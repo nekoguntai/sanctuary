@@ -13,7 +13,9 @@ import {
   Users,
   ChevronDown,
   ChevronRight,
-  UserCircle
+  UserCircle,
+  Server,
+  Shield
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
@@ -102,7 +104,7 @@ const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorCla
 export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme }) => {
   const { user, logout } = useUser();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState({ wallets: true, devices: true });
+  const [expanded, setExpanded] = useState({ wallets: true, devices: true, admin: true });
 
   // Data for Sidebar
   const [wallets, setWallets] = useState<ApiWallet[]>([]);
@@ -127,7 +129,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
     fetchData();
   }, [location.pathname, user]);
 
-  const toggleSection = (section: 'wallets' | 'devices') => {
+  const toggleSection = (section: 'wallets' | 'devices' | 'admin') => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
@@ -208,7 +210,32 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
           </div>
         </div>
         <NavItem to="/account" icon={UserCircle} label="Account" />
-        {user?.isAdmin && <NavItem to="/admin" icon={Users} label="Administration" />}
+        {user?.isAdmin && (
+          <div className="space-y-1 pt-2">
+            <NavItem
+              to="/admin"
+              icon={Shield}
+              label="Administration"
+              hasSubmenu
+              isOpen={expanded.admin}
+              onToggle={() => toggleSection('admin')}
+            />
+            {expanded.admin && (
+              <div className="animate-fade-in-up space-y-0.5 mb-2">
+                <SubNavItem
+                  to="/admin/node-config"
+                  label="Node Config"
+                  icon={<Server className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/users-groups"
+                  label="Users & Groups"
+                  icon={<Users className="w-3 h-3" />}
+                />
+              </div>
+            )}
+          </div>
+        )}
         <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 

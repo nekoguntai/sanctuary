@@ -12,7 +12,8 @@ import { DeviceDetail } from './components/DeviceDetail';
 import { ConnectDevice } from './components/ConnectDevice';
 import { Settings } from './components/Settings';
 import { Account } from './components/Account';
-import { Admin } from './components/Admin';
+import { NodeConfig } from './components/NodeConfig';
+import { UsersGroups } from './components/UsersGroups';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -46,7 +47,9 @@ const AppRoutes: React.FC = () => {
           <Route path="/devices/:id" element={<DeviceDetail />} />
           <Route path="/account" element={<Account />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/node-config" element={<NodeConfig />} />
+          <Route path="/admin/users-groups" element={<UsersGroups />} />
+          <Route path="/admin" element={<Navigate to="/admin/node-config" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

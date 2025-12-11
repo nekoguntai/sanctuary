@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build output
 dist/
@@ -31,5 +30,4 @@ yarn-error.log*
 Thumbs.db
 
 # Prisma
-prisma/migrations/
 .env.test

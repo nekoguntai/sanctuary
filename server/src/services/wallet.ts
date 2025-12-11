@@ -1,0 +1,549 @@
+/**
+ * Wallet Service
+ *
+ * Business logic for wallet management operations
+ */
+
+import prisma from '../models/prisma';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as bip39 from 'bip39';
+import * as bip32 from 'bip32';
+import * as descriptorBuilder from './bitcoin/descriptorBuilder';
+import * as addressDerivation from './bitcoin/addressDerivation';
+
+// Number of addresses to generate when creating a wallet
+const INITIAL_ADDRESS_COUNT = 20;
+
+interface CreateWalletInput {
+  name: string;
+  type: 'single_sig' | 'multi_sig';
+  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+  network?: 'mainnet' | 'testnet' | 'regtest';
+  quorum?: number;
+  totalSigners?: number;
+  descriptor?: string;
+  fingerprint?: string;
+  groupId?: string;
+  deviceIds?: string[]; // New: array of device IDs to include
+}
+
+interface WalletWithBalance {
+  id: string;
+  name: string;
+  type: string;
+  scriptType: string;
+  network: string;
+  quorum?: number | null;
+  totalSigners?: number | null;
+  descriptor?: string | null;
+  fingerprint?: string | null;
+  createdAt: Date;
+  balance: number;
+  deviceCount: number;
+  addressCount: number;
+  // Sync metadata
+  lastSyncedAt?: Date | null;
+  lastSyncStatus?: string | null;
+  syncInProgress?: boolean;
+}
+
+/**
+ * Create a new wallet
+ */
+export async function createWallet(
+  userId: string,
+  input: CreateWalletInput
+): Promise<WalletWithBalance> {
+  // Validate multi-sig parameters
+  if (input.type === 'multi_sig') {
+    if (!input.quorum || !input.totalSigners) {
+      throw new Error('Quorum and totalSigners required for multi-sig wallets');
+    }
+    if (input.quorum > input.totalSigners) {
+      throw new Error('Quorum cannot exceed total signers');
+    }
+  }
+
+  let descriptor = input.descriptor;
+  let fingerprint = input.fingerprint;
+
+  // If device IDs provided, fetch devices and generate descriptor
+  if (input.deviceIds && input.deviceIds.length > 0) {
+    // Fetch devices belonging to the user
+    const devices = await prisma.device.findMany({
+      where: {
+        id: { in: input.deviceIds },
+        userId,
+      },
+    });
+
+    if (devices.length !== input.deviceIds.length) {
+      throw new Error('One or more devices not found or not owned by user');
+    }
+
+    // Validate device count for wallet type
+    if (input.type === 'single_sig' && devices.length !== 1) {
+      throw new Error('Single-sig wallet requires exactly 1 device');
+    }
+    if (input.type === 'multi_sig' && devices.length < 2) {
+      throw new Error('Multi-sig wallet requires at least 2 devices');
+    }
+
+    // Build descriptor from devices
+    const deviceInfos = devices.map(d => ({
+      fingerprint: d.fingerprint,
+      xpub: d.xpub,
+      derivationPath: d.derivationPath || undefined,
+    }));
+
+    const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+      deviceInfos,
+      {
+        type: input.type,
+        scriptType: input.scriptType,
+        network: input.network || 'mainnet',
+        quorum: input.quorum,
+      }
+    );
+
+    descriptor = descriptorResult.descriptor;
+    fingerprint = descriptorResult.fingerprint;
+  }
+
+  // Create wallet in database with transaction to ensure device linking
+  const wallet = await prisma.$transaction(async (tx) => {
+    // Create the wallet
+    const newWallet = await tx.wallet.create({
+      data: {
+        name: input.name,
+        type: input.type,
+        scriptType: input.scriptType,
+        network: input.network || 'mainnet',
+        quorum: input.quorum,
+        totalSigners: input.totalSigners,
+        descriptor,
+        fingerprint,
+        groupId: input.groupId,
+        users: {
+          create: {
+            userId,
+            role: 'owner',
+          },
+        },
+      },
+    });
+
+    // Link devices to wallet if provided
+    if (input.deviceIds && input.deviceIds.length > 0) {
+      await tx.walletDevice.createMany({
+        data: input.deviceIds.map((deviceId, index) => ({
+          walletId: newWallet.id,
+          deviceId,
+          signerIndex: index,
+        })),
+      });
+    }
+
+    // Fetch complete wallet with relations
+    return tx.wallet.findUnique({
+      where: { id: newWallet.id },
+      include: {
+        devices: true,
+        addresses: true,
+      },
+    });
+  });
+
+  if (!wallet) {
+    throw new Error('Failed to create wallet');
+  }
+
+  // Generate initial addresses if wallet has a descriptor
+  if (descriptor) {
+    try {
+      const addressesToCreate = [];
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          descriptor,
+          i,
+          {
+            network: (input.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest',
+            change: false, // External/receive addresses
+          }
+        );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      // Bulk insert addresses
+      await prisma.address.createMany({
+        data: addressesToCreate,
+      });
+    } catch (err) {
+      console.error('[WALLET] Failed to generate initial addresses:', err);
+      // Don't fail wallet creation if address generation fails
+    }
+  }
+
+  // Re-fetch wallet with addresses
+  const walletWithAddresses = await prisma.wallet.findUnique({
+    where: { id: wallet.id },
+    include: {
+      devices: true,
+      addresses: true,
+    },
+  });
+
+  return {
+    ...wallet,
+    balance: 0,
+    deviceCount: wallet.devices.length,
+    addressCount: walletWithAddresses?.addresses.length || 0,
+  };
+}
+
+/**
+ * Get all wallets for a user
+ */
+export async function getUserWallets(userId: string): Promise<WalletWithBalance[]> {
+  const wallets = await prisma.wallet.findMany({
+    where: {
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include: {
+      devices: true,
+      addresses: true,
+      transactions: {
+        where: { type: 'received' },
+        select: { amount: true },
+      },
+      utxos: {
+        where: { spent: false },
+        select: { amount: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return wallets.map((wallet) => {
+    // Calculate balance from unspent UTXOs
+    const balance = wallet.utxos.reduce(
+      (sum, utxo) => sum + Number(utxo.amount),
+      0
+    );
+
+    return {
+      id: wallet.id,
+      name: wallet.name,
+      type: wallet.type,
+      scriptType: wallet.scriptType,
+      network: wallet.network,
+      quorum: wallet.quorum,
+      totalSigners: wallet.totalSigners,
+      descriptor: wallet.descriptor,
+      fingerprint: wallet.fingerprint,
+      createdAt: wallet.createdAt,
+      balance,
+      deviceCount: wallet.devices.length,
+      addressCount: wallet.addresses.length,
+      // Sync metadata
+      lastSyncedAt: wallet.lastSyncedAt,
+      lastSyncStatus: wallet.lastSyncStatus,
+      syncInProgress: wallet.syncInProgress,
+    };
+  });
+}
+
+/**
+ * Get a single wallet by ID
+ */
+export async function getWalletById(
+  walletId: string,
+  userId: string
+): Promise<WalletWithBalance | null> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include: {
+      users: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      },
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+      addresses: {
+        orderBy: { index: 'asc' },
+      },
+      utxos: {
+        where: { spent: false },
+      },
+      group: true,
+    },
+  });
+
+  if (!wallet) return null;
+
+  const balance = wallet.utxos.reduce(
+    (sum, utxo) => sum + Number(utxo.amount),
+    0
+  );
+
+  return {
+    id: wallet.id,
+    name: wallet.name,
+    type: wallet.type,
+    scriptType: wallet.scriptType,
+    network: wallet.network,
+    quorum: wallet.quorum,
+    totalSigners: wallet.totalSigners,
+    descriptor: wallet.descriptor,
+    fingerprint: wallet.fingerprint,
+    createdAt: wallet.createdAt,
+    balance,
+    deviceCount: wallet.devices.length,
+    addressCount: wallet.addresses.length,
+    // Sync metadata
+    lastSyncedAt: wallet.lastSyncedAt,
+    lastSyncStatus: wallet.lastSyncStatus,
+    syncInProgress: wallet.syncInProgress,
+  };
+}
+
+/**
+ * Update wallet
+ */
+export async function updateWallet(
+  walletId: string,
+  userId: string,
+  updates: Partial<{ name: string; descriptor: string }>
+): Promise<WalletWithBalance> {
+  // Check user has owner role
+  const walletUser = await prisma.walletUser.findFirst({
+    where: {
+      walletId,
+      userId,
+      role: 'owner',
+    },
+  });
+
+  if (!walletUser) {
+    throw new Error('Only wallet owners can update wallet');
+  }
+
+  const wallet = await prisma.wallet.update({
+    where: { id: walletId },
+    data: updates,
+    include: {
+      devices: true,
+      addresses: true,
+      utxos: {
+        where: { spent: false },
+      },
+    },
+  });
+
+  const balance = wallet.utxos.reduce(
+    (sum, utxo) => sum + Number(utxo.amount),
+    0
+  );
+
+  return {
+    ...wallet,
+    balance,
+    deviceCount: wallet.devices.length,
+    addressCount: wallet.addresses.length,
+  };
+}
+
+/**
+ * Delete wallet
+ */
+export async function deleteWallet(walletId: string, userId: string): Promise<void> {
+  // Check user has owner role
+  const walletUser = await prisma.walletUser.findFirst({
+    where: {
+      walletId,
+      userId,
+      role: 'owner',
+    },
+  });
+
+  if (!walletUser) {
+    throw new Error('Only wallet owners can delete wallet');
+  }
+
+  await prisma.wallet.delete({
+    where: { id: walletId },
+  });
+}
+
+/**
+ * Add device to wallet
+ */
+export async function addDeviceToWallet(
+  walletId: string,
+  deviceId: string,
+  userId: string,
+  signerIndex?: number
+): Promise<void> {
+  // Check user has access to wallet
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId } },
+    },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found or access denied');
+  }
+
+  // Check device belongs to user
+  const device = await prisma.device.findFirst({
+    where: {
+      id: deviceId,
+      userId,
+    },
+  });
+
+  if (!device) {
+    throw new Error('Device not found');
+  }
+
+  // Add device to wallet
+  await prisma.walletDevice.create({
+    data: {
+      walletId,
+      deviceId,
+      signerIndex,
+    },
+  });
+}
+
+/**
+ * Generate new receiving address for wallet
+ */
+export async function generateAddress(
+  walletId: string,
+  userId: string
+): Promise<string> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId } },
+    },
+    include: {
+      addresses: {
+        orderBy: { index: 'desc' },
+        take: 1,
+      },
+    },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found');
+  }
+
+  // Get next index
+  const nextIndex = wallet.addresses.length > 0 ? wallet.addresses[0].index + 1 : 0;
+
+  // Check if wallet has descriptor or xpub
+  if (!wallet.descriptor) {
+    throw new Error(
+      'Wallet does not have a descriptor. Cannot derive addresses. ' +
+      'Please import wallet with xpub or descriptor.'
+    );
+  }
+
+  // Derive address from descriptor
+  const addressDerivation = await import('./bitcoin/addressDerivation');
+  const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+    wallet.descriptor,
+    nextIndex,
+    {
+      network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+      change: false, // External/receive address
+    }
+  );
+
+  // Save to database
+  await prisma.address.create({
+    data: {
+      walletId,
+      address,
+      derivationPath,
+      index: nextIndex,
+      used: false,
+    },
+  });
+
+  return address;
+}
+
+/**
+ * Get wallet statistics
+ */
+export async function getWalletStats(walletId: string, userId: string) {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include: {
+      transactions: true,
+      utxos: { where: { spent: false } },
+      addresses: true,
+    },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found');
+  }
+
+  const balance = wallet.utxos.reduce(
+    (sum, utxo) => sum + Number(utxo.amount),
+    0
+  );
+
+  const received = wallet.transactions
+    .filter((tx) => tx.type === 'received')
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const sent = wallet.transactions
+    .filter((tx) => tx.type === 'sent')
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  return {
+    balance,
+    received,
+    sent,
+    transactionCount: wallet.transactions.length,
+    utxoCount: wallet.utxos.length,
+    addressCount: wallet.addresses.length,
+  };
+}

@@ -1,0 +1,194 @@
+/**
+ * Transactions API
+ *
+ * API calls for transaction and UTXO management
+ */
+
+import apiClient from './client';
+
+export interface Label {
+  id: string;
+  walletId: string;
+  name: string;
+  color: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Transaction {
+  id: string;
+  txid: string;
+  walletId: string;
+  type: 'received' | 'sent';
+  amount: string | number;
+  fee?: string | number;
+  confirmations: number;
+  blockHeight?: number;
+  blockTime?: string;
+  label?: string;
+  memo?: string;
+  labels?: Label[];
+  address?: {
+    address: string;
+    derivationPath: string;
+  };
+}
+
+export interface UTXO {
+  id: string;
+  txid: string;
+  vout: number;
+  address: string;
+  amount: string | number;
+  scriptPubKey: string;
+  confirmations: number;
+  blockHeight?: number;
+  spent: boolean;
+  createdAt: string;
+}
+
+export interface Address {
+  id: string;
+  address: string;
+  derivationPath: string;
+  index: number;
+  used: boolean;
+  balance: number;
+  labels?: Label[];
+  createdAt: string;
+}
+
+export interface GetTransactionsParams {
+  limit?: number;
+  offset?: number;
+}
+
+export interface GetUTXOsResponse {
+  utxos: UTXO[];
+  count: number;
+  totalBalance: number;
+}
+
+export interface CreateTransactionRequest {
+  recipient: string;
+  amount: number;
+  feeRate: number;
+  selectedUtxoIds?: string[];
+  enableRBF?: boolean;
+  label?: string;
+  memo?: string;
+}
+
+export interface CreateTransactionResponse {
+  psbtBase64: string;
+  fee: number;
+  totalInput: number;
+  totalOutput: number;
+  changeAmount: number;
+  changeAddress?: string;
+  utxos: Array<{ txid: string; vout: number }>;
+}
+
+export interface BroadcastTransactionRequest {
+  signedPsbtBase64: string;
+  recipient: string;
+  amount: number;
+  fee: number;
+  label?: string;
+  memo?: string;
+  utxos: Array<{ txid: string; vout: number }>;
+}
+
+export interface BroadcastTransactionResponse {
+  txid: string;
+  broadcasted: boolean;
+}
+
+export interface EstimateTransactionRequest {
+  recipient: string;
+  amount: number;
+  feeRate: number;
+  selectedUtxoIds?: string[];
+}
+
+export interface EstimateTransactionResponse {
+  fee: number;
+  totalCost: number;
+  inputCount: number;
+  outputCount: number;
+  changeAmount: number;
+  sufficient: boolean;
+  error?: string;
+}
+
+/**
+ * Get transactions for a wallet
+ */
+export async function getTransactions(
+  walletId: string,
+  params?: GetTransactionsParams
+): Promise<Transaction[]> {
+  return apiClient.get<Transaction[]>(`/wallets/${walletId}/transactions`, params);
+}
+
+/**
+ * Get a specific transaction by txid
+ */
+export async function getTransaction(txid: string): Promise<Transaction> {
+  return apiClient.get<Transaction>(`/transactions/${txid}`);
+}
+
+/**
+ * Get UTXOs for a wallet
+ */
+export async function getUTXOs(walletId: string): Promise<GetUTXOsResponse> {
+  return apiClient.get<GetUTXOsResponse>(`/wallets/${walletId}/utxos`);
+}
+
+/**
+ * Get addresses for a wallet
+ */
+export async function getAddresses(walletId: string, used?: boolean): Promise<Address[]> {
+  const params = used !== undefined ? { used: String(used) } : undefined;
+  return apiClient.get<Address[]>(`/wallets/${walletId}/addresses`, params);
+}
+
+/**
+ * Create a transaction PSBT (for hardware wallet signing)
+ */
+export async function createTransaction(
+  walletId: string,
+  data: CreateTransactionRequest
+): Promise<CreateTransactionResponse> {
+  return apiClient.post<CreateTransactionResponse>(
+    `/wallets/${walletId}/transactions/create`,
+    data
+  );
+}
+
+/**
+ * Broadcast a signed transaction
+ */
+export async function broadcastTransaction(
+  walletId: string,
+  data: BroadcastTransactionRequest
+): Promise<BroadcastTransactionResponse> {
+  return apiClient.post<BroadcastTransactionResponse>(
+    `/wallets/${walletId}/transactions/broadcast`,
+    data
+  );
+}
+
+/**
+ * Estimate transaction cost
+ */
+export async function estimateTransaction(
+  walletId: string,
+  data: EstimateTransactionRequest
+): Promise<EstimateTransactionResponse> {
+  return apiClient.post<EstimateTransactionResponse>(
+    `/wallets/${walletId}/transactions/estimate`,
+    data
+  );
+}

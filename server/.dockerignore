@@ -1,0 +1,37 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Environment files (will be provided via docker-compose)
+.env
+.env.*
+!.env.example
+
+# Development files
+*.log
+npm-debug.log*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Prisma migrations (we'll handle these separately)
+# prisma/migrations

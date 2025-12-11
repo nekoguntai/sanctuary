@@ -1,0 +1,54 @@
+{
+  "name": "sanctuary-server",
+  "version": "1.0.0",
+  "description": "Backend API server for Sanctuary Bitcoin Wallet",
+  "main": "dist/index.js",
+  "prisma": {
+    "seed": "node --experimental-specifier-resolution=node dist/prisma/seed.js"
+  },
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "ts-node prisma/seed.ts"
+  },
+  "keywords": [
+    "bitcoin",
+    "wallet",
+    "api",
+    "sanctuary"
+  ],
+  "author": "riannom",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.7.0",
+    "@types/bcrypt": "^6.0.0",
+    "axios": "^1.6.2",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "bip32": "^4.0.0",
+    "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "tiny-secp256k1": "^2.2.3",
+    "ws": "^8.15.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.5",
+    "@types/ws": "^8.5.10",
+    "prisma": "^5.7.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,142 @@
+/**
+ * Sanctuary Wallet API Server
+ *
+ * Main entry point for the backend API server.
+ * Handles Bitcoin wallet management, transactions, and user authentication.
+ */
+
+import express, { Express, Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import { createServer } from 'http';
+import config from './config';
+import authRoutes from './api/auth';
+import walletRoutes from './api/wallets';
+import deviceRoutes from './api/devices';
+import transactionRoutes from './api/transactions';
+import labelRoutes from './api/labels';
+import bitcoinRoutes from './api/bitcoin';
+import priceRoutes from './api/price';
+import nodeRoutes from './api/node';
+import adminRoutes from './api/admin';
+import syncRoutes from './api/sync';
+import { initializeWebSocketServer } from './websocket/server';
+import { notificationService } from './websocket/notifications';
+import { getSyncService } from './services/syncService';
+
+// Initialize Express app
+const app: Express = express();
+
+// ========================================
+// MIDDLEWARE
+// ========================================
+
+// CORS configuration
+app.use(cors({
+  origin: config.nodeEnv === 'development' ? true : config.clientUrl,
+  credentials: true,
+}));
+
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Request logging
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// ========================================
+// ROUTES
+// ========================================
+
+// Health check
+app.get('/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: config.nodeEnv,
+  });
+});
+
+// API v1 routes
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/wallets', walletRoutes);
+app.use('/api/v1/devices', deviceRoutes);
+app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
+app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
+app.use('/api/v1/bitcoin', bitcoinRoutes);
+app.use('/api/v1/price', priceRoutes);
+app.use('/api/v1/node', nodeRoutes);
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/sync', syncRoutes);
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Route ${req.method} ${req.path} not found`,
+  });
+});
+
+// Error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('[ERROR]', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: config.nodeEnv === 'development' ? err.message : 'Something went wrong',
+  });
+});
+
+// ========================================
+// SERVER START
+// ========================================
+
+// Create HTTP server
+const httpServer = createServer(app);
+
+// Initialize WebSocket server
+const wsServer = initializeWebSocketServer(httpServer);
+
+// Start notification service
+notificationService.start().catch((err) => {
+  console.error('Failed to start notification service:', err);
+});
+
+// Start background sync service
+const syncService = getSyncService();
+syncService.start().catch((err) => {
+  console.error('Failed to start sync service:', err);
+});
+
+// Start listening
+httpServer.listen(config.port, () => {
+  console.log('');
+  console.log('🏛️  Sanctuary Wallet API Server');
+  console.log('=====================================');
+  console.log(`Environment: ${config.nodeEnv}`);
+  console.log(`Server:      ${config.apiUrl}`);
+  console.log(`Client:      ${config.clientUrl}`);
+  console.log(`Network:     ${config.bitcoin.network}`);
+  console.log('=====================================');
+  console.log('');
+  console.log(`✅ HTTP Server running on port ${config.port}`);
+  console.log(`✅ WebSocket Server running on ws://localhost:${config.port}/ws`);
+  console.log(`✅ Notification Service running`);
+  console.log(`✅ Background Sync Service running`);
+  console.log('');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server...');
+  wsServer.close();
+  notificationService.stop();
+  syncService.stop();
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+export default app;

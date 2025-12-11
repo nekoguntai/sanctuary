@@ -1,0 +1,370 @@
+// Sanctuary Wallet Database Schema
+// This schema defines all database tables and relationships for the wallet backend
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// USER MANAGEMENT
+// ========================================
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String   // Hashed with bcrypt
+  email     String?  @unique
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // User preferences (stored as JSON)
+  preferences Json?
+
+  // Relationships
+  wallets     WalletUser[]
+  devices     Device[]
+  transactions Transaction[]
+  groupMemberships GroupMember[]
+
+  @@map("users")
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  purpose     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  members GroupMember[]
+  wallets Wallet[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  userId    String
+  groupId   String
+  role      String   @default("member") // member, admin
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@map("group_members")
+}
+
+// ========================================
+// WALLET MANAGEMENT
+// ========================================
+
+model Wallet {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // single_sig, multi_sig
+  scriptType  String   // native_segwit, nested_segwit, taproot, legacy
+  network     String   @default("mainnet") // mainnet, testnet, regtest
+
+  // Multi-sig configuration
+  quorum      Int?     // e.g., 2 for 2-of-3
+  totalSigners Int?    // e.g., 3 for 2-of-3
+
+  // Wallet descriptors
+  descriptor  String?  // Output descriptor
+  fingerprint String?  // Master key fingerprint
+
+  // Optional group ownership
+  groupId     String?
+
+  // Sync metadata - for caching layer
+  lastSyncedAt    DateTime?  // Last successful full sync
+  lastSyncStatus  String?    // success, failed, partial
+  lastSyncError   String?    // Error message if failed
+  syncInProgress  Boolean    @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  users        WalletUser[]
+  devices      WalletDevice[]
+  addresses    Address[]
+  transactions Transaction[]
+  utxos        UTXO[]
+  labels       Label[]
+  group        Group?   @relation(fields: [groupId], references: [id])
+
+  @@map("wallets")
+}
+
+model WalletUser {
+  id        String   @id @default(uuid())
+  walletId  String
+  userId    String
+  role      String   @default("viewer") // owner, signer, viewer
+  createdAt DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, userId])
+  @@map("wallet_users")
+}
+
+// ========================================
+// HARDWARE DEVICES
+// ========================================
+
+// Hardware device model catalog - stores device specifications and capabilities
+model HardwareDeviceModel {
+  id              String   @id @default(uuid())
+  name            String   @unique // Display name (e.g., "ColdCard Mk4")
+  slug            String   @unique // URL-friendly identifier (e.g., "coldcard-mk4")
+  manufacturer    String   // Company name (e.g., "Coinkite")
+
+  // Connectivity capabilities (stored as array of strings)
+  connectivity    String[] // usb, bluetooth, nfc, sd_card, qr_code, air_gapped
+
+  // Security features
+  secureElement   Boolean  @default(false)
+  openSource      Boolean  @default(false)
+  airGapped       Boolean  @default(false)
+
+  // Bitcoin features
+  supportsBitcoinOnly Boolean @default(true)
+  supportsMultisig    Boolean @default(true)
+  supportsTaproot     Boolean @default(false)
+  supportsPassphrase  Boolean @default(true)
+
+  // Supported script types (stored as array)
+  scriptTypes     String[] // legacy, nested_segwit, native_segwit, taproot
+
+  // Display info
+  hasScreen       Boolean  @default(true)
+  screenType      String?  // e-ink, lcd, oled, none
+
+  // Additional info
+  releaseYear     Int?
+  discontinued    Boolean  @default(false)
+  imageUrl        String?
+  websiteUrl      String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationship to user's registered devices
+  devices         Device[]
+
+  @@map("hardware_device_models")
+}
+
+// User's registered device instances
+model Device {
+  id              String   @id @default(uuid())
+  userId          String
+  modelId         String?  // Reference to HardwareDeviceModel
+  type            String   // Legacy field for backward compatibility
+  label           String
+  fingerprint     String   @unique
+  derivationPath  String?  // e.g., m/84'/0'/0'
+  xpub            String   // Extended public key
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model   HardwareDeviceModel? @relation(fields: [modelId], references: [id])
+  wallets WalletDevice[]
+
+  @@map("devices")
+}
+
+model WalletDevice {
+  id        String   @id @default(uuid())
+  walletId  String
+  deviceId  String
+  signerIndex Int?   // For multi-sig wallets
+  createdAt DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, deviceId])
+  @@map("wallet_devices")
+}
+
+// ========================================
+// BITCOIN DATA
+// ========================================
+
+model Address {
+  id             String   @id @default(uuid())
+  walletId       String
+  address        String   @unique
+  derivationPath String   // e.g., m/84'/0'/0'/0/0
+  index          Int
+  used           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  wallet       Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  addressLabels AddressLabel[]
+
+  @@index([walletId, used])
+  @@map("addresses")
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  txid          String   @unique
+  walletId      String
+  userId        String?
+  type          String   // sent, received
+  amount        BigInt   // Amount in satoshis
+  fee           BigInt?  // Fee in satoshis
+  confirmations Int      @default(0)
+  blockHeight   Int?
+  blockTime     DateTime?
+  label         String?
+  memo          String?
+  rawTx         String?  // Raw transaction hex
+  counterpartyAddress String? // Sender address (for receives) or recipient address (for sends)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id])
+  address Address? @relation(fields: [addressId], references: [id])
+  addressId String?
+  transactionLabels TransactionLabel[]
+
+  @@index([walletId])
+  @@index([txid])
+  @@map("transactions")
+}
+
+model UTXO {
+  id            String   @id @default(uuid())
+  walletId      String
+  txid          String
+  vout          Int      // Output index
+  address       String
+  amount        BigInt   // Amount in satoshis
+  scriptPubKey  String
+  confirmations Int      @default(0)
+  blockHeight   Int?
+  spent         Boolean  @default(false)
+  spentTxid     String?  // Transaction ID that spent this UTXO
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@unique([txid, vout])
+  @@index([walletId, spent])
+  @@map("utxos")
+}
+
+// ========================================
+// SYSTEM CONFIGURATION
+// ========================================
+
+model NodeConfig {
+  id             String   @id @default(uuid())
+  type           String   // bitcoin_core, electrum
+  host           String
+  port           Int
+  useSsl         Boolean  @default(false)
+  username       String?
+  password       String?
+  isDefault      Boolean  @default(false)
+  explorerUrl    String?
+  feeEstimatorUrl String? // URL for mempool.space-compatible fee estimation API (defaults to mempool.space)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("node_configs")
+}
+
+model FeeEstimate {
+  id          String   @id @default(uuid())
+  fastest     Int      // sat/vB
+  halfHour    Int      // sat/vB
+  hour        Int      // sat/vB
+  createdAt   DateTime @default(now())
+
+  @@map("fee_estimates")
+}
+
+model PriceData {
+  id        String   @id @default(uuid())
+  currency  String   // USD, EUR, GBP, etc.
+  price     Float
+  source    String   // mempool, coingecko, kraken
+  createdAt DateTime @default(now())
+
+  @@index([currency, createdAt])
+  @@map("price_data")
+}
+
+// ========================================
+// LABELS & TAGGING
+// ========================================
+
+model Label {
+  id          String   @id @default(uuid())
+  walletId    String
+  name        String
+  color       String   @default("#6366f1") // Hex color for display
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wallet              Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  transactionLabels   TransactionLabel[]
+  addressLabels       AddressLabel[]
+
+  @@unique([walletId, name]) // Labels must be unique per wallet
+  @@index([walletId])
+  @@map("labels")
+}
+
+model TransactionLabel {
+  id            String   @id @default(uuid())
+  transactionId String
+  labelId       String
+  createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  label       Label       @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, labelId])
+  @@index([transactionId])
+  @@index([labelId])
+  @@map("transaction_labels")
+}
+
+model AddressLabel {
+  id        String   @id @default(uuid())
+  addressId String
+  labelId   String
+  createdAt DateTime @default(now())
+
+  address Address @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  label   Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([addressId, labelId])
+  @@index([addressId])
+  @@index([labelId])
+  @@map("address_labels")
+}

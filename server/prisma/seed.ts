@@ -1,0 +1,635 @@
+import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+
+const prisma = new PrismaClient();
+
+// Default admin user credentials
+// IMPORTANT: Users should change this password after first login!
+const DEFAULT_ADMIN = {
+  username: 'admin',
+  password: 'sanctuary',  // Default password - change after first login!
+  isAdmin: true,
+  preferences: {
+    unit: 'sats',
+    theme: 'sanctuary',
+    darkMode: true,
+    showFiat: true,
+    background: 'zen',
+    fiatCurrency: 'USD',
+    priceProvider: 'auto',
+  },
+};
+
+// Comprehensive list of hardware wallet models with their capabilities
+const hardwareDeviceModels = [
+  // ========================================
+  // COINKITE (ColdCard)
+  // ========================================
+  {
+    name: 'ColdCard Mk4',
+    slug: 'coldcard-mk4',
+    manufacturer: 'Coinkite',
+    connectivity: ['usb', 'sd_card', 'nfc'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2022,
+    websiteUrl: 'https://coldcard.com',
+  },
+  {
+    name: 'ColdCard Q',
+    slug: 'coldcard-q',
+    manufacturer: 'Coinkite',
+    connectivity: ['usb', 'sd_card', 'qr_code', 'nfc'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2024,
+    websiteUrl: 'https://coldcard.com',
+  },
+  {
+    name: 'ColdCard Mk3',
+    slug: 'coldcard-mk3',
+    manufacturer: 'Coinkite',
+    connectivity: ['usb', 'sd_card'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: false,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2019,
+    discontinued: true,
+    websiteUrl: 'https://coldcard.com',
+  },
+
+  // ========================================
+  // LEDGER
+  // ========================================
+  {
+    name: 'Ledger Nano S Plus',
+    slug: 'ledger-nano-s-plus',
+    manufacturer: 'Ledger',
+    connectivity: ['usb'],
+    secureElement: true,
+    openSource: false,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2022,
+    websiteUrl: 'https://ledger.com',
+  },
+  {
+    name: 'Ledger Nano X',
+    slug: 'ledger-nano-x',
+    manufacturer: 'Ledger',
+    connectivity: ['usb', 'bluetooth'],
+    secureElement: true,
+    openSource: false,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2019,
+    websiteUrl: 'https://ledger.com',
+  },
+  {
+    name: 'Ledger Stax',
+    slug: 'ledger-stax',
+    manufacturer: 'Ledger',
+    connectivity: ['usb', 'bluetooth', 'nfc'],
+    secureElement: true,
+    openSource: false,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'e-ink',
+    releaseYear: 2023,
+    websiteUrl: 'https://ledger.com',
+  },
+  {
+    name: 'Ledger Flex',
+    slug: 'ledger-flex',
+    manufacturer: 'Ledger',
+    connectivity: ['usb', 'bluetooth', 'nfc'],
+    secureElement: true,
+    openSource: false,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'e-ink',
+    releaseYear: 2024,
+    websiteUrl: 'https://ledger.com',
+  },
+
+  // ========================================
+  // TREZOR
+  // ========================================
+  {
+    name: 'Trezor Model One',
+    slug: 'trezor-model-one',
+    manufacturer: 'SatoshiLabs',
+    connectivity: ['usb'],
+    secureElement: false,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: false,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2014,
+    websiteUrl: 'https://trezor.io',
+  },
+  {
+    name: 'Trezor Model T',
+    slug: 'trezor-model-t',
+    manufacturer: 'SatoshiLabs',
+    connectivity: ['usb', 'sd_card'],
+    secureElement: false,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2018,
+    websiteUrl: 'https://trezor.io',
+  },
+  {
+    name: 'Trezor Safe 3',
+    slug: 'trezor-safe-3',
+    manufacturer: 'SatoshiLabs',
+    connectivity: ['usb'],
+    secureElement: true,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2023,
+    websiteUrl: 'https://trezor.io',
+  },
+  {
+    name: 'Trezor Safe 5',
+    slug: 'trezor-safe-5',
+    manufacturer: 'SatoshiLabs',
+    connectivity: ['usb', 'nfc'],
+    secureElement: true,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2024,
+    websiteUrl: 'https://trezor.io',
+  },
+
+  // ========================================
+  // FOUNDATION (Passport)
+  // ========================================
+  {
+    name: 'Foundation Passport',
+    slug: 'foundation-passport',
+    manufacturer: 'Foundation Devices',
+    connectivity: ['sd_card', 'qr_code'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://foundationdevices.com',
+  },
+  {
+    name: 'Foundation Passport Batch 2',
+    slug: 'foundation-passport-batch2',
+    manufacturer: 'Foundation Devices',
+    connectivity: ['sd_card', 'qr_code'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2023,
+    websiteUrl: 'https://foundationdevices.com',
+  },
+
+  // ========================================
+  // BLOCKSTREAM (Jade)
+  // ========================================
+  {
+    name: 'Blockstream Jade',
+    slug: 'blockstream-jade',
+    manufacturer: 'Blockstream',
+    connectivity: ['usb', 'bluetooth', 'qr_code'],
+    secureElement: false, // Uses blind oracle instead
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://blockstream.com/jade',
+  },
+  {
+    name: 'Blockstream Jade Plus',
+    slug: 'blockstream-jade-plus',
+    manufacturer: 'Blockstream',
+    connectivity: ['usb', 'bluetooth', 'qr_code'],
+    secureElement: false,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2024,
+    websiteUrl: 'https://blockstream.com/jade',
+  },
+
+  // ========================================
+  // BITBOX
+  // ========================================
+  {
+    name: 'BitBox02',
+    slug: 'bitbox02',
+    manufacturer: 'Shift Crypto',
+    connectivity: ['usb'],
+    secureElement: true,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2019,
+    websiteUrl: 'https://shiftcrypto.ch',
+  },
+  {
+    name: 'BitBox02 Bitcoin-only',
+    slug: 'bitbox02-btc-only',
+    manufacturer: 'Shift Crypto',
+    connectivity: ['usb'],
+    secureElement: true,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2019,
+    websiteUrl: 'https://shiftcrypto.ch',
+  },
+
+  // ========================================
+  // KEYSTONE
+  // ========================================
+  {
+    name: 'Keystone Pro',
+    slug: 'keystone-pro',
+    manufacturer: 'Keystone',
+    connectivity: ['qr_code', 'sd_card'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://keyst.one',
+  },
+  {
+    name: 'Keystone 3 Pro',
+    slug: 'keystone-3-pro',
+    manufacturer: 'Keystone',
+    connectivity: ['qr_code', 'sd_card', 'nfc'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2023,
+    websiteUrl: 'https://keyst.one',
+  },
+  {
+    name: 'Keystone Essential',
+    slug: 'keystone-essential',
+    manufacturer: 'Keystone',
+    connectivity: ['qr_code'],
+    secureElement: true,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://keyst.one',
+  },
+
+  // ========================================
+  // SEEDSIGNER
+  // ========================================
+  {
+    name: 'SeedSigner',
+    slug: 'seedsigner',
+    manufacturer: 'SeedSigner',
+    connectivity: ['qr_code'],
+    secureElement: false,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://seedsigner.com',
+  },
+
+  // ========================================
+  // KRUX
+  // ========================================
+  {
+    name: 'Krux',
+    slug: 'krux',
+    manufacturer: 'Krux',
+    connectivity: ['qr_code', 'sd_card'],
+    secureElement: false,
+    openSource: true,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2022,
+    websiteUrl: 'https://selfcustody.github.io/krux/',
+  },
+
+  // ========================================
+  // KEEPKEY
+  // ========================================
+  {
+    name: 'KeepKey',
+    slug: 'keepkey',
+    manufacturer: 'ShapeShift',
+    connectivity: ['usb'],
+    secureElement: false,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: false,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit'],
+    hasScreen: true,
+    screenType: 'oled',
+    releaseYear: 2015,
+    websiteUrl: 'https://www.keepkey.com',
+  },
+
+  // ========================================
+  // SATOCHIP
+  // ========================================
+  {
+    name: 'Satochip',
+    slug: 'satochip',
+    manufacturer: 'Satochip',
+    connectivity: ['nfc'],
+    secureElement: true,
+    openSource: true,
+    airGapped: false,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: false,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit'],
+    hasScreen: false,
+    screenType: null,
+    releaseYear: 2019,
+    websiteUrl: 'https://satochip.io',
+  },
+
+  // ========================================
+  // NGRAVE
+  // ========================================
+  {
+    name: 'Ngrave Zero',
+    slug: 'ngrave-zero',
+    manufacturer: 'Ngrave',
+    connectivity: ['qr_code'],
+    secureElement: true,
+    openSource: false,
+    airGapped: true,
+    supportsBitcoinOnly: false,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: true,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: true,
+    screenType: 'lcd',
+    releaseYear: 2021,
+    websiteUrl: 'https://ngrave.io',
+  },
+
+  // ========================================
+  // GENERIC / OTHER
+  // ========================================
+  {
+    name: 'Generic SD Card',
+    slug: 'generic-sd',
+    manufacturer: 'Generic',
+    connectivity: ['sd_card'],
+    secureElement: false,
+    openSource: false,
+    airGapped: true,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: false,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: false,
+    screenType: null,
+    releaseYear: null,
+    websiteUrl: null,
+  },
+  {
+    name: 'Generic USB',
+    slug: 'generic-usb',
+    manufacturer: 'Generic',
+    connectivity: ['usb'],
+    secureElement: false,
+    openSource: false,
+    airGapped: false,
+    supportsBitcoinOnly: true,
+    supportsMultisig: true,
+    supportsTaproot: true,
+    supportsPassphrase: false,
+    scriptTypes: ['legacy', 'nested_segwit', 'native_segwit', 'taproot'],
+    hasScreen: false,
+    screenType: null,
+    releaseYear: null,
+    websiteUrl: null,
+  },
+];
+
+async function main() {
+  // ========================================
+  // Create default admin user
+  // ========================================
+  console.log('Creating default admin user...');
+
+  const existingAdmin = await prisma.user.findUnique({
+    where: { username: DEFAULT_ADMIN.username },
+  });
+
+  if (existingAdmin) {
+    console.log(`Default admin user '${DEFAULT_ADMIN.username}' already exists, skipping...`);
+  } else {
+    const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN.password, 10);
+    await prisma.user.create({
+      data: {
+        username: DEFAULT_ADMIN.username,
+        password: hashedPassword,
+        isAdmin: DEFAULT_ADMIN.isAdmin,
+        preferences: DEFAULT_ADMIN.preferences,
+      },
+    });
+    console.log(`Created default admin user: ${DEFAULT_ADMIN.username}`);
+    console.log('');
+    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('║  DEFAULT CREDENTIALS                                       ║');
+    console.log('║  Username: admin                                           ║');
+    console.log('║  Password: sanctuary                                       ║');
+    console.log('║                                                            ║');
+    console.log('║  ⚠️  IMPORTANT: Change this password after first login!    ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log('');
+  }
+
+  // ========================================
+  // Seed hardware device models
+  // ========================================
+  console.log('Seeding hardware device models...');
+
+  for (const model of hardwareDeviceModels) {
+    const existing = await prisma.hardwareDeviceModel.findUnique({
+      where: { slug: model.slug },
+    });
+
+    if (existing) {
+      // Update existing model
+      await prisma.hardwareDeviceModel.update({
+        where: { slug: model.slug },
+        data: model,
+      });
+      console.log(`Updated: ${model.name}`);
+    } else {
+      // Create new model
+      await prisma.hardwareDeviceModel.create({
+        data: model,
+      });
+      console.log(`Created: ${model.name}`);
+    }
+  }
+
+  console.log(`\nSeeded ${hardwareDeviceModels.length} hardware device models.`);
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -119,7 +119,7 @@ export const Dashboard: React.FC = () => {
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [recentTx, setRecentTx] = useState<Transaction[]>([]);
   const [fees, setFees] = useState<FeeEstimate | null>(null);
-  const [nodeStatus, setNodeStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [nodeStatus, setNodeStatus] = useState<'unknown' | 'checking' | 'connected' | 'error'>('unknown');
   const [bitcoinStatus, setBitcoinStatus] = useState<bitcoinApi.BitcoinStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<Timeframe>('1W');
@@ -250,6 +250,7 @@ export const Dashboard: React.FC = () => {
 
         // Check Bitcoin network status
         try {
+          setNodeStatus('checking');
           const status = await bitcoinApi.getStatus();
           setBitcoinStatus(status);
           setNodeStatus(status.connected ? 'connected' : 'error');
@@ -625,6 +626,7 @@ export const Dashboard: React.FC = () => {
             {nodeStatus === 'connected' && <div className="h-2.5 w-2.5 rounded-full bg-success-500 animate-pulse"></div>}
             {nodeStatus === 'error' && <div className="h-2.5 w-2.5 rounded-full bg-rose-500"></div>}
             {nodeStatus === 'checking' && <div className="h-2.5 w-2.5 rounded-full bg-warning-500 animate-pulse"></div>}
+            {nodeStatus === 'unknown' && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
           </div>
           <div className="flex items-start">
             <div className={`p-2.5 rounded-xl mr-3 transition-colors flex-shrink-0 ${
@@ -655,6 +657,9 @@ export const Dashboard: React.FC = () => {
                 )}
                 {nodeStatus === 'checking' && (
                   <span className="text-xs text-sanctuary-400">Checking...</span>
+                )}
+                {nodeStatus === 'unknown' && (
+                  <span className="text-xs text-sanctuary-400">Unknown</span>
                 )}
               </div>
               {nodeStatus === 'connected' && bitcoinStatus && (

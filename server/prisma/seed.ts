@@ -564,6 +564,33 @@ const hardwareDeviceModels = [
 
 async function main() {
   // ========================================
+  // Create default node configuration
+  // ========================================
+  console.log('Creating default node configuration...');
+
+  const existingNodeConfig = await prisma.nodeConfig.findFirst({
+    where: { isDefault: true },
+  });
+
+  if (existingNodeConfig) {
+    console.log('Default node configuration already exists, skipping...');
+  } else {
+    await prisma.nodeConfig.create({
+      data: {
+        id: 'default',
+        type: 'electrum',
+        host: 'electrum.blockstream.info',
+        port: 50002,
+        useSsl: true,
+        explorerUrl: 'https://mempool.space',
+        feeEstimatorUrl: 'https://mempool.space',
+        isDefault: true,
+      },
+    });
+    console.log('Created default node configuration (Blockstream public Electrum server)');
+  }
+
+  // ========================================
   // Create default admin user
   // ========================================
   console.log('Creating default admin user...');

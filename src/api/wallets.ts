@@ -62,6 +62,55 @@ export interface AddDeviceToWalletRequest {
   signerIndex?: number;
 }
 
+// Import-related types
+export interface DeviceResolution {
+  fingerprint: string;
+  xpub: string;
+  derivationPath: string;
+  existingDeviceId: string | null;
+  existingDeviceLabel: string | null;
+  willCreate: boolean;
+  suggestedLabel?: string;
+  originalType?: string;
+}
+
+export interface ImportValidationResult {
+  valid: boolean;
+  error?: string;
+  format: 'descriptor' | 'json' | 'wallet_export';
+  walletType: 'single_sig' | 'multi_sig';
+  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+  network: 'mainnet' | 'testnet' | 'regtest';
+  quorum?: number;
+  totalSigners?: number;
+  devices: DeviceResolution[];
+  suggestedName?: string;
+}
+
+export interface ImportWalletRequest {
+  data: string; // Descriptor or JSON
+  name: string;
+  network?: 'mainnet' | 'testnet' | 'regtest';
+  deviceLabels?: Record<string, string>;
+}
+
+export interface ImportWalletResult {
+  wallet: {
+    id: string;
+    name: string;
+    type: string;
+    scriptType: string;
+    network: string;
+    quorum?: number | null;
+    totalSigners?: number | null;
+    descriptor?: string | null;
+  };
+  devicesCreated: number;
+  devicesReused: number;
+  createdDeviceIds: string[];
+  reusedDeviceIds: string[];
+}
+
 /**
  * Get all wallets for current user
  */
@@ -119,4 +168,21 @@ export async function addDeviceToWallet(
   data: AddDeviceToWalletRequest
 ): Promise<{ message: string }> {
   return apiClient.post<{ message: string }>(`/wallets/${walletId}/devices`, data);
+}
+
+/**
+ * Validate import data and preview what will happen
+ */
+export async function validateImport(input: {
+  descriptor?: string;
+  json?: string;
+}): Promise<ImportValidationResult> {
+  return apiClient.post<ImportValidationResult>('/wallets/import/validate', input);
+}
+
+/**
+ * Import a wallet from descriptor or JSON
+ */
+export async function importWallet(data: ImportWalletRequest): Promise<ImportWalletResult> {
+  return apiClient.post<ImportWalletResult>('/wallets/import', data);
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WalletType } from '../types';
 import * as walletsApi from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet, Upload } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -106,10 +106,16 @@ export const WalletList: React.FC = () => {
           <p className="text-sanctuary-500 mb-6 max-w-md mx-auto">
             Create your first wallet to start managing your Bitcoin. Connect your hardware devices and build single-sig or multi-sig wallets with full self-custody.
           </p>
-          <Button onClick={() => navigate('/wallets/create')}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Your First Wallet
-          </Button>
+          <div className="flex items-center justify-center gap-3">
+            <Button onClick={() => navigate('/wallets/create')}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Wallet
+            </Button>
+            <Button variant="secondary" onClick={() => navigate('/wallets/import')}>
+              <Upload className="w-4 h-4 mr-2" />
+              Import Wallet
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -139,9 +145,13 @@ export const WalletList: React.FC = () => {
                     <ListIcon className="w-4 h-4" />
                 </button>
             </div>
+            <Button variant="secondary" onClick={() => navigate('/wallets/import')}>
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+            </Button>
             <Button onClick={() => navigate('/wallets/create')}>
                 <Plus className="w-4 h-4 mr-2" />
-                Add Wallet
+                Create
             </Button>
         </div>
       </div>

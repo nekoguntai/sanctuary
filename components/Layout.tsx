@@ -89,13 +89,14 @@ const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorCla
   return (
     <Link
       to={to}
-      className={`group flex items-center pl-11 pr-3 py-2 text-sm font-medium transition-all duration-200 border-l-2 ml-5 ${
+      className={`group flex items-center pl-8 pr-3 py-2 text-sm font-medium transition-all duration-200 border-l-2 ml-3 min-w-0 ${
         isActive
           ? `border-primary-500 dark:border-primary-500 text-primary-700 dark:text-primary-400 ${activeColorClass || ''}`
           : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-500 dark:text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-300'
       }`}
+      title={label}
     >
-      {icon && <span className="mr-2 opacity-70">{icon}</span>}
+      {icon && <span className="mr-2 opacity-70 flex-shrink-0">{icon}</span>}
       <span className="truncate">{label}</span>
     </Link>
   );

@@ -7,6 +7,7 @@ import { WalletList } from './components/WalletList';
 import { WalletDetail } from './components/WalletDetail';
 import { SendTransaction } from './components/SendTransaction';
 import { CreateWallet } from './components/CreateWallet';
+import { ImportWallet } from './components/ImportWallet';
 import { DeviceList } from './components/DeviceList';
 import { DeviceDetail } from './components/DeviceDetail';
 import { ConnectDevice } from './components/ConnectDevice';
@@ -40,6 +41,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/wallets" element={<WalletList />} />
           <Route path="/wallets/create" element={<CreateWallet />} />
+          <Route path="/wallets/import" element={<ImportWallet />} />
           <Route path="/wallets/:id" element={<WalletDetail />} />
           <Route path="/wallets/:id/send" element={<SendTransaction />} />
           <Route path="/devices" element={<DeviceList />} />

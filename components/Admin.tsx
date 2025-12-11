@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { NodeConfig } from '../types';
 import { Button } from './ui/Button';
-import { Users, UserPlus, Shield, User as UserIcon, Plus, Server, Check, AlertCircle, Link as LinkIcon, CheckCircle, XCircle, Trash2, Edit2, X, Eye, EyeOff, Gauge } from 'lucide-react';
+import { Users, UserPlus, Shield, User as UserIcon, Plus, Server, Check, AlertCircle, Link as LinkIcon, CheckCircle, XCircle, Trash2, Edit2, X, Eye, EyeOff, Gauge, Globe } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
+
+// List of well-known public Electrum servers
+const PUBLIC_ELECTRUM_SERVERS = [
+  { name: 'Blockstream (SSL)', host: 'electrum.blockstream.info', port: '50002', useSsl: true },
+  { name: 'Blockstream (TCP)', host: 'electrum.blockstream.info', port: '50001', useSsl: false },
+  { name: 'mempool.space (SSL)', host: 'electrum.mempool.space', port: '50002', useSsl: true },
+  { name: 'Emzy (SSL)', host: 'electrum.emzy.de', port: '50002', useSsl: true },
+  { name: 'Bitaroo (SSL)', host: 'electrum.bitaroo.net', port: '50002', useSsl: true },
+  { name: 'Diynodes (SSL)', host: 'electrum.diynodes.com', port: '50002', useSsl: true },
+  { name: 'hsmiths (SSL)', host: 'electrum.hsmiths.com', port: '50002', useSsl: true },
+  { name: 'qtornado (SSL)', host: 'electrum.qtornado.com', port: '50002', useSsl: true },
+];
 
 export const Admin: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -62,12 +74,12 @@ export const Admin: React.FC = () => {
       setNodeConfig(nc);
     } catch (error) {
       console.error('[Admin] Failed to load data:', error);
-      // Set default node config if API call fails
+      // Set default node config if API call fails - use Blockstream public server
       setNodeConfig({
         type: 'electrum',
-        host: '127.0.0.1',
-        port: '50001',
-        useSsl: false,
+        host: 'electrum.blockstream.info',
+        port: '50002',
+        useSsl: true,
         explorerUrl: 'https://mempool.space',
         feeEstimatorUrl: 'https://mempool.space'
       });
@@ -453,6 +465,40 @@ export const Admin: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Public Electrum Servers - only shown for Electrum type */}
+            {nodeConfig.type === 'electrum' && (
+              <div className="space-y-3 border-t border-sanctuary-100 dark:border-sanctuary-800 pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Public Electrum Servers</label>
+                    <p className="text-xs text-sanctuary-500">Quick-select from well-known public servers. These are free to use but may have privacy implications.</p>
+                  </div>
+                  <Globe className="w-4 h-4 text-sanctuary-400" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PUBLIC_ELECTRUM_SERVERS.map((server) => (
+                    <button
+                      key={`${server.host}:${server.port}`}
+                      onClick={() => setNodeConfig({
+                        ...nodeConfig,
+                        host: server.host,
+                        port: server.port,
+                        useSsl: server.useSsl
+                      })}
+                      className={`text-left px-3 py-2 text-xs rounded-lg border transition-colors ${
+                        nodeConfig.host === server.host && nodeConfig.port === server.port
+                          ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                          : 'bg-sanctuary-50 dark:bg-sanctuary-800 border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
+                      }`}
+                    >
+                      <div className="font-medium">{server.name}</div>
+                      <div className="text-[10px] text-sanctuary-500 font-mono truncate">{server.host}:{server.port}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {nodeConfig.type === 'bitcoind' && (
               <div className="grid grid-cols-2 gap-4">

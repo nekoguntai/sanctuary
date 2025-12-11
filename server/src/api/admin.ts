@@ -24,15 +24,16 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
     });
 
     if (!nodeConfig) {
-      // Return default configuration if none exists
+      // Return default configuration if none exists - use public Blockstream server
       return res.json({
         type: 'electrum',
-        host: '127.0.0.1',
-        port: '50001',
-        useSsl: false,
+        host: 'electrum.blockstream.info',
+        port: '50002',
+        useSsl: true,
         user: null,
         password: null,
         explorerUrl: 'https://mempool.space',
+        feeEstimatorUrl: 'https://mempool.space',
       });
     }
 

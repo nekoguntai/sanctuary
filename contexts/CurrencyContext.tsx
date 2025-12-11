@@ -28,14 +28,6 @@ interface CurrencyContextType {
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
-// Fallback rates if API fails
-const FALLBACK_RATES: Record<FiatCurrency, number> = {
-  USD: 64230,
-  EUR: 59100,
-  GBP: 50500,
-  JPY: 9600000
-};
-
 const SYMBOLS: Record<FiatCurrency, string> = {
   USD: '$',
   EUR: '€',
@@ -99,8 +91,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     } catch (error) {
       console.error('Failed to fetch BTC price:', error);
       setPriceError('Failed to fetch price');
-      // Fall back to hardcoded rate
-      setBtcPrice(FALLBACK_RATES[fiatCurrency]);
+      // Keep btcPrice as null to show "-----" instead of stale fallback
     } finally {
       setPriceLoading(false);
     }

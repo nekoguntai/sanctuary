@@ -30,7 +30,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
     // Connect if not already connected
     if (!websocketClient.isConnected()) {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('sanctuary_token');
       websocketClient.connect(token || undefined);
     } else {
       setConnected(true);

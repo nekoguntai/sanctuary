@@ -1,0 +1,1181 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label } from '../types';
+import * as walletsApi from '../src/api/wallets';
+import * as transactionsApi from '../src/api/transactions';
+import * as labelsApi from '../src/api/labels';
+import * as devicesApi from '../src/api/devices';
+import * as bitcoinApi from '../src/api/bitcoin';
+import * as syncApi from '../src/api/sync';
+import { ApiError } from '../src/api/client';
+import { TransactionList } from './TransactionList';
+import { UTXOList } from './UTXOList';
+import { WalletStats } from './WalletStats';
+import { LabelManager } from './LabelManager';
+import { LabelBadges } from './LabelSelector';
+import { Button } from './ui/Button';
+import { useCurrency } from '../contexts/CurrencyContext';
+import { QRCodeSVG } from 'qrcode.react';
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  Settings,
+  Share2,
+  Copy,
+  Users,
+  Shield,
+  Trash2,
+  Plus,
+  Download,
+  FileJson,
+  FileText,
+  QrCode,
+  MapPin,
+  Check,
+  User as UserIcon,
+  ChevronDown,
+  X,
+  AlertTriangle,
+  RefreshCw,
+  Tag,
+  Edit2
+} from 'lucide-react';
+import { getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
+import { useUser } from '../contexts/UserContext';
+import { useWalletEvents } from '../hooks/useWebSocket';
+import { useNotifications } from '../contexts/NotificationContext';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+
+export const WalletDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { format } = useCurrency();
+  const { user } = useUser();
+  const highlightTxId = (location.state as any)?.highlightTxId;
+
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [utxos, setUTXOs] = useState<UTXO[]>([]);
+
+  // Addresses State
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [addressLimit, setAddressLimit] = useState(20);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'stats' | 'access' | 'settings'>('tx');
+  
+  // Export Modal State
+  const [showExport, setShowExport] = useState(false);
+  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text'>('qr');
+  
+  // Delete Modal State
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteInput, setDeleteInput] = useState('');
+  
+  // Data for Settings/Access
+  const [users, setUsers] = useState<User[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedGroupToAdd, setSelectedGroupToAdd] = useState<string>('');
+  
+  // Selection State for UTXOs
+  const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
+
+  // Address QR Modal State
+  const [qrModalAddress, setQrModalAddress] = useState<string | null>(null);
+
+  // Address Label Editing State
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
+  const [savingAddressLabels, setSavingAddressLabels] = useState(false);
+
+  // Receive Modal State
+  const [showReceive, setShowReceive] = useState(false);
+
+  // Clipboard functionality
+  const { copy, isCopied } = useCopyToClipboard();
+
+  // WebSocket integration
+  const { addNotification } = useNotifications();
+
+  // Subscribe to wallet events
+  useWalletEvents(id, {
+    onTransaction: (data) => {
+      console.log('Real-time transaction:', data);
+
+      // Show notification
+      addNotification({
+        type: 'transaction',
+        title: data.type === 'received' ? 'Bitcoin Received' : 'Bitcoin Sent',
+        message: `${data.type === 'received' ? '+' : '-'}${(data.amount / 100000000).toFixed(8)} BTC in ${wallet?.name || 'wallet'}`,
+        duration: 10000,
+        data,
+      });
+
+      // Refresh transaction list
+      fetchData();
+    },
+    onBalance: (data) => {
+      console.log('Real-time balance update:', data);
+
+      // Update wallet balance immediately
+      if (wallet) {
+        setWallet({ ...wallet, balance: data.balance });
+      }
+
+      // Show notification for significant changes
+      if (Math.abs(data.change) > 10000) {
+        addNotification({
+          type: 'balance',
+          title: 'Balance Updated',
+          message: `${data.change > 0 ? '+' : ''}${(data.change / 100000000).toFixed(8)} BTC`,
+          duration: 8000,
+          data,
+        });
+      }
+    },
+    onConfirmation: (data) => {
+      console.log('Transaction confirmation:', data);
+
+      // Update transaction confirmations
+      setTransactions(prev =>
+        prev.map(tx =>
+          tx.txid === data.txid
+            ? { ...tx, confirmations: data.confirmations }
+            : tx
+        )
+      );
+
+      // Show notification for important milestones
+      if ([1, 3, 6].includes(data.confirmations)) {
+        addNotification({
+          type: 'confirmation',
+          title: 'Transaction Confirmed',
+          message: `${data.confirmations} confirmation${data.confirmations > 1 ? 's' : ''} reached`,
+          duration: 5000,
+          data,
+        });
+      }
+    },
+    onSync: (data) => {
+      console.log('Sync status update:', data);
+
+      // Update wallet sync status
+      if (wallet) {
+        setWallet({
+          ...wallet,
+          syncInProgress: data.inProgress,
+          lastSyncStatus: data.status || wallet.lastSyncStatus,
+          lastSyncedAt: data.lastSyncedAt ? new Date(data.lastSyncedAt).toISOString() : wallet.lastSyncedAt,
+        });
+      }
+
+      // If sync completed, refresh data
+      if (!data.inProgress && data.status === 'success') {
+        fetchData();
+      }
+    },
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, [id, user]);
+
+  const fetchData = async () => {
+    if (!id || !user) return;
+
+    setLoading(true);
+    setError(null);
+
+    // Fetch wallet data - this is critical, fail if it doesn't work
+    let apiWallet;
+    try {
+      apiWallet = await walletsApi.getWallet(id);
+    } catch (err) {
+      console.error('Failed to fetch wallet:', err);
+      if (err instanceof ApiError) {
+        if (err.status === 404) {
+          navigate('/wallets');
+          return;
+        }
+        setError(err.message);
+      } else {
+        setError('Failed to load wallet');
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Convert API wallet to component format
+    const formattedWallet: Wallet = {
+      id: apiWallet.id,
+      name: apiWallet.name,
+      type: apiWallet.type as WalletType,
+      balance: apiWallet.balance,
+      scriptType: apiWallet.scriptType,
+      derivationPath: apiWallet.descriptor || '',
+      fingerprint: apiWallet.fingerprint || '',
+      label: apiWallet.name,
+      xpub: '',
+      unit: 'sats',
+      ownerId: user.id,
+      groupIds: [],
+      quorum: apiWallet.quorum && apiWallet.totalSigners
+        ? { m: apiWallet.quorum, n: apiWallet.totalSigners }
+        : { m: 1, n: 1 },
+      descriptor: apiWallet.descriptor,
+      deviceIds: [], // Will be populated from devices
+      // Sync metadata
+      lastSyncedAt: apiWallet.lastSyncedAt,
+      lastSyncStatus: apiWallet.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
+      syncInProgress: apiWallet.syncInProgress,
+    };
+
+    setWallet(formattedWallet);
+
+    // Fetch remaining data in parallel, with individual error handling
+    // These can fail gracefully without blocking the wallet view
+    const fetchPromises = [];
+
+    // Fetch devices
+    fetchPromises.push(
+      devicesApi.getDevices()
+        .then(allDevices => {
+          const walletDevices = allDevices
+            .filter(d => d.wallets?.some(w => w.wallet.id === id))
+            .map(d => ({
+              id: d.id,
+              type: d.type,
+              label: d.label,
+              fingerprint: d.fingerprint,
+              derivationPath: d.derivationPath || "m/84'/0'/0'",
+              xpub: d.xpub,
+              userId: user.id,
+            }));
+          setDevices(walletDevices);
+        })
+        .catch(err => console.error('Failed to fetch devices:', err))
+    );
+
+    // Fetch transactions
+    fetchPromises.push(
+      transactionsApi.getTransactions(id, { limit: 50 })
+        .then(apiTransactions => {
+          const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
+            id: tx.id,
+            txid: tx.txid,
+            amount: (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
+            timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
+            confirmations: tx.confirmations,
+            confirmed: tx.confirmations >= 1,
+            fee: tx.fee ? Number(tx.fee) : 0,
+            walletId: id,
+            label: tx.label || tx.memo || '',
+            labels: tx.labels || [], // Map labels from API
+            address: tx.address?.address,
+            blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
+            counterpartyAddress: tx.counterpartyAddress || undefined,
+          }));
+          setTransactions(formattedTxs);
+        })
+        .catch(err => console.error('Failed to fetch transactions:', err))
+    );
+
+    // Fetch UTXOs
+    fetchPromises.push(
+      transactionsApi.getUTXOs(id)
+        .then(utxoData => {
+          const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
+            txid: utxo.txid,
+            vout: utxo.vout,
+            amount: Number(utxo.amount),
+            address: utxo.address,
+            confirmations: utxo.confirmations,
+            frozen: false, // TODO: Add frozen state to database
+            date: new Date(utxo.createdAt).getTime(),
+          }));
+          setUTXOs(formattedUTXOs);
+        })
+        .catch(err => console.error('Failed to fetch UTXOs:', err))
+    );
+
+    // Fetch addresses
+    fetchPromises.push(
+      loadAddresses(id, 20, 0, true)
+        .catch(err => console.error('Failed to fetch addresses:', err))
+    );
+
+    // Wait for all fetches to complete (they handle their own errors)
+    await Promise.all(fetchPromises);
+
+    // Note: Users and groups are not needed for basic wallet display
+    setUsers([]);
+    setGroups([]);
+
+    setLoading(false);
+  };
+
+  const loadAddresses = async (walletId: string, limit: number, offset: number, reset = false) => {
+    try {
+      setLoadingAddresses(true);
+      const apiAddresses = await transactionsApi.getAddresses(walletId);
+
+      // Convert to component format
+      const formattedAddrs: Address[] = apiAddresses.map(addr => ({
+        id: addr.id,
+        address: addr.address,
+        derivationPath: addr.derivationPath,
+        index: addr.index,
+        used: addr.used,
+        balance: addr.balance || 0,
+        walletId: walletId,
+      }));
+
+      setAddresses(prev => reset ? formattedAddrs : [...prev, ...formattedAddrs]);
+    } catch (err) {
+      console.error('Failed to load addresses:', err);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  // Sync wallet with blockchain (immediate sync using new sync API)
+  const handleSync = async () => {
+    if (!id) return;
+
+    try {
+      setSyncing(true);
+      // Use the new sync API for immediate sync
+      const result = await syncApi.syncWallet(id);
+      if (!result.success && result.error) {
+        console.error('Sync error:', result.error);
+      }
+      // Reload wallet data after sync
+      await fetchData();
+    } catch (err) {
+      console.error('Failed to sync wallet:', err);
+      if (err instanceof ApiError) {
+        alert(`Sync failed: ${err.message}`);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Queue wallet for background sync when page loads
+  useEffect(() => {
+    if (id && user) {
+      // Queue this wallet for high-priority background sync
+      // Data is already loaded from DB cache, this updates it in background
+      syncApi.queueSync(id, 'high').catch(err => {
+        console.error('Failed to queue wallet sync:', err);
+      });
+    }
+  }, [id, user]);
+
+  const handleLoadMoreAddresses = () => {
+      if (!id) return;
+      const nextOffset = addresses.length;
+      loadAddresses(id, 20, nextOffset);
+  };
+
+  // Truncate address to show first 10 + "..." + last 6 characters
+  const truncateAddress = (address: string) => {
+    if (address.length <= 18) return address;
+    return `${address.slice(0, 10)}...${address.slice(-6)}`;
+  };
+
+  // Address label editing functions
+  const handleEditAddressLabels = async (addr: Address) => {
+    if (!addr.id || !id) return;
+    setEditingAddressId(addr.id);
+    setSelectedLabelIds(addr.labels?.map(l => l.id) || []);
+    try {
+      const labels = await labelsApi.getLabels(id);
+      setAvailableLabels(labels);
+    } catch (err) {
+      console.error('Failed to load labels:', err);
+    }
+  };
+
+  const handleSaveAddressLabels = async () => {
+    if (!editingAddressId) return;
+    try {
+      setSavingAddressLabels(true);
+      await labelsApi.setAddressLabels(editingAddressId, selectedLabelIds);
+      // Update the address's labels locally
+      const updatedLabels = availableLabels.filter(l => selectedLabelIds.includes(l.id));
+      setAddresses(current =>
+        current.map(addr =>
+          addr.id === editingAddressId ? { ...addr, labels: updatedLabels } : addr
+        )
+      );
+      setEditingAddressId(null);
+    } catch (err) {
+      console.error('Failed to save address labels:', err);
+    } finally {
+      setSavingAddressLabels(false);
+    }
+  };
+
+  const handleToggleAddressLabel = (labelId: string) => {
+    setSelectedLabelIds(prev =>
+      prev.includes(labelId)
+        ? prev.filter(id => id !== labelId)
+        : [...prev, labelId]
+    );
+  };
+
+  // Refresh data callback for when labels are changed
+  const handleLabelsChange = () => {
+    if (id) {
+      fetchData();
+    }
+  };
+
+  const handleToggleFreeze = (txid: string, vout: number) => {
+    setUTXOs(current => 
+      current.map(u => 
+        (u.txid === txid && u.vout === vout) ? { ...u, frozen: !u.frozen } : u
+      )
+    );
+  };
+
+  const handleToggleSelect = (id: string) => {
+    const next = new Set(selectedUtxos);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedUtxos(next);
+  };
+
+  const handleSendSelected = () => {
+    navigate(`/wallets/${id}/send`, { state: { preSelected: Array.from(selectedUtxos) } });
+  };
+
+  const handleUpdateWallet = async (updatedData: Partial<Wallet>) => {
+    if (!wallet || !id) return;
+
+    try {
+      // Optimistic update
+      const updatedWallet = { ...wallet, ...updatedData };
+      setWallet(updatedWallet);
+
+      // Update via API (only name and descriptor are updateable)
+      await walletsApi.updateWallet(id, {
+        name: updatedData.name,
+        descriptor: updatedData.descriptor,
+      });
+    } catch (err) {
+      console.error('Failed to update wallet:', err);
+      // Revert optimistic update on error
+      setWallet(wallet);
+      if (err instanceof ApiError) {
+        alert(`Update failed: ${err.message}`);
+      }
+    }
+  };
+
+  const addGroup = () => {
+    if (!wallet || !selectedGroupToAdd) return;
+    if (wallet.groupIds.includes(selectedGroupToAdd)) return;
+    const newGroupIds = [...wallet.groupIds, selectedGroupToAdd];
+    handleUpdateWallet({ groupIds: newGroupIds });
+    setSelectedGroupToAdd('');
+  };
+
+  const removeGroup = (groupId: string) => {
+    if (!wallet) return;
+    const newGroupIds = wallet.groupIds.filter(id => id !== groupId);
+    handleUpdateWallet({ groupIds: newGroupIds });
+  };
+
+  const downloadJson = () => {
+     if(!wallet) return;
+     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(wallet, null, 2));
+     const downloadAnchorNode = document.createElement('a');
+     downloadAnchorNode.setAttribute("href",     dataStr);
+     downloadAnchorNode.setAttribute("download", `${wallet.name.replace(/\s+/g, '_')}_backup.json`);
+     document.body.appendChild(downloadAnchorNode); // required for firefox
+     downloadAnchorNode.click();
+     downloadAnchorNode.remove();
+  }
+
+  if (loading) return <div className="p-8 text-center animate-pulse">Loading wallet...</div>;
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-6 max-w-md mx-auto">
+          <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+          <h3 className="text-lg font-medium text-rose-900 dark:text-rose-100 mb-2">Failed to Load Wallet</h3>
+          <p className="text-rose-700 dark:text-rose-300 mb-4">{error}</p>
+          <Button onClick={() => { setError(null); fetchData(); }} variant="primary">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!wallet) return <div className="p-8 text-center animate-pulse">Loading wallet...</div>;
+
+  const ownerUser = users.find(u => u.id === wallet.ownerId);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Card */}
+      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10 pointer-events-none">
+           {getWalletIcon(wallet.type, "w-40 h-40 text-primary-500")}
+        </div>
+        
+        <div className="relative z-10">
+          <div className="flex flex-wrap gap-2 mb-3">
+             {/* Wallet Type Badge */}
+             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
+               {wallet.type === 'Multi Sig' ? `${wallet.quorum?.m} of ${wallet.quorum?.n} Multisig` : 'Single Signature'}
+             </span>
+             {devices.map(d => (
+                 <span key={d.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sanctuary-50 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-300 dark:border-sanctuary-700">
+                    {getDeviceIcon(d.type, "w-3 h-3 mr-1")} {d.label}
+                 </span>
+             ))}
+             {ownerUser && (
+                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-600 border border-primary-100 dark:bg-sanctuary-800 dark:text-sanctuary-400 dark:border-sanctuary-700">
+                    <UserIcon className="w-3 h-3 mr-1" /> Owned by {ownerUser.username}
+                 </span>
+             )}
+             {/* Sync Status Badge */}
+             {syncing || wallet.syncInProgress ? (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Syncing...
+               </span>
+             ) : wallet.lastSyncStatus === 'success' ? (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20" title={wallet.lastSyncedAt ? `Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}` : ''}>
+                  <Check className="w-3 h-3 mr-1" /> Synced
+               </span>
+             ) : wallet.lastSyncStatus === 'failed' ? (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" title="Last sync failed">
+                  <AlertTriangle className="w-3 h-3 mr-1" /> Sync Failed
+               </span>
+             ) : wallet.lastSyncedAt ? (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sanctuary-100 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-400 dark:border-sanctuary-700" title={`Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}`}>
+                  <Check className="w-3 h-3 mr-1" /> Cached
+               </span>
+             ) : (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20" title="Never synced">
+                  <AlertTriangle className="w-3 h-3 mr-1" /> Not Synced
+               </span>
+             )}
+          </div>
+
+          <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50 tracking-tight">{wallet.name}</h1>
+          
+          <div className="mt-4 flex items-baseline">
+            <span className="text-4xl font-bold text-sanctuary-900 dark:text-sanctuary-50 mr-2">
+              {format(wallet.balance)}
+            </span>
+          </div>
+
+          <div className="mt-6 flex space-x-3">
+             <Button onClick={() => setShowReceive(true)} variant="primary">
+               <ArrowDownLeft className="w-4 h-4 mr-2" /> Receive
+             </Button>
+             <Button variant="secondary" onClick={() => navigate(`/wallets/${id}/send`)}>
+               <ArrowUpRight className="w-4 h-4 mr-2" /> Send
+             </Button>
+             <Button variant="ghost" onClick={handleSync} disabled={syncing}>
+               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+               {syncing ? 'Syncing...' : 'Sync'}
+             </Button>
+             <Button variant="ghost" onClick={() => setShowExport(true)}>
+               <Share2 className="w-4 h-4 mr-2" /> Export
+             </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {['tx', 'utxo', 'addresses', 'stats', 'access', 'settings'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab as any)}
+              className={`${
+                activeTab === tab
+                  ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300'
+                  : 'border-transparent text-sanctuary-500 hover:text-sanctuary-700 hover:border-sanctuary-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors`}
+            >
+              {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Content Area */}
+      <div className="min-h-[400px]">
+        {activeTab === 'tx' && (
+          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+             <TransactionList transactions={transactions} highlightedTxId={highlightTxId} onLabelsChange={handleLabelsChange} />
+          </div>
+        )}
+        
+        {activeTab === 'utxo' && (
+          <UTXOList 
+            utxos={utxos} 
+            onToggleFreeze={handleToggleFreeze}
+            selectable={true}
+            selectedUtxos={selectedUtxos}
+            onToggleSelect={handleToggleSelect}
+            onSendSelected={handleSendSelected}
+          />
+        )}
+
+        {activeTab === 'addresses' && (
+           <div className="space-y-4 animate-fade-in">
+              <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+                 <div className="px-6 py-4 bg-sanctuary-50 dark:bg-sanctuary-950 border-b border-sanctuary-100 dark:border-sanctuary-800">
+                    <div className="flex items-center space-x-2">
+                       <MapPin className="w-4 h-4 text-sanctuary-500" />
+                       <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Address Explorer</h3>
+                    </div>
+                 </div>
+                 {addresses.length === 0 ? (
+                    <div className="p-12 text-center">
+                       <MapPin className="w-12 h-12 mx-auto text-sanctuary-300 dark:text-sanctuary-600 mb-4" />
+                       <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Addresses Available</h3>
+                       <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 mb-4 max-w-md mx-auto">
+                          {!wallet.descriptor
+                            ? "This wallet doesn't have a descriptor. Please link a hardware device with an xpub to generate addresses."
+                            : "No addresses have been generated yet. Click below to generate addresses."}
+                       </p>
+                       {wallet.descriptor && (
+                          <Button variant="primary" onClick={handleLoadMoreAddresses} isLoading={loadingAddresses}>
+                             <Plus className="w-4 h-4 mr-2" /> Generate Addresses
+                          </Button>
+                       )}
+                    </div>
+                 ) : (
+                    <>
+                       <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
+                             <thead className="bg-sanctuary-50 dark:bg-sanctuary-950">
+                                <tr>
+                                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Path (Index)</th>
+                                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Address</th>
+                                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Label</th>
+                                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
+                                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                             </thead>
+                             <tbody className="divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
+                                {addresses.map((addr) => (
+                                   <tr key={addr.address} className="hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors">
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-sanctuary-500 font-mono">
+                                         ...{addr.derivationPath.split('/').slice(-2).join('/')}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                         <div className="flex items-center space-x-2">
+                                           <span
+                                             className="text-sm font-mono text-sanctuary-700 dark:text-sanctuary-300 cursor-default"
+                                             title={addr.address}
+                                           >
+                                             {truncateAddress(addr.address)}
+                                           </span>
+                                           <button
+                                             className={`transition-colors ${isCopied(addr.address) ? 'text-success-500' : 'text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300'}`}
+                                             onClick={() => copy(addr.address)}
+                                             title={isCopied(addr.address) ? 'Copied!' : 'Copy address'}
+                                           >
+                                             {isCopied(addr.address) ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                           </button>
+                                           <button
+                                             className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                                             onClick={() => setQrModalAddress(addr.address)}
+                                             title="Show QR code"
+                                           >
+                                             <QrCode className="w-3 h-3" />
+                                           </button>
+                                         </div>
+                                      </td>
+                                      <td className="px-6 py-4 text-sm">
+                                         {editingAddressId === addr.id ? (
+                                            <div className="flex flex-wrap gap-1.5 items-center min-w-[200px]">
+                                              {availableLabels.length === 0 ? (
+                                                <span className="text-xs text-sanctuary-400">No labels available</span>
+                                              ) : (
+                                                <>
+                                                  {availableLabels.map(label => {
+                                                    const isSelected = selectedLabelIds.includes(label.id);
+                                                    return (
+                                                      <button
+                                                        key={label.id}
+                                                        onClick={() => handleToggleAddressLabel(label.id)}
+                                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white transition-all ${
+                                                          isSelected
+                                                            ? 'ring-2 ring-offset-1 ring-sanctuary-500'
+                                                            : 'opacity-50 hover:opacity-75'
+                                                        }`}
+                                                        style={{ backgroundColor: label.color }}
+                                                      >
+                                                        <Tag className="w-2.5 h-2.5" />
+                                                        {label.name}
+                                                      </button>
+                                                    );
+                                                  })}
+                                                </>
+                                              )}
+                                              <div className="flex items-center gap-1 ml-2">
+                                                <button
+                                                  onClick={handleSaveAddressLabels}
+                                                  disabled={savingAddressLabels}
+                                                  className="p-1 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white rounded transition-colors"
+                                                  title="Save"
+                                                >
+                                                  {savingAddressLabels ? (
+                                                    <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent" />
+                                                  ) : (
+                                                    <Check className="w-3 h-3" />
+                                                  )}
+                                                </button>
+                                                <button
+                                                  onClick={() => setEditingAddressId(null)}
+                                                  className="p-1 text-sanctuary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded transition-colors"
+                                                  title="Cancel"
+                                                >
+                                                  <X className="w-3 h-3" />
+                                                </button>
+                                              </div>
+                                            </div>
+                                         ) : (
+                                            <div className="flex items-center gap-2 group">
+                                              {(addr.labels && addr.labels.length > 0) ? (
+                                                <LabelBadges labels={addr.labels} maxDisplay={2} size="sm" />
+                                              ) : addr.label ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sanctuary-100 text-sanctuary-800 dark:bg-sanctuary-800 dark:text-sanctuary-300">
+                                                  {addr.label}
+                                                </span>
+                                              ) : (
+                                                <span className="text-sanctuary-300 italic">-</span>
+                                              )}
+                                              {addr.id && (
+                                                <button
+                                                  onClick={() => handleEditAddressLabels(addr)}
+                                                  className="opacity-0 group-hover:opacity-100 p-1 text-sanctuary-400 hover:text-primary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded transition-all"
+                                                  title="Edit labels"
+                                                >
+                                                  <Edit2 className="w-3 h-3" />
+                                                </button>
+                                              )}
+                                            </div>
+                                         )}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                                         {addr.balance > 0 ? format(addr.balance) : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${addr.used ? 'bg-success-100 text-success-800 dark:bg-success-900 dark:text-success-100' : 'bg-sanctuary-100 text-sanctuary-800 dark:bg-sanctuary-800 dark:text-sanctuary-300'}`}>
+                                            {addr.used ? 'Used' : 'Unused'}
+                                         </span>
+                                      </td>
+                                   </tr>
+                                ))}
+                             </tbody>
+                          </table>
+                       </div>
+                       <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-950 border-t border-sanctuary-100 dark:border-sanctuary-800 text-center">
+                          <Button variant="secondary" onClick={handleLoadMoreAddresses} isLoading={loadingAddresses}>
+                              <ChevronDown className="w-4 h-4 mr-2" /> Load More Addresses
+                          </Button>
+                       </div>
+                    </>
+                 )}
+              </div>
+           </div>
+        )}
+
+        {activeTab === 'stats' && (
+          <WalletStats utxos={utxos} balance={wallet.balance} transactions={transactions} />
+        )}
+
+        {activeTab === 'access' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <h3 className="text-lg font-medium mb-4 flex items-center">
+                 <Shield className="w-5 h-5 mr-2 text-primary-500" />
+                 Ownership
+               </h3>
+               <div className="flex items-center p-4 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg justify-between">
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
+                        {ownerUser?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="ml-4">
+                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{ownerUser?.username || user?.username || 'You'}</p>
+                        <p className="text-xs text-sanctuary-500">Wallet Creator & Owner</p>
+                    </div>
+                  </div>
+
+                  {/* Transfer Ownership Small Control */}
+                  {users.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                         <span className="text-xs text-sanctuary-400">Transfer to:</span>
+                         <select
+                          value={wallet.ownerId}
+                          onChange={(e) => handleUpdateWallet({ ownerId: e.target.value })}
+                          className="text-xs bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded px-2 py-1"
+                        >
+                           {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                        </select>
+                    </div>
+                  )}
+               </div>
+            </div>
+
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium flex items-center">
+                        <Users className="w-5 h-5 mr-2 text-primary-500" />
+                        Shared Access
+                    </h3>
+               </div>
+               
+               {/* Add Group Control Moved Here */}
+               <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Grant Access</p>
+                   <div className="flex space-x-2">
+                          <select 
+                             value={selectedGroupToAdd}
+                             onChange={(e) => setSelectedGroupToAdd(e.target.value)}
+                             className="flex-1 text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
+                          >
+                             <option value="">Select Group to Share With...</option>
+                             {groups.filter(g => !wallet.groupIds.includes(g.id)).map(g => (
+                                 <option key={g.id} value={g.id}>{g.name}</option>
+                             ))}
+                          </select>
+                          <Button size="sm" onClick={addGroup} disabled={!selectedGroupToAdd}>
+                              <Plus className="w-4 h-4 mr-1" /> Add Access
+                          </Button>
+                   </div>
+               </div>
+
+               {wallet.groupIds.length === 0 ? (
+                 <div className="text-center py-8 text-sanctuary-500 italic">
+                    This wallet is currently private.
+                 </div>
+               ) : (
+                 <div className="grid gap-4">
+                    {wallet.groupIds.map(gid => {
+                       const group = groups.find(g => g.id === gid);
+                       if(!group) return null;
+                       const members = users.filter(u => group.memberIds.includes(u.id));
+                       return (
+                         <div key={gid} className="border border-sanctuary-100 dark:border-sanctuary-800 rounded-lg overflow-hidden">
+                            <div className="bg-sanctuary-50 dark:bg-sanctuary-950/50 px-4 py-3 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
+                               <div className="flex items-center">
+                                   <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{group.name}</span>
+                                   <span className="text-xs text-sanctuary-500">({members.length} Members)</span>
+                               </div>
+                               <button onClick={() => removeGroup(gid)} className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
+                                  <Trash2 className="w-3 h-3 mr-1" /> Revoke
+                               </button>
+                            </div>
+                            <div className="p-4 bg-white dark:bg-sanctuary-900">
+                               <div className="flex flex-wrap gap-2">
+                                  {members.map(m => (
+                                     <div key={m.id} className="flex items-center bg-sanctuary-50 dark:bg-sanctuary-800 px-3 py-1.5 rounded-full border border-sanctuary-100 dark:border-sanctuary-700">
+                                        <UserIcon className="w-3 h-3 mr-2 text-sanctuary-400" />
+                                        <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{m.username}</span>
+                                     </div>
+                                  ))}
+                               </div>
+                            </div>
+                         </div>
+                       )
+                    })}
+                 </div>
+               )}
+            </div>
+          </div>
+        )}
+
+
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl space-y-6">
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <h3 className="text-lg font-medium mb-4">Wallet Configuration</h3>
+               <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                 <div>
+                   <dt className="text-sm font-medium text-sanctuary-500">Wallet ID</dt>
+                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.id}</dd>
+                 </div>
+                 <div>
+                   <dt className="text-sm font-medium text-sanctuary-500">Type</dt>
+                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.type}</dd>
+                 </div>
+                 {wallet.quorum && (
+                    <div>
+                        <dt className="text-sm font-medium text-sanctuary-500">Quorum</dt>
+                        <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.quorum.m} of {wallet.quorum.n}</dd>
+                    </div>
+                 )}
+               </dl>
+            </div>
+            
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <h3 className="text-lg font-medium mb-4">Hardware Devices</h3>
+               <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
+                   {devices.map(d => (
+                       <li key={d.id} className="py-4 flex justify-between items-center">
+                           <div className="flex items-center space-x-3">
+                               <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800">
+                                   {getDeviceIcon(d.type, "w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400")}
+                               </div>
+                               <div>
+                                   <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
+                                   <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
+                               </div>
+                           </div>
+                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">
+                               Active
+                           </span>
+                       </li>
+                   ))}
+               </ul>
+            </div>
+
+             {/* Labels Management */}
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+              <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
+            </div>
+
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <h3 className="text-lg font-medium mb-4 text-zen-vermilion">Danger Zone</h3>
+               <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Wallet</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Export Modal Overlay */}
+      {showExport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-light">Export Wallet</h3>
+              <button onClick={() => setShowExport(false)} className="text-sanctuary-400 hover:text-sanctuary-600"><X className="w-5 h-5"/></button>
+            </div>
+
+            {/* Export Tabs */}
+            <div className="flex border-b border-sanctuary-200 dark:border-sanctuary-800 mb-6">
+                 <button onClick={() => setExportTab('qr')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'qr' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
+                   <QrCode className="w-4 h-4 mx-auto mb-1" />
+                   QR Code
+                 </button>
+                 <button onClick={() => setExportTab('json')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'json' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
+                   <FileJson className="w-4 h-4 mx-auto mb-1" />
+                   JSON File
+                 </button>
+                 <button onClick={() => setExportTab('text')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'text' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
+                   <FileText className="w-4 h-4 mx-auto mb-1" />
+                   Descriptor
+                 </button>
+            </div>
+            
+            <div className="flex flex-col items-center space-y-6">
+               {exportTab === 'qr' && (
+                  <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100">
+                    <QRCodeSVG value={wallet.descriptor} size={240} level="L" />
+                    <p className="text-center text-xs text-sanctuary-400 mt-2">Scan to import into another device</p>
+                  </div>
+               )}
+
+               {exportTab === 'json' && (
+                   <div className="text-center w-full">
+                       <FileJson className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
+                       <p className="text-sm text-sanctuary-500 mb-6">Download the full wallet backup in JSON format. Store this file securely.</p>
+                       <Button onClick={downloadJson} className="w-full">
+                           <Download className="w-4 h-4 mr-2" /> Download Backup
+                       </Button>
+                   </div>
+               )}
+
+               {exportTab === 'text' && (
+                    <div className="w-full">
+                        <label className="block text-xs font-medium text-sanctuary-500 mb-1">Output Descriptor</label>
+                        <textarea
+                        readOnly
+                        className="w-full h-32 p-3 text-xs font-mono bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
+                        value={wallet.descriptor}
+                        />
+                         <Button className="w-full mt-4" variant={isCopied(wallet.descriptor) ? 'primary' : 'secondary'} onClick={() => copy(wallet.descriptor)}>
+                            {isCopied(wallet.descriptor) ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                            {isCopied(wallet.descriptor) ? 'Copied!' : 'Copy to Clipboard'}
+                        </Button>
+                    </div>
+               )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+                <Button className="w-full" variant="ghost" onClick={() => setShowExport(false)}>
+                   Close
+                 </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receive Modal */}
+      {showReceive && (() => {
+        const receiveAddress = addresses.find(a => !a.used)?.address || addresses[0]?.address || '';
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowReceive(false)}>
+            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">Receive Bitcoin</h3>
+                <button
+                  onClick={() => setShowReceive(false)}
+                  className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {receiveAddress ? (
+                <div className="flex flex-col items-center">
+                  <div className="bg-white p-4 rounded-xl mb-4 shadow-sm">
+                    <QRCodeSVG value={receiveAddress} size={200} level="M" />
+                  </div>
+                  <div className="w-full">
+                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Receive Address</label>
+                    <div className="flex items-center space-x-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
+                      <code className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
+                        {receiveAddress}
+                      </code>
+                      <button
+                        onClick={() => copy(receiveAddress)}
+                        className={`flex-shrink-0 p-2 rounded transition-colors ${isCopied(receiveAddress) ? 'bg-success-100 dark:bg-success-500/20 text-success-600 dark:text-success-400' : 'hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-400'}`}
+                        title={isCopied(receiveAddress) ? 'Copied!' : 'Copy address'}
+                      >
+                        {isCopied(receiveAddress) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-sanctuary-500 mt-4 text-center">
+                    Send only Bitcoin (BTC) to this address.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sanctuary-500 mb-4">No receive address available. Please link a hardware device with an xpub first.</p>
+                  <Button variant="secondary" onClick={() => { setShowReceive(false); setActiveTab('settings'); }}>
+                    Go to Settings
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Address QR Code Modal */}
+      {qrModalAddress && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQrModalAddress(null)}>
+          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Address QR Code</h3>
+              <button
+                onClick={() => setQrModalAddress(null)}
+                className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="bg-white p-4 rounded-xl mb-4">
+                <QRCodeSVG value={qrModalAddress} size={200} level="M" />
+              </div>
+              <div className="w-full">
+                <label className="block text-xs font-medium text-sanctuary-500 mb-1">Full Address</label>
+                <div className="flex items-center space-x-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
+                  <span className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
+                    {qrModalAddress}
+                  </span>
+                  <button
+                    onClick={() => copy(qrModalAddress)}
+                    className={`flex-shrink-0 transition-colors ${isCopied(qrModalAddress) ? 'text-success-500' : 'text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300'}`}
+                    title={isCopied(qrModalAddress) ? 'Copied!' : 'Copy address'}
+                  >
+                    {isCopied(qrModalAddress) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
+             <div className="text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
+                   <AlertTriangle className="h-6 w-6 text-rose-600 dark:text-rose-400" />
+                </div>
+                <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Delete Wallet?</h3>
+                <p className="text-sm text-sanctuary-500 mb-6">
+                   This action cannot be undone. This will permanently remove the wallet configuration from Sanctuary. Your funds remain on the blockchain, but you will need your seed or backup to access them again.
+                </p>
+                
+                <div className="mb-6">
+                   <label className="block text-xs font-medium text-sanctuary-500 mb-1 text-left">Type <span className="font-bold text-sanctuary-900 dark:text-sanctuary-100">DELETE</span> to confirm</label>
+                   <input 
+                      type="text" 
+                      value={deleteInput}
+                      onChange={(e) => setDeleteInput(e.target.value)}
+                      className="w-full px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      placeholder="DELETE"
+                   />
+                </div>
+
+                <div className="flex space-x-3">
+                   <Button variant="ghost" className="flex-1" onClick={() => { setShowDelete(false); setDeleteInput(''); }}>Cancel</Button>
+                   <Button
+                      variant="danger"
+                      className="flex-1"
+                      disabled={deleteInput !== 'DELETE'}
+                      onClick={async () => {
+                         if(wallet && id) {
+                            try {
+                               await walletsApi.deleteWallet(id);
+                               navigate('/wallets');
+                            } catch (err) {
+                               console.error('Failed to delete wallet:', err);
+                               if (err instanceof ApiError) {
+                                  alert(`Delete failed: ${err.message}`);
+                               }
+                            }
+                         }
+                      }}
+                   >
+                      Delete Forever
+                   </Button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

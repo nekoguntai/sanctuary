@@ -1,0 +1,137 @@
+# =============================================
+# Sanctuary Bitcoin Wallet - Docker Compose
+# =============================================
+# Usage:
+#   Development: docker-compose up --build
+#   Production:  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: sanctuary-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sanctuary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanctuary}
+      POSTGRES_DB: ${POSTGRES_DB:-sanctuary}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sanctuary} -d ${POSTGRES_DB:-sanctuary}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sanctuary-network
+
+  # ============================================
+  # Backend API Server
+  # ============================================
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sanctuary-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Server
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      API_URL: ${API_URL:-http://localhost:3001}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # Bitcoin Network
+      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
+
+      # Electrum Server
+      ELECTRUM_HOST: ${ELECTRUM_HOST:-electrum.blockstream.info}
+      ELECTRUM_PORT: ${ELECTRUM_PORT:-50002}
+      ELECTRUM_PROTOCOL: ${ELECTRUM_PROTOCOL:-ssl}
+
+      # Price APIs
+      MEMPOOL_API: ${MEMPOOL_API:-https://mempool.space/api/v1}
+      COINGECKO_API: ${COINGECKO_API:-https://api.coingecko.com/api/v3}
+      KRAKEN_API: ${KRAKEN_API:-https://api.kraken.com/0/public}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - sanctuary-network
+
+  # ============================================
+  # Database Migrations & Seeding (one-time run)
+  # ============================================
+  migrate:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sanctuary-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public
+    command: ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
+    networks:
+      - sanctuary-network
+    restart: "no"
+
+  # ============================================
+  # Frontend (Nginx + React)
+  # ============================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    container_name: sanctuary-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: 3001
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sanctuary-network
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  sanctuary-network:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local

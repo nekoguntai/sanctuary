@@ -1,0 +1,175 @@
+/**
+ * Sync API Routes
+ *
+ * API endpoints for wallet synchronization management
+ */
+
+import { Router, Request, Response } from 'express';
+import { authenticate } from '../middleware/auth';
+import { getSyncService } from '../services/syncService';
+import prisma from '../models/prisma';
+
+const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
+
+/**
+ * POST /api/v1/sync/wallet/:walletId
+ * Trigger immediate sync for a wallet
+ */
+router.post('/wallet/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    const syncService = getSyncService();
+    const result = await syncService.syncNow(walletId);
+
+    res.json({
+      success: result.success,
+      syncedAddresses: result.addresses,
+      newTransactions: result.transactions,
+      newUtxos: result.utxos,
+      error: result.error,
+    });
+  } catch (error: any) {
+    console.error('[SYNC API] Sync wallet error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to sync wallet',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/sync/queue/:walletId
+ * Queue a wallet for background sync
+ */
+router.post('/queue/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+    const { priority = 'normal' } = req.body;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    const syncService = getSyncService();
+    syncService.queueSync(walletId, priority);
+
+    const status = await syncService.getSyncStatus(walletId);
+
+    res.json({
+      queued: true,
+      queuePosition: status.queuePosition,
+      syncInProgress: status.syncInProgress,
+    });
+  } catch (error: any) {
+    console.error('[SYNC API] Queue sync error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to queue sync',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/sync/status/:walletId
+ * Get sync status for a wallet
+ */
+router.get('/status/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    const syncService = getSyncService();
+    const status = await syncService.getSyncStatus(walletId);
+
+    res.json(status);
+  } catch (error: any) {
+    console.error('[SYNC API] Get sync status error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to get sync status',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/sync/user
+ * Queue all user's wallets for background sync (called on login/page load)
+ */
+router.post('/user', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { priority = 'normal' } = req.body;
+
+    const syncService = getSyncService();
+    await syncService.queueUserWallets(userId, priority);
+
+    res.json({
+      success: true,
+      message: 'All wallets queued for sync',
+    });
+  } catch (error: any) {
+    console.error('[SYNC API] Queue user wallets error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to queue wallets',
+    });
+  }
+});
+
+export default router;

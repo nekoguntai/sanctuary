@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sanctuary Wallet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              // Sanctuary = Structural Palette (Backgrounds/Borders/Neutral Text)
+              // Updated to use CSS variables for Deep Theming support
+              sanctuary: {
+                50: 'var(--color-bg-50)',
+                100: 'var(--color-bg-100)',
+                200: 'var(--color-bg-200)',
+                300: 'var(--color-bg-300)',
+                400: 'var(--color-bg-400)',
+                500: 'var(--color-bg-500)',
+                600: 'var(--color-bg-600)',
+                700: 'var(--color-bg-700)',
+                800: 'var(--color-bg-800)',
+                900: 'var(--color-bg-900)',
+                950: 'var(--color-bg-950)',
+              },
+              // Primary = Theming (Variables) for Buttons/Text/Highlights
+              primary: {
+                50: 'var(--color-primary-50)',
+                100: 'var(--color-primary-100)',
+                200: 'var(--color-primary-200)',
+                300: 'var(--color-primary-300)',
+                400: 'var(--color-primary-400)',
+                500: 'var(--color-primary-500)',
+                600: 'var(--color-primary-600)',
+                700: 'var(--color-primary-700)',
+                800: 'var(--color-primary-800)',
+                900: 'var(--color-primary-900)',
+                950: 'var(--color-primary-950)',
+              },
+              // Semantic Colors (Success/Good/SingleSig)
+              success: {
+                50: 'var(--color-success-50)',
+                100: 'var(--color-success-100)',
+                200: 'var(--color-success-200)',
+                500: 'var(--color-success-500)',
+                600: 'var(--color-success-600)',
+                700: 'var(--color-success-700)',
+                800: 'var(--color-success-800)',
+                900: 'var(--color-success-900)',
+                950: 'var(--color-success-950)',
+              },
+              // Semantic Colors (Warning/Multisig/Pending)
+              warning: {
+                50: 'var(--color-warning-50)',
+                100: 'var(--color-warning-100)',
+                200: 'var(--color-warning-200)',
+                500: 'var(--color-warning-500)',
+                600: 'var(--color-warning-600)',
+                700: 'var(--color-warning-700)',
+                800: 'var(--color-warning-800)',
+                900: 'var(--color-warning-900)',
+                950: 'var(--color-warning-950)',
+              },
+              // Zen Accents (Static)
+              zen: {
+                vermilion: '#e05a47', 
+                indigo: '#2e4a7d',    
+                matcha: '#84a98c',    
+                gold: '#d4b483',      
+                sakura: '#fcd9d9',    
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out',
+              'fade-in-up': 'fadeInUp 0.5s ease-out',
+              'slide-in-right': 'slideInRight 0.3s ease-out',
+              'slide-out-right': 'slideOutRight 0.3s ease-in',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              slideInRight: {
+                '0%': { transform: 'translateX(100%)', opacity: '0' },
+                '100%': { transform: 'translateX(0)', opacity: '1' },
+              },
+              slideOutRight: {
+                '0%': { transform: 'translateX(0)', opacity: '1' },
+                '100%': { transform: 'translateX(100%)', opacity: '0' },
+              },
+            }
+          },
+        },
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--color-bg-50);
+        transition: background-color 0.5s ease, color 0.5s ease;
+      }
+
+      html.dark body {
+        background-color: var(--color-bg-950);
+      }
+
+      /* Scrollbar Hide Utility */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+
+      /* Custom Scrollbar Styling */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--color-bg-100);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--color-bg-300);
+        border-radius: 4px;
+        transition: background 0.2s ease;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--color-bg-400);
+      }
+
+      ::-webkit-scrollbar-corner {
+        background: var(--color-bg-100);
+      }
+
+      /* Dark mode scrollbar */
+      html.dark ::-webkit-scrollbar-track {
+        background: var(--color-bg-900);
+      }
+
+      html.dark ::-webkit-scrollbar-thumb {
+        background: var(--color-bg-700);
+      }
+
+      html.dark ::-webkit-scrollbar-thumb:hover {
+        background: var(--color-bg-600);
+      }
+
+      html.dark ::-webkit-scrollbar-corner {
+        background: var(--color-bg-900);
+      }
+
+      /* Firefox scrollbar */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-bg-300) var(--color-bg-100);
+      }
+
+      html.dark * {
+        scrollbar-color: var(--color-bg-700) var(--color-bg-900);
+      }
+
+      /* Force dark mode backgrounds on table and input elements */
+      html.dark table tr,
+      html.dark table td {
+        background-color: inherit !important;
+      }
+
+      html.dark input[type="text"],
+      html.dark input[type="password"],
+      html.dark input[type="email"] {
+        background-color: var(--color-bg-900) !important;
+      }
+
+      /* Sanctuary Hero: Large Fixed Center Logo */
+      .bg-pattern-sanctuary-hero {
+        background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%2352525b' stroke-width='0.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg opacity='0.02' transform='scale(1)'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/g%3E%3Cg opacity='0.05' transform='translate(6 6) scale(0.5)'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/g%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-attachment: fixed;
+        background-size: 80vmin;
+      }
+      html.dark .bg-pattern-sanctuary-hero {
+        background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23a1a1aa' stroke-width='0.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg opacity='0.02' transform='scale(1)'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/g%3E%3Cg opacity='0.05' transform='translate(6 6) scale(0.5)'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/g%3E%3C/svg%3E");
+      }
+
+      /*
+       * Theme CSS variables and background patterns are now managed
+       * by the theme registry system (/themes directory).
+       * Themes are loaded dynamically at runtime.
+       */
+
+      /* Background Patterns */
+
+      /* Zen: Dot Pattern */
+      .bg-pattern-zen {
+        background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2352525b' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+      html.dark .bg-pattern-zen {
+        background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23a1a1aa' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+
+      /* Circuit: Tech/Geometric */
+      .bg-pattern-circuit {
+        background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2352525b' fill-opacity='0.05'%3E%3Cpath d='M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c0 5.523-4.477 10-10 10s-10-4.477-10-10 4.477-10 10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c0 5.523-4.477 10-10 10S0 25.523 0 20s4.477-10 10-10zm10 8c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8zm40 40c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z' /%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+      html.dark .bg-pattern-circuit {
+        background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23a1a1aa' fill-opacity='0.05'%3E%3Cpath d='M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c0 5.523-4.477 10-10 10s-10-4.477-10-10 4.477-10 10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c0 5.523-4.477 10-10 10S0 25.523 0 20s4.477-10 10-10zm10 8c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8zm40 40c4.418 0 8-3.582 8-8s-3.582-8-8-8-8 3.582-8 8 3.582 8 8 8z' /%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      }
+
+      /* Topography: Map Lines */
+      .bg-pattern-topography {
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%2352525b' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+      }
+
+      /* Waves: Flowing/Water */
+      .bg-pattern-waves {
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='20' viewBox='0 0 100 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M21.184 20c.357-.13.72-.264 1.088-.402l1.768-.661C33.64 15.347 39.647 14 50 14c10.271 0 15.362 1.222 24.629 4.928.955.383 1.869.74 2.75 1.072h6.225c-2.51-.735-5.197-1.52-7.894-2.677C65.592 13.078 60.103 12 50 12c-10.18 0-15.602 1.157-25.71 5.323-2.697 1.157-5.384 1.942-7.894 2.677h6.225zM0 20c2.82 0 5.798-.992 9.009-2.677C19.117 13.157 24.539 12 34.647 12c10.103 0 15.592 1.078 25.71 5.323C63.666 18.665 66.644 19.657 69.464 20h21.072c-2.82 0-5.798-.992-9.009-2.677C71.336 13.157 65.914 12 55.806 12c-10.103 0-15.592 1.078-25.71 5.323C26.79 18.665 23.812 19.657 20.992 20H0z' fill='%2352525b' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+      }
+      html.dark .bg-pattern-waves {
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='20' viewBox='0 0 100 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M21.184 20c.357-.13.72-.264 1.088-.402l1.768-.661C33.64 15.347 39.647 14 50 14c10.271 0 15.362 1.222 24.629 4.928.955.383 1.869.74 2.75 1.072h6.225c-2.51-.735-5.197-1.52-7.894-2.677C65.592 13.078 60.103 12 50 12c-10.18 0-15.602 1.157-25.71 5.323-2.697 1.157-5.384 1.942-7.894 2.677h6.225zM0 20c2.82 0 5.798-.992 9.009-2.677C19.117 13.157 24.539 12 34.647 12c10.103 0 15.592 1.078 25.71 5.323C63.666 18.665 66.644 19.657 69.464 20h21.072c-2.82 0-5.798-.992-9.009-2.677C71.336 13.157 65.914 12 55.806 12c-10.103 0-15.592 1.078-25.71 5.323C26.79 18.665 23.812 19.657 20.992 20H0z' fill='%23a1a1aa' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+      }
+
+      /* Lines: Linear/Diagonal */
+      .bg-pattern-lines {
+        background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(82, 82, 91, 0.05) 10px, rgba(82, 82, 91, 0.05) 11px);
+      }
+      html.dark .bg-pattern-lines {
+        background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(161, 161, 170, 0.05) 10px, rgba(161, 161, 170, 0.05) 11px);
+      }
+
+      /* Sanctuary: Repeating Logo Pattern */
+      .bg-pattern-sanctuary {
+        background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%2352525b' stroke-width='1' stroke-linecap='round' stroke-linejoin='round' opacity='0.05'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/svg%3E");
+      }
+      html.dark .bg-pattern-sanctuary {
+        background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23a1a1aa' stroke-width='1' stroke-linecap='round' stroke-linejoin='round' opacity='0.05'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/svg%3E");
+      }
+    </style>
+
+<link rel="stylesheet" href="/index.css">
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "qrcode.react": "https://aistudiocdn.com/qrcode.react@^4.2.0",
+    "jsqr": "https://aistudiocdn.com/jsqr@^1.4.0"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-DOMiIjVI.js"></script>
+</head>
+  <body class="bg-sanctuary-50 text-sanctuary-900 dark:bg-sanctuary-950 dark:text-sanctuary-100 transition-colors duration-300">
+    <div id="root"></div>
+</body>
+</html>

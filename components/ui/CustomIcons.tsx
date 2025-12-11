@@ -1,0 +1,217 @@
+import React from 'react';
+import { HardwareDevice, WalletType } from '../../types';
+import { Usb } from 'lucide-react';
+
+interface IconProps {
+  className?: string;
+}
+
+// --- App Logo ---
+// "Sanctuary Stack": Layers of security forming a secure foundation.
+// Geometric, minimalist, and resembling a vault or a stack of coins/servers.
+export const SanctuaryLogo: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+    <path d="M2 17l10 5 10-5" />
+    <path d="M2 12l10 5 10-5" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" fillOpacity="0.5" />
+  </svg>
+);
+
+// --- Wallet Type Icons ---
+
+// "The Master Key": Represents a single point of entry/control.
+export const SingleSigIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Key Head */}
+    <circle cx="13.5" cy="10.5" r="5.5" />
+    <circle cx="13.5" cy="10.5" r="2" fill="currentColor" fillOpacity="0.1" />
+    {/* Key Shaft */}
+    <path d="M9.5 14.5L4 20" />
+    {/* Teeth */}
+    <path d="M4 20l2-2" />
+    <path d="M4 20l-1-1" />
+  </svg>
+);
+
+// "The Vault Mechanism": Represents complex security requiring multiple parts.
+export const MultiSigIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Outer Rim */}
+    <circle cx="12" cy="12" r="10" />
+    {/* Inner Mechanism */}
+    <path d="M12 2v20" opacity="0.2" />
+    <path d="M2 12h20" opacity="0.2" />
+    <circle cx="12" cy="12" r="4" />
+    {/* Locking Pins */}
+    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+    <circle cx="12" cy="7" r="1" />
+    <circle cx="17" cy="12" r="1" />
+    <circle cx="7" cy="12" r="1" />
+    <circle cx="12" cy="17" r="1" />
+  </svg>
+);
+
+export const getWalletIcon = (type: WalletType, className?: string) => {
+  return type === WalletType.MULTI_SIG 
+    ? <MultiSigIcon className={className} /> 
+    : <SingleSigIcon className={className} />;
+};
+
+
+// --- Hardware Device Icons ---
+
+const ColdCardMk4Icon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="6" y="2" width="12" height="20" rx="2" />
+    <rect x="8" y="5" width="8" height="6" rx="1" />
+    <circle cx="9" cy="15" r="0.5" fill="currentColor" />
+    <circle cx="12" cy="15" r="0.5" fill="currentColor" />
+    <circle cx="15" cy="15" r="0.5" fill="currentColor" />
+    <circle cx="9" cy="17" r="0.5" fill="currentColor" />
+    <circle cx="12" cy="17" r="0.5" fill="currentColor" />
+    <circle cx="15" cy="17" r="0.5" fill="currentColor" />
+    <circle cx="9" cy="19" r="0.5" fill="currentColor" />
+    <circle cx="12" cy="19" r="0.5" fill="currentColor" />
+    <circle cx="15" cy="19" r="0.5" fill="currentColor" />
+  </svg>
+);
+
+const ColdCardQIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <rect x="5" y="6" width="14" height="6" rx="1" />
+    <path d="M4 14h16" strokeDasharray="2 2" />
+    <path d="M4 17h16" strokeDasharray="2 2" />
+    <circle cx="18" cy="15.5" r="1" />
+  </svg>
+);
+
+const TrezorIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M7 4h10l3 5v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9l3-5z" />
+    <rect x="8" y="8" width="8" height="6" rx="1" />
+    <path d="M12 17v1" />
+  </svg>
+);
+
+const LedgerNanoIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Device Body */}
+    <rect x="4" y="8" width="16" height="8" rx="4" />
+    {/* Screen */}
+    <rect x="8" y="10" width="8" height="4" rx="1" fill="currentColor" fillOpacity="0.1" />
+    {/* Buttons */}
+    <circle cx="6" cy="12" r="1" />
+    <circle cx="18" cy="12" r="1" />
+    {/* Swivel Hinge/Cover hint */}
+    <path d="M16 8c2.2 0 4 1.8 4 4s-1.8 4-4 4" opacity="0.5" />
+  </svg>
+);
+
+const LedgerStaxIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Body */}
+    <rect x="6" y="3" width="14" height="18" rx="1" />
+    {/* Curved Spine */}
+    <path d="M6 3c-2 0-3 1-3 3v12c0 2 1 3 3 3" />
+    {/* Screen Area hint */}
+    <path d="M8 3v18" strokeDasharray="1 2" opacity="0.5" />
+    <rect x="10" y="6" width="7" height="12" rx="0.5" opacity="0.3" />
+  </svg>
+);
+
+const LedgerFlexIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Main Body */}
+    <rect x="4" y="3" width="16" height="18" rx="2" />
+    {/* E-ink Screen */}
+    <rect x="6" y="5" width="12" height="14" rx="1" opacity="0.8" />
+    {/* Bottom Bezel/Button area */}
+    <path d="M12 20v1" />
+  </svg>
+);
+
+const BitBoxIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M9 3h6v4h-6z" />
+    <path d="M7 7h10v14H7z" />
+    <path d="M12 12l2 2" />
+    <path d="M12 12l-2 2" />
+  </svg>
+);
+
+const FoundationPassportIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Body */}
+    <rect x="6" y="2" width="12" height="20" rx="2" />
+    {/* Screen */}
+    <rect x="8" y="5" width="8" height="8" rx="1" />
+    {/* Keypad area hint */}
+    <path d="M8 15h8" />
+    <path d="M8 18h8" />
+    <path d="M12 15v3" />
+  </svg>
+);
+
+const BlockstreamJadeIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Body */}
+    <rect x="4" y="6" width="16" height="12" rx="2" />
+    {/* Screen */}
+    <rect x="7" y="8" width="6" height="8" rx="1" />
+    {/* Camera/Button bump area */}
+    <circle cx="16" cy="12" r="2" />
+    <path d="M16 10l-1 2 1 2 1-2z" fill="currentColor" fillOpacity="0.2" stroke="none"/>
+  </svg>
+);
+
+const KeystoneIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+     {/* Body like a smartphone */}
+     <rect x="5" y="2" width="14" height="20" rx="3" />
+     {/* Screen */}
+     <rect x="7" y="5" width="10" height="10" rx="1" />
+     {/* Fingerprint/Home button area */}
+     <circle cx="12" cy="19" r="1.5" />
+  </svg>
+);
+
+export const getDeviceIcon = (type: HardwareDevice | string, className?: string) => {
+  // Normalize type to lowercase for matching
+  const normalizedType = typeof type === 'string' ? type.toLowerCase() : type;
+
+  // Match against enum values or string patterns
+  if (type === HardwareDevice.COLDCARD_MK4 || normalizedType.includes('coldcard') && (normalizedType.includes('mk4') || normalizedType.includes('mk3'))) {
+    return <ColdCardMk4Icon className={className} />;
+  }
+  if (type === HardwareDevice.COLDCARD_Q || normalizedType.includes('coldcard') && normalizedType.includes('q')) {
+    return <ColdCardQIcon className={className} />;
+  }
+  if (type === HardwareDevice.TREZOR || normalizedType.includes('trezor')) {
+    return <TrezorIcon className={className} />;
+  }
+  if (type === HardwareDevice.LEDGER_STAX || normalizedType.includes('ledger') && normalizedType.includes('stax')) {
+    return <LedgerStaxIcon className={className} />;
+  }
+  if (type === HardwareDevice.LEDGER_FLEX || normalizedType.includes('ledger') && normalizedType.includes('flex')) {
+    return <LedgerFlexIcon className={className} />;
+  }
+  if (type === HardwareDevice.LEDGER || normalizedType.includes('ledger') && normalizedType.includes('nano')) {
+    return <LedgerNanoIcon className={className} />;
+  }
+  if (type === HardwareDevice.BITBOX || normalizedType.includes('bitbox')) {
+    return <BitBoxIcon className={className} />;
+  }
+  if (type === HardwareDevice.FOUNDATION_PASSPORT || normalizedType.includes('passport') || normalizedType.includes('foundation')) {
+    return <FoundationPassportIcon className={className} />;
+  }
+  if (type === HardwareDevice.BLOCKSTREAM_JADE || normalizedType.includes('jade') || normalizedType.includes('blockstream')) {
+    return <BlockstreamJadeIcon className={className} />;
+  }
+  if (type === HardwareDevice.KEYSTONE || normalizedType.includes('keystone')) {
+    return <KeystoneIcon className={className} />;
+  }
+  // Default for generic or unknown devices
+  return <Usb className={className} />;
+};

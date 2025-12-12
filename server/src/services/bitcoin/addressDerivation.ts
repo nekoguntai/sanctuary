@@ -11,25 +11,51 @@ import * as ecc from 'tiny-secp256k1';
 const bip32 = BIP32Factory(ecc);
 
 /**
+ * Multisig key info extracted from descriptor
+ */
+export interface MultisigKeyInfo {
+  fingerprint: string;
+  accountPath: string;
+  xpub: string;
+  derivationPath: string;
+}
+
+/**
+ * Parsed descriptor result
+ */
+export interface ParsedDescriptor {
+  type: 'wpkh' | 'sh-wpkh' | 'tr' | 'pkh' | 'wsh-sortedmulti' | 'sh-wsh-sortedmulti';
+  xpub?: string;
+  path?: string;
+  fingerprint?: string;
+  accountPath?: string;
+  // Multisig specific
+  quorum?: number;
+  keys?: MultisigKeyInfo[];
+}
+
+/**
  * Parse output descriptor to extract xpub and derivation info
  * Supports various descriptor formats:
  * - wpkh([fingerprint/84'/0'/0']xpub.../0/*)
  * - sh(wpkh([fingerprint/49'/0'/0']xpub.../0/*))
  * - tr([fingerprint/86'/0'/0']xpub.../0/*)
+ * - wsh(sortedmulti(M,[fp/path]xpub/0/*,[fp/path]xpub/0/*,...))
+ * - sh(wsh(sortedmulti(...)))
  */
-export function parseDescriptor(descriptor: string): {
-  type: 'wpkh' | 'sh-wpkh' | 'tr' | 'pkh';
-  xpub: string;
-  path: string;
-  fingerprint?: string;
-  accountPath?: string;
-} {
+export function parseDescriptor(descriptor: string): ParsedDescriptor {
   // Remove whitespace
   descriptor = descriptor.trim();
 
   // Detect script type
-  let type: 'wpkh' | 'sh-wpkh' | 'tr' | 'pkh';
-  if (descriptor.startsWith('wpkh(')) {
+  let type: ParsedDescriptor['type'];
+
+  // Check for multisig first
+  if (descriptor.startsWith('wsh(sortedmulti(') || descriptor.startsWith('wsh(multi(')) {
+    return parseMultisigDescriptor(descriptor, 'wsh-sortedmulti');
+  } else if (descriptor.startsWith('sh(wsh(sortedmulti(') || descriptor.startsWith('sh(wsh(multi(')) {
+    return parseMultisigDescriptor(descriptor, 'sh-wsh-sortedmulti');
+  } else if (descriptor.startsWith('wpkh(')) {
     type = 'wpkh';
   } else if (descriptor.startsWith('sh(wpkh(')) {
     type = 'sh-wpkh';
@@ -70,6 +96,45 @@ export function parseDescriptor(descriptor: string): {
     path,
     fingerprint,
     accountPath,
+  };
+}
+
+/**
+ * Parse multisig descriptor to extract all keys and quorum
+ */
+function parseMultisigDescriptor(
+  descriptor: string,
+  type: 'wsh-sortedmulti' | 'sh-wsh-sortedmulti'
+): ParsedDescriptor {
+  // Extract quorum (the M in M-of-N)
+  const quorumMatch = descriptor.match(/(?:sorted)?multi\((\d+),/);
+  if (!quorumMatch) {
+    throw new Error('Could not parse quorum from multisig descriptor');
+  }
+  const quorum = parseInt(quorumMatch[1], 10);
+
+  // Extract all key expressions: [fingerprint/path]xpub/derivation
+  const keyRegex = /\[([a-f0-9]{8})\/([^\]]+)\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*]+))?/g;
+  const keys: MultisigKeyInfo[] = [];
+
+  let match;
+  while ((match = keyRegex.exec(descriptor)) !== null) {
+    keys.push({
+      fingerprint: match[1],
+      accountPath: match[2],
+      xpub: match[3],
+      derivationPath: match[4] || '0/*',
+    });
+  }
+
+  if (keys.length === 0) {
+    throw new Error('Could not parse keys from multisig descriptor');
+  }
+
+  return {
+    type,
+    quorum,
+    keys,
   };
 }
 
@@ -193,21 +258,123 @@ export function deriveAddressFromDescriptor(
   const parsed = parseDescriptor(descriptor);
   const { network = 'mainnet', change = false } = options;
 
-  // Map descriptor type to script type
-  const scriptTypeMap: Record<typeof parsed.type, 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy'> = {
+  // Handle multisig descriptors
+  if (parsed.type === 'wsh-sortedmulti' || parsed.type === 'sh-wsh-sortedmulti') {
+    return deriveMultisigAddress(parsed, index, { network, change });
+  }
+
+  // Map descriptor type to script type for single-sig
+  const scriptTypeMap: Record<'wpkh' | 'sh-wpkh' | 'tr' | 'pkh', 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy'> = {
     wpkh: 'native_segwit',
     'sh-wpkh': 'nested_segwit',
     tr: 'taproot',
     pkh: 'legacy',
   };
 
-  const scriptType = scriptTypeMap[parsed.type];
+  const scriptType = scriptTypeMap[parsed.type as 'wpkh' | 'sh-wpkh' | 'tr' | 'pkh'];
+
+  if (!parsed.xpub) {
+    throw new Error('No xpub found in descriptor');
+  }
 
   return deriveAddress(parsed.xpub, index, {
     scriptType,
     network,
     change,
   });
+}
+
+/**
+ * Derive multisig address from parsed descriptor
+ */
+function deriveMultisigAddress(
+  parsed: ParsedDescriptor,
+  index: number,
+  options: {
+    network: 'mainnet' | 'testnet' | 'regtest';
+    change: boolean;
+  }
+): {
+  address: string;
+  derivationPath: string;
+  publicKey: Buffer;
+} {
+  const { network, change } = options;
+  const networkObj = getNetwork(network);
+
+  if (!parsed.keys || parsed.keys.length === 0) {
+    throw new Error('No keys found in multisig descriptor');
+  }
+  if (parsed.quorum === undefined) {
+    throw new Error('No quorum found in multisig descriptor');
+  }
+
+  const changeIndex = change ? 1 : 0;
+
+  // Derive public keys from each xpub at the given index
+  const pubkeys: Buffer[] = [];
+  for (const keyInfo of parsed.keys) {
+    const node = bip32.fromBase58(keyInfo.xpub, networkObj);
+    // Derivation path after xpub is typically 0/* or 1/* (external/internal)
+    // Parse the derivation path from key info (e.g., "0/*" means derive at 0/index)
+    const pathParts = keyInfo.derivationPath.replace('*', String(index)).split('/');
+    let derived = node;
+    for (const part of pathParts) {
+      if (part === '') continue;
+      const idx = parseInt(part, 10);
+      if (!isNaN(idx)) {
+        derived = derived.derive(idx);
+      }
+    }
+    if (!derived.publicKey) {
+      throw new Error('Failed to derive public key from xpub');
+    }
+    pubkeys.push(derived.publicKey);
+  }
+
+  // Sort public keys for sortedmulti (lexicographic order)
+  pubkeys.sort((a, b) => a.compare(b));
+
+  // Create the multisig redeem script (p2ms)
+  const p2ms = bitcoin.payments.p2ms({
+    m: parsed.quorum,
+    pubkeys,
+    network: networkObj,
+  });
+
+  let address: string;
+
+  if (parsed.type === 'wsh-sortedmulti') {
+    // P2WSH (native segwit multisig)
+    const p2wsh = bitcoin.payments.p2wsh({
+      redeem: p2ms,
+      network: networkObj,
+    });
+    if (!p2wsh.address) throw new Error('Failed to generate P2WSH address');
+    address = p2wsh.address;
+  } else {
+    // P2SH-P2WSH (nested segwit multisig)
+    const p2wsh = bitcoin.payments.p2wsh({
+      redeem: p2ms,
+      network: networkObj,
+    });
+    const p2sh = bitcoin.payments.p2sh({
+      redeem: p2wsh,
+      network: networkObj,
+    });
+    if (!p2sh.address) throw new Error('Failed to generate P2SH-P2WSH address');
+    address = p2sh.address;
+  }
+
+  // Build derivation path string (use first key's path as reference)
+  const firstKey = parsed.keys[0];
+  const derivationPath = `m/${firstKey.accountPath}/${changeIndex}/${index}`;
+
+  return {
+    address,
+    derivationPath,
+    publicKey: pubkeys[0], // Return first sorted pubkey as reference
+  };
 }
 
 /**
@@ -317,6 +484,37 @@ export function deriveAddresses(
   for (let i = 0; i < count; i++) {
     const index = startIndex + i;
     const { address, derivationPath } = deriveAddress(xpub, index, options);
+    addresses.push({ address, derivationPath, index });
+  }
+
+  return addresses;
+}
+
+/**
+ * Derive multiple addresses from descriptor at once
+ */
+export function deriveAddressesFromDescriptor(
+  descriptor: string,
+  startIndex: number,
+  count: number,
+  options: {
+    network?: 'mainnet' | 'testnet' | 'regtest';
+    change?: boolean;
+  } = {}
+): Array<{
+  address: string;
+  derivationPath: string;
+  index: number;
+}> {
+  const addresses: Array<{
+    address: string;
+    derivationPath: string;
+    index: number;
+  }> = [];
+
+  for (let i = 0; i < count; i++) {
+    const index = startIndex + i;
+    const { address, derivationPath } = deriveAddressFromDescriptor(descriptor, index, options);
     addresses.push({ address, derivationPath, index });
   }
 

@@ -317,7 +317,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/devices/:id
- * Remove a device
+ * Remove a device (only if not in use by any wallet)
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
@@ -329,12 +329,37 @@ router.delete('/:id', async (req: Request, res: Response) => {
         id,
         userId,
       },
+      include: {
+        wallets: {
+          include: {
+            wallet: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!device) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Device not found',
+      });
+    }
+
+    // Check if device is in use by any wallet
+    if (device.wallets && device.wallets.length > 0) {
+      const walletNames = device.wallets.map(w => w.wallet.name).join(', ');
+      return res.status(409).json({
+        error: 'Conflict',
+        message: `Cannot delete device. It is in use by wallet(s): ${walletNames}`,
+        wallets: device.wallets.map(w => ({
+          id: w.wallet.id,
+          name: w.wallet.name,
+        })),
       });
     }
 

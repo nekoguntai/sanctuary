@@ -429,6 +429,7 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       changeAmount: txData.changeAmount,
       changeAddress: txData.changeAddress,
       utxos: txData.utxos,
+      inputPaths: txData.inputPaths, // Derivation paths for hardware wallet signing
     });
   } catch (error: any) {
     console.error('[TRANSACTIONS] Create transaction error:', error);
@@ -499,6 +500,173 @@ router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, re
     res.json(result);
   } catch (error: any) {
     console.error('[TRANSACTIONS] Broadcast transaction error:', error);
+    res.status(400).json({
+      error: 'Bad Request',
+      message: error.message || 'Failed to broadcast transaction',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:walletId/psbt/create
+ * Create a PSBT for hardware wallet signing
+ * This is the preferred endpoint for hardware wallet integrations
+ */
+router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+    const {
+      recipients, // Array of { address, amount }
+      feeRate,
+      utxoIds, // Optional: specific UTXOs to use
+      changeAddress, // Optional: custom change address
+    } = req.body;
+
+    // Validation
+    if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'recipients array is required',
+      });
+    }
+
+    if (!feeRate || feeRate < 1) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'feeRate must be at least 1 sat/vB',
+      });
+    }
+
+    // Validate recipients
+    for (const recipient of recipients) {
+      if (!recipient.address || !recipient.amount) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Each recipient must have address and amount',
+        });
+      }
+    }
+
+    // Check user has access to wallet with signing permission
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        users: {
+          some: {
+            userId,
+            role: { in: ['owner', 'signer'] },
+          },
+        },
+      },
+    });
+
+    if (!wallet) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions to create transactions for this wallet',
+      });
+    }
+
+    // For now, only support single recipient (can be extended later)
+    const { address, amount } = recipients[0];
+
+    // Create PSBT
+    const txService = await import('../services/bitcoin/transactionService');
+    const txData = await txService.createTransaction(
+      walletId,
+      address,
+      amount,
+      feeRate,
+      {
+        selectedUtxoIds: utxoIds,
+        enableRBF: true,
+      }
+    );
+
+    res.json({
+      psbt: txData.psbtBase64,
+      fee: txData.fee,
+      inputPaths: txData.inputPaths,
+      totalInput: txData.totalInput,
+      totalOutput: txData.totalOutput,
+      changeAmount: txData.changeAmount,
+      changeAddress: txData.changeAddress,
+      utxos: txData.utxos,
+    });
+  } catch (error: any) {
+    console.error('[PSBT] Create PSBT error:', error);
+    res.status(400).json({
+      error: 'Bad Request',
+      message: error.message || 'Failed to create PSBT',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:walletId/psbt/broadcast
+ * Broadcast a signed PSBT
+ */
+router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+    const { signedPsbt, label, memo } = req.body;
+
+    // Validation
+    if (!signedPsbt) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'signedPsbt is required',
+      });
+    }
+
+    // Check user has access to wallet with signing permission
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        users: {
+          some: {
+            userId,
+            role: { in: ['owner', 'signer'] },
+          },
+        },
+      },
+    });
+
+    if (!wallet) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions to broadcast from this wallet',
+      });
+    }
+
+    // Parse PSBT to get transaction details
+    const txService = await import('../services/bitcoin/transactionService');
+    const psbtInfo = txService.getPSBTInfo(signedPsbt);
+
+    // Calculate amount from outputs (exclude change)
+    // For simplicity, assume last output is change if there are 2+ outputs
+    const outputs = psbtInfo.outputs;
+    const recipientOutput = outputs[0];
+    const amount = recipientOutput?.value || 0;
+
+    // Broadcast transaction
+    const result = await txService.broadcastAndSave(walletId, signedPsbt, {
+      recipient: recipientOutput?.address || '',
+      amount,
+      fee: psbtInfo.fee,
+      label,
+      memo,
+      utxos: psbtInfo.inputs.map(i => ({ txid: i.txid, vout: i.vout })),
+    });
+
+    res.json({
+      txid: result.txid,
+      broadcasted: result.broadcasted,
+    });
+  } catch (error: any) {
+    console.error('[PSBT] Broadcast error:', error);
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',

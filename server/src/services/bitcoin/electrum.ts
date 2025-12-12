@@ -149,7 +149,8 @@ class ElectrumClient {
           this.pendingRequests.delete(response.id);
 
           if (response.error) {
-            request.reject(new Error(response.error.message));
+            const errorMsg = response.error.message || JSON.stringify(response.error);
+            request.reject(new Error(errorMsg));
           } else {
             request.resolve(response.result);
           }
@@ -244,9 +245,73 @@ class ElectrumClient {
 
   /**
    * Get transaction details
+   * Note: verbose=true is not supported by all servers (e.g., Blockstream)
+   * If verbose fails, falls back to fetching raw tx and decoding locally
    */
   async getTransaction(txid: string, verbose: boolean = true): Promise<any> {
-    return this.request('blockchain.transaction.get', [txid, verbose]);
+    try {
+      return await this.request('blockchain.transaction.get', [txid, verbose]);
+    } catch (error: any) {
+      // If verbose not supported, get raw tx and decode it ourselves
+      if (verbose && error.message?.includes('verbose') || error.message?.includes('unsupported')) {
+        const rawTx = await this.request('blockchain.transaction.get', [txid, false]);
+        return this.decodeRawTransaction(rawTx);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Decode raw transaction hex to structured format
+   */
+  private decodeRawTransaction(rawTx: string): any {
+    const bitcoin = require('bitcoinjs-lib');
+
+    try {
+      const tx = bitcoin.Transaction.fromHex(rawTx);
+
+      // Build vout array with address info
+      const vout = tx.outs.map((output: any, index: number) => {
+        let address: string | undefined;
+
+        try {
+          // Try to extract address from output script
+          address = bitcoin.address.fromOutputScript(output.script, bitcoin.networks.bitcoin);
+        } catch (e) {
+          // Some outputs (like OP_RETURN) don't have addresses
+        }
+
+        return {
+          value: output.value / 100000000, // Convert satoshis to BTC
+          n: index,
+          scriptPubKey: {
+            hex: output.script.toString('hex'),
+            address: address, // Single address for segwit
+            addresses: address ? [address] : [], // Array for legacy compatibility
+          },
+        };
+      });
+
+      // Build vin array
+      const vin = tx.ins.map((input: any, index: number) => ({
+        txid: Buffer.from(input.hash).reverse().toString('hex'),
+        vout: input.index,
+        sequence: input.sequence,
+      }));
+
+      return {
+        txid: tx.getId(),
+        hash: tx.getHash().toString('hex'),
+        version: tx.version,
+        size: rawTx.length / 2,
+        locktime: tx.locktime,
+        vin,
+        vout,
+      };
+    } catch (error) {
+      console.error('[ELECTRUM] Failed to decode raw transaction:', error);
+      throw new Error('Failed to decode transaction');
+    }
   }
 
   /**

@@ -127,6 +127,7 @@ export async function createTransaction(
   changeAmount: number;
   changeAddress?: string;
   utxos: Array<{ txid: string; vout: number }>;
+  inputPaths: string[]; // Derivation paths for hardware wallet signing
 }> {
   const { selectedUtxoIds, enableRBF = true, label, memo } = options;
 
@@ -161,8 +162,23 @@ export async function createTransaction(
   // Create PSBT
   const psbt = new bitcoin.Psbt({ network: networkObj });
 
-  // Add inputs
+  // Add inputs and collect derivation paths
   const sequence = enableRBF ? RBF_SEQUENCE : 0xffffffff;
+  const inputPaths: string[] = [];
+
+  // Get addresses with their derivation paths for the UTXOs being spent
+  const utxoAddresses = selection.utxos.map(u => u.address);
+  const addressRecords = await prisma.address.findMany({
+    where: {
+      walletId,
+      address: { in: utxoAddresses },
+    },
+    select: {
+      address: true,
+      derivationPath: true,
+    },
+  });
+  const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   for (const utxo of selection.utxos) {
     psbt.addInput({
@@ -174,6 +190,10 @@ export async function createTransaction(
         value: Number(utxo.amount),
       },
     });
+
+    // Get derivation path for this input (for hardware wallet signing)
+    const derivationPath = addressPathMap.get(utxo.address) || '';
+    inputPaths.push(derivationPath);
   }
 
   // Add recipient output
@@ -236,6 +256,7 @@ export async function createTransaction(
     changeAmount: selection.changeAmount,
     changeAddress,
     utxos: selection.utxos.map((u) => ({ txid: u.txid, vout: u.vout })),
+    inputPaths,
   };
 }
 

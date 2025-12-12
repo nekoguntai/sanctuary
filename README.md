@@ -1,6 +1,26 @@
-# Sanctuary
+<p align="center">
+  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23059669' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z'/%3E%3Cpath d='M2 17l10 5 10-5'/%3E%3Cpath d='M2 12l10 5 10-5'/%3E%3Ccircle cx='12' cy='12' r='1' fill='%23059669' fill-opacity='0.5'/%3E%3C/svg%3E" alt="Sanctuary Logo" width="80" height="80" />
+</p>
 
-A web-based Bitcoin wallet coordinator designed for security-conscious users. Sanctuary never holds private keys—all signing happens on your hardware wallet. Run it locally, on your private server, or in the cloud.
+<h1 align="center">Sanctuary</h1>
+
+<p align="center">
+  <strong>Your keys, your coins, your server.</strong>
+</p>
+
+<p align="center">
+  A web-based Bitcoin wallet coordinator designed for security-conscious users.<br/>
+  Sanctuary never holds private keys—all signing happens on your hardware wallet.<br/>
+  Run it locally, on your private server, or in the cloud.
+</p>
+
+<p align="center">
+  <em>Don't trust. Verify.</em>
+</p>
+
+---
+
+> **Disclaimer:** Sanctuary is provided free of charge, "as is", without warranty of any kind, express or implied. The authors and contributors accept no liability for any damages, loss of funds, or other issues arising from the use of this software. You are solely responsible for the security of your Bitcoin and the verification of all transactions. Always verify addresses and amounts on your hardware wallet before signing.
 
 ## Overview
 
@@ -80,7 +100,7 @@ Optional:
 
 2. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    ```
 
@@ -116,7 +136,7 @@ Optional:
 
 3. **Clone and run**
    ```powershell
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    copy .env.example .env
    docker compose up -d
@@ -140,7 +160,7 @@ For users who prefer not to use Docker Desktop:
 
 3. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
    docker compose up -d
@@ -159,7 +179,7 @@ For users who prefer not to use Docker Desktop:
 
 2. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
    docker compose up -d
@@ -181,7 +201,7 @@ For users who prefer a lighter-weight solution:
 
 3. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
    docker compose up -d
@@ -217,7 +237,7 @@ For users who prefer a lighter-weight solution:
 
 2. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
    docker compose up -d
@@ -238,7 +258,7 @@ For systems where you can't or don't want to run Docker:
 
 2. **Clone and run**
    ```bash
-   git clone https://github.com/yourusername/sanctuary.git
+   git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
    podman-compose up -d

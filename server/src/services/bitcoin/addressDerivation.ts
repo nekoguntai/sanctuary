@@ -315,9 +315,28 @@ function deriveMultisigAddress(
   const pubkeys: Buffer[] = [];
   for (const keyInfo of parsed.keys) {
     const node = bip32.fromBase58(keyInfo.xpub, networkObj);
-    // Derivation path after xpub is typically 0/* or 1/* (external/internal)
-    // Parse the derivation path from key info (e.g., "0/*" means derive at 0/index)
-    const pathParts = keyInfo.derivationPath.replace('*', String(index)).split('/');
+    // Derivation path after xpub is typically <0;1>/* or 0/* (external/internal)
+    // Handle both formats:
+    // - "0/*" -> derive at 0/index (receive only)
+    // - "<0;1>/*" -> derive at changeIndex/index (both receive and change)
+    // - "/*" -> derive at changeIndex/index (assumes change prefix needed)
+    let pathStr = keyInfo.derivationPath;
+
+    // Replace <0;1> with the appropriate change index
+    if (pathStr.includes('<0;1>')) {
+      pathStr = pathStr.replace('<0;1>', String(changeIndex));
+    } else if (pathStr.startsWith('0/') || pathStr.startsWith('1/')) {
+      // Path already has explicit change index, replace the first number with our change index
+      pathStr = String(changeIndex) + pathStr.slice(1);
+    } else if (pathStr === '*' || pathStr === '/*') {
+      // No change prefix, add it
+      pathStr = `${changeIndex}/${index}`;
+    }
+
+    // Replace * with index
+    pathStr = pathStr.replace('*', String(index));
+
+    const pathParts = pathStr.split('/');
     let derived = node;
     for (const part of pathParts) {
       if (part === '') continue;

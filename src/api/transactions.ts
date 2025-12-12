@@ -78,6 +78,8 @@ export interface CreateTransactionRequest {
   enableRBF?: boolean;
   label?: string;
   memo?: string;
+  sendMax?: boolean;
+  subtractFees?: boolean;
 }
 
 export interface CreateTransactionResponse {
@@ -88,6 +90,7 @@ export interface CreateTransactionResponse {
   changeAmount: number;
   changeAddress?: string;
   utxos: Array<{ txid: string; vout: number }>;
+  effectiveAmount?: number;
 }
 
 export interface BroadcastTransactionRequest {
@@ -152,6 +155,13 @@ export async function getUTXOs(walletId: string): Promise<GetUTXOsResponse> {
 export async function getAddresses(walletId: string, used?: boolean): Promise<Address[]> {
   const params = used !== undefined ? { used: String(used) } : undefined;
   return apiClient.get<Address[]>(`/wallets/${walletId}/addresses`, params);
+}
+
+/**
+ * Generate more addresses for a wallet
+ */
+export async function generateAddresses(walletId: string, count: number = 10): Promise<{ generated: number }> {
+  return apiClient.post<{ generated: number }>(`/wallets/${walletId}/addresses/generate`, { count });
 }
 
 /**

@@ -145,7 +145,7 @@ export interface Wallet {
   groupIds: string[]; // IDs of groups this wallet is shared with
   // Sync metadata
   lastSyncedAt?: string | null;
-  lastSyncStatus?: 'success' | 'failed' | 'partial' | null;
+  lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | null;
   syncInProgress?: boolean;
 }
 

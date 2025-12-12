@@ -541,7 +541,6 @@ export const ImportWallet: React.FC = () => {
               size="lg"
               onClick={handleImport}
               isLoading={isImporting}
-              className="bg-success-600 hover:bg-success-700 text-white dark:bg-success-600 dark:hover:bg-success-700"
             >
               <Upload className="w-4 h-4 mr-2" /> Import Wallet
             </Button>

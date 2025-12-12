@@ -359,6 +359,10 @@ export class NotificationService {
     status?: string;
     error?: string;
     lastSyncedAt?: Date;
+    retryCount?: number;
+    maxRetries?: number;
+    retryingIn?: number;
+    retriesExhausted?: boolean;
   }) {
     const wsServer = getWebSocketServer();
 

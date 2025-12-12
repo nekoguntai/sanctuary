@@ -275,6 +275,8 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
     if (addresses.length === 0 && wallet.descriptor && used === undefined) {
       try {
         const addressesToCreate = [];
+
+        // Generate receive addresses (change = 0)
         for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
           const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
             wallet.descriptor,
@@ -282,6 +284,25 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
             {
               network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
               change: false, // External/receive addresses
+            }
+          );
+          addressesToCreate.push({
+            walletId,
+            address,
+            derivationPath,
+            index: i,
+            used: false,
+          });
+        }
+
+        // Generate change addresses (change = 1)
+        for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+          const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+            wallet.descriptor,
+            i,
+            {
+              network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+              change: true, // Internal/change addresses
             }
           );
           addressesToCreate.push({
@@ -354,6 +375,134 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
 });
 
 /**
+ * POST /api/v1/wallets/:walletId/addresses/generate
+ * Generate more addresses for a wallet
+ */
+router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+    const { count = 10 } = req.body;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    if (!wallet.descriptor) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Wallet does not have a descriptor',
+      });
+    }
+
+    // Get current max index for receive and change addresses
+    const existingAddresses = await prisma.address.findMany({
+      where: { walletId },
+      select: { derivationPath: true, index: true },
+    });
+
+    // Parse existing addresses to find max indices
+    let maxReceiveIndex = -1;
+    let maxChangeIndex = -1;
+
+    for (const addr of existingAddresses) {
+      const parts = addr.derivationPath.split('/');
+      if (parts.length >= 2) {
+        const changeIndicator = parts[parts.length - 2];
+        const index = parseInt(parts[parts.length - 1], 10);
+        if (changeIndicator === '0' && index > maxReceiveIndex) {
+          maxReceiveIndex = index;
+        } else if (changeIndicator === '1' && index > maxChangeIndex) {
+          maxChangeIndex = index;
+        }
+      }
+    }
+
+    const addressesToCreate = [];
+
+    // Generate more receive addresses
+    for (let i = maxReceiveIndex + 1; i < maxReceiveIndex + 1 + count; i++) {
+      try {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          wallet.descriptor,
+          i,
+          {
+            network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+            change: false,
+          }
+        );
+        addressesToCreate.push({
+          walletId,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      } catch (err) {
+        console.error(`[TRANSACTIONS] Failed to derive receive address ${i}:`, err);
+      }
+    }
+
+    // Generate more change addresses
+    for (let i = maxChangeIndex + 1; i < maxChangeIndex + 1 + count; i++) {
+      try {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          wallet.descriptor,
+          i,
+          {
+            network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+            change: true,
+          }
+        );
+        addressesToCreate.push({
+          walletId,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      } catch (err) {
+        console.error(`[TRANSACTIONS] Failed to derive change address ${i}:`, err);
+      }
+    }
+
+    // Bulk insert addresses (skip duplicates)
+    if (addressesToCreate.length > 0) {
+      await prisma.address.createMany({
+        data: addressesToCreate,
+        skipDuplicates: true,
+      });
+    }
+
+    res.json({
+      generated: addressesToCreate.length,
+      receiveAddresses: count,
+      changeAddresses: count,
+    });
+  } catch (error) {
+    console.error('[TRANSACTIONS] Generate addresses error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to generate addresses',
+    });
+  }
+});
+
+/**
  * POST /api/v1/wallets/:walletId/transactions/create
  * Create a new transaction PSBT (returns PSBT for hardware wallet signing)
  */
@@ -369,6 +518,8 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       enableRBF = true,
       label,
       memo,
+      sendMax = false,
+      subtractFees = false,
     } = req.body;
 
     // Validation
@@ -418,6 +569,8 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
         enableRBF,
         label,
         memo,
+        sendMax,
+        subtractFees,
       }
     );
 
@@ -430,6 +583,7 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       changeAddress: txData.changeAddress,
       utxos: txData.utxos,
       inputPaths: txData.inputPaths, // Derivation paths for hardware wallet signing
+      effectiveAmount: txData.effectiveAmount, // The actual amount being sent
     });
   } catch (error: any) {
     console.error('[TRANSACTIONS] Create transaction error:', error);

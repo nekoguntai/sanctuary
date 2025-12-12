@@ -4,13 +4,14 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
-import { ArrowDownLeft, ArrowUpRight, Clock, Tag, CheckCircle2, MoreHorizontal, ExternalLink, Copy, X, ArrowDown, Check, Edit2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, MoreHorizontal, ExternalLink, Copy, X, ArrowDown, Check, Edit2 } from 'lucide-react';
 import { LabelBadges } from './LabelSelector';
 
 interface TransactionListProps {
   transactions: Transaction[];
   showWalletBadge?: boolean;
   wallets?: Wallet[];
+  walletAddresses?: string[]; // All addresses belonging to this wallet for consolidation detection
   onWalletClick?: (walletId: string) => void;
   onTransactionClick?: (transaction: Transaction) => void;
   highlightedTxId?: string;
@@ -21,6 +22,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
   showWalletBadge = false,
   wallets = [],
+  walletAddresses = [],
   onWalletClick,
   onTransactionClick,
   highlightedTxId,
@@ -141,6 +143,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         <ul className="-my-5 divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
           {transactions.map((tx) => {
             const isReceive = tx.amount > 0;
+            // Check if this is a consolidation transaction:
+            // Case 1: Sent transaction where recipient is a wallet address
+            // Case 2: Received transaction where sender (counterpartyAddress) is also a wallet address
+            //         (This happens when sync detects a self-send as "received")
+            const isConsolidation = (
+              // Case 1: Sent to self
+              (tx.amount < 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress)) ||
+              // Case 2: Received from self (sync recorded receive side of consolidation)
+              (tx.amount > 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress))
+            );
             const isHighlighted = highlightedTxId === tx.id;
             const txWallet = getWallet(tx.walletId);
             const isMultisig = txWallet?.type === WalletType.MULTI_SIG;
@@ -167,18 +179,30 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               >
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
-                    <span className={`inline-flex items-center justify-center h-10 w-10 rounded-full ${isReceive ? 'bg-success-100 text-success-600 dark:bg-success-500/10 dark:text-success-400' : 'bg-sanctuary-200 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'}`}>
-                      {isReceive ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
+                    <span className={`inline-flex items-center justify-center h-10 w-10 rounded-full ${
+                      isConsolidation
+                        ? 'bg-primary-100 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400'
+                        : isReceive
+                        ? 'bg-success-100 text-success-600 dark:bg-success-500/10 dark:text-success-400'
+                        : 'bg-sanctuary-200 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
+                    }`}>
+                      {isConsolidation ? <RefreshCw className="h-5 w-5" /> : isReceive ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpRight className="h-5 w-5" />}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 truncate">
-                        {isReceive ? 'Received' : 'Sent'}
+                        {isConsolidation ? 'Consolidation' : isReceive ? 'Received' : 'Sent'}
                       </p>
-                      <div className={`text-sm font-semibold ${isReceive ? 'text-success-600 dark:text-success-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
+                      <div className={`text-sm font-semibold ${
+                        isConsolidation
+                          ? 'text-primary-600 dark:text-primary-400'
+                          : isReceive
+                          ? 'text-success-600 dark:text-success-400'
+                          : 'text-sanctuary-900 dark:text-sanctuary-100'
+                      }`}>
                         <Amount
-                          sats={tx.amount}
+                          sats={isConsolidation ? Math.abs(tx.amount) : tx.amount}
                           showSign={isReceive}
                           size="sm"
                           className="items-end"
@@ -331,12 +355,26 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       {/* Details Grid */}
                       <div className="grid grid-cols-2 gap-3">
                          {/* Type */}
-                         <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
-                            <p className="text-xs text-sanctuary-500 mb-1">Type</p>
-                            <p className={`text-sm font-medium ${selectedTx.amount > 0 ? 'text-success-600 dark:text-success-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
-                               {selectedTx.amount > 0 ? 'Received' : 'Sent'}
-                            </p>
-                         </div>
+                         {(() => {
+                           const isSelectedConsolidation = (
+                             (selectedTx.amount < 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress)) ||
+                             (selectedTx.amount > 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress))
+                           );
+                           return (
+                             <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                               <p className="text-xs text-sanctuary-500 mb-1">Type</p>
+                               <p className={`text-sm font-medium ${
+                                 isSelectedConsolidation
+                                   ? 'text-primary-600 dark:text-primary-400'
+                                   : selectedTx.amount > 0
+                                   ? 'text-success-600 dark:text-success-400'
+                                   : 'text-sanctuary-900 dark:text-sanctuary-100'
+                               }`}>
+                                 {isSelectedConsolidation ? 'Consolidation' : selectedTx.amount > 0 ? 'Received' : 'Sent'}
+                               </p>
+                             </div>
+                           );
+                         })()}
 
                          {/* Date & Time */}
                          <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
@@ -379,17 +417,27 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                          )}
                       </div>
 
-                      {/* Counterparty Address - Sender (for receives) or Recipient (for sends) */}
-                      {selectedTx.counterpartyAddress && (
+                      {/* Counterparty Address - Sender (for receives), Consolidation Address, or Recipient (for sends) */}
+                      {selectedTx.counterpartyAddress && (() => {
+                        const isSelectedConsolidation = (
+                          (selectedTx.amount < 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress)) ||
+                          (selectedTx.amount > 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress))
+                        );
+                        return (
                         <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
                            <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">
-                              {selectedTx.amount > 0 ? 'Sender Address' : 'Recipient Address'}
+                              {isSelectedConsolidation
+                                ? 'Consolidation Address (Your Wallet)'
+                                : selectedTx.amount > 0
+                                ? 'Sender Address'
+                                : 'Recipient Address'}
                            </p>
                            <code className="text-xs font-mono break-all text-sanctuary-700 dark:text-sanctuary-300">
                               {selectedTx.counterpartyAddress}
                            </code>
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Your Address - which of your addresses was involved */}
                       {selectedTx.address && (

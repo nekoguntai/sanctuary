@@ -117,6 +117,8 @@ export async function createTransaction(
     enableRBF?: boolean;
     label?: string;
     memo?: string;
+    sendMax?: boolean; // Send entire balance (no change output)
+    subtractFees?: boolean; // Subtract fees from amount instead of adding
   } = {}
 ): Promise<{
   psbt: bitcoin.Psbt;
@@ -128,8 +130,9 @@ export async function createTransaction(
   changeAddress?: string;
   utxos: Array<{ txid: string; vout: number }>;
   inputPaths: string[]; // Derivation paths for hardware wallet signing
+  effectiveAmount: number; // The actual amount being sent
 }> {
-  const { selectedUtxoIds, enableRBF = true, label, memo } = options;
+  const { selectedUtxoIds, enableRBF = true, label, memo, sendMax = false, subtractFees = false } = options;
 
   // Get wallet info
   const wallet = await prisma.wallet.findUnique({
@@ -150,14 +153,71 @@ export async function createTransaction(
     throw new Error('Invalid recipient address');
   }
 
-  // Select UTXOs
-  const selection = await selectUTXOs(
-    walletId,
-    amount,
-    feeRate,
-    UTXOSelectionStrategy.LARGEST_FIRST,
-    selectedUtxoIds
-  );
+  // For sendMax, we need to select all UTXOs first, then calculate the amount
+  let effectiveAmount = amount;
+  let selection;
+
+  if (sendMax) {
+    // Select all available UTXOs (or specified ones)
+    const utxos = await prisma.uTXO.findMany({
+      where: {
+        walletId,
+        spent: false,
+        ...(selectedUtxoIds && selectedUtxoIds.length > 0 ? {
+          id: { in: selectedUtxoIds }
+        } : {}),
+      },
+    });
+
+    if (utxos.length === 0) {
+      throw new Error('No spendable UTXOs found');
+    }
+
+    const totalAmount = utxos.reduce((sum, u) => sum + Number(u.amount), 0);
+    // For sendMax, only 1 output (no change)
+    const estimatedSize = estimateTransactionSize(utxos.length, 1, 'native_segwit');
+    const estimatedFee = calculateFee(estimatedSize, feeRate);
+
+    if (totalAmount <= estimatedFee) {
+      throw new Error(`Insufficient funds. Total ${totalAmount} sats is not enough to cover fee ${estimatedFee} sats`);
+    }
+
+    effectiveAmount = totalAmount - estimatedFee;
+
+    selection = {
+      utxos: utxos.map(u => ({
+        ...u,
+        amount: Number(u.amount),
+        scriptPubKey: u.scriptPubKey || '',
+      })),
+      totalAmount,
+      estimatedFee,
+      changeAmount: 0, // No change for sendMax
+    };
+  } else if (subtractFees) {
+    // Select UTXOs for the full amount, then subtract fee from output
+    selection = await selectUTXOs(
+      walletId,
+      amount,
+      feeRate,
+      UTXOSelectionStrategy.LARGEST_FIRST,
+      selectedUtxoIds
+    );
+    // Fee is subtracted from the amount being sent
+    effectiveAmount = amount - selection.estimatedFee;
+    if (effectiveAmount <= 0) {
+      throw new Error(`Amount ${amount} sats is not enough to cover fee ${selection.estimatedFee} sats`);
+    }
+  } else {
+    // Normal selection: amount + fee must be covered
+    selection = await selectUTXOs(
+      walletId,
+      amount,
+      feeRate,
+      UTXOSelectionStrategy.LARGEST_FIRST,
+      selectedUtxoIds
+    );
+  }
 
   // Create PSBT
   const psbt = new bitcoin.Psbt({ network: networkObj });
@@ -199,14 +259,14 @@ export async function createTransaction(
   // Add recipient output
   psbt.addOutput({
     address: recipient,
-    value: amount,
+    value: effectiveAmount,
   });
 
-  // Add change output if needed
+  // Add change output if needed (skip for sendMax - no change)
   const dustThreshold = 546;
   let changeAddress: string | undefined;
 
-  if (selection.changeAmount >= dustThreshold) {
+  if (!sendMax && selection.changeAmount >= dustThreshold) {
     // Get or create a change address
     // Note: Address model doesn't distinguish between receive/change in schema
     // We use derivationPath to identify change addresses (path includes '/1/')
@@ -252,11 +312,12 @@ export async function createTransaction(
     psbtBase64: psbt.toBase64(),
     fee: selection.estimatedFee,
     totalInput: selection.totalAmount,
-    totalOutput: amount + (selection.changeAmount >= dustThreshold ? selection.changeAmount : 0),
-    changeAmount: selection.changeAmount,
+    totalOutput: effectiveAmount + (sendMax ? 0 : (selection.changeAmount >= dustThreshold ? selection.changeAmount : 0)),
+    changeAmount: sendMax ? 0 : selection.changeAmount,
     changeAddress,
     utxos: selection.utxos.map((u) => ({ txid: u.txid, vout: u.vout })),
     inputPaths,
+    effectiveAmount, // The actual amount being sent (may differ from requested if sendMax or subtractFees)
   };
 }
 

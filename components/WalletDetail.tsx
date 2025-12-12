@@ -72,6 +72,13 @@ export const WalletDetail: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sync retry state
+  const [syncRetryInfo, setSyncRetryInfo] = useState<{
+    retryCount: number;
+    maxRetries: number;
+    error?: string;
+  } | null>(null);
+
   const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'stats' | 'access' | 'settings'>('tx');
   const [addressSubTab, setAddressSubTab] = useState<'receive' | 'change'>('receive');
   
@@ -189,7 +196,19 @@ export const WalletDetail: React.FC = () => {
         });
       }
 
-      // If sync completed, refresh data
+      // Update retry info
+      if (data.status === 'retrying' && data.retryCount !== undefined && data.maxRetries !== undefined) {
+        setSyncRetryInfo({
+          retryCount: data.retryCount,
+          maxRetries: data.maxRetries,
+          error: data.error,
+        });
+      } else if (data.status === 'success' || data.status === 'failed') {
+        // Clear retry info on success or final failure
+        setSyncRetryInfo(null);
+      }
+
+      // If sync completed successfully, refresh data
       if (!data.inProgress && data.status === 'success') {
         fetchData();
       }
@@ -226,10 +245,12 @@ export const WalletDetail: React.FC = () => {
     }
 
     // Convert API wallet to component format
+    // API returns 'multi_sig' or 'single_sig', convert to WalletType enum values
+    const walletType = apiWallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
     const formattedWallet: Wallet = {
       id: apiWallet.id,
       name: apiWallet.name,
-      type: apiWallet.type as WalletType,
+      type: walletType,
       balance: apiWallet.balance,
       scriptType: apiWallet.scriptType,
       derivationPath: apiWallet.descriptor || '',
@@ -246,7 +267,7 @@ export const WalletDetail: React.FC = () => {
       deviceIds: [], // Will be populated from devices
       // Sync metadata
       lastSyncedAt: apiWallet.lastSyncedAt,
-      lastSyncStatus: apiWallet.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
+      lastSyncStatus: apiWallet.lastSyncStatus as 'success' | 'failed' | 'partial' | 'retrying' | null,
       syncInProgress: apiWallet.syncInProgress,
     };
 
@@ -676,7 +697,11 @@ export const WalletDetail: React.FC = () => {
                  </span>
              )}
              {/* Sync Status Badge */}
-             {syncing || wallet.syncInProgress ? (
+             {wallet.lastSyncStatus === 'retrying' || syncRetryInfo ? (
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20" title={syncRetryInfo?.error || 'Sync failed, retrying...'}>
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Sync failed. Retrying {syncRetryInfo?.retryCount || 1} of {syncRetryInfo?.maxRetries || 3}...
+               </span>
+             ) : syncing || wallet.syncInProgress ? (
                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
                   <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Syncing...
                </span>
@@ -750,7 +775,12 @@ export const WalletDetail: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'tx' && (
           <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
-             <TransactionList transactions={transactions} highlightedTxId={highlightTxId} onLabelsChange={handleLabelsChange} />
+             <TransactionList
+               transactions={transactions}
+               highlightedTxId={highlightTxId}
+               onLabelsChange={handleLabelsChange}
+               walletAddresses={addresses.map(a => a.address)}
+             />
           </div>
         )}
         

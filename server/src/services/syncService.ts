@@ -19,10 +19,16 @@ const CONFIRMATION_UPDATE_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes for confirma
 const STALE_THRESHOLD_MS = 10 * 60 * 1000; // Consider wallet stale if not synced in 10 minutes
 const MAX_CONCURRENT_SYNCS = 3;
 
+// Retry configuration
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS_MS = [5000, 15000, 45000]; // Exponential backoff: 5s, 15s, 45s
+
 interface SyncJob {
   walletId: string;
   priority: 'high' | 'normal' | 'low';
   requestedAt: Date;
+  retryCount?: number;
+  lastError?: string;
 }
 
 class SyncService {
@@ -259,9 +265,9 @@ class SyncService {
   }
 
   /**
-   * Execute a sync job for a wallet
+   * Execute a sync job for a wallet with retry support
    */
-  private async executeSyncJob(walletId: string): Promise<{
+  private async executeSyncJob(walletId: string, retryCount: number = 0): Promise<{
     success: boolean;
     addresses: number;
     transactions: number;
@@ -284,10 +290,12 @@ class SyncService {
     const notificationService = getNotificationService();
     notificationService.broadcastSyncStatus(walletId, {
       inProgress: true,
+      retryCount,
+      maxRetries: MAX_RETRY_ATTEMPTS,
     });
 
     try {
-      console.log(`[SYNC] Starting sync for wallet ${walletId}`);
+      console.log(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})` : ''}`);
 
       // Get previous balance for comparison
       const previousBalance = await this.getWalletBalance(walletId);
@@ -318,7 +326,6 @@ class SyncService {
       console.log(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
 
       // Always notify sync completion via WebSocket
-      const notificationService = getNotificationService();
       notificationService.broadcastSyncStatus(walletId, {
         inProgress: false,
         status: 'success',
@@ -344,24 +351,74 @@ class SyncService {
         ...result,
       };
     } catch (error: any) {
-      console.error(`[SYNC] Sync failed for wallet ${walletId}:`, error);
+      const errorMessage = error.message || 'Unknown error';
+      console.error(`[SYNC] Sync failed for wallet ${walletId}:`, errorMessage);
 
-      // Update sync metadata with error
+      // Check if we should retry
+      if (retryCount < MAX_RETRY_ATTEMPTS) {
+        const nextRetry = retryCount + 1;
+        const delayMs = RETRY_DELAYS_MS[retryCount] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+
+        console.log(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${MAX_RETRY_ATTEMPTS})`);
+
+        // Notify that we're retrying
+        notificationService.broadcastSyncStatus(walletId, {
+          inProgress: true,
+          status: 'retrying',
+          error: errorMessage,
+          retryCount: nextRetry,
+          maxRetries: MAX_RETRY_ATTEMPTS,
+          retryingIn: delayMs,
+        });
+
+        // Update DB to show retrying state
+        await prisma.wallet.update({
+          where: { id: walletId },
+          data: {
+            lastSyncStatus: 'retrying',
+            lastSyncError: `${errorMessage} (retrying ${nextRetry}/${MAX_RETRY_ATTEMPTS})`,
+            syncInProgress: false, // Will be set to true when retry starts
+          },
+        });
+
+        // Remove from active syncs so retry can start
+        this.activeSyncs.delete(walletId);
+
+        // Schedule retry with delay
+        setTimeout(() => {
+          this.executeSyncJob(walletId, nextRetry).catch(err => {
+            console.error(`[SYNC] Retry failed for wallet ${walletId}:`, err);
+          });
+        }, delayMs);
+
+        return {
+          success: false,
+          addresses: 0,
+          transactions: 0,
+          utxos: 0,
+          error: `${errorMessage} - retrying...`,
+        };
+      }
+
+      // All retries exhausted - final failure
+      console.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
+
+      // Update sync metadata with final error
       await prisma.wallet.update({
         where: { id: walletId },
         data: {
           lastSyncStatus: 'failed',
-          lastSyncError: error.message || 'Unknown error',
+          lastSyncError: errorMessage,
           syncInProgress: false,
         },
       });
 
       // Notify sync failure via WebSocket
-      const notificationService = getNotificationService();
       notificationService.broadcastSyncStatus(walletId, {
         inProgress: false,
         status: 'failed',
-        error: error.message || 'Unknown error',
+        error: errorMessage,
+        retriesExhausted: true,
       });
 
       // Continue processing queue
@@ -372,7 +429,7 @@ class SyncService {
         addresses: 0,
         transactions: 0,
         utxos: 0,
-        error: error.message,
+        error: errorMessage,
       };
     } finally {
       this.activeSyncs.delete(walletId);

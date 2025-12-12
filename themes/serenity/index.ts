@@ -96,17 +96,17 @@ export const serenityTheme: ThemeDefinition = {
         950: '#ffffff',  // Pure light
       },
 
-      // Success colors (Aurora green)
+      // Success colors (Nebula cyan/teal - distant star glow)
       success: {
-        50: '#052e16',
-        100: '#064e3b',
-        200: '#047857',
-        500: '#34d399',  // Aurora green
-        600: '#6ee7b7',
-        700: '#a7f3d0',
-        800: '#d1fae5',
-        900: '#ecfdf5',
-        950: '#f0fdf4',
+        50: '#0a1a2e',
+        100: '#0c2d4d',
+        200: '#0e4470',
+        500: '#22d3ee',  // Cosmic cyan
+        600: '#67e8f9',
+        700: '#a5f3fc',
+        800: '#cffafe',
+        900: '#ecfeff',
+        950: '#f0fdff',
       },
 
       // Warning colors (Nebula magenta/pink)

@@ -117,16 +117,14 @@ Optional:
 
 5. **Start Sanctuary**
    ```bash
-   # With HTTPS (recommended - enables hardware wallet WebUSB)
    HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
-
-   # Or HTTP-only (no hardware wallet support)
-   JWT_SECRET=your-secret-here docker compose up -d
    ```
 
 6. **Access the interface**
 
    Open https://localhost:8443 in your browser (accept the self-signed certificate warning)
+
+   > HTTP requests to port 8080 are automatically redirected to HTTPS.
 
 ---
 

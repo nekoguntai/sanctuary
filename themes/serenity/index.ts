@@ -2,7 +2,7 @@
  * Serenity Theme
  *
  * Light mode: Hawaii-inspired with warm sand backgrounds and ocean accents
- * Dark mode: Night sky with deep purple/black backgrounds and starlight accents
+ * Dark mode: Starry night sky with deep indigo/blue backgrounds and starlight accents
  *
  * Author: Sanctuary Wallet Team
  */
@@ -13,8 +13,8 @@ export const serenityTheme: ThemeDefinition = {
   id: 'serenity',
   name: 'Serenity',
   author: 'Sanctuary Wallet Team',
-  version: '1.0.0',
-  description: 'Hawaii-inspired ocean theme transitioning to night sky in dark mode',
+  version: '1.1.0',
+  description: 'Ocean serenity in light mode, starry night sky in dark mode',
 
   colors: {
     light: {
@@ -66,48 +66,60 @@ export const serenityTheme: ThemeDefinition = {
     },
 
     dark: {
-      // Background colors (Night sky - deep purple/black)
+      // Background colors (Starry night sky - deep blues to black)
       bg: {
-        50: '#f3e8ff',   // Pale purple (lightest elements/text)
-        100: '#e9d5ff',  // Light lavender
-        200: '#d8b4fe',
-        300: '#c084fc',
-        400: '#a855f7',
-        500: '#9333ea',
-        600: '#7e22ce',
-        700: '#6b21a8',
-        800: '#3b0764',  // Panels (deep purple)
-        900: '#2e1065',  // Main background (darker purple)
-        950: '#0f0720',  // Abyss (black-purple)
+        50: '#e0e7ff',   // Pale starlight blue
+        100: '#c7d2fe',  // Light periwinkle
+        200: '#a5b4fc',  // Soft indigo
+        300: '#818cf8',  // Twilight violet
+        400: '#6366f1',  // Evening indigo
+        500: '#4f46e5',  // Deep twilight
+        600: '#3730a3',  // Night indigo
+        700: '#1e1b4b',  // Deep night blue
+        800: '#0f0d2e',  // Midnight panels
+        900: '#0a0919',  // Night sky background
+        950: '#050510',  // Cosmic black
       },
 
-      // Primary colors (Starlight/neon violet)
+      // Primary colors (Starlight - silver to bright blue)
       primary: {
-        50: '#0f0720',
-        100: '#2e1065',
-        200: '#3b0764',
-        300: '#581c87',
-        400: '#7e22ce',
-        500: '#a855f7',  // Bright violet accent
-        600: '#c084fc',
-        700: '#d8b4fe',
-        800: '#e9d5ff',  // Text high contrast
-        900: '#f3e8ff',
-        950: '#ffffff',
+        50: '#0c0a1a',   // Deep space
+        100: '#1a1744',  // Dark nebula
+        200: '#2d2a6e',  // Distant stars
+        300: '#4338ca',  // Bright star core
+        400: '#6366f1',  // Star glow
+        500: '#818cf8',  // Bright starlight
+        600: '#a5b4fc',  // Soft star shine
+        700: '#c7d2fe',  // Pale starlight
+        800: '#e0e7ff',  // Near-white glow
+        900: '#eef2ff',  // Brightest star
+        950: '#ffffff',  // Pure light
       },
 
-      // Success colors (Night green/emerald)
+      // Success colors (Aurora green)
       success: {
+        50: '#052e16',
         100: '#064e3b',
-        500: '#34d399',  // Emerald 400
+        200: '#047857',
+        500: '#34d399',  // Aurora green
+        600: '#6ee7b7',
+        700: '#a7f3d0',
         800: '#d1fae5',
+        900: '#ecfdf5',
+        950: '#f0fdf4',
       },
 
-      // Warning colors (Night pink/magenta)
+      // Warning colors (Nebula magenta/pink)
       warning: {
-        100: '#831843',
-        500: '#e879f9',  // Fuchsia 400
-        800: '#fdf4ff',
+        50: '#2e1a47',
+        100: '#4c1d95',
+        200: '#6b21a8',
+        500: '#c084fc',  // Nebula purple
+        600: '#d8b4fe',
+        700: '#e9d5ff',
+        800: '#f3e8ff',
+        900: '#faf5ff',
+        950: '#fefcff',
       },
     },
   },

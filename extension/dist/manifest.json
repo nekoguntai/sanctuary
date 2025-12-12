@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sanctuary Hardware Wallet Bridge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Connect hardware wallets (Ledger, Trezor) to Sanctuary Bitcoin Wallet",
   "permissions": [
     "storage",

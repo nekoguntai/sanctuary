@@ -102,3 +102,30 @@ export interface ChangePasswordRequest {
 export async function changePassword(data: ChangePasswordRequest): Promise<{ message: string }> {
   return apiClient.post<{ message: string }>('/auth/me/change-password', data);
 }
+
+export interface UserGroup {
+  id: string;
+  name: string;
+  description?: string;
+  memberCount: number;
+  memberIds: string[];
+}
+
+/**
+ * Get groups the current user is a member of
+ */
+export async function getUserGroups(): Promise<UserGroup[]> {
+  return apiClient.get<UserGroup[]>('/auth/me/groups');
+}
+
+export interface SearchUser {
+  id: string;
+  username: string;
+}
+
+/**
+ * Search users by username
+ */
+export async function searchUsers(query: string): Promise<SearchUser[]> {
+  return apiClient.get<SearchUser[]>('/auth/users/search', { q: query });
+}

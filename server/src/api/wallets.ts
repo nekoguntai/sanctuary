@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
+import prisma from '../models/prisma';
 
 const router = Router();
 
@@ -381,6 +382,292 @@ function getDefaultAccountPath(scriptType: string, network: string): string {
       return `84'/${coinType}/0'`;
   }
 }
+
+/**
+ * POST /api/v1/wallets/:id/share/group
+ * Share wallet with a group
+ */
+router.post('/:id/share/group', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { groupId } = req.body;
+
+    // Verify user is owner of the wallet
+    const walletUser = await prisma.walletUser.findFirst({
+      where: {
+        walletId: id,
+        userId,
+        role: 'owner',
+      },
+    });
+
+    if (!walletUser) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only wallet owners can share wallets',
+      });
+    }
+
+    // If groupId provided, verify user is member of that group
+    if (groupId) {
+      const groupMember = await prisma.groupMember.findFirst({
+        where: {
+          groupId,
+          userId,
+        },
+      });
+
+      if (!groupMember) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'You must be a member of the group to share with it',
+        });
+      }
+    }
+
+    // Update wallet's group
+    const wallet = await prisma.wallet.update({
+      where: { id },
+      data: { groupId: groupId || null },
+      include: {
+        group: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      groupId: wallet.groupId,
+      groupName: wallet.group?.name || null,
+    });
+  } catch (error: any) {
+    console.error('[WALLETS] Share with group error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to share wallet with group',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:id/share/user
+ * Share wallet with a specific user
+ */
+router.post('/:id/share/user', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+    const { targetUserId, role = 'viewer' } = req.body;
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'targetUserId is required',
+      });
+    }
+
+    if (!['viewer', 'signer'].includes(role)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'role must be viewer or signer',
+      });
+    }
+
+    // Verify user is owner of the wallet
+    const walletUser = await prisma.walletUser.findFirst({
+      where: {
+        walletId: id,
+        userId,
+        role: 'owner',
+      },
+    });
+
+    if (!walletUser) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only wallet owners can share wallets',
+      });
+    }
+
+    // Verify target user exists
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!targetUser) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+    }
+
+    // Check if user already has access
+    const existingAccess = await prisma.walletUser.findFirst({
+      where: {
+        walletId: id,
+        userId: targetUserId,
+      },
+    });
+
+    if (existingAccess) {
+      // Update role if different
+      if (existingAccess.role !== role && existingAccess.role !== 'owner') {
+        await prisma.walletUser.update({
+          where: { id: existingAccess.id },
+          data: { role },
+        });
+      }
+      return res.json({
+        success: true,
+        message: 'User access updated',
+      });
+    }
+
+    // Add user to wallet
+    await prisma.walletUser.create({
+      data: {
+        walletId: id,
+        userId: targetUserId,
+        role,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'User added to wallet',
+    });
+  } catch (error: any) {
+    console.error('[WALLETS] Share with user error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to share wallet with user',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/wallets/:id/share/user/:targetUserId
+ * Remove a user's access to wallet
+ */
+router.delete('/:id/share/user/:targetUserId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id, targetUserId } = req.params;
+
+    // Verify user is owner of the wallet
+    const walletUser = await prisma.walletUser.findFirst({
+      where: {
+        walletId: id,
+        userId,
+        role: 'owner',
+      },
+    });
+
+    if (!walletUser) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only wallet owners can remove users',
+      });
+    }
+
+    // Can't remove the owner
+    const targetWalletUser = await prisma.walletUser.findFirst({
+      where: {
+        walletId: id,
+        userId: targetUserId,
+      },
+    });
+
+    if (!targetWalletUser) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'User does not have access to this wallet',
+      });
+    }
+
+    if (targetWalletUser.role === 'owner') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Cannot remove the owner from the wallet',
+      });
+    }
+
+    await prisma.walletUser.delete({
+      where: { id: targetWalletUser.id },
+    });
+
+    res.json({
+      success: true,
+      message: 'User removed from wallet',
+    });
+  } catch (error: any) {
+    console.error('[WALLETS] Remove user error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to remove user from wallet',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/wallets/:id/share
+ * Get wallet sharing info (group and users)
+ */
+router.get('/:id/share', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+
+    // Verify user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      include: {
+        group: true,
+        users: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    res.json({
+      group: wallet.group ? {
+        id: wallet.group.id,
+        name: wallet.group.name,
+      } : null,
+      users: wallet.users.map((wu: { user: { id: string; username: string }; role: string }) => ({
+        id: wu.user.id,
+        username: wu.user.username,
+        role: wu.role,
+      })),
+    });
+  } catch (error: any) {
+    console.error('[WALLETS] Get share info error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get sharing info',
+    });
+  }
+});
 
 /**
  * POST /api/v1/wallets/import/validate

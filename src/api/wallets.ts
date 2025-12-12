@@ -186,3 +186,53 @@ export async function validateImport(input: {
 export async function importWallet(data: ImportWalletRequest): Promise<ImportWalletResult> {
   return apiClient.post<ImportWalletResult>('/wallets/import', data);
 }
+
+// Wallet sharing types
+export interface ShareWithGroupRequest {
+  groupId: string | null;
+}
+
+export interface ShareWithUserRequest {
+  targetUserId: string;
+  role?: 'viewer' | 'signer';
+}
+
+export interface WalletShareInfo {
+  group: {
+    id: string;
+    name: string;
+  } | null;
+  users: Array<{
+    id: string;
+    username: string;
+    role: string;
+  }>;
+}
+
+/**
+ * Share wallet with a group
+ */
+export async function shareWalletWithGroup(walletId: string, data: ShareWithGroupRequest): Promise<{ success: boolean; groupId: string | null; groupName: string | null }> {
+  return apiClient.post(`/wallets/${walletId}/share/group`, data);
+}
+
+/**
+ * Share wallet with a specific user
+ */
+export async function shareWalletWithUser(walletId: string, data: ShareWithUserRequest): Promise<{ success: boolean; message: string }> {
+  return apiClient.post(`/wallets/${walletId}/share/user`, data);
+}
+
+/**
+ * Remove user from wallet
+ */
+export async function removeUserFromWallet(walletId: string, targetUserId: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.delete(`/wallets/${walletId}/share/user/${targetUserId}`);
+}
+
+/**
+ * Get wallet sharing info
+ */
+export async function getWalletShareInfo(walletId: string): Promise<WalletShareInfo> {
+  return apiClient.get(`/wallets/${walletId}/share`);
+}

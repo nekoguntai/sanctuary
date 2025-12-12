@@ -241,6 +241,88 @@ router.patch('/me/preferences', authenticate, async (req: Request, res: Response
 });
 
 /**
+ * GET /api/v1/auth/me/groups
+ * Get groups the current user is a member of
+ */
+router.get('/me/groups', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    const groups = await prisma.group.findMany({
+      where: {
+        members: {
+          some: { userId },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        members: {
+          select: {
+            userId: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    res.json(groups.map(g => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      memberCount: g.members.length,
+      memberIds: g.members.map(m => m.userId),
+    })));
+  } catch (error) {
+    console.error('[AUTH] Get user groups error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get groups',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/auth/users/search
+ * Search users by username (for sharing)
+ */
+router.get('/users/search', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || typeof q !== 'string' || q.length < 2) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Search query must be at least 2 characters',
+      });
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        username: {
+          contains: q,
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+      },
+      take: 10,
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('[AUTH] Search users error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to search users',
+    });
+  }
+});
+
+/**
  * POST /api/v1/auth/me/change-password
  * Change user password
  */

@@ -7,6 +7,7 @@ import * as labelsApi from '../src/api/labels';
 import * as devicesApi from '../src/api/devices';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
+import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
 import { TransactionList } from './TransactionList';
 import { UTXOList } from './UTXOList';
@@ -84,8 +85,13 @@ export const WalletDetail: React.FC = () => {
   
   // Data for Settings/Access
   const [users, setUsers] = useState<User[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [groups, setGroups] = useState<authApi.UserGroup[]>([]);
   const [selectedGroupToAdd, setSelectedGroupToAdd] = useState<string>('');
+  const [walletShareInfo, setWalletShareInfo] = useState<walletsApi.WalletShareInfo | null>(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState<authApi.SearchUser[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [sharingLoading, setSharingLoading] = useState(false);
   
   // Selection State for UTXOs
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
@@ -330,9 +336,20 @@ export const WalletDetail: React.FC = () => {
     // Wait for all fetches to complete (they handle their own errors)
     await Promise.all(fetchPromises);
 
-    // Note: Users and groups are not needed for basic wallet display
-    setUsers([]);
-    setGroups([]);
+    // Fetch user's groups and wallet sharing info (for Access tab)
+    try {
+      const userGroups = await authApi.getUserGroups();
+      setGroups(userGroups);
+    } catch (err) {
+      console.error('Failed to fetch user groups:', err);
+    }
+
+    try {
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+    } catch (err) {
+      console.error('Failed to fetch wallet share info:', err);
+    }
 
     setLoading(false);
   };
@@ -395,10 +412,19 @@ export const WalletDetail: React.FC = () => {
     }
   }, [id, user]);
 
-  const handleLoadMoreAddresses = () => {
+  const handleLoadMoreAddresses = async () => {
       if (!id) return;
-      const nextOffset = addresses.length;
-      loadAddresses(id, 20, nextOffset);
+      setLoadingAddresses(true);
+      try {
+        // Generate more addresses on the backend
+        await transactionsApi.generateAddresses(id, 10);
+        // Reload all addresses
+        await loadAddresses(id, 20, 0, true);
+      } catch (err) {
+        console.error('Failed to generate more addresses:', err);
+      } finally {
+        setLoadingAddresses(false);
+      }
   };
 
   // Truncate address to show first 10 + "..." + last 6 characters
@@ -497,18 +523,99 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const addGroup = () => {
-    if (!wallet || !selectedGroupToAdd) return;
-    if (wallet.groupIds.includes(selectedGroupToAdd)) return;
-    const newGroupIds = [...wallet.groupIds, selectedGroupToAdd];
-    handleUpdateWallet({ groupIds: newGroupIds });
-    setSelectedGroupToAdd('');
+  const addGroup = async () => {
+    if (!wallet || !selectedGroupToAdd || !id) return;
+    try {
+      setSharingLoading(true);
+      await walletsApi.shareWalletWithGroup(id, { groupId: selectedGroupToAdd });
+      // Refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+      setSelectedGroupToAdd('');
+    } catch (err) {
+      console.error('Failed to share with group:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to share: ${err.message}`);
+      }
+    } finally {
+      setSharingLoading(false);
+    }
   };
 
-  const removeGroup = (groupId: string) => {
-    if (!wallet) return;
-    const newGroupIds = wallet.groupIds.filter(id => id !== groupId);
-    handleUpdateWallet({ groupIds: newGroupIds });
+  const removeGroup = async () => {
+    if (!wallet || !id) return;
+    try {
+      setSharingLoading(true);
+      // Setting groupId to null removes group access
+      await walletsApi.shareWalletWithGroup(id, { groupId: null });
+      // Refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+    } catch (err) {
+      console.error('Failed to remove group:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to remove group: ${err.message}`);
+      }
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const handleShareWithUser = async (targetUserId: string, role: 'viewer' | 'signer' = 'viewer') => {
+    if (!id) return;
+    try {
+      setSharingLoading(true);
+      await walletsApi.shareWalletWithUser(id, { targetUserId, role });
+      // Refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+      setUserSearchQuery('');
+      setUserSearchResults([]);
+    } catch (err) {
+      console.error('Failed to share with user:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to share: ${err.message}`);
+      }
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const handleRemoveUserAccess = async (targetUserId: string) => {
+    if (!id) return;
+    try {
+      setSharingLoading(true);
+      await walletsApi.removeUserFromWallet(id, targetUserId);
+      // Refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+    } catch (err) {
+      console.error('Failed to remove user:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to remove user: ${err.message}`);
+      }
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const handleSearchUsers = async (query: string) => {
+    setUserSearchQuery(query);
+    if (query.length < 2) {
+      setUserSearchResults([]);
+      return;
+    }
+    try {
+      setSearchingUsers(true);
+      const results = await authApi.searchUsers(query);
+      // Filter out users who already have access
+      const existingUserIds = walletShareInfo?.users.map(u => u.id) || [];
+      setUserSearchResults(results.filter(u => !existingUserIds.includes(u.id)));
+    } catch (err) {
+      console.error('Failed to search users:', err);
+    } finally {
+      setSearchingUsers(false);
+    }
   };
 
   const downloadJson = () => {
@@ -907,100 +1014,167 @@ export const WalletDetail: React.FC = () => {
 
         {activeTab === 'access' && (
           <div className="space-y-6">
+            {/* Ownership Section */}
             <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <h3 className="text-lg font-medium mb-4 flex items-center">
                  <Shield className="w-5 h-5 mr-2 text-primary-500" />
                  Ownership
                </h3>
-               <div className="flex items-center p-4 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg justify-between">
+               <div className="flex items-center p-4 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg">
                   <div className="flex items-center">
                     <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
-                        {ownerUser?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
+                        {walletShareInfo?.users.find(u => u.role === 'owner')?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
                     </div>
                     <div className="ml-4">
-                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{ownerUser?.username || user?.username || 'You'}</p>
+                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                          {walletShareInfo?.users.find(u => u.role === 'owner')?.username || user?.username || 'You'}
+                        </p>
                         <p className="text-xs text-sanctuary-500">Wallet Creator & Owner</p>
                     </div>
                   </div>
-
-                  {/* Transfer Ownership Small Control */}
-                  {users.length > 0 && (
-                    <div className="flex items-center space-x-2">
-                         <span className="text-xs text-sanctuary-400">Transfer to:</span>
-                         <select
-                          value={wallet.ownerId}
-                          onChange={(e) => handleUpdateWallet({ ownerId: e.target.value })}
-                          className="text-xs bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded px-2 py-1"
-                        >
-                           {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-                        </select>
-                    </div>
-                  )}
                </div>
             </div>
 
+            {/* Group Sharing Section */}
             <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium flex items-center">
                         <Users className="w-5 h-5 mr-2 text-primary-500" />
-                        Shared Access
+                        Group Access
                     </h3>
                </div>
-               
-               {/* Add Group Control Moved Here */}
-               <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Grant Access</p>
-                   <div className="flex space-x-2">
-                          <select 
-                             value={selectedGroupToAdd}
-                             onChange={(e) => setSelectedGroupToAdd(e.target.value)}
-                             className="flex-1 text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
-                          >
-                             <option value="">Select Group to Share With...</option>
-                             {groups.filter(g => !wallet.groupIds.includes(g.id)).map(g => (
-                                 <option key={g.id} value={g.id}>{g.name}</option>
-                             ))}
-                          </select>
-                          <Button size="sm" onClick={addGroup} disabled={!selectedGroupToAdd}>
-                              <Plus className="w-4 h-4 mr-1" /> Add Access
-                          </Button>
-                   </div>
-               </div>
 
-               {wallet.groupIds.length === 0 ? (
-                 <div className="text-center py-8 text-sanctuary-500 italic">
-                    This wallet is currently private.
+               {/* Share with Group */}
+               {!walletShareInfo?.group && (
+                 <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with Group</p>
+                   <div className="flex space-x-2">
+                     <select
+                       value={selectedGroupToAdd}
+                       onChange={(e) => setSelectedGroupToAdd(e.target.value)}
+                       className="flex-1 text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
+                     >
+                       <option value="">Select Group...</option>
+                       {groups.map(g => (
+                         <option key={g.id} value={g.id}>{g.name}</option>
+                       ))}
+                     </select>
+                     <Button size="sm" onClick={addGroup} disabled={!selectedGroupToAdd || sharingLoading} isLoading={sharingLoading}>
+                       <Plus className="w-4 h-4 mr-1" /> Share
+                     </Button>
+                   </div>
+                   {groups.length === 0 && (
+                     <p className="text-xs text-sanctuary-400 mt-2">You are not a member of any groups yet.</p>
+                   )}
+                 </div>
+               )}
+
+               {/* Current Group */}
+               {walletShareInfo?.group ? (
+                 <div className="border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg overflow-hidden">
+                   <div className="bg-sanctuary-100 dark:bg-sanctuary-800 px-4 py-3 border-b border-sanctuary-200 dark:border-sanctuary-700 flex justify-between items-center">
+                     <div className="flex items-center">
+                       <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{walletShareInfo.group.name}</span>
+                       <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
+                         Group Access
+                       </span>
+                     </div>
+                     <button
+                       onClick={removeGroup}
+                       disabled={sharingLoading}
+                       className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
+                     >
+                       <Trash2 className="w-3 h-3 mr-1" /> Remove
+                     </button>
+                   </div>
+                   <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-900">
+                     <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400">All members of this group can view and access this wallet.</p>
+                   </div>
                  </div>
                ) : (
-                 <div className="grid gap-4">
-                    {wallet.groupIds.map(gid => {
-                       const group = groups.find(g => g.id === gid);
-                       if(!group) return null;
-                       const members = users.filter(u => group.memberIds.includes(u.id));
-                       return (
-                         <div key={gid} className="border border-sanctuary-100 dark:border-sanctuary-800 rounded-lg overflow-hidden">
-                            <div className="bg-sanctuary-50 dark:bg-sanctuary-950/50 px-4 py-3 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
-                               <div className="flex items-center">
-                                   <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{group.name}</span>
-                                   <span className="text-xs text-sanctuary-500">({members.length} Members)</span>
-                               </div>
-                               <button onClick={() => removeGroup(gid)} className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
-                                  <Trash2 className="w-3 h-3 mr-1" /> Revoke
-                               </button>
-                            </div>
-                            <div className="p-4 bg-white dark:bg-sanctuary-900">
-                               <div className="flex flex-wrap gap-2">
-                                  {members.map(m => (
-                                     <div key={m.id} className="flex items-center bg-sanctuary-50 dark:bg-sanctuary-800 px-3 py-1.5 rounded-full border border-sanctuary-100 dark:border-sanctuary-700">
-                                        <UserIcon className="w-3 h-3 mr-2 text-sanctuary-400" />
-                                        <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{m.username}</span>
-                                     </div>
-                                  ))}
-                               </div>
-                            </div>
+                 <div className="text-center py-4 text-sanctuary-500 text-sm">
+                    Not shared with any group.
+                 </div>
+               )}
+            </div>
+
+            {/* Individual User Sharing Section */}
+            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium flex items-center">
+                        <UserIcon className="w-5 h-5 mr-2 text-primary-500" />
+                        Individual Access
+                    </h3>
+               </div>
+
+               {/* Search and Add User */}
+               <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                 <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with User</p>
+                 <div className="relative">
+                   <input
+                     type="text"
+                     value={userSearchQuery}
+                     onChange={(e) => handleSearchUsers(e.target.value)}
+                     placeholder="Search users by username..."
+                     className="w-full text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
+                   />
+                   {searchingUsers && (
+                     <div className="absolute right-3 top-2.5">
+                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                     </div>
+                   )}
+
+                   {/* Search Results Dropdown */}
+                   {userSearchResults.length > 0 && (
+                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                       {userSearchResults.map(u => (
+                         <button
+                           key={u.id}
+                           onClick={() => handleShareWithUser(u.id, 'viewer')}
+                           disabled={sharingLoading}
+                           className="w-full text-left px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
+                         >
+                           <div className="flex items-center">
+                             <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                               {u.username.charAt(0).toUpperCase()}
+                             </div>
+                             <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{u.username}</span>
+                           </div>
+                           <span className="text-xs text-primary-500">+ Add</span>
+                         </button>
+                       ))}
+                     </div>
+                   )}
+                 </div>
+               </div>
+
+               {/* Current Users */}
+               {walletShareInfo && walletShareInfo.users.filter(u => u.role !== 'owner').length > 0 ? (
+                 <div className="space-y-2">
+                   {walletShareInfo.users.filter(u => u.role !== 'owner').map(u => (
+                     <div key={u.id} className="flex items-center justify-between p-3 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg">
+                       <div className="flex items-center">
+                         <div className="h-8 w-8 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-sm font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-3">
+                           {u.username.charAt(0).toUpperCase()}
                          </div>
-                       )
-                    })}
+                         <div>
+                           <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{u.username}</p>
+                           <p className="text-xs text-sanctuary-500 capitalize">{u.role}</p>
+                         </div>
+                       </div>
+                       <button
+                         onClick={() => handleRemoveUserAccess(u.id)}
+                         disabled={sharingLoading}
+                         className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
+                       >
+                         <X className="w-3 h-3 mr-1" /> Remove
+                       </button>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <div className="text-center py-4 text-sanctuary-500 text-sm">
+                    Not shared with any individual users.
                  </div>
                )}
             </div>

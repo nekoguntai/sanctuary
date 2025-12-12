@@ -305,7 +305,9 @@ EXPLORER_URL=https://mempool.space
 
 ### Enabling HTTPS
 
-HTTPS is required for WebUSB to work directly in the browser (for hardware wallet access). To enable HTTPS:
+HTTPS is required for WebUSB to work directly in the browser (for hardware wallet access). With HTTPS enabled:
+- **All content is served exclusively over HTTPS**
+- **HTTP requests are automatically redirected to HTTPS**
 
 **Option 1: Self-Signed Certificates (Development)**
 
@@ -316,15 +318,15 @@ chmod +x generate-certs.sh
 ./generate-certs.sh localhost
 cd ../../..
 
-# Run with SSL enabled (HTTPS on port 8443, HTTP redirect on port 8080)
+# Run with HTTPS (port 8443) + HTTP redirect (port 8080)
 HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 ```
 
-Access at `https://localhost:8443`. Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
+Access at `https://localhost:8443` (or `http://localhost:8080` which redirects to HTTPS). Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
 
 For standard ports (requires root/admin):
 ```bash
-HTTPS_PORT=443 FRONTEND_PORT=80 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+HTTPS_PORT=443 HTTP_PORT=80 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 ```
 
 **Option 2: mkcert (Locally-Trusted Certificates)**
@@ -343,7 +345,7 @@ mkcert -install
 # Generate certificates
 mkcert -key-file docker/nginx/ssl/privkey.pem -cert-file docker/nginx/ssl/fullchain.pem localhost 127.0.0.1
 
-# Run with SSL
+# Run with HTTPS
 HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 ```
 

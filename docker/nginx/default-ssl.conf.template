@@ -1,4 +1,4 @@
-# Sanctuary Frontend + API Reverse Proxy Configuration (HTTPS)
+# Sanctuary Frontend + API Reverse Proxy Configuration (HTTPS Only)
 # Environment variables are substituted at container startup
 
 upstream backend {
@@ -6,27 +6,19 @@ upstream backend {
     keepalive 32;
 }
 
-# Redirect HTTP to HTTPS
+# HTTP → HTTPS redirect
 server {
     listen 80;
     listen [::]:80;
     server_name _;
 
-    # Health check on HTTP (for Docker healthcheck)
-    location /health {
-        access_log off;
-        return 200 'healthy';
-        add_header Content-Type text/plain;
-    }
-
-    # Redirect all other requests to HTTPS
-    # HTTPS_REDIRECT_PORT should be set to the external HTTPS port (e.g., 8443)
+    # Redirect all requests to HTTPS
     location / {
         return 301 https://$host:${HTTPS_REDIRECT_PORT}$request_uri;
     }
 }
 
-# HTTPS server
+# HTTPS server (all content served here)
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;

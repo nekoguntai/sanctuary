@@ -18,6 +18,7 @@ import { sanctuaryTheme } from './sanctuary';
 import { serenityTheme } from './serenity';
 import { forestTheme } from './forest';
 import { cyberTheme } from './cyber';
+import { sunriseTheme } from './sunrise';
 
 // Register all themes
 themeRegistry.registerMany([
@@ -25,6 +26,7 @@ themeRegistry.registerMany([
   serenityTheme,
   forestTheme,
   cyberTheme,
+  sunriseTheme,
 ]);
 
 // Register global patterns

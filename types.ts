@@ -18,7 +18,7 @@ export enum HardwareDevice {
   GENERIC = 'Generic SD',
 }
 
-export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber';
+export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber' | 'sunrise';
 export type BackgroundOption = 'minimal' | 'zen' | 'circuit' | 'topography' | 'waves' | 'lines' | 'sanctuary' | 'sanctuary-hero';
 
 export interface UserPreferences {

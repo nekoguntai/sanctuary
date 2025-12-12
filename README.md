@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23059669' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z'/%3E%3Cpath d='M2 17l10 5 10-5'/%3E%3Cpath d='M2 12l10 5 10-5'/%3E%3Ccircle cx='12' cy='12' r='1' fill='%23059669' fill-opacity='0.5'/%3E%3C/svg%3E" alt="Sanctuary Logo" width="80" height="80" />
+  <img src="assets/logo.svg" alt="Sanctuary Logo" width="80" height="80" />
 </p>
 
 <h1 align="center">Sanctuary</h1>

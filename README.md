@@ -332,7 +332,19 @@ Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scan
 
 Sanctuary uses a browser extension to communicate with USB hardware wallets. This allows signing transactions even when Sanctuary runs in Docker or on a remote server.
 
-#### Building the Extension
+#### Installing the Extension
+
+**Chrome / Edge / Brave:**
+
+1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
+2. Enable **Developer mode** (toggle in top right)
+3. Click **Load unpacked**
+4. Select the `extension/dist` directory from this repository
+5. The Sanctuary Bridge icon should appear in your toolbar
+
+#### Building from Source (Optional)
+
+The extension comes pre-built in `extension/dist`. If you want to build it yourself:
 
 ```bash
 cd extension
@@ -341,20 +353,10 @@ cd extension
 npm install
 
 # Build the extension
-npm run build
+npm run package
 
 # The built extension will be in the dist/ directory
 ```
-
-#### Installing the Extension
-
-**Chrome / Edge / Brave:**
-
-1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
-2. Enable **Developer mode** (toggle in top right)
-3. Click **Load unpacked**
-4. Select the `extension/dist` directory
-5. The Sanctuary Bridge icon should appear in your toolbar
 
 **Firefox (experimental):**
 

@@ -1,0 +1,33 @@
+{
+  "name": "sanctuary-hw-bridge",
+  "version": "1.0.0",
+  "description": "Hardware wallet bridge extension for Sanctuary Bitcoin Wallet",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:background && npm run build:content && npm run build:popup && npm run build:options",
+    "build:background": "esbuild background/service-worker.ts --bundle --outfile=dist/background/service-worker.js --format=esm --target=chrome120 --alias:stream=stream-browserify --alias:buffer=buffer --alias:events=events --define:global=globalThis --define:process.env.NODE_ENV=\\\"production\\\"",
+    "build:content": "esbuild content/bridge.ts --bundle --outfile=dist/content/bridge.js --format=iife --target=chrome120 && esbuild content/injected.ts --bundle --outfile=dist/content/injected.js --format=iife --target=chrome120",
+    "build:popup": "esbuild popup/popup.ts --bundle --outfile=dist/popup/popup.js --format=iife --target=chrome120",
+    "build:options": "esbuild options/options.ts --bundle --outfile=dist/options/options.js --format=iife --target=chrome120",
+    "watch": "npm run build -- --watch",
+    "copy-assets": "cp manifest.json dist/ && cp -r icons dist/ && cp popup/popup.html dist/popup/ && cp popup/popup.css dist/popup/ && cp options/options.html dist/options/ && cp options/options.css dist/options/",
+    "package": "npm run build && npm run copy-assets",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ledgerhq/hw-app-btc": "^10.4.1",
+    "@ledgerhq/hw-transport-webusb": "^6.29.4",
+    "@trezor/connect-web": "^9.4.6"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "^0.2.57",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/tokenizer": "^0.0.4",
+    "@types/chrome": "^0.0.287",
+    "buffer": "^6.0.3",
+    "esbuild": "^0.24.2",
+    "events": "^3.3.0",
+    "stream-browserify": "^3.0.0",
+    "typescript": "^5.7.2"
+  }
+}

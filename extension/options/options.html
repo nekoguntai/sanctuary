@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sanctuary HW Bridge - Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Sanctuary HW Bridge Settings</h1>
+    </header>
+
+    <main class="main">
+      <section class="section">
+        <h2>Allowed Domains</h2>
+        <p class="description">
+          The extension automatically works with localhost and local network IPs.
+          Add custom domains below if you're running Sanctuary on a custom hostname.
+        </p>
+
+        <div class="domains-list" id="domains-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="add-domain">
+          <input
+            type="text"
+            id="new-domain"
+            placeholder="e.g., sanctuary.myserver.com"
+            pattern="^[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z0-9][a-zA-Z0-9-]*)*$"
+          >
+          <button id="add-domain-btn" class="btn-primary">Add Domain</button>
+        </div>
+        <p class="hint">
+          Enter domain without protocol (no http:// or https://)
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Default Allowed Origins</h2>
+        <p class="description">
+          These origins are always allowed and cannot be removed:
+        </p>
+        <ul class="default-list">
+          <li><code>localhost</code> - Local development</li>
+          <li><code>127.0.0.1</code> - Loopback address</li>
+          <li><code>192.168.x.x</code> - Private network (Class C)</li>
+          <li><code>10.x.x.x</code> - Private network (Class A)</li>
+          <li><code>172.16-31.x.x</code> - Private network (Class B)</li>
+          <li><code>*.sanctuary.local</code> - Local DNS</li>
+          <li><code>*.sanctuary.lan</code> - LAN DNS</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Security</h2>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="require-https" disabled>
+            <span>Require HTTPS for custom domains</span>
+          </label>
+          <p class="hint">Coming soon - for now, both HTTP and HTTPS are allowed</p>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button id="save-btn" class="btn-primary">Save Settings</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>Sanctuary Hardware Wallet Bridge v1.0.0</p>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

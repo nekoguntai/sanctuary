@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sanctuary HW Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <h1>Sanctuary</h1>
+      </div>
+      <span class="version">v1.0.0</span>
+    </header>
+
+    <main class="main">
+      <section class="status-section">
+        <h2>Device Status</h2>
+        <div id="status-indicator" class="status-indicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Checking...</span>
+        </div>
+      </section>
+
+      <section class="devices-section">
+        <h2>Connected Devices</h2>
+        <div id="devices-list" class="devices-list">
+          <p class="no-devices">No devices connected</p>
+        </div>
+      </section>
+
+      <section class="connect-section">
+        <h2>Connect Device</h2>
+        <div class="connect-buttons">
+          <button id="connect-ledger" class="connect-btn ledger">
+            <span class="btn-icon">L</span>
+            <span>Ledger</span>
+          </button>
+          <button id="connect-trezor" class="connect-btn trezor">
+            <span class="btn-icon">T</span>
+            <span>Trezor</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="info-section">
+        <h2>Support</h2>
+        <ul class="support-list">
+          <li>
+            <span class="checkmark">&#10003;</span>
+            Ledger (Nano S, S+, X, Stax, Flex)
+          </li>
+          <li>
+            <span class="checkmark">&#10003;</span>
+            Trezor (Model One, T, Safe 3, Safe 5)
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Hardware Wallet Bridge Extension</p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

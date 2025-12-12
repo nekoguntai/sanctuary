@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "isolatedModules": true,
+    "types": ["chrome"]
+  },
+  "include": [
+    "background/**/*.ts",
+    "content/**/*.ts",
+    "lib/**/*.ts",
+    "popup/**/*.ts",
+    "types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

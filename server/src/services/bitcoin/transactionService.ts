@@ -159,15 +159,19 @@ export async function createTransaction(
 
   if (sendMax) {
     // Select all available UTXOs (or specified ones)
-    const utxos = await prisma.uTXO.findMany({
+    let utxos = await prisma.uTXO.findMany({
       where: {
         walletId,
         spent: false,
-        ...(selectedUtxoIds && selectedUtxoIds.length > 0 ? {
-          id: { in: selectedUtxoIds }
-        } : {}),
       },
     });
+
+    // Filter by selected UTXOs if provided (format: "txid:vout")
+    if (selectedUtxoIds && selectedUtxoIds.length > 0) {
+      utxos = utxos.filter((utxo) =>
+        selectedUtxoIds.includes(`${utxo.txid}:${utxo.vout}`)
+      );
+    }
 
     if (utxos.length === 0) {
       throw new Error('No spendable UTXOs found');

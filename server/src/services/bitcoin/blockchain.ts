@@ -5,7 +5,7 @@
  * Handles address monitoring, transaction fetching, and UTXO management.
  */
 
-import { getElectrumClient } from './electrum';
+import { getNodeClient } from './nodeClient';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 
@@ -25,7 +25,7 @@ async function getBlockTimestamp(height: number): Promise<Date | null> {
   }
 
   try {
-    const client = getElectrumClient();
+    const client = await getNodeClient();
     const headerHex = await client.getBlockHeader(height);
 
     // Block header structure (80 bytes):
@@ -69,14 +69,9 @@ export async function syncAddress(addressId: string): Promise<{
     throw new Error('Address not found');
   }
 
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
   try {
-    // Ensure connection
-    if (!client.isConnected()) {
-      await client.connect();
-    }
-
     // Get transaction history
     const history = await client.getAddressHistory(addressRecord.address);
 
@@ -288,30 +283,341 @@ export async function syncAddress(addressId: string): Promise<{
 }
 
 /**
- * Sync all addresses for a wallet
+ * Sync all addresses for a wallet - OPTIMIZED with parallel processing and batch operations
  */
 export async function syncWallet(walletId: string): Promise<{
   addresses: number;
   transactions: number;
   utxos: number;
 }> {
+  const startTime = Date.now();
+  const client = await getNodeClient();
+
+
+  // Get all addresses for the wallet
   const addresses = await prisma.address.findMany({
     where: { walletId },
   });
 
-  let totalTransactions = 0;
-  let totalUtxos = 0;
+  if (addresses.length === 0) {
+    return { addresses: 0, transactions: 0, utxos: 0 };
+  }
 
-  for (const address of addresses) {
-    try {
-      const result = await syncAddress(address.id);
-      totalTransactions += result.transactions;
-      totalUtxos += result.utxos;
-    } catch (error) {
-      console.error(`[BLOCKCHAIN] Failed to sync address ${address.address}:`, error);
-      // Continue with other addresses
+  const walletAddressSet = new Set(addresses.map(a => a.address));
+  const addressMap = new Map(addresses.map(a => [a.address, a]));
+
+  // PHASE 1: Batch fetch all address histories in parallel
+  console.log(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses...`);
+  const HISTORY_BATCH_SIZE = 10; // Concurrent history fetches
+  const historyResults: Map<string, Array<{ tx_hash: string; height: number }>> = new Map();
+
+  for (let i = 0; i < addresses.length; i += HISTORY_BATCH_SIZE) {
+    const batch = addresses.slice(i, i + HISTORY_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (addr) => {
+        try {
+          const history = await client.getAddressHistory(addr.address);
+          return { address: addr.address, history };
+        } catch (error) {
+          console.error(`[BLOCKCHAIN] Failed to get history for ${addr.address}:`, error);
+          return { address: addr.address, history: [] };
+        }
+      })
+    );
+    for (const result of batchResults) {
+      historyResults.set(result.address, result.history);
     }
   }
+
+  // Collect all unique txids from all address histories
+  const allTxids = new Set<string>();
+  for (const history of historyResults.values()) {
+    for (const item of history) {
+      allTxids.add(item.tx_hash);
+    }
+  }
+
+  // PHASE 2: Batch check which transactions already exist in DB
+  const existingTxs = await prisma.transaction.findMany({
+    where: {
+      walletId,
+      txid: { in: Array.from(allTxids) },
+    },
+    select: { txid: true, type: true },
+  });
+  const existingTxMap = new Map(existingTxs.map(tx => [`${tx.txid}:${tx.type}`, true]));
+  const existingTxidSet = new Set(existingTxs.map(tx => tx.txid));
+
+  // Filter to only new txids
+  const newTxids = Array.from(allTxids).filter(txid => !existingTxidSet.has(txid));
+  console.log(`[BLOCKCHAIN] Found ${newTxids.length} new transactions to process (${existingTxidSet.size} already exist)`);
+
+  // PHASE 3: Batch fetch transaction details for new txids
+  const txDetailsCache: Map<string, any> = new Map();
+  const TX_BATCH_SIZE = 5; // Concurrent tx fetches
+
+  for (let i = 0; i < newTxids.length; i += TX_BATCH_SIZE) {
+    const batch = newTxids.slice(i, i + TX_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (txid) => {
+        try {
+          const details = await client.getTransaction(txid, true);
+          return { txid, details };
+        } catch (error) {
+          console.error(`[BLOCKCHAIN] Failed to get tx ${txid}:`, error);
+          return { txid, details: null };
+        }
+      })
+    );
+    for (const result of batchResults) {
+      if (result.details) {
+        txDetailsCache.set(result.txid, result.details);
+      }
+    }
+  }
+
+  // PHASE 4: Process transactions and collect records to insert
+  const transactionsToCreate: any[] = [];
+  const currentHeight = await getBlockHeight();
+
+  // Build txid -> height map from histories
+  const txHeightMap = new Map<string, number>();
+  for (const history of historyResults.values()) {
+    for (const item of history) {
+      txHeightMap.set(item.tx_hash, item.height);
+    }
+  }
+
+  // Helper to check if output matches an address
+  const outputMatchesAddress = (out: any, address: string): boolean => {
+    if (out.scriptPubKey?.address === address) return true;
+    if (out.scriptPubKey?.addresses?.includes(address)) return true;
+    return false;
+  };
+
+  // Process each address's history
+  for (const [addressStr, history] of historyResults) {
+    const addressRecord = addressMap.get(addressStr)!;
+
+    for (const item of history) {
+      const txDetails = txDetailsCache.get(item.tx_hash);
+      if (!txDetails) continue;
+
+      const outputs = txDetails.vout || [];
+      const inputs = txDetails.vin || [];
+
+      // Check if this address received funds
+      const isReceived = outputs.some((out: any) => outputMatchesAddress(out, addressStr));
+
+      // Get block timestamp
+      let blockTime: Date | null = null;
+      if (txDetails.time) {
+        blockTime = new Date(txDetails.time * 1000);
+      } else if (item.height > 0) {
+        blockTime = await getBlockTimestamp(item.height);
+      }
+
+      const confirmations = item.height > 0 ? Math.max(0, currentHeight - item.height + 1) : 0;
+
+      // Create receive transaction if not already exists
+      if (isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
+        const amount = outputs
+          .filter((out: any) => outputMatchesAddress(out, addressStr))
+          .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+
+        transactionsToCreate.push({
+          txid: item.tx_hash,
+          walletId,
+          addressId: addressRecord.id,
+          type: 'received',
+          amount: BigInt(amount),
+          confirmations,
+          blockHeight: item.height > 0 ? item.height : null,
+          blockTime,
+        });
+        existingTxMap.set(`${item.tx_hash}:received`, true);
+      }
+
+      // Check if wallet sent funds (any wallet address in inputs)
+      let isSent = false;
+      for (const input of inputs) {
+        if (input.coinbase) continue;
+
+        let inputAddr: string | undefined;
+        if (input.prevout && input.prevout.scriptPubKey) {
+          inputAddr = input.prevout.scriptPubKey.address ||
+            (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+        }
+
+        if (inputAddr && walletAddressSet.has(inputAddr)) {
+          isSent = true;
+          break;
+        }
+      }
+
+      // Create sent transaction if not already exists
+      if (isSent && !existingTxMap.has(`${item.tx_hash}:sent`)) {
+        let totalToExternal = 0;
+        for (const out of outputs) {
+          const outAddr = out.scriptPubKey?.address ||
+            (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
+          if (outAddr && !walletAddressSet.has(outAddr)) {
+            totalToExternal += Math.round(out.value * 100000000);
+          }
+        }
+
+        if (totalToExternal > 0) {
+          transactionsToCreate.push({
+            txid: item.tx_hash,
+            walletId,
+            addressId: addressRecord.id,
+            type: 'sent',
+            amount: BigInt(totalToExternal),
+            confirmations,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
+          });
+          existingTxMap.set(`${item.tx_hash}:sent`, true);
+        }
+      }
+    }
+  }
+
+  // PHASE 5: Batch insert transactions
+  let totalTransactions = 0;
+  if (transactionsToCreate.length > 0) {
+    // Deduplicate by txid:type
+    const uniqueTxs = new Map<string, any>();
+    for (const tx of transactionsToCreate) {
+      const key = `${tx.txid}:${tx.type}`;
+      if (!uniqueTxs.has(key)) {
+        uniqueTxs.set(key, tx);
+      }
+    }
+
+    const uniqueTxArray = Array.from(uniqueTxs.values());
+    console.log(`[BLOCKCHAIN] Inserting ${uniqueTxArray.length} transactions...`);
+
+    // Use createMany for bulk insert (note: doesn't return created records)
+    await prisma.transaction.createMany({
+      data: uniqueTxArray,
+      skipDuplicates: true,
+    });
+    totalTransactions = uniqueTxArray.length;
+  }
+
+  // PHASE 6: Batch fetch all UTXOs for all addresses in parallel
+  console.log(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses...`);
+  const utxoResults: Array<{ address: string; utxos: any[] }> = [];
+
+  for (let i = 0; i < addresses.length; i += HISTORY_BATCH_SIZE) {
+    const batch = addresses.slice(i, i + HISTORY_BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (addr) => {
+        try {
+          const utxos = await client.getAddressUTXOs(addr.address);
+          return { address: addr.address, utxos };
+        } catch (error) {
+          console.error(`[BLOCKCHAIN] Failed to get UTXOs for ${addr.address}:`, error);
+          return { address: addr.address, utxos: [] };
+        }
+      })
+    );
+    utxoResults.push(...batchResults);
+  }
+
+  // Collect all UTXO identifiers
+  const allUtxoKeys = new Set<string>();
+  const utxoDataMap = new Map<string, { address: string; utxo: any }>();
+
+  for (const result of utxoResults) {
+    for (const utxo of result.utxos) {
+      const key = `${utxo.tx_hash}:${utxo.tx_pos}`;
+      allUtxoKeys.add(key);
+      utxoDataMap.set(key, { address: result.address, utxo });
+    }
+  }
+
+  // PHASE 7: Batch check which UTXOs already exist
+  const existingUtxos = await prisma.uTXO.findMany({
+    where: { walletId },
+    select: { txid: true, vout: true },
+  });
+  const existingUtxoSet = new Set(existingUtxos.map(u => `${u.txid}:${u.vout}`));
+
+  // Filter to only new UTXOs
+  const newUtxoKeys = Array.from(allUtxoKeys).filter(key => !existingUtxoSet.has(key));
+  console.log(`[BLOCKCHAIN] Found ${newUtxoKeys.length} new UTXOs (${existingUtxoSet.size} already exist)`);
+
+  // PHASE 8: Fetch tx details for new UTXOs (use cache when available)
+  const utxosToCreate: any[] = [];
+
+  for (const key of newUtxoKeys) {
+    const data = utxoDataMap.get(key)!;
+    const { address, utxo } = data;
+
+    // Get tx details from cache or fetch
+    let txDetails = txDetailsCache.get(utxo.tx_hash);
+    if (!txDetails) {
+      try {
+        txDetails = await client.getTransaction(utxo.tx_hash);
+        txDetailsCache.set(utxo.tx_hash, txDetails);
+      } catch (error) {
+        console.error(`[BLOCKCHAIN] Failed to get tx ${utxo.tx_hash} for UTXO:`, error);
+        continue;
+      }
+    }
+
+    const output = txDetails.vout?.[utxo.tx_pos];
+    if (!output) continue;
+
+    const confirmations = utxo.height > 0 ? Math.max(0, currentHeight - utxo.height + 1) : 0;
+
+    utxosToCreate.push({
+      walletId,
+      txid: utxo.tx_hash,
+      vout: utxo.tx_pos,
+      address,
+      amount: BigInt(utxo.value),
+      scriptPubKey: output.scriptPubKey?.hex || '',
+      confirmations,
+      blockHeight: utxo.height > 0 ? utxo.height : null,
+      spent: false,
+    });
+  }
+
+  // PHASE 9: Batch insert UTXOs
+  let totalUtxos = 0;
+  if (utxosToCreate.length > 0) {
+    console.log(`[BLOCKCHAIN] Inserting ${utxosToCreate.length} UTXOs...`);
+    await prisma.uTXO.createMany({
+      data: utxosToCreate,
+      skipDuplicates: true,
+    });
+    totalUtxos = utxosToCreate.length;
+  }
+
+  // PHASE 10: Batch update used addresses
+  const usedAddresses = new Set<string>();
+  for (const [addressStr, history] of historyResults) {
+    if (history.length > 0) {
+      usedAddresses.add(addressStr);
+    }
+  }
+
+  if (usedAddresses.size > 0) {
+    await prisma.address.updateMany({
+      where: {
+        walletId,
+        address: { in: Array.from(usedAddresses) },
+        used: false,
+      },
+      data: { used: true },
+    });
+  }
+
+  const elapsed = Date.now() - startTime;
+  console.log(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${totalTransactions} tx, ${totalUtxos} utxos`);
 
   return {
     addresses: addresses.length,
@@ -324,11 +630,8 @@ export async function syncWallet(walletId: string): Promise<{
  * Get current block height
  */
 export async function getBlockHeight(): Promise<number> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   return client.getBlockHeight();
 }
@@ -355,11 +658,8 @@ export async function broadcastTransaction(rawTx: string): Promise<{
   txid: string;
   broadcasted: boolean;
 }> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   try {
     const txid = await client.broadcastTransaction(rawTx);
@@ -381,11 +681,8 @@ export async function getFeeEstimates(): Promise<{
   hour: number;      // ~6 blocks
   economy: number;   // ~12 blocks
 }> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   try {
     const [fastest, halfHour, hour, economy] = await Promise.all([
@@ -417,11 +714,8 @@ export async function getFeeEstimates(): Promise<{
  * Get transaction details from blockchain
  */
 export async function getTransactionDetails(txid: string): Promise<any> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   return client.getTransaction(txid, true);
 }
@@ -431,11 +725,8 @@ export async function getTransactionDetails(txid: string): Promise<any> {
  * Subscribe to address and get notifications
  */
 export async function monitorAddress(address: string): Promise<string> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   return client.subscribeAddress(address);
 }
@@ -459,7 +750,7 @@ export async function checkAddress(
   }
 
   // Check blockchain
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
   try {
     if (!client.isConnected()) {
@@ -485,50 +776,58 @@ export async function checkAddress(
 }
 
 /**
- * Update confirmations for pending transactions
+ * Update confirmations for pending transactions - OPTIMIZED with batch updates
  */
 export async function updateTransactionConfirmations(walletId: string): Promise<number> {
   const transactions = await prisma.transaction.findMany({
     where: {
       walletId,
       confirmations: { lt: 6 }, // Only update transactions with less than 6 confirmations
+      blockHeight: { not: null },
     },
+    select: { id: true, blockHeight: true, confirmations: true },
   });
 
-  let updated = 0;
+  if (transactions.length === 0) return 0;
+
+  const currentHeight = await getBlockHeight();
+
+  // Calculate new confirmations and collect updates
+  const updates: Array<{ id: string; confirmations: number }> = [];
 
   for (const tx of transactions) {
     if (tx.blockHeight) {
-      try {
-        const confirmations = await getConfirmations(tx.blockHeight);
-
-        if (confirmations !== tx.confirmations) {
-          await prisma.transaction.update({
-            where: { id: tx.id },
-            data: { confirmations },
-          });
-          updated++;
-        }
-      } catch (error) {
-        console.error(`[BLOCKCHAIN] Failed to update confirmations for ${tx.txid}:`, error);
+      const newConfirmations = Math.max(0, currentHeight - tx.blockHeight + 1);
+      if (newConfirmations !== tx.confirmations) {
+        updates.push({ id: tx.id, confirmations: newConfirmations });
       }
     }
   }
 
-  return updated;
+  // Batch update using a transaction
+  if (updates.length > 0) {
+    await prisma.$transaction(
+      updates.map(u =>
+        prisma.transaction.update({
+          where: { id: u.id },
+          data: { confirmations: u.confirmations },
+        })
+      )
+    );
+  }
+
+  return updates.length;
 }
 
 /**
  * Populate missing transaction fields (blockHeight, addressId, blockTime, fee) from blockchain
  * Called during sync to fill in data for transactions that were created before
  * these fields existed or were populated
+ * OPTIMIZED with batch fetching and batch updates
  */
 export async function populateMissingTransactionFields(walletId: string): Promise<number> {
-  const client = getElectrumClient();
+  const client = await getNodeClient();
 
-  if (!client.isConnected()) {
-    await client.connect();
-  }
 
   // Find transactions with missing fields (including fee and counterparty address)
   const transactions = await prisma.transaction.findMany({
@@ -557,16 +856,43 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
   console.log(`[BLOCKCHAIN] Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
 
-  let updated = 0;
   const currentHeight = await getBlockHeight();
+
+  // PHASE 1: Batch fetch all transaction details in parallel
+  const TX_BATCH_SIZE = 5;
+  const txDetailsCache = new Map<string, any>();
+  const txids = transactions.map(tx => tx.txid);
+
+  for (let i = 0; i < txids.length; i += TX_BATCH_SIZE) {
+    const batch = txids.slice(i, i + TX_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (txid) => {
+        try {
+          const details = await client.getTransaction(txid, true);
+          return { txid, details };
+        } catch (error) {
+          console.error(`[BLOCKCHAIN] Failed to fetch tx ${txid}:`, error);
+          return { txid, details: null };
+        }
+      })
+    );
+    for (const result of results) {
+      if (result.details) {
+        txDetailsCache.set(result.txid, result.details);
+      }
+    }
+  }
+
+  // Collect all pending updates
+  const pendingUpdates: Array<{ id: string; data: any }> = [];
+  let updated = 0;
 
   for (const tx of transactions) {
     try {
-      // Fetch transaction details from blockchain (verbose mode to get more details)
-      const txDetails = await client.getTransaction(tx.txid, true);
+      // Get transaction details from cache
+      const txDetails = txDetailsCache.get(tx.txid);
 
       if (!txDetails) {
-        console.error(`[BLOCKCHAIN] Could not fetch details for tx ${tx.txid}`);
         continue;
       }
 
@@ -754,18 +1080,27 @@ export async function populateMissingTransactionFields(walletId: string): Promis
         }
       }
 
-      // Apply updates if any
+      // Collect updates if any
       if (Object.keys(updates).length > 0) {
-        await prisma.transaction.update({
-          where: { id: tx.id },
-          data: updates,
-        });
-        updated++;
-        console.log(`[BLOCKCHAIN] Updated tx ${tx.txid.slice(0, 8)}... with:`, Object.keys(updates).join(', '));
+        pendingUpdates.push({ id: tx.id, data: updates });
       }
     } catch (error) {
       console.error(`[BLOCKCHAIN] Failed to populate fields for tx ${tx.txid}:`, error);
     }
+  }
+
+  // PHASE 2: Batch apply all updates
+  if (pendingUpdates.length > 0) {
+    console.log(`[BLOCKCHAIN] Applying ${pendingUpdates.length} transaction updates...`);
+    await prisma.$transaction(
+      pendingUpdates.map(u =>
+        prisma.transaction.update({
+          where: { id: u.id },
+          data: u.data,
+        })
+      )
+    );
+    updated = pendingUpdates.length;
   }
 
   console.log(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions`);

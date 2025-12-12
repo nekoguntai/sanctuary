@@ -10,7 +10,7 @@
 
 import prisma from '../models/prisma';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields } from './bitcoin/blockchain';
-import { getElectrumClient } from './bitcoin/electrum';
+import { getNodeClient } from './bitcoin/nodeClient';
 import { getNotificationService } from '../websocket/notifications';
 
 // Sync configuration
@@ -553,15 +553,11 @@ class SyncService {
       select: { address: true },
     });
 
-    const client = getElectrumClient();
-
-    if (!client.isConnected()) {
-      await client.connect();
-    }
+    const client = await getNodeClient();
 
     for (const { address } of addresses) {
       try {
-        // Subscribe to address - Electrum will notify on changes
+        // Subscribe to address - Electrum/RPC will notify on changes (if supported)
         await client.subscribeAddress(address);
       } catch (error) {
         console.error(`[SYNC] Failed to subscribe to address ${address}:`, error);

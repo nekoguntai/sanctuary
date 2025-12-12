@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import prisma from '../models/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
-import ElectrumClient from '../services/bitcoin/electrum';
+import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 
 const router = Router();
 
@@ -123,6 +123,9 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
 
     console.log('[ADMIN] Node config updated:', { type, host, port });
 
+    // Reset the active node client so it reconnects with new config
+    resetNodeClient();
+
     res.json({
       type: nodeConfig.type,
       host: nodeConfig.host,
@@ -159,119 +162,47 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
       });
     }
 
-    if (type === 'electrum') {
-      // Create a temporary Electrum client for testing
-      const testClient = new ElectrumClient();
-
-      try {
-        // Temporarily update the database config for the test connection
-        const existingConfig = await prisma.nodeConfig.findFirst({
-          where: { isDefault: true },
-        });
-
-        const originalConfig = existingConfig ? { ...existingConfig } : null;
-
-        // Create/update temp config
-        if (existingConfig) {
-          await prisma.nodeConfig.update({
-            where: { id: existingConfig.id },
-            data: {
-              type,
-              host,
-              port: parseInt(port.toString(), 10),
-              useSsl: useSsl === true,
-              username: user || null,
-              password: password || null,
-            },
-          });
-        } else {
-          await prisma.nodeConfig.create({
-            data: {
-              id: 'default',
-              type,
-              host,
-              port: parseInt(port.toString(), 10),
-              useSsl: useSsl === true,
-              username: user || null,
-              password: password || null,
-              explorerUrl: 'https://mempool.space',
-              isDefault: true,
-            },
-          });
-        }
-
-        // Test the connection
-        await testClient.connect();
-        const version = await testClient.getServerVersion();
-        const blockHeight = await testClient.getBlockHeight();
-
-        // Disconnect the test client
-        testClient.disconnect();
-
-        // Restore original config if it existed
-        if (originalConfig) {
-          await prisma.nodeConfig.update({
-            where: { id: originalConfig.id },
-            data: {
-              type: originalConfig.type,
-              host: originalConfig.host,
-              port: originalConfig.port,
-              username: originalConfig.username,
-              password: originalConfig.password,
-            },
-          });
-        } else {
-          // If there was no original config, delete the test one
-          await prisma.nodeConfig.delete({
-            where: { id: 'default' },
-          });
-        }
-
-        res.json({
-          success: true,
-          serverInfo: version.server,
-          protocol: version.protocol,
-          blockHeight: blockHeight,
-          message: `Successfully connected to ${version.server} at block ${blockHeight}`,
-        });
-      } catch (error: any) {
-        // Restore original config on error
-        const existingConfig = await prisma.nodeConfig.findFirst({
-          where: { isDefault: true },
-        });
-
-        if (existingConfig) {
-          // Restore would require storing original - for now just disconnect
-          testClient.disconnect();
-        }
-
-        console.error('[ADMIN] Test connection error:', error);
-        res.status(500).json({
-          success: false,
-          error: 'Connection Failed',
-          message: error.message || 'Failed to connect to Electrum server',
-        });
-      }
-    } else if (type === 'bitcoind') {
-      // TODO: Implement bitcoind test connection
-      res.status(501).json({
-        success: false,
-        error: 'Not Implemented',
-        message: 'Bitcoin Core connection testing not yet implemented',
-      });
-    } else {
-      res.status(400).json({
+    if (type !== 'electrum' && type !== 'bitcoind') {
+      return res.status(400).json({
         success: false,
         error: 'Bad Request',
         message: 'Type must be either "electrum" or "bitcoind"',
       });
     }
-  } catch (error) {
+
+    // Build config for testing
+    const testConfig: NodeConfig = {
+      type: type === 'bitcoind' ? 'bitcoind' : 'electrum',
+      host,
+      port: parseInt(port.toString(), 10),
+      protocol: useSsl ? 'ssl' : 'tcp',
+      user: user || undefined,
+      password: password || undefined,
+      ssl: useSsl === true,
+    };
+
+    // Test the connection using the nodeClient abstraction
+    const result = await testNodeConfig(testConfig);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        blockHeight: result.info?.blockHeight,
+        message: result.message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Connection Failed',
+        message: result.message,
+      });
+    }
+  } catch (error: any) {
     console.error('[ADMIN] Test connection error:', error);
     res.status(500).json({
       success: false,
       error: 'Internal Server Error',
-      message: 'Failed to test node connection',
+      message: error.message || 'Failed to test node connection',
     });
   }
 });

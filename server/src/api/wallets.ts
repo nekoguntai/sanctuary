@@ -219,6 +219,165 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/wallets/:id/export
+ * Export wallet in Sparrow-compatible JSON format
+ */
+router.get('/:id/export', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+
+    // Get wallet with all related data
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      include: {
+        devices: {
+          include: {
+            device: true,
+          },
+          orderBy: { signerIndex: 'asc' },
+        },
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    // Map script type to Sparrow format
+    const scriptTypeMap: Record<string, string> = {
+      'native_segwit': 'P2WPKH',
+      'nested_segwit': 'P2SH_P2WPKH',
+      'taproot': 'P2TR',
+      'legacy': 'P2PKH',
+    };
+
+    // For multisig, use P2WSH (native) or P2SH_P2WSH (nested)
+    const getScriptType = () => {
+      if (wallet.type === 'multi_sig') {
+        if (wallet.scriptType === 'native_segwit') return 'P2WSH';
+        if (wallet.scriptType === 'nested_segwit') return 'P2SH_P2WSH';
+      }
+      return scriptTypeMap[wallet.scriptType] || 'P2WPKH';
+    };
+
+    // Build keystores array from devices
+    const keystores = wallet.devices.map((wd, index) => {
+      const device = wd.device;
+
+      // Parse derivation path to extract fingerprint and path
+      // Format: m/84'/0'/0' or just the path
+      const derivationPath = device.derivationPath || "m/84'/0'/0'";
+
+      return {
+        label: device.label || `Keystore ${index + 1}`,
+        source: 'HW_USB', // Hardware wallet
+        walletModel: mapDeviceTypeToWalletModel(device.type),
+        keyDerivation: {
+          masterFingerprint: device.fingerprint,
+          derivationPath: derivationPath,
+        },
+        extendedPublicKey: device.xpub,
+      };
+    });
+
+    // Build policy for multisig
+    const getDefaultPolicy = () => {
+      if (wallet.type === 'multi_sig' && wallet.quorum && wallet.totalSigners) {
+        return {
+          name: 'Multi Signature',
+          miniscript: `thresh(${wallet.quorum},${keystores.map((_, i) => `pk(${String.fromCharCode(65 + i)})`).join(',')})`,
+        };
+      }
+      return {
+        name: 'Single Signature',
+        miniscript: 'pk(A)',
+      };
+    };
+
+    // Build Sparrow-compatible export format
+    const exportData = {
+      // Core wallet info
+      label: wallet.name,
+      name: wallet.name,
+
+      // Policy and script type (Sparrow format)
+      policyType: wallet.type === 'multi_sig' ? 'MULTI' : 'SINGLE',
+      scriptType: getScriptType(),
+
+      // Multisig threshold
+      ...(wallet.type === 'multi_sig' && {
+        defaultPolicy: getDefaultPolicy(),
+      }),
+
+      // Keystores (signing devices)
+      keystores,
+
+      // Network
+      network: wallet.network?.toUpperCase() || 'MAINNET',
+
+      // Descriptor (for direct import)
+      descriptor: wallet.descriptor,
+
+      // Gap limit (standard)
+      gapLimit: 20,
+
+      // Export metadata
+      exportedAt: new Date().toISOString(),
+      exportedFrom: 'Sanctuary',
+      version: '1.0',
+    };
+
+    res.json(exportData);
+  } catch (error: any) {
+    console.error('[WALLETS] Export wallet error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to export wallet',
+    });
+  }
+});
+
+/**
+ * Map device type to Sparrow wallet model
+ */
+function mapDeviceTypeToWalletModel(deviceType: string): string {
+  const typeMap: Record<string, string> = {
+    'coldcard': 'COLDCARD',
+    'coldcard_mk4': 'COLDCARD',
+    'coldcard_q': 'COLDCARD',
+    'ledger': 'LEDGER_NANO_S',
+    'ledger_nano_s': 'LEDGER_NANO_S',
+    'ledger_nano_x': 'LEDGER_NANO_X',
+    'ledger_stax': 'LEDGER_STAX',
+    'ledger_flex': 'LEDGER_FLEX',
+    'trezor': 'TREZOR_1',
+    'trezor_one': 'TREZOR_1',
+    'trezor_model_t': 'TREZOR_T',
+    'trezor_safe_3': 'TREZOR_SAFE_3',
+    'bitbox02': 'BITBOX_02',
+    'bitbox': 'BITBOX_02',
+    'foundation_passport': 'PASSPORT',
+    'passport': 'PASSPORT',
+    'blockstream_jade': 'JADE',
+    'jade': 'JADE',
+    'keystone': 'KEYSTONE',
+  };
+
+  const normalized = deviceType.toLowerCase().replace(/\s+/g, '_');
+  return typeMap[normalized] || 'SPARROW';
+}
+
+/**
  * POST /api/v1/wallets/:id/addresses
  * Generate a new receiving address
  */

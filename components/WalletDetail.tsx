@@ -639,15 +639,22 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const downloadJson = () => {
-     if(!wallet) return;
-     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(wallet, null, 2));
-     const downloadAnchorNode = document.createElement('a');
-     downloadAnchorNode.setAttribute("href",     dataStr);
-     downloadAnchorNode.setAttribute("download", `${wallet.name.replace(/\s+/g, '_')}_backup.json`);
-     document.body.appendChild(downloadAnchorNode); // required for firefox
-     downloadAnchorNode.click();
-     downloadAnchorNode.remove();
+  const downloadJson = async () => {
+     if(!wallet || !id) return;
+     try {
+       // Fetch Sparrow-compatible export from backend
+       const exportData = await walletsApi.exportWallet(id);
+       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+       const downloadAnchorNode = document.createElement('a');
+       downloadAnchorNode.setAttribute("href", dataStr);
+       downloadAnchorNode.setAttribute("download", `${wallet.name.replace(/\s+/g, '_')}_backup.json`);
+       document.body.appendChild(downloadAnchorNode); // required for firefox
+       downloadAnchorNode.click();
+       downloadAnchorNode.remove();
+     } catch (err) {
+       console.error('Failed to export wallet:', err);
+       alert('Failed to export wallet');
+     }
   }
 
   if (loading) return <div className="p-8 text-center animate-pulse">Loading wallet...</div>;

@@ -236,3 +236,40 @@ export async function removeUserFromWallet(walletId: string, targetUserId: strin
 export async function getWalletShareInfo(walletId: string): Promise<WalletShareInfo> {
   return apiClient.get(`/wallets/${walletId}/share`);
 }
+
+// Export types
+export interface WalletExportKeystore {
+  label: string;
+  source: string;
+  walletModel: string;
+  keyDerivation: {
+    masterFingerprint: string;
+    derivationPath: string;
+  };
+  extendedPublicKey: string;
+}
+
+export interface WalletExport {
+  label: string;
+  name: string;
+  policyType: 'SINGLE' | 'MULTI';
+  scriptType: string;
+  defaultPolicy?: {
+    name: string;
+    miniscript: string;
+  };
+  keystores: WalletExportKeystore[];
+  network: string;
+  descriptor?: string;
+  gapLimit: number;
+  exportedAt: string;
+  exportedFrom: string;
+  version: string;
+}
+
+/**
+ * Export wallet in Sparrow-compatible JSON format
+ */
+export async function exportWallet(walletId: string): Promise<WalletExport> {
+  return apiClient.get(`/wallets/${walletId}/export`);
+}

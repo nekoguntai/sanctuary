@@ -296,9 +296,11 @@ EXPLORER_URL=https://mempool.space
 
 ### Connecting to Your Own Bitcoin Node
 
-For maximum privacy, connect Sanctuary to your own Bitcoin/Electrum infrastructure:
+For maximum privacy, connect Sanctuary to your own Bitcoin/Electrum infrastructure.
 
-**Option 1: Electrum Server**
+> **Recommendation:** Use an Electrum server (Fulcrum, ElectrumX, or electrs) rather than Bitcoin Core RPC directly. Electrum servers maintain an address index optimized for wallet queries, providing significantly faster sync times and lower resource usage. Bitcoin Core's `scantxoutset` command works but is slower and not designed for frequent wallet operations.
+
+**Option 1: Electrum Server (Recommended)**
 ```bash
 ELECTRUM_HOST=192.168.1.100
 ELECTRUM_PORT=50002
@@ -311,6 +313,20 @@ ELECTRUM_HOST=fulcrum.local
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=false
 ```
+
+**Option 3: Bitcoin Core RPC**
+
+Bitcoin Core RPC is supported but not recommended for regular use. Configure via the Admin panel under Node Config.
+
+```
+Type: bitcoind
+Host: 192.168.1.100
+Port: 8332
+Username: your-rpc-user
+Password: your-rpc-password
+```
+
+Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scantxoutset` which rescans the UTXO set on each query.
 
 ### Hardware Wallet Setup
 

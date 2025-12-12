@@ -28,6 +28,12 @@ interface ElectrumRequest {
   id: number;
 }
 
+interface ElectrumConfig {
+  host: string;
+  port: number;
+  protocol: 'tcp' | 'ssl';
+}
+
 class ElectrumClient {
   private socket: net.Socket | tls.TLSSocket | null = null;
   private requestId = 0;
@@ -38,6 +44,15 @@ class ElectrumClient {
   private buffer = '';
   private connected = false;
   private serverVersion: { server: string; protocol: string } | null = null;
+  private explicitConfig: ElectrumConfig | null = null;
+
+  /**
+   * Create an ElectrumClient
+   * @param explicitConfig Optional config to use instead of database/env config
+   */
+  constructor(explicitConfig?: ElectrumConfig) {
+    this.explicitConfig = explicitConfig || null;
+  }
 
   /**
    * Connect to Electrum server
@@ -45,26 +60,32 @@ class ElectrumClient {
   async connect(): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
-        // Get node config from database
-        const nodeConfig = await prisma.nodeConfig.findFirst({
-          where: { isDefault: true },
-        });
-
-        // Fallback to environment config if no database config
         let host: string;
         let port: number;
         let protocol: 'tcp' | 'ssl';
 
-        if (nodeConfig && nodeConfig.type === 'electrum') {
-          host = nodeConfig.host;
-          port = nodeConfig.port;
-          // Use explicit useSsl setting from config
-          protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+        // Use explicit config if provided (for testing connections)
+        if (this.explicitConfig) {
+          host = this.explicitConfig.host;
+          port = this.explicitConfig.port;
+          protocol = this.explicitConfig.protocol;
         } else {
-          // Fallback to env config
-          host = config.bitcoin.electrum.host;
-          port = config.bitcoin.electrum.port;
-          protocol = config.bitcoin.electrum.protocol;
+          // Get node config from database
+          const nodeConfig = await prisma.nodeConfig.findFirst({
+            where: { isDefault: true },
+          });
+
+          if (nodeConfig && nodeConfig.type === 'electrum') {
+            host = nodeConfig.host;
+            port = nodeConfig.port;
+            // Use explicit useSsl setting from config
+            protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+          } else {
+            // Fallback to env config
+            host = config.bitcoin.electrum.host;
+            port = config.bitcoin.electrum.port;
+            protocol = config.bitcoin.electrum.protocol;
+          }
         }
 
         if (protocol === 'ssl') {
@@ -397,4 +418,12 @@ export function closeElectrumClient(): void {
   }
 }
 
+/**
+ * Reset Electrum client (alias for closeElectrumClient)
+ */
+export function resetElectrumClient(): void {
+  closeElectrumClient();
+}
+
+export { ElectrumClient };
 export default ElectrumClient;

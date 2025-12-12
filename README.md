@@ -294,6 +294,50 @@ ELECTRUM_SSL=true
 EXPLORER_URL=https://mempool.space
 ```
 
+### Enabling HTTPS
+
+HTTPS is required for WebUSB/WebHID to work directly in the browser (for hardware wallet access without the extension). To enable HTTPS:
+
+**Option 1: Self-Signed Certificates (Development)**
+
+```bash
+# Generate self-signed certificates
+cd docker/nginx/ssl
+chmod +x generate-certs.sh
+./generate-certs.sh localhost
+
+# Run with SSL enabled
+FRONTEND_PORT=443 JWT_SECRET=your-secret docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+```
+
+Access at `https://localhost`. Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
+
+**Option 2: mkcert (Locally-Trusted Certificates)**
+
+For a better local development experience without certificate warnings:
+
+```bash
+# Install mkcert (https://github.com/FiloSottile/mkcert)
+# macOS: brew install mkcert
+# Windows: choco install mkcert
+# Linux: see mkcert GitHub
+
+# Install local CA
+mkcert -install
+
+# Generate certificates
+mkcert -key-file docker/nginx/ssl/privkey.pem -cert-file docker/nginx/ssl/fullchain.pem localhost 127.0.0.1
+
+# Run with SSL
+FRONTEND_PORT=443 JWT_SECRET=your-secret docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+```
+
+**Option 3: Let's Encrypt (Production)**
+
+For production deployments with a domain name, replace the certificates in `docker/nginx/ssl/` with your Let's Encrypt certificates:
+- `fullchain.pem` — Your certificate chain
+- `privkey.pem` — Your private key
+
 ### Connecting to Your Own Bitcoin Node
 
 For maximum privacy, connect Sanctuary to your own Bitcoin/Electrum infrastructure.

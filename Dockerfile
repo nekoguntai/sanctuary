@@ -43,6 +43,10 @@ RUN addgroup -g 1001 -S sanctuary && \
 # Copy custom nginx configuration
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY docker/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY docker/nginx/default-ssl.conf.template /etc/nginx/templates/default-ssl.conf.template
+
+# Create SSL directory (certificates mounted at runtime)
+RUN mkdir -p /etc/nginx/ssl
 
 # Copy built assets from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -57,10 +61,11 @@ RUN chown -R sanctuary:sanctuary /usr/share/nginx/html && \
     chown -R sanctuary:sanctuary /var/log/nginx && \
     touch /var/run/nginx.pid && \
     chown -R sanctuary:sanctuary /var/run/nginx.pid && \
-    chown -R sanctuary:sanctuary /etc/nginx/conf.d
+    chown -R sanctuary:sanctuary /etc/nginx/conf.d && \
+    chown -R sanctuary:sanctuary /etc/nginx/ssl
 
-# Expose port
-EXPOSE 80
+# Expose ports (HTTP and HTTPS)
+EXPOSE 80 443
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

@@ -362,10 +362,12 @@ function mapDeviceTypeToWalletModel(deviceType: string): string {
     'ledger_nano_x': 'LEDGER_NANO_X',
     'ledger_stax': 'LEDGER_STAX',
     'ledger_flex': 'LEDGER_FLEX',
+    'ledger_gen_5': 'LEDGER_FLEX', // Gen 5 uses same protocol as Flex
     'trezor': 'TREZOR_1',
     'trezor_one': 'TREZOR_1',
     'trezor_model_t': 'TREZOR_T',
     'trezor_safe_3': 'TREZOR_SAFE_3',
+    'trezor_safe_7': 'TREZOR_SAFE_5', // Safe 7 uses Safe 5 protocol
     'bitbox02': 'BITBOX_02',
     'bitbox': 'BITBOX_02',
     'foundation_passport': 'PASSPORT',

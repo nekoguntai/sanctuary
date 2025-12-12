@@ -95,6 +95,21 @@ const TrezorIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 );
 
+const TrezorSafe7Icon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Trezor Safe 7: Slim rectangular body with large touchscreen */}
+    <rect x="6" y="2" width="12" height="20" rx="2.5" />
+    {/* Large color touchscreen (edge-to-edge look) */}
+    <rect x="7.5" y="3.5" width="9" height="15" rx="1" fill="currentColor" fillOpacity="0.1" />
+    {/* Screen content hint - shield/lock icon */}
+    <path d="M12 7v4" />
+    <path d="M10 9h4" />
+    <circle cx="12" cy="14" r="1.5" />
+    {/* USB-C port at bottom */}
+    <rect x="10" y="20" width="4" height="1" rx="0.5" fill="currentColor" fillOpacity="0.3" />
+  </svg>
+);
+
 const LedgerNanoIcon: React.FC<IconProps> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
     {/* Device Body */}
@@ -129,6 +144,21 @@ const LedgerFlexIcon: React.FC<IconProps> = ({ className }) => (
     <rect x="6" y="5" width="12" height="14" rx="1" opacity="0.8" />
     {/* Bottom Bezel/Button area */}
     <path d="M12 20v1" />
+  </svg>
+);
+
+const LedgerGen5Icon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Ledger Gen 5: Premium credit card form factor with edge-to-edge display */}
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    {/* Full touchscreen display */}
+    <rect x="4.5" y="5.5" width="15" height="13" rx="1" fill="currentColor" fillOpacity="0.1" />
+    {/* Ledger logo hint on screen */}
+    <path d="M8 10h3v4h5" />
+    {/* Secure element indicator */}
+    <circle cx="17" cy="8" r="1" fill="currentColor" fillOpacity="0.3" />
+    {/* USB-C port on side */}
+    <rect x="21" y="11" width="1" height="2" rx="0.3" fill="currentColor" fillOpacity="0.3" />
   </svg>
 );
 
@@ -188,6 +218,9 @@ export const getDeviceIcon = (type: HardwareDevice | string, className?: string)
   if (type === HardwareDevice.COLDCARD_Q || normalizedType.includes('coldcard') && normalizedType.includes('q')) {
     return <ColdCardQIcon className={className} />;
   }
+  if (type === HardwareDevice.TREZOR_SAFE_7 || normalizedType.includes('trezor') && (normalizedType.includes('safe 7') || normalizedType.includes('safe_7'))) {
+    return <TrezorSafe7Icon className={className} />;
+  }
   if (type === HardwareDevice.TREZOR || normalizedType.includes('trezor')) {
     return <TrezorIcon className={className} />;
   }
@@ -196,6 +229,9 @@ export const getDeviceIcon = (type: HardwareDevice | string, className?: string)
   }
   if (type === HardwareDevice.LEDGER_FLEX || normalizedType.includes('ledger') && normalizedType.includes('flex')) {
     return <LedgerFlexIcon className={className} />;
+  }
+  if (type === HardwareDevice.LEDGER_GEN_5 || normalizedType.includes('ledger') && (normalizedType.includes('gen 5') || normalizedType.includes('gen_5'))) {
+    return <LedgerGen5Icon className={className} />;
   }
   if (type === HardwareDevice.LEDGER || normalizedType.includes('ledger') && normalizedType.includes('nano')) {
     return <LedgerNanoIcon className={className} />;

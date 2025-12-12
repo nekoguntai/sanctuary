@@ -1,7 +1,7 @@
 /**
  * Serenity Theme
  *
- * Light mode: Hawaii-inspired with warm sand backgrounds and ocean accents
+ * Light mode: Tropical beach with sandy backgrounds, turquoise ocean, and palm greens
  * Dark mode: Starry night sky with deep indigo/blue backgrounds and starlight accents
  *
  * Author: Sanctuary Wallet Team
@@ -14,54 +14,60 @@ export const serenityTheme: ThemeDefinition = {
   name: 'Serenity',
   author: 'Sanctuary Wallet Team',
   version: '1.1.0',
-  description: 'Ocean serenity in light mode, starry night sky in dark mode',
+  description: 'Tropical beach in light mode, starry night sky in dark mode',
 
   colors: {
     light: {
-      // Background colors (Warm sand tones)
+      // Background colors (Warm tropical sand)
       bg: {
-        50: '#faf9f6',   // Off-white sand
-        100: '#f5f0e1',  // Light tan
-        200: '#e6dcc8',  // Wet sand
-        300: '#d4c5a9',
-        400: '#a89f91',  // Driftwood
-        500: '#78716c',
-        600: '#57534e',
-        700: '#44403c',
-        800: '#292524',
-        900: '#1c1917',
-        950: '#0c0a09',
+        50: '#fffdf8',   // Sun-bleached white
+        100: '#fef8e8',  // Pale sand
+        200: '#f5ead4',  // Warm beach sand
+        300: '#e8d9b8',  // Golden sand
+        400: '#c4b08a',  // Wet sand
+        500: '#8a7a5c',  // Driftwood
+        600: '#6b5d44',
+        700: '#4d432f',
+        800: '#332c1f',
+        900: '#1f1a12',
+        950: '#0f0d09',
       },
 
-      // Primary colors (Ocean/teal/blue)
+      // Primary colors (Tropical turquoise ocean)
       primary: {
-        50: '#f0fdfa',   // Foam
-        100: '#ccfbf1',
-        200: '#99fadd',  // Clear water
-        300: '#5eead4',
-        400: '#2dd4bf',
-        500: '#0d9488',  // Deep teal accent
-        600: '#0f766e',
-        700: '#115e59',  // Text color
-        800: '#134e4a',  // Button background
-        900: '#042f2e',
-        950: '#020617',
+        50: '#effffe',   // Seafoam white
+        100: '#c8fffe',  // Shallow lagoon
+        200: '#8ff7f5',  // Crystal clear water
+        300: '#4fe8e8',  // Bright turquoise
+        400: '#22d3d8',  // Tropical lagoon
+        500: '#0ab4bc',  // Deep turquoise accent
+        600: '#0891a0',  // Ocean blue
+        700: '#0e7082',  // Deep water text
+        800: '#155b6a',  // Button background
+        900: '#164a55',
+        950: '#082f38',
       },
 
-      // Success colors (Seafoam)
+      // Success colors (Tropical palm green)
       success: {
-        50: '#effcf6',
-        100: '#d1fae5',
-        500: '#10b981',
-        800: '#064e3b',
+        50: '#f0fdf4',
+        100: '#dcfce7',
+        200: '#bbf7d0',
+        500: '#22c55e',  // Vibrant palm green
+        600: '#16a34a',
+        700: '#15803d',
+        800: '#166534',
       },
 
-      // Warning colors (Driftwood - neutral, no orange)
+      // Warning colors (Coral reef/hibiscus)
       warning: {
-        50: '#fafaf9',
-        100: '#f5f5f4',
-        500: '#a8a29e',
-        800: '#57534e',
+        50: '#fff5f5',
+        100: '#ffe4e6',
+        200: '#fecdd3',
+        500: '#f472a3',  // Hibiscus pink
+        600: '#ec4899',
+        700: '#db2777',
+        800: '#9d174d',
       },
     },
 

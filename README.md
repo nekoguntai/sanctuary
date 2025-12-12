@@ -336,7 +336,17 @@ Sanctuary uses a browser extension to communicate with USB hardware wallets. Thi
 
 **Chrome / Edge / Brave:**
 
-1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
+**Option 1: Download the zip (easiest)**
+1. Download [`sanctuary-bridge-extension.zip`](extension/sanctuary-bridge-extension.zip)
+2. Extract the zip file
+3. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
+4. Enable **Developer mode** (toggle in top right)
+5. Click **Load unpacked**
+6. Select the extracted `dist` folder
+7. The Sanctuary Bridge icon should appear in your toolbar
+
+**Option 2: From cloned repository**
+1. Open `chrome://extensions`
 2. Enable **Developer mode** (toggle in top right)
 3. Click **Load unpacked**
 4. Select the `extension/dist` directory from this repository

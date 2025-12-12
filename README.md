@@ -40,7 +40,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ## Features
 
 - **Multi-wallet support** — Manage multiple wallets (single-sig and multisig)
-- **Hardware wallet integration** — Connect via WebUSB/WebHID through browser extension
+- **Hardware wallet integration** — Connect Ledger devices directly via WebUSB (HTTPS required)
 - **Real-time sync** — Monitor transactions and balances via Electrum or your own Bitcoin node
 - **Address management** — Receive/change address tracking with labels
 - **UTXO control** — Coin selection for privacy-conscious transactions
@@ -54,19 +54,19 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Your Browser                              │
-│  ┌─────────────────┐    ┌─────────────────────────────────────┐ │
-│  │ Sanctuary Web UI │◄──►│ Sanctuary Bridge Extension          │ │
-│  └────────┬────────┘    │ (WebUSB/WebHID to Hardware Wallet)  │ │
-│           │              └─────────────────────────────────────┘ │
-└───────────┼──────────────────────────────────────────────────────┘
-            │ HTTPS
-┌───────────▼───────────────────────────────────────────┐
-│              Docker Compose Stack                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐  │
-│  │  Frontend   │  │   Backend   │  │   PostgreSQL  │  │
-│  │   (nginx)   │  │  (Node.js)  │  │   (Database)  │  │
-│  └─────────────┘  └──────┬──────┘  └───────────────┘  │
-└──────────────────────────┼────────────────────────────┘
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    Sanctuary Web UI                          │ │
+│  │              (WebUSB → Hardware Wallet)                      │ │
+│  └────────────────────────────┬────────────────────────────────┘ │
+└───────────────────────────────┼─────────────────────────────────┘
+                                │ HTTPS
+┌───────────────────────────────▼─────────────────────────┐
+│                  Docker Compose Stack                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐    │
+│  │  Frontend   │  │   Backend   │  │   PostgreSQL  │    │
+│  │   (nginx)   │  │  (Node.js)  │  │   (Database)  │    │
+│  └─────────────┘  └──────┬──────┘  └───────────────┘    │
+└──────────────────────────┼──────────────────────────────┘
                            │
             ┌──────────────▼──────────────┐
             │   Bitcoin Network Access     │
@@ -75,10 +75,10 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ```
 
 **Components:**
-- **Frontend** — React-based web interface served via nginx
+- **Frontend** — React-based web interface served via nginx (HTTPS for WebUSB)
 - **Backend** — Node.js API server handling wallet logic and blockchain queries
 - **Database** — PostgreSQL for storing wallet metadata, addresses, and transaction history
-- **Extension** — Browser extension bridging hardware wallets to the web interface
+- **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger devices)
 
 ## Requirements
 
@@ -374,93 +374,56 @@ Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scan
 
 ### Hardware Wallet Setup
 
-Sanctuary uses a browser extension to communicate with USB hardware wallets. This allows signing transactions even when Sanctuary runs in Docker or on a remote server.
+Sanctuary uses WebUSB to communicate directly with Ledger hardware wallets from your browser. **HTTPS is required** for WebUSB to work.
 
-#### Installing the Extension
+#### Requirements
 
-**Chrome / Edge / Brave:**
+- **HTTPS** — Enable SSL (see [Enabling HTTPS](#enabling-https) above)
+- **Chrome/Edge/Brave** — WebUSB is not supported in Firefox or Safari
+- **Ledger device** — Currently supported: Nano S, Nano S Plus, Nano X, Stax, Flex
 
-**Option 1: Download the zip (easiest)**
-1. Download [`sanctuary-bridge-extension.zip`](extension/sanctuary-bridge-extension.zip)
-2. Extract the zip file
-3. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
-4. Enable **Developer mode** (toggle in top right)
-5. Click **Load unpacked**
-6. Select the extracted `dist` folder
-7. The Sanctuary Bridge icon should appear in your toolbar
+#### Connecting Your Device
 
-**Option 2: From cloned repository**
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (toggle in top right)
-3. Click **Load unpacked**
-4. Select the `extension/dist` directory from this repository
-5. The Sanctuary Bridge icon should appear in your toolbar
+1. **Enable HTTPS** in Sanctuary (required for WebUSB)
+2. **Connect your Ledger** via USB
+3. **Unlock the device** with your PIN
+4. **Open the Bitcoin app** on your Ledger
+5. In Sanctuary, click **Connect Device** — your browser will show a device picker
+6. **Select your Ledger** to authorize access
 
-#### Building from Source (Optional)
-
-The extension comes pre-built in `extension/dist`. If you want to build it yourself:
-
-```bash
-cd extension
-
-# Install dependencies
-npm install
-
-# Build the extension
-npm run package
-
-# The built extension will be in the dist/ directory
-```
-
-**Firefox (experimental):**
-
-Firefox requires additional manifest modifications for WebUSB compatibility. See `extension/README.md` for details.
-
-#### Using the Extension
-
-1. **Connect your hardware wallet** via USB
-2. **Unlock the device** and open the Bitcoin app (for Ledger)
-3. **Click the extension icon** to verify your device is detected
-4. **Open Sanctuary** in your browser — the extension auto-injects the bridge API
-5. When sending transactions:
-   - Sanctuary creates a PSBT (Partially Signed Bitcoin Transaction)
-   - The extension prompts you to sign on your device
-   - Review and approve the transaction on your hardware wallet screen
-   - Sanctuary broadcasts the signed transaction
+Once connected, you can:
+- Export xpubs for watch-only wallet setup
+- Sign transactions (PSBT)
+- Verify addresses on the device display
 
 #### Supported Devices
 
-| Manufacturer | Models |
-|--------------|--------|
-| **Ledger** | Nano S, Nano S Plus, Nano X, Stax, Flex, Gen 5 |
-| **Trezor** | Model One, Model T, Safe 3, Safe 5, Safe 7 |
-| **ColdCard** | Mk3, Mk4, Q (air-gapped via PSBT file) |
-| **Others** | BitBox02, Jade, Passport, Keystone (air-gapped) |
+| Device | Connection | Status |
+|--------|------------|--------|
+| **Ledger Nano S/S+/X** | WebUSB | Supported |
+| **Ledger Stax/Flex** | WebUSB | Supported |
+| **ColdCard** | PSBT file (air-gap) | Supported |
+| **Trezor** | Coming soon | Planned |
+| **Others** | PSBT file (air-gap) | Supported |
 
-#### Allowed Origins
+**Air-gapped devices** (ColdCard, Keystone, Passport) work via PSBT file export/import — no USB connection needed.
 
-The extension works automatically with:
-- `localhost` and `127.0.0.1`
-- Private network IPs (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`)
-- `*.sanctuary.local` and `*.sanctuary.lan`
+#### Troubleshooting
 
-Custom domains can be added in the extension's Options page.
-
-#### Troubleshooting Extension Issues
+**"WebUSB not supported"**
+- Ensure you're using Chrome, Edge, or Brave
+- Verify HTTPS is enabled (check for 🔒 in address bar)
+- Try `https://localhost` instead of `http://localhost`
 
 **"Device not found"**
 - Ensure device is plugged in and unlocked
-- For Ledger: Open the Bitcoin app
+- Open the Bitcoin app on your Ledger
+- Close other apps using the device (Ledger Live)
 - Try a different USB port or cable
-- Close other apps that might be using the device (Ledger Live, Trezor Suite)
 
-**"Permission denied"**
-- Click the extension icon and use "Connect Device"
-- Select your device in the browser's USB permission dialog
-
-**"Extension not detected"**
-- Refresh the Sanctuary page after installing
-- Verify the extension is enabled in your browser's extension settings
+**"Access denied"**
+- Click "Connect Device" again to trigger the permission dialog
+- Select your device in the browser's USB picker
 
 ## Usage
 

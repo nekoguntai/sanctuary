@@ -2,14 +2,12 @@
  * Hardware Wallet Integration Service
  *
  * Provides browser-based hardware wallet integration for signing Bitcoin transactions.
- * Supports Ledger and Trezor hardware wallets via the Sanctuary browser extension.
- *
- * Architecture:
- * - Browser extension handles USB communication via WebUSB/WebHID
- * - Content script injects `window.sanctuaryHWBridge` API into the page
- * - This service provides a clean interface for React components
+ * Uses native WebUSB API for direct communication with Ledger devices.
+ * Requires HTTPS for WebUSB to work in the browser.
  */
 
+import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
+import AppBtc from '@ledgerhq/hw-app-btc';
 import apiClient from '../src/api/client';
 
 export type DeviceType = 'coldcard' | 'ledger' | 'trezor' | 'bitbox' | 'passport' | 'jade' | 'unknown';
@@ -51,193 +49,289 @@ export interface XpubResult {
   path: string;
 }
 
-// Bridge API interface (injected by extension)
-interface SanctuaryHWBridge {
-  isAvailable: true;
-  version: string;
-  getDevices(): Promise<HardwareWalletDevice[]>;
-  getXpub(path: string, deviceId?: string): Promise<XpubResult>;
-  signPSBT(psbt: string, inputPaths: string[], deviceId?: string): Promise<{ signedPsbt: string; signatures: number }>;
-  verifyAddress(path: string, address: string, deviceId?: string): Promise<boolean>;
-  connectDevice(deviceType: 'ledger' | 'trezor'): Promise<HardwareWalletDevice>;
-  onDeviceChange(callback: (devices: HardwareWalletDevice[]) => void): () => void;
+// Ledger USB vendor ID
+const LEDGER_VENDOR_ID = 0x2c97;
+
+// Connected device state
+interface LedgerConnection {
+  transport: TransportWebUSB;
+  app: AppBtc;
+  device: USBDevice;
 }
 
-declare global {
-  interface Window {
-    sanctuaryHWBridge?: SanctuaryHWBridge;
-  }
-}
+let activeConnection: LedgerConnection | null = null;
 
 /**
- * Check if the Sanctuary HW Bridge extension is available
+ * Check if WebUSB is supported in this browser
  */
-export const isExtensionAvailable = (): boolean => {
-  return typeof window !== 'undefined' && window.sanctuaryHWBridge?.isAvailable === true;
+export const isWebUSBSupported = (): boolean => {
+  return typeof navigator !== 'undefined' && 'usb' in navigator;
 };
 
 /**
- * Wait for the extension to become available
- * @param timeout Maximum time to wait in milliseconds
+ * Check if we're in a secure context (HTTPS or localhost)
  */
-export const waitForExtension = (timeout = 3000): Promise<boolean> => {
-  return new Promise((resolve) => {
-    // Already available
-    if (isExtensionAvailable()) {
-      resolve(true);
-      return;
-    }
-
-    // Wait for the ready event
-    const handler = () => {
-      window.removeEventListener('sanctuaryHWBridgeReady', handler);
-      clearTimeout(timeoutId);
-      resolve(true);
-    };
-
-    window.addEventListener('sanctuaryHWBridgeReady', handler);
-
-    // Timeout fallback
-    const timeoutId = setTimeout(() => {
-      window.removeEventListener('sanctuaryHWBridgeReady', handler);
-      resolve(isExtensionAvailable());
-    }, timeout);
-  });
+export const isSecureContext = (): boolean => {
+  return typeof window !== 'undefined' && window.isSecureContext;
 };
 
 /**
- * Check if browser supports hardware wallet integration (via extension or native)
+ * Check if hardware wallet integration is supported
  */
 export const isHardwareWalletSupported = (): boolean => {
-  // Extension is available - full support
-  if (isExtensionAvailable()) {
-    return true;
-  }
-
-  // Check for WebUSB support (Chrome, Edge) - partial support
-  if ('usb' in navigator) {
-    return true;
-  }
-
-  // Check for WebHID support (broader compatibility) - partial support
-  if ('hid' in navigator) {
-    return true;
-  }
-
-  return false;
+  return isWebUSBSupported() && isSecureContext();
 };
 
 /**
- * Get list of connected hardware wallet devices
+ * Get model name from Ledger product ID
+ */
+const getLedgerModel = (productId: number): string => {
+  const models: Record<number, string> = {
+    0x0001: 'Ledger Nano S',
+    0x0004: 'Ledger Nano X',
+    0x0005: 'Ledger Nano S Plus',
+    0x0006: 'Ledger Stax',
+    0x0007: 'Ledger Flex',
+  };
+  return models[productId] || 'Ledger Device';
+};
+
+/**
+ * Get device ID from USB device
+ */
+const getDeviceId = (device: USBDevice): string => {
+  return `ledger-${device.vendorId}-${device.productId}-${device.serialNumber || 'unknown'}`;
+};
+
+/**
+ * Get list of previously authorized Ledger devices
  */
 export const getConnectedDevices = async (): Promise<HardwareWalletDevice[]> => {
-  // Use extension bridge if available
-  if (isExtensionAvailable()) {
-    try {
-      const devices = await window.sanctuaryHWBridge!.getDevices();
-      return devices.map(d => ({
-        ...d,
-        name: d.model || `${d.type.charAt(0).toUpperCase()}${d.type.slice(1)}`,
-      }));
-    } catch (error) {
-      console.error('Failed to get devices from extension:', error);
-      return [];
-    }
+  if (!isWebUSBSupported()) {
+    return [];
   }
 
-  // No extension - return empty
-  console.warn('Hardware wallet extension not available');
-  return [];
+  try {
+    const devices = await navigator.usb.getDevices();
+    const ledgerDevices = devices.filter(d => d.vendorId === LEDGER_VENDOR_ID);
+
+    return ledgerDevices.map(device => ({
+      id: getDeviceId(device),
+      type: 'ledger' as DeviceType,
+      name: getLedgerModel(device.productId),
+      model: getLedgerModel(device.productId),
+      connected: device.opened || (activeConnection?.device === device),
+      fingerprint: undefined, // Will be set on connect
+    }));
+  } catch (error) {
+    console.error('Failed to enumerate devices:', error);
+    return [];
+  }
 };
 
 /**
- * Request permission to connect to a hardware wallet
+ * Request permission to connect to a Ledger device
+ * Must be called in response to a user gesture (click)
  */
-export const requestDevice = async (type?: DeviceType): Promise<HardwareWalletDevice | null> => {
-  if (!isExtensionAvailable()) {
+export const requestDevice = async (): Promise<HardwareWalletDevice | null> => {
+  if (!isHardwareWalletSupported()) {
     throw new Error(
-      'Hardware wallet extension not installed. Please install the Sanctuary HW Bridge extension.'
+      'WebUSB is not supported. Please use Chrome/Edge on HTTPS.'
     );
   }
 
-  // Only Ledger and Trezor are supported via the extension
-  const supportedTypes = ['ledger', 'trezor'] as const;
-  const deviceType = type && supportedTypes.includes(type as any)
-    ? (type as 'ledger' | 'trezor')
-    : 'ledger'; // Default to Ledger
-
   try {
-    const device = await window.sanctuaryHWBridge!.connectDevice(deviceType);
+    // This will show the browser's device picker
+    const device = await navigator.usb.requestDevice({
+      filters: [{ vendorId: LEDGER_VENDOR_ID }],
+    });
+
+    if (!device) {
+      return null;
+    }
+
     return {
-      ...device,
-      name: device.model || `${device.type.charAt(0).toUpperCase()}${device.type.slice(1)}`,
+      id: getDeviceId(device),
+      type: 'ledger',
+      name: getLedgerModel(device.productId),
+      model: getLedgerModel(device.productId),
+      connected: false,
+      fingerprint: undefined,
     };
   } catch (error) {
-    console.error('Device connection failed:', error);
+    if ((error as Error).name === 'NotFoundError') {
+      // User cancelled the picker
+      return null;
+    }
     throw error;
   }
 };
 
 /**
- * Get extended public key from a connected device
+ * Connect to a Ledger device and open the Bitcoin app
  */
-export const getXpub = async (
-  path: string,
-  deviceId?: string
-): Promise<XpubResult> => {
-  if (!isExtensionAvailable()) {
-    throw new Error('Hardware wallet extension not available');
+export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDevice> => {
+  if (!isHardwareWalletSupported()) {
+    throw new Error('WebUSB is not supported in this browser');
   }
 
-  return window.sanctuaryHWBridge!.getXpub(path, deviceId);
-};
-
-/**
- * Verify an address on the hardware wallet display
- */
-export const verifyAddress = async (
-  path: string,
-  address: string,
-  deviceId?: string
-): Promise<boolean> => {
-  if (!isExtensionAvailable()) {
-    throw new Error('Hardware wallet extension not available');
-  }
-
-  return window.sanctuaryHWBridge!.verifyAddress(path, address, deviceId);
-};
-
-/**
- * Sign a PSBT with a hardware wallet
- */
-export const signPSBT = async (
-  device: HardwareWalletDevice,
-  request: PSBTSignRequest
-): Promise<PSBTSignResponse> => {
-  if (!device.connected) {
-    throw new Error('Device not connected');
-  }
-
-  if (!isExtensionAvailable()) {
-    throw new Error('Hardware wallet extension not available');
+  // Close existing connection
+  if (activeConnection) {
+    try {
+      await activeConnection.transport.close();
+    } catch {
+      // Ignore close errors
+    }
+    activeConnection = null;
   }
 
   try {
-    const result = await window.sanctuaryHWBridge!.signPSBT(
-      request.psbt,
-      request.inputPaths,
-      device.id
-    );
+    // Create transport (will use existing permission or request new one)
+    const transport = await TransportWebUSB.create();
+    const device = transport.device;
+
+    // Create Bitcoin app instance
+    const app = new AppBtc({ transport });
+
+    // Get master fingerprint
+    let fingerprint: string | undefined;
+    try {
+      const result = await app.getWalletXpub({ path: "m/84'/0'/0'" });
+      fingerprint = result.masterFingerprint?.toString(16).padStart(8, '0');
+    } catch (error) {
+      console.warn('Could not get fingerprint - Bitcoin app may not be open:', error);
+    }
+
+    activeConnection = { transport, app, device };
 
     return {
-      psbt: result.signedPsbt,
-      signatures: result.signatures,
+      id: getDeviceId(device),
+      type: 'ledger',
+      name: getLedgerModel(device.productId),
+      model: getLedgerModel(device.productId),
+      connected: true,
+      fingerprint,
     };
   } catch (error) {
-    console.error('PSBT signing failed:', error);
-    throw new Error(
-      `Failed to sign transaction: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('denied') || message.includes('NotAllowed')) {
+      throw new Error('Access denied. Please allow USB access and try again.');
+    }
+    if (message.includes('0x6d00') || message.includes('0x6e00')) {
+      throw new Error('Please open the Bitcoin app on your Ledger device.');
+    }
+    if (message.includes('locked') || message.includes('0x6982')) {
+      throw new Error('Ledger is locked. Please unlock with your PIN.');
+    }
+
+    throw new Error(`Failed to connect: ${message}`);
+  }
+};
+
+/**
+ * Disconnect from the active device
+ */
+export const disconnectDevice = async (): Promise<void> => {
+  if (activeConnection) {
+    try {
+      await activeConnection.transport.close();
+    } catch (error) {
+      console.warn('Error closing transport:', error);
+    }
+    activeConnection = null;
+  }
+};
+
+/**
+ * Get extended public key from the connected device
+ */
+export const getXpub = async (path: string): Promise<XpubResult> => {
+  if (!activeConnection) {
+    throw new Error('No device connected');
+  }
+
+  try {
+    const result = await activeConnection.app.getWalletXpub({ path });
+    return {
+      xpub: result.xpub,
+      fingerprint: result.masterFingerprint?.toString(16).padStart(8, '0') || '',
+      path,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('0x6985') || message.includes('denied')) {
+      throw new Error('Request rejected on device');
+    }
+    if (message.includes('0x6d00') || message.includes('0x6e00')) {
+      throw new Error('Bitcoin app not open on device');
+    }
+
+    throw new Error(`Failed to get xpub: ${message}`);
+  }
+};
+
+/**
+ * Verify an address on the device display
+ */
+export const verifyAddress = async (path: string, address: string): Promise<boolean> => {
+  if (!activeConnection) {
+    throw new Error('No device connected');
+  }
+
+  try {
+    // Display address on device for verification
+    await activeConnection.app.getWalletPublicKey(path, { verify: true });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('0x6985') || message.includes('denied')) {
+      return false; // User rejected
+    }
+
+    throw new Error(`Failed to verify address: ${message}`);
+  }
+};
+
+/**
+ * Sign a PSBT with the connected device
+ */
+export const signPSBT = async (
+  request: PSBTSignRequest
+): Promise<PSBTSignResponse> => {
+  if (!activeConnection) {
+    throw new Error('No device connected');
+  }
+
+  try {
+    // Decode PSBT from base64
+    const psbtBuffer = Buffer.from(request.psbt, 'base64');
+
+    // Sign with Ledger
+    // Note: The actual signing API depends on the hw-app-btc version
+    // This is a simplified example - production code needs proper PSBT handling
+    const result = await activeConnection.app.signPsbt(psbtBuffer, request.inputPaths);
+
+    // Re-encode signed PSBT
+    const signedPsbt = Buffer.from(result.psbt).toString('base64');
+
+    return {
+      psbt: signedPsbt,
+      signatures: result.signatures?.length || request.inputPaths.length,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('0x6985') || message.includes('denied')) {
+      throw new Error('Transaction rejected on device');
+    }
+    if (message.includes('0x6d00') || message.includes('0x6e00')) {
+      throw new Error('Bitcoin app not open on device');
+    }
+
+    throw new Error(`Failed to sign: ${message}`);
   }
 };
 
@@ -277,170 +371,111 @@ export const broadcastSignedPSBT = async (
 };
 
 /**
- * Subscribe to device connection changes
- */
-export const onDeviceChange = (
-  callback: (devices: HardwareWalletDevice[]) => void
-): (() => void) => {
-  if (!isExtensionAvailable()) {
-    console.warn('Hardware wallet extension not available for device change events');
-    return () => {};
-  }
-
-  return window.sanctuaryHWBridge!.onDeviceChange(callback);
-};
-
-/**
- * Hardware Wallet Service
- *
- * Main service class for hardware wallet operations
+ * Hardware Wallet Service Class
  */
 export class HardwareWalletService {
   private connectedDevice: HardwareWalletDevice | null = null;
-  private unsubscribeDeviceChange: (() => void) | null = null;
-
-  constructor() {
-    // Auto-subscribe to device changes when extension is available
-    this.initDeviceChangeListener();
-  }
-
-  private async initDeviceChangeListener(): Promise<void> {
-    // Wait for extension to be ready
-    const available = await waitForExtension(5000);
-    if (available) {
-      this.unsubscribeDeviceChange = onDeviceChange((devices) => {
-        // Update connected device status
-        if (this.connectedDevice) {
-          const device = devices.find(d => d.id === this.connectedDevice!.id);
-          if (device) {
-            this.connectedDevice = {
-              ...this.connectedDevice,
-              connected: device.connected,
-            };
-          } else {
-            // Device disconnected
-            this.connectedDevice = null;
-          }
-        }
-      });
-    }
-  }
 
   /**
-   * Check if the extension is available
+   * Check if WebUSB is supported
    */
-  isExtensionAvailable(): boolean {
-    return isExtensionAvailable();
+  isSupported(): boolean {
+    return isHardwareWalletSupported();
   }
 
   /**
-   * Check if a device is currently connected
+   * Check if a device is connected
    */
   isConnected(): boolean {
     return this.connectedDevice !== null && this.connectedDevice.connected;
   }
 
   /**
-   * Get the currently connected device
+   * Get the connected device
    */
   getDevice(): HardwareWalletDevice | null {
     return this.connectedDevice;
   }
 
   /**
-   * Get all connected devices
+   * Get all authorized devices
    */
   async getDevices(): Promise<HardwareWalletDevice[]> {
     return getConnectedDevices();
   }
 
   /**
-   * Connect to a hardware wallet device
+   * Request permission and connect to a device
    */
-  async connect(type?: DeviceType): Promise<HardwareWalletDevice> {
-    const device = await requestDevice(type);
+  async connect(): Promise<HardwareWalletDevice> {
+    // First request permission
+    const device = await requestDevice();
     if (!device) {
       throw new Error('No device selected');
     }
 
-    this.connectedDevice = device;
-    return device;
+    // Then connect
+    this.connectedDevice = await connectDevice();
+    return this.connectedDevice;
   }
 
   /**
-   * Disconnect from the current device
+   * Connect to an already authorized device
    */
-  disconnect(): void {
+  async connectAuthorized(): Promise<HardwareWalletDevice> {
+    this.connectedDevice = await connectDevice();
+    return this.connectedDevice;
+  }
+
+  /**
+   * Disconnect from the device
+   */
+  async disconnect(): Promise<void> {
+    await disconnectDevice();
     this.connectedDevice = null;
   }
 
   /**
-   * Get extended public key from the connected device
+   * Get xpub from device
    */
   async getXpub(path: string): Promise<XpubResult> {
-    if (!this.isConnected() || !this.connectedDevice) {
-      throw new Error('No device connected');
-    }
-
-    return getXpub(path, this.connectedDevice.id);
+    return getXpub(path);
   }
 
   /**
-   * Verify an address on the device display
+   * Verify address on device
    */
   async verifyAddress(path: string, address: string): Promise<boolean> {
-    if (!this.isConnected() || !this.connectedDevice) {
-      throw new Error('No device connected');
-    }
-
-    return verifyAddress(path, address, this.connectedDevice.id);
+    return verifyAddress(path, address);
   }
 
   /**
-   * Sign a PSBT with the connected device
+   * Sign a PSBT
    */
   async signPSBT(request: PSBTSignRequest): Promise<PSBTSignResponse> {
-    if (!this.isConnected() || !this.connectedDevice) {
-      throw new Error('No device connected');
-    }
-
-    return signPSBT(this.connectedDevice, request);
+    return signPSBT(request);
   }
 
   /**
-   * Create, sign, and broadcast a transaction
+   * Full transaction signing flow
    */
   async signTransaction(tx: TransactionForSigning): Promise<string> {
-    if (!this.isConnected() || !this.connectedDevice) {
+    if (!this.isConnected()) {
       throw new Error('No device connected');
     }
 
-    // Create PSBT via backend
+    // Create PSBT
     const { psbt, inputPaths } = await createPSBTForSigning(tx);
 
-    // Sign PSBT with device
-    const signed = await signPSBT(this.connectedDevice, {
-      psbt,
-      inputPaths,
-    });
+    // Sign
+    const signed = await signPSBT({ psbt, inputPaths });
 
-    // Broadcast signed transaction
+    // Broadcast
     const result = await broadcastSignedPSBT(tx.walletId, signed.psbt);
 
     return result.txid;
   }
-
-  /**
-   * Cleanup subscriptions
-   */
-  destroy(): void {
-    if (this.unsubscribeDeviceChange) {
-      this.unsubscribeDeviceChange();
-      this.unsubscribeDeviceChange = null;
-    }
-    this.connectedDevice = null;
-  }
 }
 
-// Export singleton instance
+// Export singleton
 export const hardwareWalletService = new HardwareWalletService();

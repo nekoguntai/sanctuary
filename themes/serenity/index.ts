@@ -59,15 +59,15 @@ export const serenityTheme: ThemeDefinition = {
         800: '#166534',
       },
 
-      // Warning colors (Coral reef/hibiscus)
+      // Warning colors (Sunset coral/orange)
       warning: {
-        50: '#fff5f5',
-        100: '#ffe4e6',
-        200: '#fecdd3',
-        500: '#f472a3',  // Hibiscus pink
-        600: '#ec4899',
-        700: '#db2777',
-        800: '#9d174d',
+        50: '#fff7ed',
+        100: '#ffedd5',
+        200: '#fed7aa',
+        500: '#f97316',  // Sunset orange
+        600: '#ea580c',
+        700: '#c2410c',
+        800: '#9a3412',
       },
     },
 

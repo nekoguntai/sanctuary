@@ -9,6 +9,49 @@ import { getElectrumClient } from './electrum';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 
+// Cache for block timestamps to avoid repeated lookups
+const blockTimestampCache = new Map<number, Date>();
+
+/**
+ * Get block timestamp from block height
+ * Block header is 80 bytes hex; timestamp is at bytes 68-72 (little-endian uint32)
+ */
+async function getBlockTimestamp(height: number): Promise<Date | null> {
+  if (height <= 0) return null;
+
+  // Check cache first
+  if (blockTimestampCache.has(height)) {
+    return blockTimestampCache.get(height)!;
+  }
+
+  try {
+    const client = getElectrumClient();
+    const headerHex = await client.getBlockHeader(height);
+
+    // Block header structure (80 bytes):
+    // - version: 4 bytes (0-3)
+    // - prev_block_hash: 32 bytes (4-35)
+    // - merkle_root: 32 bytes (36-67)
+    // - timestamp: 4 bytes (68-71) - little-endian uint32
+    // - bits: 4 bytes (72-75)
+    // - nonce: 4 bytes (76-79)
+
+    // Extract timestamp bytes (68-71, each byte is 2 hex chars)
+    const timestampHex = headerHex.slice(136, 144); // bytes 68-71 = chars 136-143
+
+    // Convert from little-endian hex to number
+    const timestampBuffer = Buffer.from(timestampHex, 'hex');
+    const timestamp = timestampBuffer.readUInt32LE(0);
+
+    const date = new Date(timestamp * 1000);
+    blockTimestampCache.set(height, date);
+    return date;
+  } catch (error) {
+    console.error(`[BLOCKCHAIN] Failed to get timestamp for block ${height}:`, error);
+    return null;
+  }
+}
+
 /**
  * Sync address with blockchain
  * Fetches transactions and UTXOs for an address and updates database
@@ -40,45 +83,152 @@ export async function syncAddress(addressId: string): Promise<{
     let transactionCount = 0;
     let utxoCount = 0;
 
+    // Helper to check if output matches our address
+    // Handles both legacy format (addresses array) and segwit format (address singular)
+    const outputMatchesAddress = (out: any, address: string): boolean => {
+      if (out.scriptPubKey?.address === address) return true;
+      if (out.scriptPubKey?.addresses?.includes(address)) return true;
+      return false;
+    };
+
+    // Get all wallet addresses for checking inputs (to detect sends)
+    const walletAddresses = await prisma.address.findMany({
+      where: { walletId: addressRecord.walletId },
+      select: { address: true },
+    });
+    const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+
     // Process each transaction
     for (const item of history) {
       const existingTx = await prisma.transaction.findUnique({
         where: { txid: item.tx_hash },
       });
 
-      if (!existingTx) {
-        // Fetch full transaction details
-        const txDetails = await client.getTransaction(item.tx_hash);
+      if (existingTx) {
+        continue;
+      }
 
-        // Determine if this is a receive or send
-        // For simplicity, we'll mark it as received if the address is in outputs
-        const outputs = txDetails.vout || [];
-        const isReceived = outputs.some((out: any) =>
-          out.scriptPubKey?.addresses?.includes(addressRecord.address)
-        );
+      // Fetch full transaction details
+      const txDetails = await client.getTransaction(item.tx_hash);
 
-        if (isReceived) {
-          const amount = outputs
-            .filter((out: any) =>
-              out.scriptPubKey?.addresses?.includes(addressRecord.address)
-            )
-            .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+      const outputs = txDetails.vout || [];
+      const inputs = txDetails.vin || [];
 
-          // Create transaction record
-          await prisma.transaction.create({
-            data: {
-              txid: item.tx_hash,
-              walletId: addressRecord.walletId,
-              addressId: addressRecord.id,
-              type: 'received',
-              amount: BigInt(amount),
-              confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
-              blockHeight: item.height > 0 ? item.height : null,
-              blockTime: txDetails.time ? new Date(txDetails.time * 1000) : null,
-            },
+      // Check if this address received funds (is in outputs)
+      const isReceived = outputs.some((out: any) =>
+        outputMatchesAddress(out, addressRecord.address)
+      );
+
+      // Check if this address sent funds (is in inputs)
+      // Need to check previous outputs referenced by inputs
+      let isSent = false;
+      let totalSentFromWallet = 0;
+
+      for (const input of inputs) {
+        // Skip coinbase inputs
+        if (input.coinbase) continue;
+
+        let inputAddr: string | undefined;
+        let inputValue: number | undefined;
+
+        // Check if input has prevout info (verbose mode from server)
+        if (input.prevout && input.prevout.scriptPubKey) {
+          inputAddr = input.prevout.scriptPubKey.address ||
+            (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+          inputValue = input.prevout.value;
+        } else if (input.txid && input.vout !== undefined) {
+          // Need to look up the previous transaction to find the input address
+          try {
+            const prevTx = await client.getTransaction(input.txid);
+            if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+              const prevOutput = prevTx.vout[input.vout];
+              inputAddr = prevOutput.scriptPubKey?.address ||
+                (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+              inputValue = prevOutput.value;
+            }
+          } catch (e) {
+            // Skip if we can't look up the prev tx
+            console.error(`[BLOCKCHAIN] Failed to look up input tx ${input.txid}:`, e);
+          }
+        }
+
+        if (inputAddr && walletAddressSet.has(inputAddr)) {
+          isSent = true;
+          if (inputValue) {
+            totalSentFromWallet += Math.round(inputValue * 100000000);
+          }
+        }
+      }
+
+      // Get block timestamp - prefer txDetails.time, fall back to block header
+      let blockTime: Date | null = null;
+      if (txDetails.time) {
+        blockTime = new Date(txDetails.time * 1000);
+      } else if (item.height > 0) {
+        // Derive timestamp from block header
+        blockTime = await getBlockTimestamp(item.height);
+      }
+
+      if (isReceived) {
+        const amount = outputs
+          .filter((out: any) =>
+            outputMatchesAddress(out, addressRecord.address)
+          )
+          .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+
+        // Create receive transaction record
+        await prisma.transaction.create({
+          data: {
+            txid: item.tx_hash,
+            walletId: addressRecord.walletId,
+            addressId: addressRecord.id,
+            type: 'received',
+            amount: BigInt(amount),
+            confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
+          },
+        });
+
+        transactionCount++;
+      }
+
+      // Record sent transaction if our wallet addresses were in inputs
+      // This detects when we're spending from this wallet (even if we also receive change)
+      if (isSent) {
+        // Calculate how much was sent to external addresses (non-wallet addresses)
+        let totalToExternal = 0;
+        for (const out of outputs) {
+          const outAddr = out.scriptPubKey?.address ||
+            (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
+          // Count output as "sent" if it goes to an address outside our wallet
+          if (outAddr && !walletAddressSet.has(outAddr)) {
+            totalToExternal += Math.round(out.value * 100000000);
+          }
+        }
+
+        if (totalToExternal > 0) {
+          // Check if we already recorded this as a sent tx (could be from another address sync)
+          const existingSentTx = await prisma.transaction.findFirst({
+            where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'sent' },
           });
 
-          transactionCount++;
+          if (!existingSentTx) {
+            await prisma.transaction.create({
+              data: {
+                txid: item.tx_hash,
+                walletId: addressRecord.walletId,
+                addressId: addressRecord.id,
+                type: 'sent',
+                amount: BigInt(totalToExternal),
+                confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+                blockHeight: item.height > 0 ? item.height : null,
+                blockTime,
+              },
+            });
+
+            transactionCount++;
+          }
         }
       }
     }
@@ -429,8 +579,17 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       }
 
       // Populate blockTime if missing
-      if (tx.blockTime === null && txDetails.time) {
-        updates.blockTime = new Date(txDetails.time * 1000);
+      if (tx.blockTime === null) {
+        if (txDetails.time) {
+          updates.blockTime = new Date(txDetails.time * 1000);
+        } else if (tx.blockHeight || updates.blockHeight) {
+          // Derive timestamp from block header if tx.time not available
+          const height = updates.blockHeight || tx.blockHeight;
+          const blockTime = await getBlockTimestamp(height);
+          if (blockTime) {
+            updates.blockTime = blockTime;
+          }
+        }
       }
 
       const inputs = txDetails.vin || [];

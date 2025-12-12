@@ -2,14 +2,15 @@
  * Hardware Wallet Integration Service
  *
  * Provides browser-based hardware wallet integration for signing Bitcoin transactions.
- * Supports Coldcard, Ledger, Trezor, and other hardware wallets via PSBT.
+ * Supports Ledger and Trezor hardware wallets via the Sanctuary browser extension.
  *
- * Note: This is a foundation layer. Full hardware wallet support requires:
- * - WebUSB/WebHID APIs for device communication
- * - Device-specific libraries (@ledgerhq/hw-app-btc, @trezor/connect-web)
- * - PSBT encoding/decoding
- * - Multi-sig coordination
+ * Architecture:
+ * - Browser extension handles USB communication via WebUSB/WebHID
+ * - Content script injects `window.sanctuaryHWBridge` API into the page
+ * - This service provides a clean interface for React components
  */
+
+import apiClient from '../src/api/client';
 
 export type DeviceType = 'coldcard' | 'ledger' | 'trezor' | 'bitbox' | 'passport' | 'jade' | 'unknown';
 
@@ -20,6 +21,8 @@ export interface HardwareWalletDevice {
   model?: string;
   connected: boolean;
   fingerprint?: string;
+  needsPin?: boolean;
+  needsPassphrase?: boolean;
 }
 
 export interface PSBTSignRequest {
@@ -42,16 +45,81 @@ export interface TransactionForSigning {
   changeAddress?: string;
 }
 
+export interface XpubResult {
+  xpub: string;
+  fingerprint: string;
+  path: string;
+}
+
+// Bridge API interface (injected by extension)
+interface SanctuaryHWBridge {
+  isAvailable: true;
+  version: string;
+  getDevices(): Promise<HardwareWalletDevice[]>;
+  getXpub(path: string, deviceId?: string): Promise<XpubResult>;
+  signPSBT(psbt: string, inputPaths: string[], deviceId?: string): Promise<{ signedPsbt: string; signatures: number }>;
+  verifyAddress(path: string, address: string, deviceId?: string): Promise<boolean>;
+  connectDevice(deviceType: 'ledger' | 'trezor'): Promise<HardwareWalletDevice>;
+  onDeviceChange(callback: (devices: HardwareWalletDevice[]) => void): () => void;
+}
+
+declare global {
+  interface Window {
+    sanctuaryHWBridge?: SanctuaryHWBridge;
+  }
+}
+
 /**
- * Check if browser supports hardware wallet integration
+ * Check if the Sanctuary HW Bridge extension is available
+ */
+export const isExtensionAvailable = (): boolean => {
+  return typeof window !== 'undefined' && window.sanctuaryHWBridge?.isAvailable === true;
+};
+
+/**
+ * Wait for the extension to become available
+ * @param timeout Maximum time to wait in milliseconds
+ */
+export const waitForExtension = (timeout = 3000): Promise<boolean> => {
+  return new Promise((resolve) => {
+    // Already available
+    if (isExtensionAvailable()) {
+      resolve(true);
+      return;
+    }
+
+    // Wait for the ready event
+    const handler = () => {
+      window.removeEventListener('sanctuaryHWBridgeReady', handler);
+      clearTimeout(timeoutId);
+      resolve(true);
+    };
+
+    window.addEventListener('sanctuaryHWBridgeReady', handler);
+
+    // Timeout fallback
+    const timeoutId = setTimeout(() => {
+      window.removeEventListener('sanctuaryHWBridgeReady', handler);
+      resolve(isExtensionAvailable());
+    }, timeout);
+  });
+};
+
+/**
+ * Check if browser supports hardware wallet integration (via extension or native)
  */
 export const isHardwareWalletSupported = (): boolean => {
-  // Check for WebUSB support (Chrome, Edge)
+  // Extension is available - full support
+  if (isExtensionAvailable()) {
+    return true;
+  }
+
+  // Check for WebUSB support (Chrome, Edge) - partial support
   if ('usb' in navigator) {
     return true;
   }
 
-  // Check for WebHID support (broader compatibility)
+  // Check for WebHID support (broader compatibility) - partial support
   if ('hid' in navigator) {
     return true;
   }
@@ -61,78 +129,86 @@ export const isHardwareWalletSupported = (): boolean => {
 
 /**
  * Get list of connected hardware wallet devices
- *
- * In production, this would:
- * 1. Query USB/HID devices
- * 2. Identify hardware wallets by vendor/product IDs
- * 3. Return list of connected devices
  */
 export const getConnectedDevices = async (): Promise<HardwareWalletDevice[]> => {
-  // Check browser support
-  if (!isHardwareWalletSupported()) {
-    console.warn('Hardware wallet support not available in this browser');
-    return [];
+  // Use extension bridge if available
+  if (isExtensionAvailable()) {
+    try {
+      const devices = await window.sanctuaryHWBridge!.getDevices();
+      return devices.map(d => ({
+        ...d,
+        name: d.model || `${d.type.charAt(0).toUpperCase()}${d.type.slice(1)}`,
+      }));
+    } catch (error) {
+      console.error('Failed to get devices from extension:', error);
+      return [];
+    }
   }
 
-  try {
-    // In production, query actual USB devices:
-    // const devices = await navigator.usb.getDevices();
-    // return devices.filter(d => isHardwareWallet(d)).map(mapToDevice);
-
-    // For now, return empty array (demo mode)
-    return [];
-  } catch (error) {
-    console.error('Failed to get connected devices:', error);
-    return [];
-  }
+  // No extension - return empty
+  console.warn('Hardware wallet extension not available');
+  return [];
 };
 
 /**
  * Request permission to connect to a hardware wallet
- *
- * In production, this would:
- * 1. Show browser's device picker
- * 2. User selects their hardware wallet
- * 3. Return device info
  */
 export const requestDevice = async (type?: DeviceType): Promise<HardwareWalletDevice | null> => {
-  if (!isHardwareWalletSupported()) {
-    throw new Error('Hardware wallet support not available in this browser');
+  if (!isExtensionAvailable()) {
+    throw new Error(
+      'Hardware wallet extension not installed. Please install the Sanctuary HW Bridge extension.'
+    );
   }
 
+  // Only Ledger and Trezor are supported via the extension
+  const supportedTypes = ['ledger', 'trezor'] as const;
+  const deviceType = type && supportedTypes.includes(type as any)
+    ? (type as 'ledger' | 'trezor')
+    : 'ledger'; // Default to Ledger
+
   try {
-    // In production, request USB device:
-    // const device = await navigator.usb.requestDevice({
-    //   filters: getVendorFilters(type)
-    // });
-    // return mapToDevice(device);
-
-    console.log('requestDevice called for type:', type);
-
-    // For demo, return mock device
+    const device = await window.sanctuaryHWBridge!.connectDevice(deviceType);
     return {
-      id: 'demo-device',
-      type: type || 'coldcard',
-      name: type ? `${type.charAt(0).toUpperCase()}${type.slice(1)} (Demo)` : 'Hardware Wallet (Demo)',
-      model: 'Mk4',
-      connected: true,
-      fingerprint: 'ABCD1234',
+      ...device,
+      name: device.model || `${device.type.charAt(0).toUpperCase()}${device.type.slice(1)}`,
     };
   } catch (error) {
-    console.error('Device request failed:', error);
-    return null;
+    console.error('Device connection failed:', error);
+    throw error;
   }
 };
 
 /**
+ * Get extended public key from a connected device
+ */
+export const getXpub = async (
+  path: string,
+  deviceId?: string
+): Promise<XpubResult> => {
+  if (!isExtensionAvailable()) {
+    throw new Error('Hardware wallet extension not available');
+  }
+
+  return window.sanctuaryHWBridge!.getXpub(path, deviceId);
+};
+
+/**
+ * Verify an address on the hardware wallet display
+ */
+export const verifyAddress = async (
+  path: string,
+  address: string,
+  deviceId?: string
+): Promise<boolean> => {
+  if (!isExtensionAvailable()) {
+    throw new Error('Hardware wallet extension not available');
+  }
+
+  return window.sanctuaryHWBridge!.verifyAddress(path, address, deviceId);
+};
+
+/**
  * Sign a PSBT with a hardware wallet
- *
- * In production, this would:
- * 1. Send PSBT to device
- * 2. User verifies on device screen
- * 3. User approves on device
- * 4. Device returns signed PSBT
- * 5. Verify signatures
  */
 export const signPSBT = async (
   device: HardwareWalletDevice,
@@ -142,83 +218,76 @@ export const signPSBT = async (
     throw new Error('Device not connected');
   }
 
+  if (!isExtensionAvailable()) {
+    throw new Error('Hardware wallet extension not available');
+  }
+
   try {
-    // In production, send PSBT to device:
-    // switch (device.type) {
-    //   case 'ledger':
-    //     return await signWithLedger(device, request);
-    //   case 'trezor':
-    //     return await signWithTrezor(device, request);
-    //   case 'coldcard':
-    //     return await signWithColdcard(device, request);
-    //   default:
-    //     throw new Error(`Unsupported device type: ${device.type}`);
-    // }
+    const result = await window.sanctuaryHWBridge!.signPSBT(
+      request.psbt,
+      request.inputPaths,
+      device.id
+    );
 
-    console.log('Signing PSBT with device:', device.name);
-    console.log('PSBT:', request.psbt.substring(0, 50) + '...');
-    console.log('Input paths:', request.inputPaths);
-
-    // For demo, simulate signing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Return mock signed PSBT
     return {
-      psbt: request.psbt, // In production, this would be signed
-      signatures: request.inputPaths.length,
+      psbt: result.signedPsbt,
+      signatures: result.signatures,
     };
   } catch (error) {
     console.error('PSBT signing failed:', error);
-    throw new Error(`Failed to sign transaction: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to sign transaction: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 };
 
 /**
- * Create a PSBT for signing
- *
- * This calls the backend API to create a properly formatted PSBT
+ * Create a PSBT for signing via the backend API
  */
 export const createPSBTForSigning = async (
   tx: TransactionForSigning
-): Promise<string> => {
-  // In production, call backend API:
-  // const response = await fetch(`/api/v1/transactions/create-psbt`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(tx)
-  // });
-  // const data = await response.json();
-  // return data.psbt;
+): Promise<{ psbt: string; fee: number; inputPaths: string[] }> => {
+  const response = await apiClient.post<{
+    psbt: string;
+    fee: number;
+    inputPaths: string[];
+  }>(`/wallets/${tx.walletId}/psbt/create`, {
+    recipients: [{ address: tx.recipient, amount: tx.amount }],
+    feeRate: tx.feeRate,
+    utxoIds: tx.utxos,
+    changeAddress: tx.changeAddress,
+  });
 
-  console.log('Creating PSBT for transaction:', tx);
-
-  // For demo, return mock PSBT (base64 encoded)
-  return 'cHNidP8BAFICAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...';
+  return response;
 };
 
 /**
- * Broadcast a signed PSBT to the Bitcoin network
- *
- * This calls the backend API to finalize and broadcast the transaction
+ * Broadcast a signed PSBT to the Bitcoin network via the backend
  */
 export const broadcastSignedPSBT = async (
+  walletId: string,
   psbt: string
 ): Promise<{ txid: string }> => {
-  // In production, call backend API:
-  // const response = await fetch(`/api/v1/bitcoin/broadcast-psbt`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ psbt })
-  // });
-  // const data = await response.json();
-  // return data;
+  const response = await apiClient.post<{ txid: string }>(
+    `/wallets/${walletId}/psbt/broadcast`,
+    { signedPsbt: psbt }
+  );
 
-  console.log('Broadcasting signed PSBT');
+  return response;
+};
 
-  // For demo, return mock transaction ID
-  return {
-    txid: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-  };
+/**
+ * Subscribe to device connection changes
+ */
+export const onDeviceChange = (
+  callback: (devices: HardwareWalletDevice[]) => void
+): (() => void) => {
+  if (!isExtensionAvailable()) {
+    console.warn('Hardware wallet extension not available for device change events');
+    return () => {};
+  }
+
+  return window.sanctuaryHWBridge!.onDeviceChange(callback);
 };
 
 /**
@@ -228,6 +297,41 @@ export const broadcastSignedPSBT = async (
  */
 export class HardwareWalletService {
   private connectedDevice: HardwareWalletDevice | null = null;
+  private unsubscribeDeviceChange: (() => void) | null = null;
+
+  constructor() {
+    // Auto-subscribe to device changes when extension is available
+    this.initDeviceChangeListener();
+  }
+
+  private async initDeviceChangeListener(): Promise<void> {
+    // Wait for extension to be ready
+    const available = await waitForExtension(5000);
+    if (available) {
+      this.unsubscribeDeviceChange = onDeviceChange((devices) => {
+        // Update connected device status
+        if (this.connectedDevice) {
+          const device = devices.find(d => d.id === this.connectedDevice!.id);
+          if (device) {
+            this.connectedDevice = {
+              ...this.connectedDevice,
+              connected: device.connected,
+            };
+          } else {
+            // Device disconnected
+            this.connectedDevice = null;
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Check if the extension is available
+   */
+  isExtensionAvailable(): boolean {
+    return isExtensionAvailable();
+  }
 
   /**
    * Check if a device is currently connected
@@ -241,6 +345,13 @@ export class HardwareWalletService {
    */
   getDevice(): HardwareWalletDevice | null {
     return this.connectedDevice;
+  }
+
+  /**
+   * Get all connected devices
+   */
+  async getDevices(): Promise<HardwareWalletDevice[]> {
+    return getConnectedDevices();
   }
 
   /**
@@ -264,26 +375,70 @@ export class HardwareWalletService {
   }
 
   /**
-   * Sign a transaction with the connected device
+   * Get extended public key from the connected device
+   */
+  async getXpub(path: string): Promise<XpubResult> {
+    if (!this.isConnected() || !this.connectedDevice) {
+      throw new Error('No device connected');
+    }
+
+    return getXpub(path, this.connectedDevice.id);
+  }
+
+  /**
+   * Verify an address on the device display
+   */
+  async verifyAddress(path: string, address: string): Promise<boolean> {
+    if (!this.isConnected() || !this.connectedDevice) {
+      throw new Error('No device connected');
+    }
+
+    return verifyAddress(path, address, this.connectedDevice.id);
+  }
+
+  /**
+   * Sign a PSBT with the connected device
+   */
+  async signPSBT(request: PSBTSignRequest): Promise<PSBTSignResponse> {
+    if (!this.isConnected() || !this.connectedDevice) {
+      throw new Error('No device connected');
+    }
+
+    return signPSBT(this.connectedDevice, request);
+  }
+
+  /**
+   * Create, sign, and broadcast a transaction
    */
   async signTransaction(tx: TransactionForSigning): Promise<string> {
     if (!this.isConnected() || !this.connectedDevice) {
       throw new Error('No device connected');
     }
 
-    // Create PSBT
-    const psbt = await createPSBTForSigning(tx);
+    // Create PSBT via backend
+    const { psbt, inputPaths } = await createPSBTForSigning(tx);
 
     // Sign PSBT with device
     const signed = await signPSBT(this.connectedDevice, {
       psbt,
-      inputPaths: ["m/84'/0'/0'/0/0"], // In production, derive from UTXOs
+      inputPaths,
     });
 
     // Broadcast signed transaction
-    const result = await broadcastSignedPSBT(signed.psbt);
+    const result = await broadcastSignedPSBT(tx.walletId, signed.psbt);
 
     return result.txid;
+  }
+
+  /**
+   * Cleanup subscriptions
+   */
+  destroy(): void {
+    if (this.unsubscribeDeviceChange) {
+      this.unsubscribeDeviceChange();
+      this.unsubscribeDeviceChange = null;
+    }
+    this.connectedDevice = null;
   }
 }
 

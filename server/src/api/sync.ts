@@ -172,4 +172,50 @@ router.post('/user', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/v1/sync/reset/:walletId
+ * Reset a stuck sync state
+ */
+router.post('/reset/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    // Reset the sync state
+    await prisma.wallet.update({
+      where: { id: walletId },
+      data: { syncInProgress: false },
+    });
+
+    res.json({
+      success: true,
+      message: 'Sync state reset',
+    });
+  } catch (error: any) {
+    console.error('[SYNC API] Reset sync error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to reset sync state',
+    });
+  }
+});
+
 export default router;

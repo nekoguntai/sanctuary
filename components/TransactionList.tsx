@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Transaction, Wallet, WalletType, Label } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
 import { ArrowDownLeft, ArrowUpRight, Clock, Tag, CheckCircle2, MoreHorizontal, ExternalLink, Copy, X, ArrowDown, Check, Edit2 } from 'lucide-react';
@@ -175,10 +176,13 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 truncate">
                         {isReceive ? 'Received' : 'Sent'}
                       </p>
-                      <div className="flex items-center text-sm text-sanctuary-500 dark:text-sanctuary-400">
-                        <span className={`font-semibold ${isReceive ? 'text-success-600 dark:text-success-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
-                          {isReceive ? '+' : ''}{format(Math.abs(tx.amount))}
-                        </span>
+                      <div className={`text-sm font-semibold ${isReceive ? 'text-success-600 dark:text-success-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
+                        <Amount
+                          sats={tx.amount}
+                          showSign={isReceive}
+                          size="sm"
+                          className="items-end"
+                        />
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-1">
@@ -269,7 +273,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   {/* Amount Hero */}
                   <div className="text-center">
                       <div className={`text-4xl font-bold mb-2 ${selectedTx.amount > 0 ? 'text-success-600 dark:text-success-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
-                         {selectedTx.amount > 0 ? '+' : ''}{format(Math.abs(selectedTx.amount))}
+                         <Amount
+                           sats={selectedTx.amount}
+                           showSign={selectedTx.amount > 0}
+                           size="xl"
+                           className="items-center"
+                         />
                       </div>
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${selectedTx.confirmed ? 'bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-300' : 'bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-300'}`}>
                          {selectedTx.confirmed ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Clock className="w-4 h-4 mr-2" />}

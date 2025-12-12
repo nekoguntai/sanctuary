@@ -11,6 +11,7 @@ import { BlockVisualizer } from './BlockVisualizer';
 import { Activity, TrendingUp, TrendingDown, Zap, Wallet as WalletIcon, CheckCircle2, XCircle, ChevronRight, Wifi, WifiOff, Bitcoin, RefreshCw, Check, AlertTriangle, Clock } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -696,16 +697,11 @@ export const Dashboard: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex-shrink-0">
             <p className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Total Balance</p>
-            <h3 className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-50 mt-1">
-              {format(totalBalance)}
-            </h3>
-            {showFiat && (
-              <p className="text-sm text-sanctuary-500 mt-1">
-                ≈ {btcPrice !== null
-                  ? `${currencySymbol}${((totalBalance / 100000000) * btcPrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                  : '-----'}
-              </p>
-            )}
+            <Amount
+              sats={totalBalance}
+              size="xl"
+              className="mt-1 font-bold text-sanctuary-900 dark:text-sanctuary-50"
+            />
           </div>
           <div className="flex-1 lg:w-2/3">
             <div className="flex justify-end mb-2">
@@ -846,7 +842,7 @@ export const Dashboard: React.FC = () => {
                               )}
                            </td>
                            <td className="px-4 py-4 whitespace-nowrap text-right">
-                              <div className="text-sm font-bold text-sanctuary-900 dark:text-sanctuary-100">{format(w.balance)}</div>
+                              <Amount sats={w.balance} size="sm" className="font-bold text-sanctuary-900 dark:text-sanctuary-100 items-end" />
                            </td>
                            <td className="px-4 py-4 whitespace-nowrap text-right">
                               <ChevronRight className="w-4 h-4 text-sanctuary-300 group-hover:text-sanctuary-500 transition-colors" />

@@ -6,6 +6,7 @@ import { Plus, LayoutGrid, List as ListIcon, Wallet, Upload } from 'lucide-react
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -162,9 +163,11 @@ export const WalletList: React.FC = () => {
              <div className="md:w-1/3 flex flex-col justify-between">
                 <div>
                     <h3 className="text-sm font-medium text-sanctuary-500 uppercase tracking-wide mb-1">Total Balance</h3>
-                    <div className="text-3xl font-bold text-sanctuary-900 dark:text-sanctuary-50">
-                        {format(totalBalance)}
-                    </div>
+                    <Amount
+                      sats={totalBalance}
+                      size="xl"
+                      className="font-bold text-sanctuary-900 dark:text-sanctuary-50"
+                    />
                 </div>
                 <div className="mt-6">
                     <p className="text-xs text-sanctuary-400">
@@ -249,9 +252,11 @@ export const WalletList: React.FC = () => {
                 </h3>
 
                 <div className="mt-2 mb-4">
-                    <span className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-50">
-                    {format(wallet.balance).split(' (')[0]}
-                    </span>
+                    <Amount
+                      sats={wallet.balance}
+                      size="lg"
+                      className="font-bold text-sanctuary-900 dark:text-sanctuary-50"
+                    />
                 </div>
 
                 <div className="flex items-center text-xs text-sanctuary-500 border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-4">
@@ -328,8 +333,8 @@ export const WalletList: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-sanctuary-500 capitalize">
                                         {wallet.network}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-sanctuary-900 dark:text-sanctuary-100">
-                                        {format(wallet.balance)}
+                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <Amount sats={wallet.balance} size="sm" className="font-bold text-sanctuary-900 dark:text-sanctuary-100 items-end" />
                                     </td>
                                 </tr>
                             );

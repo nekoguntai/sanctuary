@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { WalletType, HardwareDevice } from '../types';
-import { getDevices, updateDevice, Device as ApiDevice } from '../src/api/devices';
-import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon } from 'lucide-react';
+import { getDevices, updateDevice, deleteDevice, Device as ApiDevice } from '../src/api/devices';
+import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,10 @@ export const DeviceList: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  // Delete state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
@@ -59,6 +63,20 @@ export const DeviceList: React.FC = () => {
       setEditingId(null);
     } catch (error) {
       console.error('Failed to update device:', error);
+    }
+  };
+
+  const handleDelete = async (device: DeviceWithWallets) => {
+    try {
+      setDeleteError(null);
+      await deleteDevice(device.id);
+      setDevices(prev => prev.filter(d => d.id !== device.id));
+      setDeleteConfirmId(null);
+    } catch (error: any) {
+      console.error('Failed to delete device:', error);
+      // Show error message from API
+      const message = error.message || 'Failed to delete device';
+      setDeleteError(message);
     }
   };
 
@@ -181,27 +199,65 @@ export const DeviceList: React.FC = () => {
                     </div>
                  </div>
 
-                 <div className="flex flex-col md:items-end">
-                    <span className="text-xs font-medium text-sanctuary-400 uppercase mb-2">Used in Wallets</span>
-                    <div className="flex flex-wrap gap-2">
-                      {associatedWallets.length > 0 ? (
-                        associatedWallets.map(w => {
-                          const isMultisig = w.type === WalletType.MULTI_SIG;
-                          const badgeClass = isMultisig 
-                            ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
-                            : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300';
+                 <div className="flex items-center space-x-4">
+                    <div className="flex flex-col md:items-end">
+                      <span className="text-xs font-medium text-sanctuary-400 uppercase mb-2">Used in Wallets</span>
+                      <div className="flex flex-wrap gap-2">
+                        {associatedWallets.length > 0 ? (
+                          associatedWallets.map(w => {
+                            const isMultisig = w.type === WalletType.MULTI_SIG;
+                            const badgeClass = isMultisig
+                              ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
+                              : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300';
 
-                          return (
-                            <span key={w.id} className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${badgeClass}`}>
-                              <HardDrive className="w-3 h-3 mr-1" />
-                              {w.name}
-                            </span>
-                          );
-                        })
-                      ) : (
-                        <span className="text-xs text-sanctuary-400 italic">Unused</span>
-                      )}
+                            return (
+                              <span key={w.id} className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${badgeClass}`}>
+                                <HardDrive className="w-3 h-3 mr-1" />
+                                {w.name}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="text-xs text-sanctuary-400 italic">Unused</span>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Delete Button - only show for unused devices */}
+                    {associatedWallets.length === 0 && (
+                      <div className="relative">
+                        {deleteConfirmId === device.id ? (
+                          <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/30 p-2 rounded-lg">
+                            <span className="text-xs text-rose-700 dark:text-rose-300">Delete?</span>
+                            <button
+                              onClick={() => handleDelete(device)}
+                              className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
+                              className="px-2 py-1 text-xs bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300 rounded hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(device.id)}
+                            className="p-2 text-sanctuary-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                            title="Delete device"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {deleteError && deleteConfirmId === device.id && (
+                          <div className="absolute right-0 top-full mt-1 p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-xs rounded shadow-lg z-10 whitespace-nowrap">
+                            {deleteError}
+                          </div>
+                        )}
+                      </div>
+                    )}
                  </div>
               </div>
             );
@@ -256,12 +312,40 @@ export const DeviceList: React.FC = () => {
                                                 <div className="flex items-center group">
                                                     <span className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100 truncate mr-2">{device.label}</span>
                                                     <button onClick={() => handleEdit(device)} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                                                    {associatedWallets.length === 0 && (
+                                                      <button
+                                                        onClick={() => setDeleteConfirmId(device.id)}
+                                                        className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-rose-600 transition-opacity ml-1"
+                                                        title="Delete device"
+                                                      >
+                                                        <Trash2 className="w-3 h-3" />
+                                                      </button>
+                                                    )}
                                                 </div>
                                             )}
                                             <div className="text-xs font-mono text-sanctuary-500">{device.fingerprint}</div>
                                         </div>
+
+                                        {/* Delete confirmation */}
+                                        {deleteConfirmId === device.id && (
+                                          <div className="flex items-center space-x-1">
+                                            <span className="text-[10px] text-rose-600">Delete?</span>
+                                            <button
+                                              onClick={() => handleDelete(device)}
+                                              className="px-1 py-0.5 text-[10px] bg-rose-600 text-white rounded hover:bg-rose-700"
+                                            >
+                                              Yes
+                                            </button>
+                                            <button
+                                              onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
+                                              className="px-1 py-0.5 text-[10px] bg-sanctuary-200 dark:bg-sanctuary-700 rounded hover:bg-sanctuary-300"
+                                            >
+                                              No
+                                            </button>
+                                          </div>
+                                        )}
                                      </div>
-                                     
+
                                      {/* Mini Wallet Tags */}
                                      <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-sanctuary-50 dark:border-sanctuary-800">
                                          {associatedWallets.length > 0 ? (
@@ -270,7 +354,7 @@ export const DeviceList: React.FC = () => {
                                                  const tagClass = isMultisig
                                                     ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
                                                     : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300';
-                                                 
+
                                                  return (
                                                      <span key={w.id} className={`text-[10px] px-1.5 py-0.5 rounded flex items-center truncate max-w-[100px] ${tagClass}`}>
                                                          <HardDrive className="w-2 h-2 mr-1 flex-shrink-0" /> {w.name}

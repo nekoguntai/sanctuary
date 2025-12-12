@@ -12,6 +12,7 @@ import { HardwareWalletConnect } from './HardwareWalletConnect';
 import { useHardwareWallet } from '../hooks/useHardwareWallet';
 import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import jsQR from 'jsqr';
 
@@ -396,7 +397,7 @@ export const SendTransaction: React.FC = () => {
             <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">Send Bitcoin</h1>
             <div className="text-right">
                 <div className="text-sm text-sanctuary-500">Available Balance</div>
-                <div className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">{format(wallet.balance)}</div>
+                <Amount sats={wallet.balance} size="lg" className="font-medium text-sanctuary-900 dark:text-sanctuary-100 items-end" />
             </div>
         </div>
 

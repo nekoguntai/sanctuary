@@ -3,6 +3,7 @@ import { UTXO } from '../types';
 import { Lock, Unlock, Check, ArrowUpRight, ExternalLink } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 
 interface UTXOListProps {
@@ -157,10 +158,8 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 )}
                 
                 <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                    <span className={`font-mono text-lg font-medium ${isFrozen ? 'text-zen-vermilion' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
-                        {format(utxo.amount)}
-                    </span>
+                    <div className={`font-mono font-medium ${isFrozen ? 'text-zen-vermilion' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
+                      <Amount sats={utxo.amount} size="lg" />
                     </div>
                     <p className="text-xs text-sanctuary-500 font-mono break-all max-w-md">
                     {utxo.address}

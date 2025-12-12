@@ -15,6 +15,7 @@ interface CurrencyContextType {
   btcPrice: number | null;
   currencySymbol: string;
   format: (sats: number, options?: { forceSats?: boolean }) => string;
+  formatFiat: (sats: number) => string | null;
   getFiatValue: (sats: number) => number | null;
   formatFiatPrice: (price: number | null) => string;
   priceLoading: boolean;
@@ -122,24 +123,23 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     return `${currencySymbol}${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // Format BTC/sats value only (no fiat)
   const format = (sats: number, options?: { forceSats?: boolean }) => {
-    let mainString = '';
     const useSats = options?.forceSats || unit === 'sats';
 
     if (useSats) {
-        mainString = `${sats.toLocaleString()} sats`;
+      return `${sats.toLocaleString()} sats`;
     } else {
-        mainString = `${(sats / 100_000_000).toFixed(8)} BTC`;
+      return `${(sats / 100_000_000).toFixed(8)} BTC`;
     }
+  };
 
-    if (showFiat && !options?.forceSats) {
-      const fiatVal = getFiatValue(sats);
-      const fiatString = fiatVal !== null
-        ? `${currencySymbol}${fiatVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : '-----';
-      return `${mainString} (≈${fiatString})`;
-    }
-    return mainString;
+  // Format fiat value only (returns null if fiat is disabled or price unavailable)
+  const formatFiat = (sats: number): string | null => {
+    if (!showFiat) return null;
+    const fiatVal = getFiatValue(sats);
+    if (fiatVal === null) return '-----';
+    return `${currencySymbol}${fiatVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   return (
@@ -153,6 +153,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
       btcPrice,
       currencySymbol,
       format,
+      formatFiat,
       getFiatValue,
       formatFiatPrice,
       priceLoading,

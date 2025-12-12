@@ -353,9 +353,11 @@ router.get('/:id/export', async (req: Request, res: Response) => {
 function mapDeviceTypeToWalletModel(deviceType: string): string {
   const typeMap: Record<string, string> = {
     'coldcard': 'COLDCARD',
+    'coldcardmk4': 'COLDCARD',
     'coldcard_mk4': 'COLDCARD',
     'coldcard_q': 'COLDCARD',
     'ledger': 'LEDGER_NANO_S',
+    'ledger_nano': 'LEDGER_NANO_S',
     'ledger_nano_s': 'LEDGER_NANO_S',
     'ledger_nano_x': 'LEDGER_NANO_X',
     'ledger_stax': 'LEDGER_STAX',
@@ -371,10 +373,13 @@ function mapDeviceTypeToWalletModel(deviceType: string): string {
     'blockstream_jade': 'JADE',
     'jade': 'JADE',
     'keystone': 'KEYSTONE',
+    'generic': 'AIRGAPPED',
+    'generic_sd': 'AIRGAPPED',
   };
 
   const normalized = deviceType.toLowerCase().replace(/\s+/g, '_');
-  return typeMap[normalized] || 'SPARROW';
+  // Return mapped value or uppercase device type (never SPARROW for hardware wallets)
+  return typeMap[normalized] || deviceType.toUpperCase().replace(/\s+/g, '_');
 }
 
 /**

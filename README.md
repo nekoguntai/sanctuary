@@ -330,10 +330,81 @@ Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scan
 
 ### Hardware Wallet Setup
 
-1. Install the **Sanctuary Bridge** browser extension
-2. Connect your hardware wallet via USB
-3. The extension bridges WebUSB/WebHID to communicate with your device
-4. All signing happens on the hardware wallet—private keys never leave the device
+Sanctuary uses a browser extension to communicate with USB hardware wallets. This allows signing transactions even when Sanctuary runs in Docker or on a remote server.
+
+#### Building the Extension
+
+```bash
+cd extension
+
+# Install dependencies
+npm install
+
+# Build the extension
+npm run build
+
+# The built extension will be in the dist/ directory
+```
+
+#### Installing the Extension
+
+**Chrome / Edge / Brave:**
+
+1. Open `chrome://extensions` (or `edge://extensions`, `brave://extensions`)
+2. Enable **Developer mode** (toggle in top right)
+3. Click **Load unpacked**
+4. Select the `extension/dist` directory
+5. The Sanctuary Bridge icon should appear in your toolbar
+
+**Firefox (experimental):**
+
+Firefox requires additional manifest modifications for WebUSB compatibility. See `extension/README.md` for details.
+
+#### Using the Extension
+
+1. **Connect your hardware wallet** via USB
+2. **Unlock the device** and open the Bitcoin app (for Ledger)
+3. **Click the extension icon** to verify your device is detected
+4. **Open Sanctuary** in your browser — the extension auto-injects the bridge API
+5. When sending transactions:
+   - Sanctuary creates a PSBT (Partially Signed Bitcoin Transaction)
+   - The extension prompts you to sign on your device
+   - Review and approve the transaction on your hardware wallet screen
+   - Sanctuary broadcasts the signed transaction
+
+#### Supported Devices
+
+| Manufacturer | Models |
+|--------------|--------|
+| **Ledger** | Nano S, Nano S Plus, Nano X, Stax, Flex, Gen 5 |
+| **Trezor** | Model One, Model T, Safe 3, Safe 5, Safe 7 |
+| **ColdCard** | Mk3, Mk4, Q (air-gapped via PSBT file) |
+| **Others** | BitBox02, Jade, Passport, Keystone (air-gapped) |
+
+#### Allowed Origins
+
+The extension works automatically with:
+- `localhost` and `127.0.0.1`
+- Private network IPs (`192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`)
+- `*.sanctuary.local` and `*.sanctuary.lan`
+
+Custom domains can be added in the extension's Options page.
+
+#### Troubleshooting Extension Issues
+
+**"Device not found"**
+- Ensure device is plugged in and unlocked
+- For Ledger: Open the Bitcoin app
+- Try a different USB port or cable
+- Close other apps that might be using the device (Ledger Live, Trezor Suite)
+
+**"Permission denied"**
+- Click the extension icon and use "Connect Device"
+- Select your device in the browser's USB permission dialog
+
+**"Extension not detected"**
+- Refresh the Sanctuary page after installing
+- Verify the extension is enabled in your browser's extension settings
 
 ## Usage
 

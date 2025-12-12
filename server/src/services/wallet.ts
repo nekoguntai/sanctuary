@@ -45,6 +45,12 @@ interface WalletWithBalance {
   lastSyncedAt?: Date | null;
   lastSyncStatus?: string | null;
   syncInProgress?: boolean;
+  // Sharing info
+  isShared: boolean;
+  sharedWith?: {
+    groupName?: string | null;
+    userCount: number;
+  };
 }
 
 /**
@@ -204,6 +210,7 @@ export async function createWallet(
     balance: 0,
     deviceCount: wallet.devices.length,
     addressCount: walletWithAddresses?.addresses.length || 0,
+    isShared: false,
   };
 }
 
@@ -229,6 +236,13 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
         where: { spent: false },
         select: { amount: true },
       },
+      // Include sharing info
+      group: {
+        select: { name: true },
+      },
+      users: {
+        select: { userId: true },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -239,6 +253,11 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
       (sum, utxo) => sum + Number(utxo.amount),
       0
     );
+
+    // Determine if wallet is shared (has group or multiple users)
+    const userCount = wallet.users.length;
+    const hasGroup = !!wallet.group;
+    const isShared = hasGroup || userCount > 1;
 
     return {
       id: wallet.id,
@@ -258,6 +277,12 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
       lastSyncedAt: wallet.lastSyncedAt,
       lastSyncStatus: wallet.lastSyncStatus,
       syncInProgress: wallet.syncInProgress,
+      // Sharing info
+      isShared,
+      sharedWith: isShared ? {
+        groupName: wallet.group?.name || null,
+        userCount,
+      } : undefined,
     };
   });
 }
@@ -310,6 +335,11 @@ export async function getWalletById(
     0
   );
 
+  // Determine if wallet is shared
+  const userCount = wallet.users.length;
+  const hasGroup = !!wallet.group;
+  const isShared = hasGroup || userCount > 1;
+
   return {
     id: wallet.id,
     name: wallet.name,
@@ -328,6 +358,12 @@ export async function getWalletById(
     lastSyncedAt: wallet.lastSyncedAt,
     lastSyncStatus: wallet.lastSyncStatus,
     syncInProgress: wallet.syncInProgress,
+    // Sharing info
+    isShared,
+    sharedWith: isShared ? {
+      groupName: wallet.group?.name || null,
+      userCount,
+    } : undefined,
   };
 }
 
@@ -361,6 +397,12 @@ export async function updateWallet(
       utxos: {
         where: { spent: false },
       },
+      group: {
+        select: { name: true },
+      },
+      users: {
+        select: { userId: true },
+      },
     },
   });
 
@@ -369,11 +411,21 @@ export async function updateWallet(
     0
   );
 
+  // Determine if wallet is shared
+  const userCount = wallet.users.length;
+  const hasGroup = !!wallet.group;
+  const isShared = hasGroup || userCount > 1;
+
   return {
     ...wallet,
     balance,
     deviceCount: wallet.devices.length,
     addressCount: wallet.addresses.length,
+    isShared,
+    sharedWith: isShared ? {
+      groupName: wallet.group?.name || null,
+      userCount,
+    } : undefined,
   };
 }
 

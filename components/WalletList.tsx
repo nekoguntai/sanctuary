@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WalletType } from '../types';
 import * as walletsApi from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet, Upload } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet, Upload, Users } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -244,6 +244,12 @@ export const WalletList: React.FC = () => {
                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${badgeColorClass}`}>
                             {isMultisig ? 'Multisig' : 'Single Sig'}
                         </span>
+                        {wallet.isShared && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
+                                <Users className="w-3 h-3" />
+                                Shared
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -321,9 +327,17 @@ export const WalletList: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
-                                            {isMultisig ? `${wallet.quorum} of ${wallet.totalSigners}` : 'Single Sig'}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
+                                                {isMultisig ? `${wallet.quorum} of ${wallet.totalSigners}` : 'Single Sig'}
+                                            </span>
+                                            {wallet.isShared && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
+                                                    <Users className="w-3 h-3" />
+                                                    Shared
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm text-sanctuary-900 dark:text-sanctuary-100">

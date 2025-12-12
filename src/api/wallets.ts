@@ -24,6 +24,12 @@ export interface Wallet {
   lastSyncedAt?: string | null;
   lastSyncStatus?: string | null;
   syncInProgress?: boolean;
+  // Sharing info
+  isShared: boolean;
+  sharedWith?: {
+    groupName?: string | null;
+    userCount: number;
+  };
 }
 
 export interface CreateWalletRequest {

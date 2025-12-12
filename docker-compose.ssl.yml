@@ -2,7 +2,7 @@
 # Sanctuary Bitcoin Wallet - HTTPS/SSL Override
 # =============================================
 # Usage:
-#   docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+#   HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 #
 # Prerequisites:
 #   1. Generate certificates:
@@ -10,14 +10,21 @@
 #   2. Or use mkcert for locally-trusted certificates:
 #      mkcert -install
 #      mkcert -key-file docker/nginx/ssl/privkey.pem -cert-file docker/nginx/ssl/fullchain.pem localhost 127.0.0.1
+#
+# Environment variables:
+#   HTTPS_PORT - HTTPS port (default: 443)
+#   FRONTEND_PORT - HTTP port for redirect (default: 8080, overrides base config)
 # =============================================
 
 services:
   frontend:
     environment:
       ENABLE_SSL: "true"
+      # Pass HTTPS port to nginx for correct HTTP→HTTPS redirects
+      HTTPS_REDIRECT_PORT: "${HTTPS_PORT:-443}"
     ports:
-      - "${FRONTEND_PORT:-443}:443"
-      - "80:80"
+      # Override base config: use FRONTEND_PORT for HTTP redirect, HTTPS_PORT for SSL
+      - "${HTTPS_PORT:-443}:443"
+      - "${FRONTEND_PORT:-8080}:80"
     volumes:
       - ./docker/nginx/ssl:/etc/nginx/ssl:ro

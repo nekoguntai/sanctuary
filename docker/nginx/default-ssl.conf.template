@@ -20,8 +20,9 @@ server {
     }
 
     # Redirect all other requests to HTTPS
+    # HTTPS_REDIRECT_PORT should be set to the external HTTPS port (e.g., 8443)
     location / {
-        return 301 https://$host$request_uri;
+        return 301 https://$host:${HTTPS_REDIRECT_PORT}$request_uri;
     }
 }
 

@@ -110,14 +110,23 @@ Optional:
    # Edit .env with your preferred settings
    ```
 
-4. **Start Sanctuary**
+4. **Generate SSL certificates** (recommended for hardware wallet support)
    ```bash
-   docker compose up -d
+   cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
    ```
 
-5. **Access the interface**
+5. **Start Sanctuary**
+   ```bash
+   # With HTTPS (recommended - enables hardware wallet WebUSB)
+   HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
 
-   Open http://localhost:8080 in your browser
+   # Or HTTP-only (no hardware wallet support)
+   JWT_SECRET=your-secret-here docker compose up -d
+   ```
+
+6. **Access the interface**
+
+   Open https://localhost:8443 in your browser (accept the self-signed certificate warning)
 
 ---
 
@@ -296,7 +305,7 @@ EXPLORER_URL=https://mempool.space
 
 ### Enabling HTTPS
 
-HTTPS is required for WebUSB/WebHID to work directly in the browser (for hardware wallet access without the extension). To enable HTTPS:
+HTTPS is required for WebUSB to work directly in the browser (for hardware wallet access). To enable HTTPS:
 
 **Option 1: Self-Signed Certificates (Development)**
 
@@ -305,12 +314,18 @@ HTTPS is required for WebUSB/WebHID to work directly in the browser (for hardwar
 cd docker/nginx/ssl
 chmod +x generate-certs.sh
 ./generate-certs.sh localhost
+cd ../../..
 
-# Run with SSL enabled
-FRONTEND_PORT=443 JWT_SECRET=your-secret docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+# Run with SSL enabled (HTTPS on port 8443, HTTP redirect on port 8080)
+HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 ```
 
-Access at `https://localhost`. Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
+Access at `https://localhost:8443`. Your browser will warn about the self-signed certificate—click "Advanced" and proceed.
+
+For standard ports (requires root/admin):
+```bash
+HTTPS_PORT=443 FRONTEND_PORT=80 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+```
 
 **Option 2: mkcert (Locally-Trusted Certificates)**
 
@@ -322,14 +337,14 @@ For a better local development experience without certificate warnings:
 # Windows: choco install mkcert
 # Linux: see mkcert GitHub
 
-# Install local CA
+# Install local CA (one time)
 mkcert -install
 
 # Generate certificates
 mkcert -key-file docker/nginx/ssl/privkey.pem -cert-file docker/nginx/ssl/fullchain.pem localhost 127.0.0.1
 
 # Run with SSL
-FRONTEND_PORT=443 JWT_SECRET=your-secret docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+HTTPS_PORT=8443 JWT_SECRET=your-secret docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
 ```
 
 **Option 3: Let's Encrypt (Production)**
@@ -429,17 +444,18 @@ Once connected, you can:
 
 ### First Run
 
-1. Open http://localhost:8080
-2. Create an account (stored locally in your database)
-3. Add a wallet by importing an output descriptor or connecting a hardware wallet
-4. Sanctuary will scan the blockchain for your transaction history
+1. Open https://localhost:8443 in Chrome, Edge, or Brave
+2. Accept the self-signed certificate warning (Advanced → Proceed)
+3. Create an account (stored locally in your database)
+4. Add a wallet by importing an output descriptor or connecting a hardware wallet
+5. Sanctuary will scan the blockchain for your transaction history
 
 ### Importing a Wallet
 
 Sanctuary supports multiple import methods:
 
 - **Output Descriptor** — Paste a descriptor like `wpkh([fingerprint/84'/0'/0']xpub.../0/*)`
-- **Hardware Wallet** — Connect via extension to read the xpub directly
+- **Hardware Wallet** — Connect via WebUSB (HTTPS required) to read the xpub directly
 - **JSON Export** — Import from Sparrow, Specter, or other compatible wallets
 
 ### Creating Transactions
@@ -524,9 +540,10 @@ docker compose up -d
 ```
 
 ### Can't connect to hardware wallet
-- Ensure the browser extension is installed and enabled
+- Ensure HTTPS is enabled (WebUSB requires a secure context)
+- Use Chrome, Edge, or Brave (Firefox/Safari don't support WebUSB)
 - Try a different USB port
-- Check that no other application is using the device
+- Check that no other application is using the device (close Ledger Live)
 - On Linux, you may need udev rules for your hardware wallet
 
 ### Database connection errors
@@ -577,7 +594,8 @@ sanctuary/
 │   └── prisma/        # Database schema and migrations
 ├── src/
 │   └── api/           # Frontend API client
-├── extension/         # Browser extension source
+├── services/          # Frontend services (hardware wallet, etc.)
+├── themes/            # Color theme definitions
 ├── docker/            # Docker configuration files
 └── docker-compose.yml
 ```

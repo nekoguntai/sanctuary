@@ -5,6 +5,7 @@ set -e
 export BACKEND_HOST=${BACKEND_HOST:-backend}
 export BACKEND_PORT=${BACKEND_PORT:-3001}
 export ENABLE_SSL=${ENABLE_SSL:-false}
+export HTTPS_REDIRECT_PORT=${HTTPS_REDIRECT_PORT:-443}
 
 # Choose template based on SSL setting
 if [ "$ENABLE_SSL" = "true" ] && [ -f /etc/nginx/ssl/fullchain.pem ] && [ -f /etc/nginx/ssl/privkey.pem ]; then
@@ -18,12 +19,13 @@ else
 fi
 
 # Substitute environment variables in nginx config template
-envsubst '${BACKEND_HOST} ${BACKEND_PORT}' < "$TEMPLATE" > /etc/nginx/conf.d/default.conf
+envsubst '${BACKEND_HOST} ${BACKEND_PORT} ${HTTPS_REDIRECT_PORT}' < "$TEMPLATE" > /etc/nginx/conf.d/default.conf
 
 echo "Nginx configuration generated with:"
 echo "  BACKEND_HOST: $BACKEND_HOST"
 echo "  BACKEND_PORT: $BACKEND_PORT"
 echo "  ENABLE_SSL: $ENABLE_SSL"
+echo "  HTTPS_REDIRECT_PORT: $HTTPS_REDIRECT_PORT"
 
 # Execute the main command
 exec "$@"

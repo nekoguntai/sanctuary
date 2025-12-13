@@ -21,6 +21,7 @@ export interface User {
     priceProvider?: string;
   };
   createdAt: string;
+  twoFactorEnabled?: boolean;
 }
 
 export interface LoginRequest {
@@ -39,6 +40,20 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface TwoFactorRequiredResponse {
+  requires2FA: true;
+  tempToken: string;
+}
+
+export type LoginResponse = AuthResponse | TwoFactorRequiredResponse;
+
+/**
+ * Check if a login response requires 2FA
+ */
+export function requires2FA(response: LoginResponse): response is TwoFactorRequiredResponse {
+  return 'requires2FA' in response && response.requires2FA === true;
+}
+
 /**
  * Register a new user
  */
@@ -53,12 +68,15 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
 
 /**
  * Login user
+ * Returns either a full auth response or a 2FA required response
  */
-export async function login(data: LoginRequest): Promise<AuthResponse> {
-  const response = await apiClient.post<AuthResponse>('/auth/login', data);
+export async function login(data: LoginRequest): Promise<LoginResponse> {
+  const response = await apiClient.post<LoginResponse>('/auth/login', data);
 
-  // Set token in client
-  apiClient.setToken(response.token);
+  // Only set token if full auth (not 2FA pending)
+  if (!requires2FA(response)) {
+    apiClient.setToken(response.token);
+  }
 
   return response;
 }

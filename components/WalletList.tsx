@@ -220,8 +220,8 @@ export const WalletList: React.FC = () => {
 
             // Standardized Badge Styling (Matching Recent Activity)
             const badgeColorClass = isMultisig
-                ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
-                : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300';
+                ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+                : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
 
             const iconColorClass = isMultisig
                 ? 'bg-warning-50 dark:bg-warning-900/50 text-warning-600 dark:text-warning-400'
@@ -300,8 +300,8 @@ export const WalletList: React.FC = () => {
                         {wallets.map((wallet) => {
                             const isMultisig = wallet.type === 'multi_sig';
                             const badgeClass = isMultisig
-                                ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300'
-                                : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300';
+                                ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+                                : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
 
                             const iconClass = isMultisig
                                 ? 'text-warning-600 dark:text-warning-400'

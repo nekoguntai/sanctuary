@@ -46,7 +46,9 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **UTXO control** — Coin selection for privacy-conscious transactions
 - **Transaction building** — Create PSBTs for hardware wallet signing
 - **Multi-user access** — Share wallet visibility with family or team members
+- **Role-based permissions** — Fine-grained access control (owner, signer, viewer)
 - **Group permissions** — Organize users into groups with shared wallet access
+- **Admin controls** — Configure public registration and system settings
 - **Dark mode** — Easy on the eyes, day or night
 
 ## Architecture
@@ -485,6 +487,28 @@ Sanctuary supports multiple import methods:
 5. Click **Sign with Hardware Wallet**
 6. Confirm on your hardware device
 7. Broadcast the signed transaction
+
+### User Roles & Permissions
+
+Sanctuary supports role-based access control for shared wallets:
+
+| Role | View | Edit Labels | Create Transactions | Share/Delete |
+|------|------|-------------|---------------------|--------------|
+| **Owner** | ✓ | ✓ | ✓ | ✓ |
+| **Signer** | ✓ | ✓ | ✓ | ✗ |
+| **Viewer** | ✓ | ✗ | ✗ | ✗ |
+
+- **Owner** — Full control. Can share wallets with groups/users and delete the wallet.
+- **Signer** — Can view, add/edit labels, and create transactions for signing.
+- **Viewer** — Read-only access. Can view transactions and balances but cannot modify anything.
+
+When sharing a wallet with a group, you can set a default role for all group members.
+
+### Admin Settings
+
+Administrators can configure system-wide settings under **Administration → System Settings**:
+
+- **Public Registration** — Enable/disable self-service account creation. When disabled (default), only administrators can create new user accounts.
 
 ## Updating
 

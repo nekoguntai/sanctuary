@@ -16,7 +16,8 @@ import {
   UserCircle,
   Server,
   Shield,
-  Cog
+  Cog,
+  Database,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
@@ -239,6 +240,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                   to="/admin/users-groups"
                   label="Users & Groups"
                   icon={<Users className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/backup"
+                  label="Backup & Restore"
+                  icon={<Database className="w-3 h-3" />}
                 />
               </div>
             )}

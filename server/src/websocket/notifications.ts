@@ -9,6 +9,9 @@
 import { getWebSocketServer, WebSocketEvent } from './server';
 import { getElectrumClient } from '../services/bitcoin/electrum';
 import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('NOTIFY');
 
 export interface TransactionNotification {
   txid: string;
@@ -51,17 +54,17 @@ export class NotificationService {
    */
   async start() {
     if (this.isRunning) {
-      console.log('Notification service already running');
+      log.debug('Notification service already running');
       return;
     }
 
     this.isRunning = true;
-    console.log('Starting notification service...');
+    log.debug('Starting notification service...');
 
     // Subscribe to Electrum blockchain headers for new blocks
     await this.subscribeToBlocks();
 
-    console.log('Notification service started');
+    log.debug('Notification service started');
   }
 
   /**
@@ -69,7 +72,7 @@ export class NotificationService {
    */
   stop() {
     this.isRunning = false;
-    console.log('Notification service stopped');
+    log.debug('Notification service stopped');
   }
 
   /**
@@ -79,9 +82,9 @@ export class NotificationService {
     try {
       // In production, this would subscribe to Electrum's blockchain.headers.subscribe
       // For demo, we'll simulate periodic block checks
-      console.log('Subscribed to blockchain headers');
+      log.debug('Subscribed to blockchain headers');
     } catch (err) {
-      console.error('Failed to subscribe to blocks:', err);
+      log.error('Failed to subscribe to blocks', { error: String(err) });
     }
   }
 
@@ -99,13 +102,13 @@ export class NotificationService {
       await electrumClient.subscribeAddress(address);
 
       this.subscribedAddresses.add(address);
-      console.log(`Subscribed to address updates: ${address}`);
+      log.debug(`Subscribed to address updates: ${address}`);
 
       // Note: Electrum subscriptions work via the persistent connection
       // Status changes are received via the socket and would need to be
       // handled separately in the electrum client event handlers
     } catch (err) {
-      console.error(`Failed to subscribe to address ${address}:`, err);
+      log.error(`Failed to subscribe to address ${address}`, { error: String(err) });
     }
   }
 
@@ -121,7 +124,7 @@ export class NotificationService {
       });
 
       if (!addressRecord) {
-        console.warn(`Address ${address} not found in database`);
+        log.warn(`Address ${address} not found in database`);
         return;
       }
 
@@ -138,7 +141,7 @@ export class NotificationService {
       const balance = await electrumClient.getAddressBalance(address);
       await this.handleBalanceUpdate(addressRecord.wallet.id, balance);
     } catch (err) {
-      console.error('Failed to handle address update:', err);
+      log.error('Failed to handle address update', { error: String(err) });
     }
   }
 
@@ -170,7 +173,7 @@ export class NotificationService {
 
       this.broadcastTransactionNotification(notification);
     } catch (err) {
-      console.error('Failed to handle transaction:', err);
+      log.error('Failed to handle transaction', { error: String(err) });
     }
   }
 
@@ -198,7 +201,7 @@ export class NotificationService {
         },
       });
     } catch (err) {
-      console.error('Failed to check confirmation update:', err);
+      log.error('Failed to check confirmation update', { error: String(err) });
     }
   }
 
@@ -223,7 +226,7 @@ export class NotificationService {
 
       this.broadcastBalanceUpdate(update);
     } catch (err) {
-      console.error('Failed to handle balance update:', err);
+      log.error('Failed to handle balance update', { error: String(err) });
     }
   }
 
@@ -247,7 +250,7 @@ export class NotificationService {
     };
 
     wsServer.broadcast(event);
-    console.log(`Broadcast transaction notification: ${notification.txid}`);
+    log.debug(`Broadcast transaction notification: ${notification.txid}`);
   }
 
   /**
@@ -268,7 +271,7 @@ export class NotificationService {
     };
 
     wsServer.broadcast(event);
-    console.log(`Broadcast balance update for wallet: ${update.walletId}`);
+    log.debug(`Broadcast balance update for wallet: ${update.walletId}`);
   }
 
   /**
@@ -288,7 +291,7 @@ export class NotificationService {
     };
 
     wsServer.broadcast(event);
-    console.log(`Broadcast new block: ${notification.height}`);
+    log.debug(`Broadcast new block: ${notification.height}`);
   }
 
   /**
@@ -325,9 +328,9 @@ export class NotificationService {
         await this.subscribeToAddress(addr.address, walletId);
       }
 
-      console.log(`Wallet ${walletId} subscribed to real-time updates`);
+      log.debug(`Wallet ${walletId} subscribed to real-time updates`);
     } catch (err) {
-      console.error(`Failed to subscribe wallet ${walletId}:`, err);
+      log.error(`Failed to subscribe wallet ${walletId}`, { error: String(err) });
     }
   }
 
@@ -348,7 +351,7 @@ export class NotificationService {
     };
 
     wsServer.broadcast(event);
-    console.log(`Broadcast confirmation update: ${update.txid} (${update.confirmations} confs)`);
+    log.debug(`Broadcast confirmation update: ${update.txid} (${update.confirmations} confs)`);
   }
 
   /**

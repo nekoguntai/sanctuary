@@ -90,7 +90,7 @@ export const WalletDetail: React.FC = () => {
   
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
-  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text'>('qr');
+  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels'>('qr');
   
   // Delete Modal State
   const [showDelete, setShowDelete] = useState(false);
@@ -1532,6 +1532,10 @@ export const WalletDetail: React.FC = () => {
                    <FileText className="w-4 h-4 mx-auto mb-1" />
                    Descriptor
                  </button>
+                 <button onClick={() => setExportTab('labels')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'labels' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
+                   <Tag className="w-4 h-4 mx-auto mb-1" />
+                   Labels
+                 </button>
             </div>
             
             <div className="flex flex-col items-center space-y-6">
@@ -1565,6 +1569,24 @@ export const WalletDetail: React.FC = () => {
                             {isCopied(wallet.descriptor) ? 'Copied!' : 'Copy to Clipboard'}
                         </Button>
                     </div>
+               )}
+
+               {exportTab === 'labels' && (
+                   <div className="text-center w-full">
+                       <Tag className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
+                       <p className="text-sm text-sanctuary-500 mb-2">Export wallet labels in BIP 329 format.</p>
+                       <p className="text-xs text-sanctuary-400 mb-6">This exports transaction and address labels as a JSON Lines file compatible with Sparrow, Electrum, and other BIP 329 supporting wallets.</p>
+                       <Button onClick={async () => {
+                           try {
+                             await walletsApi.exportLabelsBip329(id!, wallet.name);
+                           } catch (err: any) {
+                             console.error('Failed to export labels:', err);
+                             alert(err.message || 'Failed to export labels');
+                           }
+                       }} className="w-full">
+                           <Download className="w-4 h-4 mr-2" /> Download Labels (BIP 329)
+                       </Button>
+                   </div>
                )}
             </div>
 

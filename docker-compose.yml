@@ -13,6 +13,7 @@
 #   - HTTPS_PORT: HTTPS port (default: 443, use 8443 for non-root)
 #   - HTTP_PORT: HTTP redirect port (default: 80)
 #   - JWT_SECRET: Required for authentication (must be set)
+#   - LOG_LEVEL: Logging verbosity - debug, info, warn, error (default: info)
 #
 # SSL Certificates:
 #   Self-signed certs are in ./docker/nginx/ssl/
@@ -61,6 +62,9 @@ services:
       PORT: 3001
       API_URL: ${API_URL:-http://localhost:3001}
       CLIENT_URL: ${CLIENT_URL:-http://localhost}
+
+      # Logging (debug, info, warn, error)
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public

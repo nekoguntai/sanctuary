@@ -12,6 +12,9 @@ import prisma from '../models/prisma';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields } from './bitcoin/blockchain';
 import { getNodeClient } from './bitcoin/nodeClient';
 import { getNotificationService } from '../websocket/notifications';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('SYNC');
 
 // Sync configuration
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes for full sync check
@@ -53,11 +56,11 @@ class SyncService {
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.log('[SYNC] Service already running');
+      log.info('[SYNC] Service already running');
       return;
     }
 
-    console.log('[SYNC] Starting background sync service...');
+    log.info('[SYNC] Starting background sync service...');
     this.isRunning = true;
 
     // Reset any stuck syncInProgress flags from previous server sessions
@@ -76,7 +79,7 @@ class SyncService {
     // Process any existing queue
     this.processQueue();
 
-    console.log('[SYNC] Background sync service started');
+    log.info('[SYNC] Background sync service started');
   }
 
   /**
@@ -90,10 +93,10 @@ class SyncService {
         data: { syncInProgress: false },
       });
       if (result.count > 0) {
-        console.log(`[SYNC] Reset ${result.count} stuck sync flags from previous session`);
+        log.info(`[SYNC] Reset ${result.count} stuck sync flags from previous session`);
       }
     } catch (error) {
-      console.error('[SYNC] Failed to reset stuck sync flags:', error);
+      log.error('[SYNC] Failed to reset stuck sync flags', { error: String(error) });
     }
   }
 
@@ -101,7 +104,7 @@ class SyncService {
    * Stop the background sync service
    */
   stop(): void {
-    console.log('[SYNC] Stopping background sync service...');
+    log.info('[SYNC] Stopping background sync service...');
     this.isRunning = false;
 
     if (this.syncInterval) {
@@ -114,7 +117,7 @@ class SyncService {
       this.confirmationInterval = null;
     }
 
-    console.log('[SYNC] Background sync service stopped');
+    log.info('[SYNC] Background sync service stopped');
   }
 
   /**
@@ -123,7 +126,7 @@ class SyncService {
   queueSync(walletId: string, priority: 'high' | 'normal' | 'low' = 'normal'): void {
     // Don't queue if already in queue or actively syncing
     if (this.activeSyncs.has(walletId)) {
-      console.log(`[SYNC] Wallet ${walletId} already syncing, skipping queue`);
+      log.info(`[SYNC] Wallet ${walletId} already syncing, skipping queue`);
       return;
     }
 
@@ -144,7 +147,7 @@ class SyncService {
     });
 
     this.sortQueue();
-    console.log(`[SYNC] Queued wallet ${walletId} with ${priority} priority`);
+    log.info(`[SYNC] Queued wallet ${walletId} with ${priority} priority`);
 
     // Start processing if not already
     this.processQueue();
@@ -168,7 +171,7 @@ class SyncService {
       this.queueSync(wallet.id, priority);
     }
 
-    console.log(`[SYNC] Queued ${wallets.length} wallets for user ${userId}`);
+    log.info(`[SYNC] Queued ${wallets.length} wallets for user ${userId}`);
   }
 
   /**
@@ -259,7 +262,7 @@ class SyncService {
 
       // Don't await - run concurrently
       this.executeSyncJob(job.walletId).catch(err => {
-        console.error(`[SYNC] Failed to sync wallet ${job.walletId}:`, err);
+        log.error(`[SYNC] Failed to sync wallet ${job.walletId}`, { error: String(err) });
       });
     }
   }
@@ -295,7 +298,7 @@ class SyncService {
     });
 
     try {
-      console.log(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})` : ''}`);
+      log.info(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})` : ''}`);
 
       // Get previous balance for comparison
       const previousBalance = await this.getWalletBalance(walletId);
@@ -306,7 +309,7 @@ class SyncService {
       // Populate missing fields for any existing transactions
       const populatedCount = await populateMissingTransactionFields(walletId);
       if (populatedCount > 0) {
-        console.log(`[SYNC] Populated missing fields for ${populatedCount} existing transactions`);
+        log.info(`[SYNC] Populated missing fields for ${populatedCount} existing transactions`);
       }
 
       // Get new balance
@@ -323,7 +326,7 @@ class SyncService {
         },
       });
 
-      console.log(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
+      log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
 
       // Always notify sync completion via WebSocket
       notificationService.broadcastSyncStatus(walletId, {
@@ -352,14 +355,14 @@ class SyncService {
       };
     } catch (error: any) {
       const errorMessage = error.message || 'Unknown error';
-      console.error(`[SYNC] Sync failed for wallet ${walletId}:`, errorMessage);
+      log.error(`[SYNC] Sync failed for wallet ${walletId}:`, errorMessage);
 
       // Check if we should retry
       if (retryCount < MAX_RETRY_ATTEMPTS) {
         const nextRetry = retryCount + 1;
         const delayMs = RETRY_DELAYS_MS[retryCount] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
 
-        console.log(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${MAX_RETRY_ATTEMPTS})`);
+        log.info(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${MAX_RETRY_ATTEMPTS})`);
 
         // Notify that we're retrying
         notificationService.broadcastSyncStatus(walletId, {
@@ -387,7 +390,7 @@ class SyncService {
         // Schedule retry with delay
         setTimeout(() => {
           this.executeSyncJob(walletId, nextRetry).catch(err => {
-            console.error(`[SYNC] Retry failed for wallet ${walletId}:`, err);
+            log.error(`[SYNC] Retry failed for wallet ${walletId}`, { error: String(err) });
           });
         }, delayMs);
 
@@ -401,7 +404,7 @@ class SyncService {
       }
 
       // All retries exhausted - final failure
-      console.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
+      log.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
 
       // Update sync metadata with final error
       await prisma.wallet.update({
@@ -476,10 +479,10 @@ class SyncService {
       }
 
       if (staleWallets.length > 0) {
-        console.log(`[SYNC] Queued ${staleWallets.length} stale wallets for background sync`);
+        log.info(`[SYNC] Queued ${staleWallets.length} stale wallets for background sync`);
       }
     } catch (error) {
-      console.error('[SYNC] Failed to check for stale syncs:', error);
+      log.error('[SYNC] Failed to check for stale syncs', { error: String(error) });
     }
   }
 
@@ -531,15 +534,15 @@ class SyncService {
             }
           }
         } catch (error) {
-          console.error(`[SYNC] Failed to update confirmations for wallet ${walletId}:`, error);
+          log.error(`[SYNC] Failed to update confirmations for wallet ${walletId}`, { error: String(error) });
         }
       }
 
       if (totalUpdated > 0) {
-        console.log(`[SYNC] Updated ${totalUpdated} transaction confirmations`);
+        log.info(`[SYNC] Updated ${totalUpdated} transaction confirmations`);
       }
     } catch (error) {
-      console.error('[SYNC] Failed to update confirmations:', error);
+      log.error('[SYNC] Failed to update confirmations', { error: String(error) });
     }
   }
 
@@ -560,11 +563,11 @@ class SyncService {
         // Subscribe to address - Electrum/RPC will notify on changes (if supported)
         await client.subscribeAddress(address);
       } catch (error) {
-        console.error(`[SYNC] Failed to subscribe to address ${address}:`, error);
+        log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(error) });
       }
     }
 
-    console.log(`[SYNC] Subscribed to ${addresses.length} addresses for wallet ${walletId}`);
+    log.info(`[SYNC] Subscribed to ${addresses.length} addresses for wallet ${walletId}`);
   }
 }
 

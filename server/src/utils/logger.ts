@@ -1,0 +1,236 @@
+/**
+ * Logger Utility
+ *
+ * A configurable logging system with multiple verbosity levels for the Sanctuary backend.
+ *
+ * ================================================================================
+ * ARCHITECTURE DOCUMENTATION (for future development)
+ * ================================================================================
+ *
+ * LOG LEVELS (in order of verbosity):
+ *   - DEBUG (0): Detailed debugging information. Use for tracing code execution,
+ *                variable values, and troubleshooting. Only shown when LOG_LEVEL=debug.
+ *   - INFO  (1): General operational information. Use for successful operations,
+ *                startup messages, and routine events. Default level.
+ *   - WARN  (2): Warning conditions. Use for deprecated features, recoverable errors,
+ *                or situations that might indicate a problem.
+ *   - ERROR (3): Error conditions. Use for failures that prevent an operation from
+ *                completing. Always shown regardless of LOG_LEVEL.
+ *
+ * CONFIGURATION:
+ *   Set the LOG_LEVEL environment variable to control verbosity:
+ *     - LOG_LEVEL=debug  -> Shows all messages (most verbose)
+ *     - LOG_LEVEL=info   -> Shows info, warn, error (default)
+ *     - LOG_LEVEL=warn   -> Shows warn, error only
+ *     - LOG_LEVEL=error  -> Shows errors only (least verbose)
+ *
+ * USAGE EXAMPLES:
+ *
+ *   // Import and create a module-specific logger
+ *   import { createLogger } from '../utils/logger';
+ *   const log = createLogger('WALLETS');
+ *
+ *   // Basic logging
+ *   log.debug('Processing wallet request');
+ *   log.info('Wallet created successfully');
+ *   log.warn('Deprecated API endpoint called');
+ *   log.error('Failed to create wallet');
+ *
+ *   // Logging with context (structured data)
+ *   log.info('Wallet synced', { walletId: '123', txCount: 45, duration: '2.3s' });
+ *   log.error('Sync failed', { walletId: '123', error: err.message });
+ *
+ *   // Using the default logger (prefix: 'APP')
+ *   import { logger } from '../utils/logger';
+ *   logger.info('Application started');
+ *
+ * OUTPUT FORMAT:
+ *   [ISO_TIMESTAMP] LEVEL [PREFIX] Message key=value key=value
+ *
+ *   Example:
+ *   [2024-01-15T10:30:45.123Z] INFO  [WALLETS] Wallet synced walletId=123 txCount=45
+ *
+ * BEST PRACTICES:
+ *   1. Create a module-specific logger with createLogger('MODULE_NAME')
+ *   2. Use UPPERCASE for module names (e.g., 'WALLETS', 'SYNC', 'AUTH')
+ *   3. Use debug() for detailed tracing during development
+ *   4. Use info() for normal operational events
+ *   5. Use warn() for issues that don't stop execution but need attention
+ *   6. Use error() for failures - always include error details in context
+ *   7. Include relevant IDs and metrics in context objects
+ *   8. Keep message strings concise; put details in context
+ *
+ * RUNTIME CONFIGURATION:
+ *   The log level can be changed at runtime using setLogLevel():
+ *     import { setLogLevel } from '../utils/logger';
+ *     setLogLevel('debug'); // Enable debug logging temporarily
+ *
+ * ================================================================================
+ */
+
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+}
+
+const LOG_LEVEL_MAP: Record<string, LogLevel> = {
+  debug: LogLevel.DEBUG,
+  info: LogLevel.INFO,
+  warn: LogLevel.WARN,
+  error: LogLevel.ERROR,
+};
+
+// Get log level from environment, default to INFO
+const getLogLevel = (): LogLevel => {
+  const envLevel = process.env.LOG_LEVEL?.toLowerCase();
+  return envLevel && LOG_LEVEL_MAP[envLevel] !== undefined
+    ? LOG_LEVEL_MAP[envLevel]
+    : LogLevel.INFO;
+};
+
+let currentLogLevel = getLogLevel();
+
+// Color codes for terminal output (ANSI escape codes)
+const colors = {
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m',
+};
+
+/**
+ * Get ISO timestamp for log entries
+ */
+const getTimestamp = (): string => {
+  return new Date().toISOString();
+};
+
+/**
+ * Format context object as key=value pairs
+ * Objects are JSON stringified, primitives are converted to strings
+ */
+const formatContext = (context?: Record<string, any>): string => {
+  if (!context || Object.keys(context).length === 0) return '';
+
+  const formatted = Object.entries(context)
+    .map(([key, value]) => {
+      if (value === undefined || value === null) {
+        return `${key}=null`;
+      }
+      if (typeof value === 'object') {
+        return `${key}=${JSON.stringify(value)}`;
+      }
+      return `${key}=${value}`;
+    })
+    .join(' ');
+
+  return ` ${colors.dim}${formatted}${colors.reset}`;
+};
+
+/**
+ * Core logging function - writes formatted log entry to stdout
+ */
+const log = (
+  level: LogLevel,
+  levelName: string,
+  color: string,
+  prefix: string,
+  message: string,
+  context?: Record<string, any>
+): void => {
+  // Skip if below current log level
+  if (level < currentLogLevel) return;
+
+  const timestamp = getTimestamp();
+  const contextStr = formatContext(context);
+
+  // Format: [timestamp] LEVEL [PREFIX] message context
+  console.log(
+    `${colors.gray}[${timestamp}]${colors.reset} ${color}${levelName}${colors.reset} ${colors.cyan}[${prefix}]${colors.reset} ${message}${contextStr}`
+  );
+};
+
+/**
+ * Logger interface returned by createLogger
+ */
+export interface Logger {
+  debug: (message: string, context?: Record<string, any>) => void;
+  info: (message: string, context?: Record<string, any>) => void;
+  warn: (message: string, context?: Record<string, any>) => void;
+  error: (message: string, context?: Record<string, any>) => void;
+}
+
+/**
+ * Create a logger instance with a specific prefix/module name
+ *
+ * @param prefix - Module identifier shown in log output (e.g., 'WALLETS', 'SYNC')
+ * @returns Logger instance with debug, info, warn, error methods
+ *
+ * @example
+ * const log = createLogger('WALLETS');
+ * log.info('Wallet created', { walletId: '123' });
+ */
+export const createLogger = (prefix: string): Logger => {
+  return {
+    debug: (message: string, context?: Record<string, any>) => {
+      log(LogLevel.DEBUG, 'DEBUG', colors.gray, prefix, message, context);
+    },
+
+    info: (message: string, context?: Record<string, any>) => {
+      log(LogLevel.INFO, 'INFO ', colors.blue, prefix, message, context);
+    },
+
+    warn: (message: string, context?: Record<string, any>) => {
+      log(LogLevel.WARN, 'WARN ', colors.yellow, prefix, message, context);
+    },
+
+    error: (message: string, context?: Record<string, any>) => {
+      log(LogLevel.ERROR, 'ERROR', colors.red, prefix, message, context);
+    },
+  };
+};
+
+/**
+ * Default logger instance with 'APP' prefix
+ * Use for general application-wide logging
+ */
+export const logger = createLogger('APP');
+
+/**
+ * Update log level at runtime
+ *
+ * @param level - New log level (LogLevel enum or string: 'debug', 'info', 'warn', 'error')
+ *
+ * @example
+ * setLogLevel('debug'); // Enable debug logging
+ * setLogLevel(LogLevel.WARN); // Only show warnings and errors
+ */
+export const setLogLevel = (level: LogLevel | string): void => {
+  if (typeof level === 'string') {
+    const parsedLevel = LOG_LEVEL_MAP[level.toLowerCase()];
+    if (parsedLevel !== undefined) {
+      currentLogLevel = parsedLevel;
+      logger.info('Log level changed', { level: level.toLowerCase() });
+    }
+  } else {
+    currentLogLevel = level;
+  }
+};
+
+/**
+ * Get current log level as string
+ *
+ * @returns Current log level name ('debug', 'info', 'warn', or 'error')
+ */
+export const getConfiguredLogLevel = (): string => {
+  const levelNames = Object.entries(LOG_LEVEL_MAP);
+  const current = levelNames.find(([_, v]) => v === currentLogLevel);
+  return current ? current[0] : 'info';
+};
+
+export default logger;

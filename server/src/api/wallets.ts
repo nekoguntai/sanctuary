@@ -9,8 +9,10 @@ import { authenticate } from '../middleware/auth';
 import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
 import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('WALLETS');
 
 // All routes require authentication
 router.use(authenticate);
@@ -26,7 +28,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json(wallets);
   } catch (error) {
-    console.error('[WALLETS] Get wallets error:', error);
+    log.error('[WALLETS] Get wallets error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallets',
@@ -91,7 +93,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(wallet);
   } catch (error: any) {
-    console.error('[WALLETS] Create wallet error:', error);
+    log.error('[WALLETS] Create wallet error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create wallet',
@@ -119,7 +121,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(wallet);
   } catch (error) {
-    console.error('[WALLETS] Get wallet error:', error);
+    log.error('[WALLETS] Get wallet error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallet',
@@ -144,7 +146,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     res.json(wallet);
   } catch (error: any) {
-    console.error('[WALLETS] Update wallet error:', error);
+    log.error('[WALLETS] Update wallet error', { error: String(error) });
 
     if (error.message.includes('owner')) {
       return res.status(403).json({
@@ -173,7 +175,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error: any) {
-    console.error('[WALLETS] Delete wallet error:', error);
+    log.error('[WALLETS] Delete wallet error', { error: String(error) });
 
     if (error.message.includes('owner')) {
       return res.status(403).json({
@@ -202,7 +204,7 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
 
     res.json(stats);
   } catch (error: any) {
-    console.error('[WALLETS] Get wallet stats error:', error);
+    log.error('[WALLETS] Get wallet stats error', { error: String(error) });
 
     if (error.message.includes('not found')) {
       return res.status(404).json({
@@ -214,6 +216,127 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallet stats',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/wallets/:id/export/labels
+ * Export wallet labels in BIP 329 format (JSON Lines)
+ * https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki
+ */
+router.get('/:id/export/labels', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { id } = req.params;
+
+    log.debug('Export labels request', { walletId: id, userId });
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    log.debug('Export labels wallet lookup', { found: !!wallet, walletName: wallet?.name });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    // Get all transactions with labels
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        walletId: id,
+        OR: [
+          { label: { not: null } },
+          { memo: { not: null } },
+          { transactionLabels: { some: {} } },
+        ],
+      },
+      include: {
+        transactionLabels: {
+          include: {
+            label: true,
+          },
+        },
+      },
+    });
+
+    // Get all addresses with labels
+    const addresses = await prisma.address.findMany({
+      where: {
+        walletId: id,
+        addressLabels: { some: {} },
+      },
+      include: {
+        addressLabels: {
+          include: {
+            label: true,
+          },
+        },
+      },
+    });
+
+    // Build BIP 329 JSON Lines
+    const lines: string[] = [];
+
+    // Transaction labels
+    for (const tx of transactions) {
+      // Combine label, memo, and tag labels
+      const labelParts: string[] = [];
+      if (tx.label) labelParts.push(tx.label);
+      if (tx.memo) labelParts.push(tx.memo);
+      for (const tl of tx.transactionLabels) {
+        if (tl.label.name) labelParts.push(tl.label.name);
+      }
+
+      if (labelParts.length > 0) {
+        lines.push(JSON.stringify({
+          type: 'tx',
+          ref: tx.txid,
+          label: labelParts.join(', '),
+        }));
+      }
+    }
+
+    // Address labels
+    for (const addr of addresses) {
+      const labelParts: string[] = [];
+      for (const al of addr.addressLabels) {
+        if (al.label.name) labelParts.push(al.label.name);
+      }
+
+      if (labelParts.length > 0) {
+        lines.push(JSON.stringify({
+          type: 'addr',
+          ref: addr.address,
+          label: labelParts.join(', '),
+          origin: addr.derivationPath || undefined,
+        }));
+      }
+    }
+
+    // Set response headers for file download
+    const filename = `${wallet.name.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
+    res.setHeader('Content-Type', 'application/jsonl');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Send as newline-separated JSON
+    res.send(lines.join('\n'));
+  } catch (error: any) {
+    log.error('[WALLETS] Export labels error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to export labels',
     });
   }
 });
@@ -339,7 +462,7 @@ router.get('/:id/export', async (req: Request, res: Response) => {
 
     res.json(exportData);
   } catch (error: any) {
-    console.error('[WALLETS] Export wallet error:', error);
+    log.error('[WALLETS] Export wallet error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to export wallet',
@@ -397,7 +520,7 @@ router.post('/:id/addresses', async (req: Request, res: Response) => {
 
     res.status(201).json({ address });
   } catch (error: any) {
-    console.error('[WALLETS] Generate address error:', error);
+    log.error('[WALLETS] Generate address error', { error: String(error) });
 
     if (error.message.includes('not found')) {
       return res.status(404).json({
@@ -434,7 +557,7 @@ router.post('/:id/devices', async (req: Request, res: Response) => {
 
     res.status(201).json({ message: 'Device added to wallet' });
   } catch (error: any) {
-    console.error('[WALLETS] Add device error:', error);
+    log.error('[WALLETS] Add device error', { error: String(error) });
 
     if (error.message.includes('not found') || error.message.includes('denied')) {
       return res.status(404).json({
@@ -521,7 +644,7 @@ router.post('/validate-xpub', async (req: Request, res: Response) => {
       accountPath: accountPathStr,
     });
   } catch (error: any) {
-    console.error('[WALLETS] Validate xpub error:', error);
+    log.error('[WALLETS] Validate xpub error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to validate xpub',
@@ -619,7 +742,7 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
       groupRole: wallet.groupRole,
     });
   } catch (error: any) {
-    console.error('[WALLETS] Share with group error:', error);
+    log.error('[WALLETS] Share with group error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to share wallet with group',
@@ -715,7 +838,7 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
       message: 'User added to wallet',
     });
   } catch (error: any) {
-    console.error('[WALLETS] Share with user error:', error);
+    log.error('[WALLETS] Share with user error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to share wallet with user',
@@ -779,7 +902,7 @@ router.delete('/:id/share/user/:targetUserId', async (req: Request, res: Respons
       message: 'User removed from wallet',
     });
   } catch (error: any) {
-    console.error('[WALLETS] Remove user error:', error);
+    log.error('[WALLETS] Remove user error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to remove user from wallet',
@@ -840,7 +963,7 @@ router.get('/:id/share', async (req: Request, res: Response) => {
       })),
     });
   } catch (error: any) {
-    console.error('[WALLETS] Get share info error:', error);
+    log.error('[WALLETS] Get share info error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get sharing info',
@@ -871,7 +994,7 @@ router.post('/import/validate', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error: any) {
-    console.error('[WALLETS] Import validate error:', error);
+    log.error('[WALLETS] Import validate error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to validate import data',
@@ -911,7 +1034,7 @@ router.post('/import', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (error: any) {
-    console.error('[WALLETS] Import wallet error:', error);
+    log.error('[WALLETS] Import wallet error', { error: String(error) });
 
     // Check for unique constraint violation (duplicate fingerprint)
     if (error.code === 'P2002' && error.meta?.target?.includes('fingerprint')) {

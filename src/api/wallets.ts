@@ -286,3 +286,31 @@ export interface WalletExport {
 export async function exportWallet(walletId: string): Promise<WalletExport> {
   return apiClient.get(`/wallets/${walletId}/export`);
 }
+
+/**
+ * Export wallet labels in BIP 329 format (JSON Lines)
+ * Downloads the file directly
+ */
+export async function exportLabelsBip329(walletId: string, walletName: string): Promise<void> {
+  const token = localStorage.getItem('sanctuary_token');
+  const response = await fetch(`/api/v1/wallets/${walletId}/export/labels`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to export labels (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}

@@ -6,8 +6,10 @@
 
 import { Router, Request, Response } from 'express';
 import { getPriceService } from '../services/price';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('PRICE');
 const priceService = getPriceService();
 
 /**
@@ -25,7 +27,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json(price);
   } catch (error: any) {
-    console.error('[PRICE] Get price error:', error);
+    log.error('[PRICE] Get price error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to fetch price',
@@ -53,7 +55,7 @@ router.get('/multiple', async (req: Request, res: Response) => {
 
     res.json(prices);
   } catch (error: any) {
-    console.error('[PRICE] Get multiple prices error:', error);
+    log.error('[PRICE] Get multiple prices error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch prices',
@@ -74,7 +76,7 @@ router.get('/from/:provider', async (req: Request, res: Response) => {
 
     res.json(price);
   } catch (error: any) {
-    console.error('[PRICE] Get price from provider error:', error);
+    log.error('[PRICE] Get price from provider error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to fetch price from provider',
@@ -105,7 +107,7 @@ router.post('/convert/to-fiat', async (req: Request, res: Response) => {
       currency,
     });
   } catch (error: any) {
-    console.error('[PRICE] Convert to fiat error:', error);
+    log.error('[PRICE] Convert to fiat error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to convert to fiat',
@@ -136,7 +138,7 @@ router.post('/convert/to-sats', async (req: Request, res: Response) => {
       sats,
     });
   } catch (error: any) {
-    console.error('[PRICE] Convert to sats error:', error);
+    log.error('[PRICE] Convert to sats error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to convert to sats',
@@ -177,7 +179,7 @@ router.get('/health', async (req: Request, res: Response) => {
     const health = await priceService.healthCheck();
     res.json(health);
   } catch (error) {
-    console.error('[PRICE] Health check error:', error);
+    log.error('[PRICE] Health check error', { error: String(error) });
     res.status(500).json({
       healthy: false,
       error: 'Failed to perform health check',
@@ -269,7 +271,7 @@ router.get('/historical', async (req: Request, res: Response) => {
       provider: 'coingecko',
     });
   } catch (error: any) {
-    console.error('[PRICE] Get historical price error:', error);
+    log.error('[PRICE] Get historical price error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to fetch historical price',
@@ -307,7 +309,7 @@ router.get('/history', async (req: Request, res: Response) => {
       provider: 'coingecko',
     });
   } catch (error: any) {
-    console.error('[PRICE] Get price history error:', error);
+    log.error('[PRICE] Get price history error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to fetch price history',

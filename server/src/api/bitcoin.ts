@@ -11,8 +11,10 @@ import * as utils from '../services/bitcoin/utils';
 import { getElectrumClient } from '../services/bitcoin/electrum';
 import * as mempool from '../services/bitcoin/mempool';
 import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('BITCOIN');
 
 /**
  * GET /api/v1/bitcoin/status
@@ -72,7 +74,7 @@ router.get('/fees', async (req: Request, res: Response) => {
       });
       return;
     } catch (mempoolError) {
-      console.warn('[BITCOIN] Mempool.space fee fetch failed, falling back to Electrum:', mempoolError);
+      log.warn('[BITCOIN] Mempool.space fee fetch failed, falling back to Electrum', { error: String(mempoolError) });
     }
 
     // Fallback to Electrum estimates
@@ -82,7 +84,7 @@ router.get('/fees', async (req: Request, res: Response) => {
       minimum: 1,
     });
   } catch (error) {
-    console.error('[BITCOIN] Get fees error:', error);
+    log.error('[BITCOIN] Get fees error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch fee estimates',
@@ -100,7 +102,7 @@ router.get('/mempool', async (req: Request, res: Response) => {
 
     res.json(data);
   } catch (error) {
-    console.error('[BITCOIN] Get mempool error:', error);
+    log.error('[BITCOIN] Get mempool error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch mempool data',
@@ -119,7 +121,7 @@ router.get('/blocks/recent', async (req: Request, res: Response) => {
 
     res.json(blocks);
   } catch (error) {
-    console.error('[BITCOIN] Get recent blocks error:', error);
+    log.error('[BITCOIN] Get recent blocks error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch recent blocks',
@@ -146,7 +148,7 @@ router.post('/address/validate', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[BITCOIN] Validate address error:', error);
+    log.error('[BITCOIN] Validate address error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to validate address',
@@ -179,7 +181,7 @@ router.get('/address/:address', async (req: Request, res: Response) => {
       type: utils.getAddressType(address),
     });
   } catch (error) {
-    console.error('[BITCOIN] Get address error:', error);
+    log.error('[BITCOIN] Get address error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch address info',
@@ -221,7 +223,7 @@ router.post('/wallet/:walletId/sync', authenticate, async (req: Request, res: Re
       ...result,
     });
   } catch (error) {
-    console.error('[BITCOIN] Sync wallet error:', error);
+    log.error('[BITCOIN] Sync wallet error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to sync wallet',
@@ -265,7 +267,7 @@ router.post('/address/:addressId/sync', authenticate, async (req: Request, res: 
       ...result,
     });
   } catch (error) {
-    console.error('[BITCOIN] Sync address error:', error);
+    log.error('[BITCOIN] Sync address error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to sync address',
@@ -285,7 +287,7 @@ router.get('/transaction/:txid', async (req: Request, res: Response) => {
 
     res.json(txDetails);
   } catch (error) {
-    console.error('[BITCOIN] Get transaction error:', error);
+    log.error('[BITCOIN] Get transaction error', { error: String(error) });
     res.status(404).json({
       error: 'Not Found',
       message: 'Transaction not found',
@@ -312,7 +314,7 @@ router.post('/broadcast', authenticate, async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error: any) {
-    console.error('[BITCOIN] Broadcast error:', error);
+    log.error('[BITCOIN] Broadcast error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',
@@ -354,7 +356,7 @@ router.post('/wallet/:walletId/update-confirmations', authenticate, async (req: 
       updated,
     });
   } catch (error) {
-    console.error('[BITCOIN] Update confirmations error:', error);
+    log.error('[BITCOIN] Update confirmations error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update confirmations',
@@ -387,7 +389,7 @@ router.get('/block/:height', async (req: Request, res: Response) => {
 
     res.json(header);
   } catch (error) {
-    console.error('[BITCOIN] Get block error:', error);
+    log.error('[BITCOIN] Get block error', { error: String(error) });
     res.status(404).json({
       error: 'Not Found',
       message: 'Block not found',
@@ -424,7 +426,7 @@ router.post('/utils/estimate-fee', async (req: Request, res: Response) => {
       feeRate,
     });
   } catch (error) {
-    console.error('[BITCOIN] Estimate fee error:', error);
+    log.error('[BITCOIN] Estimate fee error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to estimate fee',
@@ -443,7 +445,7 @@ router.get('/fees/advanced', async (req: Request, res: Response) => {
 
     res.json(fees);
   } catch (error) {
-    console.error('[BITCOIN] Get advanced fees error:', error);
+    log.error('[BITCOIN] Get advanced fees error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch advanced fee estimates',
@@ -464,7 +466,7 @@ router.post('/transaction/:txid/rbf-check', authenticate, async (req: Request, r
 
     res.json(result);
   } catch (error) {
-    console.error('[BITCOIN] RBF check error:', error);
+    log.error('[BITCOIN] RBF check error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to check RBF status',
@@ -526,7 +528,7 @@ router.post('/transaction/:txid/rbf', authenticate, async (req: Request, res: Re
       outputs: result.outputs,
     });
   } catch (error: any) {
-    console.error('[BITCOIN] RBF creation error:', error);
+    log.error('[BITCOIN] RBF creation error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create RBF transaction',
@@ -594,7 +596,7 @@ router.post('/transaction/cpfp', authenticate, async (req: Request, res: Respons
       effectiveFeeRate: result.effectiveFeeRate,
     });
   } catch (error: any) {
-    console.error('[BITCOIN] CPFP creation error:', error);
+    log.error('[BITCOIN] CPFP creation error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create CPFP transaction',
@@ -672,7 +674,7 @@ router.post('/transaction/batch', authenticate, async (req: Request, res: Respon
       recipientCount: recipients.length,
     });
   } catch (error: any) {
-    console.error('[BITCOIN] Batch transaction error:', error);
+    log.error('[BITCOIN] Batch transaction error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create batch transaction',
@@ -710,7 +712,7 @@ router.post('/utils/estimate-optimal-fee', async (req: Request, res: Response) =
 
     res.json(result);
   } catch (error) {
-    console.error('[BITCOIN] Optimal fee estimation error:', error);
+    log.error('[BITCOIN] Optimal fee estimation error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to estimate optimal fee',

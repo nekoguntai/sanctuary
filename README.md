@@ -319,7 +319,55 @@ ELECTRUM_SSL=true
 
 # Block explorer URL for transaction links
 EXPLORER_URL=https://mempool.space
+
+# Logging level (debug, info, warn, error)
+LOG_LEVEL=info
 ```
+
+### Logging
+
+Sanctuary uses a structured logging system with configurable verbosity levels:
+
+| Level | Description |
+|-------|-------------|
+| `debug` | Verbose output for development and troubleshooting (WebSocket events, sync details, API calls) |
+| `info` | Normal operation messages (startup, sync completion) — **default** |
+| `warn` | Warning conditions that don't prevent operation |
+| `error` | Error conditions that may affect functionality |
+
+**Setting the log level:**
+
+```bash
+# Verbose debugging (see all WebSocket subscriptions, sync operations, etc.)
+LOG_LEVEL=debug docker compose up
+
+# Normal operation (default)
+LOG_LEVEL=info docker compose up
+
+# Quiet mode (warnings and errors only)
+LOG_LEVEL=warn docker compose up
+
+# Minimal output (errors only)
+LOG_LEVEL=error docker compose up
+```
+
+**Log format:**
+```
+[2025-12-13T20:57:49.857Z] DEBUG [WS] WebSocket client authenticated: user-id-here
+[2025-12-13T20:57:49.921Z] INFO  [SYNC] Background sync service started
+[2025-12-13T20:57:50.123Z] WARN  [BLOCKCHAIN] Failed to get tx abc123
+[2025-12-13T20:57:50.456Z] ERROR [WALLETS] Database connection failed
+```
+
+**Module prefixes:**
+- `[WS]` — WebSocket server events
+- `[SYNC]` — Background sync service
+- `[BLOCKCHAIN]` — Blockchain/Electrum operations
+- `[WALLETS]` — Wallet API operations
+- `[NOTIFY]` — Real-time notification service
+- `[ADMIN]` — Admin API operations
+- `[BITCOIN]` — Bitcoin RPC/network operations
+- `[PRICE]` — Price feed service
 
 ### Enabling HTTPS
 

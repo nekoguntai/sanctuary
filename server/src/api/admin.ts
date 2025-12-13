@@ -9,8 +9,10 @@ import bcrypt from 'bcrypt';
 import prisma from '../models/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('ADMIN');
 
 /**
  * GET /api/v1/admin/node-config
@@ -48,7 +50,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
     });
   } catch (error) {
-    console.error('[ADMIN] Get node config error:', error);
+    log.error('[ADMIN] Get node config error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get node configuration',
@@ -62,7 +64,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    console.log('[ADMIN] PUT /node-config request body:', req.body);
+    log.info('[ADMIN] PUT /node-config request body:', req.body);
     const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl } = req.body;
 
     // Validation
@@ -121,7 +123,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       });
     }
 
-    console.log('[ADMIN] Node config updated:', { type, host, port });
+    log.info('[ADMIN] Node config updated:', { type, host, port });
 
     // Reset the active node client so it reconnects with new config
     resetNodeClient();
@@ -138,7 +140,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       message: 'Node configuration updated successfully. Backend will reconnect on next request.',
     });
   } catch (error) {
-    console.error('[ADMIN] Update node config error:', error);
+    log.error('[ADMIN] Update node config error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update node configuration',
@@ -198,7 +200,7 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
       });
     }
   } catch (error: any) {
-    console.error('[ADMIN] Test connection error:', error);
+    log.error('[ADMIN] Test connection error', { error: String(error) });
     res.status(500).json({
       success: false,
       error: 'Internal Server Error',
@@ -231,7 +233,7 @@ router.get('/users', authenticate, requireAdmin, async (req: Request, res: Respo
 
     res.json(users);
   } catch (error) {
-    console.error('[ADMIN] Get users error:', error);
+    log.error('[ADMIN] Get users error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get users',
@@ -315,11 +317,11 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
       },
     });
 
-    console.log('[ADMIN] User created:', { username, isAdmin: isAdmin === true });
+    log.info('[ADMIN] User created:', { username, isAdmin: isAdmin === true });
 
     res.status(201).json(user);
   } catch (error) {
-    console.error('[ADMIN] Create user error:', error);
+    log.error('[ADMIN] Create user error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to create user',
@@ -409,11 +411,11 @@ router.put('/users/:userId', authenticate, requireAdmin, async (req: Request, re
       },
     });
 
-    console.log('[ADMIN] User updated:', { userId, changes: Object.keys(updateData) });
+    log.info('[ADMIN] User updated:', { userId, changes: Object.keys(updateData) });
 
     res.json(user);
   } catch (error) {
-    console.error('[ADMIN] Update user error:', error);
+    log.error('[ADMIN] Update user error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update user',
@@ -455,11 +457,11 @@ router.delete('/users/:userId', authenticate, requireAdmin, async (req: Request,
       where: { id: userId },
     });
 
-    console.log('[ADMIN] User deleted:', { userId, username: existingUser.username });
+    log.info('[ADMIN] User deleted:', { userId, username: existingUser.username });
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error('[ADMIN] Delete user error:', error);
+    log.error('[ADMIN] Delete user error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete user',
@@ -510,7 +512,7 @@ router.get('/groups', authenticate, requireAdmin, async (req: Request, res: Resp
 
     res.json(result);
   } catch (error) {
-    console.error('[ADMIN] Get groups error:', error);
+    log.error('[ADMIN] Get groups error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get groups',
@@ -578,7 +580,7 @@ router.post('/groups', authenticate, requireAdmin, async (req: Request, res: Res
       },
     });
 
-    console.log('[ADMIN] Group created:', { name, id: group.id });
+    log.info('[ADMIN] Group created:', { name, id: group.id });
 
     res.status(201).json({
       id: completeGroup!.id,
@@ -593,7 +595,7 @@ router.post('/groups', authenticate, requireAdmin, async (req: Request, res: Res
       })),
     });
   } catch (error) {
-    console.error('[ADMIN] Create group error:', error);
+    log.error('[ADMIN] Create group error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to create group',
@@ -687,7 +689,7 @@ router.put('/groups/:groupId', authenticate, requireAdmin, async (req: Request, 
       },
     });
 
-    console.log('[ADMIN] Group updated:', { groupId, name: group!.name });
+    log.info('[ADMIN] Group updated:', { groupId, name: group!.name });
 
     res.json({
       id: group!.id,
@@ -703,7 +705,7 @@ router.put('/groups/:groupId', authenticate, requireAdmin, async (req: Request, 
       })),
     });
   } catch (error) {
-    console.error('[ADMIN] Update group error:', error);
+    log.error('[ADMIN] Update group error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update group',
@@ -736,11 +738,11 @@ router.delete('/groups/:groupId', authenticate, requireAdmin, async (req: Reques
       where: { id: groupId },
     });
 
-    console.log('[ADMIN] Group deleted:', { groupId, name: existingGroup.name });
+    log.info('[ADMIN] Group deleted:', { groupId, name: existingGroup.name });
 
     res.json({ message: 'Group deleted successfully' });
   } catch (error) {
-    console.error('[ADMIN] Delete group error:', error);
+    log.error('[ADMIN] Delete group error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete group',
@@ -812,7 +814,7 @@ router.post('/groups/:groupId/members', authenticate, requireAdmin, async (req: 
       },
     });
 
-    console.log('[ADMIN] Member added to group:', { groupId, userId, role: membership.role });
+    log.info('[ADMIN] Member added to group:', { groupId, userId, role: membership.role });
 
     res.status(201).json({
       userId,
@@ -820,7 +822,7 @@ router.post('/groups/:groupId/members', authenticate, requireAdmin, async (req: 
       role: membership.role,
     });
   } catch (error) {
-    console.error('[ADMIN] Add group member error:', error);
+    log.error('[ADMIN] Add group member error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to add member to group',
@@ -857,11 +859,11 @@ router.delete('/groups/:groupId/members/:userId', authenticate, requireAdmin, as
       },
     });
 
-    console.log('[ADMIN] Member removed from group:', { groupId, userId });
+    log.info('[ADMIN] Member removed from group:', { groupId, userId });
 
     res.json({ message: 'Member removed from group successfully' });
   } catch (error) {
-    console.error('[ADMIN] Remove group member error:', error);
+    log.error('[ADMIN] Remove group member error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to remove member from group',
@@ -897,7 +899,7 @@ router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       ...settingsObj,
     });
   } catch (error) {
-    console.error('[ADMIN] Get settings error:', error);
+    log.error('[ADMIN] Get settings error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get system settings',
@@ -922,7 +924,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       });
     }
 
-    console.log('[ADMIN] Settings updated:', Object.keys(updates));
+    log.info('[ADMIN] Settings updated:', Object.keys(updates));
 
     // Return updated settings
     const settings = await prisma.systemSetting.findMany();
@@ -939,7 +941,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
 
     res.json(settingsObj);
   } catch (error) {
-    console.error('[ADMIN] Update settings error:', error);
+    log.error('[ADMIN] Update settings error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update system settings',

@@ -8,6 +8,9 @@
 import { getNodeClient } from './nodeClient';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('BLOCKCHAIN');
 
 // Cache for block timestamps to avoid repeated lookups
 const blockTimestampCache = new Map<number, Date>();
@@ -47,7 +50,7 @@ async function getBlockTimestamp(height: number): Promise<Date | null> {
     blockTimestampCache.set(height, date);
     return date;
   } catch (error) {
-    console.error(`[BLOCKCHAIN] Failed to get timestamp for block ${height}:`, error);
+    log.warn(`[BLOCKCHAIN] Failed to get timestamp for block ${height}`, { error: String(error) });
     return null;
   }
 }
@@ -135,7 +138,7 @@ export async function syncAddress(addressId: string): Promise<{
             }
           } catch (e) {
             // Skip if we can't look up the prev tx
-            console.error(`[BLOCKCHAIN] Failed to look up input tx ${input.txid}:`, e);
+            log.warn(`[BLOCKCHAIN] Failed to look up input tx ${input.txid}`, { error: String(e) });
           }
         }
 
@@ -276,7 +279,7 @@ export async function syncAddress(addressId: string): Promise<{
       utxos: utxoCount,
     };
   } catch (error) {
-    console.error('[BLOCKCHAIN] Sync address error:', error);
+    log.error('[BLOCKCHAIN] Sync address error', { error: String(error) });
     throw error;
   }
 }
@@ -306,7 +309,7 @@ export async function syncWallet(walletId: string): Promise<{
   const addressMap = new Map(addresses.map(a => [a.address, a]));
 
   // PHASE 1: Batch fetch all address histories in parallel
-  console.log(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses...`);
+  log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses...`);
   const HISTORY_BATCH_SIZE = 10; // Concurrent history fetches
   const historyResults: Map<string, Array<{ tx_hash: string; height: number }>> = new Map();
 
@@ -318,7 +321,7 @@ export async function syncWallet(walletId: string): Promise<{
           const history = await client.getAddressHistory(addr.address);
           return { address: addr.address, history };
         } catch (error) {
-          console.error(`[BLOCKCHAIN] Failed to get history for ${addr.address}:`, error);
+          log.warn(`[BLOCKCHAIN] Failed to get history for ${addr.address}`, { error: String(error) });
           return { address: addr.address, history: [] };
         }
       })
@@ -349,7 +352,7 @@ export async function syncWallet(walletId: string): Promise<{
 
   // Filter to only new txids
   const newTxids = Array.from(allTxids).filter(txid => !existingTxidSet.has(txid));
-  console.log(`[BLOCKCHAIN] Found ${newTxids.length} new transactions to process (${existingTxidSet.size} already exist)`);
+  log.debug(`[BLOCKCHAIN] Found ${newTxids.length} new transactions to process (${existingTxidSet.size} already exist)`);
 
   // PHASE 3: Batch fetch transaction details for new txids
   const txDetailsCache: Map<string, any> = new Map();
@@ -363,7 +366,7 @@ export async function syncWallet(walletId: string): Promise<{
           const details = await client.getTransaction(txid, true);
           return { txid, details };
         } catch (error) {
-          console.error(`[BLOCKCHAIN] Failed to get tx ${txid}:`, error);
+          log.warn(`[BLOCKCHAIN] Failed to get tx ${txid}`, { error: String(error) });
           return { txid, details: null };
         }
       })
@@ -537,7 +540,7 @@ export async function syncWallet(walletId: string): Promise<{
     }
 
     const uniqueTxArray = Array.from(uniqueTxs.values());
-    console.log(`[BLOCKCHAIN] Inserting ${uniqueTxArray.length} transactions...`);
+    log.debug(`[BLOCKCHAIN] Inserting ${uniqueTxArray.length} transactions...`);
 
     // Use createMany for bulk insert (note: doesn't return created records)
     await prisma.transaction.createMany({
@@ -548,7 +551,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses in parallel
-  console.log(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses...`);
+  log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses...`);
   const utxoResults: Array<{ address: string; utxos: any[] }> = [];
 
   for (let i = 0; i < addresses.length; i += HISTORY_BATCH_SIZE) {
@@ -559,7 +562,7 @@ export async function syncWallet(walletId: string): Promise<{
           const utxos = await client.getAddressUTXOs(addr.address);
           return { address: addr.address, utxos };
         } catch (error) {
-          console.error(`[BLOCKCHAIN] Failed to get UTXOs for ${addr.address}:`, error);
+          log.warn(`[BLOCKCHAIN] Failed to get UTXOs for ${addr.address}`, { error: String(error) });
           return { address: addr.address, utxos: [] };
         }
       })
@@ -588,7 +591,7 @@ export async function syncWallet(walletId: string): Promise<{
 
   // Filter to only new UTXOs
   const newUtxoKeys = Array.from(allUtxoKeys).filter(key => !existingUtxoSet.has(key));
-  console.log(`[BLOCKCHAIN] Found ${newUtxoKeys.length} new UTXOs (${existingUtxoSet.size} already exist)`);
+  log.debug(`[BLOCKCHAIN] Found ${newUtxoKeys.length} new UTXOs (${existingUtxoSet.size} already exist)`);
 
   // PHASE 8: Fetch tx details for new UTXOs (use cache when available)
   const utxosToCreate: any[] = [];
@@ -604,7 +607,7 @@ export async function syncWallet(walletId: string): Promise<{
         txDetails = await client.getTransaction(utxo.tx_hash);
         txDetailsCache.set(utxo.tx_hash, txDetails);
       } catch (error) {
-        console.error(`[BLOCKCHAIN] Failed to get tx ${utxo.tx_hash} for UTXO:`, error);
+        log.warn(`[BLOCKCHAIN] Failed to get tx ${utxo.tx_hash} for UTXO`, { error: String(error) });
         continue;
       }
     }
@@ -630,7 +633,7 @@ export async function syncWallet(walletId: string): Promise<{
   // PHASE 9: Batch insert UTXOs
   let totalUtxos = 0;
   if (utxosToCreate.length > 0) {
-    console.log(`[BLOCKCHAIN] Inserting ${utxosToCreate.length} UTXOs...`);
+    log.debug(`[BLOCKCHAIN] Inserting ${utxosToCreate.length} UTXOs...`);
     await prisma.uTXO.createMany({
       data: utxosToCreate,
       skipDuplicates: true,
@@ -658,7 +661,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   const elapsed = Date.now() - startTime;
-  console.log(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${totalTransactions} tx, ${totalUtxos} utxos`);
+  log.debug(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${totalTransactions} tx, ${totalUtxos} utxos`);
 
   return {
     addresses: addresses.length,
@@ -687,7 +690,7 @@ async function getConfirmations(blockHeight: number): Promise<number> {
     const currentHeight = await getBlockHeight();
     return Math.max(0, currentHeight - blockHeight + 1);
   } catch (error) {
-    console.error('[BLOCKCHAIN] Failed to get confirmations:', error);
+    log.error('[BLOCKCHAIN] Failed to get confirmations', { error: String(error) });
     return 0;
   }
 }
@@ -740,7 +743,7 @@ export async function getFeeEstimates(): Promise<{
       economy: Math.max(1, economy),
     };
   } catch (error) {
-    console.error('[BLOCKCHAIN] Failed to get fee estimates:', error);
+    log.error('[BLOCKCHAIN] Failed to get fee estimates', { error: String(error) });
     // Return sensible defaults if fee estimation fails
     return {
       fastest: 20,
@@ -895,7 +898,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     return 0;
   }
 
-  console.log(`[BLOCKCHAIN] Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
+  log.debug(`[BLOCKCHAIN] Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
 
   const currentHeight = await getBlockHeight();
 
@@ -912,7 +915,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
           const details = await client.getTransaction(txid, true);
           return { txid, details };
         } catch (error) {
-          console.error(`[BLOCKCHAIN] Failed to fetch tx ${txid}:`, error);
+          log.warn(`[BLOCKCHAIN] Failed to fetch tx ${txid}`, { error: String(error) });
           return { txid, details: null };
         }
       })
@@ -1002,7 +1005,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
                     totalInputValue += Math.round(prevTx.vout[input.vout].value * 100000000);
                   }
                 } catch (e) {
-                  console.error(`[BLOCKCHAIN] Could not fetch input tx ${input.txid}:`, e);
+                  log.warn(`[BLOCKCHAIN] Could not fetch input tx ${input.txid}`, { error: String(e) });
                 }
               }
             }
@@ -1016,7 +1019,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
             }
           }
         } catch (feeError) {
-          console.error(`[BLOCKCHAIN] Could not calculate fee for tx ${tx.txid}:`, feeError);
+          log.warn(`[BLOCKCHAIN] Could not calculate fee for tx ${tx.txid}`, { error: String(feeError) });
         }
       }
 
@@ -1051,7 +1054,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
                     }
                   }
                 } catch (e) {
-                  console.error(`[BLOCKCHAIN] Could not fetch input tx for sender address:`, e);
+                  log.warn(`[BLOCKCHAIN] Could not fetch input tx for sender address`, { error: String(e) });
                 }
               }
             }
@@ -1070,7 +1073,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
             }
           }
         } catch (counterpartyError) {
-          console.error(`[BLOCKCHAIN] Could not get counterparty address for tx ${tx.txid}:`, counterpartyError);
+          log.warn(`[BLOCKCHAIN] Could not get counterparty address for tx ${tx.txid}`, { error: String(counterpartyError) });
         }
       }
 
@@ -1126,13 +1129,13 @@ export async function populateMissingTransactionFields(walletId: string): Promis
         pendingUpdates.push({ id: tx.id, data: updates });
       }
     } catch (error) {
-      console.error(`[BLOCKCHAIN] Failed to populate fields for tx ${tx.txid}:`, error);
+      log.warn(`[BLOCKCHAIN] Failed to populate fields for tx ${tx.txid}`, { error: String(error) });
     }
   }
 
   // PHASE 2: Batch apply all updates
   if (pendingUpdates.length > 0) {
-    console.log(`[BLOCKCHAIN] Applying ${pendingUpdates.length} transaction updates...`);
+    log.debug(`[BLOCKCHAIN] Applying ${pendingUpdates.length} transaction updates...`);
     await prisma.$transaction(
       pendingUpdates.map(u =>
         prisma.transaction.update({
@@ -1144,6 +1147,6 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     updated = pendingUpdates.length;
   }
 
-  console.log(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions`);
+  log.debug(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions`);
   return updated;
 }

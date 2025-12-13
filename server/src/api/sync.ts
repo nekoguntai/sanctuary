@@ -8,8 +8,10 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { getSyncService } from '../services/syncService';
 import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('SYNC_API');
 
 // All routes require authentication
 router.use(authenticate);
@@ -52,7 +54,7 @@ router.post('/wallet/:walletId', async (req: Request, res: Response) => {
       error: result.error,
     });
   } catch (error: any) {
-    console.error('[SYNC API] Sync wallet error:', error);
+    log.error('[SYNC_API] Sync wallet error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to sync wallet',
@@ -99,7 +101,7 @@ router.post('/queue/:walletId', async (req: Request, res: Response) => {
       syncInProgress: status.syncInProgress,
     });
   } catch (error: any) {
-    console.error('[SYNC API] Queue sync error:', error);
+    log.error('[SYNC_API] Queue sync error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to queue sync',
@@ -139,7 +141,7 @@ router.get('/status/:walletId', async (req: Request, res: Response) => {
 
     res.json(status);
   } catch (error: any) {
-    console.error('[SYNC API] Get sync status error:', error);
+    log.error('[SYNC_API] Get sync status error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to get sync status',
@@ -164,7 +166,7 @@ router.post('/user', async (req: Request, res: Response) => {
       message: 'All wallets queued for sync',
     });
   } catch (error: any) {
-    console.error('[SYNC API] Queue user wallets error:', error);
+    log.error('[SYNC_API] Queue user wallets error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to queue wallets',
@@ -210,7 +212,7 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
       message: 'Sync state reset',
     });
   } catch (error: any) {
-    console.error('[SYNC API] Reset sync error:', error);
+    log.error('[SYNC_API] Reset sync error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to reset sync state',
@@ -285,7 +287,7 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
       deletedTransactions: deletedTxs.count,
     });
   } catch (error: any) {
-    console.error('[SYNC API] Resync error:', error);
+    log.error('[SYNC_API] Resync error:', error);
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to resync wallet',

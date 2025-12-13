@@ -13,6 +13,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { verifyToken } from '../utils/jwt';
 import { Server } from 'http';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('WS');
 
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -46,7 +49,7 @@ export class SanctauryWebSocketServer {
     this.wss.on('connection', this.handleConnection.bind(this));
     this.startHeartbeat();
 
-    console.log('WebSocket server initialized on /ws');
+    log.debug('WebSocket server initialized on /ws');
   }
 
   /**
@@ -64,14 +67,14 @@ export class SanctauryWebSocketServer {
       try {
         const decoded = verifyToken(token);
         client.userId = decoded.userId;
-        console.log(`WebSocket client authenticated: ${client.userId}`);
+        log.debug(`WebSocket client authenticated: ${client.userId}`);
       } catch (err) {
-        console.error('WebSocket authentication failed:', err);
+        log.error('WebSocket authentication failed', { error: String(err) });
         client.close(1008, 'Authentication failed');
         return;
       }
     } else {
-      console.log('WebSocket client connected without authentication');
+      log.debug('WebSocket client connected without authentication');
       // Allow unauthenticated connections but limit functionality
     }
 
@@ -94,7 +97,7 @@ export class SanctauryWebSocketServer {
 
     // Setup error handler
     client.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      log.error('WebSocket error:', error);
       this.handleDisconnect(client);
     });
 
@@ -147,10 +150,10 @@ export class SanctauryWebSocketServer {
           break;
 
         default:
-          console.warn('Unknown message type:', message.type);
+          log.warn('Unknown message type', { type: message.type });
       }
     } catch (err) {
-      console.error('Failed to parse WebSocket message:', err);
+      log.error('Failed to parse WebSocket message', { error: String(err) });
     }
   }
 
@@ -159,7 +162,7 @@ export class SanctauryWebSocketServer {
    */
   private handleSubscribe(client: AuthenticatedWebSocket, data: any) {
     if (!data?.channel) {
-      console.warn('Subscribe request missing channel');
+      log.warn('Subscribe request missing channel');
       return;
     }
 
@@ -182,7 +185,7 @@ export class SanctauryWebSocketServer {
     }
     this.subscriptions.get(channel)!.add(client);
 
-    console.log(`Client subscribed to ${channel}`);
+    log.debug(`Client subscribed to ${channel}`);
 
     this.sendToClient(client, {
       type: 'subscribed',
@@ -207,7 +210,7 @@ export class SanctauryWebSocketServer {
       }
     }
 
-    console.log(`Client unsubscribed from ${channel}`);
+    log.debug(`Client unsubscribed from ${channel}`);
 
     this.sendToClient(client, {
       type: 'unsubscribed',
@@ -229,7 +232,7 @@ export class SanctauryWebSocketServer {
       }
     }
 
-    console.log('WebSocket client disconnected');
+    log.debug('WebSocket client disconnected');
   }
 
   /**
@@ -301,7 +304,7 @@ export class SanctauryWebSocketServer {
     const interval = setInterval(() => {
       for (const client of this.clients) {
         if (!client.isAlive) {
-          console.log('Terminating dead connection');
+          log.debug('Terminating dead connection');
           client.terminate();
           this.handleDisconnect(client);
           continue;

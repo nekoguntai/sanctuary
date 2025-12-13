@@ -207,6 +207,7 @@ export const Dashboard: React.FC = () => {
               const formattedTxs: Transaction[] = txs.map(tx => {
                 // Parse amount - API returns positive for receives, we need to handle based on type
                 const rawAmount = typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount;
+                // Sent = negative, Consolidation = positive (just moving funds), Received = positive
                 const amount = tx.type === 'sent' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
 
                 return {
@@ -220,6 +221,7 @@ export const Dashboard: React.FC = () => {
                   blockHeight: tx.blockHeight,
                   timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
                   label: tx.label || '',
+                  type: tx.type, // Include type for consolidation detection
                 };
               });
               allTransactions.push(...formattedTxs);

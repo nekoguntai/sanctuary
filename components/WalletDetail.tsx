@@ -425,6 +425,30 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
+  // Full resync - clears transactions and re-syncs from blockchain
+  const handleFullResync = async () => {
+    if (!id) return;
+
+    if (!confirm('This will clear all transaction history and re-sync from the blockchain. This is useful if transactions are missing. Continue?')) {
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      const result = await syncApi.resyncWallet(id);
+      alert(result.message);
+      // Reload wallet data after resync is queued
+      await fetchData();
+    } catch (err) {
+      console.error('Failed to resync wallet:', err);
+      if (err instanceof ApiError) {
+        alert(`Resync failed: ${err.message}`);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Queue wallet for background sync when page loads
   useEffect(() => {
     if (id && user) {
@@ -1307,6 +1331,43 @@ export const WalletDetail: React.FC = () => {
                 <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
               </div>
             )}
+
+            {/* Sync Options */}
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+              <h3 className="text-lg font-medium mb-4 text-sanctuary-900 dark:text-sanctuary-100">Sync Options</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Sync Now</p>
+                    <p className="text-xs text-sanctuary-500">Fetch latest transactions from the blockchain</p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleSync}
+                    disabled={syncing}
+                  >
+                    {syncing ? 'Syncing...' : 'Sync'}
+                  </Button>
+                </div>
+                <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Full Resync</p>
+                      <p className="text-xs text-sanctuary-500">Clear all transactions and re-sync from blockchain. Use if transactions are missing.</p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleFullResync}
+                      disabled={syncing}
+                    >
+                      {syncing ? 'Syncing...' : 'Resync'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Danger Zone - only show if user is owner */}
             {wallet.userRole === 'owner' && (

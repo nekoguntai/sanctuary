@@ -126,6 +126,7 @@ export interface Transaction {
   counterpartyAddress?: string; // Sender (for receives) or recipient (for sends)
   inputs?: TransactionInput[];
   outputs?: TransactionOutput[];
+  type?: 'sent' | 'received' | 'consolidation'; // Transaction type from sync
 }
 
 export interface Quorum {

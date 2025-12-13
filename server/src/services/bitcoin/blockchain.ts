@@ -95,14 +95,6 @@ export async function syncAddress(addressId: string): Promise<{
 
     // Process each transaction
     for (const item of history) {
-      const existingTx = await prisma.transaction.findUnique({
-        where: { txid: item.tx_hash },
-      });
-
-      if (existingTx) {
-        continue;
-      }
-
       // Fetch full transaction details
       const txDetails = await client.getTransaction(item.tx_hash);
 
@@ -165,27 +157,34 @@ export async function syncAddress(addressId: string): Promise<{
       }
 
       if (isReceived) {
-        const amount = outputs
-          .filter((out: any) =>
-            outputMatchesAddress(out, addressRecord.address)
-          )
-          .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
-
-        // Create receive transaction record
-        await prisma.transaction.create({
-          data: {
-            txid: item.tx_hash,
-            walletId: addressRecord.walletId,
-            addressId: addressRecord.id,
-            type: 'received',
-            amount: BigInt(amount),
-            confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
-            blockHeight: item.height > 0 ? item.height : null,
-            blockTime,
-          },
+        // Check if we already recorded this as a received tx
+        const existingReceivedTx = await prisma.transaction.findFirst({
+          where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'received' },
         });
 
-        transactionCount++;
+        if (!existingReceivedTx) {
+          const amount = outputs
+            .filter((out: any) =>
+              outputMatchesAddress(out, addressRecord.address)
+            )
+            .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+
+          // Create receive transaction record
+          await prisma.transaction.create({
+            data: {
+              txid: item.tx_hash,
+              walletId: addressRecord.walletId,
+              addressId: addressRecord.id,
+              type: 'received',
+              amount: BigInt(amount),
+              confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+              blockHeight: item.height > 0 ? item.height : null,
+              blockTime,
+            },
+          });
+
+          transactionCount++;
+        }
       }
 
       // Record sent transaction if our wallet addresses were in inputs
@@ -419,8 +418,93 @@ export async function syncWallet(walletId: string): Promise<{
 
       const confirmations = item.height > 0 ? Math.max(0, currentHeight - item.height + 1) : 0;
 
-      // Create receive transaction if not already exists
-      if (isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
+      // First, check if wallet sent funds (any wallet address in inputs)
+      // This is needed to detect consolidations BEFORE creating received records
+      let isSent = false;
+      for (const input of inputs) {
+        if (input.coinbase) continue;
+
+        let inputAddr: string | undefined;
+        if (input.prevout && input.prevout.scriptPubKey) {
+          inputAddr = input.prevout.scriptPubKey.address ||
+            (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+        } else if (input.txid && input.vout !== undefined) {
+          // Electrum doesn't provide prevout, so look up the previous transaction
+          // First check if we have it cached
+          const prevTx = txDetailsCache.get(input.txid);
+          if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+            const prevOutput = prevTx.vout[input.vout];
+            inputAddr = prevOutput.scriptPubKey?.address ||
+              (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+          } else {
+            // Need to fetch the previous transaction
+            try {
+              const fetchedPrevTx = await client.getTransaction(input.txid);
+              if (fetchedPrevTx && fetchedPrevTx.vout && fetchedPrevTx.vout[input.vout]) {
+                const prevOutput = fetchedPrevTx.vout[input.vout];
+                inputAddr = prevOutput.scriptPubKey?.address ||
+                  (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+                // Cache it for future use
+                txDetailsCache.set(input.txid, fetchedPrevTx);
+              }
+            } catch (e) {
+              // Skip if we can't look up the prev tx
+            }
+          }
+        }
+
+        if (inputAddr && walletAddressSet.has(inputAddr)) {
+          isSent = true;
+          break;
+        }
+      }
+
+      // Calculate output destinations
+      let totalToExternal = 0;
+      let totalToWallet = 0;
+      for (const out of outputs) {
+        const outAddr = out.scriptPubKey?.address ||
+          (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
+        if (outAddr && !walletAddressSet.has(outAddr)) {
+          totalToExternal += Math.round(out.value * 100000000);
+        } else if (outAddr) {
+          totalToWallet += Math.round(out.value * 100000000);
+        }
+      }
+
+      // Determine transaction type and create appropriate record
+      // Priority: consolidation > sent > received
+      // A consolidation is when funds move within wallet (inputs from wallet, all outputs to wallet)
+      const isConsolidation = isSent && totalToExternal === 0 && totalToWallet > 0;
+
+      if (isConsolidation && !existingTxMap.has(`${item.tx_hash}:consolidation`)) {
+        // Consolidation - funds moved within wallet
+        transactionsToCreate.push({
+          txid: item.tx_hash,
+          walletId,
+          addressId: addressRecord.id,
+          type: 'consolidation',
+          amount: BigInt(totalToWallet),
+          confirmations,
+          blockHeight: item.height > 0 ? item.height : null,
+          blockTime,
+        });
+        existingTxMap.set(`${item.tx_hash}:consolidation`, true);
+      } else if (isSent && totalToExternal > 0 && !existingTxMap.has(`${item.tx_hash}:sent`)) {
+        // Regular send to external address
+        transactionsToCreate.push({
+          txid: item.tx_hash,
+          walletId,
+          addressId: addressRecord.id,
+          type: 'sent',
+          amount: BigInt(totalToExternal),
+          confirmations,
+          blockHeight: item.height > 0 ? item.height : null,
+          blockTime,
+        });
+        existingTxMap.set(`${item.tx_hash}:sent`, true);
+      } else if (!isSent && isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
+        // Received from external - only if NOT sent from wallet (not consolidation)
         const amount = outputs
           .filter((out: any) => outputMatchesAddress(out, addressStr))
           .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
@@ -436,49 +520,6 @@ export async function syncWallet(walletId: string): Promise<{
           blockTime,
         });
         existingTxMap.set(`${item.tx_hash}:received`, true);
-      }
-
-      // Check if wallet sent funds (any wallet address in inputs)
-      let isSent = false;
-      for (const input of inputs) {
-        if (input.coinbase) continue;
-
-        let inputAddr: string | undefined;
-        if (input.prevout && input.prevout.scriptPubKey) {
-          inputAddr = input.prevout.scriptPubKey.address ||
-            (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
-        }
-
-        if (inputAddr && walletAddressSet.has(inputAddr)) {
-          isSent = true;
-          break;
-        }
-      }
-
-      // Create sent transaction if not already exists
-      if (isSent && !existingTxMap.has(`${item.tx_hash}:sent`)) {
-        let totalToExternal = 0;
-        for (const out of outputs) {
-          const outAddr = out.scriptPubKey?.address ||
-            (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
-          if (outAddr && !walletAddressSet.has(outAddr)) {
-            totalToExternal += Math.round(out.value * 100000000);
-          }
-        }
-
-        if (totalToExternal > 0) {
-          transactionsToCreate.push({
-            txid: item.tx_hash,
-            walletId,
-            addressId: addressRecord.id,
-            type: 'sent',
-            amount: BigInt(totalToExternal),
-            confirmations,
-            blockHeight: item.height > 0 ? item.height : null,
-            blockTime,
-          });
-          existingTxMap.set(`${item.tx_hash}:sent`, true);
-        }
       }
     }
   }

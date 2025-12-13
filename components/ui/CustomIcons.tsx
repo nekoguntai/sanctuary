@@ -1,6 +1,6 @@
 import React from 'react';
 import { HardwareDevice, WalletType } from '../../types';
-import { Usb } from 'lucide-react';
+import { Key } from 'lucide-react';
 
 interface IconProps {
   className?: string;
@@ -249,5 +249,5 @@ export const getDeviceIcon = (type: HardwareDevice | string, className?: string)
     return <KeystoneIcon className={className} />;
   }
   // Default for generic or unknown devices
-  return <Usb className={className} />;
+  return <Key className={className} />;
 };

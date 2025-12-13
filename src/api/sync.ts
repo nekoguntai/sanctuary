@@ -61,3 +61,17 @@ export async function queueUserWallets(
 ): Promise<{ success: boolean; message: string }> {
   return apiClient.post<{ success: boolean; message: string }>('/sync/user', { priority });
 }
+
+export interface ResyncResult {
+  success: boolean;
+  message: string;
+  deletedTransactions: number;
+}
+
+/**
+ * Full resync - clears all transactions and re-syncs from blockchain
+ * Use this to fix missing transactions (e.g., sent transactions)
+ */
+export async function resyncWallet(walletId: string): Promise<ResyncResult> {
+  return apiClient.post<ResyncResult>(`/sync/resync/${walletId}`);
+}

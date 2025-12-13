@@ -218,4 +218,79 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/v1/sync/resync/:walletId
+ * Full resync - clears all transactions and re-syncs from blockchain
+ * Use this to fix missing transactions (e.g., sent transactions)
+ */
+router.post('/resync/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+
+    // Check user has access to wallet
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    // Check if sync is already in progress
+    if (wallet.syncInProgress) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Sync already in progress for this wallet',
+      });
+    }
+
+    // Clear all transactions for this wallet
+    const deletedTxs = await prisma.transaction.deleteMany({
+      where: { walletId },
+    });
+
+    // Reset address used flags so they get properly marked during sync
+    await prisma.address.updateMany({
+      where: { walletId },
+      data: { used: false },
+    });
+
+    // Reset the wallet sync state
+    await prisma.wallet.update({
+      where: { id: walletId },
+      data: {
+        syncInProgress: false,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+      },
+    });
+
+    // Trigger immediate high-priority sync
+    const syncService = getSyncService();
+    syncService.queueSync(walletId, 'high');
+
+    res.json({
+      success: true,
+      message: `Cleared ${deletedTxs.count} transactions. Full resync queued.`,
+      deletedTransactions: deletedTxs.count,
+    });
+  } catch (error: any) {
+    console.error('[SYNC API] Resync error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to resync wallet',
+    });
+  }
+});
+
 export default router;

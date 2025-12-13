@@ -146,13 +146,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           {transactions.map((tx) => {
             const isReceive = tx.amount > 0;
             // Check if this is a consolidation transaction:
-            // Case 1: Sent transaction where recipient is a wallet address
-            // Case 2: Received transaction where sender (counterpartyAddress) is also a wallet address
-            //         (This happens when sync detects a self-send as "received")
+            // Case 1: Transaction type is explicitly 'consolidation' (from sync)
+            // Case 2: Sent transaction where recipient is a wallet address
+            // Case 3: Received transaction where sender (counterpartyAddress) is also a wallet address
             const isConsolidation = (
-              // Case 1: Sent to self
+              // Case 1: Explicitly marked as consolidation by sync
+              tx.type === 'consolidation' ||
+              // Case 2: Sent to self
               (tx.amount < 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress)) ||
-              // Case 2: Received from self (sync recorded receive side of consolidation)
+              // Case 3: Received from self (sync recorded receive side of consolidation)
               (tx.amount > 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress))
             );
             const isHighlighted = highlightedTxId === tx.id;

@@ -869,4 +869,82 @@ router.delete('/groups/:groupId/members/:userId', authenticate, requireAdmin, as
   }
 });
 
+// ========================================
+// SYSTEM SETTINGS
+// ========================================
+
+/**
+ * GET /api/v1/admin/settings
+ * Get all system settings (admin only)
+ */
+router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const settings = await prisma.systemSetting.findMany();
+
+    // Convert to key-value object with parsed JSON values
+    const settingsObj: Record<string, any> = {};
+    for (const setting of settings) {
+      try {
+        settingsObj[setting.key] = JSON.parse(setting.value);
+      } catch {
+        settingsObj[setting.key] = setting.value;
+      }
+    }
+
+    // Return defaults for any missing settings
+    res.json({
+      registrationEnabled: false, // Default to disabled (admin-only)
+      ...settingsObj,
+    });
+  } catch (error) {
+    console.error('[ADMIN] Get settings error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get system settings',
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/settings
+ * Update system settings (admin only)
+ */
+router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const updates = req.body;
+
+    // Validate and update each setting
+    for (const [key, value] of Object.entries(updates)) {
+      await prisma.systemSetting.upsert({
+        where: { key },
+        update: { value: JSON.stringify(value) },
+        create: { key, value: JSON.stringify(value) },
+      });
+    }
+
+    console.log('[ADMIN] Settings updated:', Object.keys(updates));
+
+    // Return updated settings
+    const settings = await prisma.systemSetting.findMany();
+    const settingsObj: Record<string, any> = {
+      registrationEnabled: false, // Default to disabled (admin-only)
+    };
+    for (const setting of settings) {
+      try {
+        settingsObj[setting.key] = JSON.parse(setting.value);
+      } catch {
+        settingsObj[setting.key] = setting.value;
+      }
+    }
+
+    res.json(settingsObj);
+  } catch (error) {
+    console.error('[ADMIN] Update settings error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update system settings',
+    });
+  }
+});
+
 export default router;

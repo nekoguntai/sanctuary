@@ -77,7 +77,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
       case 'error':
         return 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-500/20';
       default:
-        return 'bg-sanctuary-50 dark:bg-sanctuary-800/50 border-sanctuary-200 dark:border-sanctuary-700';
+        return 'surface-secondary/50 border-sanctuary-200 dark:border-sanctuary-700';
     }
   };
 

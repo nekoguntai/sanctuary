@@ -239,7 +239,7 @@ export const UsersGroups: React.FC = () => {
               </Button>
            </div>
 
-           <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+           <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
               <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800 max-h-96 overflow-y-auto">
                  {users.length === 0 ? (
                    <li className="p-8 text-center text-sanctuary-400">No users found</li>
@@ -288,15 +288,15 @@ export const UsersGroups: React.FC = () => {
               <h3 className="text-lg font-medium">Groups</h3>
            </div>
 
-           <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-              <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-800 border-b border-sanctuary-100 dark:border-sanctuary-800">
+           <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+              <div className="p-4 surface-secondary border-b border-sanctuary-100 dark:border-sanctuary-800">
                  <div className="flex space-x-2">
                     <input
                       type="text"
                       value={newGroup}
                       onChange={(e) => setNewGroup(e.target.value)}
                       placeholder="New group name"
-                      className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                      className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                       onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
                     />
                     <Button size="sm" onClick={handleCreateGroup} disabled={!newGroup || isCreatingGroup} isLoading={isCreatingGroup}>
@@ -312,7 +312,7 @@ export const UsersGroups: React.FC = () => {
                       <div className="flex items-center justify-between mb-2">
                          <h4 className="font-medium text-sm">{g.name}</h4>
                          <div className="flex items-center space-x-2">
-                           <span className="text-xs bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-0.5 rounded text-sanctuary-600 dark:text-sanctuary-400">
+                           <span className="text-xs surface-secondary px-2 py-0.5 rounded text-sanctuary-600 dark:text-sanctuary-400">
                               {g.members.length} Members
                            </span>
                            <button
@@ -350,7 +350,7 @@ export const UsersGroups: React.FC = () => {
       {/* Create User Modal */}
       {showCreateUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUser(false)}>
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Create New User</h3>
               <button onClick={() => setShowCreateUser(false)} className="text-sanctuary-400 hover:text-sanctuary-600">
@@ -433,7 +433,7 @@ export const UsersGroups: React.FC = () => {
       {/* Edit User Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingUser(null)}>
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Edit User: {editingUser.username}</h3>
               <button onClick={() => setEditingUser(null)} className="text-sanctuary-400 hover:text-sanctuary-600">
@@ -514,7 +514,7 @@ export const UsersGroups: React.FC = () => {
       {/* Edit Group Modal */}
       {editingGroup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingGroup(null)}>
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Edit Group</h3>
               <button onClick={() => setEditingGroup(null)} className="text-sanctuary-400 hover:text-sanctuary-600">

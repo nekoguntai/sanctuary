@@ -16,6 +16,7 @@ interface TransactionListProps {
   onTransactionClick?: (transaction: Transaction) => void;
   highlightedTxId?: string;
   onLabelsChange?: () => void;
+  canEdit?: boolean; // Whether user can edit labels (default: true for backwards compat)
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -26,7 +27,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onWalletClick,
   onTransactionClick,
   highlightedTxId,
-  onLabelsChange
+  onLabelsChange,
+  canEdit = true
 }) => {
   const { format } = useCurrency();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -232,7 +234,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         ) : tx.label && (
                           <>
                             <span>•</span>
-                            <span className="flex items-center bg-sanctuary-100 dark:bg-sanctuary-800 px-1.5 py-0.5 rounded text-sanctuary-600 dark:text-sanctuary-300">
+                            <span className="flex items-center surface-secondary px-1.5 py-0.5 rounded text-sanctuary-600 dark:text-sanctuary-300">
                               <Tag className="w-3 h-3 mr-1" />
                               {tx.label}
                             </span>
@@ -281,9 +283,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {/* Transaction Details Modal */}
       {selectedTx && (
          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedTx(null)}>
-            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-sanctuary-200 dark:border-sanctuary-800" onClick={e => e.stopPropagation()}>
+            <div className="surface-elevated rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-sanctuary-200 dark:border-sanctuary-800" onClick={e => e.stopPropagation()}>
                {/* Modal Header */}
-               <div className="sticky top-0 bg-white dark:bg-sanctuary-900 p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-start z-10">
+               <div className="sticky top-0 surface-elevated p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-start z-10">
                   <div>
                     <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">Transaction Details</h3>
                     <p className="text-sm text-sanctuary-500">{new Date(selectedTx.timestamp).toLocaleString()}</p>
@@ -348,7 +350,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                             <div className="w-full border-t border-sanctuary-200 dark:border-sanctuary-800"></div>
                          </div>
                          <div className="relative flex justify-center">
-                            <span className="bg-white dark:bg-sanctuary-900 px-3 text-sm text-sanctuary-500 uppercase tracking-wide">Details</span>
+                            <span className="surface-elevated px-3 text-sm text-sanctuary-500 uppercase tracking-wide">Details</span>
                          </div>
                       </div>
 
@@ -456,13 +458,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-xs font-medium text-sanctuary-500 uppercase">Labels</p>
                           {!editingLabels ? (
-                            <button
-                              onClick={() => handleEditLabels(selectedTx)}
-                              className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                              Edit
-                            </button>
+                            canEdit && (
+                              <button
+                                onClick={() => handleEditLabels(selectedTx)}
+                                className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                Edit
+                              </button>
+                            )
                           ) : (
                             <div className="flex items-center gap-2">
                               <button

@@ -147,11 +147,11 @@ export const BatchSend: React.FC = () => {
         {recipients.map((recipient, index) => (
           <div
             key={recipient.id}
-            className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800"
+            className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800"
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-full flex items-center justify-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400">
+                <div className="w-8 h-8 surface-secondary rounded-full flex items-center justify-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400">
                   {index + 1}
                 </div>
                 <input
@@ -219,7 +219,7 @@ export const BatchSend: React.FC = () => {
       </div>
 
       {/* Fee Selection */}
-      <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
         <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
           Network Fee
         </h3>
@@ -239,7 +239,7 @@ export const BatchSend: React.FC = () => {
           </div>
 
           {/* Fee Comparison */}
-          <div className="p-3 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded-lg">
+          <div className="p-3 surface-secondary/30 rounded-lg">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-sanctuary-600 dark:text-sanctuary-400">
                 Individual transactions:
@@ -267,7 +267,7 @@ export const BatchSend: React.FC = () => {
       </div>
 
       {/* Summary */}
-      <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated p-6 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
         <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
           Summary
         </h3>
@@ -343,7 +343,7 @@ export const BatchSend: React.FC = () => {
       )}
 
       {/* Action Button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-sanctuary-900 border-t border-sanctuary-200 dark:border-sanctuary-800 md:static md:bg-transparent md:border-0 md:p-0">
+      <div className="fixed bottom-0 left-0 right-0 p-4 surface-elevated border-t border-sanctuary-200 dark:border-sanctuary-800 md:static md:bg-transparent md:border-0 md:p-0">
         <Button
           size="lg"
           className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"

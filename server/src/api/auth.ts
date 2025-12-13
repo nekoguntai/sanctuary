@@ -13,11 +13,60 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 
 /**
+ * GET /api/v1/auth/registration-status
+ * Check if public registration is enabled (public endpoint for login page)
+ */
+router.get('/registration-status', async (req: Request, res: Response) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'registrationEnabled' },
+    });
+
+    // Default to disabled if setting doesn't exist (admin-only)
+    let enabled = false;
+    if (setting) {
+      try {
+        enabled = JSON.parse(setting.value);
+      } catch {
+        enabled = false;
+      }
+    }
+
+    res.json({ enabled });
+  } catch (error) {
+    console.error('[AUTH] Check registration status error:', error);
+    // Default to disabled on error (admin-only)
+    res.json({ enabled: false });
+  }
+});
+
+/**
  * POST /api/v1/auth/register
  * Register a new user
  */
 router.post('/register', async (req: Request, res: Response) => {
   try {
+    // Check if registration is enabled (default: disabled / admin-only)
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'registrationEnabled' },
+    });
+
+    let registrationEnabled = false;
+    if (setting) {
+      try {
+        registrationEnabled = JSON.parse(setting.value);
+      } catch {
+        registrationEnabled = false;
+      }
+    }
+
+    if (!registrationEnabled) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Public registration is disabled. Please contact an administrator.',
+      });
+    }
+
     const { username, password, email } = req.body;
 
     // Validation

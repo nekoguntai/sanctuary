@@ -1,9 +1,23 @@
 # =============================================
 # Sanctuary Bitcoin Wallet - Docker Compose
 # =============================================
+#
+# IMPORTANT: This application is designed to run HTTPS-ONLY.
+# HTTP requests on port 80 are automatically redirected to HTTPS.
+# This is required for WebUSB hardware wallet support (browser security).
+#
 # Usage:
-#   Development: docker-compose up --build
-#   Production:  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   HTTPS_PORT=8443 JWT_SECRET="your-secret" docker compose up -d
+#
+# Environment Variables:
+#   - HTTPS_PORT: HTTPS port (default: 443, use 8443 for non-root)
+#   - HTTP_PORT: HTTP redirect port (default: 80)
+#   - JWT_SECRET: Required for authentication (must be set)
+#
+# SSL Certificates:
+#   Self-signed certs are in ./docker/nginx/ssl/
+#   For production, replace with real certificates.
+#
 # =============================================
 
 services:
@@ -95,7 +109,13 @@ services:
     restart: "no"
 
   # ============================================
-  # Frontend (Nginx + React)
+  # Frontend (Nginx + React) - HTTPS ONLY
+  # ============================================
+  # This frontend is configured for HTTPS-only operation:
+  # - Port 80 (HTTP) redirects to HTTPS
+  # - Port 443 (HTTPS) serves the application
+  # - SSL certificates mounted from ./docker/nginx/ssl/
+  # - ENABLE_SSL=true is required for WebUSB hardware wallet support
   # ============================================
   frontend:
     build:
@@ -111,10 +131,15 @@ services:
     environment:
       BACKEND_HOST: backend
       BACKEND_PORT: 3001
+      ENABLE_SSL: "true"
+      HTTPS_REDIRECT_PORT: ${HTTPS_PORT:-443}
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "--no-check-certificate", "https://localhost:443/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -66,10 +66,10 @@ export const Account: React.FC = () => {
       </div>
 
       {/* Account Information */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+            <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
               <UserCircle className="w-5 h-5" />
             </div>
             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Profile Information</h3>
@@ -105,10 +105,10 @@ export const Account: React.FC = () => {
       </div>
 
       {/* Change Password */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+            <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
               <Lock className="w-5 h-5" />
             </div>
             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Change Password</h3>

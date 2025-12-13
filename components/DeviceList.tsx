@@ -109,8 +109,8 @@ export const DeviceList: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-sanctuary-100 dark:bg-sanctuary-800 mb-4">
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full surface-secondary mb-4">
             <HardDrive className="w-8 h-8 text-sanctuary-400" />
           </div>
           <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Devices Connected</h3>
@@ -136,17 +136,17 @@ export const DeviceList: React.FC = () => {
           <p className="text-sanctuary-500">Manage your signers and keys</p>
         </div>
         <div className="flex items-center space-x-3">
-            <div className="flex bg-white dark:bg-sanctuary-900 p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                 <button
                     onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
                     title="List View"
                 >
                     <ListIcon className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setViewMode('grouped')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'grouped' ? 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'grouped' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
                     title="Grouped View"
                 >
                     <LayoutGrid className="w-4 h-4" />
@@ -167,9 +167,9 @@ export const DeviceList: React.FC = () => {
             const isEditing = editingId === device.id;
 
             return (
-              <div key={device.id} className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 flex flex-col md:flex-row md:items-center justify-between shadow-sm animate-fade-in">
+              <div key={device.id} className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 flex flex-col md:flex-row md:items-center justify-between shadow-sm animate-fade-in">
                  <div className="flex items-start space-x-4 mb-4 md:mb-0">
-                    <div className="p-3 rounded-xl bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-300">
+                    <div className="p-3 rounded-xl surface-secondary text-sanctuary-600 dark:text-sanctuary-300">
                       {getDeviceIcon(device.type as HardwareDevice, "w-6 h-6")}
                     </div>
                     <div>
@@ -194,7 +194,7 @@ export const DeviceList: React.FC = () => {
                          )}
                       </div>
                       <div className="text-sm text-sanctuary-500 font-mono mt-1">
-                        {device.type} • <span className="bg-sanctuary-100 dark:bg-sanctuary-800 px-1 rounded text-xs">{device.fingerprint}</span>
+                        {device.type} • <span className="surface-secondary px-1 rounded text-xs">{device.fingerprint}</span>
                       </div>
                     </div>
                  </div>
@@ -271,9 +271,9 @@ export const DeviceList: React.FC = () => {
            {(Object.entries(groupedDevices) as [string, DeviceWithWallets[]][]).map(([type, groupDevices]) => {
               const deviceType = type as HardwareDevice;
               return (
-                <div key={type} className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden flex flex-col h-full">
+                <div key={type} className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden flex flex-col h-full">
                     {/* Header */}
-                    <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 bg-sanctuary-50 dark:bg-sanctuary-800 flex items-center justify-between">
+                    <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 surface-secondary flex items-center justify-between">
                        <div className="flex items-center space-x-3">
                           <div className="p-2 bg-white dark:bg-sanctuary-700 rounded-lg shadow-sm text-sanctuary-600 dark:text-sanctuary-300">
                              {getDeviceIcon(deviceType, "w-6 h-6")}
@@ -293,7 +293,7 @@ export const DeviceList: React.FC = () => {
                               const isEditing = editingId === device.id;
                               
                               return (
-                                 <li key={device.id} className="p-3 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors bg-white dark:bg-sanctuary-900">
+                                 <li key={device.id} className="p-3 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors surface-elevated">
                                      <div className="flex justify-between items-start mb-2">
                                         <div className="flex-1 min-w-0">
                                             {isEditing ? (

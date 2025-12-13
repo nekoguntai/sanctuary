@@ -80,6 +80,24 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Database** — PostgreSQL for storing wallet metadata, addresses, and transaction history
 - **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger devices)
 
+## HTTPS Required
+
+> **IMPORTANT:** Sanctuary is designed to run **HTTPS-only**. This is not optional.
+
+HTTPS is mandatory for:
+- **WebUSB API** — Browsers require HTTPS (secure context) to access USB devices like hardware wallets
+- **Secure Credentials** — Protects login tokens and wallet data in transit
+- **Modern Security** — Required for many browser APIs and security features
+
+**How it works:**
+- HTTP (port 80) automatically redirects to HTTPS
+- Self-signed certificates are included for local development
+- For production, replace with real certificates (Let's Encrypt, etc.)
+
+**Default ports:**
+- `HTTPS_PORT=8443` — Main application (https://localhost:8443)
+- `HTTP_PORT=80` — Redirects only
+
 ## Requirements
 
 - **Docker** and **Docker Compose** (v2.0+)

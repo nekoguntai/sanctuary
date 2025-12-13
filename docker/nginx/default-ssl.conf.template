@@ -1,5 +1,24 @@
-# Sanctuary Frontend + API Reverse Proxy Configuration (HTTPS Only)
-# Environment variables are substituted at container startup
+# =============================================
+# Sanctuary Frontend + API Reverse Proxy (HTTPS ONLY)
+# =============================================
+#
+# IMPORTANT: This application REQUIRES HTTPS.
+# DO NOT configure HTTP-only operation.
+#
+# HTTPS is mandatory for:
+# - WebUSB API: Browser security requires HTTPS for hardware wallet
+#   communication (Ledger, Trezor, etc. via USB)
+# - Secure Contexts: Modern browser APIs require HTTPS
+# - Data Security: Protects credentials and wallet data in transit
+#
+# HTTP on port 80 exists ONLY to redirect to HTTPS.
+# All application content is served via HTTPS on port 443.
+#
+# Environment variables (substituted at container startup):
+# - ${BACKEND_HOST}: Backend API hostname (default: backend)
+# - ${BACKEND_PORT}: Backend API port (default: 3001)
+# - ${HTTPS_REDIRECT_PORT}: External HTTPS port for redirects
+# =============================================
 
 upstream backend {
     server ${BACKEND_HOST}:${BACKEND_PORT};

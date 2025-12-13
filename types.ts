@@ -133,6 +133,8 @@ export interface Quorum {
   n: number;
 }
 
+export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+
 export interface Wallet {
   id: string;
   name: string;
@@ -149,6 +151,9 @@ export interface Wallet {
   lastSyncedAt?: string | null;
   lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | null;
   syncInProgress?: boolean;
+  // User permissions for this wallet
+  userRole?: WalletRole;
+  canEdit?: boolean;
 }
 
 export interface FeeEstimate {

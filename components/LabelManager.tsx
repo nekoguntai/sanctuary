@@ -177,7 +177,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g., Exchange, Donation, Business"
-              className="w-full px-3 py-2 bg-white dark:bg-sanctuary-900 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
               autoFocus
             />
           </div>
@@ -213,7 +213,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
               value={formDescription}
               onChange={(e) => setFormDescription(e.target.value)}
               placeholder="Optional description for this label"
-              className="w-full px-3 py-2 bg-white dark:bg-sanctuary-900 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -268,7 +268,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
           {labels.map((label) => (
             <div
               key={label.id}
-              className="flex items-center justify-between p-3 bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg group hover:border-sanctuary-300 dark:hover:border-sanctuary-700 transition-colors"
+              className="flex items-center justify-between p-3 surface-elevated border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg group hover:border-sanctuary-300 dark:hover:border-sanctuary-700 transition-colors"
             >
               <div className="flex items-center gap-3">
                 <span

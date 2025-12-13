@@ -565,7 +565,7 @@ export const SendTransaction: React.FC = () => {
         </div>
 
         {/* Recipient & Amount */}
-        <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 space-y-6">
+        <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 space-y-6">
             {/* Transaction Type Toggle */}
             <div className="flex items-center space-x-4">
               <button
@@ -745,7 +745,7 @@ export const SendTransaction: React.FC = () => {
                       type="checkbox"
                       checked={enableRBF}
                       onChange={(e) => setEnableRBF(e.target.checked)}
-                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 bg-sanctuary-50 dark:bg-sanctuary-800"
+                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
                     />
                     <div>
                       <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Enable RBF</span>
@@ -758,7 +758,7 @@ export const SendTransaction: React.FC = () => {
                       type="checkbox"
                       checked={subtractFeesFromAmount}
                       onChange={(e) => setSubtractFeesFromAmount(e.target.checked)}
-                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 bg-sanctuary-50 dark:bg-sanctuary-800"
+                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
                     />
                     <div>
                       <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Subtract fees from amount</span>
@@ -775,7 +775,7 @@ export const SendTransaction: React.FC = () => {
              <div>
                 <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Network Fee</h3>
                 <p className="text-sm text-sanctuary-500 mb-4">Click a block below to target its confirmation speed, or select a preset.</p>
-                <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden">
+                <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden">
                     <BlockVisualizer
                       blocks={mempoolBlocks}
                       queuedBlocksSummary={queuedBlocksSummary}
@@ -785,7 +785,7 @@ export const SendTransaction: React.FC = () => {
                 </div>
              </div>
 
-             <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+             <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {[
                         { label: 'High Priority', rate: fees?.fastestFee, time: '~10 mins' },
@@ -795,7 +795,7 @@ export const SendTransaction: React.FC = () => {
                         <div 
                            key={opt.label}
                            onClick={() => setFeeRate(opt.rate || 1)}
-                           className={`cursor-pointer p-4 rounded-xl border transition-all ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 bg-sanctuary-50 dark:bg-sanctuary-800' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'}`}
+                           className={`cursor-pointer p-4 rounded-xl border transition-all ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 surface-secondary' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'}`}
                         >
                             <div className="font-medium text-sm">{opt.label}</div>
                             <div className="text-2xl font-bold my-1">{opt.rate} <span className="text-xs font-normal text-sanctuary-500">sat/vB</span></div>
@@ -828,7 +828,7 @@ export const SendTransaction: React.FC = () => {
 
         {/* UTXO Selection Table */}
         {showCoinControl && (
-            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
+            <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
                 <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-950 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
                     <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Select Inputs</span>
                     <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
@@ -853,7 +853,7 @@ export const SendTransaction: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
+                                    {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
                                     <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
                                 </div>
                             </div>
@@ -1389,7 +1389,7 @@ export const SendTransaction: React.FC = () => {
         })()}
 
         {/* Action Bar */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-sanctuary-900 border-t border-sanctuary-200 dark:border-sanctuary-800 md:static md:bg-transparent md:border-0 md:p-0">
+        <div className="fixed bottom-0 left-0 right-0 p-4 surface-elevated border-t border-sanctuary-200 dark:border-sanctuary-800 md:static md:bg-transparent md:border-0 md:p-0">
              <Button
                size="lg"
                className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"

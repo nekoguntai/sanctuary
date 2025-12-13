@@ -145,7 +145,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       )}
 
       {/* Action Buttons */}
-      <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3">
           Transaction Actions
         </h4>
@@ -184,7 +184,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
 
           {/* Status Message */}
           {!isReceived && !rbfStatus?.replaceable && rbfStatus?.reason && (
-            <div className="text-xs text-sanctuary-500 p-2 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded">
+            <div className="text-xs text-sanctuary-500 p-2 surface-secondary/30 rounded">
               {rbfStatus.reason}
             </div>
           )}
@@ -194,7 +194,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       {/* RBF Modal */}
       {showRBFModal && rbfStatus?.replaceable && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
             <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
               Bump Transaction Fee (RBF)
             </h3>
@@ -267,7 +267,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       {/* CPFP Modal */}
       {showCPFPModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated rounded-2xl p-6 max-w-md w-full border border-sanctuary-200 dark:border-sanctuary-800">
             <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-4">
               Accelerate Transaction (CPFP)
             </h3>

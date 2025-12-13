@@ -191,7 +191,7 @@ export const CreateWallet: React.FC = () => {
                     value={walletName}
                     onChange={(e) => setWalletName(e.target.value)}
                     placeholder={walletType === WalletType.SINGLE_SIG ? "e.g., My ColdCard Wallet" : "e.g., Family Savings"}
-                    className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                    className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                     autoFocus
                 />
             </div>
@@ -225,7 +225,7 @@ export const CreateWallet: React.FC = () => {
             {walletType === WalletType.MULTI_SIG && (
                 <div>
                     <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Quorum (M of N)</label>
-                    <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+                    <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
                         <div className="flex justify-between items-center mb-4">
                             <span className="text-sm">Required Signatures: <span className="font-bold">{quorumM}</span></span>
                             <span className="text-sm text-sanctuary-500">Total Signers: {selectedDeviceIds.size}</span>
@@ -250,12 +250,12 @@ export const CreateWallet: React.FC = () => {
 
   const renderStep4 = () => (
      <div className="space-y-6 animate-fade-in max-w-lg mx-auto text-center">
-         <div className="mx-auto w-16 h-16 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-full flex items-center justify-center mb-4">
+         <div className="mx-auto w-16 h-16 surface-secondary rounded-full flex items-center justify-center mb-4">
              <Shield className="w-8 h-8 text-sanctuary-600 dark:text-sanctuary-300" />
          </div>
          <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">Review Wallet Details</h2>
          
-         <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
+         <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
              <div className="px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
                  <h3 className="text-lg font-medium">{walletName}</h3>
              </div>

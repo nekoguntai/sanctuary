@@ -3,31 +3,21 @@
  *
  * API endpoints for managing labels on transactions and addresses.
  * Labels can be attached to multiple transactions/addresses and vice versa.
+ *
+ * Permissions:
+ * - READ (GET): Any user with wallet access (owner, signer, viewer)
+ * - WRITE (POST, PUT, DELETE): Only owner or signer roles
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
+import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
-
-/**
- * Helper: Check if user has access to wallet
- */
-async function checkWalletAccess(walletId: string, userId: string) {
-  return prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      OR: [
-        { users: { some: { userId } } },
-        { group: { members: { some: { userId } } } },
-      ],
-    },
-  });
-}
 
 // ========================================
 // LABEL CRUD OPERATIONS
@@ -42,8 +32,8 @@ router.get('/wallets/:walletId/labels', async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const { walletId } = req.params;
 
-    const wallet = await checkWalletAccess(walletId, userId);
-    if (!wallet) {
+    const hasAccess = await checkWalletAccess(walletId, userId);
+    if (!hasAccess) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Wallet not found',
@@ -95,8 +85,8 @@ router.get('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
     const userId = req.user!.userId;
     const { walletId, labelId } = req.params;
 
-    const wallet = await checkWalletAccess(walletId, userId);
-    if (!wallet) {
+    const hasAccess = await checkWalletAccess(walletId, userId);
+    if (!hasAccess) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Wallet not found',
@@ -174,7 +164,7 @@ router.get('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
 /**
  * POST /api/v1/wallets/:walletId/labels
- * Create a new label
+ * Create a new label (requires edit access: owner or signer)
  */
 router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => {
   try {
@@ -189,11 +179,20 @@ router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => 
       });
     }
 
-    const wallet = await checkWalletAccess(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      // Check if user has read access to give appropriate error
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -233,7 +232,7 @@ router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => 
 
 /**
  * PUT /api/v1/wallets/:walletId/labels/:labelId
- * Update a label
+ * Update a label (requires edit access: owner or signer)
  */
 router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Response) => {
   try {
@@ -241,11 +240,19 @@ router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
     const { walletId, labelId } = req.params;
     const { name, color, description } = req.body;
 
-    const wallet = await checkWalletAccess(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -303,18 +310,26 @@ router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
 /**
  * DELETE /api/v1/wallets/:walletId/labels/:labelId
- * Delete a label (also removes all associations)
+ * Delete a label (requires edit access: owner or signer)
  */
 router.delete('/wallets/:walletId/labels/:labelId', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { walletId, labelId } = req.params;
 
-    const wallet = await checkWalletAccess(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -401,7 +416,7 @@ router.get('/transactions/:transactionId/labels', async (req: Request, res: Resp
 
 /**
  * POST /api/v1/transactions/:transactionId/labels
- * Add labels to a transaction
+ * Add labels to a transaction (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
 router.post('/transactions/:transactionId/labels', async (req: Request, res: Response) => {
@@ -417,23 +432,32 @@ router.post('/transactions/:transactionId/labels', async (req: Request, res: Res
       });
     }
 
-    // Find transaction and check access
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id: transactionId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find transaction first
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      select: { id: true, walletId: true },
     });
 
     if (!transaction) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Transaction not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(transaction.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(transaction.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Transaction not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -479,7 +503,7 @@ router.post('/transactions/:transactionId/labels', async (req: Request, res: Res
 
 /**
  * PUT /api/v1/transactions/:transactionId/labels
- * Replace all labels on a transaction
+ * Replace all labels on a transaction (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
 router.put('/transactions/:transactionId/labels', async (req: Request, res: Response) => {
@@ -495,23 +519,32 @@ router.put('/transactions/:transactionId/labels', async (req: Request, res: Resp
       });
     }
 
-    // Find transaction and check access
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id: transactionId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find transaction first
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      select: { id: true, walletId: true },
     });
 
     if (!transaction) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Transaction not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(transaction.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(transaction.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Transaction not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -563,30 +596,39 @@ router.put('/transactions/:transactionId/labels', async (req: Request, res: Resp
 
 /**
  * DELETE /api/v1/transactions/:transactionId/labels/:labelId
- * Remove a label from a transaction
+ * Remove a label from a transaction (requires edit access: owner or signer)
  */
 router.delete('/transactions/:transactionId/labels/:labelId', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { transactionId, labelId } = req.params;
 
-    // Find transaction and check access
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id: transactionId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find transaction first
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      select: { id: true, walletId: true },
     });
 
     if (!transaction) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Transaction not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(transaction.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(transaction.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Transaction not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -661,7 +703,7 @@ router.get('/addresses/:addressId/labels', async (req: Request, res: Response) =
 
 /**
  * POST /api/v1/addresses/:addressId/labels
- * Add labels to an address
+ * Add labels to an address (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
 router.post('/addresses/:addressId/labels', async (req: Request, res: Response) => {
@@ -677,23 +719,32 @@ router.post('/addresses/:addressId/labels', async (req: Request, res: Response) 
       });
     }
 
-    // Find address and check access
-    const address = await prisma.address.findFirst({
-      where: {
-        id: addressId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find address first
+    const address = await prisma.address.findUnique({
+      where: { id: addressId },
+      select: { id: true, walletId: true },
     });
 
     if (!address) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Address not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(address.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(address.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Address not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -739,7 +790,7 @@ router.post('/addresses/:addressId/labels', async (req: Request, res: Response) 
 
 /**
  * PUT /api/v1/addresses/:addressId/labels
- * Replace all labels on an address
+ * Replace all labels on an address (requires edit access: owner or signer)
  * Body: { labelIds: string[] }
  */
 router.put('/addresses/:addressId/labels', async (req: Request, res: Response) => {
@@ -755,23 +806,32 @@ router.put('/addresses/:addressId/labels', async (req: Request, res: Response) =
       });
     }
 
-    // Find address and check access
-    const address = await prisma.address.findFirst({
-      where: {
-        id: addressId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find address first
+    const address = await prisma.address.findUnique({
+      where: { id: addressId },
+      select: { id: true, walletId: true },
     });
 
     if (!address) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Address not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(address.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(address.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Address not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 
@@ -823,30 +883,39 @@ router.put('/addresses/:addressId/labels', async (req: Request, res: Response) =
 
 /**
  * DELETE /api/v1/addresses/:addressId/labels/:labelId
- * Remove a label from an address
+ * Remove a label from an address (requires edit access: owner or signer)
  */
 router.delete('/addresses/:addressId/labels/:labelId', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { addressId, labelId } = req.params;
 
-    // Find address and check access
-    const address = await prisma.address.findFirst({
-      where: {
-        id: addressId,
-        wallet: {
-          OR: [
-            { users: { some: { userId } } },
-            { group: { members: { some: { userId } } } },
-          ],
-        },
-      },
+    // Find address first
+    const address = await prisma.address.findUnique({
+      where: { id: addressId },
+      select: { id: true, walletId: true },
     });
 
     if (!address) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Address not found',
+      });
+    }
+
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(address.walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(address.walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Address not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
       });
     }
 

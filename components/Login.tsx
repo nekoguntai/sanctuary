@@ -3,6 +3,7 @@ import { Button } from './ui/Button';
 import { Lock, User, Mail } from 'lucide-react';
 import { SanctuaryLogo } from './ui/CustomIcons';
 import { useUser } from '../contexts/UserContext';
+import { getRegistrationStatus } from '../src/api/auth';
 
 export const Login: React.FC = () => {
   const { login, register, isLoading, error, clearError } = useUser();
@@ -11,8 +12,9 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
 
-  // Check API status on mount
+  // Check API status and registration status on mount
   React.useEffect(() => {
     const checkApi = async () => {
       try {
@@ -21,6 +23,14 @@ export const Login: React.FC = () => {
         if (response.ok || response.status === 401) {
           // 401 is fine - it means the API is responding but requires auth
           setApiStatus('connected');
+
+          // Check if registration is enabled
+          try {
+            const regStatus = await getRegistrationStatus();
+            setRegistrationEnabled(regStatus.enabled);
+          } catch {
+            setRegistrationEnabled(false);
+          }
         } else {
           setApiStatus('error');
         }
@@ -67,7 +77,7 @@ export const Login: React.FC = () => {
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-xl bg-white dark:bg-sanctuary-900 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 p-6 space-y-4">
+          <div className="rounded-xl surface-elevated shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 p-6 space-y-4">
             <div>
               <label htmlFor="username" className="block text-xs font-medium text-sanctuary-500 uppercase mb-1">Username</label>
               <div className="relative">
@@ -151,16 +161,18 @@ export const Login: React.FC = () => {
               }
             </Button>
 
-            <button
-              type="button"
-              onClick={toggleMode}
-              className="w-full text-sm text-sanctuary-500 dark:text-sanctuary-400 hover:text-sanctuary-700 dark:hover:text-sanctuary-200 transition-colors"
-            >
-              {isRegisterMode
-                ? 'Already have an account? Sign in'
-                : "Don't have an account? Register"
-              }
-            </button>
+            {(registrationEnabled || isRegisterMode) && (
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="w-full text-sm text-sanctuary-500 dark:text-sanctuary-400 hover:text-sanctuary-700 dark:hover:text-sanctuary-200 transition-colors"
+              >
+                {isRegisterMode
+                  ? 'Already have an account? Sign in'
+                  : "Don't have an account? Register"
+                }
+              </button>
+            )}
           </div>
         </form>
 
@@ -172,7 +184,11 @@ export const Login: React.FC = () => {
             {apiStatus === 'error' && <span className="text-red-600 dark:text-red-400">● Error</span>}
           </p>
           <p className="text-[10px] text-sanctuary-300 dark:text-sanctuary-600">
-            {isRegisterMode ? 'Create a new account to get started' : 'Use existing credentials to sign in'}
+            {isRegisterMode
+              ? 'Create a new account to get started'
+              : registrationEnabled
+                ? 'Use existing credentials to sign in'
+                : 'Contact administrator for account access'}
           </p>
         </div>
       </div>

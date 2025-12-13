@@ -162,3 +162,25 @@ export async function addGroupMember(groupId: string, userId: string, role?: str
 export async function removeGroupMember(groupId: string, userId: string): Promise<{ message: string }> {
   return apiClient.delete<{ message: string }>(`/admin/groups/${groupId}/members/${userId}`);
 }
+
+// ========================================
+// SYSTEM SETTINGS
+// ========================================
+
+export interface SystemSettings {
+  registrationEnabled: boolean;
+}
+
+/**
+ * Get all system settings (admin only)
+ */
+export async function getSystemSettings(): Promise<SystemSettings> {
+  return apiClient.get<SystemSettings>('/admin/settings');
+}
+
+/**
+ * Update system settings (admin only)
+ */
+export async function updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
+  return apiClient.put<SystemSettings>('/admin/settings', settings);
+}

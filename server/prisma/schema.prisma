@@ -86,6 +86,7 @@ model Wallet {
 
   // Optional group ownership
   groupId     String?
+  groupRole   String   @default("viewer") // Role for group members: owner, signer, viewer
 
   // Sync metadata - for caching layer
   lastSyncedAt    DateTime?  // Last successful full sync
@@ -304,6 +305,16 @@ model FeeEstimate {
   createdAt   DateTime @default(now())
 
   @@map("fee_estimates")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   // JSON-encoded value
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }
 
 model PriceData {

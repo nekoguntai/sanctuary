@@ -14,6 +14,71 @@ import * as addressDerivation from './bitcoin/addressDerivation';
 // Number of addresses to generate when creating a wallet
 const INITIAL_ADDRESS_COUNT = 20;
 
+// Roles that can edit wallet data (labels, etc.)
+const EDIT_ROLES = ['owner', 'signer'];
+
+// ========================================
+// WALLET ACCESS HELPERS
+// ========================================
+
+export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+
+/**
+ * Get user's role for a specific wallet
+ * Returns the highest privilege role if user has multiple access paths
+ */
+export async function getUserWalletRole(walletId: string, userId: string): Promise<WalletRole> {
+  // Check direct user access first
+  const walletUser = await prisma.walletUser.findFirst({
+    where: { walletId, userId },
+  });
+
+  if (walletUser) {
+    return walletUser.role as WalletRole;
+  }
+
+  // Check group access
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      group: { members: { some: { userId } } },
+    },
+    select: { groupRole: true },
+  });
+
+  if (wallet) {
+    return wallet.groupRole as WalletRole;
+  }
+
+  return null;
+}
+
+/**
+ * Check if user has any access to wallet (for read operations)
+ */
+export async function checkWalletAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null;
+}
+
+/**
+ * Check if user has edit access to wallet (owner or signer roles)
+ * Use this for operations that modify labels, memos, etc.
+ */
+export async function checkWalletEditAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role !== null && EDIT_ROLES.includes(role);
+}
+
+/**
+ * Check if user is wallet owner
+ * Use this for operations like sharing, deleting wallet
+ */
+export async function checkWalletOwnerAccess(walletId: string, userId: string): Promise<boolean> {
+  const role = await getUserWalletRole(walletId, userId);
+  return role === 'owner';
+}
+
 interface CreateWalletInput {
   name: string;
   type: 'single_sig' | 'multi_sig';
@@ -51,6 +116,10 @@ interface WalletWithBalance {
     groupName?: string | null;
     userCount: number;
   };
+  // User's role for this wallet (owner, signer, viewer)
+  userRole?: WalletRole;
+  // Whether user can edit (owner or signer)
+  canEdit?: boolean;
 }
 
 /**
@@ -241,7 +310,7 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
         select: { name: true },
       },
       users: {
-        select: { userId: true },
+        select: { userId: true, role: true },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -258,6 +327,19 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
     const userCount = wallet.users.length;
     const hasGroup = !!wallet.group;
     const isShared = hasGroup || userCount > 1;
+
+    // Determine user's role for this wallet
+    // Check direct user access first, then group access
+    const directAccess = wallet.users.find(u => u.userId === userId);
+    let userRole: WalletRole = null;
+    if (directAccess) {
+      userRole = directAccess.role as WalletRole;
+    } else if (hasGroup) {
+      // User has access via group, use the wallet's groupRole
+      userRole = (wallet as any).groupRole as WalletRole || 'viewer';
+    }
+
+    const canEdit = userRole === 'owner' || userRole === 'signer';
 
     return {
       id: wallet.id,
@@ -283,6 +365,9 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
         groupName: wallet.group?.name || null,
         userCount,
       } : undefined,
+      // User permissions
+      userRole,
+      canEdit,
     };
   });
 }
@@ -324,7 +409,14 @@ export async function getWalletById(
       utxos: {
         where: { spent: false },
       },
-      group: true,
+      group: {
+        include: {
+          members: {
+            where: { userId },
+            select: { role: true },
+          },
+        },
+      },
     },
   });
 
@@ -339,6 +431,20 @@ export async function getWalletById(
   const userCount = wallet.users.length;
   const hasGroup = !!wallet.group;
   const isShared = hasGroup || userCount > 1;
+
+  // Determine user's role for this wallet
+  const directAccess = wallet.users.find(wu => wu.userId === userId);
+  let userRole: WalletRole = null;
+
+  if (directAccess) {
+    // Direct wallet access takes precedence
+    userRole = directAccess.role as WalletRole;
+  } else if (wallet.group) {
+    // Group-based access uses the wallet's groupRole
+    userRole = wallet.groupRole as WalletRole;
+  }
+
+  const canEdit = userRole !== null && EDIT_ROLES.includes(userRole);
 
   return {
     id: wallet.id,
@@ -364,6 +470,9 @@ export async function getWalletById(
       groupName: wallet.group?.name || null,
       userCount,
     } : undefined,
+    // User permissions
+    userRole,
+    canEdit,
   };
 }
 

@@ -82,9 +82,9 @@ export const DeviceDetail: React.FC = () => {
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Devices
         </button>
 
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
             <div className="flex items-start space-x-6">
-                <div className="p-4 rounded-2xl bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-300">
+                <div className="p-4 rounded-2xl surface-secondary text-sanctuary-600 dark:text-sanctuary-300">
                     {getDeviceIcon(device.type as HardwareDevice, "w-12 h-12")}
                 </div>
                 <div className="flex-1">
@@ -137,7 +137,7 @@ export const DeviceDetail: React.FC = () => {
         <div className="space-y-4">
              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Associated Wallets</h3>
              {wallets.length === 0 ? (
-                 <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                 <div className="surface-elevated rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                      No wallets are currently using this device.
                  </div>
              ) : (
@@ -152,11 +152,11 @@ export const DeviceDetail: React.FC = () => {
                             <div 
                                 key={w.id} 
                                 onClick={() => navigate(`/wallets/${w.id}`)}
-                                className="group cursor-pointer bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
+                                className="group cursor-pointer surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
                             >
                                 <div className="flex items-center justify-between mb-2">
                                      <div className="flex items-center space-x-3">
-                                         <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-sanctuary-500">
+                                         <div className="p-2 surface-secondary rounded-lg text-sanctuary-500">
                                              {getWalletIcon(w.type, "w-5 h-5")}
                                          </div>
                                          <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{w.name}</span>

@@ -1,10 +1,25 @@
 #!/bin/sh
 set -e
 
+# =============================================
+# Sanctuary Nginx Entrypoint - HTTPS ONLY
+# =============================================
+#
+# IMPORTANT: This application is designed to run HTTPS-ONLY.
+# ENABLE_SSL should always be "true" in production.
+#
+# HTTPS is required for:
+# - WebUSB API (hardware wallet support via browser)
+# - Secure credential transmission
+# - Modern browser security requirements
+#
+# HTTP on port 80 only serves redirects to HTTPS.
+# =============================================
+
 # Default values for environment variables
 export BACKEND_HOST=${BACKEND_HOST:-backend}
 export BACKEND_PORT=${BACKEND_PORT:-3001}
-export ENABLE_SSL=${ENABLE_SSL:-false}
+export ENABLE_SSL=${ENABLE_SSL:-true}  # Default to true - HTTPS only
 export HTTPS_REDIRECT_PORT=${HTTPS_REDIRECT_PORT:-443}
 
 # Choose template based on SSL setting

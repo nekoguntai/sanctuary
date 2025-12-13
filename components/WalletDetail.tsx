@@ -316,7 +316,8 @@ export const WalletDetail: React.FC = () => {
           const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
             id: tx.id,
             txid: tx.txid,
-            amount: (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
+            type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
+            amount: (tx.type === 'received' || tx.type === 'receive' || tx.type === 'consolidation') ? Number(tx.amount) : -Number(tx.amount),
             timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
             confirmations: tx.confirmations,
             confirmed: tx.confirmations >= 1,

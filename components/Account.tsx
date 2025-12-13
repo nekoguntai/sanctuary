@@ -79,7 +79,7 @@ export const Account: React.FC = () => {
         <div className="p-6 space-y-6">
           <div>
             <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Username</label>
-            <div className="px-4 py-3 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono">
+            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono">
               {user?.username}
             </div>
           </div>
@@ -87,7 +87,7 @@ export const Account: React.FC = () => {
           {user?.email && (
             <div>
               <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Email</label>
-              <div className="px-4 py-3 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono flex items-center">
+              <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 font-mono flex items-center">
                 <Mail className="w-4 h-4 mr-2 text-sanctuary-400" />
                 {user.email}
               </div>
@@ -96,7 +96,7 @@ export const Account: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Account Type</label>
-            <div className="px-4 py-3 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
+            <div className="px-4 py-3 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
               <Shield className={`w-4 h-4 mr-2 ${user?.isAdmin ? 'text-primary-600' : 'text-sanctuary-400'}`} />
               {user?.isAdmin ? 'Administrator' : 'Standard User'}
             </div>
@@ -137,7 +137,7 @@ export const Account: React.FC = () => {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-3 pr-12 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+                className="w-full px-4 py-3 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 required
               />
               <button
@@ -157,7 +157,7 @@ export const Account: React.FC = () => {
                 type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-3 pr-12 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+                className="w-full px-4 py-3 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 required
                 minLength={6}
               />
@@ -179,7 +179,7 @@ export const Account: React.FC = () => {
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 pr-12 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
+                className="w-full px-4 py-3 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 required
                 minLength={6}
               />

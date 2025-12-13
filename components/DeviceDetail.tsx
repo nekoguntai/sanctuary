@@ -96,7 +96,7 @@ export const DeviceDetail: React.FC = () => {
                                         <input 
                                             value={editLabel}
                                             onChange={e => setEditLabel(e.target.value)}
-                                            className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded bg-sanctuary-50 dark:bg-sanctuary-950 text-xl font-light focus:outline-none"
+                                            className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted text-xl font-light focus:outline-none"
                                         />
                                         <button onClick={handleSave} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-5 h-5" /></button>
                                         <button onClick={() => { setIsEditing(false); setEditLabel(device.label); }} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-5 h-5" /></button>
@@ -119,13 +119,13 @@ export const DeviceDetail: React.FC = () => {
                     <div className="mt-6 pt-6 border-t border-sanctuary-100 dark:border-sanctuary-800 grid grid-cols-2 gap-6">
                         <div>
                              <p className="text-xs text-sanctuary-500 uppercase mb-1">Extended Public Key (XPUB)</p>
-                             <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+                             <div className="surface-muted p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                                  <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">{device.xpub || "N/A"}</code>
                              </div>
                         </div>
                          <div>
                              <p className="text-xs text-sanctuary-500 uppercase mb-1">Derivation Path</p>
-                             <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+                             <div className="surface-muted p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                                  <code className="text-sm text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">{device.derivationPath || "m/84'/0'/0'"}</code>
                              </div>
                         </div>

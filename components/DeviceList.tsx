@@ -180,7 +180,7 @@ export const DeviceList: React.FC = () => {
                                type="text" 
                                value={editValue}
                                onChange={(e) => setEditValue(e.target.value)}
-                               className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded bg-sanctuary-50 dark:bg-sanctuary-950 focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                               className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                                autoFocus
                              />
                              <button onClick={() => handleSave(device)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-4 h-4" /></button>
@@ -302,7 +302,7 @@ export const DeviceList: React.FC = () => {
                                                         type="text" 
                                                         value={editValue}
                                                         onChange={(e) => setEditValue(e.target.value)}
-                                                        className="w-full px-2 py-1 text-xs border border-sanctuary-300 dark:border-sanctuary-700 rounded bg-sanctuary-50 dark:bg-sanctuary-950 focus:outline-none"
+                                                        className="w-full px-2 py-1 text-xs border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none"
                                                         autoFocus
                                                     />
                                                     <button onClick={() => handleSave(device)} className="p-1 text-emerald-600"><Save className="w-3 h-3" /></button>

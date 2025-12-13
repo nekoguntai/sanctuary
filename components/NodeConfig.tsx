@@ -150,7 +150,7 @@ export const NodeConfig: React.FC = () => {
                   value={nodeConfig.explorerUrl || ''}
                   onChange={(e) => setNodeConfig({ ...nodeConfig, explorerUrl: e.target.value })}
                   placeholder="https://mempool.space"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 />
                 <div className="flex space-x-2 mt-2">
                   <button
@@ -185,7 +185,7 @@ export const NodeConfig: React.FC = () => {
                   value={nodeConfig.feeEstimatorUrl || ''}
                   onChange={(e) => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: e.target.value })}
                   placeholder="https://mempool.space"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 />
                 <div className="flex space-x-2 mt-2">
                   <button
@@ -215,7 +215,7 @@ export const NodeConfig: React.FC = () => {
                 <select
                   value={nodeConfig.type}
                   onChange={(e) => setNodeConfig({ ...nodeConfig, type: e.target.value as 'electrum' | 'bitcoind' })}
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="bitcoind">Bitcoin Core (RPC)</option>
                   <option value="electrum">Electrum Server</option>
@@ -247,7 +247,7 @@ export const NodeConfig: React.FC = () => {
                   value={nodeConfig.host}
                   onChange={(e) => setNodeConfig({ ...nodeConfig, host: e.target.value })}
                   placeholder="127.0.0.1"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 />
               </div>
               <div>
@@ -257,7 +257,7 @@ export const NodeConfig: React.FC = () => {
                   value={nodeConfig.port}
                   onChange={(e) => setNodeConfig({ ...nodeConfig, port: e.target.value })}
                   placeholder="8332"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 />
               </div>
             </div>
@@ -304,7 +304,7 @@ export const NodeConfig: React.FC = () => {
                     type="text"
                     value={nodeConfig.user || ''}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, user: e.target.value })}
-                    className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
@@ -313,7 +313,7 @@ export const NodeConfig: React.FC = () => {
                     type="password"
                     value={nodeConfig.password || ''}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, password: e.target.value })}
-                    className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>

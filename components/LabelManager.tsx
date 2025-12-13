@@ -162,7 +162,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
 
       {/* Create/Edit Form */}
       {(isCreating || editingLabel) && (
-        <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-800 rounded-xl space-y-4">
+        <div className="p-4 surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-xl space-y-4">
           <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
             {editingLabel ? 'Edit Label' : 'Create New Label'}
           </h4>

@@ -287,7 +287,7 @@ export const WalletList: React.FC = () => {
         <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-                    <thead className="bg-sanctuary-50 dark:bg-sanctuary-950">
+                    <thead className="surface-muted">
                         <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Name</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Type</th>

@@ -191,7 +191,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search labels..."
-              className="w-full px-3 py-1.5 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-800 rounded text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full px-3 py-1.5 surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
               autoFocus
             />
           </div>
@@ -245,7 +245,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
                     value={newLabelName}
                     onChange={(e) => setNewLabelName(e.target.value)}
                     placeholder="New label name..."
-                    className="flex-1 px-2 py-1 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-800 rounded text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="flex-1 px-2 py-1 surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded text-sm text-sanctuary-900 dark:text-sanctuary-100 placeholder-sanctuary-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCreateLabel();

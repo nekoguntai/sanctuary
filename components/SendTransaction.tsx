@@ -623,7 +623,7 @@ export const SendTransaction: React.FC = () => {
                     <select
                       value={recipient}
                       onChange={(e) => setRecipient(e.target.value)}
-                      className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm"
+                      className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm"
                     >
                       {walletAddresses.map((addr, idx) => (
                         <option key={addr} value={addr}>
@@ -647,7 +647,7 @@ export const SendTransaction: React.FC = () => {
                                 : recipientValid === false
                                 ? 'border-rose-500 dark:border-rose-400'
                                 : 'border-sanctuary-300 dark:border-sanctuary-700'
-                            } bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors`}
+                            } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors`}
                         />
                         {recipientValid === true && (
                           <Check className="absolute right-4 top-3.5 w-5 h-5 text-green-500" />
@@ -712,7 +712,7 @@ export const SendTransaction: React.FC = () => {
                          setIsSendMax(false); // User manually changed amount, no longer send max
                        }}
                        placeholder="0"
-                       className="block w-full px-4 py-3 pr-24 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors"
+                       className="block w-full px-4 py-3 pr-24 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors"
                    />
                    <div className="absolute right-4 top-3.5 text-sanctuary-400 text-sm flex items-center pointer-events-none">
                       {amountInSats > 0 && <span className="mr-2 text-sanctuary-500 dark:text-sanctuary-400">≈ {currencySymbol}{amountInFiat}</span>}
@@ -829,7 +829,7 @@ export const SendTransaction: React.FC = () => {
         {/* UTXO Selection Table */}
         {showCoinControl && (
             <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
-                <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-950 border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
+                <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
                     <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Select Inputs</span>
                     <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
                 </div>
@@ -1013,7 +1013,7 @@ export const SendTransaction: React.FC = () => {
                         ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20'
                         : isSigning
                         ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30'
-                        : 'bg-sanctuary-50 dark:bg-sanctuary-950 border-sanctuary-200 dark:border-sanctuary-800'
+                        : 'surface-muted border-sanctuary-200 dark:border-sanctuary-800'
                     }`}
                   >
                     <div className="flex items-center justify-between p-3">

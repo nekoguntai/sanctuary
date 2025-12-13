@@ -372,7 +372,7 @@ export const UsersGroups: React.FC = () => {
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
                   placeholder="Enter username"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   autoFocus
                 />
               </div>
@@ -385,7 +385,7 @@ export const UsersGroups: React.FC = () => {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Enter password (min 6 characters)"
-                    className="w-full px-3 py-2 pr-10 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 pr-10 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <button
                     type="button"
@@ -404,7 +404,7 @@ export const UsersGroups: React.FC = () => {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="user@example.com"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -454,7 +454,7 @@ export const UsersGroups: React.FC = () => {
                   type="text"
                   value={editUsername}
                   onChange={(e) => setEditUsername(e.target.value)}
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -466,7 +466,7 @@ export const UsersGroups: React.FC = () => {
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     placeholder="Enter new password"
-                    className="w-full px-3 py-2 pr-10 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-3 py-2 pr-10 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <button
                     type="button"
@@ -485,7 +485,7 @@ export const UsersGroups: React.FC = () => {
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
                   placeholder="user@example.com"
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -535,7 +535,7 @@ export const UsersGroups: React.FC = () => {
                   type="text"
                   value={editGroupName}
                   onChange={(e) => setEditGroupName(e.target.value)}
-                  className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   autoFocus
                 />
               </div>

@@ -318,7 +318,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                   {/* ID & Links */}
                   <div className="space-y-4">
-                     <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                     <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
                         <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Transaction ID</p>
                         <div className="flex items-center justify-between">
                            <code className="text-xs font-mono break-all text-sanctuary-700 dark:text-sanctuary-300 mr-4">
@@ -365,7 +365,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                              (selectedTx.amount > 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress))
                            );
                            return (
-                             <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                             <div className="p-3 rounded-lg surface-muted border border-sanctuary-100 dark:border-sanctuary-800">
                                <p className="text-xs text-sanctuary-500 mb-1">Type</p>
                                <p className={`text-sm font-medium ${
                                  isSelectedConsolidation
@@ -381,7 +381,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                          })()}
 
                          {/* Date & Time */}
-                         <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                         <div className="p-3 rounded-lg surface-muted border border-sanctuary-100 dark:border-sanctuary-800">
                             <p className="text-xs text-sanctuary-500 mb-1">Date & Time</p>
                             <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
                                {new Date(selectedTx.timestamp).toLocaleDateString()}
@@ -392,7 +392,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                          </div>
 
                          {/* Block Height */}
-                         <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                         <div className="p-3 rounded-lg surface-muted border border-sanctuary-100 dark:border-sanctuary-800">
                             <p className="text-xs text-sanctuary-500 mb-1">Block Height</p>
                             <p className="text-sm font-mono font-medium text-sanctuary-900 dark:text-sanctuary-100">
                                {selectedTx.blockHeight != null && selectedTx.blockHeight > 0
@@ -403,7 +403,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                          {/* Network Fee - only show for sent transactions */}
                          {selectedTx.amount < 0 ? (
-                           <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                           <div className="p-3 rounded-lg surface-muted border border-sanctuary-100 dark:border-sanctuary-800">
                               <p className="text-xs text-sanctuary-500 mb-1">Network Fee</p>
                               <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
                                  {selectedTx.fee != null && selectedTx.fee > 0
@@ -412,7 +412,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                               </p>
                            </div>
                          ) : (
-                           <div className="p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-100 dark:border-sanctuary-800">
+                           <div className="p-3 rounded-lg surface-muted border border-sanctuary-100 dark:border-sanctuary-800">
                               <p className="text-xs text-sanctuary-500 mb-1">Confirmations</p>
                               <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
                                  {selectedTx.confirmations?.toLocaleString() || '0'}
@@ -428,7 +428,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                           (selectedTx.amount > 0 && selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress))
                         );
                         return (
-                        <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                        <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
                            <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">
                               {isSelectedConsolidation
                                 ? 'Consolidation Address (Your Wallet)'
@@ -445,7 +445,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                       {/* Your Address - which of your addresses was involved */}
                       {selectedTx.address && (
-                        <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                        <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
                            <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">
                               {selectedTx.amount > 0 ? 'Your Receiving Address' : 'Your Sending Address'}
                            </p>
@@ -456,7 +456,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       )}
 
                       {/* Labels Section */}
-                      <div className="bg-sanctuary-50 dark:bg-sanctuary-950 p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
+                      <div className="surface-muted p-4 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800">
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-xs font-medium text-sanctuary-500 uppercase">Labels</p>
                           {!editingLabels ? (

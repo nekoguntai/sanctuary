@@ -182,7 +182,7 @@ export const BatchSend: React.FC = () => {
                   value={recipient.address}
                   onChange={(e) => updateRecipient(recipient.id, 'address', e.target.value)}
                   placeholder="bc1q..."
-                  className="block w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 text-sm focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-muted text-sm focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
               </div>
 
@@ -195,7 +195,7 @@ export const BatchSend: React.FC = () => {
                   value={recipient.amount}
                   onChange={(e) => updateRecipient(recipient.id, 'amount', e.target.value)}
                   placeholder="0"
-                  className="block w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 text-sm focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-muted text-sm focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 {recipient.amount && parseInt(recipient.amount) > 0 && (
                   <p className="text-xs text-sanctuary-500 mt-1">
@@ -234,7 +234,7 @@ export const BatchSend: React.FC = () => {
               value={feeRate}
               onChange={(e) => setFeeRate(parseInt(e.target.value))}
               min={1}
-              className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+              className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
             />
           </div>
 

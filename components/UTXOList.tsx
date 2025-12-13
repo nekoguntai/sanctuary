@@ -63,7 +63,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-4 sticky top-0 bg-sanctuary-50 dark:bg-sanctuary-950 z-10 py-2">
+      <div className="flex justify-between items-center mb-4 sticky top-0 surface-muted z-10 py-2">
          <div className="flex items-center space-x-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Available Outputs</h4>
             <span className="text-xs text-sanctuary-400 surface-secondary px-2 py-1 rounded-full">{utxos.length} UTXOs</span>

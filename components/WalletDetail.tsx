@@ -935,7 +935,7 @@ export const WalletDetail: React.FC = () => {
              ) : (
                <div className="overflow-x-auto">
                  <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-                   <thead className="bg-sanctuary-50 dark:bg-sanctuary-950">
+                   <thead className="surface-muted">
                      <tr>
                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Index</th>
                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Address</th>
@@ -1091,7 +1091,7 @@ export const WalletDetail: React.FC = () => {
                ) : (
                  <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
                    {/* Sub-tabs Header */}
-                   <div className="px-6 py-3 bg-sanctuary-50 dark:bg-sanctuary-950 border-b border-sanctuary-100 dark:border-sanctuary-800">
+                   <div className="px-6 py-3 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800">
                      <div className="flex items-center justify-between">
                        <div className="flex space-x-1">
                          <button
@@ -1218,7 +1218,7 @@ export const WalletDetail: React.FC = () => {
 
                {/* Share with Group - only for owners */}
                {wallet.userRole === 'owner' && !walletShareInfo?.group && (
-                 <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                 <div className="mb-6 p-4 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                    <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with Group</p>
                    <div className="flex space-x-2">
                      <select
@@ -1308,7 +1308,7 @@ export const WalletDetail: React.FC = () => {
 
                {/* Search and Add User - only for owners */}
                {wallet.userRole === 'owner' && (
-                 <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                 <div className="mb-6 p-4 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                    <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with User</p>
                    <div className="relative">
                      <input
@@ -1561,7 +1561,7 @@ export const WalletDetail: React.FC = () => {
                         <label className="block text-xs font-medium text-sanctuary-500 mb-1">Output Descriptor</label>
                         <textarea
                         readOnly
-                        className="w-full h-32 p-3 text-xs font-mono bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
+                        className="w-full h-32 p-3 text-xs font-mono surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
                         value={wallet.descriptor}
                         />
                          <Button className="w-full mt-4" variant={isCopied(wallet.descriptor) ? 'primary' : 'secondary'} onClick={() => copy(wallet.descriptor)}>
@@ -1621,7 +1621,7 @@ export const WalletDetail: React.FC = () => {
                   </div>
                   <div className="w-full">
                     <label className="block text-xs font-medium text-sanctuary-500 mb-1">Receive Address</label>
-                    <div className="flex items-center space-x-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
                       <code className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
                         {receiveAddress}
                       </code>
@@ -1670,7 +1670,7 @@ export const WalletDetail: React.FC = () => {
               </div>
               <div className="w-full">
                 <label className="block text-xs font-medium text-sanctuary-500 mb-1">Full Address</label>
-                <div className="flex items-center space-x-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
+                <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
                   <span className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
                     {qrModalAddress}
                   </span>
@@ -1707,7 +1707,7 @@ export const WalletDetail: React.FC = () => {
                       type="text" 
                       value={deleteInput}
                       onChange={(e) => setDeleteInput(e.target.value)}
-                      className="w-full px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-950 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted focus:outline-none focus:ring-2 focus:ring-rose-500"
                       placeholder="DELETE"
                    />
                 </div>

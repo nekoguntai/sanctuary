@@ -209,7 +209,7 @@ export const Settings: React.FC = () => {
                 <select 
                   value={fiatCurrency}
                   onChange={(e) => setFiatCurrency(e.target.value as FiatCurrency)}
-                  className="appearance-none bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="appearance-none surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                    <option value="USD">USD ($)</option>
                    <option value="EUR">EUR (€)</option>
@@ -256,7 +256,7 @@ export const Settings: React.FC = () => {
                  <select
                    value={priceProvider}
                    onChange={(e) => setPriceProvider(e.target.value)}
-                   className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                   className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                  >
                    {availableProviders.map(provider => (
                      <option key={provider} value={provider}>
@@ -284,7 +284,7 @@ export const Settings: React.FC = () => {
                       Refresh Price
                     </Button>
                  </div>
-                 <div className="bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+                 <div className="surface-muted rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
                     <div className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-100">
                        {btcPrice !== null
                          ? `${currencySymbol}${btcPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`

@@ -464,7 +464,7 @@ export const ConnectDevice: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search devices..."
-                className="w-full pl-10 pr-10 py-2.5 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500 placeholder-sanctuary-400"
+                className="w-full pl-10 pr-10 py-2.5 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500 placeholder-sanctuary-400"
               />
               {searchQuery && (
                 <button
@@ -542,7 +542,7 @@ export const ConnectDevice: React.FC = () => {
               <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">2. Connection Method</h3>
 
               {/* Device Capabilities Preview */}
-              <div className="mb-4 p-3 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl">
+              <div className="mb-4 p-3 surface-muted rounded-xl">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-3">
                     {getDeviceIcon(selectedModel.name, "w-6 h-6")}
@@ -597,7 +597,7 @@ export const ConnectDevice: React.FC = () => {
               {method && (
                 <div className="mt-4">
                   {(method === 'usb' || method === 'bluetooth' || method === 'nfc') && (
-                    <div className="text-center py-6 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                    <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                       {!scanning && !scanned && (
                         <>
                           <div className="mx-auto text-sanctuary-400 mb-3 flex justify-center">
@@ -631,7 +631,7 @@ export const ConnectDevice: React.FC = () => {
                   )}
 
                   {(method === 'sd_card' || method === 'qr_code') && (
-                    <div className="text-center py-6 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                    <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                       {!scanning && !scanned && (
                         <>
                           <FileJson className="w-12 h-12 mx-auto text-sanctuary-400 mb-3" />
@@ -701,7 +701,7 @@ export const ConnectDevice: React.FC = () => {
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
                     placeholder={`My ${selectedModel.name}`}
-                    className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                   />
                 </div>
 
@@ -711,7 +711,7 @@ export const ConnectDevice: React.FC = () => {
                     type="text"
                     value={derivationPath}
                     onChange={(e) => setDerivationPath(e.target.value)}
-                    className="w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                   />
                   <p className="text-[10px] text-sanctuary-400 mt-1">BIP84 Native SegWit default</p>
                 </div>
@@ -724,7 +724,7 @@ export const ConnectDevice: React.FC = () => {
                     onChange={(e) => setFingerprint(e.target.value)}
                     placeholder="00000000"
                     readOnly={method !== 'manual' && scanned}
-                    className={`w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
+                    className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
                   />
                 </div>
 
@@ -736,7 +736,7 @@ export const ConnectDevice: React.FC = () => {
                     placeholder="xpub... / ypub... / zpub..."
                     readOnly={method !== 'manual' && scanned}
                     rows={3}
-                    className={`w-full px-3 py-2 bg-sanctuary-50 dark:bg-sanctuary-950 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
+                    className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
                   />
                 </div>
 

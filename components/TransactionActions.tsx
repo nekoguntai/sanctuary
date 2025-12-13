@@ -223,7 +223,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                   value={newFeeRate}
                   onChange={(e) => setNewFeeRate(parseInt(e.target.value))}
                   min={rbfStatus.minNewFeeRate || 1}
-                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 {rbfStatus.minNewFeeRate && (
                   <p className="text-xs text-sanctuary-500">
@@ -290,7 +290,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                   onChange={(e) => setTargetFeeRate(parseInt(e.target.value))}
                   min={1}
                   placeholder="e.g., 50"
-                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-950 focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
+                  className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 <p className="text-xs text-sanctuary-500">
                   The effective fee rate for both transactions combined

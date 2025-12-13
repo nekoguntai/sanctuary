@@ -557,7 +557,15 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
-    const { groupId } = req.body;
+    const { groupId, role = 'viewer' } = req.body;
+
+    // Validate role
+    if (role && !['viewer', 'signer'].includes(role)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid role. Must be viewer or signer',
+      });
+    }
 
     // Verify user is owner of the wallet
     const walletUser = await prisma.walletUser.findFirst({
@@ -592,10 +600,13 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
       }
     }
 
-    // Update wallet's group
+    // Update wallet's group and role
     const wallet = await prisma.wallet.update({
       where: { id },
-      data: { groupId: groupId || null },
+      data: {
+        groupId: groupId || null,
+        groupRole: groupId ? role : 'viewer', // Reset to default if removing group
+      },
       include: {
         group: true,
       },
@@ -605,6 +616,7 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
       success: true,
       groupId: wallet.groupId,
       groupName: wallet.group?.name || null,
+      groupRole: wallet.groupRole,
     });
   } catch (error: any) {
     console.error('[WALLETS] Share with group error:', error);
@@ -819,6 +831,7 @@ router.get('/:id/share', async (req: Request, res: Response) => {
       group: wallet.group ? {
         id: wallet.group.id,
         name: wallet.group.name,
+        role: wallet.groupRole,
       } : null,
       users: wallet.users.map((wu: { user: { id: string; username: string }; role: string }) => ({
         id: wu.user.id,

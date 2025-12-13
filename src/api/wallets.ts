@@ -201,6 +201,7 @@ export async function importWallet(data: ImportWalletRequest): Promise<ImportWal
 // Wallet sharing types
 export interface ShareWithGroupRequest {
   groupId: string | null;
+  role?: 'viewer' | 'signer';
 }
 
 export interface ShareWithUserRequest {
@@ -212,6 +213,7 @@ export interface WalletShareInfo {
   group: {
     id: string;
     name: string;
+    role: string;
   } | null;
   users: Array<{
     id: string;

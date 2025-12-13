@@ -50,6 +50,9 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Group permissions** — Organize users into groups with shared wallet access
 - **Admin controls** — Configure public registration and system settings
 - **Dark mode** — Easy on the eyes, day or night
+- **Two-factor authentication** — Optional TOTP-based 2FA with backup codes
+- **Audit logging** — Track security-relevant events and user actions
+- **Backup & restore** — Export/import all data via the web UI
 
 ## Architecture
 
@@ -558,6 +561,27 @@ Administrators can configure system-wide settings under **Administration → Sys
 
 - **Public Registration** — Enable/disable self-service account creation. When disabled (default), only administrators can create new user accounts.
 
+### Two-Factor Authentication
+
+Users can enable TOTP-based two-factor authentication for additional account security:
+
+1. Go to **Account** (click your username in the sidebar)
+2. Find the **Two-Factor Authentication** section
+3. Click **Enable 2FA**
+4. Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
+5. Enter the 6-digit code to verify
+6. **Save your backup codes** — these can be used if you lose access to your authenticator
+
+**Backup codes:**
+- 10 single-use codes are generated when 2FA is enabled
+- Each code can only be used once
+- Store them securely (password manager, printed copy in a safe place)
+- You can regenerate codes from the Account page if needed
+
+**Disabling 2FA:**
+- Requires your current password and a valid 2FA code
+- This is intentionally difficult to prevent unauthorized disabling
+
 ## Updating
 
 ```bash
@@ -570,13 +594,39 @@ docker compose up -d
 
 ## Backup & Restore
 
-### Database Backup
-```bash
-docker compose exec postgres pg_dump -U sanctuary sanctuary > backup.sql
-```
+Sanctuary provides multiple ways to backup and restore your data.
 
-### Database Restore
+### Web UI Backup (Recommended)
+
+The easiest way to backup is through the web interface:
+
+1. Go to **Administration → Backup & Restore**
+2. Click **Create Backup** to generate an encrypted backup file
+3. Enter a password to encrypt the backup
+4. Download the `.sanctuary-backup` file and store it securely
+
+To restore:
+1. Go to **Administration → Backup & Restore**
+2. Click **Restore from Backup**
+3. Upload your backup file and enter the decryption password
+4. Choose whether to merge with existing data or replace entirely
+
+**What's included in UI backups:**
+- All wallets, devices, and their configurations
+- User accounts and preferences (including 2FA settings)
+- Transaction labels and address labels
+- Groups and sharing permissions
+- Audit logs
+
+### Command-Line Backup
+
+For scripted or automated backups:
+
 ```bash
+# Full database backup
+docker compose exec postgres pg_dump -U sanctuary sanctuary > backup.sql
+
+# Restore from backup
 cat backup.sql | docker compose exec -T postgres psql -U sanctuary sanctuary
 ```
 
@@ -604,17 +654,23 @@ Sanctuary **never** stores:
 
 ### Network Exposure
 
-By default, Sanctuary only listens on `localhost`. To expose it:
+By default, Sanctuary listens on all network interfaces (`0.0.0.0`). This means it's accessible from other devices on your network.
+
+**To restrict to localhost only:**
 
 ```yaml
 # docker-compose.override.yml
 services:
   frontend:
     ports:
-      - "0.0.0.0:8080:80"  # Expose to network
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
+      - "127.0.0.1:${HTTPS_PORT:-443}:443"
 ```
 
-For production deployments, put Sanctuary behind a reverse proxy (nginx, Caddy, Traefik) with TLS.
+**For production deployments:**
+- Use a reverse proxy (nginx, Caddy, Traefik) with proper TLS certificates
+- Configure firewall rules to restrict access
+- Consider VPN access for remote administration
 
 ## Troubleshooting
 

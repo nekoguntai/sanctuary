@@ -160,7 +160,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
               {wallets.length === 0 && (
                  <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No wallets created</div>
               )}
-              {wallets.map(w => {
+              {[...wallets].sort((a, b) => a.name.localeCompare(b.name)).map(w => {
                 const isMultisig = w.type === 'multi_sig';
                 const walletType = isMultisig ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
                 // Use semantic colors (success/warning) to respect theme settings
@@ -194,12 +194,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                  {devices.length === 0 && (
                     <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No devices connected</div>
                  )}
-                 {devices.map(d => (
-                   <SubNavItem 
-                     key={d.id} 
-                     to={`/devices/${d.id}`} 
-                     label={d.label} 
-                     icon={getDeviceIcon(d.type, "w-3 h-3 text-sanctuary-400")} 
+                 {[...devices].sort((a, b) => a.label.localeCompare(b.label)).map(d => (
+                   <SubNavItem
+                     key={d.id}
+                     to={`/devices/${d.id}`}
+                     label={d.label}
+                     icon={getDeviceIcon(d.type, "w-3 h-3 text-sanctuary-400")}
                    />
                  ))}
               </div>
@@ -225,14 +225,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
             {expanded.admin && (
               <div className="animate-fade-in-up space-y-0.5 mb-2">
                 <SubNavItem
-                  to="/admin/settings"
-                  label="System Settings"
-                  icon={<Cog className="w-3 h-3" />}
-                />
-                <SubNavItem
                   to="/admin/node-config"
                   label="Node Config"
                   icon={<Server className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/settings"
+                  label="System Settings"
+                  icon={<Cog className="w-3 h-3" />}
                 />
                 <SubNavItem
                   to="/admin/users-groups"

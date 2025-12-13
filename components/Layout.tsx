@@ -23,6 +23,7 @@ import { WalletType, HardwareDevice } from '../types';
 import { useUser } from '../contexts/UserContext';
 import { getWallets, Wallet as ApiWallet } from '../src/api/wallets';
 import { getDevices, Device as ApiDevice } from '../src/api/devices';
+import { version } from '../package.json';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -246,14 +247,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         <NavItem to="/settings" icon={Settings} label="Settings" />
       </nav>
 
-      <div className="flex-shrink-0 flex border-t border-sanctuary-200 dark:border-sanctuary-800 p-4">
+      <div className="flex-shrink-0 border-t border-sanctuary-200 dark:border-sanctuary-800 p-4">
         <div className="flex items-center w-full justify-between">
+          <div className="flex items-center">
             <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg text-sanctuary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
-          >
-            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-sanctuary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
+            >
+              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+            <span className="text-xs text-sanctuary-400 ml-1">v{version}</span>
+          </div>
           <div className="flex items-center">
              <span className="text-xs font-medium text-sanctuary-500 mr-3">{user?.username}</span>
              <button

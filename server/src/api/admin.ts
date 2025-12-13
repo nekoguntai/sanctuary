@@ -125,6 +125,11 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
 
     log.info('[ADMIN] Node config updated:', { type, host, port });
 
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.NODE_CONFIG_UPDATE, AuditCategory.ADMIN, {
+      details: { type, host, port },
+    });
+
     // Reset the active node client so it reconnects with new config
     resetNodeClient();
 
@@ -319,6 +324,11 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
 
     log.info('[ADMIN] User created:', { username, isAdmin: isAdmin === true });
 
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.USER_CREATE, AuditCategory.USER, {
+      details: { targetUser: username, isAdmin: isAdmin === true },
+    });
+
     res.status(201).json(user);
   } catch (error) {
     log.error('[ADMIN] Create user error', { error: String(error) });
@@ -413,6 +423,20 @@ router.put('/users/:userId', authenticate, requireAdmin, async (req: Request, re
 
     log.info('[ADMIN] User updated:', { userId, changes: Object.keys(updateData) });
 
+    // Audit log - check for admin role changes
+    if ('isAdmin' in updateData) {
+      await auditService.logFromRequest(
+        req,
+        updateData.isAdmin ? AuditAction.USER_ADMIN_GRANT : AuditAction.USER_ADMIN_REVOKE,
+        AuditCategory.USER,
+        { details: { targetUser: user.username, userId } }
+      );
+    } else {
+      await auditService.logFromRequest(req, AuditAction.USER_UPDATE, AuditCategory.USER, {
+        details: { targetUser: user.username, userId, changes: Object.keys(updateData) },
+      });
+    }
+
     res.json(user);
   } catch (error) {
     log.error('[ADMIN] Update user error', { error: String(error) });
@@ -458,6 +482,11 @@ router.delete('/users/:userId', authenticate, requireAdmin, async (req: Request,
     });
 
     log.info('[ADMIN] User deleted:', { userId, username: existingUser.username });
+
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.USER_DELETE, AuditCategory.USER, {
+      details: { targetUser: existingUser.username, userId },
+    });
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -581,6 +610,11 @@ router.post('/groups', authenticate, requireAdmin, async (req: Request, res: Res
     });
 
     log.info('[ADMIN] Group created:', { name, id: group.id });
+
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.GROUP_CREATE, AuditCategory.ADMIN, {
+      details: { groupName: name, groupId: group.id, memberCount: memberIds?.length || 0 },
+    });
 
     res.status(201).json({
       id: completeGroup!.id,
@@ -740,6 +774,11 @@ router.delete('/groups/:groupId', authenticate, requireAdmin, async (req: Reques
 
     log.info('[ADMIN] Group deleted:', { groupId, name: existingGroup.name });
 
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.GROUP_DELETE, AuditCategory.ADMIN, {
+      details: { groupName: existingGroup.name, groupId },
+    });
+
     res.json({ message: 'Group deleted successfully' });
   } catch (error) {
     log.error('[ADMIN] Delete group error', { error: String(error) });
@@ -816,6 +855,11 @@ router.post('/groups/:groupId/members', authenticate, requireAdmin, async (req: 
 
     log.info('[ADMIN] Member added to group:', { groupId, userId, role: membership.role });
 
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.GROUP_MEMBER_ADD, AuditCategory.ADMIN, {
+      details: { groupId, targetUser: user.username, role: membership.role },
+    });
+
     res.status(201).json({
       userId,
       username: user.username,
@@ -860,6 +904,11 @@ router.delete('/groups/:groupId/members/:userId', authenticate, requireAdmin, as
     });
 
     log.info('[ADMIN] Member removed from group:', { groupId, userId });
+
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.GROUP_MEMBER_REMOVE, AuditCategory.ADMIN, {
+      details: { groupId, userId },
+    });
 
     res.json({ message: 'Member removed from group successfully' });
   } catch (error) {
@@ -926,6 +975,11 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
 
     log.info('[ADMIN] Settings updated:', Object.keys(updates));
 
+    // Audit log
+    await auditService.logFromRequest(req, AuditAction.SYSTEM_SETTING_UPDATE, AuditCategory.SYSTEM, {
+      details: { settings: Object.keys(updates) },
+    });
+
     // Return updated settings
     const settings = await prisma.systemSetting.findMany();
     const settingsObj: Record<string, any> = {
@@ -954,6 +1008,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
 // ========================================
 
 import { backupService, SanctuaryBackup } from '../services/backupService';
+import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 
 /**
  * POST /api/v1/admin/backup
@@ -975,6 +1030,16 @@ router.post('/backup', authenticate, requireAdmin, async (req: Request, res: Res
     const backup = await backupService.createBackup(adminUser, {
       includeCache: includeCache === true,
       description,
+    });
+
+    // Audit log
+    const totalRecords = Object.values(backup.meta.recordCounts).reduce((a, b) => a + b, 0);
+    await auditService.logFromRequest(req, AuditAction.BACKUP_CREATE, AuditCategory.BACKUP, {
+      details: {
+        tables: Object.keys(backup.data).length,
+        records: totalRecords,
+        includeCache: includeCache === true,
+      },
     });
 
     // Generate filename with timestamp
@@ -1094,6 +1159,16 @@ router.post('/restore', authenticate, requireAdmin, async (req: Request, res: Re
       recordsRestored: result.recordsRestored,
     });
 
+    // Audit log (note: this creates a new audit log in the restored DB)
+    await auditService.logFromRequest(req, AuditAction.BACKUP_RESTORE, AuditCategory.BACKUP, {
+      details: {
+        tablesRestored: result.tablesRestored,
+        recordsRestored: result.recordsRestored,
+        backupDate: backup.meta?.createdAt,
+        backupCreatedBy: backup.meta?.createdBy,
+      },
+    });
+
     res.json({
       success: true,
       message: 'Database restored successfully',
@@ -1106,6 +1181,82 @@ router.post('/restore', authenticate, requireAdmin, async (req: Request, res: Re
     res.status(500).json({
       error: 'Restore Failed',
       message: 'An unexpected error occurred during restore',
+    });
+  }
+});
+
+// ========================================
+// AUDIT LOGS
+// ========================================
+
+/**
+ * GET /api/v1/admin/audit-logs
+ * Get audit logs with optional filters (admin only)
+ *
+ * Query parameters:
+ *   - userId: Filter by user ID
+ *   - username: Filter by username (partial match)
+ *   - action: Filter by action (partial match)
+ *   - category: Filter by category (auth, user, wallet, device, admin, backup, system)
+ *   - success: Filter by success status (true/false)
+ *   - startDate: Filter by start date (ISO string)
+ *   - endDate: Filter by end date (ISO string)
+ *   - limit: Number of records (default 50, max 500)
+ *   - offset: Skip records for pagination
+ */
+router.get('/audit-logs', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const {
+      userId,
+      username,
+      action,
+      category,
+      success,
+      startDate,
+      endDate,
+      limit,
+      offset,
+    } = req.query;
+
+    const result = await auditService.query({
+      userId: userId as string,
+      username: username as string,
+      action: action as string,
+      category: category as AuditCategory,
+      success: success !== undefined ? success === 'true' : undefined,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      limit: Math.min(parseInt(limit as string) || 50, 500),
+      offset: parseInt(offset as string) || 0,
+    });
+
+    res.json(result);
+  } catch (error) {
+    log.error('[ADMIN] Get audit logs error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get audit logs',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/admin/audit-logs/stats
+ * Get audit log statistics (admin only)
+ *
+ * Query parameters:
+ *   - days: Number of days to include (default 30)
+ */
+router.get('/audit-logs/stats', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const stats = await auditService.getStats(days);
+    res.json(stats);
+  } catch (error) {
+    log.error('[ADMIN] Get audit stats error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get audit statistics',
     });
   }
 });

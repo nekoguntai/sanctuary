@@ -18,6 +18,7 @@ import {
   Shield,
   Cog,
   Database,
+  FileText,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
@@ -245,6 +246,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                   to="/admin/backup"
                   label="Backup & Restore"
                   icon={<Database className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/audit-logs"
+                  label="Audit Logs"
+                  icon={<FileText className="w-3 h-3" />}
                 />
               </div>
             )}

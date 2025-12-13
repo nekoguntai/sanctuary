@@ -379,3 +379,27 @@ model AddressLabel {
   @@index([labelId])
   @@map("address_labels")
 }
+
+// ========================================
+// AUDIT LOGGING
+// ========================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  // Null for system events or failed auth
+  username  String   // Stored separately in case user is deleted
+  action    String   // e.g., "user.create", "wallet.share", "backup.create"
+  category  String   // auth, user, wallet, device, admin, system
+  details   Json?    // Additional context (target user, wallet name, etc.)
+  ipAddress String?  // Client IP address
+  userAgent String?  // Browser/client info
+  success   Boolean  @default(true)
+  errorMsg  String?  // Error message if success=false
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([category])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

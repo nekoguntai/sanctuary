@@ -297,3 +297,88 @@ export async function restoreBackup(backup: SanctuaryBackup): Promise<RestoreRes
     confirmationCode: 'CONFIRM_RESTORE',
   });
 }
+
+// ========================================
+// AUDIT LOGS
+// ========================================
+
+/**
+ * Audit log entry
+ */
+export interface AuditLogEntry {
+  id: string;
+  userId: string | null;
+  username: string;
+  action: string;
+  category: string;
+  details: Record<string, unknown> | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  success: boolean;
+  errorMsg: string | null;
+  createdAt: string;
+}
+
+/**
+ * Audit log query options
+ */
+export interface AuditLogQuery {
+  userId?: string;
+  username?: string;
+  action?: string;
+  category?: string;
+  success?: boolean;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Audit log query result
+ */
+export interface AuditLogResult {
+  logs: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Audit log statistics
+ */
+export interface AuditLogStats {
+  totalEvents: number;
+  byCategory: Record<string, number>;
+  byAction: Record<string, number>;
+  failedEvents: number;
+}
+
+/**
+ * Get audit logs with optional filters (admin only)
+ */
+export async function getAuditLogs(query?: AuditLogQuery): Promise<AuditLogResult> {
+  const params = new URLSearchParams();
+  if (query) {
+    if (query.userId) params.set('userId', query.userId);
+    if (query.username) params.set('username', query.username);
+    if (query.action) params.set('action', query.action);
+    if (query.category) params.set('category', query.category);
+    if (query.success !== undefined) params.set('success', String(query.success));
+    if (query.startDate) params.set('startDate', query.startDate);
+    if (query.endDate) params.set('endDate', query.endDate);
+    if (query.limit) params.set('limit', String(query.limit));
+    if (query.offset) params.set('offset', String(query.offset));
+  }
+  const queryString = params.toString();
+  const url = queryString ? `/admin/audit-logs?${queryString}` : '/admin/audit-logs';
+  return apiClient.get<AuditLogResult>(url);
+}
+
+/**
+ * Get audit log statistics (admin only)
+ */
+export async function getAuditLogStats(days?: number): Promise<AuditLogStats> {
+  const url = days ? `/admin/audit-logs/stats?days=${days}` : '/admin/audit-logs/stats';
+  return apiClient.get<AuditLogStats>(url);
+}

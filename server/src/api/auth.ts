@@ -9,6 +9,7 @@ import prisma from '../models/prisma';
 import { hashPassword, verifyPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { authenticate } from '../middleware/auth';
+import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 
 const router = Router();
 
@@ -158,6 +159,18 @@ router.post('/login', async (req: Request, res: Response) => {
     });
 
     if (!user) {
+      // Audit failed login (user not found)
+      const { ipAddress, userAgent } = getClientInfo(req);
+      await auditService.log({
+        username,
+        action: AuditAction.LOGIN_FAILED,
+        category: AuditCategory.AUTH,
+        ipAddress,
+        userAgent,
+        success: false,
+        errorMsg: 'User not found',
+      });
+
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid username or password',
@@ -168,6 +181,19 @@ router.post('/login', async (req: Request, res: Response) => {
     const isValid = await verifyPassword(password, user.password);
 
     if (!isValid) {
+      // Audit failed login (wrong password)
+      const { ipAddress, userAgent } = getClientInfo(req);
+      await auditService.log({
+        userId: user.id,
+        username: user.username,
+        action: AuditAction.LOGIN_FAILED,
+        category: AuditCategory.AUTH,
+        ipAddress,
+        userAgent,
+        success: false,
+        errorMsg: 'Invalid password',
+      });
+
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid username or password',
@@ -179,6 +205,18 @@ router.post('/login', async (req: Request, res: Response) => {
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
+    });
+
+    // Audit successful login
+    const { ipAddress, userAgent } = getClientInfo(req);
+    await auditService.log({
+      userId: user.id,
+      username: user.username,
+      action: AuditAction.LOGIN,
+      category: AuditCategory.AUTH,
+      ipAddress,
+      userAgent,
+      success: true,
     });
 
     res.json({
@@ -425,6 +463,11 @@ router.post('/me/change-password', authenticate, async (req: Request, res: Respo
       data: {
         password: hashedPassword,
       },
+    });
+
+    // Audit password change
+    await auditService.logFromRequest(req, AuditAction.PASSWORD_CHANGE, AuditCategory.AUTH, {
+      details: { userId: user.id },
     });
 
     res.json({

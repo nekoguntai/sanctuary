@@ -25,7 +25,7 @@ const BACKUP_FORMAT_VERSION = '1.0.0';
 
 // Current schema version (increment when schema changes)
 // This should match the number of migrations applied
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 /**
  * Tables in dependency order for export/import.
@@ -57,6 +57,9 @@ const TABLE_ORDER = [
   // Fourth-level dependencies
   'transactionLabel', // FK: transactionId, labelId
   'addressLabel',     // FK: addressId, labelId
+
+  // Independent tables (no FK) - placed last for logical grouping
+  'auditLog',         // No FK (userId stored as string for history)
 ] as const;
 
 // Optional cache tables (excluded by default)

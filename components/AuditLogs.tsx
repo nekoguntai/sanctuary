@@ -332,7 +332,7 @@ export const AuditLogs: React.FC = () => {
       <div className="surface-elevated rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-sanctuary-50 dark:bg-sanctuary-950">
+            <thead className="surface-muted">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wider">
                   Time

@@ -305,6 +305,31 @@
       html.dark .surface-hover:hover {
         background-color: var(--color-bg-800);
       }
+
+      /* Muted surface - table headers, subtle backgrounds
+       * Use instead of: bg-sanctuary-50 dark:bg-sanctuary-950 */
+      .surface-muted {
+        background-color: var(--color-bg-50);
+      }
+      html.dark .surface-muted {
+        background-color: var(--color-bg-950);
+      }
+
+      /* ==============================================
+       * QUICK REFERENCE - Which surface class to use:
+       *
+       * surface-primary   - Main cards, panels (white, 900)
+       * surface-secondary - Nested sections (100, 800)
+       * surface-elevated  - Modals, dropdowns (white, 900)
+       * surface-inset     - Code blocks, form inputs (100, 950)
+       * surface-muted     - Table headers, subtle bgs (50, 950)
+       * surface-hover     - Hover states only (100, 800)
+       *
+       * NEVER USE:
+       * - bg-white dark:bg-X (white doesn't exist in dark mode)
+       * - Opacity modifiers like dark:bg-sanctuary-800/50
+       * - Hardcoded colors without dark: variant
+       * ============================================== */
     </style>
 </head>
   <body class="bg-sanctuary-50 text-sanctuary-900 dark:bg-sanctuary-950 dark:text-sanctuary-100 transition-colors duration-300">

@@ -572,11 +572,11 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const addGroup = async () => {
+  const addGroup = async (role: 'viewer' | 'signer' = 'viewer') => {
     if (!wallet || !selectedGroupToAdd || !id) return;
     try {
       setSharingLoading(true);
-      await walletsApi.shareWalletWithGroup(id, { groupId: selectedGroupToAdd });
+      await walletsApi.shareWalletWithGroup(id, { groupId: selectedGroupToAdd, role });
       // Refresh share info
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
@@ -585,6 +585,24 @@ export const WalletDetail: React.FC = () => {
       console.error('Failed to share with group:', err);
       if (err instanceof ApiError) {
         alert(`Failed to share: ${err.message}`);
+      }
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const updateGroupRole = async (role: 'viewer' | 'signer') => {
+    if (!wallet || !walletShareInfo?.group || !id) return;
+    try {
+      setSharingLoading(true);
+      await walletsApi.shareWalletWithGroup(id, { groupId: walletShareInfo.group.id, role });
+      // Refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+    } catch (err) {
+      console.error('Failed to update group role:', err);
+      if (err instanceof ApiError) {
+        alert(`Failed to update role: ${err.message}`);
       }
     } finally {
       setSharingLoading(false);
@@ -1153,9 +1171,20 @@ export const WalletDetail: React.FC = () => {
                          <option key={g.id} value={g.id}>{g.name}</option>
                        ))}
                      </select>
-                     <Button size="sm" onClick={addGroup} disabled={!selectedGroupToAdd || sharingLoading} isLoading={sharingLoading}>
-                       <Plus className="w-4 h-4 mr-1" /> Share
-                     </Button>
+                     <button
+                       onClick={() => addGroup('viewer')}
+                       disabled={!selectedGroupToAdd || sharingLoading}
+                       className="text-xs px-3 py-2 rounded-lg bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
+                     >
+                       Viewer
+                     </button>
+                     <button
+                       onClick={() => addGroup('signer')}
+                       disabled={!selectedGroupToAdd || sharingLoading}
+                       className="text-xs px-3 py-2 rounded-lg bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 transition-colors disabled:opacity-50"
+                     >
+                       Signer
+                     </button>
                    </div>
                    {groups.length === 0 && (
                      <p className="text-xs text-sanctuary-400 mt-2">You are not a member of any groups yet.</p>
@@ -1169,9 +1198,21 @@ export const WalletDetail: React.FC = () => {
                    <div className="surface-secondary px-4 py-3 border-b border-sanctuary-200 dark:border-sanctuary-700 flex justify-between items-center">
                      <div className="flex items-center">
                        <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{walletShareInfo.group.name}</span>
-                       <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
-                         Group Access
-                       </span>
+                       {wallet.userRole === 'owner' ? (
+                         <select
+                           value={walletShareInfo.group.role}
+                           onChange={(e) => updateGroupRole(e.target.value as 'viewer' | 'signer')}
+                           disabled={sharingLoading}
+                           className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full border-none cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-900/50 focus:outline-none focus:ring-0"
+                         >
+                           <option value="viewer">Viewer</option>
+                           <option value="signer">Signer</option>
+                         </select>
+                       ) : (
+                         <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full capitalize">
+                           {walletShareInfo.group.role}
+                         </span>
+                       )}
                      </div>
                      {wallet.userRole === 'owner' && (
                        <button
@@ -1184,7 +1225,9 @@ export const WalletDetail: React.FC = () => {
                      )}
                    </div>
                    <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-900">
-                     <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400">All members of this group can view and access this wallet.</p>
+                     <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400">
+                       All members of this group have <span className="font-medium capitalize">{walletShareInfo.group.role}</span> access to this wallet.
+                     </p>
                    </div>
                  </div>
                ) : (
@@ -1225,11 +1268,9 @@ export const WalletDetail: React.FC = () => {
                      {userSearchResults.length > 0 && (
                        <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                          {userSearchResults.map(u => (
-                           <button
+                           <div
                              key={u.id}
-                             onClick={() => handleShareWithUser(u.id, 'viewer')}
-                             disabled={sharingLoading}
-                             className="w-full text-left px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
+                             className="px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
                            >
                              <div className="flex items-center">
                                <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
@@ -1237,8 +1278,23 @@ export const WalletDetail: React.FC = () => {
                                </div>
                                <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{u.username}</span>
                              </div>
-                             <span className="text-xs text-primary-500">+ Add</span>
-                           </button>
+                             <div className="flex items-center gap-1">
+                               <button
+                                 onClick={() => handleShareWithUser(u.id, 'viewer')}
+                                 disabled={sharingLoading}
+                                 className="text-xs px-2 py-1 rounded bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
+                               >
+                                 Viewer
+                               </button>
+                               <button
+                                 onClick={() => handleShareWithUser(u.id, 'signer')}
+                                 disabled={sharingLoading}
+                                 className="text-xs px-2 py-1 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 transition-colors disabled:opacity-50"
+                               >
+                                 Signer
+                               </button>
+                             </div>
+                           </div>
                          ))}
                        </div>
                      )}
@@ -1257,7 +1313,19 @@ export const WalletDetail: React.FC = () => {
                          </div>
                          <div>
                            <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{u.username}</p>
-                           <p className="text-xs text-sanctuary-500 capitalize">{u.role}</p>
+                           {wallet.userRole === 'owner' ? (
+                             <select
+                               value={u.role}
+                               onChange={(e) => handleShareWithUser(u.id, e.target.value as 'viewer' | 'signer')}
+                               disabled={sharingLoading}
+                               className="text-xs bg-transparent border-none p-0 text-sanctuary-500 capitalize cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 focus:outline-none focus:ring-0"
+                             >
+                               <option value="viewer">Viewer</option>
+                               <option value="signer">Signer</option>
+                             </select>
+                           ) : (
+                             <p className="text-xs text-sanctuary-500 capitalize">{u.role}</p>
+                           )}
                          </div>
                        </div>
                        {wallet.userRole === 'owner' && (

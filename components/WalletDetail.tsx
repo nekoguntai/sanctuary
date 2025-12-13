@@ -62,6 +62,12 @@ export const WalletDetail: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [utxos, setUTXOs] = useState<UTXO[]>([]);
 
+  // Transaction Pagination State
+  const TX_PAGE_SIZE = 50;
+  const [txOffset, setTxOffset] = useState(0);
+  const [hasMoreTx, setHasMoreTx] = useState(true);
+  const [loadingMoreTx, setLoadingMoreTx] = useState(false);
+
   // Addresses State
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressLimit, setAddressLimit] = useState(20);
@@ -309,9 +315,9 @@ export const WalletDetail: React.FC = () => {
         .catch(err => console.error('Failed to fetch devices:', err))
     );
 
-    // Fetch transactions
+    // Fetch transactions (initial load)
     fetchPromises.push(
-      transactionsApi.getTransactions(id, { limit: 50 })
+      transactionsApi.getTransactions(id, { limit: TX_PAGE_SIZE, offset: 0 })
         .then(apiTransactions => {
           const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
             id: tx.id,
@@ -330,6 +336,8 @@ export const WalletDetail: React.FC = () => {
             counterpartyAddress: tx.counterpartyAddress || undefined,
           }));
           setTransactions(formattedTxs);
+          setTxOffset(TX_PAGE_SIZE);
+          setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
         })
         .catch(err => console.error('Failed to fetch transactions:', err))
     );
@@ -377,6 +385,40 @@ export const WalletDetail: React.FC = () => {
     }
 
     setLoading(false);
+  };
+
+  const loadMoreTransactions = async () => {
+    if (!id || loadingMoreTx || !hasMoreTx) return;
+
+    try {
+      setLoadingMoreTx(true);
+      const apiTransactions = await transactionsApi.getTransactions(id, { limit: TX_PAGE_SIZE, offset: txOffset });
+
+      const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
+        id: tx.id,
+        txid: tx.txid,
+        type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
+        amount: (tx.type === 'received' || tx.type === 'receive' || tx.type === 'consolidation') ? Number(tx.amount) : -Number(tx.amount),
+        timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
+        confirmations: tx.confirmations,
+        confirmed: tx.confirmations >= 1,
+        fee: tx.fee ? Number(tx.fee) : 0,
+        walletId: id,
+        label: tx.label || tx.memo || '',
+        labels: tx.labels || [],
+        address: tx.address?.address,
+        blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
+        counterpartyAddress: tx.counterpartyAddress || undefined,
+      }));
+
+      setTransactions(prev => [...prev, ...formattedTxs]);
+      setTxOffset(prev => prev + TX_PAGE_SIZE);
+      setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load more transactions:', err);
+    } finally {
+      setLoadingMoreTx(false);
+    }
   };
 
   const loadAddresses = async (walletId: string, limit: number, offset: number, reset = false) => {
@@ -835,6 +877,24 @@ export const WalletDetail: React.FC = () => {
                walletAddresses={addresses.map(a => a.address)}
                canEdit={wallet?.canEdit !== false}
              />
+             {hasMoreTx && transactions.length > 0 && (
+               <div className="mt-4 text-center">
+                 <button
+                   onClick={loadMoreTransactions}
+                   disabled={loadingMoreTx}
+                   className="px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors disabled:opacity-50"
+                 >
+                   {loadingMoreTx ? (
+                     <span className="flex items-center justify-center">
+                       <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                       Loading...
+                     </span>
+                   ) : (
+                     `Load More (${transactions.length} shown)`
+                   )}
+                 </button>
+               </div>
+             )}
           </div>
         )}
         

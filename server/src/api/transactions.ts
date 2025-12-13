@@ -2,12 +2,17 @@
  * Transaction API Routes
  *
  * API endpoints for transaction and UTXO management
+ *
+ * Permissions:
+ * - READ (GET): Any user with wallet access (owner, signer, viewer)
+ * - WRITE (POST): Only owner or signer roles can create/broadcast transactions
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import * as addressDerivation from '../services/bitcoin/addressDerivation';
+import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 
 const INITIAL_ADDRESS_COUNT = 20;
 
@@ -376,7 +381,7 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
 
 /**
  * POST /api/v1/wallets/:walletId/addresses/generate
- * Generate more addresses for a wallet
+ * Generate more addresses for a wallet (requires edit access: owner or signer)
  */
 router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: Response) => {
   try {
@@ -384,15 +389,25 @@ router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: R
     const { walletId } = req.params;
     const { count = 10 } = req.body;
 
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to edit this wallet',
+      });
+    }
+
+    // Fetch wallet data
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
     });
 
     if (!wallet) {
@@ -537,23 +552,31 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       });
     }
 
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        users: {
-          some: {
-            userId,
-            role: { in: ['owner', 'signer'] },
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Insufficient permissions to send from this wallet',
+      });
+    }
+
+    // Fetch wallet data
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
       });
     }
 
@@ -620,20 +643,16 @@ router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, re
       });
     }
 
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        users: {
-          some: {
-            userId,
-            role: { in: ['owner', 'signer'] },
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Insufficient permissions to send from this wallet',
@@ -702,20 +721,16 @@ router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response
       }
     }
 
-    // Check user has access to wallet with signing permission
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        users: {
-          some: {
-            userId,
-            role: { in: ['owner', 'signer'] },
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Insufficient permissions to create transactions for this wallet',
@@ -775,20 +790,16 @@ router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Respo
       });
     }
 
-    // Check user has access to wallet with signing permission
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        users: {
-          some: {
-            userId,
-            role: { in: ['owner', 'signer'] },
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
+    // Check edit access (owner or signer only)
+    const canEdit = await checkWalletEditAccess(walletId, userId);
+    if (!canEdit) {
+      const hasAccess = await checkWalletAccess(walletId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Wallet not found',
+        });
+      }
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Insufficient permissions to broadcast from this wallet',

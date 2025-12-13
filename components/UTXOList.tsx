@@ -66,7 +66,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       <div className="flex justify-between items-center mb-4 sticky top-0 bg-sanctuary-50 dark:bg-sanctuary-950 z-10 py-2">
          <div className="flex items-center space-x-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Available Outputs</h4>
-            <span className="text-xs text-sanctuary-400 bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-1 rounded-full">{utxos.length} UTXOs</span>
+            <span className="text-xs text-sanctuary-400 surface-secondary px-2 py-1 rounded-full">{utxos.length} UTXOs</span>
          </div>
          <div className="flex items-center space-x-2">
             {selectable && selectedCount > 0 && onSendSelected && (
@@ -79,7 +79,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       </div>
 
       {/* Visualization Section - Always Visible */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800 min-h-[160px]">
+      <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800 min-h-[160px]">
         <div className="flex flex-wrap gap-4 items-center justify-center">
             {utxos.map((utxo) => {
                 const id = `${utxo.txid}:${utxo.vout}`;

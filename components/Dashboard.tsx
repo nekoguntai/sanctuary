@@ -501,7 +501,7 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6 animate-fade-in pb-12">
 
       {/* Block Visualizer Section */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
          <div className="flex items-center justify-between px-2 mb-2">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Bitcoin Network Status</h4>
             <div className="flex items-center space-x-4">
@@ -557,7 +557,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
         {/* BTC Price Card - Compact with animated price */}
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Bitcoin Price</h3>
             <div className="p-2 bg-warning-100 dark:bg-warning-900/30 rounded-xl">
@@ -590,27 +590,27 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Fee Estimation Card */}
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Fee Estimation</h4>
             <Zap className="w-4 h-4 text-warning-500" />
           </div>
           <div className="space-y-2">
-            <div className="flex justify-between items-center p-2.5 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-xl">
+            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-success-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Fast</span>
               </div>
               <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{fees?.fast?.toFixed(1)} sat/vB</span>
             </div>
-            <div className="flex justify-between items-center p-2.5 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-xl">
+            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-warning-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Normal</span>
               </div>
               <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{fees?.medium?.toFixed(1)} sat/vB</span>
             </div>
-            <div className="flex justify-between items-center p-2.5 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-xl">
+            <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-sanctuary-400 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Slow</span>
@@ -621,7 +621,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Node Status Card */}
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
             {nodeStatus === 'connected' && <div className="h-2.5 w-2.5 rounded-full bg-success-500 animate-pulse"></div>}
@@ -693,7 +693,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Total Balance Card - Full Width */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex-shrink-0">
             <p className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Total Balance</p>
@@ -705,7 +705,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="flex-1 lg:w-2/3">
             <div className="flex justify-end mb-2">
-              <div className="flex space-x-1 bg-sanctuary-50 dark:bg-sanctuary-800 p-1 rounded-lg">
+              <div className="flex space-x-1 surface-secondary p-1 rounded-lg">
                 {['1D', '1W', '1M', '1Y', 'ALL'].map((tf) => (
                   <button
                     key={tf}
@@ -745,7 +745,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Wallet Breakdown Section (Table View) */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
          <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
                <WalletIcon className="w-5 h-5 mr-2 text-sanctuary-400" />
@@ -754,7 +754,7 @@ export const Dashboard: React.FC = () => {
          </div>
 
          {/* Visual Bar */}
-         <div className="h-4 w-full bg-sanctuary-100 dark:bg-sanctuary-800 rounded-full overflow-hidden flex mb-8">
+         <div className="h-4 w-full surface-secondary rounded-full overflow-hidden flex mb-8">
             {wallets.length === 0 ? (
                <div className="w-full h-full bg-sanctuary-200 dark:bg-sanctuary-700"></div>
             ) : wallets.map((w, idx) => {
@@ -775,7 +775,7 @@ export const Dashboard: React.FC = () => {
          {/* Wallet Table */}
          <div className="overflow-x-auto">
             <table className="min-w-full bg-transparent">
-               <thead className="bg-sanctuary-50 dark:bg-sanctuary-800 border-b border-sanctuary-100 dark:border-sanctuary-800">
+               <thead className="surface-secondary border-b border-sanctuary-100 dark:border-sanctuary-800">
                   <tr>
                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wider w-8"></th>
                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wider">Wallet Name</th>
@@ -856,7 +856,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
             <Activity className="w-5 h-5 mr-2 text-sanctuary-400" />

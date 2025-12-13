@@ -15,6 +15,7 @@ import { Settings } from './components/Settings';
 import { Account } from './components/Account';
 import { NodeConfig } from './components/NodeConfig';
 import { UsersGroups } from './components/UsersGroups';
+import { SystemSettings } from './components/SystemSettings';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -51,7 +52,8 @@ const AppRoutes: React.FC = () => {
           <Route path="/settings" element={<Settings />} />
           <Route path="/admin/node-config" element={<NodeConfig />} />
           <Route path="/admin/users-groups" element={<UsersGroups />} />
-          <Route path="/admin" element={<Navigate to="/admin/node-config" replace />} />
+          <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

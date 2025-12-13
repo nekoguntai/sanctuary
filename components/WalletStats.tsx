@@ -140,7 +140,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
              <div className="flex items-center justify-between mb-2">
                  <span className="text-xs font-medium text-sanctuary-500 uppercase">{showFiat ? `${fiatCurrency} Value` : 'BTC Value'}</span>
                  <DollarSign className="w-4 h-4 text-emerald-500" />
@@ -156,7 +156,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
              </div>
           </div>
           
-          <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
              <div className="flex items-center justify-between mb-2">
                  <span className="text-xs font-medium text-sanctuary-500 uppercase">UTXO Count</span>
                  <Coins className="w-4 h-4 text-zen-accent" />
@@ -167,7 +167,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
              <div className="text-xs text-sanctuary-400 mt-1">Unspent Outputs</div>
           </div>
 
-           <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+           <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
              <div className="flex items-center justify-between mb-2">
                  <span className="text-xs font-medium text-sanctuary-500 uppercase">Avg UTXO Age</span>
                  <CalendarClock className="w-4 h-4 text-blue-400" />
@@ -181,7 +181,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
              </div>
           </div>
 
-           <div className="bg-white dark:bg-sanctuary-900 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+           <div className="surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
              <div className="flex items-center justify-between mb-2">
                  <span className="text-xs font-medium text-sanctuary-500 uppercase">First Activity</span>
                  <Clock className="w-4 h-4 text-sanctuary-400" />
@@ -202,7 +202,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">Accumulation History</h3>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
@@ -222,7 +222,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
            </div>
         </div>
 
-        <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">UTXO Age Distribution</h3>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">

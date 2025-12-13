@@ -129,3 +129,10 @@ export interface SearchUser {
 export async function searchUsers(query: string): Promise<SearchUser[]> {
   return apiClient.get<SearchUser[]>('/auth/users/search', { q: query });
 }
+
+/**
+ * Check if public registration is enabled
+ */
+export async function getRegistrationStatus(): Promise<{ enabled: boolean }> {
+  return apiClient.get<{ enabled: boolean }>('/auth/registration-status');
+}

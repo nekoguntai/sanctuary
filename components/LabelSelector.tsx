@@ -145,7 +145,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`flex items-center justify-between w-full px-3 py-2 bg-white dark:bg-sanctuary-900 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sm transition-colors ${
+        className={`flex items-center justify-between w-full px-3 py-2 surface-elevated border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg text-sm transition-colors ${
           disabled
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:border-sanctuary-400 dark:hover:border-sanctuary-600'
@@ -182,7 +182,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full surface-elevated border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg shadow-lg overflow-hidden">
           {/* Search Input */}
           <div className="p-2 border-b border-sanctuary-100 dark:border-sanctuary-800">
             <input
@@ -215,7 +215,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
                       key={label.id}
                       onClick={() => handleToggleLabel(label)}
                       className={`flex items-center justify-between w-full px-3 py-2 text-left hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors ${
-                        isSelected ? 'bg-sanctuary-50 dark:bg-sanctuary-800/50' : ''
+                        isSelected ? 'surface-secondary/50' : ''
                       }`}
                     >
                       <span

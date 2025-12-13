@@ -450,7 +450,7 @@ export const ConnectDevice: React.FC = () => {
 
         {/* Step 1: Select Device Model */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-sanctuary-500 uppercase">1. Select Your Device</h3>
               <span className="text-xs text-sanctuary-400">{filteredModels.length} devices</span>
@@ -483,7 +483,7 @@ export const ConnectDevice: React.FC = () => {
                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                   !selectedManufacturer
                     ? 'bg-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900'
-                    : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                    : 'surface-secondary text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
                 }`}
               >
                 All
@@ -495,7 +495,7 @@ export const ConnectDevice: React.FC = () => {
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                     selectedManufacturer === mfr
                       ? 'bg-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900'
-                      : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                      : 'surface-secondary text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
                   }`}
                 >
                   {mfr}
@@ -538,7 +538,7 @@ export const ConnectDevice: React.FC = () => {
 
           {/* Step 2: Connection Method (only show if device selected) */}
           {selectedModel && (
-            <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+            <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
               <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">2. Connection Method</h3>
 
               {/* Device Capabilities Preview */}
@@ -684,7 +684,7 @@ export const ConnectDevice: React.FC = () => {
 
         {/* Step 3: Device Details & Save (Right Column) */}
         <div className="space-y-4">
-          <div className="bg-white dark:bg-sanctuary-900 p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
+          <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 sticky top-4">
             <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">3. Device Details</h3>
 
             {!selectedModel ? (

@@ -250,7 +250,7 @@ export const ImportWallet: React.FC = () => {
             ? 'wpkh([a1b2c3d4/84h/0h/0h]xpub6E.../0/*)'
             : '{\n  "type": "multi_sig",\n  "scriptType": "native_segwit",\n  "quorum": 2,\n  "devices": [...]\n}'}
           rows={10}
-          className={`w-full px-4 py-3 rounded-xl border bg-white dark:bg-sanctuary-900 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm ${
+          className={`w-full px-4 py-3 rounded-xl border surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm ${
             validationError
               ? 'border-red-500 dark:border-red-400'
               : 'border-sanctuary-300 dark:border-sanctuary-700'
@@ -265,7 +265,7 @@ export const ImportWallet: React.FC = () => {
         )}
 
         {format === 'json' && (
-          <div className="text-xs text-sanctuary-500 bg-sanctuary-50 dark:bg-sanctuary-800/50 p-4 rounded-lg">
+          <div className="text-xs text-sanctuary-500 surface-secondary p-4 rounded-lg">
             <p className="font-medium mb-2">Expected JSON format:</p>
             <pre className="overflow-x-auto">{`{
   "type": "single_sig" | "multi_sig",
@@ -311,7 +311,7 @@ export const ImportWallet: React.FC = () => {
               value={walletName}
               onChange={(e) => setWalletName(e.target.value)}
               placeholder="e.g., Imported Multisig"
-              className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500"
               autoFocus
             />
           </div>
@@ -342,7 +342,7 @@ export const ImportWallet: React.FC = () => {
           </div>
 
           {/* Wallet Info */}
-          <div className="bg-sanctuary-50 dark:bg-sanctuary-800/50 rounded-xl p-4 space-y-3">
+          <div className="surface-secondary rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-full ${
                 validationResult.walletType === 'multi_sig'
@@ -355,7 +355,7 @@ export const ImportWallet: React.FC = () => {
                 }
               </div>
               <div>
-                <p className="font-medium">
+                <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
                   {validationResult.walletType === 'multi_sig'
                     ? `${validationResult.quorum}-of-${validationResult.totalSigners} Multisig`
                     : 'Single Signature'}
@@ -419,7 +419,7 @@ export const ImportWallet: React.FC = () => {
 
     return (
       <div className="space-y-6 animate-fade-in max-w-lg mx-auto text-center">
-        <div className="mx-auto w-16 h-16 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-full flex items-center justify-center mb-4">
+        <div className="mx-auto w-16 h-16 surface-secondary rounded-full flex items-center justify-center mb-4">
           <Shield className="w-8 h-8 text-sanctuary-600 dark:text-sanctuary-300" />
         </div>
         <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">
@@ -433,7 +433,7 @@ export const ImportWallet: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden text-left">
           <div className="px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
             <h3 className="text-lg font-medium">{walletName}</h3>
           </div>
@@ -555,7 +555,7 @@ export const ImportWallet: React.FC = () => {
 const DeviceCard: React.FC<{ device: DeviceResolution; isReused: boolean }> = ({ device, isReused }) => (
   <div className={`p-3 rounded-lg border flex items-center justify-between ${
     isReused
-      ? 'border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900'
+      ? 'border-sanctuary-200 dark:border-sanctuary-700 surface-elevated'
       : 'border-success-200 dark:border-success-800 bg-success-50 dark:bg-success-900/20'
   }`}>
     <div className="flex items-center gap-3">

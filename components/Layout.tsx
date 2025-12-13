@@ -15,7 +15,8 @@ import {
   ChevronRight,
   UserCircle,
   Server,
-  Shield
+  Shield,
+  Cog
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
@@ -224,6 +225,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
             {expanded.admin && (
               <div className="animate-fade-in-up space-y-0.5 mb-2">
                 <SubNavItem
+                  to="/admin/settings"
+                  label="System Settings"
+                  icon={<Cog className="w-3 h-3" />}
+                />
+                <SubNavItem
                   to="/admin/node-config"
                   label="Node Config"
                   icon={<Server className="w-3 h-3" />}
@@ -269,7 +275,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
       {/* Sidebar Desktop - Uses Sanctuary 900 which is now correctly defined as Dark Gray in index.html */}
       <div className="hidden md:flex md:flex-shrink-0">
         <div className="flex flex-col w-64">
-          <div className="flex flex-col h-0 flex-1 border-r border-sanctuary-200 dark:border-sanctuary-800 bg-white dark:bg-sanctuary-900">
+          <div className="flex flex-col h-0 flex-1 border-r border-sanctuary-200 dark:border-sanctuary-800 surface-elevated">
             {sidebarContent}
           </div>
         </div>
@@ -277,7 +283,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
 
       {/* Mobile Header */}
       <div className="flex flex-col flex-1 w-0 overflow-hidden bg-transparent">
-        <div className="md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-white dark:bg-sanctuary-900 border-b border-sanctuary-200 dark:border-sanctuary-800 flex justify-between items-center px-4 h-16">
+        <div className="md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 surface-elevated border-b border-sanctuary-200 dark:border-sanctuary-800 flex justify-between items-center px-4 h-16">
             <div className="flex items-center">
               <SanctuaryLogo className="h-6 w-6 text-primary-700 dark:text-primary-500 mr-2" />
               <span className="text-lg font-light text-sanctuary-800 dark:text-sanctuary-200">Sanctuary</span>
@@ -295,7 +301,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         {isMobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-40 flex">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-sanctuary-900">
+            <div className="relative flex-1 flex flex-col max-w-xs w-full surface-elevated">
                {sidebarContent}
             </div>
           </div>

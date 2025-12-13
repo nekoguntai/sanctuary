@@ -87,10 +87,10 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* Visual Customization */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-             <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
                <Palette className="w-5 h-5" />
              </div>
              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Personalization</h3>
@@ -153,10 +153,10 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* Display Settings */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-             <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
                <Monitor className="w-5 h-5" />
              </div>
              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Display Preferences</h3>
@@ -169,7 +169,7 @@ export const Settings: React.FC = () => {
               <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Bitcoin Unit</label>
               <p className="text-sm text-sanctuary-500">Choose between Sats (Integers) or BTC (Decimal).</p>
             </div>
-            <div className="flex items-center bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg p-1">
+            <div className="flex items-center surface-secondary rounded-lg p-1">
                <button 
                   onClick={() => setUnit('sats')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${unit === 'sats' ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
@@ -231,10 +231,10 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* External Services */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-             <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
                <Globe className="w-5 h-5" />
              </div>
              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">External Services</h3>

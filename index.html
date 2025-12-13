@@ -253,6 +253,58 @@
       html.dark .bg-pattern-sanctuary {
         background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23a1a1aa' stroke-width='1' stroke-linecap='round' stroke-linejoin='round' opacity='0.05'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5z' /%3E%3Cpath d='M2 17l10 5 10-5' /%3E%3Cpath d='M2 12l10 5 10-5' /%3E%3C/svg%3E");
       }
+
+      /* ==============================================
+       * SURFACE UTILITY CLASSES
+       * Use these semantic classes instead of raw bg-* classes
+       * to automatically handle light/dark mode transitions.
+       *
+       * Usage examples:
+       *   <div class="surface-primary">...</div>     // Main cards/panels
+       *   <div class="surface-secondary">...</div>   // Nested/muted sections
+       *   <div class="surface-elevated">...</div>    // Modals/dropdowns
+       *   <div class="surface-inset">...</div>       // Code blocks/inputs
+       * ============================================== */
+
+      /* Primary surface - main content cards/panels */
+      .surface-primary {
+        background-color: var(--color-bg-50);
+      }
+      html.dark .surface-primary {
+        background-color: var(--color-bg-900);
+      }
+
+      /* Secondary surface - muted/nested sections */
+      .surface-secondary {
+        background-color: var(--color-bg-100);
+      }
+      html.dark .surface-secondary {
+        background-color: var(--color-bg-800);
+      }
+
+      /* Elevated surface - modals, popovers, dropdowns */
+      .surface-elevated {
+        background-color: white;
+      }
+      html.dark .surface-elevated {
+        background-color: var(--color-bg-900);
+      }
+
+      /* Inset surface - code blocks, form inputs, wells */
+      .surface-inset {
+        background-color: var(--color-bg-100);
+      }
+      html.dark .surface-inset {
+        background-color: var(--color-bg-950);
+      }
+
+      /* Hover surface - interactive backgrounds */
+      .surface-hover:hover {
+        background-color: var(--color-bg-100);
+      }
+      html.dark .surface-hover:hover {
+        background-color: var(--color-bg-800);
+      }
     </style>
 </head>
   <body class="bg-sanctuary-50 text-sanctuary-900 dark:bg-sanctuary-950 dark:text-sanctuary-100 transition-colors duration-300">

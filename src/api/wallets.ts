@@ -6,6 +6,8 @@
 
 import apiClient from './client';
 
+export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
+
 export interface Wallet {
   id: string;
   name: string;
@@ -30,6 +32,9 @@ export interface Wallet {
     groupName?: string | null;
     userCount: number;
   };
+  // User permissions
+  userRole?: WalletRole;
+  canEdit?: boolean;
 }
 
 export interface CreateWalletRequest {

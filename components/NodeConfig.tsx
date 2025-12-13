@@ -105,10 +105,10 @@ export const NodeConfig: React.FC = () => {
         <p className="text-sanctuary-500">Configure the backend Bitcoin node connection</p>
       </div>
 
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg text-primary-600 dark:text-primary-500">
+            <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
               <Server className="w-5 h-5" />
             </div>
             <div>
@@ -155,13 +155,13 @@ export const NodeConfig: React.FC = () => {
                 <div className="flex space-x-2 mt-2">
                   <button
                     onClick={() => setNodeConfig({ ...nodeConfig, explorerUrl: 'https://mempool.space' })}
-                    className="text-xs bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
+                    className="text-xs surface-secondary px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
                   >
                     Use mempool.space
                   </button>
                   <button
                     onClick={() => setNodeConfig({ ...nodeConfig, explorerUrl: 'https://blockstream.info' })}
-                    className="text-xs bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
+                    className="text-xs surface-secondary px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
                   >
                     Use blockstream.info
                   </button>
@@ -190,13 +190,13 @@ export const NodeConfig: React.FC = () => {
                 <div className="flex space-x-2 mt-2">
                   <button
                     onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: 'https://mempool.space' })}
-                    className="text-xs bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
+                    className="text-xs surface-secondary px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
                   >
                     Use mempool.space (default)
                   </button>
                   <button
                     onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: '' })}
-                    className="text-xs bg-sanctuary-100 dark:bg-sanctuary-800 px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
+                    className="text-xs surface-secondary px-2 py-1 rounded hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
                   >
                     Use Block Explorer URL
                   </button>
@@ -285,7 +285,7 @@ export const NodeConfig: React.FC = () => {
                       className={`text-left px-3 py-2 text-xs rounded-lg border transition-colors ${
                         nodeConfig.host === server.host && nodeConfig.port === server.port
                           ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
-                          : 'bg-sanctuary-50 dark:bg-sanctuary-800 border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
+                          : 'surface-secondary border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
                       }`}
                     >
                       <div className="font-medium">{server.name}</div>

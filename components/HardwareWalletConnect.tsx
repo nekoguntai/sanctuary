@@ -85,7 +85,7 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+      <div className="surface-elevated rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-sanctuary-200 dark:border-sanctuary-800 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -172,7 +172,7 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
           </div>
 
           {/* Info Box */}
-          <div className="mt-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-800/50 rounded-xl">
+          <div className="mt-6 p-4 surface-secondary/50 rounded-xl">
             <div className="flex items-start space-x-3">
               <Usb className="w-5 h-5 text-sanctuary-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 text-sm text-sanctuary-600 dark:text-sanctuary-400">

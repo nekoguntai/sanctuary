@@ -99,8 +99,8 @@ export const WalletList: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-sanctuary-100 dark:bg-sanctuary-800 mb-4">
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full surface-secondary mb-4">
             <Wallet className="w-8 h-8 text-sanctuary-400" />
           </div>
           <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Wallets Yet</h3>
@@ -132,16 +132,16 @@ export const WalletList: React.FC = () => {
           <p className="text-sanctuary-500">Manage your wallets and spending accounts</p>
         </div>
         <div className="flex items-center space-x-3">
-            <div className="flex bg-white dark:bg-sanctuary-900 p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                 <button
                     onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
                 >
                     <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
                     onClick={() => setViewMode('table')}
-                    className={`p-2 rounded-md transition-colors ${viewMode === 'table' ? 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                    className={`p-2 rounded-md transition-colors ${viewMode === 'table' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
                 >
                     <ListIcon className="w-4 h-4" />
                 </button>
@@ -158,7 +158,7 @@ export const WalletList: React.FC = () => {
       </div>
 
       {/* Stats & Trends Card */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
          <div className="flex flex-col md:flex-row gap-8">
              <div className="md:w-1/3 flex flex-col justify-between">
                 <div>
@@ -178,7 +178,7 @@ export const WalletList: React.FC = () => {
              
              <div className="md:w-2/3">
                  <div className="flex justify-end mb-4">
-                    <div className="flex space-x-1 bg-sanctuary-50 dark:bg-sanctuary-800 p-1 rounded-lg">
+                    <div className="flex space-x-1 surface-secondary p-1 rounded-lg">
                         {['1D', '1W', '1M', '1Y', 'ALL'].map((tf) => (
                             <button
                             key={tf}
@@ -234,7 +234,7 @@ export const WalletList: React.FC = () => {
                 <div
                 key={wallet.id}
                 onClick={() => navigate(`/wallets/${wallet.id}`)}
-                className="group bg-white dark:bg-sanctuary-900 rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800 shadow-sm hover:shadow-md hover:border-primary-300 dark:hover:border-primary-600 transition-all cursor-pointer relative overflow-hidden"
+                className="group surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800 shadow-sm hover:shadow-md hover:border-primary-300 dark:hover:border-primary-600 transition-all cursor-pointer relative overflow-hidden"
                 >
                 <div className="flex justify-between items-start mb-6">
                     <div className={`p-3 rounded-xl ${iconColorClass}`}>
@@ -284,7 +284,7 @@ export const WalletList: React.FC = () => {
 
       {/* Table View */}
       {viewMode === 'table' && (
-        <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
                     <thead className="bg-sanctuary-50 dark:bg-sanctuary-950">
@@ -296,7 +296,7 @@ export const WalletList: React.FC = () => {
                             <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-sanctuary-900 divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
+                    <tbody className="surface-elevated divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
                         {wallets.map((wallet) => {
                             const isMultisig = wallet.type === 'multi_sig';
                             const badgeClass = isMultisig
@@ -317,7 +317,7 @@ export const WalletList: React.FC = () => {
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center">
-                                            <div className="flex-shrink-0 h-8 w-8 rounded-full bg-sanctuary-100 dark:bg-sanctuary-800 flex items-center justify-center">
+                                            <div className="flex-shrink-0 h-8 w-8 rounded-full surface-secondary flex items-center justify-center">
                                                 {getWalletIcon(walletTypeForIcon, `w-4 h-4 ${iconClass}`)}
                                             </div>
                                             <div className="ml-4">

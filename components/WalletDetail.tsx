@@ -269,6 +269,9 @@ export const WalletDetail: React.FC = () => {
       lastSyncedAt: apiWallet.lastSyncedAt,
       lastSyncStatus: apiWallet.lastSyncStatus as 'success' | 'failed' | 'partial' | 'retrying' | null,
       syncInProgress: apiWallet.syncInProgress,
+      // User permissions
+      userRole: apiWallet.userRole,
+      canEdit: apiWallet.canEdit,
     };
 
     setWallet(formattedWallet);
@@ -682,7 +685,7 @@ export const WalletDetail: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header Card */}
-      <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10 pointer-events-none">
            {getWalletIcon(wallet.type, "w-40 h-40 text-primary-500")}
         </div>
@@ -781,12 +784,13 @@ export const WalletDetail: React.FC = () => {
       {/* Content Area */}
       <div className="min-h-[400px]">
         {activeTab === 'tx' && (
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+          <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
              <TransactionList
                transactions={transactions}
                highlightedTxId={highlightTxId}
                onLabelsChange={handleLabelsChange}
                walletAddresses={addresses.map(a => a.address)}
+               canEdit={wallet?.canEdit !== false}
              />
           </div>
         )}
@@ -967,7 +971,7 @@ export const WalletDetail: React.FC = () => {
            return (
              <div className="space-y-4 animate-fade-in">
                {addresses.length === 0 ? (
-                 <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
+                 <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
                    <MapPin className="w-12 h-12 mx-auto text-sanctuary-300 dark:text-sanctuary-600 mb-4" />
                    <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Addresses Available</h3>
                    <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 mb-4 max-w-md mx-auto">
@@ -982,7 +986,7 @@ export const WalletDetail: React.FC = () => {
                    )}
                  </div>
                ) : (
-                 <div className="bg-white dark:bg-sanctuary-900 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+                 <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
                    {/* Sub-tabs Header */}
                    <div className="px-6 py-3 bg-sanctuary-50 dark:bg-sanctuary-950 border-b border-sanctuary-100 dark:border-sanctuary-800">
                      <div className="flex items-center justify-between">
@@ -1051,13 +1055,41 @@ export const WalletDetail: React.FC = () => {
 
         {activeTab === 'access' && (
           <div className="space-y-6">
+            {/* Your Access Section */}
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+               <h3 className="text-lg font-medium mb-4 flex items-center">
+                 <Shield className="w-5 h-5 mr-2 text-primary-500" />
+                 Your Access
+               </h3>
+               <div className="flex items-center justify-between p-4 surface-secondary rounded-lg">
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
+                        {user?.username?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="ml-4">
+                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                          {user?.username || 'You'}
+                        </p>
+                        <p className="text-xs text-sanctuary-500 capitalize">{wallet.userRole || 'Unknown'} Access</p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                    wallet.userRole === 'owner' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' :
+                    wallet.userRole === 'signer' ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300' :
+                    'bg-sanctuary-100 text-sanctuary-700 dark:bg-sanctuary-700 dark:text-sanctuary-300'
+                  }`}>
+                    {wallet.canEdit ? 'Can Edit' : 'Read Only'}
+                  </span>
+               </div>
+            </div>
+
             {/* Ownership Section */}
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <h3 className="text-lg font-medium mb-4 flex items-center">
                  <Shield className="w-5 h-5 mr-2 text-primary-500" />
                  Ownership
                </h3>
-               <div className="flex items-center p-4 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg">
+               <div className="flex items-center p-4 surface-secondary rounded-lg">
                   <div className="flex items-center">
                     <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
                         {walletShareInfo?.users.find(u => u.role === 'owner')?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
@@ -1073,7 +1105,7 @@ export const WalletDetail: React.FC = () => {
             </div>
 
             {/* Group Sharing Section */}
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium flex items-center">
                         <Users className="w-5 h-5 mr-2 text-primary-500" />
@@ -1081,15 +1113,15 @@ export const WalletDetail: React.FC = () => {
                     </h3>
                </div>
 
-               {/* Share with Group */}
-               {!walletShareInfo?.group && (
+               {/* Share with Group - only for owners */}
+               {wallet.userRole === 'owner' && !walletShareInfo?.group && (
                  <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                    <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with Group</p>
                    <div className="flex space-x-2">
                      <select
                        value={selectedGroupToAdd}
                        onChange={(e) => setSelectedGroupToAdd(e.target.value)}
-                       className="flex-1 text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
+                       className="flex-1 text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
                      >
                        <option value="">Select Group...</option>
                        {groups.map(g => (
@@ -1109,20 +1141,22 @@ export const WalletDetail: React.FC = () => {
                {/* Current Group */}
                {walletShareInfo?.group ? (
                  <div className="border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg overflow-hidden">
-                   <div className="bg-sanctuary-100 dark:bg-sanctuary-800 px-4 py-3 border-b border-sanctuary-200 dark:border-sanctuary-700 flex justify-between items-center">
+                   <div className="surface-secondary px-4 py-3 border-b border-sanctuary-200 dark:border-sanctuary-700 flex justify-between items-center">
                      <div className="flex items-center">
                        <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{walletShareInfo.group.name}</span>
                        <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
                          Group Access
                        </span>
                      </div>
-                     <button
-                       onClick={removeGroup}
-                       disabled={sharingLoading}
-                       className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
-                     >
-                       <Trash2 className="w-3 h-3 mr-1" /> Remove
-                     </button>
+                     {wallet.userRole === 'owner' && (
+                       <button
+                         onClick={removeGroup}
+                         disabled={sharingLoading}
+                         className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
+                       >
+                         <Trash2 className="w-3 h-3 mr-1" /> Remove
+                       </button>
+                     )}
                    </div>
                    <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-900">
                      <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400">All members of this group can view and access this wallet.</p>
@@ -1136,7 +1170,7 @@ export const WalletDetail: React.FC = () => {
             </div>
 
             {/* Individual User Sharing Section */}
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium flex items-center">
                         <UserIcon className="w-5 h-5 mr-2 text-primary-500" />
@@ -1144,52 +1178,54 @@ export const WalletDetail: React.FC = () => {
                     </h3>
                </div>
 
-               {/* Search and Add User */}
-               <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                 <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with User</p>
-                 <div className="relative">
-                   <input
-                     type="text"
-                     value={userSearchQuery}
-                     onChange={(e) => handleSearchUsers(e.target.value)}
-                     placeholder="Search users by username..."
-                     className="w-full text-sm bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
-                   />
-                   {searchingUsers && (
-                     <div className="absolute right-3 top-2.5">
-                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
-                     </div>
-                   )}
+               {/* Search and Add User - only for owners */}
+               {wallet.userRole === 'owner' && (
+                 <div className="mb-6 p-4 bg-sanctuary-50 dark:bg-sanctuary-950 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with User</p>
+                   <div className="relative">
+                     <input
+                       type="text"
+                       value={userSearchQuery}
+                       onChange={(e) => handleSearchUsers(e.target.value)}
+                       placeholder="Search users by username..."
+                       className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
+                     />
+                     {searchingUsers && (
+                       <div className="absolute right-3 top-2.5">
+                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                       </div>
+                     )}
 
-                   {/* Search Results Dropdown */}
-                   {userSearchResults.length > 0 && (
-                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                       {userSearchResults.map(u => (
-                         <button
-                           key={u.id}
-                           onClick={() => handleShareWithUser(u.id, 'viewer')}
-                           disabled={sharingLoading}
-                           className="w-full text-left px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
-                         >
-                           <div className="flex items-center">
-                             <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
-                               {u.username.charAt(0).toUpperCase()}
+                     {/* Search Results Dropdown */}
+                     {userSearchResults.length > 0 && (
+                       <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                         {userSearchResults.map(u => (
+                           <button
+                             key={u.id}
+                             onClick={() => handleShareWithUser(u.id, 'viewer')}
+                             disabled={sharingLoading}
+                             className="w-full text-left px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
+                           >
+                             <div className="flex items-center">
+                               <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                                 {u.username.charAt(0).toUpperCase()}
+                               </div>
+                               <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{u.username}</span>
                              </div>
-                             <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{u.username}</span>
-                           </div>
-                           <span className="text-xs text-primary-500">+ Add</span>
-                         </button>
-                       ))}
-                     </div>
-                   )}
+                             <span className="text-xs text-primary-500">+ Add</span>
+                           </button>
+                         ))}
+                       </div>
+                     )}
+                   </div>
                  </div>
-               </div>
+               )}
 
                {/* Current Users */}
                {walletShareInfo && walletShareInfo.users.filter(u => u.role !== 'owner').length > 0 ? (
                  <div className="space-y-2">
                    {walletShareInfo.users.filter(u => u.role !== 'owner').map(u => (
-                     <div key={u.id} className="flex items-center justify-between p-3 bg-sanctuary-50 dark:bg-sanctuary-800 rounded-lg">
+                     <div key={u.id} className="flex items-center justify-between p-3 surface-secondary rounded-lg">
                        <div className="flex items-center">
                          <div className="h-8 w-8 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-sm font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-3">
                            {u.username.charAt(0).toUpperCase()}
@@ -1199,13 +1235,15 @@ export const WalletDetail: React.FC = () => {
                            <p className="text-xs text-sanctuary-500 capitalize">{u.role}</p>
                          </div>
                        </div>
-                       <button
-                         onClick={() => handleRemoveUserAccess(u.id)}
-                         disabled={sharingLoading}
-                         className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
-                       >
-                         <X className="w-3 h-3 mr-1" /> Remove
-                       </button>
+                       {wallet.userRole === 'owner' && (
+                         <button
+                           onClick={() => handleRemoveUserAccess(u.id)}
+                           disabled={sharingLoading}
+                           className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
+                         >
+                           <X className="w-3 h-3 mr-1" /> Remove
+                         </button>
+                       )}
                      </div>
                    ))}
                  </div>
@@ -1221,7 +1259,7 @@ export const WalletDetail: React.FC = () => {
 
         {activeTab === 'settings' && (
           <div className="max-w-2xl space-y-6">
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <h3 className="text-lg font-medium mb-4">Wallet Configuration</h3>
                <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                  <div>
@@ -1241,13 +1279,13 @@ export const WalletDetail: React.FC = () => {
                </dl>
             </div>
             
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <h3 className="text-lg font-medium mb-4">Hardware Devices</h3>
                <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
                    {devices.map(d => (
                        <li key={d.id} className="py-4 flex justify-between items-center">
                            <div className="flex items-center space-x-3">
-                               <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800">
+                               <div className="p-2 rounded-lg surface-secondary">
                                    {getDeviceIcon(d.type, "w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400")}
                                </div>
                                <div>
@@ -1263,15 +1301,20 @@ export const WalletDetail: React.FC = () => {
                </ul>
             </div>
 
-             {/* Labels Management */}
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-              <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
-            </div>
+             {/* Labels Management - only show if user can edit */}
+            {wallet.canEdit !== false && (
+              <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+                <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
+              </div>
+            )}
 
-            <div className="bg-white dark:bg-sanctuary-900 rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <h3 className="text-lg font-medium mb-4 text-zen-vermilion">Danger Zone</h3>
-               <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Wallet</Button>
-            </div>
+            {/* Danger Zone - only show if user is owner */}
+            {wallet.userRole === 'owner' && (
+              <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
+                 <h3 className="text-lg font-medium mb-4 text-zen-vermilion">Danger Zone</h3>
+                 <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Wallet</Button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1279,7 +1322,7 @@ export const WalletDetail: React.FC = () => {
       {/* Export Modal Overlay */}
       {showExport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
+          <div className="surface-elevated rounded-2xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-light">Export Wallet</h3>
               <button onClick={() => setShowExport(false)} className="text-sanctuary-400 hover:text-sanctuary-600"><X className="w-5 h-5"/></button>
@@ -1349,7 +1392,7 @@ export const WalletDetail: React.FC = () => {
         const receiveAddress = addresses.find(a => !a.used)?.address || addresses[0]?.address || '';
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowReceive(false)}>
-            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+            <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">Receive Bitcoin</h3>
                 <button
@@ -1399,7 +1442,7 @@ export const WalletDetail: React.FC = () => {
       {/* Address QR Code Modal */}
       {qrModalAddress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQrModalAddress(null)}>
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+          <div className="surface-elevated rounded-2xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Address QR Code</h3>
               <button
@@ -1436,7 +1479,7 @@ export const WalletDetail: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {showDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-sanctuary-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
+          <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
              <div className="text-center">
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
                    <AlertTriangle className="h-6 w-6 text-rose-600 dark:text-rose-400" />

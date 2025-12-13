@@ -143,7 +143,7 @@ class AuditService {
           username: input.username,
           action: input.action,
           category: input.category,
-          details: input.details || null,
+          details: input.details ?? undefined,
           ipAddress: input.ipAddress,
           userAgent: input.userAgent,
           success: input.success ?? true,
@@ -182,7 +182,7 @@ class AuditService {
     const user = req.user;
 
     await this.log({
-      userId: user?.id,
+      userId: user?.userId,
       username: user?.username || 'anonymous',
       action,
       category,

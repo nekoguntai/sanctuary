@@ -1,0 +1,91 @@
+/**
+ * Two-Factor Authentication API
+ *
+ * API calls for 2FA setup, verification, and management
+ */
+
+import apiClient from './client';
+import type { AuthResponse } from './auth';
+
+export interface TwoFactorSetupResponse {
+  secret: string;
+  qrCodeDataUrl: string;
+}
+
+export interface TwoFactorEnableResponse {
+  success: boolean;
+  backupCodes: string[];
+}
+
+export interface TwoFactorVerifyRequest {
+  tempToken: string;
+  code: string;
+}
+
+export interface TwoFactorDisableRequest {
+  password: string;
+  token: string;
+}
+
+export interface BackupCodesResponse {
+  remaining: number;
+}
+
+export interface RegenerateBackupCodesRequest {
+  password: string;
+  token: string;
+}
+
+export interface RegenerateBackupCodesResponse {
+  success: boolean;
+  backupCodes: string[];
+}
+
+/**
+ * Start 2FA setup - get QR code and secret
+ */
+export async function setup2FA(): Promise<TwoFactorSetupResponse> {
+  return apiClient.post<TwoFactorSetupResponse>('/auth/2fa/setup', {});
+}
+
+/**
+ * Enable 2FA by verifying a TOTP code
+ */
+export async function enable2FA(token: string): Promise<TwoFactorEnableResponse> {
+  return apiClient.post<TwoFactorEnableResponse>('/auth/2fa/enable', { token });
+}
+
+/**
+ * Disable 2FA (requires password and current 2FA code)
+ */
+export async function disable2FA(data: TwoFactorDisableRequest): Promise<{ success: boolean }> {
+  return apiClient.post<{ success: boolean }>('/auth/2fa/disable', data);
+}
+
+/**
+ * Verify 2FA code during login
+ */
+export async function verify2FA(data: TwoFactorVerifyRequest): Promise<AuthResponse> {
+  const response = await apiClient.post<AuthResponse>('/auth/2fa/verify', data);
+
+  // Set the full auth token after successful 2FA verification
+  apiClient.setToken(response.token);
+
+  return response;
+}
+
+/**
+ * Get remaining backup codes count
+ */
+export async function getBackupCodesCount(password: string): Promise<BackupCodesResponse> {
+  return apiClient.get<BackupCodesResponse>('/auth/2fa/backup-codes', { password });
+}
+
+/**
+ * Regenerate backup codes
+ */
+export async function regenerateBackupCodes(
+  data: RegenerateBackupCodesRequest
+): Promise<RegenerateBackupCodesResponse> {
+  return apiClient.post<RegenerateBackupCodesResponse>('/auth/2fa/backup-codes/regenerate', data);
+}

@@ -46,7 +46,7 @@ export const DeviceDetail: React.FC = () => {
         const walletList = deviceData.wallets?.map(w => ({
           id: w.wallet.id,
           name: w.wallet.name,
-          type: w.wallet.type === 'MULTI_SIG' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG
+          type: w.wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG
         })) || [];
         setWallets(walletList);
         setEditLabel(deviceData.label);
@@ -144,9 +144,9 @@ export const DeviceDetail: React.FC = () => {
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      {wallets.map(w => {
                          const isMultisig = w.type === WalletType.MULTI_SIG;
-                         const badgeClass = isMultisig 
-                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 dark:border dark:border-orange-700' 
-                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-100 dark:border dark:border-emerald-700';
+                         const badgeClass = isMultisig
+                            ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+                            : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
 
                          return (
                             <div 

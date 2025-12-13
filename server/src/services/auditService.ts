@@ -79,6 +79,15 @@ export enum AuditAction {
   BACKUP_CREATE = 'backup.create',
   BACKUP_VALIDATE = 'backup.validate',
   BACKUP_RESTORE = 'backup.restore',
+
+  // Two-Factor Authentication
+  TWO_FACTOR_SETUP = 'auth.2fa_setup',
+  TWO_FACTOR_ENABLED = 'auth.2fa_enabled',
+  TWO_FACTOR_DISABLED = 'auth.2fa_disabled',
+  TWO_FACTOR_VERIFIED = 'auth.2fa_verified',
+  TWO_FACTOR_FAILED = 'auth.2fa_failed',
+  TWO_FACTOR_BACKUP_CODE_USED = 'auth.2fa_backup_code_used',
+  TWO_FACTOR_BACKUP_CODES_REGENERATED = 'auth.2fa_backup_codes_regenerated',
 }
 
 /**

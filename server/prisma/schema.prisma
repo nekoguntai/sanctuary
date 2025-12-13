@@ -27,6 +27,11 @@ model User {
   // User preferences (stored as JSON)
   preferences Json?
 
+  // Two-Factor Authentication
+  twoFactorEnabled    Boolean  @default(false)
+  twoFactorSecret     String?  // TOTP secret (base32)
+  twoFactorBackupCodes String? // JSON array of hashed backup codes
+
   // Relationships
   wallets     WalletUser[]
   devices     Device[]

@@ -11,14 +11,17 @@ export interface JWTPayload {
   userId: string;
   username: string;
   isAdmin: boolean;
+  pending2FA?: boolean; // True when awaiting 2FA verification
 }
 
 /**
  * Generate a JWT token for a user
+ * @param payload - User payload data
+ * @param expiresIn - Optional custom expiry (e.g., '5m', '1h', '7d')
  */
-export function generateToken(payload: JWTPayload): string {
+export function generateToken(payload: JWTPayload, expiresIn?: string): string {
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn as string | number,
+    expiresIn: expiresIn || (config.jwtExpiresIn as string | number),
   } as jwt.SignOptions);
 }
 

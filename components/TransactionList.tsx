@@ -164,8 +164,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             // Determine badge colors based on wallet type using Semantic colors
             // Updated to remove transparent borders in dark mode to fix glow effect
             const badgeClass = isMultisig
-                ? 'bg-warning-100 text-warning-800 dark:bg-warning-900/30 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50'
-                : 'bg-success-100 text-success-800 dark:bg-success-900/30 dark:text-success-300 hover:bg-success-200 dark:hover:bg-success-900/50';
+                ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20 hover:bg-warning-200 dark:hover:bg-warning-900/50'
+                : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20 hover:bg-success-200 dark:hover:bg-success-900/50';
 
             return (
               <li 

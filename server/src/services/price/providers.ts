@@ -12,6 +12,7 @@ export interface PriceData {
   price: number;
   currency: string;
   timestamp: Date;
+  change24h?: number; // 24-hour percentage change
 }
 
 /**
@@ -55,12 +56,14 @@ export async function fetchCoinGeckoPrice(currency: string = 'USD'): Promise<Pri
         params: {
           ids: 'bitcoin',
           vs_currencies: currencyLower,
+          include_24hr_change: true,
         },
         timeout: 5000,
       }
     );
 
     const price = response.data.bitcoin?.[currencyLower];
+    const change24h = response.data.bitcoin?.[`${currencyLower}_24h_change`];
 
     if (!price) {
       throw new Error(`Currency ${currency} not available from CoinGecko`);
@@ -71,6 +74,7 @@ export async function fetchCoinGeckoPrice(currency: string = 'USD'): Promise<Pri
       price,
       currency: currency.toUpperCase(),
       timestamp: new Date(),
+      change24h: change24h !== undefined ? parseFloat(change24h.toFixed(2)) : undefined,
     };
   } catch (error: any) {
     throw new Error(`CoinGecko API error: ${error.message}`);

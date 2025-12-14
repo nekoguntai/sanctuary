@@ -114,7 +114,7 @@ const AnimatedPrice: React.FC<{ value: number | null; symbol: string }> = ({ val
 };
 
 export const Dashboard: React.FC = () => {
-  const { format, btcPrice, currencySymbol, priceLoading, lastPriceUpdate, showFiat } = useCurrency();
+  const { format, btcPrice, priceChange24h, currencySymbol, priceLoading, lastPriceUpdate, showFiat } = useCurrency();
   const { user } = useUser();
   const navigate = useNavigate();
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -133,9 +133,8 @@ export const Dashboard: React.FC = () => {
   const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
   const { addNotification } = useNotifications();
 
-  // Mock 24h change - in production this would come from API
-  const [priceChange24h] = useState(() => (Math.random() * 6 - 2).toFixed(2)); // Random between -2% and +4%
-  const priceChangePositive = parseFloat(priceChange24h) >= 0;
+  // 24h price change from CoinGecko (via CurrencyContext)
+  const priceChangePositive = priceChange24h !== null && priceChange24h >= 0;
 
   // Function to refresh mempool/block data
   const refreshMempoolData = useCallback(async () => {
@@ -580,7 +579,7 @@ export const Dashboard: React.FC = () => {
               ) : (
                 <TrendingDown className="w-4 h-4 mr-1" />
               )}
-              {priceChangePositive ? '+' : ''}{priceChange24h}%
+              {priceChange24h !== null ? `${priceChangePositive ? '+' : ''}${priceChange24h.toFixed(2)}%` : '---'}
               <span className="text-sanctuary-400 font-normal ml-2">24h</span>
             </div>
             {lastPriceUpdate && (

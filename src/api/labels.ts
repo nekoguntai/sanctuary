@@ -5,36 +5,10 @@
  */
 
 import apiClient from './client';
+import type { Label, LabelWithItems } from '../types';
 
-export interface Label {
-  id: string;
-  walletId: string;
-  name: string;
-  color: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-  transactionCount?: number;
-  addressCount?: number;
-}
-
-export interface LabelWithItems extends Label {
-  transactions: Array<{
-    id: string;
-    txid: string;
-    type: string;
-    amount: number;
-    confirmations: number;
-    blockTime?: string;
-  }>;
-  addresses: Array<{
-    id: string;
-    address: string;
-    derivationPath: string;
-    index: number;
-    used: boolean;
-  }>;
-}
+// Re-export types for backward compatibility
+export type { Label, LabelWithItems } from '../types';
 
 export interface CreateLabelRequest {
   name: string;

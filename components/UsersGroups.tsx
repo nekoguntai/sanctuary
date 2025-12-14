@@ -3,8 +3,10 @@ import { Button } from './ui/Button';
 import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye, EyeOff } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 export const UsersGroups: React.FC = () => {
+  const { handleError } = useErrorHandler();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,9 +145,9 @@ export const UsersGroups: React.FC = () => {
     try {
       await adminApi.deleteUser(user.id);
       loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('[UsersGroups] Delete user error:', error);
-      alert(error.message || 'Failed to delete user');
+      handleError(error, 'Delete User Failed');
     }
   };
 
@@ -158,9 +160,9 @@ export const UsersGroups: React.FC = () => {
       await adminApi.createGroup({ name: newGroup.trim() });
       setNewGroup('');
       loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('[UsersGroups] Create group error:', error);
-      alert(error.message || 'Failed to create group');
+      handleError(error, 'Create Group Failed');
     } finally {
       setIsCreatingGroup(false);
     }
@@ -174,9 +176,9 @@ export const UsersGroups: React.FC = () => {
     try {
       await adminApi.deleteGroup(group.id);
       loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('[UsersGroups] Delete group error:', error);
-      alert(error.message || 'Failed to delete group');
+      handleError(error, 'Delete Group Failed');
     }
   };
 

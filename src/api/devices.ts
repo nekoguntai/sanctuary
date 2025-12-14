@@ -5,47 +5,10 @@
  */
 
 import apiClient from './client';
+import type { Device, HardwareDeviceModel } from '../types';
 
-export interface HardwareDeviceModel {
-  id: string;
-  name: string;
-  slug: string;
-  manufacturer: string;
-  connectivity: string[];
-  secureElement: boolean;
-  openSource: boolean;
-  airGapped: boolean;
-  supportsBitcoinOnly: boolean;
-  supportsMultisig: boolean;
-  supportsTaproot: boolean;
-  supportsPassphrase: boolean;
-  scriptTypes: string[];
-  hasScreen: boolean;
-  screenType?: string;
-  releaseYear?: number;
-  discontinued: boolean;
-  imageUrl?: string;
-  websiteUrl?: string;
-}
-
-export interface Device {
-  id: string;
-  type: string;
-  label: string;
-  fingerprint: string;
-  derivationPath?: string;
-  xpub: string;
-  createdAt: string;
-  model?: HardwareDeviceModel;
-  wallets?: Array<{
-    wallet: {
-      id: string;
-      name: string;
-      type: string;
-      scriptType?: string;
-    };
-  }>;
-}
+// Re-export types for backward compatibility
+export type { Device, HardwareDeviceModel } from '../types';
 
 export interface CreateDeviceRequest {
   type: string;

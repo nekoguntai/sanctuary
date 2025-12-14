@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as walletsApi from '../src/api/wallets';
 import * as devicesApi from '../src/api/devices';
-import { ApiError } from '../src/api/client';
 import { Device, WalletType, Wallet } from '../types';
 import { Button } from './ui/Button';
 import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
 import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 export const CreateWallet: React.FC = () => {
   const navigate = useNavigate();
+  const { handleError } = useErrorHandler();
   const [step, setStep] = useState(1);
   const [availableDevices, setAvailableDevices] = useState<Device[]>([]);
   
@@ -64,7 +65,7 @@ export const CreateWallet: React.FC = () => {
     else if (step === 2 && selectedDeviceIds.size > 0) {
         // Validate M-of-N on transition
         if (walletType === WalletType.MULTI_SIG && selectedDeviceIds.size < 2) {
-            alert("Multisig requires at least 2 devices.");
+            handleError('Multisig requires at least 2 devices.', 'Validation Error');
             return;
         }
         setStep(3);
@@ -92,11 +93,7 @@ export const CreateWallet: React.FC = () => {
       navigate(`/wallets/${created.id}`);
     } catch (error) {
       console.error('Failed to create wallet:', error);
-      if (error instanceof ApiError) {
-        alert(`Error creating wallet: ${error.message}`);
-      } else {
-        alert('Failed to create wallet. Please try again.');
-      }
+      handleError(error, 'Failed to Create Wallet');
     } finally {
       setIsSubmitting(false);
     }

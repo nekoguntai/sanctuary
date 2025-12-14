@@ -9,6 +9,7 @@ import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
 import { UTXOList } from './UTXOList';
 import { WalletStats } from './WalletStats';
@@ -53,7 +54,6 @@ import { useUser } from '../contexts/UserContext';
 import { useWalletEvents, useWalletLogs, WalletLogEntry } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
-import { ApiError } from '../src/api/client';
 
 // Per-Wallet Telegram Settings Component
 const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) => {
@@ -242,6 +242,7 @@ export const WalletDetail: React.FC = () => {
   const location = useLocation();
   const { format } = useCurrency();
   const { user } = useUser();
+  const { handleError, showSuccess } = useErrorHandler();
   const highlightTxId = (location.state as any)?.highlightTxId;
 
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -664,9 +665,7 @@ export const WalletDetail: React.FC = () => {
       await fetchData();
     } catch (err) {
       console.error('Failed to sync wallet:', err);
-      if (err instanceof ApiError) {
-        alert(`Sync failed: ${err.message}`);
-      }
+      handleError(err, 'Sync Failed');
     } finally {
       setSyncing(false);
     }
@@ -683,14 +682,12 @@ export const WalletDetail: React.FC = () => {
     try {
       setSyncing(true);
       const result = await syncApi.resyncWallet(id);
-      alert(result.message);
+      showSuccess(result.message, 'Resync Queued');
       // Reload wallet data after resync is queued
       await fetchData();
     } catch (err) {
       console.error('Failed to resync wallet:', err);
-      if (err instanceof ApiError) {
-        alert(`Resync failed: ${err.message}`);
-      }
+      handleError(err, 'Resync Failed');
     } finally {
       setSyncing(false);
     }
@@ -812,9 +809,7 @@ export const WalletDetail: React.FC = () => {
       console.error('Failed to update wallet:', err);
       // Revert optimistic update on error
       setWallet(wallet);
-      if (err instanceof ApiError) {
-        alert(`Update failed: ${err.message}`);
-      }
+      handleError(err, 'Update Failed');
     }
   };
 
@@ -829,9 +824,7 @@ export const WalletDetail: React.FC = () => {
       setSelectedGroupToAdd('');
     } catch (err) {
       console.error('Failed to share with group:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to share: ${err.message}`);
-      }
+      handleError(err, 'Share Failed');
     } finally {
       setSharingLoading(false);
     }
@@ -847,9 +840,7 @@ export const WalletDetail: React.FC = () => {
       setWalletShareInfo(shareInfo);
     } catch (err) {
       console.error('Failed to update group role:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to update role: ${err.message}`);
-      }
+      handleError(err, 'Update Role Failed');
     } finally {
       setSharingLoading(false);
     }
@@ -866,9 +857,7 @@ export const WalletDetail: React.FC = () => {
       setWalletShareInfo(shareInfo);
     } catch (err) {
       console.error('Failed to remove group:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to remove group: ${err.message}`);
-      }
+      handleError(err, 'Remove Group Failed');
     } finally {
       setSharingLoading(false);
     }
@@ -886,9 +875,7 @@ export const WalletDetail: React.FC = () => {
       setUserSearchResults([]);
     } catch (err) {
       console.error('Failed to share with user:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to share: ${err.message}`);
-      }
+      handleError(err, 'Share Failed');
     } finally {
       setSharingLoading(false);
     }
@@ -904,9 +891,7 @@ export const WalletDetail: React.FC = () => {
       setWalletShareInfo(shareInfo);
     } catch (err) {
       console.error('Failed to remove user:', err);
-      if (err instanceof ApiError) {
-        alert(`Failed to remove user: ${err.message}`);
-      }
+      handleError(err, 'Remove User Failed');
     } finally {
       setSharingLoading(false);
     }
@@ -945,7 +930,7 @@ export const WalletDetail: React.FC = () => {
        downloadAnchorNode.remove();
      } catch (err) {
        console.error('Failed to export wallet:', err);
-       alert('Failed to export wallet');
+       handleError(err, 'Export Failed');
      }
   }
 
@@ -1909,9 +1894,9 @@ export const WalletDetail: React.FC = () => {
                        <Button onClick={async () => {
                            try {
                              await walletsApi.exportLabelsBip329(id!, wallet.name);
-                           } catch (err: any) {
+                           } catch (err) {
                              console.error('Failed to export labels:', err);
-                             alert(err.message || 'Failed to export labels');
+                             handleError(err, 'Export Labels Failed');
                            }
                        }} className="w-full">
                            <Download className="w-4 h-4 mr-2" /> Download Labels (BIP 329)
@@ -2055,9 +2040,7 @@ export const WalletDetail: React.FC = () => {
                                navigate('/wallets');
                             } catch (err) {
                                console.error('Failed to delete wallet:', err);
-                               if (err instanceof ApiError) {
-                                  alert(`Delete failed: ${err.message}`);
-                               }
+                               handleError(err, 'Delete Failed');
                             }
                          }
                       }}

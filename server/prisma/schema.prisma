@@ -37,6 +37,7 @@ model User {
   devices     Device[]
   transactions Transaction[]
   groupMemberships GroupMember[]
+  pushDevices PushDevice[]
 
   @@map("users")
 }
@@ -407,4 +408,23 @@ model AuditLog {
   @@index([category])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ========================================
+// PUSH NOTIFICATIONS
+// ========================================
+
+model PushDevice {
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique  // Device token from APNs/FCM
+  platform    String   // "ios" or "android"
+  deviceName  String?  // User-friendly name (e.g., "John's iPhone")
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_devices")
 }

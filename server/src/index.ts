@@ -19,6 +19,7 @@ import priceRoutes from './api/price';
 import nodeRoutes from './api/node';
 import adminRoutes from './api/admin';
 import syncRoutes from './api/sync';
+import pushRoutes from './api/push';
 import { initializeWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
@@ -70,6 +71,7 @@ app.use('/api/v1/price', priceRoutes);
 app.use('/api/v1/node', nodeRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/sync', syncRoutes);
+app.use('/api/v1/push', pushRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

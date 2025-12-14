@@ -87,8 +87,9 @@ export async function testTelegramConfig(
 
 /**
  * Get all users who have access to a wallet (direct or via group)
+ * Exported for use by other notification services (e.g., push notifications)
  */
-async function getWalletUsers(walletId: string) {
+export async function getWalletUsers(walletId: string) {
   return prisma.user.findMany({
     where: {
       OR: [

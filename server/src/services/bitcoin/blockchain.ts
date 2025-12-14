@@ -583,14 +583,14 @@ export async function syncWallet(walletId: string): Promise<{
       consolidation,
     });
 
-    // Send Telegram notifications for new transactions (async, don't block sync)
-    const { notifyNewTransactions } = await import('../telegram/telegramService');
+    // Send notifications for new transactions (Telegram + Push, async, don't block sync)
+    const { notifyNewTransactions } = await import('../notifications/notificationService');
     notifyNewTransactions(walletId, uniqueTxArray.map(tx => ({
       txid: tx.txid,
       type: tx.type,
       amount: tx.amount,
     }))).catch(err => {
-      log.warn(`[BLOCKCHAIN] Failed to send Telegram notifications: ${err}`);
+      log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
     });
   }
 

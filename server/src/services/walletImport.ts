@@ -7,18 +7,20 @@
  */
 
 import prisma from '../models/prisma';
-import {
+import type {
   ParsedDescriptor,
   ParsedDevice,
   JsonImportDevice,
+  JsonImportConfig,
+  ScriptType,
+  Network,
+} from './bitcoin/descriptorParser';
+import {
   parseDescriptorForImport,
   parseJsonImport,
   parseImportInput,
   validateDescriptor,
   validateJsonImport,
-  JsonImportConfig,
-  ScriptType,
-  Network,
 } from './bitcoin/descriptorParser';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
@@ -39,7 +41,7 @@ export interface DeviceResolution {
 export interface ImportValidationResult {
   valid: boolean;
   error?: string;
-  format: 'descriptor' | 'json' | 'wallet_export';
+  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
   walletType: 'single_sig' | 'multi_sig';
   scriptType: ScriptType;
   network: Network;
@@ -549,6 +551,189 @@ export async function importFromJson(
 }
 
 /**
+ * Import wallet from pre-parsed data (e.g., BlueWallet text format)
+ */
+export async function importFromParsedData(
+  userId: string,
+  input: {
+    parsed: ParsedDescriptor;
+    name: string;
+    network?: Network;
+    deviceLabels?: Record<string, string>; // fingerprint -> label
+  }
+): Promise<ImportWalletResult> {
+  const { parsed } = input;
+  const network = input.network || parsed.network;
+
+  // Check for duplicate wallet - get all user's wallets and compare device fingerprints
+  const newFingerprints = new Set(parsed.devices.map(d => d.fingerprint.toLowerCase()));
+
+  const userWallets = await prisma.wallet.findMany({
+    where: {
+      users: { some: { userId } },
+      descriptor: { not: null },
+    },
+    select: {
+      id: true,
+      name: true,
+      descriptor: true,
+    },
+  });
+
+  for (const wallet of userWallets) {
+    if (!wallet.descriptor) continue;
+
+    // Extract fingerprints from existing wallet descriptor
+    const existingFingerprints = new Set(
+      (wallet.descriptor.match(/\[([a-f0-9]{8})\//gi) || [])
+        .map(m => m.slice(1, 9).toLowerCase())
+    );
+
+    // Check if same set of devices
+    if (existingFingerprints.size === newFingerprints.size &&
+        [...newFingerprints].every(fp => existingFingerprints.has(fp))) {
+      throw new Error(`A wallet with these devices already exists: "${wallet.name}"`);
+    }
+  }
+
+  // Resolve devices
+  const resolutions = await resolveDevices(userId, parsed.devices);
+
+  // Create devices and wallet in a transaction
+  return await prisma.$transaction(async (tx) => {
+    const createdDeviceIds: string[] = [];
+    const reusedDeviceIds: string[] = [];
+    const deviceIdsForWallet: string[] = [];
+
+    // Create or reuse devices
+    for (const resolution of resolutions) {
+      if (resolution.willCreate) {
+        // Create new device
+        const label =
+          input.deviceLabels?.[resolution.fingerprint] ||
+          resolution.suggestedLabel ||
+          `Imported Device`;
+
+        const newDevice = await tx.device.create({
+          data: {
+            userId,
+            type: resolution.originalType || 'unknown',
+            label,
+            fingerprint: resolution.fingerprint,
+            derivationPath: resolution.derivationPath,
+            xpub: resolution.xpub,
+          },
+        });
+
+        createdDeviceIds.push(newDevice.id);
+        deviceIdsForWallet.push(newDevice.id);
+      } else {
+        reusedDeviceIds.push(resolution.existingDeviceId!);
+        deviceIdsForWallet.push(resolution.existingDeviceId!);
+      }
+    }
+
+    // Build descriptor with proper formatting
+    const devices = await tx.device.findMany({
+      where: { id: { in: deviceIdsForWallet } },
+    });
+
+    // Sort devices by their order in the original parsed.devices
+    const sortedDevices = deviceIdsForWallet.map(
+      (id) => devices.find((d) => d.id === id)!
+    );
+
+    const deviceInfos = sortedDevices.map((d) => ({
+      fingerprint: d.fingerprint,
+      xpub: d.xpub,
+      derivationPath: d.derivationPath || undefined,
+    }));
+
+    const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+      deviceInfos,
+      {
+        type: parsed.type,
+        scriptType: parsed.scriptType,
+        network,
+        quorum: parsed.quorum,
+      }
+    );
+
+    // Create wallet
+    const wallet = await tx.wallet.create({
+      data: {
+        name: input.name,
+        type: parsed.type,
+        scriptType: parsed.scriptType,
+        network,
+        quorum: parsed.quorum,
+        totalSigners: parsed.totalSigners,
+        descriptor: descriptorResult.descriptor,
+        fingerprint: descriptorResult.fingerprint,
+        users: {
+          create: {
+            userId,
+            role: 'owner',
+          },
+        },
+      },
+    });
+
+    // Link devices to wallet
+    await tx.walletDevice.createMany({
+      data: deviceIdsForWallet.map((deviceId, index) => ({
+        walletId: wallet.id,
+        deviceId,
+        signerIndex: index,
+      })),
+    });
+
+    // Generate initial addresses
+    try {
+      const addressesToCreate = [];
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } =
+          addressDerivation.deriveAddressFromDescriptor(
+            descriptorResult.descriptor,
+            i,
+            { network, change: false }
+          );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      await tx.address.createMany({
+        data: addressesToCreate,
+      });
+    } catch (err) {
+      console.error('[IMPORT] Failed to generate initial addresses:', err);
+    }
+
+    return {
+      wallet: {
+        id: wallet.id,
+        name: wallet.name,
+        type: wallet.type,
+        scriptType: wallet.scriptType,
+        network: wallet.network,
+        quorum: wallet.quorum,
+        totalSigners: wallet.totalSigners,
+        descriptor: wallet.descriptor,
+      },
+      devicesCreated: createdDeviceIds.length,
+      devicesReused: reusedDeviceIds.length,
+      createdDeviceIds,
+      reusedDeviceIds,
+    };
+  });
+}
+
+/**
  * Auto-detect format and import wallet
  */
 export async function importWallet(
@@ -583,6 +768,16 @@ export async function importWallet(
       json: trimmed,
       name: input.name,
       network: input.network,
+    });
+  }
+
+  // For BlueWallet text format - import using parsed data
+  if (parseResult.format === 'bluewallet_text') {
+    return importFromParsedData(userId, {
+      parsed: parseResult.parsed,
+      name: input.name,
+      network: input.network,
+      deviceLabels: input.deviceLabels,
     });
   }
 

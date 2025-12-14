@@ -383,6 +383,193 @@ export interface WalletExportFormat {
 }
 
 /**
+ * BlueWallet multisig text format parser
+ *
+ * Format example:
+ * # BlueWallet Multisig setup file
+ * Name: MyWallet
+ * Policy: 2 of 3
+ * Derivation: m/48'/0'/0'/2'
+ * Format: P2WSH
+ *
+ * # derivation: m/48'/0'/0'/2'
+ * 7E839592: xpub6EGS...
+ */
+export interface BlueWalletTextFormat {
+  name?: string;
+  policy?: { quorum: number; total: number };
+  derivation?: string;
+  format?: string;
+  devices: Array<{
+    fingerprint: string;
+    xpub: string;
+    derivationPath?: string;
+  }>;
+}
+
+/**
+ * Check if input looks like BlueWallet text format
+ */
+function isBlueWalletTextFormat(input: string): boolean {
+  const lines = input.split('\n');
+  let hasPolicy = false;
+  let hasDeviceLine = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.match(/^Policy:\s*\d+\s+of\s+\d+$/i)) {
+      hasPolicy = true;
+    }
+    // Device line: fingerprint: xpub (8 hex chars followed by colon and xpub)
+    if (trimmed.match(/^[a-fA-F0-9]{8}:\s*[xyztuvYZTUVpub]/)) {
+      hasDeviceLine = true;
+    }
+  }
+
+  return hasPolicy && hasDeviceLine;
+}
+
+/**
+ * Parse BlueWallet text format
+ */
+function parseBlueWalletText(input: string): BlueWalletTextFormat {
+  const lines = input.split('\n');
+  const result: BlueWalletTextFormat = {
+    devices: [],
+  };
+
+  let currentDerivation: string | undefined;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (!trimmed) continue;
+
+    // Parse Name: value
+    const nameMatch = trimmed.match(/^Name:\s*(.+)$/i);
+    if (nameMatch) {
+      result.name = nameMatch[1].trim();
+      continue;
+    }
+
+    // Parse Policy: M of N
+    const policyMatch = trimmed.match(/^Policy:\s*(\d+)\s+of\s+(\d+)$/i);
+    if (policyMatch) {
+      result.policy = {
+        quorum: parseInt(policyMatch[1], 10),
+        total: parseInt(policyMatch[2], 10),
+      };
+      continue;
+    }
+
+    // Parse Derivation: m/48'/0'/0'/2'
+    const derivationMatch = trimmed.match(/^Derivation:\s*(.+)$/i);
+    if (derivationMatch) {
+      result.derivation = derivationMatch[1].trim();
+      continue;
+    }
+
+    // Parse Format: P2WSH
+    const formatMatch = trimmed.match(/^Format:\s*(.+)$/i);
+    if (formatMatch) {
+      result.format = formatMatch[1].trim().toUpperCase();
+      continue;
+    }
+
+    // Parse comment with derivation path: # derivation: m/48'/0'/0'/2'
+    const commentDerivationMatch = trimmed.match(/^#\s*derivation:\s*(.+)$/i);
+    if (commentDerivationMatch) {
+      currentDerivation = commentDerivationMatch[1].trim();
+      continue;
+    }
+
+    // Skip other comments
+    if (trimmed.startsWith('#')) continue;
+
+    // Parse device line: fingerprint: xpub
+    const deviceMatch = trimmed.match(/^([a-fA-F0-9]{8}):\s*([xyztuvYZTUVpub][a-zA-Z0-9]+)$/);
+    if (deviceMatch) {
+      result.devices.push({
+        fingerprint: deviceMatch[1].toLowerCase(),
+        xpub: deviceMatch[2],
+        derivationPath: currentDerivation || result.derivation,
+      });
+      currentDerivation = undefined; // Reset for next device
+      continue;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Convert BlueWallet format string to script type
+ */
+function blueWalletFormatToScriptType(format: string | undefined): ScriptType {
+  if (!format) return 'native_segwit';
+
+  const upper = format.toUpperCase();
+  switch (upper) {
+    case 'P2WSH':
+      return 'native_segwit';
+    case 'P2SH-P2WSH':
+      return 'nested_segwit';
+    case 'P2SH':
+      return 'legacy';
+    case 'P2TR':
+      return 'taproot';
+    case 'P2WPKH':
+      return 'native_segwit';
+    case 'P2SH-P2WPKH':
+      return 'nested_segwit';
+    case 'P2PKH':
+      return 'legacy';
+    default:
+      return 'native_segwit';
+  }
+}
+
+/**
+ * Parse BlueWallet text format into standard ParsedDescriptor
+ */
+function parseBlueWalletTextImport(input: string): ParsedDescriptor {
+  const parsed = parseBlueWalletText(input);
+
+  if (parsed.devices.length === 0) {
+    throw new Error('No devices found in BlueWallet text file');
+  }
+
+  // Map devices to standard format
+  const devices: ParsedDevice[] = parsed.devices.map((d) => ({
+    fingerprint: d.fingerprint,
+    xpub: d.xpub,
+    derivationPath: normalizeDerivationPath(d.derivationPath || parsed.derivation || "m/48'/0'/0'/2'"),
+  }));
+
+  // Detect network from first device
+  const network = detectNetwork(devices[0].xpub, devices[0].derivationPath);
+
+  // Determine wallet type
+  const isMultisig = parsed.policy && parsed.policy.total > 1;
+
+  const result: ParsedDescriptor = {
+    type: isMultisig ? 'multi_sig' : 'single_sig',
+    scriptType: blueWalletFormatToScriptType(parsed.format),
+    devices,
+    network,
+    isChange: false,
+  };
+
+  if (isMultisig && parsed.policy) {
+    result.quorum = parsed.policy.quorum;
+    result.totalSigners = parsed.policy.total;
+  }
+
+  return result;
+}
+
+/**
  * Check if JSON is a wallet export format (has descriptor field)
  */
 function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
@@ -395,11 +582,64 @@ function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
 }
 
 /**
- * Attempt to parse input as either descriptor or JSON
+ * Extract descriptor from text that may contain comments
+ * Returns the first valid descriptor line found
+ */
+function extractDescriptorFromText(input: string): string | null {
+  const lines = input.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Check if line looks like a descriptor (starts with script type wrapper)
+    if (
+      trimmed.startsWith('wsh(') ||
+      trimmed.startsWith('wpkh(') ||
+      trimmed.startsWith('sh(') ||
+      trimmed.startsWith('pkh(') ||
+      trimmed.startsWith('tr(')
+    ) {
+      return trimmed;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if input is a text file with descriptors and comments
+ */
+function isDescriptorTextFormat(input: string): boolean {
+  const lines = input.split('\n');
+  let hasComment = false;
+  let hasDescriptor = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) hasComment = true;
+    if (
+      trimmed.startsWith('wsh(') ||
+      trimmed.startsWith('wpkh(') ||
+      trimmed.startsWith('sh(') ||
+      trimmed.startsWith('pkh(') ||
+      trimmed.startsWith('tr(')
+    ) {
+      hasDescriptor = true;
+    }
+  }
+
+  return hasComment && hasDescriptor;
+}
+
+/**
+ * Attempt to parse input as descriptor, JSON, or BlueWallet text format
  * Returns the parsed result or throws an error
  */
 export function parseImportInput(input: string): {
-  format: 'descriptor' | 'json' | 'wallet_export';
+  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
   parsed: ParsedDescriptor;
   originalDevices?: JsonImportDevice[];
   suggestedName?: string;
@@ -437,7 +677,28 @@ export function parseImportInput(input: string): {
     }
   }
 
-  // Try as descriptor
+  // Check if it's BlueWallet/Coldcard text format (has Policy: M of N)
+  if (isBlueWalletTextFormat(trimmed)) {
+    const blueWalletParsed = parseBlueWalletText(trimmed);
+    return {
+      format: 'bluewallet_text',
+      parsed: parseBlueWalletTextImport(trimmed),
+      suggestedName: blueWalletParsed.name,
+    };
+  }
+
+  // Check if it's a text file with descriptors and comments (e.g., Sparrow export)
+  if (isDescriptorTextFormat(trimmed)) {
+    const descriptor = extractDescriptorFromText(trimmed);
+    if (descriptor) {
+      return {
+        format: 'descriptor',
+        parsed: parseDescriptorForImport(descriptor),
+      };
+    }
+  }
+
+  // Try as plain descriptor
   return {
     format: 'descriptor',
     parsed: parseDescriptorForImport(trimmed),

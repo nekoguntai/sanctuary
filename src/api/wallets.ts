@@ -88,7 +88,7 @@ export interface DeviceResolution {
 export interface ImportValidationResult {
   valid: boolean;
   error?: string;
-  format: 'descriptor' | 'json' | 'wallet_export';
+  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
   walletType: 'single_sig' | 'multi_sig';
   scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
   network: 'mainnet' | 'testnet' | 'regtest';

@@ -9,6 +9,7 @@ import { getNodeClient } from './nodeClient';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 import { createLogger } from '../../utils/logger';
+import { walletLog } from '../../websocket/notifications';
 
 const log = createLogger('BLOCKCHAIN');
 
@@ -302,11 +303,20 @@ export async function syncWallet(walletId: string): Promise<{
   });
 
   if (addresses.length === 0) {
+    walletLog(walletId, 'info', 'BLOCKCHAIN', 'No addresses to scan');
     return { addresses: 0, transactions: 0, utxos: 0 };
   }
 
   const walletAddressSet = new Set(addresses.map(a => a.address));
   const addressMap = new Map(addresses.map(a => [a.address, a]));
+
+  // Count receive vs change addresses
+  const receiveAddrs = addresses.filter(a => a.derivationPath?.includes('/0/')).length;
+  const changeAddrs = addresses.filter(a => a.derivationPath?.includes('/1/')).length;
+  walletLog(walletId, 'info', 'BLOCKCHAIN', `Scanning ${addresses.length} addresses`, {
+    receive: receiveAddrs,
+    change: changeAddrs,
+  });
 
   // PHASE 1: Batch fetch all address histories in parallel
   log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses...`);
@@ -333,11 +343,19 @@ export async function syncWallet(walletId: string): Promise<{
 
   // Collect all unique txids from all address histories
   const allTxids = new Set<string>();
-  for (const history of historyResults.values()) {
+  let addressesWithActivity = 0;
+  for (const [addr, history] of historyResults.entries()) {
+    if (history.length > 0) {
+      addressesWithActivity++;
+    }
     for (const item of history) {
       allTxids.add(item.tx_hash);
     }
   }
+
+  walletLog(walletId, 'debug', 'BLOCKCHAIN', `Found ${addressesWithActivity} addresses with activity`, {
+    totalTransactions: allTxids.size,
+  });
 
   // PHASE 2: Batch check which transactions already exist in DB
   const existingTxs = await prisma.transaction.findMany({
@@ -353,6 +371,12 @@ export async function syncWallet(walletId: string): Promise<{
   // Filter to only new txids
   const newTxids = Array.from(allTxids).filter(txid => !existingTxidSet.has(txid));
   log.debug(`[BLOCKCHAIN] Found ${newTxids.length} new transactions to process (${existingTxidSet.size} already exist)`);
+
+  if (newTxids.length > 0) {
+    walletLog(walletId, 'info', 'BLOCKCHAIN', `Fetching ${newTxids.length} new transactions`, {
+      existing: existingTxidSet.size,
+    });
+  }
 
   // PHASE 3: Batch fetch transaction details for new txids
   const txDetailsCache: Map<string, any> = new Map();
@@ -548,6 +572,16 @@ export async function syncWallet(walletId: string): Promise<{
       skipDuplicates: true,
     });
     totalTransactions = uniqueTxArray.length;
+
+    // Log transaction type breakdown
+    const received = uniqueTxArray.filter(t => t.type === 'received').length;
+    const sent = uniqueTxArray.filter(t => t.type === 'sent').length;
+    const consolidation = uniqueTxArray.filter(t => t.type === 'consolidation').length;
+    walletLog(walletId, 'info', 'BLOCKCHAIN', `Recorded ${totalTransactions} transactions`, {
+      received,
+      sent,
+      consolidation,
+    });
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses in parallel
@@ -639,6 +673,13 @@ export async function syncWallet(walletId: string): Promise<{
       skipDuplicates: true,
     });
     totalUtxos = utxosToCreate.length;
+
+    // Calculate total value of new UTXOs
+    const totalValue = utxosToCreate.reduce((sum, u) => sum + Number(u.amount), 0);
+    walletLog(walletId, 'info', 'UTXO', `Found ${totalUtxos} new UTXOs`, {
+      totalSats: totalValue,
+      existing: existingUtxoSet.size,
+    });
   }
 
   // PHASE 10: Batch update used addresses

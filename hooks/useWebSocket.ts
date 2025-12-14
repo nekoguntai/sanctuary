@@ -1,5 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { websocketClient, WebSocketEvent, WebSocketEventType } from '../services/websocket';
+
+// Log entry type matching backend WalletLogEntry
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface WalletLogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  module: string;
+  message: string;
+  details?: Record<string, any>;
+}
 
 export interface UseWebSocketReturn {
   connected: boolean;
@@ -145,4 +157,80 @@ export const useWalletEvents = (
       websocketClient.off('sync', handleEvent);
     };
   }, [walletId, subscribeWallet, unsubscribeWallet, callbacks.onTransaction, callbacks.onBalance, callbacks.onConfirmation, callbacks.onSync]);
+};
+
+/**
+ * Hook for subscribing to wallet log events
+ * Returns array of log entries that accumulates in real-time
+ */
+export const useWalletLogs = (
+  walletId: string | undefined,
+  options: {
+    maxEntries?: number;
+    enabled?: boolean;
+  } = {}
+) => {
+  const { maxEntries = 500, enabled = true } = options;
+  const [logs, setLogs] = useState<WalletLogEntry[]>([]);
+  const [isPaused, setIsPaused] = useState(false);
+  const logsRef = useRef<WalletLogEntry[]>([]);
+
+  // Keep ref in sync with state for use in callbacks
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  const clearLogs = useCallback(() => {
+    setLogs([]);
+    logsRef.current = [];
+  }, []);
+
+  const togglePause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!walletId || !enabled) return;
+
+    const channel = `wallet:${walletId}:log`;
+
+    // Subscribe to the log channel
+    websocketClient.subscribe(channel);
+
+    // Handle log events
+    const handleLog = (event: WebSocketEvent) => {
+      if (event.event !== 'log') return;
+
+      // Check if this is for our wallet
+      const eventChannel = event.channel;
+      if (eventChannel !== channel) return;
+
+      // Don't add if paused
+      if (isPaused) return;
+
+      const entry = event.data as WalletLogEntry;
+      setLogs(prev => {
+        const newLogs = [...prev, entry];
+        // Keep only last maxEntries
+        if (newLogs.length > maxEntries) {
+          return newLogs.slice(-maxEntries);
+        }
+        return newLogs;
+      });
+    };
+
+    websocketClient.on('log', handleLog);
+
+    return () => {
+      websocketClient.unsubscribe(channel);
+      websocketClient.off('log', handleLog);
+    };
+  }, [walletId, enabled, maxEntries, isPaused]);
+
+  return {
+    logs,
+    isPaused,
+    clearLogs,
+    togglePause,
+  };
 };

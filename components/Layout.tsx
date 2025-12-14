@@ -109,7 +109,7 @@ const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorCla
 export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme }) => {
   const { user, logout } = useUser();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState({ wallets: true, devices: true, admin: true });
+  const [expanded, setExpanded] = useState({ wallets: false, devices: false, admin: false });
 
   // Data for Sidebar
   const [wallets, setWallets] = useState<ApiWallet[]>([]);

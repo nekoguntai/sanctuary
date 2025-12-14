@@ -11,7 +11,7 @@
 import prisma from '../models/prisma';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields } from './bitcoin/blockchain';
 import { getNodeClient } from './bitcoin/nodeClient';
-import { getNotificationService } from '../websocket/notifications';
+import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('SYNC');
@@ -298,7 +298,11 @@ class SyncService {
     });
 
     try {
+      const startTime = Date.now();
       log.info(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})` : ''}`);
+      walletLog(walletId, 'info', 'SYNC', retryCount > 0
+        ? `Sync started (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})`
+        : 'Sync started');
 
       // Get previous balance for comparison
       const previousBalance = await this.getWalletBalance(walletId);
@@ -310,6 +314,7 @@ class SyncService {
       const populatedCount = await populateMissingTransactionFields(walletId);
       if (populatedCount > 0) {
         log.info(`[SYNC] Populated missing fields for ${populatedCount} existing transactions`);
+        walletLog(walletId, 'info', 'SYNC', `Populated details for ${populatedCount} transactions`);
       }
 
       // Get new balance
@@ -326,7 +331,13 @@ class SyncService {
         },
       });
 
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
+      walletLog(walletId, 'info', 'SYNC', `Sync completed in ${duration}s`, {
+        transactions: result.transactions,
+        utxos: result.utxos,
+        addresses: result.addresses,
+      });
 
       // Always notify sync completion via WebSocket
       notificationService.broadcastSyncStatus(walletId, {
@@ -363,6 +374,10 @@ class SyncService {
         const delayMs = RETRY_DELAYS_MS[retryCount] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
 
         log.info(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${MAX_RETRY_ATTEMPTS})`);
+        walletLog(walletId, 'warn', 'SYNC', `Sync failed: ${errorMessage}. Retrying in ${delayMs / 1000}s...`, {
+          attempt: nextRetry,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+        });
 
         // Notify that we're retrying
         notificationService.broadcastSyncStatus(walletId, {
@@ -405,6 +420,7 @@ class SyncService {
 
       // All retries exhausted - final failure
       log.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
+      walletLog(walletId, 'error', 'SYNC', `Sync failed after ${MAX_RETRY_ATTEMPTS} attempts: ${errorMessage}`);
 
       // Update sync metadata with final error
       await prisma.wallet.update({

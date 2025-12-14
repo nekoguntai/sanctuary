@@ -58,19 +58,23 @@ export class WebSocketClient {
     this.isConnecting = true;
     this.token = token || null;
 
-    // Build connection URL with token if available
-    const wsUrl = this.token ? `${this.url}?token=${this.token}` : this.url;
-
+    // Connect without token in URL (security: avoid token exposure in logs/history)
     console.log('Connecting to WebSocket:', this.url);
 
     try {
-      this.ws = new WebSocket(wsUrl);
+      this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
+
+        // Send authentication message if we have a token
+        // This avoids exposing token in URL query parameters
+        if (this.token) {
+          this.sendAuthMessage(this.token);
+        }
 
         // Resubscribe to channels
         this.resubscribe();
@@ -159,6 +163,10 @@ export class WebSocketClient {
     switch (message.type) {
       case 'connected':
         console.log('WebSocket connection confirmed');
+        break;
+
+      case 'authenticated':
+        console.log('WebSocket authenticated:', message.data?.success ? 'success' : 'failed');
         break;
 
       case 'subscribed':
@@ -335,12 +343,23 @@ export class WebSocketClient {
   /**
    * Send message to server
    */
-  private send(message: any) {
+  private send(message: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
       console.warn('Cannot send message: WebSocket not connected');
     }
+  }
+
+  /**
+   * Send authentication message to server
+   * This authenticates the connection without exposing token in URL
+   */
+  private sendAuthMessage(token: string) {
+    this.send({
+      type: 'auth',
+      data: { token },
+    });
   }
 
   /**

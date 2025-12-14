@@ -38,6 +38,8 @@ class SyncService {
   private static instance: SyncService;
   private syncQueue: SyncJob[] = [];
   private activeSyncs: Set<string> = new Set();
+  // Promise-based locks to prevent race conditions between concurrent sync requests
+  private syncLocks: Map<string, Promise<void>> = new Map();
   private syncInterval: NodeJS.Timeout | null = null;
   private confirmationInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
@@ -268,6 +270,38 @@ class SyncService {
   }
 
   /**
+   * Acquire a lock for a wallet sync to prevent race conditions
+   */
+  private async acquireSyncLock(walletId: string): Promise<boolean> {
+    // If there's an existing lock, wait for it to complete
+    const existingLock = this.syncLocks.get(walletId);
+    if (existingLock) {
+      try {
+        await existingLock;
+      } catch {
+        // Ignore errors from previous sync
+      }
+    }
+
+    // Check again after waiting (another request may have just started)
+    if (this.activeSyncs.has(walletId)) {
+      return false;
+    }
+
+    // Acquire the lock
+    this.activeSyncs.add(walletId);
+    return true;
+  }
+
+  /**
+   * Release a wallet sync lock
+   */
+  private releaseSyncLock(walletId: string): void {
+    this.activeSyncs.delete(walletId);
+    this.syncLocks.delete(walletId);
+  }
+
+  /**
    * Execute a sync job for a wallet with retry support
    */
   private async executeSyncJob(walletId: string, retryCount: number = 0): Promise<{
@@ -277,11 +311,15 @@ class SyncService {
     utxos: number;
     error?: string;
   }> {
-    if (this.activeSyncs.has(walletId)) {
+    // Try to acquire lock - prevents race conditions
+    if (!await this.acquireSyncLock(walletId)) {
       return { success: false, addresses: 0, transactions: 0, utxos: 0, error: 'Already syncing' };
     }
 
-    this.activeSyncs.add(walletId);
+    // Create a promise that will be resolved when sync completes
+    let resolveLock: () => void;
+    const lockPromise = new Promise<void>((resolve) => { resolveLock = resolve; });
+    this.syncLocks.set(walletId, lockPromise);
 
     // Mark sync in progress
     await prisma.wallet.update({
@@ -399,8 +437,9 @@ class SyncService {
           },
         });
 
-        // Remove from active syncs so retry can start
-        this.activeSyncs.delete(walletId);
+        // Remove from active syncs and release lock so retry can start
+        this.releaseSyncLock(walletId);
+        resolveLock!();
 
         // Schedule retry with delay
         setTimeout(() => {
@@ -451,7 +490,8 @@ class SyncService {
         error: errorMessage,
       };
     } finally {
-      this.activeSyncs.delete(walletId);
+      this.releaseSyncLock(walletId);
+      resolveLock!();
     }
   }
 

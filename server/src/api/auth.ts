@@ -5,6 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import prisma from '../models/prisma';
 import { hashPassword, verifyPassword } from '../utils/password';
 import { generateToken, verifyToken } from '../utils/jwt';
@@ -13,6 +14,48 @@ import { auditService, AuditAction, AuditCategory, getClientInfo } from '../serv
 import * as twoFactorService from '../services/twoFactorService';
 
 const router = Router();
+
+// Rate limiters for authentication endpoints
+// Strict limiter for login attempts (5 attempts per 15 minutes)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many login attempts. Please try again in 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use IP + username combination to prevent targeted attacks
+    const username = req.body?.username?.toLowerCase() || 'unknown';
+    return `${req.ip}-${username}`;
+  },
+});
+
+// Limiter for registration (10 attempts per hour per IP)
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 attempts per hour
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many registration attempts. Please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiter for 2FA verification (10 attempts per 15 minutes)
+const twoFactorLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many 2FA attempts. Please try again in 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * GET /api/v1/auth/registration-status
@@ -46,7 +89,7 @@ router.get('/registration-status', async (req: Request, res: Response) => {
  * POST /api/v1/auth/register
  * Register a new user
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', registerLimiter, async (req: Request, res: Response) => {
   try {
     // Check if registration is enabled (default: disabled / admin-only)
     const setting = await prisma.systemSetting.findUnique({
@@ -142,7 +185,7 @@ router.post('/register', async (req: Request, res: Response) => {
  * POST /api/v1/auth/login
  * Login existing user
  */
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
 
@@ -726,7 +769,7 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response) =>
  * POST /api/v1/auth/2fa/verify
  * Verify 2FA code during login (uses temporary token)
  */
-router.post('/2fa/verify', async (req: Request, res: Response) => {
+router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response) => {
   try {
     const { tempToken, code } = req.body;
 

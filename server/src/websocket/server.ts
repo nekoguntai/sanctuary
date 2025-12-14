@@ -17,15 +17,19 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('WS');
 
+// Timeout for unauthenticated connections (30 seconds)
+const AUTH_TIMEOUT_MS = 30000;
+
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
   isAlive: boolean;
+  authTimeout?: NodeJS.Timeout;
 }
 
 export interface WebSocketMessage {
-  type: 'subscribe' | 'unsubscribe' | 'ping' | 'pong';
-  data?: any;
+  type: 'auth' | 'subscribe' | 'unsubscribe' | 'ping' | 'pong';
+  data?: Record<string, unknown>;
 }
 
 export interface WebSocketEvent {
@@ -76,6 +80,13 @@ export class SanctauryWebSocketServer {
     } else {
       log.debug('WebSocket client connected without authentication');
       // Allow unauthenticated connections but limit functionality
+      // Set timeout to close if they don't authenticate
+      client.authTimeout = setTimeout(() => {
+        if (!client.userId) {
+          log.debug('Closing unauthenticated connection due to timeout');
+          client.close(4001, 'Authentication timeout');
+        }
+      }, AUTH_TIMEOUT_MS);
     }
 
     this.clients.add(client);
@@ -137,6 +148,10 @@ export class SanctauryWebSocketServer {
       const message: WebSocketMessage = JSON.parse(data.toString());
 
       switch (message.type) {
+        case 'auth':
+          this.handleAuth(client, message.data);
+          break;
+
         case 'subscribe':
           this.handleSubscribe(client, message.data);
           break;
@@ -158,10 +173,55 @@ export class SanctauryWebSocketServer {
   }
 
   /**
+   * Handle authentication via message (more secure than URL token)
+   */
+  private handleAuth(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+    if (!data?.token || typeof data.token !== 'string') {
+      this.sendToClient(client, {
+        type: 'error',
+        data: { message: 'Authentication token required' },
+      });
+      return;
+    }
+
+    // Don't allow re-authentication
+    if (client.userId) {
+      this.sendToClient(client, {
+        type: 'authenticated',
+        data: { success: true, userId: client.userId, message: 'Already authenticated' },
+      });
+      return;
+    }
+
+    try {
+      const decoded = verifyToken(data.token);
+      client.userId = decoded.userId;
+      log.debug(`WebSocket client authenticated via message: ${client.userId}`);
+
+      // Clear authentication timeout
+      if (client.authTimeout) {
+        clearTimeout(client.authTimeout);
+        client.authTimeout = undefined;
+      }
+
+      this.sendToClient(client, {
+        type: 'authenticated',
+        data: { success: true, userId: client.userId },
+      });
+    } catch (err) {
+      log.error('WebSocket authentication failed', { error: String(err) });
+      this.sendToClient(client, {
+        type: 'error',
+        data: { message: 'Authentication failed' },
+      });
+    }
+  }
+
+  /**
    * Handle subscription request
    */
-  private handleSubscribe(client: AuthenticatedWebSocket, data: any) {
-    if (!data?.channel) {
+  private handleSubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+    if (!data?.channel || typeof data.channel !== 'string') {
       log.warn('Subscribe request missing channel');
       return;
     }
@@ -196,8 +256,8 @@ export class SanctauryWebSocketServer {
   /**
    * Handle unsubscribe request
    */
-  private handleUnsubscribe(client: AuthenticatedWebSocket, data: any) {
-    if (!data?.channel) return;
+  private handleUnsubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+    if (!data?.channel || typeof data.channel !== 'string') return;
 
     const { channel } = data;
     client.subscriptions.delete(channel);
@@ -222,6 +282,12 @@ export class SanctauryWebSocketServer {
    * Handle client disconnect
    */
   private handleDisconnect(client: AuthenticatedWebSocket) {
+    // Clear any pending auth timeout
+    if (client.authTimeout) {
+      clearTimeout(client.authTimeout);
+      client.authTimeout = undefined;
+    }
+
     this.clients.delete(client);
 
     // Remove from all subscriptions

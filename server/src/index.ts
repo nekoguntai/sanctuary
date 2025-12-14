@@ -6,6 +6,7 @@
  */
 
 import express, { Express, Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import { createServer } from 'http';
 import config from './config';
@@ -30,6 +31,24 @@ const app: Express = express();
 // ========================================
 // MIDDLEWARE
 // ========================================
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Required for some React patterns
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'wss:', 'ws:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: config.nodeEnv === 'production' ? [] : null,
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for some WebUSB hardware wallet integrations
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+}));
 
 // CORS configuration
 app.use(cors({

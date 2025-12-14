@@ -12,6 +12,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import * as addressDerivation from '../services/bitcoin/addressDerivation';
+import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 
 const INITIAL_ADDRESS_COUNT = 20;
@@ -537,7 +538,7 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       subtractFees = false,
     } = req.body;
 
-    // Validation
+    // Basic validation
     if (!recipient || !amount) {
       return res.status(400).json({
         error: 'Bad Request',
@@ -577,6 +578,16 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       return res.status(404).json({
         error: 'Not Found',
         message: 'Wallet not found',
+      });
+    }
+
+    // Validate Bitcoin address for the wallet's network
+    const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
+    const addressValidation = validateAddress(recipient, network);
+    if (!addressValidation.valid) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid Bitcoin address: ${addressValidation.error}`,
       });
     }
 

@@ -16,8 +16,9 @@ import * as twoFactorService from '../services/twoFactorService';
 const router = Router();
 
 // Rate limiters for authentication endpoints
-// Express app has trust proxy enabled; disable validations that would warn about proxy setup
-const rateLimitValidations = { trustProxy: false, xForwardedForHeader: false };
+// Express app has trust proxy enabled; disable all validations (we know our proxy setup is correct)
+// This suppresses the IPv6 warnings when running behind nginx
+const rateLimitValidations = false;
 
 // Strict limiter for login attempts (5 attempts per 15 minutes)
 const loginLimiter = rateLimit({

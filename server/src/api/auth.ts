@@ -16,6 +16,7 @@ import * as twoFactorService from '../services/twoFactorService';
 const router = Router();
 
 // Rate limiters for authentication endpoints
+// Note: Express app has trust proxy enabled, so we skip that validation
 // Strict limiter for login attempts (5 attempts per 15 minutes)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -26,6 +27,7 @@ const loginLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }, // We set trust proxy at Express level
   keyGenerator: (req) => {
     // Use IP + username combination to prevent targeted attacks
     const username = req.body?.username?.toLowerCase() || 'unknown';
@@ -43,6 +45,7 @@ const registerLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }, // We set trust proxy at Express level
 });
 
 // Limiter for 2FA verification (10 attempts per 15 minutes)
@@ -55,6 +58,7 @@ const twoFactorLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false }, // We set trust proxy at Express level
 });
 
 /**

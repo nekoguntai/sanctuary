@@ -5,37 +5,10 @@
  */
 
 import apiClient from './client';
+import type { Wallet, WalletRole } from '../types';
 
-export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
-
-export interface Wallet {
-  id: string;
-  name: string;
-  type: 'single_sig' | 'multi_sig';
-  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
-  network: 'mainnet' | 'testnet' | 'regtest';
-  quorum?: number;
-  totalSigners?: number;
-  descriptor?: string;
-  fingerprint?: string;
-  balance: number;
-  deviceCount: number;
-  addressCount: number;
-  createdAt: string;
-  // Sync metadata
-  lastSyncedAt?: string | null;
-  lastSyncStatus?: string | null;
-  syncInProgress?: boolean;
-  // Sharing info
-  isShared: boolean;
-  sharedWith?: {
-    groupName?: string | null;
-    userCount: number;
-  };
-  // User permissions
-  userRole?: WalletRole;
-  canEdit?: boolean;
-}
+// Re-export types for backward compatibility
+export type { Wallet, WalletRole } from '../types';
 
 export interface CreateWalletRequest {
   name: string;
@@ -292,7 +265,7 @@ export async function exportWallet(walletId: string): Promise<WalletExport> {
  * Downloads the file directly
  */
 export async function exportLabelsBip329(walletId: string, walletName: string): Promise<void> {
-  const token = localStorage.getItem('sanctuary_token');
+  const token = apiClient.getToken();
   const response = await fetch(`/api/v1/wallets/${walletId}/export/labels`, {
     headers: {
       'Authorization': `Bearer ${token}`,

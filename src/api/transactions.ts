@@ -5,63 +5,15 @@
  */
 
 import apiClient from './client';
+import type { Label, Transaction, UTXO, Address } from '../types';
 
-export interface Label {
-  id: string;
-  walletId: string;
-  name: string;
-  color: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Transaction {
-  id: string;
-  txid: string;
-  walletId: string;
-  type: 'received' | 'sent';
-  amount: string | number;
-  fee?: string | number;
-  confirmations: number;
-  blockHeight?: number;
-  blockTime?: string;
-  label?: string;
-  memo?: string;
-  labels?: Label[];
-  address?: {
-    address: string;
-    derivationPath: string;
-  };
-}
-
-export interface UTXO {
-  id: string;
-  txid: string;
-  vout: number;
-  address: string;
-  amount: string | number;
-  scriptPubKey: string;
-  confirmations: number;
-  blockHeight?: number;
-  spent: boolean;
-  createdAt: string;
-}
-
-export interface Address {
-  id: string;
-  address: string;
-  derivationPath: string;
-  index: number;
-  used: boolean;
-  balance: number;
-  labels?: Label[];
-  createdAt: string;
-}
+// Re-export types for backward compatibility
+export type { Label, Transaction, UTXO, Address } from '../types';
 
 export interface GetTransactionsParams {
   limit?: number;
   offset?: number;
+  [key: string]: string | number | boolean | string[] | undefined | null;
 }
 
 export interface GetUTXOsResponse {

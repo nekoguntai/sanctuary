@@ -34,20 +34,20 @@ interface LayoutProps {
   onLogout: () => void;
 }
 
-const NavItem = ({ 
-  to, 
-  icon: Icon, 
-  label, 
-  hasSubmenu = false, 
-  isOpen = false, 
-  onToggle 
-}: { 
-  to: string; 
-  icon: any; 
-  label: string; 
-  hasSubmenu?: boolean; 
-  isOpen?: boolean; 
-  onToggle?: (e: React.MouseEvent) => void; 
+const NavItem = ({
+  to,
+  icon: Icon,
+  label,
+  hasSubmenu = false,
+  isOpen = false,
+  onToggle
+}: {
+  to: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  hasSubmenu?: boolean;
+  isOpen?: boolean;
+  onToggle?: (e: React.MouseEvent) => void;
 }) => {
   const location = useLocation();
   const isActive = to === '/' 

@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { websocketClient, WebSocketEvent, WebSocketEventType } from '../services/websocket';
+import apiClient from '../src/api/client';
+import type {
+  WebSocketTransactionData,
+  WebSocketBalanceData,
+  WebSocketConfirmationData,
+  WebSocketSyncData,
+} from '../src/types';
 
 // Log entry type matching backend WalletLogEntry
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -10,7 +17,7 @@ export interface WalletLogEntry {
   level: LogLevel;
   module: string;
   message: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface UseWebSocketReturn {
@@ -42,7 +49,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
     // Connect if not already connected
     if (!websocketClient.isConnected()) {
-      const token = localStorage.getItem('sanctuary_token');
+      const token = apiClient.getToken();
       websocketClient.connect(token || undefined);
     } else {
       setConnected(true);
@@ -100,7 +107,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 export const useWebSocketEvent = (
   eventType: WebSocketEventType | '*',
   callback: (event: WebSocketEvent) => void,
-  deps: any[] = []
+  deps: unknown[] = []
 ) => {
   useEffect(() => {
     websocketClient.on(eventType, callback);
@@ -117,10 +124,10 @@ export const useWebSocketEvent = (
 export const useWalletEvents = (
   walletId: string | undefined,
   callbacks: {
-    onTransaction?: (data: any) => void;
-    onBalance?: (data: any) => void;
-    onConfirmation?: (data: any) => void;
-    onSync?: (data: any) => void;
+    onTransaction?: (data: WebSocketTransactionData) => void;
+    onBalance?: (data: WebSocketBalanceData) => void;
+    onConfirmation?: (data: WebSocketConfirmationData) => void;
+    onSync?: (data: WebSocketSyncData) => void;
   }
 ) => {
   const { subscribeWallet, unsubscribeWallet } = useWebSocket();
@@ -134,13 +141,13 @@ export const useWalletEvents = (
     // Setup event handlers
     const handleEvent = (event: WebSocketEvent) => {
       if (event.event === 'transaction' && callbacks.onTransaction) {
-        callbacks.onTransaction(event.data);
+        callbacks.onTransaction(event.data as WebSocketTransactionData);
       } else if (event.event === 'balance' && callbacks.onBalance) {
-        callbacks.onBalance(event.data);
+        callbacks.onBalance(event.data as WebSocketBalanceData);
       } else if (event.event === 'confirmation' && callbacks.onConfirmation) {
-        callbacks.onConfirmation(event.data);
+        callbacks.onConfirmation(event.data as WebSocketConfirmationData);
       } else if (event.event === 'sync' && callbacks.onSync) {
-        callbacks.onSync(event.data);
+        callbacks.onSync(event.data as WebSocketSyncData);
       }
     };
 

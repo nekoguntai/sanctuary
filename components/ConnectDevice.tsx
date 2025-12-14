@@ -186,10 +186,10 @@ export const ConnectDevice: React.FC = () => {
         // Or nested: { data: { sync: { coins: [...] } } }
         const keystoneCoins = data.coins || data.data?.sync?.coins;
         if (!foundXpub && keystoneCoins && Array.isArray(keystoneCoins)) {
-          const btcCoin = keystoneCoins.find((c: any) => c.coinCode === 'BTC' || c.coin === 'BTC');
+          const btcCoin = keystoneCoins.find((c: Record<string, unknown>) => c.coinCode === 'BTC' || c.coin === 'BTC');
           if (btcCoin?.accounts && Array.isArray(btcCoin.accounts)) {
             // Prefer Native SegWit (84') account
-            const nativeSegwit = btcCoin.accounts.find((a: any) => a.hdPath?.includes("84'") || a.hdPath?.includes("84h"));
+            const nativeSegwit = btcCoin.accounts.find((a: Record<string, unknown>) => (a.hdPath as string)?.includes("84'") || (a.hdPath as string)?.includes("84h"));
             const account = nativeSegwit || btcCoin.accounts[0];
             if (account) {
               foundXpub = account.xPub || account.xpub || '';
@@ -355,9 +355,9 @@ export const ConnectDevice: React.FC = () => {
       };
       await createDevice(deviceData);
       navigate('/devices');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to save device:', err);
-      setError(err?.message || 'Failed to save device. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to save device. Please try again.');
     } finally {
       setSaving(false);
     }

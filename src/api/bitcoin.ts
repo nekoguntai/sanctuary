@@ -5,6 +5,10 @@
  */
 
 import apiClient from './client';
+import type { BitcoinTransactionDetails, BlockHeader } from '../types';
+
+// Re-export types for convenience
+export type { BitcoinTransactionDetails, BlockHeader } from '../types';
 
 export interface BitcoinStatus {
   connected: boolean;
@@ -119,8 +123,8 @@ export async function syncAddress(addressId: string): Promise<SyncResult> {
 /**
  * Get transaction details from blockchain
  */
-export async function getTransactionDetails(txid: string): Promise<any> {
-  return apiClient.get<any>(`/bitcoin/transaction/${txid}`);
+export async function getTransactionDetails(txid: string): Promise<BitcoinTransactionDetails> {
+  return apiClient.get<BitcoinTransactionDetails>(`/bitcoin/transaction/${txid}`);
 }
 
 /**
@@ -144,8 +148,8 @@ export async function updateConfirmations(walletId: string): Promise<{ message: 
 /**
  * Get block header
  */
-export async function getBlockHeader(height: number): Promise<any> {
-  return apiClient.get<any>(`/bitcoin/block/${height}`);
+export async function getBlockHeader(height: number): Promise<BlockHeader> {
+  return apiClient.get<BlockHeader>(`/bitcoin/block/${height}`);
 }
 
 /**

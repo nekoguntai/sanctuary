@@ -253,7 +253,7 @@ export interface RestoreResult {
  * This returns a Blob for file download.
  */
 export async function createBackup(options?: BackupOptions): Promise<Blob> {
-  const token = localStorage.getItem('sanctuary_token');
+  const token = apiClient.getToken();
 
   const response = await fetch('/api/v1/admin/backup', {
     method: 'POST',

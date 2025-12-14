@@ -15,11 +15,27 @@ export * as price from './price';
 export { default as apiClient, ApiError } from './client';
 export type { ApiResponse } from './client';
 
-// Re-export commonly used types
+// Re-export domain types from central location
+export type {
+  Label,
+  LabelWithItems,
+  Transaction,
+  UTXO,
+  Address,
+  Device,
+  HardwareDeviceModel,
+  Wallet,
+  WalletRole,
+  FeeEstimates,
+  BitcoinTransactionDetails,
+  BlockHeader,
+} from '../types';
+
+// Re-export auth types
 export type { User, AuthResponse } from './auth';
-export type { Wallet, CreateWalletRequest } from './wallets';
-export type { Transaction, UTXO, Address, Label } from './transactions';
-export type { Label as LabelFull, LabelWithItems, CreateLabelRequest, UpdateLabelRequest } from './labels';
-export type { Device } from './devices';
-export type { BitcoinStatus, FeeEstimates } from './bitcoin';
+
+// Re-export request/response types from modules
+export type { CreateWalletRequest } from './wallets';
+export type { CreateLabelRequest, UpdateLabelRequest } from './labels';
+export type { BitcoinStatus } from './bitcoin';
 export type { AggregatedPrice, PriceSource } from './price';

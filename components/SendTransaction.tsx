@@ -15,6 +15,7 @@ import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, S
 import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 
 // Device connection capabilities
 type ConnectionMethod = 'usb' | 'bluetooth' | 'airgap';
@@ -112,6 +113,7 @@ export const SendTransaction: React.FC = () => {
   const location = useLocation();
   const { format, getFiatValue, currencySymbol } = useCurrency();
   const { user } = useUser();
+  const { handleError, showSuccess, showInfo } = useErrorHandler();
 
   // Hardware wallet integration
   const hardwareWallet = useHardwareWallet();
@@ -316,7 +318,7 @@ export const SendTransaction: React.FC = () => {
       }
     } catch (err) {
       console.error("Camera error", err);
-      alert("Unable to access camera");
+      handleError('Unable to access camera. Please check your browser permissions.', 'Camera Error');
       setShowScanner(false);
     }
   };
@@ -479,15 +481,9 @@ export const SendTransaction: React.FC = () => {
             utxos: txData.utxos,
           });
 
-          alert(
-            `Transaction Signed & Broadcast! 🎉\n\n` +
-            `Transaction ID: ${broadcastResult.txid.substring(0, 16)}...\n\n` +
-            `Details:\n` +
-            `To: ${recipient.substring(0, 20)}...\n` +
-            `Amount: ${format(amountSats)}\n` +
-            `Fee: ${format(txData.fee)}\n` +
-            `Total: ${format(totalNeeded)}\n\n` +
-            `Signed with: ${hardwareWallet.device.name}`
+          showSuccess(
+            `Transaction broadcast successfully! TXID: ${broadcastResult.txid.substring(0, 16)}... Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}`,
+            'Transaction Broadcast'
           );
 
           navigate(`/wallets/${id}`);
@@ -500,20 +496,9 @@ export const SendTransaction: React.FC = () => {
       }
 
       // If no hardware wallet, show connection prompt
-      alert(
-        `Transaction Ready to Sign\n\n` +
-        `To: ${recipient}\n` +
-        `Amount: ${format(amountSats)}\n` +
-        `Fee: ${format(txData.fee)}\n` +
-        `Total: ${format(totalNeeded)}\n\n` +
-        `Connect a hardware wallet to sign this transaction securely.\n\n` +
-        `Supported devices:\n` +
-        `• Coldcard (Mk3, Mk4, Q)\n` +
-        `• Ledger (Nano S, X, S Plus)\n` +
-        `• Trezor (One, Model T, Safe 3)\n` +
-        `• BitBox02\n` +
-        `• Passport\n` +
-        `• Blockstream Jade`
+      showInfo(
+        `Transaction ready for signing. Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}. Connect a hardware wallet to sign securely.`,
+        'Connect Hardware Wallet'
       );
 
       // Prompt to connect hardware wallet
@@ -1271,7 +1256,7 @@ export const SendTransaction: React.FC = () => {
               const content = e.target?.result as string;
               console.log('Uploaded signed PSBT:', content.substring(0, 50) + '...');
               // In production, this would broadcast the signed transaction
-              alert('Signed PSBT uploaded! Ready to broadcast.');
+              showSuccess('Signed PSBT uploaded! Ready to broadcast.', 'PSBT Uploaded');
               setShowPsbtOptions(false);
             };
             reader.readAsText(file);

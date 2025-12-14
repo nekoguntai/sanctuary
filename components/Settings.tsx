@@ -1,11 +1,274 @@
 import React, { useState, useEffect } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Link as LinkIcon, Palette, Image as ImageIcon, Check, Waves, Minus, Server } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Link as LinkIcon, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
 import { ThemeOption, BackgroundOption } from '../types';
 import { themeRegistry } from '../themes';
+import * as authApi from '../src/api/auth';
+import { ApiError } from '../src/api/client';
+
+// Telegram Settings Component
+const TelegramSettings: React.FC = () => {
+  const { user, updatePreferences } = useUser();
+
+  const [botToken, setBotToken] = useState(user?.preferences?.telegram?.botToken || '');
+  const [chatId, setChatId] = useState(user?.preferences?.telegram?.chatId || '');
+  const [enabled, setEnabled] = useState(user?.preferences?.telegram?.enabled || false);
+  const [showBotToken, setShowBotToken] = useState(false);
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleTestConnection = async () => {
+    if (!botToken || !chatId) {
+      setError('Please enter both bot token and chat ID');
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+    setError(null);
+
+    try {
+      const result = await authApi.testTelegramConfig(botToken, chatId);
+      if (result.success) {
+        setTestResult({ success: true, message: 'Test message sent successfully!' });
+      } else {
+        setTestResult({ success: false, message: result.error || 'Failed to send test message' });
+      }
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to test connection';
+      setTestResult({ success: false, message });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    setSaveSuccess(false);
+
+    try {
+      await updatePreferences({
+        telegram: {
+          botToken,
+          chatId,
+          enabled,
+          wallets: user?.preferences?.telegram?.wallets || {},
+        },
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleEnabled = async () => {
+    const newEnabled = !enabled;
+    setEnabled(newEnabled);
+
+    // Save immediately when toggling
+    try {
+      await updatePreferences({
+        telegram: {
+          botToken,
+          chatId,
+          enabled: newEnabled,
+          wallets: user?.preferences?.telegram?.wallets || {},
+        },
+      });
+    } catch (err) {
+      // Revert on error
+      setEnabled(!newEnabled);
+      const message = err instanceof ApiError ? err.message : 'Failed to update';
+      setError(message);
+    }
+  };
+
+  const isConfigured = botToken && chatId;
+
+  return (
+    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
+            <Send className="w-5 h-5" />
+          </div>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Telegram Notifications</h3>
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        <p className="text-sm text-sanctuary-600 dark:text-sanctuary-400">
+          Receive transaction notifications via Telegram. Create your own bot using{' '}
+          <a
+            href="https://t.me/BotFather"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center"
+          >
+            @BotFather
+            <ExternalLink className="w-3 h-3 ml-1" />
+          </a>
+          {' '}and get your chat ID from{' '}
+          <a
+            href="https://t.me/userinfobot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center"
+          >
+            @userinfobot
+            <ExternalLink className="w-3 h-3 ml-1" />
+          </a>.
+        </p>
+
+        {/* Bot Token */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+            Bot Token
+          </label>
+          <div className="relative">
+            <input
+              type={showBotToken ? 'text' : 'password'}
+              value={botToken}
+              onChange={(e) => setBotToken(e.target.value)}
+              placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+              className="w-full px-4 py-2.5 pr-12 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all font-mono text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowBotToken(!showBotToken)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+            >
+              {showBotToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-sanctuary-500">From @BotFather when you create your bot</p>
+        </div>
+
+        {/* Chat ID */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+            Chat ID
+          </label>
+          <input
+            type="text"
+            value={chatId}
+            onChange={(e) => setChatId(e.target.value)}
+            placeholder="123456789"
+            className="w-full px-4 py-2.5 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all font-mono text-sm"
+          />
+          <p className="text-xs text-sanctuary-500">Your Telegram user ID from @userinfobot</p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-500" />
+            <span className="text-sm text-rose-600 dark:text-rose-400">{error}</span>
+          </div>
+        )}
+
+        {/* Test Result */}
+        {testResult && (
+          <div className={`p-3 rounded-xl flex items-center space-x-2 ${
+            testResult.success
+              ? 'bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800'
+              : 'bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800'
+          }`}>
+            {testResult.success ? (
+              <Check className="w-4 h-4 text-success-500" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+            )}
+            <span className={`text-sm ${
+              testResult.success
+                ? 'text-success-600 dark:text-success-400'
+                : 'text-rose-600 dark:text-rose-400'
+            }`}>{testResult.message}</span>
+          </div>
+        )}
+
+        {/* Save Success */}
+        {saveSuccess && (
+          <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 rounded-xl flex items-center space-x-2">
+            <Check className="w-4 h-4 text-success-500" />
+            <span className="text-sm text-success-600 dark:text-success-400">Settings saved successfully</span>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+          <div className="flex items-center space-x-3">
+            <Button
+              variant="secondary"
+              onClick={handleTestConnection}
+              disabled={!botToken || !chatId || isTesting}
+            >
+              {isTesting ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Test
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 mr-2" />
+              )}
+              Save
+            </Button>
+          </div>
+
+          {/* Enable toggle */}
+          <label className="flex items-center space-x-3 cursor-pointer">
+            <span className="text-sm text-sanctuary-600 dark:text-sanctuary-400">
+              {enabled ? 'Enabled' : 'Disabled'}
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleEnabled}
+              disabled={!isConfigured}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enabled && isConfigured
+                  ? 'bg-success-500'
+                  : 'bg-sanctuary-300 dark:bg-sanctuary-700'
+              } ${!isConfigured ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${
+                  enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </div>
+
+        {isConfigured && (
+          <p className="text-xs text-sanctuary-500 dark:text-sanctuary-500">
+            Configure per-wallet notification preferences in each wallet's Settings tab.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const Settings: React.FC = () => {
   const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders, refreshPrice, priceLoading, lastPriceUpdate, btcPrice, currencySymbol } = useCurrency();
@@ -300,6 +563,9 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Telegram Notifications */}
+      <TelegramSettings />
     </div>
   );
 };

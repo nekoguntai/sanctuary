@@ -996,4 +996,47 @@ router.post('/2fa/backup-codes/regenerate', authenticate, async (req: Request, r
   }
 });
 
+// ============================================================================
+// TELEGRAM NOTIFICATIONS
+// ============================================================================
+
+/**
+ * POST /api/v1/auth/telegram/test
+ * Test Telegram configuration by sending a test message
+ */
+router.post('/telegram/test', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { botToken, chatId } = req.body;
+
+    if (!botToken || !chatId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Bot token and chat ID are required',
+      });
+    }
+
+    // Import telegram service
+    const { testTelegramConfig } = await import('../services/telegram/telegramService');
+    const result = await testTelegramConfig(botToken, chatId);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Test message sent successfully',
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to send test message',
+      });
+    }
+  } catch (error) {
+    console.error('[AUTH] Telegram test error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to test Telegram configuration',
+    });
+  }
+});
+
 export default router;

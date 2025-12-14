@@ -23,6 +23,20 @@ export enum HardwareDevice {
 export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber' | 'sunrise';
 export type BackgroundOption = 'minimal' | 'zen' | 'circuit' | 'topography' | 'waves' | 'lines' | 'sanctuary' | 'sanctuary-hero';
 
+export interface WalletTelegramSettings {
+  enabled: boolean;
+  notifyReceived: boolean;
+  notifySent: boolean;
+  notifyConsolidation: boolean;
+}
+
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+  enabled: boolean;
+  wallets: Record<string, WalletTelegramSettings>;
+}
+
 export interface UserPreferences {
   darkMode: boolean;
   unit: 'sats' | 'btc';
@@ -31,6 +45,7 @@ export interface UserPreferences {
   theme: ThemeOption;
   background: BackgroundOption;
   priceProvider?: string;
+  telegram?: TelegramConfig;
 }
 
 export interface User {

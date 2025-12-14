@@ -5,6 +5,7 @@
  */
 
 import apiClient from './client';
+import type { TelegramConfig, WalletTelegramSettings } from '../../types';
 
 export interface User {
   id: string;
@@ -19,10 +20,13 @@ export interface User {
     fiatCurrency?: string;
     showFiat?: boolean;
     priceProvider?: string;
+    telegram?: TelegramConfig;
   };
   createdAt: string;
   twoFactorEnabled?: boolean;
 }
+
+export type { TelegramConfig, WalletTelegramSettings };
 
 export interface LoginRequest {
   username: string;
@@ -153,4 +157,17 @@ export async function searchUsers(query: string): Promise<SearchUser[]> {
  */
 export async function getRegistrationStatus(): Promise<{ enabled: boolean }> {
   return apiClient.get<{ enabled: boolean }>('/auth/registration-status');
+}
+
+/**
+ * Test Telegram configuration by sending a test message
+ */
+export async function testTelegramConfig(
+  botToken: string,
+  chatId: string
+): Promise<{ success: boolean; error?: string }> {
+  return apiClient.post<{ success: boolean; error?: string }>('/auth/telegram/test', {
+    botToken,
+    chatId,
+  });
 }

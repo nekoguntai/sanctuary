@@ -314,3 +314,27 @@ export async function exportLabelsBip329(walletId: string, walletName: string): 
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
+// ============================================================================
+// TELEGRAM SETTINGS
+// ============================================================================
+
+import type { WalletTelegramSettings } from '../../types';
+
+/**
+ * Get Telegram notification settings for a wallet
+ */
+export async function getWalletTelegramSettings(walletId: string): Promise<WalletTelegramSettings> {
+  const response = await apiClient.get<{ settings: WalletTelegramSettings }>(`/wallets/${walletId}/telegram`);
+  return response.settings;
+}
+
+/**
+ * Update Telegram notification settings for a wallet
+ */
+export async function updateWalletTelegramSettings(
+  walletId: string,
+  settings: Partial<WalletTelegramSettings>
+): Promise<void> {
+  await apiClient.patch(`/wallets/${walletId}/telegram`, settings);
+}

@@ -582,6 +582,16 @@ export async function syncWallet(walletId: string): Promise<{
       sent,
       consolidation,
     });
+
+    // Send Telegram notifications for new transactions (async, don't block sync)
+    const { notifyNewTransactions } = await import('../telegram/telegramService');
+    notifyNewTransactions(walletId, uniqueTxArray.map(tx => ({
+      txid: tx.txid,
+      type: tx.type,
+      amount: tx.amount,
+    }))).catch(err => {
+      log.warn(`[BLOCKCHAIN] Failed to send Telegram notifications: ${err}`);
+    });
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses in parallel

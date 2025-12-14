@@ -1051,4 +1051,106 @@ router.post('/import', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// TELEGRAM NOTIFICATIONS (Per-Wallet Settings)
+// ============================================================================
+
+/**
+ * GET /api/v1/wallets/:id/telegram
+ * Get Telegram notification settings for a specific wallet
+ */
+router.get('/:id/telegram', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    // Check wallet access
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found or access denied',
+      });
+    }
+
+    const { getWalletTelegramSettings } = await import('../services/telegram/telegramService');
+    const settings = await getWalletTelegramSettings(userId, id);
+
+    res.json({
+      settings: settings || {
+        enabled: false,
+        notifyReceived: true,
+        notifySent: true,
+        notifyConsolidation: false,
+      },
+    });
+  } catch (error) {
+    console.error('[WALLETS] Get Telegram settings error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Telegram settings',
+    });
+  }
+});
+
+/**
+ * PATCH /api/v1/wallets/:id/telegram
+ * Update Telegram notification settings for a specific wallet
+ */
+router.patch('/:id/telegram', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const { enabled, notifyReceived, notifySent, notifyConsolidation } = req.body;
+
+    // Check wallet access
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found or access denied',
+      });
+    }
+
+    const { updateWalletTelegramSettings } = await import('../services/telegram/telegramService');
+    await updateWalletTelegramSettings(userId, id, {
+      enabled: enabled ?? false,
+      notifyReceived: notifyReceived ?? true,
+      notifySent: notifySent ?? true,
+      notifyConsolidation: notifyConsolidation ?? false,
+    });
+
+    res.json({
+      success: true,
+      message: 'Telegram settings updated',
+    });
+  } catch (error) {
+    console.error('[WALLETS] Update Telegram settings error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update Telegram settings',
+    });
+  }
+});
+
 export default router;

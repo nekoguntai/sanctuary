@@ -28,6 +28,9 @@ import { getSyncService } from './services/syncService';
 // Initialize Express app
 const app: Express = express();
 
+// Trust first proxy (nginx) for accurate client IP in rate limiting
+app.set('trust proxy', 1);
+
 // ========================================
 // MIDDLEWARE
 // ========================================

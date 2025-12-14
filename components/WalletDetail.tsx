@@ -41,11 +41,14 @@ import {
   RefreshCw,
   Tag,
   Edit2,
-  ExternalLink
+  ExternalLink,
+  ScrollText,
+  Pause,
+  Play
 } from 'lucide-react';
 import { getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { useUser } from '../contexts/UserContext';
-import { useWalletEvents } from '../hooks/useWebSocket';
+import { useWalletEvents, useWalletLogs, WalletLogEntry } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
@@ -85,7 +88,7 @@ export const WalletDetail: React.FC = () => {
     error?: string;
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'stats' | 'access' | 'settings'>('tx');
+  const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'stats' | 'access' | 'settings' | 'log'>('tx');
   const [addressSubTab, setAddressSubTab] = useState<'receive' | 'change'>('receive');
   
   // Export Modal State
@@ -126,6 +129,23 @@ export const WalletDetail: React.FC = () => {
 
   // Clipboard functionality
   const { copy, isCopied } = useCopyToClipboard();
+
+  // Wallet logs hook - only enabled when Log tab is active
+  const { logs, isPaused, clearLogs, togglePause } = useWalletLogs(id, {
+    enabled: activeTab === 'log',
+    maxEntries: 500,
+  });
+
+  // Auto-scroll ref for log container
+  const logContainerRef = React.useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = React.useState(true);
+
+  // Auto-scroll to bottom when new logs arrive
+  React.useEffect(() => {
+    if (autoScroll && logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs, autoScroll]);
 
   // WebSocket integration
   const { addNotification } = useNotifications();
@@ -850,7 +870,7 @@ export const WalletDetail: React.FC = () => {
       {/* Tabs */}
       <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {['tx', 'utxo', 'addresses', 'stats', 'access', 'settings'].map((tab) => (
+          {['tx', 'utxo', 'addresses', 'stats', 'access', 'settings', 'log'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -1154,6 +1174,129 @@ export const WalletDetail: React.FC = () => {
 
         {activeTab === 'stats' && (
           <WalletStats utxos={utxos} balance={wallet.balance} transactions={transactions} />
+        )}
+
+        {activeTab === 'log' && (
+          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
+            {/* Log Controls */}
+            <div className="px-4 py-3 surface-muted border-b border-sanctuary-200 dark:border-sanctuary-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ScrollText className="w-4 h-4 text-sanctuary-500" />
+                <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Sync Log</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-500">
+                  {logs.length} entries
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={togglePause}
+                  className={`p-1.5 rounded transition-colors ${
+                    isPaused
+                      ? 'bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400'
+                      : 'hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-500'
+                  }`}
+                  title={isPaused ? 'Resume' : 'Pause'}
+                >
+                  {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={clearLogs}
+                  className="px-3 py-1.5 text-xs font-medium text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded transition-colors"
+                >
+                  Clear
+                </button>
+                <label className="flex items-center space-x-1.5 text-xs text-sanctuary-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoScroll}
+                    onChange={(e) => setAutoScroll(e.target.checked)}
+                    className="rounded border-sanctuary-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>Auto-scroll</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Log Content */}
+            <div
+              ref={logContainerRef}
+              className="h-[500px] overflow-y-auto font-mono text-xs"
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                const isAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50;
+                if (autoScroll !== isAtBottom) {
+                  setAutoScroll(isAtBottom);
+                }
+              }}
+            >
+              {logs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-sanctuary-400">
+                  <ScrollText className="w-12 h-12 mb-3 opacity-30" />
+                  <p className="text-sm">No log entries yet</p>
+                  <p className="text-xs mt-1">Trigger a sync to see real-time logs</p>
+                </div>
+              ) : (
+                <div className="p-2">
+                  {logs.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={`flex items-start py-1 px-2 rounded hover:bg-sanctuary-50 dark:hover:bg-sanctuary-900 ${
+                        entry.level === 'error' ? 'bg-rose-50/50 dark:bg-rose-900/10' :
+                        entry.level === 'warn' ? 'bg-warning-50/50 dark:bg-warning-900/10' : ''
+                      }`}
+                    >
+                      {/* Timestamp */}
+                      <span className="text-sanctuary-400 flex-shrink-0 w-20">
+                        {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                      </span>
+                      {/* Level */}
+                      <span className={`flex-shrink-0 w-12 font-medium ${
+                        entry.level === 'debug' ? 'text-sanctuary-400' :
+                        entry.level === 'info' ? 'text-success-600 dark:text-success-400' :
+                        entry.level === 'warn' ? 'text-warning-600 dark:text-warning-400' :
+                        'text-rose-600 dark:text-rose-400'
+                      }`}>
+                        {entry.level.toUpperCase()}
+                      </span>
+                      {/* Module Badge */}
+                      <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${
+                        entry.module === 'SYNC' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' :
+                        entry.module === 'BLOCKCHAIN' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' :
+                        entry.module === 'UTXO' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                        entry.module === 'ELECTRUM' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
+                        'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
+                      }`}>
+                        {entry.module}
+                      </span>
+                      {/* Message */}
+                      <span className="text-sanctuary-700 dark:text-sanctuary-300 flex-1 break-words">
+                        {entry.message}
+                        {entry.details && (
+                          <span className="text-sanctuary-400 ml-2">
+                            {Object.entries(entry.details).map(([k, v]) => `${k}=${v}`).join(' ')}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Status Bar */}
+            <div className="px-4 py-2 surface-muted border-t border-sanctuary-200 dark:border-sanctuary-800 flex items-center justify-between text-xs text-sanctuary-400">
+              <span>
+                {isPaused ? (
+                  <span className="text-warning-500">Paused</span>
+                ) : (
+                  <span className="text-success-500">Live</span>
+                )}
+              </span>
+              <span>
+                {autoScroll ? 'Auto-scroll enabled' : 'Scroll to bottom to re-enable auto-scroll'}
+              </span>
+            </div>
+          </div>
         )}
 
         {activeTab === 'access' && (

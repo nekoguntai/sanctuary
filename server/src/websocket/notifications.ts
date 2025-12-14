@@ -45,6 +45,18 @@ export interface MempoolNotification {
   feeRate: number; // sat/vB
 }
 
+// Wallet Log Types for real-time sync logging
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface WalletLogEntry {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  module: string;
+  message: string;
+  details?: Record<string, any>;
+}
+
 export class NotificationService {
   private subscribedAddresses: Set<string> = new Set();
   private isRunning: boolean = false;
@@ -380,6 +392,27 @@ export class NotificationService {
 
     wsServer.broadcast(event);
   }
+
+  /**
+   * Broadcast wallet log entry for real-time sync logging
+   */
+  public broadcastWalletLog(walletId: string, entry: Omit<WalletLogEntry, 'id' | 'timestamp'>) {
+    const wsServer = getWebSocketServer();
+
+    const logEntry: WalletLogEntry = {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      ...entry,
+    };
+
+    const event: WebSocketEvent = {
+      type: 'log',
+      walletId,
+      data: logEntry,
+    };
+
+    wsServer.broadcast(event);
+  }
 }
 
 // Export singleton instance
@@ -387,3 +420,22 @@ export const notificationService = new NotificationService();
 
 // Export getter function for use in other services
 export const getNotificationService = (): NotificationService => notificationService;
+
+/**
+ * Helper function to send a log entry to the frontend via WebSocket for a specific wallet
+ * Convenience wrapper around notificationService.broadcastWalletLog
+ */
+export function walletLog(
+  walletId: string,
+  level: LogLevel,
+  module: string,
+  message: string,
+  details?: Record<string, any>
+): void {
+  notificationService.broadcastWalletLog(walletId, {
+    level,
+    module,
+    message,
+    details,
+  });
+}

@@ -11,6 +11,7 @@ export interface PriceSource {
   price: number;
   currency: string;
   timestamp: string;
+  change24h?: number;
 }
 
 export interface AggregatedPrice {
@@ -21,6 +22,7 @@ export interface AggregatedPrice {
   average: number;
   timestamp: string;
   cached: boolean;
+  change24h?: number;
 }
 
 export interface ConvertToFiatRequest {

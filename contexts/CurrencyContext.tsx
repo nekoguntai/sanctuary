@@ -13,6 +13,7 @@ interface CurrencyContextType {
   unit: BitcoinUnit;
   setUnit: (unit: BitcoinUnit) => void;
   btcPrice: number | null;
+  priceChange24h: number | null;
   currencySymbol: string;
   format: (sats: number, options?: { forceSats?: boolean }) => string;
   formatFiat: (sats: number) => string | null;
@@ -47,6 +48,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
 
   // Price fetching state - start with null until first real price is fetched
   const [btcPrice, setBtcPrice] = useState<number | null>(null);
+  const [priceChange24h, setPriceChange24h] = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(true);
   const [priceError, setPriceError] = useState<string | null>(null);
   const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
@@ -88,6 +90,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
 
       const priceData = await priceApi.getPrice(fiatCurrency, true);
       setBtcPrice(priceData.price);
+      setPriceChange24h(priceData.change24h ?? null);
       setLastPriceUpdate(new Date(priceData.timestamp));
     } catch (error) {
       console.error('Failed to fetch BTC price:', error);
@@ -151,6 +154,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
       unit,
       setUnit,
       btcPrice,
+      priceChange24h,
       currencySymbol,
       format,
       formatFiat,

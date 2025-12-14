@@ -26,6 +26,7 @@ interface AggregatedPrice {
   average: number;
   timestamp: Date;
   cached: boolean;
+  change24h?: number;
 }
 
 class PriceService {
@@ -54,6 +55,7 @@ class PriceService {
           average: cached.price,
           timestamp: cached.timestamp,
           cached: true,
+          change24h: cached.change24h,
         };
       }
     }
@@ -79,6 +81,10 @@ class PriceService {
     const average = prices.reduce((sum, p) => sum + p, 0) / prices.length;
     const median = this.calculateMedian(prices);
 
+    // Get 24h change from CoinGecko if available (they provide this data)
+    const coinGeckoSource = results.find(r => r.provider === 'coingecko');
+    const change24h = coinGeckoSource?.change24h;
+
     // Use median as the main price (more resistant to outliers)
     const aggregated: AggregatedPrice = {
       price: median,
@@ -88,6 +94,7 @@ class PriceService {
       average,
       timestamp: new Date(),
       cached: false,
+      change24h,
     };
 
     // Cache the result (using first source for cache)

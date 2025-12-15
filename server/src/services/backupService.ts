@@ -18,6 +18,7 @@ import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import { version as appVersion } from '../../package.json';
 import { migrationService, getExpectedSchemaVersion } from './migrationService';
+import { isEncrypted, decrypt } from '../utils/encryption';
 
 const log = createLogger('BACKUP');
 
@@ -390,7 +391,31 @@ export class BackupService {
 
           try {
             // Handle DateTime fields (they come as strings from JSON)
-            const processedRecords = records.map((record) => this.processRecord(record));
+            let processedRecords = records.map((record) => this.processRecord(record));
+
+            // Special handling for nodeConfig - check if encrypted passwords can be decrypted
+            if (table === 'nodeConfig') {
+              processedRecords = processedRecords.map((record) => {
+                if (record.password && isEncrypted(record.password)) {
+                  try {
+                    // Try to decrypt with current ENCRYPTION_KEY
+                    decrypt(record.password);
+                    // If successful, keep the password
+                  } catch (error) {
+                    // Can't decrypt - password was encrypted with different key
+                    log.warn('[BACKUP] Node config password cannot be decrypted (different ENCRYPTION_KEY)', {
+                      nodeType: record.type,
+                    });
+                    warnings.push(
+                      `Node configuration password could not be restored (encrypted with different key). Please update your ${record.type || 'node'} password in Settings > Node Configuration.`
+                    );
+                    // Clear the password so user knows to re-enter it
+                    return { ...record, password: null };
+                  }
+                }
+                return record;
+              });
+            }
 
             // Use createMany for bulk insert
             // @ts-ignore - Dynamic table access

@@ -23,10 +23,13 @@ import {
 import * as adminApi from '../src/api/admin';
 import type { SanctuaryBackup, ValidationResult } from '../src/api/admin';
 import { createLogger } from '../utils/logger';
+import { useAppNotifications } from '../contexts/AppNotificationContext';
 
 const log = createLogger('BackupRestore');
 
 export const BackupRestore: React.FC = () => {
+  const { addNotification } = useAppNotifications();
+
   // Backup state
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [includeCache, setIncludeCache] = useState(false);
@@ -156,6 +159,18 @@ export const BackupRestore: React.FC = () => {
         setUploadedBackup(null);
         setUploadedFileName(null);
         setValidationResult(null);
+
+        // Show warnings as notifications (e.g., node passwords that couldn't be restored)
+        if (result.warnings && result.warnings.length > 0) {
+          result.warnings.forEach((warning) => {
+            addNotification({
+              type: 'warning',
+              title: 'Restore Warning',
+              message: warning,
+              persistent: true,
+            });
+          });
+        }
 
         // Reload the page after successful restore to refresh all data
         setTimeout(() => {

@@ -88,6 +88,15 @@ export enum AuditAction {
   TWO_FACTOR_FAILED = 'auth.2fa_failed',
   TWO_FACTOR_BACKUP_CODE_USED = 'auth.2fa_backup_code_used',
   TWO_FACTOR_BACKUP_CODES_REGENERATED = 'auth.2fa_backup_codes_regenerated',
+
+  // Transaction operations
+  TRANSACTION_CREATE = 'wallet.transaction_create',
+  TRANSACTION_SIGN = 'wallet.transaction_sign',
+  TRANSACTION_BROADCAST = 'wallet.transaction_broadcast',
+  TRANSACTION_BROADCAST_FAILED = 'wallet.transaction_broadcast_failed',
+
+  // Address operations
+  ADDRESS_GENERATE = 'wallet.address_generate',
 }
 
 /**

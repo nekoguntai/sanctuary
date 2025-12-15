@@ -6,6 +6,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader, JWTPayload } from '../utils/jwt';
+import { requestContext } from '../utils/requestContext';
 
 // Extend Express Request type to include user
 declare global {
@@ -36,6 +37,9 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 
     // Attach user to request
     req.user = payload;
+
+    // Set user in request context for logging correlation
+    requestContext.setUser(payload.userId, payload.username);
 
     next();
   } catch (error) {
@@ -77,6 +81,8 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction) {
     if (token) {
       const payload = verifyToken(token);
       req.user = payload;
+      // Set user in request context for logging correlation
+      requestContext.setUser(payload.userId, payload.username);
     }
 
     next();

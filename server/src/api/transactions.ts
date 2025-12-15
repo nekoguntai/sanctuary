@@ -13,6 +13,7 @@ import { authenticate } from '../middleware/auth';
 import { requireWalletAccess } from '../middleware/walletAccess';
 import prisma from '../models/prisma';
 import * as addressDerivation from '../services/bitcoin/addressDerivation';
+import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 import { createLogger } from '../utils/logger';
@@ -590,9 +591,33 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       utxos,
     });
 
+    // Audit log successful broadcast
+    await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST, AuditCategory.WALLET, {
+      success: true,
+      details: {
+        walletId,
+        txid: result.txid,
+        recipient,
+        amount,
+        fee,
+      },
+    });
+
     res.json(result);
   } catch (error: any) {
     log.error('Broadcast transaction error', { error });
+
+    // Audit log failed broadcast
+    await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
+      success: false,
+      errorMsg: error.message,
+      details: {
+        walletId: req.walletId,
+        recipient: req.body?.recipient,
+        amount: req.body?.amount,
+      },
+    });
+
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',
@@ -712,12 +737,34 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
       utxos: psbtInfo.inputs.map(i => ({ txid: i.txid, vout: i.vout })),
     });
 
+    // Audit log successful broadcast
+    await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST, AuditCategory.WALLET, {
+      success: true,
+      details: {
+        walletId,
+        txid: result.txid,
+        recipient: recipientOutput?.address,
+        amount,
+        fee: psbtInfo.fee,
+      },
+    });
+
     res.json({
       txid: result.txid,
       broadcasted: result.broadcasted,
     });
   } catch (error: any) {
     log.error('PSBT broadcast error', { error });
+
+    // Audit log failed broadcast
+    await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
+      success: false,
+      errorMsg: error.message,
+      details: {
+        walletId: req.walletId,
+      },
+    });
+
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',

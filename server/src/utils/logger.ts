@@ -45,10 +45,14 @@
  *   logger.info('Application started');
  *
  * OUTPUT FORMAT:
- *   [ISO_TIMESTAMP] LEVEL [PREFIX] Message key=value key=value
+ *   [ISO_TIMESTAMP] LEVEL [PREFIX] [REQ_ID] Message key=value key=value
  *
  *   Example:
- *   [2024-01-15T10:30:45.123Z] INFO  [WALLETS] Wallet synced walletId=123 txCount=45
+ *   [2024-01-15T10:30:45.123Z] INFO  [WALLETS] [a1b2c3d4] Wallet synced walletId=123 txCount=45
+ *
+ * REQUEST CONTEXT:
+ *   When running within a request context (set up by requestLogger middleware),
+ *   the request ID is automatically included in all log entries for correlation.
  *
  * BEST PRACTICES:
  *   1. Create a module-specific logger with createLogger('MODULE_NAME')
@@ -67,6 +71,9 @@
  *
  * ================================================================================
  */
+
+import { requestContext } from './requestContext';
+import { safeError } from './redact';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -147,11 +154,22 @@ const log = (
   if (level < currentLogLevel) return;
 
   const timestamp = getTimestamp();
-  const contextStr = formatContext(context);
 
-  // Format: [timestamp] LEVEL [PREFIX] message context
+  // Get request ID from context if available
+  const reqCtx = requestContext.get();
+  const requestId = reqCtx?.requestId;
+  const requestIdStr = requestId ? ` ${colors.dim}[${requestId}]${colors.reset}` : '';
+
+  // Merge request context into log context
+  const enrichedContext = {
+    ...context,
+    ...(reqCtx?.userId && !context?.userId ? { userId: reqCtx.userId } : {}),
+  };
+  const contextStr = formatContext(enrichedContext);
+
+  // Format: [timestamp] LEVEL [PREFIX] [REQ_ID] message context
   console.log(
-    `${colors.gray}[${timestamp}]${colors.reset} ${color}${levelName}${colors.reset} ${colors.cyan}[${prefix}]${colors.reset} ${message}${contextStr}`
+    `${colors.gray}[${timestamp}]${colors.reset} ${color}${levelName}${colors.reset} ${colors.cyan}[${prefix}]${colors.reset}${requestIdStr} ${message}${contextStr}`
   );
 };
 
@@ -232,5 +250,92 @@ export const getConfiguredLogLevel = (): string => {
   const current = levelNames.find(([_, v]) => v === currentLogLevel);
   return current ? current[0] : 'info';
 };
+
+/**
+ * Extract error information in a standardized format for logging
+ *
+ * This provides a consistent way to extract error details across the codebase.
+ * Use this when logging errors to ensure consistent format.
+ *
+ * @param error - Error object or unknown value
+ * @returns Object with standardized error properties
+ *
+ * @example
+ * try {
+ *   await riskyOperation();
+ * } catch (error) {
+ *   log.error('Operation failed', extractError(error));
+ * }
+ */
+export function extractError(error: unknown): { error: string; errorName?: string } {
+  const safe = safeError(error);
+  return {
+    error: safe.message,
+    ...(safe.name && safe.name !== 'Error' ? { errorName: safe.name } : {}),
+  };
+}
+
+// Re-export safeError for direct use
+export { safeError };
+
+/**
+ * Timer utility for measuring operation durations
+ *
+ * @example
+ * const timer = createTimer();
+ * await longOperation();
+ * log.info('Operation completed', { duration: timer.elapsed() });
+ *
+ * // Or with auto-logging
+ * const timer = createTimer('sync-wallet', log);
+ * await syncWallet();
+ * timer.end({ walletId: '123' }); // Logs: "sync-wallet completed" with duration
+ */
+export interface Timer {
+  /** Get elapsed time in milliseconds */
+  elapsed(): number;
+  /** Get elapsed time as formatted string (e.g., "1.23s", "456ms") */
+  elapsedFormatted(): string;
+  /** End timer and log completion (if logger provided) */
+  end(context?: Record<string, any>): number;
+}
+
+/**
+ * Create a timer for measuring operation duration
+ *
+ * @param operationName - Optional name for the operation (used in auto-logging)
+ * @param logger - Optional logger to use for auto-logging on end()
+ * @returns Timer object
+ */
+export function createTimer(operationName?: string, timerLogger?: Logger): Timer {
+  const startTime = Date.now();
+  const hrStart = process.hrtime.bigint();
+
+  const elapsed = (): number => {
+    return Date.now() - startTime;
+  };
+
+  const elapsedFormatted = (): string => {
+    const ms = elapsed();
+    if (ms >= 1000) {
+      return `${(ms / 1000).toFixed(2)}s`;
+    }
+    return `${ms}ms`;
+  };
+
+  const end = (context?: Record<string, any>): number => {
+    const duration = elapsed();
+    if (operationName && timerLogger) {
+      timerLogger.info(`${operationName} completed`, {
+        ...context,
+        duration: elapsedFormatted(),
+        durationMs: duration,
+      });
+    }
+    return duration;
+  };
+
+  return { elapsed, elapsedFormatted, end };
+}
 
 export default logger;

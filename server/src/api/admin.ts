@@ -65,8 +65,9 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    log.info('[ADMIN] PUT /node-config request body:', req.body);
     const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl } = req.body;
+    // Log non-sensitive fields only (password excluded)
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password });
 
     // Validation
     if (!type || !host || !port) {

@@ -27,6 +27,7 @@ import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
 import { validateEncryptionKey } from './utils/encryption';
+import { requestLogger } from './middleware/requestLogger';
 
 const log = createLogger('SERVER');
 
@@ -78,11 +79,8 @@ app.use(cors({
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
-// Request logging
-app.use((req: Request, res: Response, next: NextFunction) => {
-  log.debug(`${req.method} ${req.path}`);
-  next();
-});
+// Request logging and correlation IDs
+app.use(requestLogger);
 
 // ========================================
 // ROUTES

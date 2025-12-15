@@ -154,3 +154,18 @@ export async function estimateTransaction(
     data
   );
 }
+
+export interface FreezeUTXOResponse {
+  id: string;
+  txid: string;
+  vout: number;
+  frozen: boolean;
+  message: string;
+}
+
+/**
+ * Toggle UTXO frozen status
+ */
+export async function freezeUTXO(utxoId: string, frozen: boolean): Promise<FreezeUTXOResponse> {
+  return apiClient.patch<FreezeUTXOResponse>(`/utxos/${utxoId}/freeze`, { frozen });
+}

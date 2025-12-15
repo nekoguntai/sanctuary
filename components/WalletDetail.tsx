@@ -552,12 +552,13 @@ export const WalletDetail: React.FC = () => {
       transactionsApi.getUTXOs(id)
         .then(utxoData => {
           const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
+            id: utxo.id,
             txid: utxo.txid,
             vout: utxo.vout,
             amount: Number(utxo.amount),
             address: utxo.address,
             confirmations: utxo.confirmations,
-            frozen: false, // TODO: Add frozen state to database
+            frozen: utxo.frozen ?? false,
             date: new Date(utxo.createdAt).getTime(),
           }));
           setUTXOs(formattedUTXOs);
@@ -773,12 +774,34 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const handleToggleFreeze = (txid: string, vout: number) => {
-    setUTXOs(current => 
-      current.map(u => 
-        (u.txid === txid && u.vout === vout) ? { ...u, frozen: !u.frozen } : u
+  const handleToggleFreeze = async (txid: string, vout: number) => {
+    // Find the UTXO to toggle
+    const utxo = utxos.find(u => u.txid === txid && u.vout === vout);
+    if (!utxo || !utxo.id) {
+      console.error('UTXO not found or missing ID');
+      return;
+    }
+
+    const newFrozenState = !utxo.frozen;
+
+    // Optimistic update
+    setUTXOs(current =>
+      current.map(u =>
+        (u.txid === txid && u.vout === vout) ? { ...u, frozen: newFrozenState } : u
       )
     );
+
+    try {
+      await transactionsApi.freezeUTXO(utxo.id, newFrozenState);
+    } catch (err) {
+      console.error('Failed to freeze UTXO:', err);
+      // Revert optimistic update on error
+      setUTXOs(current =>
+        current.map(u =>
+          (u.txid === txid && u.vout === vout) ? { ...u, frozen: !newFrozenState } : u
+        )
+      );
+    }
   };
 
   const handleToggleSelect = (id: string) => {

@@ -97,9 +97,14 @@ class PriceService {
       change24h,
     };
 
-    // Cache the result (using first source for cache)
+    // Cache the result - prefer coingecko (has change24h) or first available
     if (results.length > 0) {
-      this.setCache(cacheKey, results[0]);
+      const sourceToCache = coinGeckoSource || results[0];
+      // Ensure change24h is preserved in cache even if using non-coingecko source
+      if (change24h !== undefined && !sourceToCache.change24h) {
+        sourceToCache.change24h = change24h;
+      }
+      this.setCache(cacheKey, sourceToCache);
     }
 
     return aggregated;

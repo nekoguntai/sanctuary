@@ -851,6 +851,84 @@ router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Respo
 });
 
 /**
+ * PATCH /api/v1/utxos/:utxoId/freeze
+ * Toggle the frozen status of a UTXO
+ */
+router.patch('/utxos/:utxoId/freeze', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { utxoId } = req.params;
+    const { frozen } = req.body;
+
+    // Validate frozen parameter
+    if (typeof frozen !== 'boolean') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'frozen must be a boolean',
+      });
+    }
+
+    // Find the UTXO and verify user has access to the wallet
+    const utxo = await prisma.uTXO.findFirst({
+      where: {
+        id: utxoId,
+        wallet: {
+          OR: [
+            { users: { some: { userId } } },
+            { group: { members: { some: { userId } } } },
+          ],
+        },
+      },
+      include: {
+        wallet: {
+          include: {
+            users: {
+              where: { userId },
+            },
+          },
+        },
+      },
+    });
+
+    if (!utxo) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'UTXO not found',
+      });
+    }
+
+    // Check if user has edit access (owner or signer)
+    const canEdit = await checkWalletEditAccess(utxo.walletId, userId);
+    if (!canEdit) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to modify UTXOs in this wallet',
+      });
+    }
+
+    // Update the frozen status
+    const updatedUtxo = await prisma.uTXO.update({
+      where: { id: utxoId },
+      data: { frozen },
+    });
+
+    res.json({
+      id: updatedUtxo.id,
+      txid: updatedUtxo.txid,
+      vout: updatedUtxo.vout,
+      frozen: updatedUtxo.frozen,
+      message: frozen ? 'UTXO frozen successfully' : 'UTXO unfrozen successfully',
+    });
+  } catch (error) {
+    console.error('[TRANSACTIONS] Freeze UTXO error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update UTXO frozen status',
+    });
+  }
+});
+
+/**
  * POST /api/v1/wallets/:walletId/transactions/estimate
  * Estimate transaction cost before creating
  */

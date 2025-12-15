@@ -83,17 +83,19 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // API v1 routes
+// Note: Routes with specific paths must come BEFORE catch-all routes mounted at /api/v1
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/wallets', walletRoutes);
 app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
-app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
 app.use('/api/v1/bitcoin', bitcoinRoutes);
-app.use('/api/v1/price', priceRoutes);
+app.use('/api/v1/price', priceRoutes);  // Public route - no auth required
 app.use('/api/v1/node', nodeRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/sync', syncRoutes);
 app.use('/api/v1/push', pushRoutes);
+// These routes are mounted at /api/v1 without a specific path - must come LAST
+app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
+app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -84,6 +84,7 @@ export interface Device {
 }
 
 export interface UTXO {
+  id?: string; // Database ID (needed for freeze API)
   txid: string;
   vout: number;
   amount: number; // in sats

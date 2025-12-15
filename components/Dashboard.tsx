@@ -430,54 +430,94 @@ export const Dashboard: React.FC = () => {
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 
   // Generate chart data based on timeframe and transactions
-  // For now, show flat line at current balance (accurate representation when no historical data)
   const getChartData = (tf: Timeframe, baseBalance: number, transactions: Transaction[]) => {
-      const data = [];
-      let points = 7;
-      let labelFormat = (i: number) => `Day ${i}`;
+      const now = Date.now();
+      const day = 86400000;
+
+      // Get timeframe range in ms
+      let rangeMs: number;
+      let dateFormat: (d: Date) => string;
 
       switch(tf) {
           case '1D':
-            points = 24;
-            labelFormat = (i) => `${i}:00`;
+            rangeMs = day;
+            dateFormat = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             break;
           case '1W':
-            points = 7;
-            labelFormat = (i) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i % 7];
+            rangeMs = 7 * day;
+            dateFormat = (d) => d.toLocaleDateString([], { weekday: 'short' });
             break;
           case '1M':
-            points = 30;
-            labelFormat = (i) => `${i+1}`;
+            rangeMs = 30 * day;
+            dateFormat = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
             break;
           case '1Y':
-            points = 12;
-            labelFormat = (i) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i];
+            rangeMs = 365 * day;
+            dateFormat = (d) => d.toLocaleDateString([], { month: 'short' });
             break;
           case 'ALL':
-            points = 5;
-            labelFormat = (i) => `${2020+i}`;
+          default:
+            rangeMs = 5 * 365 * day;
+            dateFormat = (d) => d.getFullYear().toString();
             break;
       }
 
-      // If we have fewer than 2 transactions, show a flat line at current balance
-      // This is the accurate representation - we don't have historical balance data
-      if (transactions.length < 2) {
-          for (let i = 0; i < points; i++) {
-              data.push({
-                  name: labelFormat(i),
-                  sats: baseBalance
-              });
-          }
-          return data;
+      const startTime = now - rangeMs;
+
+      // Filter transactions within timeframe and sort by timestamp
+      const filteredTxs = transactions
+        .filter(tx => tx.timestamp >= startTime && tx.type !== 'consolidation')
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      // If no transactions in range, show flat line at current balance
+      if (filteredTxs.length === 0) {
+          return [
+            { name: dateFormat(new Date(startTime)), sats: baseBalance },
+            { name: dateFormat(new Date()), sats: baseBalance }
+          ];
       }
 
-      // With multiple transactions, we could build a proper balance history
-      // For now, show flat line to avoid misleading mock data
-      for (let i = 0; i < points; i++) {
-          data.push({
-              name: labelFormat(i),
-              sats: baseBalance
-          });
+      // Calculate starting balance by working backwards from current balance
+      // For each transaction in range: received adds, sent subtracts
+      let startBalance = baseBalance;
+      filteredTxs.forEach(tx => {
+        if (tx.type === 'sent') {
+          startBalance += Math.abs(tx.amount); // Add back what was sent
+        } else {
+          startBalance -= Math.abs(tx.amount); // Remove what was received
+        }
+      });
+
+      // Build chart data points
+      const data: { name: string; sats: number }[] = [];
+      let runningBalance = Math.max(0, startBalance); // Ensure non-negative
+
+      // Add starting point
+      data.push({
+        name: dateFormat(new Date(Math.min(startTime, filteredTxs[0].timestamp))),
+        sats: runningBalance
+      });
+
+      // Add point for each transaction
+      filteredTxs.forEach(tx => {
+        if (tx.type === 'sent') {
+          runningBalance -= Math.abs(tx.amount);
+        } else {
+          runningBalance += Math.abs(tx.amount);
+        }
+        data.push({
+          name: dateFormat(new Date(tx.timestamp)),
+          sats: Math.max(0, runningBalance)
+        });
+      });
+
+      // Add current point if last transaction wasn't recent
+      const lastTx = filteredTxs[filteredTxs.length - 1];
+      if (now - lastTx.timestamp > day) {
+        data.push({
+          name: dateFormat(new Date()),
+          sats: baseBalance
+        });
       }
 
       return data;

@@ -272,6 +272,7 @@ model UTXO {
   blockHeight   Int?
   spent         Boolean  @default(false)
   spentTxid     String?  // Transaction ID that spent this UTXO
+  frozen        Boolean  @default(false) // Prevent UTXO from being used in transactions
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -52,82 +52,87 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   const ageDisplay = formatAge(avgUtxoAgeDays);
 
   // Build accumulation history from actual transactions
+  // Uses BACKWARDS calculation from current balance to ensure accuracy
   const buildAccumulationHistory = () => {
     if (transactions.length === 0) {
       return [{ name: 'Now', amount: balance }];
     }
 
-    // Sort transactions by timestamp (oldest first)
-    const sortedTxs = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+    // Filter out consolidations - they don't affect balance
+    const balanceChangingTxs = transactions.filter(tx => tx.type !== 'consolidation');
 
-    // Find the date range
-    const oldestTx = sortedTxs[0];
-    const oldestDate = new Date(oldestTx.timestamp);
+    if (balanceChangingTxs.length === 0) {
+      return [{ name: 'Now', amount: balance }];
+    }
+
+    // Sort transactions by timestamp (newest first for backwards calculation)
+    const sortedTxs = [...balanceChangingTxs].sort((a, b) => b.timestamp - a.timestamp);
+
+    const oldestTx = sortedTxs[sortedTxs.length - 1];
     const nowDate = new Date();
 
     // Calculate time span in days
     const spanDays = Math.ceil((now - oldestTx.timestamp) / day);
 
-    // Determine appropriate grouping based on time span
-    let groupBy: 'day' | 'week' | 'month' | 'year';
+    // Determine appropriate date formatting based on time span
     let dateFormat: (d: Date) => string;
 
     if (spanDays <= 30) {
-      groupBy = 'day';
       dateFormat = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } else if (spanDays <= 180) {
-      groupBy = 'week';
       dateFormat = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } else if (spanDays <= 730) {
-      groupBy = 'month';
       dateFormat = (d) => d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
     } else {
-      groupBy = 'year';
       dateFormat = (d) => d.getFullYear().toString();
     }
 
-    // Build cumulative balance over time
+    // Work BACKWARDS from current balance to calculate historical balances
+    // This ensures the endpoint always matches the actual current balance
     const dataPoints: { name: string; amount: number; date: Date }[] = [];
-    let runningBalance = 0;
 
-    // Add initial point before first transaction
-    const startDate = new Date(oldestDate);
-    if (groupBy === 'year') {
-      startDate.setMonth(0, 1);
-    } else if (groupBy === 'month') {
-      startDate.setDate(1);
-    }
+    // Start with current balance
+    let runningBalance = balance;
 
-    sortedTxs.forEach(tx => {
-      runningBalance += tx.amount;
+    // Add current point
+    dataPoints.push({
+      name: dateFormat(nowDate),
+      amount: balance,
+      date: nowDate
+    });
+
+    // Go through transactions newest to oldest, reversing their effect
+    for (const tx of sortedTxs) {
+      // tx.amount is already signed: positive for received, negative for sent
+      // To find balance BEFORE this transaction, we reverse the effect:
+      // - If received (positive amount): subtract to get previous balance
+      // - If sent (negative amount): add back (subtracting negative = adding)
+      runningBalance -= tx.amount;
+
       const txDate = new Date(tx.timestamp);
       dataPoints.push({
         name: dateFormat(txDate),
         amount: runningBalance,
         date: txDate
       });
-    });
-
-    // Add current point if last transaction wasn't recent
-    const lastTx = sortedTxs[sortedTxs.length - 1];
-    if (now - lastTx.timestamp > day * 7) {
-      dataPoints.push({
-        name: dateFormat(nowDate),
-        amount: balance,
-        date: nowDate
-      });
     }
 
-    // If only one point, add a starting point at 0
-    if (dataPoints.length === 1) {
-      const beforeDate = new Date(dataPoints[0].date.getTime() - day);
-      return [
-        { name: dateFormat(beforeDate), amount: 0 },
-        { name: dataPoints[0].name, amount: dataPoints[0].amount }
-      ];
+    // Reverse to get chronological order (oldest first)
+    dataPoints.reverse();
+
+    // Remove duplicate dates, keeping the last balance for each date
+    const uniquePoints: typeof dataPoints = [];
+    for (const point of dataPoints) {
+      const existing = uniquePoints.find(p => p.name === point.name);
+      if (existing) {
+        existing.amount = point.amount;
+        existing.date = point.date;
+      } else {
+        uniquePoints.push(point);
+      }
     }
 
-    return dataPoints.map(p => ({ name: p.name, amount: p.amount }));
+    return uniquePoints.map(p => ({ name: p.name, amount: p.amount }));
   };
 
   const accumulationData = buildAccumulationHistory();
@@ -214,7 +219,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                    </linearGradient>
                  </defs>
                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
-                 <YAxis hide />
+                 <YAxis hide domain={[0, 'dataMax']} />
                  <Tooltip contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
                  <Area type="monotone" dataKey="amount" stroke="#d4b483" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
                </AreaChart>

@@ -42,11 +42,12 @@ export async function selectUTXOs(
   estimatedFee: number;
   changeAmount: number;
 }> {
-  // Get available UTXOs
+  // Get available UTXOs (exclude frozen UTXOs)
   let utxos = await prisma.uTXO.findMany({
     where: {
       walletId,
       spent: false,
+      frozen: false, // Frozen UTXOs cannot be spent
     },
     orderBy:
       strategy === UTXOSelectionStrategy.LARGEST_FIRST
@@ -158,11 +159,12 @@ export async function createTransaction(
   let selection;
 
   if (sendMax) {
-    // Select all available UTXOs (or specified ones)
+    // Select all available UTXOs (or specified ones), excluding frozen UTXOs
     let utxos = await prisma.uTXO.findMany({
       where: {
         walletId,
         spent: false,
+        frozen: false, // Frozen UTXOs cannot be spent
       },
     });
 

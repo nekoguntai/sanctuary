@@ -22,6 +22,38 @@
 
 > **Disclaimer:** Sanctuary is provided free of charge, "as is", without warranty of any kind, express or implied. The authors and contributors accept no liability for any damages, loss of funds, or other issues arising from the use of this software. You are solely responsible for the security of your Bitcoin and the verification of all transactions. Always verify addresses and amounts on your hardware wallet before signing.
 
+## Quick Install
+
+**Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
+
+```bash
+# Clone and start (that's it!)
+git clone https://github.com/n-narusegawa/sanctuary.git
+cd sanctuary
+./install.sh
+```
+
+Open **https://localhost:8443** and accept the certificate warning.
+
+<details>
+<summary><strong>What the install script does</strong></summary>
+
+1. Checks for Docker and Git
+2. Generates self-signed SSL certificates (for hardware wallet support)
+3. Generates a secure random JWT secret
+4. Builds and starts the Docker containers
+5. Saves your configuration for future restarts
+
+**After installation:**
+- Start: `./start.sh`
+- Stop: `./start.sh --stop`
+- View logs: `./start.sh --logs`
+- Update: `git pull && ./start.sh --rebuild`
+
+</details>
+
+---
+
 ## Overview
 
 Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin wallets without exposing private keys to any networked device. It's designed for:
@@ -116,38 +148,27 @@ Optional:
 
 ## Installation
 
-### Quick Start (All Platforms)
+> **Easiest method:** Use `./install.sh` as shown in [Quick Install](#quick-install) above.
+>
+> The sections below are for manual installation or platform-specific troubleshooting.
 
-1. **Install Docker**
-   - See platform-specific instructions below
+### Manual Installation
 
-2. **Clone the repository**
-   ```bash
-   git clone https://github.com/n-narusegawa/sanctuary.git
-   cd sanctuary
-   ```
+If you prefer to run the commands yourself:
 
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your preferred settings
-   ```
+```bash
+# 1. Clone the repository
+git clone https://github.com/n-narusegawa/sanctuary.git
+cd sanctuary
 
-4. **Generate SSL certificates** (recommended for hardware wallet support)
-   ```bash
-   cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
-   ```
+# 2. Generate SSL certificates
+cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
 
-5. **Start Sanctuary**
-   ```bash
-   HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
-   ```
+# 3. Start Sanctuary (replace your-secret-here with a random string)
+HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose up -d
 
-6. **Access the interface**
-
-   Open https://localhost:8443 in your browser (accept the self-signed certificate warning)
-
-   > HTTP requests to port 8080 are automatically redirected to HTTPS.
+# 4. Open https://localhost:8443
+```
 
 ---
 
@@ -583,6 +604,14 @@ Users can enable TOTP-based two-factor authentication for additional account sec
 - This is intentionally difficult to prevent unauthorized disabling
 
 ## Updating
+
+```bash
+cd sanctuary
+git pull
+./start.sh --rebuild
+```
+
+Or manually:
 
 ```bash
 cd sanctuary

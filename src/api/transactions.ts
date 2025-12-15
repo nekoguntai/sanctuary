@@ -95,6 +95,54 @@ export async function getTransaction(txid: string): Promise<Transaction> {
   return apiClient.get<Transaction>(`/transactions/${txid}`);
 }
 
+export interface ExportTransactionsOptions {
+  format: 'csv' | 'json';
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Export transactions for a wallet
+ * Downloads a CSV or JSON file
+ */
+export async function exportTransactions(
+  walletId: string,
+  walletName: string,
+  options: ExportTransactionsOptions
+): Promise<void> {
+  const params = new URLSearchParams();
+  params.set('format', options.format);
+  if (options.startDate) params.set('startDate', options.startDate);
+  if (options.endDate) params.set('endDate', options.endDate);
+
+  const response = await fetch(`/api/v1/wallets/${walletId}/transactions/export?${params}`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Export failed' }));
+    throw new Error(error.message || 'Export failed');
+  }
+
+  // Get the blob and trigger download
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const safeName = walletName.replace(/[^a-zA-Z0-9]/g, '_');
+  const extension = options.format === 'json' ? 'json' : 'csv';
+  const filename = `${safeName}_transactions_${timestamp}.${extension}`;
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Get UTXOs for a wallet
  */

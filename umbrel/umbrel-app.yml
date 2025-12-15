@@ -1,0 +1,62 @@
+manifestVersion: 1
+id: sanctuary
+category: bitcoin
+name: Sanctuary
+version: "0.3.0"
+tagline: Self-hosted Bitcoin wallet coordinator for hardware wallets
+description: >-
+  Sanctuary is a watch-only wallet coordinator that helps you manage Bitcoin
+  wallets without exposing private keys to any networked device. All transaction
+  signing happens exclusively on your hardware wallet.
+
+
+  Key features:
+
+  - Multi-wallet support (single-sig and multisig)
+
+  - Hardware wallet integration via WebUSB (Ledger) and PSBT files (ColdCard, Trezor, etc.)
+
+  - Real-time blockchain sync via your Umbrel's Electrum server
+
+  - Address management with receive/change tracking and labels
+
+  - UTXO control for privacy-conscious coin selection
+
+  - Transaction building with PSBT export for hardware signing
+
+  - Multi-user access with role-based permissions (owner, signer, viewer)
+
+  - Group permissions for family or team wallet management
+
+  - Two-factor authentication with backup codes
+
+  - Encrypted backup and restore
+
+  - Dark mode and multiple color themes
+
+
+  Supported hardware wallets:
+
+  - Ledger (Nano S, S+, X, Stax, Flex) via WebUSB
+
+  - ColdCard, Trezor, Keystone, Passport, BitBox02 via PSBT files
+
+  - Any device that supports PSBT (BIP-174)
+
+
+  Sanctuary never sees, stores, or transmits private keys. Your keys stay on
+  your hardware wallet where they belong.
+developer: Sanctuary
+website: https://github.com/n-narusegawa/sanctuary
+dependencies:
+  - electrs
+repo: https://github.com/n-narusegawa/sanctuary
+support: https://github.com/n-narusegawa/sanctuary/issues
+port: 3010
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+releaseNotes: ""
+submitter: n-narusegawa
+submission: https://github.com/getumbrel/umbrel-apps/pull/XXXX

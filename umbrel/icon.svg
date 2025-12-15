@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#0f0f1a"/>
+    </linearGradient>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F4D03F"/>
+      <stop offset="50%" style="stop-color:#D4A017"/>
+      <stop offset="100%" style="stop-color:#B8860B"/>
+    </linearGradient>
+    <linearGradient id="goldGradientLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F4D03F;stop-opacity:0.3"/>
+      <stop offset="100%" style="stop-color:#D4A017;stop-opacity:0.1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="256" height="256" fill="url(#bgGradient)"/>
+
+  <!-- Temple/Sanctuary structure -->
+  <g transform="translate(128, 128)">
+    <!-- Base platform -->
+    <path d="M-80 50 L80 50 L70 60 L-70 60 Z" fill="url(#goldGradient)" opacity="0.8"/>
+
+    <!-- Middle layer -->
+    <path d="M-60 30 L60 30 L80 50 L-80 50 Z" fill="url(#goldGradient)" opacity="0.6"/>
+
+    <!-- Top layer with pillars effect -->
+    <path d="M-40 10 L40 10 L60 30 L-60 30 Z" fill="url(#goldGradient)" opacity="0.4"/>
+
+    <!-- Roof/Top -->
+    <path d="M0 -50 L-40 10 L40 10 Z" fill="url(#goldGradient)"/>
+
+    <!-- Center detail (Bitcoin-inspired) -->
+    <circle cx="0" cy="20" r="18" fill="none" stroke="url(#goldGradient)" stroke-width="3"/>
+    <text x="0" y="27" text-anchor="middle" fill="url(#goldGradient)" font-family="Arial, sans-serif" font-size="24" font-weight="bold">₿</text>
+
+    <!-- Pillar lines -->
+    <line x1="-30" y1="10" x2="-30" y2="50" stroke="url(#goldGradient)" stroke-width="2" opacity="0.5"/>
+    <line x1="0" y1="10" x2="0" y2="50" stroke="url(#goldGradient)" stroke-width="2" opacity="0.5"/>
+    <line x1="30" y1="10" x2="30" y2="50" stroke="url(#goldGradient)" stroke-width="2" opacity="0.5"/>
+
+    <!-- Subtle glow effect -->
+    <circle cx="0" cy="0" r="70" fill="url(#goldGradientLight)" opacity="0.3"/>
+  </g>
+</svg>

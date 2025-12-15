@@ -1,0 +1,87 @@
+# Sanctuary - Umbrel App
+# https://github.com/n-narusegawa/sanctuary
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: sanctuary_web_1
+      APP_PORT: 443
+      # Sanctuary handles its own authentication
+      PROXY_AUTH_ADD: "false"
+
+  web:
+    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.3.0@sha256:PLACEHOLDER_FRONTEND_SHA256
+    restart: on-failure
+    stop_grace_period: 1m
+    depends_on:
+      - server
+    environment:
+      BACKEND_HOST: sanctuary_server_1
+      BACKEND_PORT: 3001
+      ENABLE_SSL: "true"
+    volumes:
+      - ${APP_DATA_DIR}/ssl:/etc/nginx/ssl:ro
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_WEB_IP
+
+  server:
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.3.0@sha256:PLACEHOLDER_BACKEND_SHA256
+    restart: on-failure
+    stop_grace_period: 1m
+    depends_on:
+      - db
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      LOG_LEVEL: info
+      # Database
+      DATABASE_URL: postgresql://sanctuary:sanctuary@sanctuary_db_1:5432/sanctuary?schema=public
+      # JWT - generated per installation
+      JWT_SECRET: ${APP_SANCTUARY_JWT_SECRET}
+      JWT_EXPIRES_IN: 7d
+      # Bitcoin Network
+      BITCOIN_NETWORK: mainnet
+      # Electrum - connect to Umbrel's electrs
+      ELECTRUM_HOST: ${APP_ELECTRS_NODE_IP}
+      ELECTRUM_PORT: ${APP_ELECTRS_NODE_PORT}
+      ELECTRUM_PROTOCOL: tcp
+      # Price APIs (public)
+      MEMPOOL_API: https://mempool.space/api/v1
+      COINGECKO_API: https://api.coingecko.com/api/v3
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_SERVER_IP
+
+  db:
+    image: postgres:16-alpine@sha256:de3d7b6e4b5b3fe899e997579d6dfe95a99539d3e8a8ad8c0b3b52fabc8f4830
+    restart: on-failure
+    stop_grace_period: 1m
+    environment:
+      POSTGRES_USER: sanctuary
+      POSTGRES_PASSWORD: sanctuary
+      POSTGRES_DB: sanctuary
+    volumes:
+      - ${APP_DATA_DIR}/postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sanctuary -d sanctuary"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_DB_IP
+
+  migrate:
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.3.0@sha256:PLACEHOLDER_BACKEND_SHA256
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sanctuary:sanctuary@sanctuary_db_1:5432/sanctuary?schema=public
+    command: ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_MIGRATE_IP

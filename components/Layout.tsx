@@ -109,13 +109,34 @@ const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorCla
 export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme }) => {
   const { user, logout } = useUser();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [expanded, setExpanded] = useState({ wallets: false, devices: false, admin: false });
+  const location = useLocation();
+
+  // Auto-expand sections based on current route
+  const getExpandedState = (pathname: string) => {
+    // Check if viewing a specific wallet (not just /wallets list)
+    const isInWalletDetail = pathname.match(/^\/wallets\/[^/]+/);
+    // Check if viewing a specific device (not just /devices list)
+    const isInDeviceDetail = pathname.match(/^\/devices\/[^/]+/);
+    // Check if viewing any admin subpage
+    const isInAdmin = pathname.startsWith('/admin/');
+
+    return {
+      wallets: !!isInWalletDetail,
+      devices: !!isInDeviceDetail,
+      admin: isInAdmin,
+    };
+  };
+
+  const [expanded, setExpanded] = useState(() => getExpandedState(location.pathname));
+
+  // Update expanded state when route changes
+  useEffect(() => {
+    setExpanded(getExpandedState(location.pathname));
+  }, [location.pathname]);
 
   // Data for Sidebar
   const [wallets, setWallets] = useState<ApiWallet[]>([]);
   const [devices, setDevices] = useState<ApiDevice[]>([]);
-
-  const location = useLocation();
 
   useEffect(() => {
     const fetchData = async () => {

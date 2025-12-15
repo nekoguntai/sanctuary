@@ -218,3 +218,46 @@ export interface FreezeUTXOResponse {
 export async function freezeUTXO(utxoId: string, frozen: boolean): Promise<FreezeUTXOResponse> {
   return apiClient.patch<FreezeUTXOResponse>(`/utxos/${utxoId}/freeze`, { frozen });
 }
+
+/**
+ * Batch transaction output
+ */
+export interface BatchTransactionOutput {
+  address: string;
+  amount: number;
+  sendMax?: boolean;
+}
+
+export interface CreateBatchTransactionRequest {
+  outputs: BatchTransactionOutput[];
+  feeRate: number;
+  selectedUtxoIds?: string[];
+  enableRBF?: boolean;
+  label?: string;
+  memo?: string;
+}
+
+export interface CreateBatchTransactionResponse {
+  psbtBase64: string;
+  fee: number;
+  totalInput: number;
+  totalOutput: number;
+  changeAmount: number;
+  changeAddress?: string;
+  utxos: Array<{ txid: string; vout: number }>;
+  inputPaths?: string[];
+  outputs: Array<{ address: string; amount: number }>;
+}
+
+/**
+ * Create a batch transaction with multiple outputs
+ */
+export async function createBatchTransaction(
+  walletId: string,
+  data: CreateBatchTransactionRequest
+): Promise<CreateBatchTransactionResponse> {
+  return apiClient.post<CreateBatchTransactionResponse>(
+    `/wallets/${walletId}/transactions/batch`,
+    data
+  );
+}

@@ -126,6 +126,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       enableRBF,
       subtractFees,
       sendMax,
+      outputs, // Multiple outputs support
       label,
       memo,
       psbtBase64,
@@ -174,6 +175,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
         enableRBF: enableRBF ?? true,
         subtractFees: subtractFees ?? false,
         sendMax: sendMax ?? false,
+        outputs: outputs || null,
         label,
         memo,
         psbtBase64,

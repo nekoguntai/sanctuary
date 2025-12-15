@@ -13,7 +13,7 @@ import { BlockVisualizer } from './BlockVisualizer';
 import type { BlockData, QueuedBlocksSummary } from '../src/api/bitcoin';
 import { HardwareWalletConnect } from './HardwareWalletConnect';
 import { useHardwareWallet } from '../hooks/useHardwareWallet';
-import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, Bluetooth, FileDown, Upload, Save, FileText, XCircle } from 'lucide-react';
+import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, Bluetooth, FileDown, Upload, Save, FileText, XCircle, Plus, Trash2 } from 'lucide-react';
 import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -150,8 +150,15 @@ export const SendTransaction: React.FC = () => {
   const [mempoolBlocks, setMempoolBlocks] = useState<BlockData[]>([]);
   const [queuedBlocksSummary, setQueuedBlocksSummary] = useState<QueuedBlocksSummary | null>(null);
 
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
+  // Multi-output support
+  interface OutputEntry {
+    address: string;
+    amount: string;
+    sendMax: boolean;
+  }
+  const [outputs, setOutputs] = useState<OutputEntry[]>([{ address: '', amount: '', sendMax: false }]);
+  const [scanningOutputIndex, setScanningOutputIndex] = useState<number | null>(null);
+
   const [feeRate, setFeeRate] = useState<number>(0);
   const [selectedUTXOs, setSelectedUTXOs] = useState<Set<string>>(new Set());
   const [showCoinControl, setShowCoinControl] = useState(false);
@@ -159,7 +166,43 @@ export const SendTransaction: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [enableRBF, setEnableRBF] = useState(true);
   const [subtractFeesFromAmount, setSubtractFeesFromAmount] = useState(false);
-  const [isSendMax, setIsSendMax] = useState(false);
+
+  // Backwards compatibility helpers
+  const recipient = outputs[0]?.address || '';
+  const amount = outputs[0]?.amount || '';
+  const isSendMax = outputs.some(o => o.sendMax);
+  const setRecipient = (value: string) => updateOutput(0, 'address', value);
+  const setAmount = (value: string) => updateOutput(0, 'amount', value);
+
+  // Output management functions
+  const addOutput = () => {
+    setOutputs([...outputs, { address: '', amount: '', sendMax: false }]);
+    setOutputsValid([...outputsValid, null]);
+  };
+
+  const removeOutput = (index: number) => {
+    if (outputs.length > 1) {
+      setOutputs(outputs.filter((_, i) => i !== index));
+      setOutputsValid(outputsValid.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateOutput = (index: number, field: keyof OutputEntry, value: string | boolean) => {
+    const newOutputs = [...outputs];
+    newOutputs[index] = { ...newOutputs[index], [field]: value };
+    // If setting sendMax, clear the amount and unset sendMax on other outputs
+    if (field === 'sendMax' && value === true) {
+      newOutputs.forEach((o, i) => {
+        if (i !== index) o.sendMax = false;
+      });
+      newOutputs[index].amount = '';
+    }
+    setOutputs(newOutputs);
+  };
+
+  const toggleSendMax = (index: number) => {
+    updateOutput(index, 'sendMax', !outputs[index].sendMax);
+  };
 
   // PSBT file handling
   const [showPsbtOptions, setShowPsbtOptions] = useState(false);
@@ -182,7 +225,7 @@ export const SendTransaction: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [broadcasting, setBroadcasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recipientValid, setRecipientValid] = useState<boolean | null>(null);
+  const [outputsValid, setOutputsValid] = useState<(boolean | null)[]>([null]);
 
   // Draft transaction state
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
@@ -337,12 +380,29 @@ export const SendTransaction: React.FC = () => {
         if (draftData) {
           setCurrentDraftId(draftData.id);
           setIsResumingDraft(true);
-          setRecipient(draftData.recipient);
-          setAmount(draftData.amount.toString());
           setFeeRate(draftData.feeRate);
           setEnableRBF(draftData.enableRBF);
           setSubtractFeesFromAmount(draftData.subtractFees);
-          setIsSendMax(draftData.sendMax);
+
+          // Restore multiple outputs if they exist, otherwise use single recipient/amount
+          // Note: When restoring, we use the saved amounts (not recalculated MAX) since UTXOs may have changed
+          if (draftData.outputs && draftData.outputs.length > 0) {
+            const restoredOutputs = draftData.outputs.map(o => ({
+              address: o.address,
+              amount: o.amount.toString(), // Always use saved amount (includes calculated MAX values)
+              sendMax: false, // Don't restore sendMax - use fixed amounts from when draft was saved
+            }));
+            setOutputs(restoredOutputs);
+            setOutputsValid(restoredOutputs.map(() => null)); // Will be validated by useEffect
+          } else {
+            // Single output (backwards compatibility)
+            setOutputs([{
+              address: draftData.recipient,
+              amount: draftData.amount.toString(), // Use saved amount
+              sendMax: false, // Don't restore sendMax
+            }]);
+            setOutputsValid([null]); // Will be validated by useEffect
+          }
 
           // Auto-detect consolidation mode: check if recipient is a wallet address
           // Use all wallet addresses (both receive and change) for consolidation detection
@@ -355,19 +415,28 @@ export const SendTransaction: React.FC = () => {
             }
           }
 
-          // Filter out frozen UTXOs from selected set when resuming
+          // Filter out frozen/spent/unavailable UTXOs from selected set when resuming
           if (draftData.selectedUtxoIds && draftData.selectedUtxoIds.length > 0) {
-            // Filter out any UTXOs that are now frozen
-            const validUtxoIds = draftData.selectedUtxoIds.filter(utxoId => !frozenUtxoIds.has(utxoId));
+            // Create a set of available (not spent, not frozen) UTXO IDs
+            const availableUtxoIds = new Set(
+              formattedUTXOs
+                .filter(u => u.spendable && !u.frozen)
+                .map(u => `${u.txid}:${u.vout}`)
+            );
 
-            // Warn if some UTXOs were removed due to frozen status
+            // Filter to only UTXOs that are still available
+            const validUtxoIds = draftData.selectedUtxoIds.filter(utxoId => availableUtxoIds.has(utxoId));
+
+            // Warn if some UTXOs were removed
             const removedCount = draftData.selectedUtxoIds.length - validUtxoIds.length;
             if (removedCount > 0) {
-              showInfo(`${removedCount} frozen UTXO${removedCount > 1 ? 's' : ''} removed from selection`);
+              showInfo(`${removedCount} UTXO${removedCount > 1 ? 's' : ''} no longer available (spent or frozen)`);
             }
 
-            setSelectedUTXOs(new Set(validUtxoIds));
-            setShowCoinControl(true);
+            if (validUtxoIds.length > 0) {
+              setSelectedUTXOs(new Set(validUtxoIds));
+              setShowCoinControl(true);
+            }
           }
           if (draftData.signedPsbtBase64) {
             setUnsignedPsbt(draftData.signedPsbtBase64);
@@ -549,51 +618,86 @@ export const SendTransaction: React.FC = () => {
     return calculateFee(numInputs, numOutputs, feeRate);
   }, [showCoinControl, selectedUTXOs.size, amount, spendableUtxos, isSendMax, feeRate, calculateFee]);
 
-  // Calculate maximum sendable amount
-  // This depends on: selected UTXOs, fee rate, subtractFeesFromAmount, wallet balance
+  // Calculate maximum sendable amount for a specific output (accounting for other outputs)
+  const calculateMaxForOutput = useMemo(() => {
+    return (outputIndex: number) => {
+      // Determine available balance
+      let availableBalance: number;
+      let numInputs: number;
+
+      if (showCoinControl && selectedUTXOs.size > 0) {
+        availableBalance = selectedTotal;
+        numInputs = selectedUTXOs.size;
+      } else if (showCoinControl) {
+        return 0;
+      } else {
+        availableBalance = spendableUtxos.reduce((sum, u) => sum + u.amount, 0);
+        numInputs = spendableUtxos.length;
+      }
+
+      if (availableBalance <= 0 || numInputs === 0) return 0;
+
+      // Sum of other outputs' amounts (excluding the sendMax output)
+      const otherOutputsTotal = outputs.reduce((sum, o, i) => {
+        if (i === outputIndex || o.sendMax) return sum;
+        return sum + (parseInt(o.amount) || 0);
+      }, 0);
+
+      // Number of outputs (sendMax means no change output)
+      const hasSendMax = outputs.some(o => o.sendMax);
+      const numOutputs = hasSendMax ? outputs.length : outputs.length + 1;
+      const estimatedFee = calculateFee(numInputs, numOutputs, feeRate);
+
+      // Max for this output = available - other outputs - fee
+      return Math.max(0, availableBalance - otherOutputsTotal - estimatedFee);
+    };
+  }, [showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, outputs, feeRate, calculateFee]);
+
+  // Calculate max sendable for display - remaining unallocated balance
   const maxSendableAmount = useMemo(() => {
-    // Determine available balance
+    // If any output has sendMax, all remaining balance is allocated to it, so max sendable is 0
+    if (outputs.some(o => o.sendMax)) {
+      return 0;
+    }
+
+    // No sendMax output - calculate remaining balance after all fixed outputs
     let availableBalance: number;
     let numInputs: number;
 
     if (showCoinControl && selectedUTXOs.size > 0) {
-      // Coin control mode with selection: use selected total
       availableBalance = selectedTotal;
       numInputs = selectedUTXOs.size;
     } else if (showCoinControl) {
-      // Coin control mode but nothing selected: max is 0
       return 0;
     } else {
-      // Auto mode: use all spendable UTXOs
       availableBalance = spendableUtxos.reduce((sum, u) => sum + u.amount, 0);
       numInputs = spendableUtxos.length;
     }
 
     if (availableBalance <= 0 || numInputs === 0) return 0;
 
-    // For sendMax, there's only 1 output (no change)
-    const estimatedFee = calculateFee(numInputs, 1, feeRate);
+    // Sum all output amounts
+    const totalOutputs = outputs.reduce((sum, o) => sum + (parseInt(o.amount) || 0), 0);
 
-    // If subtractFeesFromAmount is checked, the max we can "send" is the full balance
-    // because the fee comes out of the amount sent
-    if (subtractFeesFromAmount) {
-      return availableBalance;
-    }
+    // Estimate fee (outputs + change)
+    const numOutputs = outputs.length + 1; // +1 for change
+    const estimatedFee = calculateFee(numInputs, numOutputs, feeRate);
 
-    // Otherwise, max = balance - fee
-    return Math.max(0, availableBalance - estimatedFee);
-  }, [showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, feeRate, subtractFeesFromAmount, calculateFee]);
+    return Math.max(0, availableBalance - totalOutputs - estimatedFee);
+  }, [outputs, showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, feeRate, calculateFee]);
 
-  // Auto-update amount when in sendMax mode and dependencies change
-  useEffect(() => {
-    if (isSendMax && maxSendableAmount >= 0) {
-      setAmount(maxSendableAmount.toString());
-    }
-  }, [isSendMax, maxSendableAmount]);
+  // Note: For sendMax outputs, the displayed value is calculated dynamically via calculateMaxForOutput(index)
+  // No useEffect needed to update amounts - the input field shows the calculated value directly when sendMax is true
+
+  // Check if any output has invalid address
+  const hasInvalidAddress = outputsValid.some(v => v === false);
+  const allOutputsHaveAddress = outputs.every(o => o.address && o.address.length > 0);
 
   // Check if transaction can be created
   const canCreateTransaction = () => {
-    if (!amount || !recipient || recipientValid === false || error) return false;
+    if (!allOutputsHaveAddress || hasInvalidAddress || error) return false;
+    // Check all outputs have amounts (or sendMax)
+    if (!outputs.every(o => o.sendMax || (o.amount && parseInt(o.amount) > 0))) return false;
     if (!isSendMax && showCoinControl && selectedTotal < (parseInt(amount || '0') + calculateTotalFee())) return false;
     return true;
   };
@@ -602,32 +706,40 @@ export const SendTransaction: React.FC = () => {
   const amountInSats = parseInt(amount || '0');
   const amountInFiat = getFiatValue(amountInSats).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Validate recipient address
+  // Validate all output addresses
   useEffect(() => {
-    const validateAddress = async () => {
-      if (!recipient || recipient.length < 10) {
-        setRecipientValid(null);
-        return;
+    const validateAllAddresses = async () => {
+      const newValidStates: (boolean | null)[] = [];
+
+      for (let i = 0; i < outputs.length; i++) {
+        const address = outputs[i].address;
+
+        if (!address || address.length < 10) {
+          newValidStates.push(null);
+          continue;
+        }
+
+        // In consolidation mode (first output only), if the address is in our wallet, it's valid
+        if (i === 0 && isConsolidation && walletAddresses.includes(address)) {
+          newValidStates.push(true);
+          continue;
+        }
+
+        try {
+          const result = await bitcoinApi.validateAddress({ address });
+          newValidStates.push(result.valid);
+        } catch (err) {
+          log.error('Address validation error', { error: err, index: i });
+          newValidStates.push(false);
+        }
       }
 
-      // In consolidation mode, if the address is in our wallet, it's valid
-      if (isConsolidation && walletAddresses.includes(recipient)) {
-        setRecipientValid(true);
-        return;
-      }
-
-      try {
-        const result = await bitcoinApi.validateAddress({ address: recipient });
-        setRecipientValid(result.valid);
-      } catch (err) {
-        log.error('Address validation error', { error: err });
-        setRecipientValid(false);
-      }
+      setOutputsValid(newValidStates);
     };
 
-    const timer = setTimeout(validateAddress, 500); // Debounce
+    const timer = setTimeout(validateAllAddresses, 500); // Debounce
     return () => clearTimeout(timer);
-  }, [recipient, isConsolidation, walletAddresses]);
+  }, [outputs, isConsolidation, walletAddresses]);
 
   // Handle transaction broadcast
   const handleBroadcast = async () => {
@@ -637,43 +749,71 @@ export const SendTransaction: React.FC = () => {
       setBroadcasting(true);
       setError(null);
 
-      // Validate inputs
-      if (!recipient) {
-        setError('Please enter a recipient address');
+      // Validate all outputs
+      for (let i = 0; i < outputs.length; i++) {
+        const output = outputs[i];
+        if (!output.address) {
+          setError(`Output ${i + 1}: Please enter a recipient address`);
+          return;
+        }
+        if (!output.sendMax && (!output.amount || parseInt(output.amount) <= 0)) {
+          setError(`Output ${i + 1}: Please enter a valid amount`);
+          return;
+        }
+      }
+
+      // Check for any invalid addresses
+      const invalidIndex = outputsValid.findIndex(v => v === false);
+      if (invalidIndex !== -1) {
+        setError(`Output ${invalidIndex + 1}: Invalid Bitcoin address`);
         return;
       }
 
-      if (recipientValid === false) {
-        setError('Invalid recipient address');
-        return;
-      }
+      // Prepare outputs for API
+      const apiOutputs = outputs.map(o => ({
+        address: o.address,
+        amount: o.sendMax ? 0 : parseInt(o.amount),
+        sendMax: o.sendMax,
+      }));
 
-      if (!amount || parseInt(amount) <= 0) {
-        setError('Please enter a valid amount');
-        return;
-      }
-
-      const amountSats = parseInt(amount);
+      const totalAmount = apiOutputs.reduce((sum, o) => sum + (o.sendMax ? 0 : o.amount), 0);
 
       // Step 1: Create transaction PSBT
-      const txData = await transactionsApi.createTransaction(id, {
-        recipient,
-        amount: amountSats,
-        feeRate,
-        selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
-        enableRBF,
-        sendMax: isSendMax,
-        subtractFees: subtractFeesFromAmount,
-      });
+      let txData: any;
+      if (outputs.length > 1 || outputs.some(o => o.sendMax)) {
+        // Use batch API for multiple outputs or sendMax
+        txData = await transactionsApi.createBatchTransaction(id, {
+          outputs: apiOutputs,
+          feeRate,
+          selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+          enableRBF,
+        });
+      } else {
+        // Single output - use original API for backwards compatibility
+        txData = await transactionsApi.createTransaction(id, {
+          recipient: outputs[0].address,
+          amount: parseInt(outputs[0].amount),
+          feeRate,
+          selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+          enableRBF,
+          sendMax: false,
+          subtractFees: subtractFeesFromAmount,
+        });
+      }
 
       // Check if balance is sufficient (skip for sendMax since backend already validated)
       if (!isSendMax && !subtractFeesFromAmount) {
-        const totalNeeded = amountSats + txData.fee;
+        const totalNeeded = totalAmount + txData.fee;
         if (wallet.balance < totalNeeded) {
           setError(`Insufficient funds. Need ${format(totalNeeded)} but have ${format(wallet.balance)}`);
           return;
         }
       }
+
+      // Calculate effective amount for display
+      const effectiveAmount = txData.outputs
+        ? txData.outputs.reduce((sum: number, o: any) => sum + o.amount, 0)
+        : totalAmount;
 
       // Step 2: Sign with hardware wallet
       if (hardwareWallet.isConnected && hardwareWallet.device) {
@@ -684,14 +824,15 @@ export const SendTransaction: React.FC = () => {
           // Step 3: Broadcast the signed transaction
           const broadcastResult = await transactionsApi.broadcastTransaction(id, {
             signedPsbtBase64: signedPsbt,
-            recipient,
-            amount: amountSats,
+            recipient: outputs[0].address, // Primary recipient for logging
+            amount: effectiveAmount,
             fee: txData.fee,
             utxos: txData.utxos,
           });
 
+          const outputsMsg = outputs.length > 1 ? `${outputs.length} outputs` : format(effectiveAmount);
           showSuccess(
-            `Transaction broadcast successfully! TXID: ${broadcastResult.txid.substring(0, 16)}... Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}`,
+            `Transaction broadcast successfully! TXID: ${broadcastResult.txid.substring(0, 16)}... Amount: ${outputsMsg}, Fee: ${format(txData.fee)}`,
             'Transaction Broadcast'
           );
 
@@ -754,43 +895,83 @@ export const SendTransaction: React.FC = () => {
       setSavingDraft(true);
       setError(null);
 
-      // Validate inputs
-      if (!recipient) {
-        setError('Please enter a recipient address');
+      // Validate all outputs
+      for (let i = 0; i < outputs.length; i++) {
+        const output = outputs[i];
+        if (!output.address) {
+          setError(`Output ${i + 1}: Please enter a recipient address`);
+          return;
+        }
+        if (!output.sendMax && (!output.amount || parseInt(output.amount) <= 0)) {
+          setError(`Output ${i + 1}: Please enter a valid amount`);
+          return;
+        }
+      }
+
+      // Check for any invalid addresses
+      const invalidIndex = outputsValid.findIndex(v => v === false);
+      if (invalidIndex !== -1) {
+        setError(`Output ${invalidIndex + 1}: Invalid Bitcoin address`);
         return;
       }
 
-      if (recipientValid === false) {
-        setError('Invalid recipient address');
-        return;
-      }
+      // Prepare outputs for API
+      const apiOutputs = outputs.map(o => ({
+        address: o.address,
+        amount: o.sendMax ? 0 : parseInt(o.amount),
+        sendMax: o.sendMax,
+      }));
 
-      if (!amount || parseInt(amount) <= 0) {
-        setError('Please enter a valid amount');
-        return;
-      }
-
-      const amountSats = parseInt(amount);
+      const totalAmount = apiOutputs.reduce((sum, o) => sum + (o.sendMax ? 0 : o.amount), 0);
 
       // Create PSBT for the draft
-      const txData = await transactionsApi.createTransaction(id, {
-        recipient,
-        amount: amountSats,
-        feeRate,
-        selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
-        enableRBF,
-        sendMax: isSendMax,
-        subtractFees: subtractFeesFromAmount,
-      });
+      let txData: any;
+      if (outputs.length > 1 || outputs.some(o => o.sendMax)) {
+        txData = await transactionsApi.createBatchTransaction(id, {
+          outputs: apiOutputs,
+          feeRate,
+          selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+          enableRBF,
+        });
+      } else {
+        txData = await transactionsApi.createTransaction(id, {
+          recipient: outputs[0].address,
+          amount: parseInt(outputs[0].amount),
+          feeRate,
+          selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+          enableRBF,
+          sendMax: false,
+          subtractFees: subtractFeesFromAmount,
+        });
+      }
+
+      // Calculate effective amount for display
+      const effectiveAmount = txData.outputs
+        ? txData.outputs.reduce((sum: number, o: any) => sum + o.amount, 0)
+        : totalAmount || parseInt(outputs[0].amount);
+
+      // Use UTXOs from transaction response (captures auto-selected UTXOs, not just manually selected ones)
+      const usedUtxoIds = txData.utxos?.map((u: { txid: string; vout: number }) => `${u.txid}:${u.vout}`) || [];
+
+      // Merge calculated amounts from txData.outputs with sendMax flags from apiOutputs
+      // txData.outputs has the actual calculated amounts (including for sendMax outputs)
+      const outputsToSave = txData.outputs
+        ? txData.outputs.map((txOutput: any, idx: number) => ({
+            address: txOutput.address,
+            amount: txOutput.amount, // Use calculated amount from transaction
+            sendMax: apiOutputs[idx]?.sendMax || false, // Preserve sendMax flag
+          }))
+        : apiOutputs;
 
       const draftRequest: draftsApi.CreateDraftRequest = {
-        recipient,
-        amount: amountSats,
+        recipient: outputs[0].address,
+        amount: effectiveAmount,
         feeRate,
-        selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+        selectedUtxoIds: usedUtxoIds.length > 0 ? usedUtxoIds : undefined,
         enableRBF,
         subtractFees: subtractFeesFromAmount,
         sendMax: isSendMax,
+        outputs: outputsToSave, // Save with calculated amounts for accurate restoration
         psbtBase64: txData.psbtBase64,
         fee: txData.fee,
         totalInput: txData.totalInput,
@@ -802,7 +983,7 @@ export const SendTransaction: React.FC = () => {
       };
 
       if (currentDraftId) {
-        // Update existing draft
+        // Update existing draft (only signing info changes, amounts are locked)
         await draftsApi.updateDraft(id, currentDraftId, {
           signedPsbtBase64: unsignedPsbt || undefined,
           status: signedDevices.size > 0 ? 'partial' : 'unsigned',
@@ -951,141 +1132,194 @@ export const SendTransaction: React.FC = () => {
               </div>
             )}
 
-            <div className="space-y-2">
+            {/* Outputs Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
-                  {isConsolidation ? 'Consolidation Address (Your Wallet)' : 'Recipient Address'}
+                  {isConsolidation ? 'Consolidation Output' : outputs.length > 1 ? `Outputs (${outputs.length})` : 'Output'}
                   {isResumingDraft && (
                     <span className="ml-2 text-xs text-sanctuary-500">(locked - resuming draft)</span>
                   )}
                 </label>
-                {isConsolidation ? (
-                  <div className="relative">
-                    <select
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      disabled={isResumingDraft}
-                      className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    >
-                      {walletAddresses.map((addr, idx) => (
-                        <option key={addr} value={addr}>
-                          #{idx}: {addr.slice(0, 12)}...{addr.slice(-8)}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-sanctuary-400 pointer-events-none" />
-                  </div>
-                ) : (
-                  <div className="flex space-x-2">
+                {!isConsolidation && !isResumingDraft && (
+                  <button
+                    type="button"
+                    onClick={addOutput}
+                    className="flex items-center text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Add Output
+                  </button>
+                )}
+              </div>
+
+              {outputs.map((output, index) => (
+                <div key={index} className={`space-y-2 ${outputs.length > 1 ? 'p-3 rounded-lg surface-secondary border border-sanctuary-200 dark:border-sanctuary-700' : ''}`}>
+                  {outputs.length > 1 && (
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-sanctuary-500">Output #{index + 1}</span>
+                      {!isResumingDraft && (
+                        <button
+                          type="button"
+                          onClick={() => removeOutput(index)}
+                          className="text-sanctuary-400 hover:text-rose-500 transition-colors"
+                          title="Remove output"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Address Input */}
+                  {isConsolidation && index === 0 ? (
+                    <div className="relative">
+                      <select
+                        value={output.address}
+                        onChange={(e) => updateOutput(index, 'address', e.target.value)}
+                        disabled={isResumingDraft}
+                        className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {walletAddresses.map((addr, idx) => (
+                          <option key={addr} value={addr}>
+                            #{idx}: {addr.slice(0, 12)}...{addr.slice(-8)}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-sanctuary-400 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <div className="flex space-x-2">
                       <div className="flex-1 relative">
                         <input
-                            type="text"
-                            value={recipient}
-                            onChange={(e) => setRecipient(e.target.value)}
-                            disabled={isResumingDraft}
-                            placeholder="bc1q..."
-                            className={`block w-full px-4 py-3 rounded-xl border ${
-                              recipientValid === true
-                                ? 'border-green-500 dark:border-green-400'
-                                : recipientValid === false
-                                ? 'border-rose-500 dark:border-rose-400'
-                                : 'border-sanctuary-300 dark:border-sanctuary-700'
-                            } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          type="text"
+                          value={output.address}
+                          onChange={(e) => updateOutput(index, 'address', e.target.value)}
+                          disabled={isResumingDraft}
+                          placeholder="bc1q..."
+                          className={`block w-full px-4 py-2.5 rounded-xl border ${
+                            outputsValid[index] === true
+                              ? 'border-green-500 dark:border-green-400'
+                              : outputsValid[index] === false
+                              ? 'border-rose-500 dark:border-rose-400'
+                              : 'border-sanctuary-300 dark:border-sanctuary-700'
+                          } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
-                        {recipientValid === true && (
-                          <Check className="absolute right-4 top-3.5 w-5 h-5 text-green-500" />
+                        {outputsValid[index] === true && (
+                          <Check className="absolute right-4 top-3 w-4 h-4 text-green-500" />
                         )}
-                        {recipientValid === false && (
-                          <X className="absolute right-4 top-3.5 w-5 h-5 text-rose-500" />
+                        {outputsValid[index] === false && (
+                          <X className="absolute right-4 top-3 w-4 h-4 text-rose-500" />
                         )}
                       </div>
                       {!isResumingDraft && (
-                        <Button variant="secondary" onClick={() => (showScanner ? (setShowScanner(false), stopCamera()) : startCamera())}>
-                            {showScanner ? <X className="w-5 h-5" /> : <QrCode className="w-5 h-5" />}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            if (showScanner && scanningOutputIndex === index) {
+                              setShowScanner(false);
+                              setScanningOutputIndex(null);
+                              stopCamera();
+                            } else {
+                              setScanningOutputIndex(index);
+                              startCamera();
+                            }
+                          }}
+                        >
+                          {showScanner && scanningOutputIndex === index ? <X className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
                         </Button>
                       )}
-                  </div>
-                )}
-                {!isConsolidation && recipientValid === false && (
-                  <p className="text-xs text-rose-500">Invalid Bitcoin address</p>
-                )}
-                {!isConsolidation && showScanner && (
-                   <div className="relative overflow-hidden rounded-xl bg-black aspect-video flex items-center justify-center">
-                       <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
-                       <canvas ref={canvasRef} className="hidden" />
-                       <div className="z-10 border-2 border-white/50 w-48 h-48 rounded-lg"></div>
-                       <p className="absolute bottom-4 z-10 text-white bg-black/50 px-3 py-1 rounded-full text-xs">Scan Bitcoin QR Code</p>
-                   </div>
-                )}
-            </div>
+                    </div>
+                  )}
+                  {!isConsolidation && outputsValid[index] === false && (
+                    <p className="text-xs text-rose-500">Invalid Bitcoin address</p>
+                  )}
 
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Amount (sats)</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Enable sendMax mode - the useEffect will update the amount
-                      setIsSendMax(true);
-                      // If no UTXOs selected and coin control is not active, select all spendable UTXOs
-                      if (!showCoinControl && spendableUtxos.length > 0) {
-                        const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
-                        setSelectedUTXOs(allSpendable);
-                        setShowCoinControl(true);
-                      } else if (showCoinControl && selectedUTXOs.size === 0 && spendableUtxos.length > 0) {
-                        // Coin control active but nothing selected - select all spendable
-                        const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
-                        setSelectedUTXOs(allSpendable);
-                      }
-                    }}
-                    className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
-                  >
-                    MAX
-                  </button>
+                  {/* QR Scanner for this output */}
+                  {showScanner && scanningOutputIndex === index && (
+                    <div className="relative overflow-hidden rounded-xl bg-black aspect-video flex items-center justify-center">
+                      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
+                      <canvas ref={canvasRef} className="hidden" />
+                      <div className="z-10 border-2 border-white/50 w-48 h-48 rounded-lg"></div>
+                      <p className="absolute bottom-4 z-10 text-white bg-black/50 px-3 py-1 rounded-full text-xs">Scan Bitcoin QR Code</p>
+                    </div>
+                  )}
+
+                  {/* Amount Input */}
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="number"
+                        value={output.sendMax ? calculateMaxForOutput(index).toString() : output.amount}
+                        onChange={(e) => {
+                          updateOutput(index, 'amount', e.target.value);
+                          if (output.sendMax) updateOutput(index, 'sendMax', false);
+                        }}
+                        placeholder="0"
+                        readOnly={output.sendMax || isResumingDraft}
+                        disabled={isResumingDraft}
+                        className={`block w-full px-4 py-2.5 pr-20 rounded-xl border text-sm ${
+                          output.sendMax
+                            ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
+                            : 'border-sanctuary-300 dark:border-sanctuary-700'
+                        } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      />
+                      <div className="absolute right-3 top-2.5 text-sanctuary-400 text-xs flex items-center">
+                        {output.sendMax && !isResumingDraft && (
+                          <button
+                            type="button"
+                            onClick={() => updateOutput(index, 'sendMax', false)}
+                            className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+                            title="Click to exit MAX mode"
+                          >
+                            MAX
+                          </button>
+                        )}
+                        <span className="pointer-events-none">SATS</span>
+                      </div>
+                    </div>
+                    {!isResumingDraft && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleSendMax(index);
+                          // Only select all UTXOs if none are currently selected
+                          // If user has already selected specific UTXOs, respect that selection
+                          if (!output.sendMax && selectedUTXOs.size === 0 && spendableUtxos.length > 0) {
+                            const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
+                            setSelectedUTXOs(allSpendable);
+                            setShowCoinControl(true);
+                          }
+                        }}
+                        className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
+                          output.sendMax
+                            ? 'bg-primary-500 text-white border-primary-500 hover:bg-primary-600'
+                            : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
+                        }`}
+                      >
+                        MAX
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="relative">
-                   <input
-                       type="number"
-                       value={amount}
-                       onChange={(e) => {
-                         setAmount(e.target.value);
-                         setIsSendMax(false); // User manually changed amount, no longer send max
-                       }}
-                       placeholder="0"
-                       className={`block w-full px-4 py-3 pr-24 rounded-xl border ${
-                         isSendMax
-                           ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
-                           : 'border-sanctuary-300 dark:border-sanctuary-700'
-                       } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors`}
-                   />
-                   <div className="absolute right-4 top-3.5 text-sanctuary-400 text-sm flex items-center">
-                      {isSendMax && (
-                        <button
-                          type="button"
-                          onClick={() => setIsSendMax(false)}
-                          className="mr-2 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
-                          title="Click to exit MAX mode and edit amount manually"
-                        >
-                          MAX
-                        </button>
-                      )}
-                      {amountInSats > 0 && <span className="mr-2 text-sanctuary-500 dark:text-sanctuary-400 pointer-events-none">≈ {currencySymbol}{amountInFiat}</span>}
-                      <span className="pointer-events-none">SATS</span>
-                   </div>
+              ))}
+
+              {showCoinControl && (
+                <div className="flex justify-between text-xs text-sanctuary-500 mt-2">
+                  <span>Selected: {format(selectedTotal)} ({selectedUTXOs.size} UTXO{selectedUTXOs.size !== 1 ? 's' : ''})</span>
+                  <span>Max sendable: {format(maxSendableAmount)}</span>
                 </div>
-                {showCoinControl && (
-                   <div className="flex justify-between text-xs text-sanctuary-500">
-                      <span>Selected: {format(selectedTotal)} ({selectedUTXOs.size} UTXO{selectedUTXOs.size !== 1 ? 's' : ''})</span>
-                      <span>Max sendable: {format(maxSendableAmount)}</span>
-                   </div>
-                )}
+              )}
             </div>
 
             {/* Advanced Options */}
             <div className="border-t border-sanctuary-200 dark:border-sanctuary-800 pt-4">
               <button
                 type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 transition-colors"
+                onClick={() => !isResumingDraft && setShowAdvanced(!showAdvanced)}
+                disabled={isResumingDraft}
+                className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <Sliders className="w-4 h-4 mr-2" />
                 Advanced Options
@@ -1094,11 +1328,12 @@ export const SendTransaction: React.FC = () => {
 
               {showAdvanced && (
                 <div className="mt-4 space-y-3 pl-6">
-                  <label className="flex items-center space-x-3 cursor-pointer">
+                  <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                       type="checkbox"
                       checked={enableRBF}
-                      onChange={(e) => setEnableRBF(e.target.checked)}
+                      onChange={(e) => !isResumingDraft && setEnableRBF(e.target.checked)}
+                      disabled={isResumingDraft}
                       className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
                     />
                     <div>
@@ -1107,11 +1342,12 @@ export const SendTransaction: React.FC = () => {
                     </div>
                   </label>
 
-                  <label className="flex items-center space-x-3 cursor-pointer">
+                  <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                       type="checkbox"
                       checked={subtractFeesFromAmount}
-                      onChange={(e) => setSubtractFeesFromAmount(e.target.checked)}
+                      onChange={(e) => !isResumingDraft && setSubtractFeesFromAmount(e.target.checked)}
+                      disabled={isResumingDraft}
                       className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
                     />
                     <div>
@@ -1125,15 +1361,17 @@ export const SendTransaction: React.FC = () => {
         </div>
 
         {/* Fee Selection */}
-        <div className="space-y-4">
+        <div className={`space-y-4 ${isResumingDraft ? 'opacity-60' : ''}`}>
              <div>
                 <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Network Fee</h3>
-                <p className="text-sm text-sanctuary-500 mb-4">Click a block below to target its confirmation speed, or select a preset.</p>
-                <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden">
+                <p className="text-sm text-sanctuary-500 mb-4">
+                  {isResumingDraft ? 'Fee rate is locked for draft transactions.' : 'Click a block below to target its confirmation speed, or select a preset.'}
+                </p>
+                <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden ${isResumingDraft ? 'pointer-events-none' : ''}`}>
                     <BlockVisualizer
                       blocks={mempoolBlocks}
                       queuedBlocksSummary={queuedBlocksSummary}
-                      onBlockClick={(rate) => setFeeRate(rate)}
+                      onBlockClick={isResumingDraft ? undefined : (rate) => setFeeRate(rate)}
                       compact={true}
                     />
                 </div>
@@ -1146,10 +1384,10 @@ export const SendTransaction: React.FC = () => {
                         { label: 'Standard', rate: fees?.halfHourFee, time: '~30 mins' },
                         { label: 'Economy', rate: fees?.hourFee, time: '~1 hour' },
                     ].map((opt) => (
-                        <div 
+                        <div
                            key={opt.label}
-                           onClick={() => setFeeRate(opt.rate || 1)}
-                           className={`cursor-pointer p-4 rounded-xl border transition-all ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 surface-secondary' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'}`}
+                           onClick={() => !isResumingDraft && setFeeRate(opt.rate || 1)}
+                           className={`p-4 rounded-xl border transition-all ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 surface-secondary' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'} ${isResumingDraft ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
                             <div className="font-medium text-sm">{opt.label}</div>
                             <div className="text-2xl font-bold my-1">{opt.rate} <span className="text-xs font-normal text-sanctuary-500">sat/vB</span></div>
@@ -1159,11 +1397,12 @@ export const SendTransaction: React.FC = () => {
                 </div>
                 <div className="pt-4 mt-2 border-t border-sanctuary-100 dark:border-sanctuary-800">
                     <label className="text-xs font-medium text-sanctuary-500 uppercase">Custom Fee Rate</label>
-                    <input 
-                       type="number" 
-                       value={feeRate} 
-                       onChange={(e) => setFeeRate(parseInt(e.target.value))}
-                       className="mt-1 block w-32 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500"
+                    <input
+                       type="number"
+                       value={feeRate}
+                       onChange={(e) => !isResumingDraft && setFeeRate(parseInt(e.target.value))}
+                       disabled={isResumingDraft}
+                       className={`mt-1 block w-32 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${isResumingDraft ? 'cursor-not-allowed' : ''}`}
                     />
                 </div>
              </div>
@@ -1171,26 +1410,31 @@ export const SendTransaction: React.FC = () => {
 
         {/* Coin Control Toggle */}
         <div className="flex items-center justify-between">
-           <button 
-             onClick={() => setShowCoinControl(!showCoinControl)}
-             className="flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200"
+           <button
+             onClick={() => !isResumingDraft && setShowCoinControl(!showCoinControl)}
+             disabled={isResumingDraft}
+             className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
            >
               <Sliders className="w-4 h-4 mr-2" />
               {showCoinControl ? 'Hide Coin Control' : 'Coin Control (Auto)'}
+              {isResumingDraft && showCoinControl && <span className="ml-2 text-xs text-sanctuary-400">(locked)</span>}
            </button>
         </div>
 
         {/* UTXO Selection Table */}
         {showCoinControl && (
-            <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in">
+            <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in ${isResumingDraft ? 'opacity-60' : ''}`}>
                 <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
-                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Select Inputs</span>
+                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                      {isResumingDraft ? 'Selected Inputs (locked)' : 'Select Inputs'}
+                    </span>
                     <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
                     {utxos.map(utxo => {
                         const id = `${utxo.txid}:${utxo.vout}`;
                         const isSelected = selectedUTXOs.has(id);
+                        const isDisabled = utxo.frozen || isResumingDraft;
                         // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
                         const frozenStyle = utxo.frozen ? {
                           backgroundImage: `repeating-linear-gradient(
@@ -1204,9 +1448,9 @@ export const SendTransaction: React.FC = () => {
                         return (
                             <div
                                 key={id}
-                                onClick={() => !utxo.frozen && toggleUTXO(id)}
+                                onClick={() => !isDisabled && toggleUTXO(id)}
                                 style={frozenStyle}
-                                className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 cursor-not-allowed bg-rose-50 dark:bg-rose-900/10' : ''}`}
+                                className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                             >
                                 <div className="flex items-center space-x-3">
                                     <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
@@ -1747,7 +1991,7 @@ export const SendTransaction: React.FC = () => {
              <Button
                size="lg"
                className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
-               disabled={!amount || !recipient || recipientValid === false || broadcasting || hardwareWallet.signing}
+               disabled={!allOutputsHaveAddress || hasInvalidAddress || broadcasting || hardwareWallet.signing}
                onClick={handleBroadcast}
              >
                  {broadcasting || hardwareWallet.signing ? (
@@ -1780,7 +2024,7 @@ export const SendTransaction: React.FC = () => {
              {/* Save as Draft Button */}
              <button
                onClick={handleSaveAsDraft}
-               disabled={!amount || !recipient || recipientValid === false || savingDraft}
+               disabled={!allOutputsHaveAddress || hasInvalidAddress || savingDraft}
                className="w-full mt-3 py-2 px-4 text-sm font-medium text-sanctuary-600 dark:text-sanctuary-300 bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
              >
                {savingDraft ? (

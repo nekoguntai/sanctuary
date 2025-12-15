@@ -675,6 +675,122 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
 });
 
 /**
+ * POST /api/v1/wallets/:walletId/transactions/batch
+ * Create a batch transaction with multiple outputs
+ */
+router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const {
+      outputs, // Array of { address, amount, sendMax? }
+      feeRate,
+      selectedUtxoIds,
+      enableRBF = true,
+      label,
+      memo,
+    } = req.body;
+
+    // Validate outputs array
+    if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'outputs array is required with at least one output',
+      });
+    }
+
+    if (!feeRate || feeRate < 1) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'feeRate must be at least 1 sat/vB',
+      });
+    }
+
+    // Fetch wallet for network validation
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
+
+    // Validate each output
+    for (let i = 0; i < outputs.length; i++) {
+      const output = outputs[i];
+      if (!output.address) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Output ${i + 1}: address is required`,
+        });
+      }
+
+      // Amount is required unless sendMax is true
+      if (!output.sendMax && (!output.amount || output.amount <= 0)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Output ${i + 1}: amount is required (or set sendMax: true)`,
+        });
+      }
+
+      // Validate address
+      const addressValidation = validateAddress(output.address, network);
+      if (!addressValidation.valid) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: `Output ${i + 1}: Invalid Bitcoin address: ${addressValidation.error}`,
+        });
+      }
+    }
+
+    // Only one output can have sendMax
+    const sendMaxCount = outputs.filter((o: any) => o.sendMax).length;
+    if (sendMaxCount > 1) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Only one output can have sendMax enabled',
+      });
+    }
+
+    // Create batch transaction
+    const txService = await import('../services/bitcoin/transactionService');
+    const txData = await txService.createBatchTransaction(
+      walletId,
+      outputs,
+      feeRate,
+      {
+        selectedUtxoIds,
+        enableRBF,
+        label,
+        memo,
+      }
+    );
+
+    res.json({
+      psbtBase64: txData.psbtBase64,
+      fee: txData.fee,
+      totalInput: txData.totalInput,
+      totalOutput: txData.totalOutput,
+      changeAmount: txData.changeAmount,
+      changeAddress: txData.changeAddress,
+      utxos: txData.utxos,
+      inputPaths: txData.inputPaths,
+      outputs: txData.outputs, // Final outputs with resolved amounts
+    });
+  } catch (error: any) {
+    log.error('Create batch transaction error', { error });
+    res.status(400).json({
+      error: 'Bad Request',
+      message: error.message || 'Failed to create batch transaction',
+    });
+  }
+});
+
+/**
  * POST /api/v1/wallets/:walletId/transactions/broadcast
  * Broadcast a signed PSBT
  */

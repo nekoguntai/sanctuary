@@ -592,6 +592,62 @@ export async function syncWallet(walletId: string): Promise<{
     }))).catch(err => {
       log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
     });
+
+    // PHASE 5.5: Auto-apply address labels to new transactions
+    // When an address has labels, new transactions at that address inherit them
+    try {
+      // Get unique addressIds from created transactions
+      const addressIds = [...new Set(uniqueTxArray.map(tx => tx.addressId).filter(Boolean))] as string[];
+
+      if (addressIds.length > 0) {
+        // Fetch address labels for these addresses
+        const addressLabels = await prisma.addressLabel.findMany({
+          where: { addressId: { in: addressIds } },
+        });
+
+        if (addressLabels.length > 0) {
+          // Group labels by addressId
+          const labelsByAddress = new Map<string, string[]>();
+          for (const al of addressLabels) {
+            const labels = labelsByAddress.get(al.addressId) || [];
+            labels.push(al.labelId);
+            labelsByAddress.set(al.addressId, labels);
+          }
+
+          // Query the created transactions to get their IDs
+          const createdTxs = await prisma.transaction.findMany({
+            where: {
+              walletId,
+              txid: { in: uniqueTxArray.map(tx => tx.txid) },
+            },
+            select: { id: true, txid: true, addressId: true },
+          });
+
+          // Build TransactionLabel records
+          const txLabelData: { transactionId: string; labelId: string }[] = [];
+          for (const tx of createdTxs) {
+            if (tx.addressId) {
+              const labels = labelsByAddress.get(tx.addressId) || [];
+              for (const labelId of labels) {
+                txLabelData.push({ transactionId: tx.id, labelId });
+              }
+            }
+          }
+
+          // Batch insert transaction labels
+          if (txLabelData.length > 0) {
+            await prisma.transactionLabel.createMany({
+              data: txLabelData,
+              skipDuplicates: true,
+            });
+            log.debug(`[BLOCKCHAIN] Auto-applied ${txLabelData.length} labels to transactions from address labels`);
+          }
+        }
+      }
+    } catch (labelError) {
+      // Don't fail the sync if labeling fails
+      log.warn(`[BLOCKCHAIN] Failed to auto-apply address labels: ${labelError}`);
+    }
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses in parallel

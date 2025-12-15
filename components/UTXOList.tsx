@@ -87,29 +87,30 @@ export const UTXOList: React.FC<UTXOListProps> = ({
             {utxos.map((utxo) => {
                 const id = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selectedUtxos.has(id);
-                const colorClass = getAgeColor(utxo.date);
+                const colorClass = utxo.frozen ? '' : getAgeColor(utxo.date);
                 const sizeClass = getSizeClass(utxo.amount);
 
-                // Striped pattern for frozen UTXOs using CSS gradient
-                const stripedStyle = utxo.frozen ? {
-                  backgroundImage: `repeating-linear-gradient(
+                // Red striped pattern for frozen UTXOs - matches the row list styling
+                // Using zen-vermilion color (#e05a47)
+                const frozenStyle = utxo.frozen ? {
+                  background: `repeating-linear-gradient(
                     45deg,
-                    rgba(255,255,255,0.2),
-                    rgba(255,255,255,0.2) 5px,
-                    transparent 5px,
-                    transparent 10px
+                    #e05a47,
+                    #e05a47 4px,
+                    #c44a3a 4px,
+                    #c44a3a 8px
                   )`
                 } : {};
 
                 return (
-                    <div 
+                    <div
                         key={id}
                         onClick={() => !utxo.frozen && onToggleSelect && onToggleSelect(id)}
-                        style={stripedStyle}
+                        style={frozenStyle}
                         className={`
                             relative rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 hover:scale-110
-                            ${sizeClass} 
-                            ${utxo.frozen ? 'opacity-80 grayscale' : ''}
+                            ${sizeClass}
+                            ${utxo.frozen ? 'cursor-not-allowed' : ''}
                             ${isSelected ? 'ring-4 ring-offset-2 ring-sanctuary-400 dark:ring-offset-sanctuary-900' : ''}
                             ${colorClass} text-white shadow-lg
                         `}
@@ -127,7 +128,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
             <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-zen-indigo mr-1"></span> &lt; 1mo</div>
             <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-zen-gold mr-1"></span> &lt; 1yr</div>
             <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-sanctuary-700 mr-1"></span> Ancient</div>
-            <div className="flex items-center ml-4 border-l border-sanctuary-200 pl-4"><span className="w-3 h-3 rounded-full bg-gray-400 mr-1" style={{backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.5), rgba(255,255,255,0.5) 2px, transparent 2px, transparent 4px)'}}></span> Frozen</div>
+            <div className="flex items-center ml-4 border-l border-sanctuary-200 dark:border-sanctuary-700 pl-4"><span className="w-3 h-3 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #e05a47, #e05a47 2px, #c44a3a 2px, #c44a3a 4px)'}}></span> Frozen</div>
         </div>
       </div>
 

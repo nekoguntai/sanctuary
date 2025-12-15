@@ -156,9 +156,14 @@ main() {
 
     echo ""
 
-    # Generate JWT secret
-    JWT_SECRET=$(generate_secret)
-    echo -e "${GREEN}✓${NC} JWT secret generated"
+    # Load existing JWT secret or generate new one
+    if [ -f "$INSTALL_DIR/.env.local" ]; then
+        source "$INSTALL_DIR/.env.local"
+        echo -e "${GREEN}✓${NC} Using existing JWT secret"
+    else
+        JWT_SECRET=$(generate_secret)
+        echo -e "${GREEN}✓${NC} JWT secret generated"
+    fi
 
     # Check for port conflicts
     if command -v ss &> /dev/null; then

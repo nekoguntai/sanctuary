@@ -21,6 +21,7 @@ import {
 import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
+import { TransactionExportModal } from './TransactionExportModal';
 import { UTXOList } from './UTXOList';
 import { WalletStats } from './WalletStats';
 import { DraftList } from './DraftList';
@@ -306,6 +307,9 @@ export const WalletDetail: React.FC = () => {
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
   const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels'>('qr');
+
+  // Transaction Export Modal State
+  const [showTransactionExport, setShowTransactionExport] = useState(false);
   
   // Delete Modal State
   const [showDelete, setShowDelete] = useState(false);
@@ -1142,6 +1146,18 @@ export const WalletDetail: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'tx' && (
           <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+             {/* Header with Export Button */}
+             {transactions.length > 0 && (
+               <div className="flex justify-end mb-4">
+                 <button
+                   onClick={() => setShowTransactionExport(true)}
+                   className="flex items-center px-3 py-1.5 text-sm text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded-lg transition-colors"
+                 >
+                   <Download className="w-4 h-4 mr-1.5" />
+                   Export
+                 </button>
+               </div>
+             )}
              <TransactionList
                transactions={transactions}
                highlightedTxId={highlightTxId}
@@ -2027,6 +2043,15 @@ export const WalletDetail: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Transaction Export Modal */}
+      {showTransactionExport && wallet && (
+        <TransactionExportModal
+          walletId={wallet.id}
+          walletName={wallet.name}
+          onClose={() => setShowTransactionExport(false)}
+        />
       )}
 
       {/* Receive Modal */}

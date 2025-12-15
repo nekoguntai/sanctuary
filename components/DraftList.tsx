@@ -244,9 +244,30 @@ export const DraftList: React.FC<DraftListProps> = ({
                   <span className="text-sm text-sanctuary-500 dark:text-sanctuary-400">
                     To:{' '}
                   </span>
-                  <span className="font-mono text-sm text-sanctuary-700 dark:text-sanctuary-300">
-                    {truncateAddress(draft.recipient)}
-                  </span>
+                  {draft.outputs && draft.outputs.length > 0 ? (
+                    draft.outputs.length === 1 ? (
+                      <span className="font-mono text-sm text-sanctuary-700 dark:text-sanctuary-300">
+                        {truncateAddress(draft.outputs[0].address)}
+                      </span>
+                    ) : (
+                      <div className="mt-1 space-y-1">
+                        {draft.outputs.map((output, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <span className="font-mono text-sanctuary-700 dark:text-sanctuary-300">
+                              {truncateAddress(output.address)}
+                            </span>
+                            <span className="ml-2 text-sanctuary-600 dark:text-sanctuary-400">
+                              {output.sendMax ? 'MAX' : format(output.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <span className="font-mono text-sm text-sanctuary-700 dark:text-sanctuary-300">
+                      {truncateAddress(draft.recipient)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-4">

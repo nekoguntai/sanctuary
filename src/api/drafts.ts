@@ -6,12 +6,18 @@
 
 import apiClient from './client';
 
+export interface DraftOutput {
+  address: string;
+  amount: number;
+  sendMax?: boolean;
+}
+
 export interface DraftTransaction {
   id: string;
   walletId: string;
   userId: string;
 
-  // Transaction parameters
+  // Transaction parameters (single output - backwards compatible)
   recipient: string;
   amount: number;
   feeRate: number;
@@ -19,6 +25,9 @@ export interface DraftTransaction {
   enableRBF: boolean;
   subtractFees: boolean;
   sendMax: boolean;
+
+  // Multiple outputs support
+  outputs?: DraftOutput[];
 
   // Labels
   label?: string;
@@ -53,6 +62,7 @@ export interface CreateDraftRequest {
   enableRBF?: boolean;
   subtractFees?: boolean;
   sendMax?: boolean;
+  outputs?: DraftOutput[]; // Multiple outputs support
   label?: string;
   memo?: string;
   psbtBase64: string;

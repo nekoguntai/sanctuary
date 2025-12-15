@@ -487,6 +487,252 @@ export async function estimateTransaction(
 }
 
 /**
+ * Output definition for batch transactions
+ */
+export interface TransactionOutput {
+  address: string;
+  amount: number;
+  sendMax?: boolean; // If true, allocate remaining balance to this output
+}
+
+/**
+ * Create a batch transaction with multiple outputs
+ */
+export async function createBatchTransaction(
+  walletId: string,
+  outputs: TransactionOutput[],
+  feeRate: number,
+  options: {
+    selectedUtxoIds?: string[];
+    enableRBF?: boolean;
+    label?: string;
+    memo?: string;
+  } = {}
+): Promise<{
+  psbt: bitcoin.Psbt;
+  psbtBase64: string;
+  fee: number;
+  totalInput: number;
+  totalOutput: number;
+  changeAmount: number;
+  changeAddress?: string;
+  utxos: Array<{ txid: string; vout: number }>;
+  inputPaths: string[];
+  outputs: Array<{ address: string; amount: number }>;
+}> {
+  const { selectedUtxoIds, enableRBF = true } = options;
+
+  // Get wallet info
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found');
+  }
+
+  if (outputs.length === 0) {
+    throw new Error('At least one output is required');
+  }
+
+  const network = wallet.network === 'testnet' ? 'testnet' : 'mainnet';
+  const networkObj = getNetwork(network);
+
+  // Validate all output addresses
+  for (const output of outputs) {
+    try {
+      bitcoin.address.toOutputScript(output.address, networkObj);
+    } catch (error) {
+      throw new Error(`Invalid address: ${output.address}`);
+    }
+  }
+
+  // Check if any output has sendMax
+  const sendMaxOutputIndex = outputs.findIndex(o => o.sendMax);
+  const hasSendMax = sendMaxOutputIndex !== -1;
+
+  // Get available UTXOs
+  let utxos = await prisma.uTXO.findMany({
+    where: {
+      walletId,
+      spent: false,
+      frozen: false,
+    },
+    orderBy: { amount: 'desc' },
+  });
+
+  // Filter by selected UTXOs if provided
+  if (selectedUtxoIds && selectedUtxoIds.length > 0) {
+    utxos = utxos.filter((utxo) =>
+      selectedUtxoIds.includes(`${utxo.txid}:${utxo.vout}`)
+    );
+  }
+
+  if (utxos.length === 0) {
+    throw new Error('No spendable UTXOs available');
+  }
+
+  // Calculate total available
+  const totalAvailable = utxos.reduce((sum, u) => sum + Number(u.amount), 0);
+
+  // Calculate fixed output amounts (non-sendMax outputs)
+  const fixedOutputTotal = outputs
+    .filter((_, i) => i !== sendMaxOutputIndex)
+    .reduce((sum, o) => sum + o.amount, 0);
+
+  // Determine number of outputs: specified outputs + possible change
+  // For sendMax, no change output; otherwise include change
+  const numOutputs = hasSendMax ? outputs.length : outputs.length + 1;
+
+  // Estimate fee
+  const estimatedSize = estimateTransactionSize(utxos.length, numOutputs, 'native_segwit');
+  const estimatedFee = calculateFee(estimatedSize, feeRate);
+
+  // Calculate sendMax amount if applicable
+  let finalOutputs: Array<{ address: string; amount: number }>;
+  let changeAmount = 0;
+
+  if (hasSendMax) {
+    // Calculate remaining balance for sendMax output
+    const sendMaxAmount = totalAvailable - fixedOutputTotal - estimatedFee;
+    if (sendMaxAmount <= 0) {
+      throw new Error(
+        `Insufficient funds. Need ${fixedOutputTotal + estimatedFee} sats for outputs and fee, have ${totalAvailable} sats`
+      );
+    }
+
+    finalOutputs = outputs.map((o, i) => ({
+      address: o.address,
+      amount: i === sendMaxOutputIndex ? sendMaxAmount : o.amount,
+    }));
+  } else {
+    // Normal batch: select UTXOs to cover all outputs + fee
+    const targetAmount = fixedOutputTotal;
+    const selectedUtxos: typeof utxos = [];
+    let selectedTotal = 0;
+
+    for (const utxo of utxos) {
+      selectedUtxos.push(utxo);
+      selectedTotal += Number(utxo.amount);
+
+      // Re-estimate fee with current selection
+      const currentSize = estimateTransactionSize(selectedUtxos.length, outputs.length + 1, 'native_segwit');
+      const currentFee = calculateFee(currentSize, feeRate);
+
+      if (selectedTotal >= targetAmount + currentFee) {
+        changeAmount = selectedTotal - targetAmount - currentFee;
+        utxos = selectedUtxos; // Use only selected UTXOs
+        break;
+      }
+    }
+
+    // Check if we have enough
+    const finalSize = estimateTransactionSize(utxos.length, outputs.length + 1, 'native_segwit');
+    const finalFee = calculateFee(finalSize, feeRate);
+    if (selectedTotal < targetAmount + finalFee) {
+      throw new Error(
+        `Insufficient funds. Need ${targetAmount + finalFee} sats, have ${selectedTotal} sats`
+      );
+    }
+
+    finalOutputs = outputs.map(o => ({
+      address: o.address,
+      amount: o.amount,
+    }));
+  }
+
+  // Create PSBT
+  const psbt = new bitcoin.Psbt({ network: networkObj });
+  const sequence = enableRBF ? RBF_SEQUENCE : 0xffffffff;
+  const inputPaths: string[] = [];
+
+  // Get derivation paths for inputs
+  const utxoAddresses = utxos.map(u => u.address);
+  const addressRecords = await prisma.address.findMany({
+    where: {
+      walletId,
+      address: { in: utxoAddresses },
+    },
+    select: {
+      address: true,
+      derivationPath: true,
+    },
+  });
+  const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
+
+  // Add inputs
+  for (const utxo of utxos) {
+    psbt.addInput({
+      hash: utxo.txid,
+      index: utxo.vout,
+      sequence,
+      witnessUtxo: {
+        script: Buffer.from(utxo.scriptPubKey || '', 'hex'),
+        value: Number(utxo.amount),
+      },
+    });
+    inputPaths.push(addressPathMap.get(utxo.address) || '');
+  }
+
+  // Add recipient outputs
+  for (const output of finalOutputs) {
+    psbt.addOutput({
+      address: output.address,
+      value: output.amount,
+    });
+  }
+
+  // Add change output if needed
+  const dustThreshold = 546;
+  let changeAddress: string | undefined;
+
+  if (!hasSendMax && changeAmount >= dustThreshold) {
+    const existingChangeAddress = await prisma.address.findFirst({
+      where: {
+        walletId,
+        used: false,
+        derivationPath: { contains: '/1/' },
+      },
+      orderBy: { index: 'asc' },
+    });
+
+    if (existingChangeAddress) {
+      changeAddress = existingChangeAddress.address;
+    } else {
+      const receivingAddress = await prisma.address.findFirst({
+        where: { walletId, used: false },
+        orderBy: { index: 'asc' },
+      });
+      if (!receivingAddress) {
+        throw new Error('No change address available');
+      }
+      changeAddress = receivingAddress.address;
+    }
+
+    psbt.addOutput({
+      address: changeAddress,
+      value: changeAmount,
+    });
+  }
+
+  const totalInput = utxos.reduce((sum, u) => sum + Number(u.amount), 0);
+  const totalOutput = finalOutputs.reduce((sum, o) => sum + o.amount, 0) + (changeAmount >= dustThreshold ? changeAmount : 0);
+
+  return {
+    psbt,
+    psbtBase64: psbt.toBase64(),
+    fee: estimatedFee,
+    totalInput,
+    totalOutput,
+    changeAmount: hasSendMax ? 0 : changeAmount,
+    changeAddress,
+    utxos: utxos.map(u => ({ txid: u.txid, vout: u.vout })),
+    inputPaths,
+    outputs: finalOutputs,
+  };
+}
+
+/**
  * Get transaction hex from PSBT for hardware wallet display
  */
 export function getPSBTInfo(psbtBase64: string): {

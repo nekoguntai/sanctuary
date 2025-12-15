@@ -309,6 +309,7 @@ model DraftTransaction {
   enableRBF       Boolean  @default(true)
   subtractFees    Boolean  @default(false)
   sendMax         Boolean  @default(false)
+  outputs         Json?    // Multiple outputs: [{ address, amount, sendMax? }]
 
   // Labels
   label           String?

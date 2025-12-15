@@ -26,7 +26,7 @@ interface DeviceCapabilities {
 }
 
 // Define what connection methods each device type supports
-const getDeviceCapabilities = (deviceType: string): DeviceCapabilities | null => {
+const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   const normalizedType = deviceType.toLowerCase();
 
   // Coldcard - USB and Air-gap (SD card / QR for Q model)
@@ -92,8 +92,28 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities | null =>
     };
   }
 
-  // Unknown device - return null to show all options
-  return null;
+  // SeedSigner - Air-gap only (QR codes)
+  if (normalizedType.includes('seedsigner')) {
+    return {
+      methods: ['airgap'],
+      labels: { usb: '', bluetooth: '', airgap: 'QR Code' }
+    };
+  }
+
+  // Generic SD card device - Air-gap only
+  if (normalizedType.includes('sd card') || normalizedType.includes('sd-card') || normalizedType.includes('airgap') || normalizedType.includes('air-gap')) {
+    return {
+      methods: ['airgap'],
+      labels: { usb: '', bluetooth: '', airgap: 'PSBT File' }
+    };
+  }
+
+  // Unknown device - default to USB + Air-gap options
+  // This allows users to choose their preferred signing method
+  return {
+    methods: ['usb', 'airgap'],
+    labels: { usb: 'USB', bluetooth: '', airgap: 'PSBT File' }
+  };
 };
 
 const getConnectionIcon = (method: ConnectionMethod) => {
@@ -1038,51 +1058,35 @@ export const SendTransaction: React.FC = () => {
                             <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                             Signing...
                           </span>
-                        ) : capabilities ? (
-                          // Known device - show specific connection options
-                          capabilities.methods.length === 1 ? (
-                            // Single method - show direct button
-                            <button
-                              onClick={() => handleSign(capabilities.methods[0])}
-                              disabled={!canCreateTransaction()}
-                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-sanctuary-300 dark:disabled:bg-sanctuary-700 disabled:text-sanctuary-500 dark:disabled:text-sanctuary-400 disabled:cursor-not-allowed rounded-lg transition-colors"
-                            >
-                              {React.createElement(getConnectionIcon(capabilities.methods[0]), { className: "w-3 h-3 mr-1.5" })}
-                              Sign via {capabilities.labels[capabilities.methods[0]]}
-                            </button>
-                          ) : (
-                            // Multiple methods - show dropdown
-                            <div className="relative">
-                              <button
-                                onClick={() => setExpandedDeviceId(isExpanded ? null : device.id)}
-                                disabled={!canCreateTransaction()}
-                                className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-sanctuary-300 dark:disabled:bg-sanctuary-700 disabled:text-sanctuary-500 dark:disabled:text-sanctuary-400 disabled:cursor-not-allowed rounded-lg transition-colors"
-                              >
-                                <Shield className="w-3 h-3 mr-1.5" />
-                                Sign
-                                <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                              </button>
-                            </div>
-                          )
-                        ) : (
-                          // Unknown device - show generic connect button that opens modal
+                        ) : capabilities.methods.length === 1 ? (
+                          // Single method - show direct button
                           <button
-                            onClick={() => {
-                              console.log('Connect & Sign clicked for device:', device.type, device.label);
-                              setShowHWConnect(true);
-                            }}
+                            onClick={() => handleSign(capabilities.methods[0])}
                             disabled={!canCreateTransaction()}
                             className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-sanctuary-300 dark:disabled:bg-sanctuary-700 disabled:text-sanctuary-500 dark:disabled:text-sanctuary-400 disabled:cursor-not-allowed rounded-lg transition-colors"
                           >
-                            <Usb className="w-3 h-3 mr-1.5" />
-                            Connect & Sign
+                            {React.createElement(getConnectionIcon(capabilities.methods[0]), { className: "w-3 h-3 mr-1.5" })}
+                            Sign via {capabilities.labels[capabilities.methods[0]]}
                           </button>
+                        ) : (
+                          // Multiple methods - show dropdown
+                          <div className="relative">
+                            <button
+                              onClick={() => setExpandedDeviceId(isExpanded ? null : device.id)}
+                              disabled={!canCreateTransaction()}
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-sanctuary-300 dark:disabled:bg-sanctuary-700 disabled:text-sanctuary-500 dark:disabled:text-sanctuary-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+                            >
+                              <Shield className="w-3 h-3 mr-1.5" />
+                              Sign
+                              <ChevronDown className={`w-3 h-3 ml-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
 
                     {/* Expanded connection options */}
-                    {isExpanded && capabilities && capabilities.methods.length > 1 && (
+                    {isExpanded && capabilities.methods.length > 1 && (
                       <div className="px-3 pb-3 pt-1 border-t border-sanctuary-200 dark:border-sanctuary-700 mt-1">
                         <p className="text-xs text-sanctuary-500 mb-2">Select connection method:</p>
                         <div className="flex flex-wrap gap-2">
@@ -1283,8 +1287,8 @@ export const SendTransaction: React.FC = () => {
                         : 'Connect your hardware wallet to sign transactions securely. Your keys never leave the device.'}
                     </p>
 
-                    {capabilities ? (
-                      // Known device - show specific connection options
+                    {singleSigDevice && capabilities ? (
+                      // Device found - show connection options based on capabilities
                       <div className="flex flex-wrap gap-2">
                         {capabilities.methods.map(method => {
                           const Icon = getConnectionIcon(method);
@@ -1320,7 +1324,7 @@ export const SendTransaction: React.FC = () => {
                         })}
                       </div>
                     ) : (
-                      // Unknown device - show generic button
+                      // No device associated - show generic connect button
                       <Button
                         variant="secondary"
                         size="sm"

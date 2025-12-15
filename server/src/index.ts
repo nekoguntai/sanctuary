@@ -87,8 +87,16 @@ app.use(requestLogger);
 // ROUTES
 // ========================================
 
-// Health check
+// Health check (both paths for compatibility)
 app.get('/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: config.nodeEnv,
+  });
+});
+
+app.get('/api/v1/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),

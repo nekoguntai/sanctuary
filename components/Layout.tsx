@@ -19,13 +19,18 @@ import {
   Cog,
   Database,
   FileText,
+  Bell,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
 import { useUser } from '../contexts/UserContext';
 import { getWallets, Wallet as ApiWallet } from '../src/api/wallets';
 import { getDevices, Device as ApiDevice } from '../src/api/devices';
+import { getDrafts } from '../src/api/drafts';
 import { version } from '../package.json';
+import { NotificationBell } from './NotificationPanel';
+import { NotificationBadge } from './NotificationBadge';
+import { useAppNotifications } from '../contexts/AppNotificationContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -79,29 +84,36 @@ const NavItem = ({
   );
 };
 
-interface SubNavItemProps { 
-  to: string; 
-  label: string; 
-  icon?: React.ReactNode; 
-  activeColorClass?: string; 
+interface SubNavItemProps {
+  to: string;
+  label: string;
+  icon?: React.ReactNode;
+  activeColorClass?: string;
+  badgeCount?: number;
+  badgeSeverity?: 'info' | 'warning' | 'critical';
 }
 
-const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorClass }) => {
+const SubNavItem: React.FC<SubNavItemProps> = ({ to, label, icon, activeColorClass, badgeCount, badgeSeverity }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
 
   return (
     <Link
       to={to}
-      className={`group flex items-center pl-8 pr-3 py-2 text-sm font-medium transition-all duration-200 border-l-2 ml-3 min-w-0 ${
+      className={`group flex items-center justify-between pl-8 pr-3 py-2 text-sm font-medium transition-all duration-200 border-l-2 ml-3 min-w-0 ${
         isActive
           ? `border-primary-500 dark:border-primary-500 text-primary-700 dark:text-primary-400 ${activeColorClass || ''}`
           : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-500 dark:text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-300'
       }`}
       title={label}
     >
-      {icon && <span className="mr-2 opacity-70 flex-shrink-0">{icon}</span>}
-      <span className="truncate">{label}</span>
+      <span className="flex items-center min-w-0">
+        {icon && <span className="mr-2 opacity-70 flex-shrink-0">{icon}</span>}
+        <span className="truncate">{label}</span>
+      </span>
+      {(badgeCount ?? 0) > 0 && (
+        <NotificationBadge count={badgeCount!} severity={badgeSeverity || 'warning'} size="sm" />
+      )}
     </Link>
   );
 };
@@ -110,6 +122,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
   const { user, logout } = useUser();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { getWalletCount, getDeviceCount, addNotification, removeNotificationsByType } = useAppNotifications();
 
   // Auto-expand sections based on current route
   const getExpandedState = (pathname: string) => {
@@ -148,12 +161,38 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         ]);
         setWallets(w);
         setDevices(d);
+
+        // Fetch drafts for all wallets and add notifications
+        for (const wallet of w) {
+          try {
+            const drafts = await getDrafts(wallet.id);
+            if (drafts.length > 0) {
+              addNotification({
+                type: 'pending_drafts',
+                scope: 'wallet',
+                scopeId: wallet.id,
+                severity: 'warning',
+                title: `${drafts.length} pending draft${drafts.length > 1 ? 's' : ''}`,
+                message: `${wallet.name}: Resume or broadcast`,
+                count: drafts.length,
+                actionUrl: `/wallets/${wallet.id}`,
+                actionLabel: 'View Drafts',
+                dismissible: true,
+                persistent: false,
+              });
+            } else {
+              removeNotificationsByType('pending_drafts', wallet.id);
+            }
+          } catch (err) {
+            // Non-critical - continue with other wallets
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch sidebar data:', error);
       }
     };
     fetchData();
-  }, [location.pathname, user]);
+  }, [user]);
 
   const toggleSection = (section: 'wallets' | 'devices' | 'admin') => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -189,6 +228,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                 const walletType = isMultisig ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
                 // Use semantic colors (success/warning) to respect theme settings
                 const activeColor = isMultisig ? 'text-warning-700 dark:text-warning-400' : 'text-success-700 dark:text-success-400';
+                const walletNotifCount = getWalletCount(w.id);
                 return (
                   <SubNavItem
                     key={w.id}
@@ -196,6 +236,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     label={w.name}
                     icon={getWalletIcon(walletType, `w-3 h-3 ${isMultisig ? 'text-warning-500' : 'text-success-500'}`)}
                     activeColorClass={activeColor}
+                    badgeCount={walletNotifCount}
+                    badgeSeverity="warning"
                   />
                 );
               })}
@@ -218,14 +260,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                  {devices.length === 0 && (
                     <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No devices connected</div>
                  )}
-                 {[...devices].sort((a, b) => a.label.localeCompare(b.label)).map(d => (
-                   <SubNavItem
-                     key={d.id}
-                     to={`/devices/${d.id}`}
-                     label={d.label}
-                     icon={getDeviceIcon(d.type, "w-3 h-3 text-sanctuary-400")}
-                   />
-                 ))}
+                 {[...devices].sort((a, b) => a.label.localeCompare(b.label)).map(d => {
+                   const deviceNotifCount = getDeviceCount(d.id);
+                   return (
+                     <SubNavItem
+                       key={d.id}
+                       to={`/devices/${d.id}`}
+                       label={d.label}
+                       icon={getDeviceIcon(d.type, "w-3 h-3 text-sanctuary-400")}
+                       badgeCount={deviceNotifCount}
+                       badgeSeverity="warning"
+                     />
+                   );
+                 })}
               </div>
             )}
         </div>
@@ -282,13 +329,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
 
       <div className="flex-shrink-0 border-t border-sanctuary-200 dark:border-sanctuary-800 p-4">
         <div className="flex items-center w-full justify-between">
-          <div className="flex items-center">
+          <div className="flex items-center gap-1">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg text-sanctuary-500 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
             >
               {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
+            <NotificationBell />
             <span className="text-xs text-sanctuary-400 ml-1">v{version}</span>
           </div>
           <div className="flex items-center">

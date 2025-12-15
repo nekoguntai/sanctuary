@@ -38,6 +38,7 @@ model User {
   transactions Transaction[]
   groupMemberships GroupMember[]
   pushDevices PushDevice[]
+  draftTransactions DraftTransaction[]
 
   @@map("users")
 }
@@ -68,6 +69,8 @@ model GroupMember {
   group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
   @@map("group_members")
 }
 
@@ -111,7 +114,9 @@ model Wallet {
   utxos        UTXO[]
   labels       Label[]
   group        Group?   @relation(fields: [groupId], references: [id])
+  draftTransactions DraftTransaction[]
 
+  @@index([groupId])
   @@map("wallets")
 }
 
@@ -126,6 +131,7 @@ model WalletUser {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([walletId, userId])
+  @@index([userId])
   @@map("wallet_users")
 }
 
@@ -193,6 +199,7 @@ model Device {
   model   HardwareDeviceModel? @relation(fields: [modelId], references: [id])
   wallets WalletDevice[]
 
+  @@index([userId])
   @@map("devices")
 }
 
@@ -207,6 +214,7 @@ model WalletDevice {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@unique([walletId, deviceId])
+  @@index([deviceId])
   @@map("wallet_devices")
 }
 
@@ -257,6 +265,7 @@ model Transaction {
 
   @@index([walletId])
   @@index([txid])
+  @@index([walletId, blockHeight(sort: Desc)])
   @@map("transactions")
 }
 
@@ -281,6 +290,56 @@ model UTXO {
   @@unique([txid, vout])
   @@index([walletId, spent])
   @@map("utxos")
+}
+
+// ========================================
+// DRAFT TRANSACTIONS
+// ========================================
+
+model DraftTransaction {
+  id              String   @id @default(uuid())
+  walletId        String
+  userId          String
+
+  // Transaction parameters (user inputs)
+  recipient       String
+  amount          BigInt
+  feeRate         Int
+  selectedUtxoIds String[] // Format: "txid:vout"
+  enableRBF       Boolean  @default(true)
+  subtractFees    Boolean  @default(false)
+  sendMax         Boolean  @default(false)
+
+  // Labels
+  label           String?
+  memo            String?
+
+  // Generated PSBT data
+  psbtBase64      String   // Unsigned PSBT
+  signedPsbtBase64 String? // Partially/fully signed PSBT
+  fee             BigInt
+  totalInput      BigInt
+  totalOutput     BigInt
+  changeAmount    BigInt
+  changeAddress   String?
+  effectiveAmount BigInt
+  inputPaths      String[] // Derivation paths for signing
+
+  // Signing status (for multisig)
+  status          String   @default("unsigned") // unsigned, partial, signed
+  signedDeviceIds String[] // Device IDs that have signed
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  expiresAt       DateTime? // Optional auto-cleanup
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([walletId, status])
+  @@index([userId])
+  @@map("draft_transactions")
 }
 
 // ========================================

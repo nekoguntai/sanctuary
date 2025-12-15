@@ -5,13 +5,15 @@ import * as walletsApi from '../src/api/wallets';
 import * as transactionsApi from '../src/api/transactions';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as devicesApi from '../src/api/devices';
+import * as draftsApi from '../src/api/drafts';
+import type { DraftTransaction } from '../src/api/drafts';
 import { ApiError } from '../src/api/client';
 import { Button } from './ui/Button';
 import { BlockVisualizer } from './BlockVisualizer';
 import type { BlockData, QueuedBlocksSummary } from '../src/api/bitcoin';
 import { HardwareWalletConnect } from './HardwareWalletConnect';
 import { useHardwareWallet } from '../hooks/useHardwareWallet';
-import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, Bluetooth, FileDown, Upload } from 'lucide-react';
+import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, Bluetooth, FileDown, Upload, Save, FileText, XCircle } from 'lucide-react';
 import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -178,6 +180,14 @@ export const SendTransaction: React.FC = () => {
   const [broadcasting, setBroadcasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recipientValid, setRecipientValid] = useState<boolean | null>(null);
+
+  // Draft transaction state
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [existingDraftsCount, setExistingDraftsCount] = useState(0);
+  const [showDraftsBanner, setShowDraftsBanner] = useState(false);
+  const [isResumingDraft, setIsResumingDraft] = useState(false);
+  const draftData = (location.state as { draft?: DraftTransaction })?.draft;
   
   // Camera refs
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -238,7 +248,7 @@ export const SendTransaction: React.FC = () => {
           transactionsApi.getAddresses(id).catch(() => []) // Fetch addresses for consolidation
         ]);
 
-        // Format UTXOs
+        // Format UTXOs (include frozen status for coin control)
         const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
           id: utxo.id,
           txid: utxo.txid,
@@ -248,8 +258,14 @@ export const SendTransaction: React.FC = () => {
           confirmations: utxo.confirmations,
           spendable: !utxo.spent,
           scriptType: formattedWallet.scriptType,
+          frozen: utxo.frozen ?? false,
         }));
         setUTXOs(formattedUTXOs);
+
+        // Create a set of frozen UTXO IDs for filtering
+        const frozenUtxoIds = new Set(
+          formattedUTXOs.filter(u => u.frozen).map(u => `${u.txid}:${u.vout}`)
+        );
 
         // Format fees
         const formattedFees: FeeEstimate = {
@@ -299,6 +315,66 @@ export const SendTransaction: React.FC = () => {
           console.error('Failed to fetch devices:', err);
           // Non-critical, don't block the page
         }
+
+        // Handle Pre-selected UTXOs from Wallet View (filter out frozen ones)
+        if (location.state && (location.state as any).preSelected) {
+          const pre = (location.state as any).preSelected as string[];
+          if (pre.length > 0) {
+            // Filter out frozen UTXOs from preselection
+            const validPre = pre.filter(utxoId => !frozenUtxoIds.has(utxoId));
+            if (validPre.length !== pre.length) {
+              showInfo(`${pre.length - validPre.length} frozen UTXO${pre.length - validPre.length > 1 ? 's' : ''} removed from selection`);
+            }
+            setSelectedUTXOs(new Set(validPre));
+            setShowCoinControl(true);
+          }
+        }
+
+        // Handle draft resume - populate form with saved draft data
+        if (draftData) {
+          setCurrentDraftId(draftData.id);
+          setIsResumingDraft(true);
+          setRecipient(draftData.recipient);
+          setAmount(draftData.amount.toString());
+          setFeeRate(draftData.feeRate);
+          setEnableRBF(draftData.enableRBF);
+          setSubtractFeesFromAmount(draftData.subtractFees);
+          setIsSendMax(draftData.sendMax);
+
+          // Auto-detect consolidation mode: check if recipient is a wallet address
+          // Use all wallet addresses (both receive and change) for consolidation detection
+          const allAddresses = addressData?.map(a => a.address) || [];
+          if (allAddresses.includes(draftData.recipient)) {
+            setIsConsolidation(true);
+            // Verify the address still exists in the wallet
+            if (!allAddresses.includes(draftData.recipient)) {
+              setError('Consolidation address no longer exists in wallet. Please select a new address.');
+            }
+          }
+
+          // Filter out frozen UTXOs from selected set when resuming
+          if (draftData.selectedUtxoIds && draftData.selectedUtxoIds.length > 0) {
+            // Filter out any UTXOs that are now frozen
+            const validUtxoIds = draftData.selectedUtxoIds.filter(utxoId => !frozenUtxoIds.has(utxoId));
+
+            // Warn if some UTXOs were removed due to frozen status
+            const removedCount = draftData.selectedUtxoIds.length - validUtxoIds.length;
+            if (removedCount > 0) {
+              showInfo(`${removedCount} frozen UTXO${removedCount > 1 ? 's' : ''} removed from selection`);
+            }
+
+            setSelectedUTXOs(new Set(validUtxoIds));
+            setShowCoinControl(true);
+          }
+          if (draftData.signedPsbtBase64) {
+            setUnsignedPsbt(draftData.signedPsbtBase64);
+          } else if (draftData.psbtBase64) {
+            setUnsignedPsbt(draftData.psbtBase64);
+          }
+          if (draftData.signedDeviceIds && draftData.signedDeviceIds.length > 0) {
+            setSignedDevices(new Set(draftData.signedDeviceIds));
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch UTXOs or fees:', err);
         if (err instanceof ApiError) {
@@ -310,12 +386,17 @@ export const SendTransaction: React.FC = () => {
         return;
       }
 
-      // Handle Pre-selected UTXOs from Wallet View
-      if (location.state && (location.state as any).preSelected) {
-        const pre = (location.state as any).preSelected as string[];
-        if (pre.length > 0) {
-          setSelectedUTXOs(new Set(pre));
-          setShowCoinControl(true);
+      // Check for existing drafts (only if not resuming a draft)
+      if (!draftData) {
+        try {
+          const existingDrafts = await draftsApi.getDrafts(id);
+          if (existingDrafts.length > 0) {
+            setExistingDraftsCount(existingDrafts.length);
+            setShowDraftsBanner(true);
+          }
+        } catch (err) {
+          // Non-critical - don't block if drafts check fails
+          console.error('Failed to check for existing drafts:', err);
         }
       }
 
@@ -324,7 +405,7 @@ export const SendTransaction: React.FC = () => {
     init();
 
     return () => stopCamera();
-  }, [id, location.state, user]);
+  }, [id, location.state, user, draftData]);
 
   const startCamera = async () => {
     setShowScanner(true);
@@ -428,7 +509,7 @@ export const SendTransaction: React.FC = () => {
       }
 
       try {
-        const result = await bitcoinApi.validateAddress(recipient);
+        const result = await bitcoinApi.validateAddress({ address: recipient });
         setRecipientValid(result.valid);
       } catch (err) {
         console.error('Address validation error:', err);
@@ -506,6 +587,15 @@ export const SendTransaction: React.FC = () => {
             'Transaction Broadcast'
           );
 
+          // Delete draft after successful broadcast
+          if (currentDraftId) {
+            try {
+              await draftsApi.deleteDraft(id, currentDraftId);
+            } catch (e) {
+              console.error('Failed to delete draft after broadcast:', e);
+            }
+          }
+
           navigate(`/wallets/${id}`);
           return;
         } catch (hwError) {
@@ -548,6 +638,89 @@ export const SendTransaction: React.FC = () => {
     }
   };
 
+  // Save transaction as draft for later signing/broadcast
+  const handleSaveAsDraft = async () => {
+    if (!wallet || !id) return;
+
+    try {
+      setSavingDraft(true);
+      setError(null);
+
+      // Validate inputs
+      if (!recipient) {
+        setError('Please enter a recipient address');
+        return;
+      }
+
+      if (recipientValid === false) {
+        setError('Invalid recipient address');
+        return;
+      }
+
+      if (!amount || parseInt(amount) <= 0) {
+        setError('Please enter a valid amount');
+        return;
+      }
+
+      const amountSats = parseInt(amount);
+
+      // Create PSBT for the draft
+      const txData = await transactionsApi.createTransaction(id, {
+        recipient,
+        amount: amountSats,
+        feeRate,
+        selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+        enableRBF,
+        sendMax: isSendMax,
+        subtractFees: subtractFeesFromAmount,
+      });
+
+      const draftRequest: draftsApi.CreateDraftRequest = {
+        recipient,
+        amount: amountSats,
+        feeRate,
+        selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+        enableRBF,
+        subtractFees: subtractFeesFromAmount,
+        sendMax: isSendMax,
+        psbtBase64: txData.psbtBase64,
+        fee: txData.fee,
+        totalInput: txData.totalInput,
+        totalOutput: txData.totalOutput,
+        changeAmount: txData.changeAmount || 0,
+        changeAddress: txData.changeAddress,
+        effectiveAmount: txData.effectiveAmount,
+        inputPaths: txData.inputPaths || [],
+      };
+
+      if (currentDraftId) {
+        // Update existing draft
+        await draftsApi.updateDraft(id, currentDraftId, {
+          signedPsbtBase64: unsignedPsbt || undefined,
+          status: signedDevices.size > 0 ? 'partial' : 'unsigned',
+        });
+        showSuccess('Draft updated successfully', 'Draft Saved');
+      } else {
+        // Create new draft
+        const draft = await draftsApi.createDraft(id, draftRequest);
+        setCurrentDraftId(draft.id);
+        showSuccess('Transaction saved as draft. You can resume signing later from the Drafts tab.', 'Draft Saved');
+      }
+
+      // Navigate back to wallet with drafts tab active
+      navigate(`/wallets/${id}`, { state: { activeTab: 'drafts' } });
+    } catch (err) {
+      console.error('Save draft error:', err);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Failed to save draft');
+      }
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-center animate-pulse">Loading transaction form...</div>;
 
   if (!wallet) return <div className="p-8 text-center">Wallet not found</div>;
@@ -569,6 +742,55 @@ export const SendTransaction: React.FC = () => {
             </div>
         </div>
 
+        {/* Existing Drafts Notification Banner */}
+        {showDraftsBanner && existingDraftsCount > 0 && (
+          <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-700 rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-warning-600 dark:text-warning-400 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-warning-700 dark:text-warning-300">
+                  You have {existingDraftsCount} draft transaction{existingDraftsCount > 1 ? 's' : ''} pending
+                </p>
+                <p className="text-xs text-warning-600 dark:text-warning-400">
+                  Consider resuming an existing draft instead of creating a new one.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => navigate(`/wallets/${id}`, { state: { activeTab: 'drafts' } })}
+                className="px-3 py-1.5 text-xs font-medium text-warning-700 dark:text-warning-300 bg-warning-100 dark:bg-warning-800/50 hover:bg-warning-200 dark:hover:bg-warning-700/50 rounded-lg transition-colors"
+              >
+                View Drafts
+              </button>
+              <button
+                onClick={() => setShowDraftsBanner(false)}
+                className="p-1 text-warning-500 hover:text-warning-700 dark:hover:text-warning-300 transition-colors"
+                title="Dismiss"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Draft Resume Banner */}
+        {currentDraftId && (
+          <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-xl p-4 flex items-center gap-3">
+            <Save className="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-primary-700 dark:text-primary-300">
+                Resuming Draft Transaction
+              </p>
+              <p className="text-xs text-primary-600 dark:text-primary-400">
+                {signedDevices.size > 0
+                  ? `${signedDevices.size} signature(s) collected. Continue signing to complete the transaction.`
+                  : 'Complete signing and broadcast, or update the draft to save your changes.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Recipient & Amount */}
         <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 space-y-6">
             {/* Transaction Type Toggle */}
@@ -578,11 +800,13 @@ export const SendTransaction: React.FC = () => {
                   setIsConsolidation(false);
                   setRecipient('');
                 }}
+                disabled={isResumingDraft}
                 className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
                   !isConsolidation
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-300'
                     : 'border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-500 hover:border-sanctuary-400'
-                }`}
+                } ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+                title={isResumingDraft ? 'Cannot change transaction type when resuming draft' : ''}
               >
                 <ArrowLeft className="w-4 h-4 inline mr-2 rotate-180" />
                 External Send
@@ -592,13 +816,13 @@ export const SendTransaction: React.FC = () => {
                   setIsConsolidation(true);
                   setRecipient(consolidationAddress);
                 }}
-                disabled={walletAddresses.length === 0}
+                disabled={walletAddresses.length === 0 || isResumingDraft}
                 className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
                   isConsolidation
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-300'
                     : 'border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-500 hover:border-sanctuary-400 disabled:opacity-50 disabled:cursor-not-allowed'
-                }`}
-                title={walletAddresses.length === 0 ? 'No addresses available for consolidation' : 'Consolidate UTXOs to your own address'}
+                } ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+                title={isResumingDraft ? 'Cannot change transaction type when resuming draft' : walletAddresses.length === 0 ? 'No addresses available for consolidation' : 'Consolidate UTXOs to your own address'}
               >
                 <RefreshCw className="w-4 h-4 inline mr-2" />
                 Consolidation
@@ -622,13 +846,17 @@ export const SendTransaction: React.FC = () => {
             <div className="space-y-2">
                 <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
                   {isConsolidation ? 'Consolidation Address (Your Wallet)' : 'Recipient Address'}
+                  {isResumingDraft && (
+                    <span className="ml-2 text-xs text-sanctuary-500">(locked - resuming draft)</span>
+                  )}
                 </label>
                 {isConsolidation ? (
                   <div className="relative">
                     <select
                       value={recipient}
                       onChange={(e) => setRecipient(e.target.value)}
-                      className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm"
+                      disabled={isResumingDraft}
+                      className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       {walletAddresses.map((addr, idx) => (
                         <option key={addr} value={addr}>
@@ -645,6 +873,7 @@ export const SendTransaction: React.FC = () => {
                             type="text"
                             value={recipient}
                             onChange={(e) => setRecipient(e.target.value)}
+                            disabled={isResumingDraft}
                             placeholder="bc1q..."
                             className={`block w-full px-4 py-3 rounded-xl border ${
                               recipientValid === true
@@ -652,7 +881,7 @@ export const SendTransaction: React.FC = () => {
                                 : recipientValid === false
                                 ? 'border-rose-500 dark:border-rose-400'
                                 : 'border-sanctuary-300 dark:border-sanctuary-700'
-                            } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors`}
+                            } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
                         {recipientValid === true && (
                           <Check className="absolute right-4 top-3.5 w-5 h-5 text-green-500" />
@@ -661,9 +890,11 @@ export const SendTransaction: React.FC = () => {
                           <X className="absolute right-4 top-3.5 w-5 h-5 text-rose-500" />
                         )}
                       </div>
-                      <Button variant="secondary" onClick={() => (showScanner ? (setShowScanner(false), stopCamera()) : startCamera())}>
-                          {showScanner ? <X className="w-5 h-5" /> : <QrCode className="w-5 h-5" />}
-                      </Button>
+                      {!isResumingDraft && (
+                        <Button variant="secondary" onClick={() => (showScanner ? (setShowScanner(false), stopCamera()) : startCamera())}>
+                            {showScanner ? <X className="w-5 h-5" /> : <QrCode className="w-5 h-5" />}
+                        </Button>
+                      )}
                   </div>
                 )}
                 {!isConsolidation && recipientValid === false && (
@@ -842,11 +1073,22 @@ export const SendTransaction: React.FC = () => {
                     {utxos.map(utxo => {
                         const id = `${utxo.txid}:${utxo.vout}`;
                         const isSelected = selectedUTXOs.has(id);
+                        // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
+                        const frozenStyle = utxo.frozen ? {
+                          backgroundImage: `repeating-linear-gradient(
+                            45deg,
+                            transparent,
+                            transparent 4px,
+                            rgba(190,18,60,0.08) 4px,
+                            rgba(190,18,60,0.08) 8px
+                          )`
+                        } : {};
                         return (
-                            <div 
-                                key={id} 
+                            <div
+                                key={id}
                                 onClick={() => !utxo.frozen && toggleUTXO(id)}
-                                className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                style={frozenStyle}
+                                className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 cursor-pointer transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 cursor-not-allowed bg-rose-50 dark:bg-rose-900/10' : ''}`}
                             >
                                 <div className="flex items-center space-x-3">
                                     <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
@@ -858,6 +1100,11 @@ export const SendTransaction: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="text-right">
+                                    {utxo.frozen && (
+                                      <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 mb-1 mr-1">
+                                        Frozen
+                                      </span>
+                                    )}
                                     {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
                                     <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
                                 </div>
@@ -1411,6 +1658,26 @@ export const SendTransaction: React.FC = () => {
                    'Sign & Broadcast Transaction'
                  )}
              </Button>
+
+             {/* Save as Draft Button */}
+             <button
+               onClick={handleSaveAsDraft}
+               disabled={!amount || !recipient || recipientValid === false || savingDraft}
+               className="w-full mt-3 py-2 px-4 text-sm font-medium text-sanctuary-600 dark:text-sanctuary-300 bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+             >
+               {savingDraft ? (
+                 <>
+                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                   Saving Draft...
+                 </>
+               ) : (
+                 <>
+                   <Save className="w-4 h-4 mr-2" />
+                   {currentDraftId ? 'Update Draft' : 'Save as Draft'}
+                 </>
+               )}
+             </button>
+
              <div className="mt-2 text-center text-xs text-sanctuary-400">
                  Estimated Fee: {format(calculateTotalFee(), { forceSats: true })}
              </div>

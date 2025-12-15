@@ -21,6 +21,7 @@ import { AuditLogs } from './components/AuditLogs';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { AppNotificationProvider } from './contexts/AppNotificationContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
 
@@ -72,7 +73,9 @@ const App: React.FC = () => {
       <UserProvider>
         <CurrencyProvider>
           <NotificationProvider>
-            <AppRoutes />
+            <AppNotificationProvider>
+              <AppRoutes />
+            </AppNotificationProvider>
           </NotificationProvider>
         </CurrencyProvider>
       </UserProvider>

@@ -912,12 +912,13 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
 });
 
 /**
- * GET /api/v1/auth/2fa/backup-codes
- * Get remaining backup codes count (requires password)
+ * POST /api/v1/auth/2fa/backup-codes
+ * Get remaining backup codes count (requires password verification)
+ * Changed from GET to POST to prevent password exposure in URL/logs
  */
-router.get('/2fa/backup-codes', authenticate, async (req: Request, res: Response) => {
+router.post('/2fa/backup-codes', authenticate, async (req: Request, res: Response) => {
   try {
-    const { password } = req.query;
+    const { password } = req.body;
 
     if (!password || typeof password !== 'string') {
       return res.status(400).json({

@@ -8,11 +8,13 @@ import * as devicesApi from '../src/api/devices';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
+import * as draftsApi from '../src/api/drafts';
 import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
 import { UTXOList } from './UTXOList';
 import { WalletStats } from './WalletStats';
+import { DraftList } from './DraftList';
 import { LabelManager } from './LabelManager';
 import { LabelBadges } from './LabelSelector';
 import { Button } from './ui/Button';
@@ -53,6 +55,7 @@ import { getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { useUser } from '../contexts/UserContext';
 import { useWalletEvents, useWalletLogs, WalletLogEntry } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useAppNotifications } from '../contexts/AppNotificationContext';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 // Per-Wallet Telegram Settings Component
@@ -243,6 +246,7 @@ export const WalletDetail: React.FC = () => {
   const { format } = useCurrency();
   const { user } = useUser();
   const { handleError, showSuccess } = useErrorHandler();
+  const { addNotification: addAppNotification, removeNotificationsByType } = useAppNotifications();
   const highlightTxId = (location.state as any)?.highlightTxId;
 
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -273,8 +277,19 @@ export const WalletDetail: React.FC = () => {
     error?: string;
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'stats' | 'access' | 'settings' | 'log'>('tx');
+  // Check for activeTab in navigation state (e.g., from notification panel)
+  const initialTab = (location.state as any)?.activeTab || 'tx';
+  const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'drafts' | 'stats' | 'access' | 'settings' | 'log'>(initialTab);
   const [addressSubTab, setAddressSubTab] = useState<'receive' | 'change'>('receive');
+  const [draftsCount, setDraftsCount] = useState(0);
+
+  // Update activeTab if navigation state changes
+  useEffect(() => {
+    const stateTab = (location.state as any)?.activeTab;
+    if (stateTab && stateTab !== activeTab) {
+      setActiveTab(stateTab);
+    }
+  }, [location.state]);
   
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
@@ -570,6 +585,34 @@ export const WalletDetail: React.FC = () => {
     fetchPromises.push(
       loadAddresses(id, 20, 0, true)
         .catch(err => console.error('Failed to fetch addresses:', err))
+    );
+
+    // Fetch drafts count (for badge on tab and notifications)
+    fetchPromises.push(
+      draftsApi.getDrafts(id)
+        .then(drafts => {
+          setDraftsCount(drafts.length);
+          // Update app notifications
+          if (drafts.length > 0) {
+            addAppNotification({
+              type: 'pending_drafts',
+              scope: 'wallet',
+              scopeId: id,
+              severity: 'warning',
+              title: `${drafts.length} pending draft${drafts.length > 1 ? 's' : ''}`,
+              message: 'Resume or broadcast your draft transactions',
+              count: drafts.length,
+              actionUrl: `/wallets/${id}`,
+              actionLabel: 'View Drafts',
+              dismissible: true,
+              persistent: false,
+            });
+          } else {
+            // Remove draft notifications if no drafts
+            removeNotificationsByType('pending_drafts', id);
+          }
+        })
+        .catch(err => console.error('Failed to fetch drafts count:', err))
     );
 
     // Wait for all fetches to complete (they handle their own errors)
@@ -1062,7 +1105,7 @@ export const WalletDetail: React.FC = () => {
       {/* Tabs */}
       <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {['tx', 'utxo', 'addresses', 'stats', 'access', 'settings', 'log'].map((tab) => (
+          {['tx', 'utxo', 'addresses', 'drafts', 'stats', 'access', 'settings', 'log'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -1070,9 +1113,14 @@ export const WalletDetail: React.FC = () => {
                 activeTab === tab
                   ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300'
                   : 'border-transparent text-sanctuary-500 hover:text-sanctuary-700 hover:border-sanctuary-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors relative`}
             >
               {tab === 'tx' ? 'Transactions' : tab === 'utxo' ? 'UTXOs' : tab}
+              {tab === 'drafts' && draftsCount > 0 && (
+                <span className="absolute -top-0.5 -right-3 flex h-4 w-4 items-center justify-center rounded-full bg-rose-400 dark:bg-rose-500 text-[10px] font-bold text-white">
+                  {draftsCount > 9 ? '9+' : draftsCount}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -1363,6 +1411,38 @@ export const WalletDetail: React.FC = () => {
              </div>
            );
         })()}
+
+        {activeTab === 'drafts' && (
+          <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
+            <DraftList
+              walletId={id!}
+              walletType={wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
+              quorum={wallet.quorum && wallet.totalSigners ? { m: wallet.quorum, n: wallet.totalSigners } : undefined}
+              canEdit={wallet.userRole !== 'viewer'}
+              onDraftsChange={(count) => {
+                setDraftsCount(count);
+                // Update app notifications
+                if (count > 0) {
+                  addAppNotification({
+                    type: 'pending_drafts',
+                    scope: 'wallet',
+                    scopeId: id!,
+                    severity: 'warning',
+                    title: `${count} pending draft${count > 1 ? 's' : ''}`,
+                    message: 'Resume or broadcast your draft transactions',
+                    count: count,
+                    actionUrl: `/wallets/${id}`,
+                    actionLabel: 'View Drafts',
+                    dismissible: true,
+                    persistent: false,
+                  });
+                } else {
+                  removeNotificationsByType('pending_drafts', id!);
+                }
+              }}
+            />
+          </div>
+        )}
 
         {activeTab === 'stats' && (
           <WalletStats utxos={utxos} balance={wallet.balance} transactions={transactions} />

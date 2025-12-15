@@ -11,6 +11,7 @@ export * as labels from './labels';
 export * as devices from './devices';
 export * as bitcoin from './bitcoin';
 export * as price from './price';
+export * as drafts from './drafts';
 
 export { default as apiClient, ApiError } from './client';
 export type { ApiResponse } from './client';
@@ -39,3 +40,4 @@ export type { CreateWalletRequest } from './wallets';
 export type { CreateLabelRequest, UpdateLabelRequest } from './labels';
 export type { BitcoinStatus } from './bitcoin';
 export type { AggregatedPrice, PriceSource } from './price';
+export type { DraftTransaction, CreateDraftRequest, UpdateDraftRequest } from './drafts';

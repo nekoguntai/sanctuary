@@ -76,9 +76,10 @@ export async function verify2FA(data: TwoFactorVerifyRequest): Promise<AuthRespo
 
 /**
  * Get remaining backup codes count
+ * Uses POST to prevent password exposure in URL/logs
  */
 export async function getBackupCodesCount(password: string): Promise<BackupCodesResponse> {
-  return apiClient.get<BackupCodesResponse>('/auth/2fa/backup-codes', { password });
+  return apiClient.post<BackupCodesResponse>('/auth/2fa/backup-codes', { password });
 }
 
 /**

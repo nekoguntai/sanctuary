@@ -5,6 +5,15 @@
  * Handles reconnection, subscriptions, and event dispatching
  */
 
+// Conditional logging - only in development mode
+// Use type assertion for Vite's import.meta.env
+const isDev = (import.meta as any).env?.DEV ?? false;
+const log = {
+  debug: (...args: unknown[]) => isDev && console.log('[WS]', ...args),
+  warn: (...args: unknown[]) => isDev && console.warn('[WS]', ...args),
+  error: (...args: unknown[]) => console.error('[WS]', ...args), // Always log errors
+};
+
 export type WebSocketEventType =
   | 'transaction'
   | 'balance'
@@ -51,7 +60,7 @@ export class WebSocketClient {
    */
   connect(token?: string) {
     if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
-      console.log('WebSocket already connected or connecting');
+      log.debug('Already connected or connecting');
       return;
     }
 
@@ -59,13 +68,13 @@ export class WebSocketClient {
     this.token = token || null;
 
     // Connect without token in URL (security: avoid token exposure in logs/history)
-    console.log('Connecting to WebSocket:', this.url);
+    log.debug('Connecting to:', this.url);
 
     try {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
+        log.debug('Connected');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -88,17 +97,17 @@ export class WebSocketClient {
           const message: WebSocketEvent = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+          log.error('Failed to parse message:', err);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        log.error('Connection error:', error);
         this.isConnecting = false;
       };
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason);
+        log.debug('Closed:', event.code, event.reason);
         this.isConnecting = false;
         this.ws = null;
 
@@ -111,7 +120,7 @@ export class WebSocketClient {
         }
       };
     } catch (err) {
-      console.error('Failed to create WebSocket connection:', err);
+      log.error('Failed to create connection:', err);
       this.isConnecting = false;
     }
   }
@@ -133,7 +142,7 @@ export class WebSocketClient {
     }
 
     this.subscriptions.clear();
-    console.log('WebSocket disconnected');
+    log.debug('Disconnected');
   }
 
   /**
@@ -145,7 +154,7 @@ export class WebSocketClient {
     }
 
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+    log.debug(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
@@ -157,24 +166,22 @@ export class WebSocketClient {
    * Handle incoming message
    */
   private handleMessage(message: WebSocketEvent) {
-    console.log('WebSocket message:', message);
-
     // Handle special message types
     switch (message.type) {
       case 'connected':
-        console.log('WebSocket connection confirmed');
+        log.debug('Connection confirmed');
         break;
 
       case 'authenticated':
-        console.log('WebSocket authenticated:', message.data?.success ? 'success' : 'failed');
+        log.debug('Authenticated:', message.data?.success ? 'success' : 'failed');
         break;
 
       case 'subscribed':
-        console.log('Subscribed to:', message.data?.channel);
+        log.debug('Subscribed to:', message.data?.channel);
         break;
 
       case 'unsubscribed':
-        console.log('Unsubscribed from:', message.data?.channel);
+        log.debug('Unsubscribed from:', message.data?.channel);
         break;
 
       case 'event':
@@ -182,15 +189,15 @@ export class WebSocketClient {
         break;
 
       case 'error':
-        console.error('WebSocket error message:', message.data);
+        log.error('Server error:', message.data);
         break;
 
       case 'pong':
-        // Heartbeat response
+        // Heartbeat response - silent
         break;
 
       default:
-        console.warn('Unknown message type:', message.type);
+        log.warn('Unknown message type:', message.type);
     }
   }
 
@@ -208,7 +215,7 @@ export class WebSocketClient {
           try {
             callback(message);
           } catch (err) {
-            console.error('Event listener error:', err);
+            log.error('Event listener error:', err);
           }
         }
       }
@@ -222,7 +229,7 @@ export class WebSocketClient {
           try {
             callback(message);
           } catch (err) {
-            console.error('Channel listener error:', err);
+            log.error('Channel listener error:', err);
           }
         }
       }
@@ -235,7 +242,7 @@ export class WebSocketClient {
         try {
           callback(message);
         } catch (err) {
-          console.error('Wildcard listener error:', err);
+          log.error('Wildcard listener error:', err);
         }
       }
     }
@@ -257,8 +264,6 @@ export class WebSocketClient {
         data: { channel },
       });
     }
-
-    console.log('Subscribed to channel:', channel);
   }
 
   /**
@@ -277,8 +282,6 @@ export class WebSocketClient {
         data: { channel },
       });
     }
-
-    console.log('Unsubscribed from channel:', channel);
   }
 
   /**
@@ -335,7 +338,7 @@ export class WebSocketClient {
       try {
         callback(connected);
       } catch (err) {
-        console.error('Connection listener error:', err);
+        log.error('Connection listener error:', err);
       }
     }
   }
@@ -347,7 +350,7 @@ export class WebSocketClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      console.warn('Cannot send message: WebSocket not connected');
+      log.warn('Cannot send: not connected');
     }
   }
 

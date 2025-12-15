@@ -17,15 +17,12 @@
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import { version as appVersion } from '../../package.json';
+import { migrationService, getExpectedSchemaVersion } from './migrationService';
 
 const log = createLogger('BACKUP');
 
 // Current backup format version
 const BACKUP_FORMAT_VERSION = '1.0.0';
-
-// Current schema version (increment when schema changes)
-// This should match the number of migrations applied
-const CURRENT_SCHEMA_VERSION = 2;
 
 /**
  * Tables in dependency order for export/import.
@@ -188,11 +185,14 @@ export class BackupService {
       }
     }
 
+    // Get current schema version from applied migrations
+    const schemaVersion = await migrationService.getSchemaVersion();
+
     const backup: SanctuaryBackup = {
       meta: {
         version: BACKUP_FORMAT_VERSION,
         appVersion,
-        schemaVersion: CURRENT_SCHEMA_VERSION,
+        schemaVersion,
         createdAt: new Date().toISOString(),
         createdBy: adminUser,
         description,
@@ -214,6 +214,9 @@ export class BackupService {
   async validateBackup(backup: any): Promise<ValidationResult> {
     const issues: string[] = [];
     const warnings: string[] = [];
+
+    // Get current schema version for comparison
+    const currentSchemaVersion = await migrationService.getSchemaVersion();
 
     // Structure validation
     if (!backup || typeof backup !== 'object') {
@@ -256,8 +259,8 @@ export class BackupService {
 
     if (meta.schemaVersion === undefined) {
       issues.push('Missing schema version');
-    } else if (meta.schemaVersion > CURRENT_SCHEMA_VERSION) {
-      issues.push(`Backup schema version (${meta.schemaVersion}) is newer than current (${CURRENT_SCHEMA_VERSION}). Cannot restore from future version.`);
+    } else if (meta.schemaVersion > currentSchemaVersion) {
+      issues.push(`Backup schema version (${meta.schemaVersion}) is newer than current (${currentSchemaVersion}). Cannot restore from future version.`);
     }
 
     // Data validation
@@ -339,19 +342,23 @@ export class BackupService {
     let tablesRestored = 0;
     let recordsRestored = 0;
 
+    // Get current schema version
+    const currentSchemaVersion = await migrationService.getSchemaVersion();
+
     log.info('[BACKUP] Starting restore', {
       backupDate: backup.meta.createdAt,
       schemaVersion: backup.meta.schemaVersion,
+      currentSchemaVersion,
     });
 
     // Apply migrations if needed
     let migratedBackup = backup;
-    if (backup.meta.schemaVersion < CURRENT_SCHEMA_VERSION) {
+    if (backup.meta.schemaVersion < currentSchemaVersion) {
       log.info('[BACKUP] Migrating backup from schema version', {
         from: backup.meta.schemaVersion,
-        to: CURRENT_SCHEMA_VERSION,
+        to: currentSchemaVersion,
       });
-      migratedBackup = this.migrateBackup(backup);
+      migratedBackup = this.migrateBackup(backup, currentSchemaVersion);
     }
 
     try {
@@ -485,7 +492,7 @@ export class BackupService {
   /**
    * Apply migrations to upgrade backup to current schema version
    */
-  private migrateBackup(backup: SanctuaryBackup): SanctuaryBackup {
+  private migrateBackup(backup: SanctuaryBackup, targetVersion: number): SanctuaryBackup {
     let current = { ...backup, data: { ...backup.data } };
     const startVersion = backup.meta.schemaVersion;
 
@@ -497,14 +504,18 @@ export class BackupService {
       }
     }
 
+    // Update to target version even if no migrations defined
+    // (schema may have changed without needing data transformation)
+    current.meta.schemaVersion = targetVersion;
+
     return current;
   }
 
   /**
-   * Get current schema version
+   * Get current schema version from applied migrations
    */
-  getSchemaVersion(): number {
-    return CURRENT_SCHEMA_VERSION;
+  async getSchemaVersion(): Promise<number> {
+    return migrationService.getSchemaVersion();
   }
 
   /**

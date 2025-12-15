@@ -28,6 +28,7 @@ import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
+import { migrationService } from './services/migrationService';
 
 const log = createLogger('SERVER');
 
@@ -150,7 +151,7 @@ syncService.start().catch((err) => {
 });
 
 // Start listening
-httpServer.listen(config.port, () => {
+httpServer.listen(config.port, async () => {
   log.info('Sanctuary Wallet API Server starting');
   log.info(`Environment: ${config.nodeEnv}`);
   log.info(`Server: ${config.apiUrl}`);
@@ -160,6 +161,9 @@ httpServer.listen(config.port, () => {
   log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
   log.info('Notification Service running');
   log.info('Background Sync Service running');
+
+  // Verify database migrations at startup
+  await migrationService.logMigrationStatus();
 });
 
 // Graceful shutdown

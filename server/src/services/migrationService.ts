@@ -1,0 +1,185 @@
+/**
+ * Migration Service
+ *
+ * Provides schema version tracking and migration verification.
+ * Queries Prisma's _prisma_migrations table for accurate version info.
+ *
+ * Usage:
+ *   import { migrationService } from './migrationService';
+ *   const version = await migrationService.getSchemaVersion();
+ *   const isValid = await migrationService.verifyMigrations();
+ */
+
+import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('MIGRATION');
+
+/**
+ * Migration record from Prisma's internal tracking table
+ */
+interface PrismaMigration {
+  id: string;
+  checksum: string;
+  finished_at: Date | null;
+  migration_name: string;
+  logs: string | null;
+  rolled_back_at: Date | null;
+  started_at: Date;
+  applied_steps_count: number;
+}
+
+/**
+ * Schema version info
+ */
+export interface SchemaVersionInfo {
+  version: number;
+  latestMigration: string | null;
+  appliedAt: Date | null;
+  totalMigrations: number;
+  pendingMigrations: number;
+}
+
+/**
+ * Expected migrations in order (update this when adding new migrations)
+ * This serves as a manifest of all migrations that should exist
+ */
+const EXPECTED_MIGRATIONS = [
+  '20251211212018_init',
+  '20251213000000_add_system_settings',
+  '20251213100000_add_group_role',
+  '20251213200000_add_audit_log',
+  '20251213210000_add_two_factor_auth',
+  '20251214000000_add_utxo_frozen',
+  '20251214100000_add_draft_transactions',
+  '20251215120000_add_performance_indexes',
+] as const;
+
+/**
+ * Get the expected schema version (number of expected migrations)
+ */
+export function getExpectedSchemaVersion(): number {
+  return EXPECTED_MIGRATIONS.length;
+}
+
+/**
+ * Migration Service
+ */
+class MigrationService {
+  /**
+   * Get all applied migrations from Prisma's tracking table
+   */
+  async getAppliedMigrations(): Promise<PrismaMigration[]> {
+    try {
+      const migrations = await prisma.$queryRaw<PrismaMigration[]>`
+        SELECT * FROM "_prisma_migrations"
+        WHERE finished_at IS NOT NULL
+          AND rolled_back_at IS NULL
+        ORDER BY finished_at ASC
+      `;
+      return migrations;
+    } catch (error) {
+      // Table might not exist if no migrations have run
+      log.warn('Could not query migrations table', { error: String(error) });
+      return [];
+    }
+  }
+
+  /**
+   * Get the current schema version (count of successfully applied migrations)
+   */
+  async getSchemaVersion(): Promise<number> {
+    const migrations = await this.getAppliedMigrations();
+    return migrations.length;
+  }
+
+  /**
+   * Get detailed schema version info
+   */
+  async getSchemaVersionInfo(): Promise<SchemaVersionInfo> {
+    const migrations = await this.getAppliedMigrations();
+    const latestMigration = migrations.length > 0 ? migrations[migrations.length - 1] : null;
+
+    return {
+      version: migrations.length,
+      latestMigration: latestMigration?.migration_name || null,
+      appliedAt: latestMigration?.finished_at || null,
+      totalMigrations: EXPECTED_MIGRATIONS.length,
+      pendingMigrations: Math.max(0, EXPECTED_MIGRATIONS.length - migrations.length),
+    };
+  }
+
+  /**
+   * Verify that all expected migrations have been applied
+   * Returns true if database is up to date, false otherwise
+   */
+  async verifyMigrations(): Promise<{
+    valid: boolean;
+    applied: number;
+    expected: number;
+    missing: string[];
+  }> {
+    const migrations = await this.getAppliedMigrations();
+    const appliedNames = new Set(migrations.map((m) => m.migration_name));
+
+    const missing: string[] = [];
+    for (const expected of EXPECTED_MIGRATIONS) {
+      if (!appliedNames.has(expected)) {
+        missing.push(expected);
+      }
+    }
+
+    const valid = missing.length === 0;
+
+    if (!valid) {
+      log.warn('Database migrations are not up to date', {
+        applied: migrations.length,
+        expected: EXPECTED_MIGRATIONS.length,
+        missing,
+      });
+    } else {
+      log.debug('Database migrations verified', {
+        applied: migrations.length,
+        expected: EXPECTED_MIGRATIONS.length,
+      });
+    }
+
+    return {
+      valid,
+      applied: migrations.length,
+      expected: EXPECTED_MIGRATIONS.length,
+      missing,
+    };
+  }
+
+  /**
+   * Check if a specific migration has been applied
+   */
+  async isMigrationApplied(migrationName: string): Promise<boolean> {
+    const migrations = await this.getAppliedMigrations();
+    return migrations.some((m) => m.migration_name === migrationName);
+  }
+
+  /**
+   * Log migration status at startup
+   */
+  async logMigrationStatus(): Promise<void> {
+    const info = await this.getSchemaVersionInfo();
+
+    if (info.pendingMigrations > 0) {
+      log.warn('Database schema is behind', {
+        currentVersion: info.version,
+        expectedVersion: info.totalMigrations,
+        pendingMigrations: info.pendingMigrations,
+      });
+    } else {
+      log.info('Database schema is up to date', {
+        version: info.version,
+        latestMigration: info.latestMigration,
+      });
+    }
+  }
+}
+
+// Export singleton instance
+export const migrationService = new MigrationService();

@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireWalletAccess } from '../middleware/walletAccess';
 import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
 import prisma from '../models/prisma';
@@ -28,7 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json(wallets);
   } catch (error) {
-    log.error('[WALLETS] Get wallets error', { error: String(error) });
+    log.error('Get wallets error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallets',
@@ -93,7 +94,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(wallet);
   } catch (error: any) {
-    log.error('[WALLETS] Create wallet error', { error: String(error) });
+    log.error('Create wallet error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create wallet',
@@ -105,12 +106,12 @@ router.post('/', async (req: Request, res: Response) => {
  * GET /api/v1/wallets/:id
  * Get a specific wallet by ID
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    const wallet = await walletService.getWalletById(id, userId);
+    const wallet = await walletService.getWalletById(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -121,7 +122,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(wallet);
   } catch (error) {
-    log.error('[WALLETS] Get wallet error', { error: String(error) });
+    log.error('Get wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallet',
@@ -131,30 +132,22 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/wallets/:id
- * Update a wallet
+ * Update a wallet (owner only)
  */
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', requireWalletAccess('owner'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const { name, descriptor } = req.body;
 
-    const wallet = await walletService.updateWallet(id, userId, {
+    const wallet = await walletService.updateWallet(walletId, userId, {
       name,
       descriptor,
     });
 
     res.json(wallet);
   } catch (error: any) {
-    log.error('[WALLETS] Update wallet error', { error: String(error) });
-
-    if (error.message.includes('owner')) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: error.message,
-      });
-    }
-
+    log.error('Update wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update wallet',
@@ -164,26 +157,18 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/wallets/:id
- * Delete a wallet
+ * Delete a wallet (owner only)
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireWalletAccess('owner'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    await walletService.deleteWallet(id, userId);
+    await walletService.deleteWallet(walletId, userId);
 
     res.status(204).send();
   } catch (error: any) {
-    log.error('[WALLETS] Delete wallet error', { error: String(error) });
-
-    if (error.message.includes('owner')) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: error.message,
-      });
-    }
-
+    log.error('Delete wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete wallet',
@@ -195,24 +180,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * GET /api/v1/wallets/:id/stats
  * Get wallet statistics
  */
-router.get('/:id/stats', async (req: Request, res: Response) => {
+router.get('/:id/stats', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    const stats = await walletService.getWalletStats(id, userId);
+    const stats = await walletService.getWalletStats(walletId, userId);
 
     res.json(stats);
   } catch (error: any) {
-    log.error('[WALLETS] Get wallet stats error', { error: String(error) });
-
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message,
-      });
-    }
-
+    log.error('Get wallet stats error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch wallet stats',
@@ -225,25 +202,15 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
  * Export wallet labels in BIP 329 format (JSON Lines)
  * https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki
  */
-router.get('/:id/export/labels', async (req: Request, res: Response) => {
+router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    log.debug('Export labels request', { walletId: id, userId });
-
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
+    // Get wallet name for filename
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { name: true },
     });
-
-    log.debug('Export labels wallet lookup', { found: !!wallet, walletName: wallet?.name });
 
     if (!wallet) {
       return res.status(404).json({
@@ -255,7 +222,7 @@ router.get('/:id/export/labels', async (req: Request, res: Response) => {
     // Get all transactions with labels
     const transactions = await prisma.transaction.findMany({
       where: {
-        walletId: id,
+        walletId,
         OR: [
           { label: { not: null } },
           { memo: { not: null } },
@@ -274,7 +241,7 @@ router.get('/:id/export/labels', async (req: Request, res: Response) => {
     // Get all addresses with labels
     const addresses = await prisma.address.findMany({
       where: {
-        walletId: id,
+        walletId,
         addressLabels: { some: {} },
       },
       include: {
@@ -333,7 +300,7 @@ router.get('/:id/export/labels', async (req: Request, res: Response) => {
     // Send as newline-separated JSON
     res.send(lines.join('\n'));
   } catch (error: any) {
-    log.error('[WALLETS] Export labels error', { error: String(error) });
+    log.error('Export labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to export labels',
@@ -345,20 +312,13 @@ router.get('/:id/export/labels', async (req: Request, res: Response) => {
  * GET /api/v1/wallets/:id/export
  * Export wallet in Sparrow-compatible JSON format
  */
-router.get('/:id/export', async (req: Request, res: Response) => {
+router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
     // Get wallet with all related data
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
       include: {
         devices: {
           include: {
@@ -462,7 +422,7 @@ router.get('/:id/export', async (req: Request, res: Response) => {
 
     res.json(exportData);
   } catch (error: any) {
-    log.error('[WALLETS] Export wallet error', { error: String(error) });
+    log.error('Export wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to export wallet',
@@ -509,26 +469,18 @@ function mapDeviceTypeToWalletModel(deviceType: string): string {
 
 /**
  * POST /api/v1/wallets/:id/addresses
- * Generate a new receiving address
+ * Generate a new receiving address (edit access - signer or owner)
  */
-router.post('/:id/addresses', async (req: Request, res: Response) => {
+router.post('/:id/addresses', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    const address = await walletService.generateAddress(id, userId);
+    const address = await walletService.generateAddress(walletId, userId);
 
     res.status(201).json({ address });
   } catch (error: any) {
-    log.error('[WALLETS] Generate address error', { error: String(error) });
-
-    if (error.message.includes('not found')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message,
-      });
-    }
-
+    log.error('Generate address error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to generate address',
@@ -538,12 +490,12 @@ router.post('/:id/addresses', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/wallets/:id/devices
- * Add a device to wallet
+ * Add a device to wallet (edit access - signer or owner)
  */
-router.post('/:id/devices', async (req: Request, res: Response) => {
+router.post('/:id/devices', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const { deviceId, signerIndex } = req.body;
 
     if (!deviceId) {
@@ -553,19 +505,11 @@ router.post('/:id/devices', async (req: Request, res: Response) => {
       });
     }
 
-    await walletService.addDeviceToWallet(id, deviceId, userId, signerIndex);
+    await walletService.addDeviceToWallet(walletId, deviceId, userId, signerIndex);
 
     res.status(201).json({ message: 'Device added to wallet' });
   } catch (error: any) {
-    log.error('[WALLETS] Add device error', { error: String(error) });
-
-    if (error.message.includes('not found') || error.message.includes('denied')) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: error.message,
-      });
-    }
-
+    log.error('Add device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to add device to wallet',
@@ -644,7 +588,7 @@ router.post('/validate-xpub', async (req: Request, res: Response) => {
       accountPath: accountPathStr,
     });
   } catch (error: any) {
-    log.error('[WALLETS] Validate xpub error', { error: String(error) });
+    log.error('Validate xpub error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to validate xpub',
@@ -674,12 +618,12 @@ function getDefaultAccountPath(scriptType: string, network: string): string {
 
 /**
  * POST /api/v1/wallets/:id/share/group
- * Share wallet with a group
+ * Share wallet with a group (owner only)
  */
-router.post('/:id/share/group', async (req: Request, res: Response) => {
+router.post('/:id/share/group', requireWalletAccess('owner'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const { groupId, role = 'viewer' } = req.body;
 
     // Validate role
@@ -687,22 +631,6 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Bad Request',
         message: 'Invalid role. Must be viewer or signer',
-      });
-    }
-
-    // Verify user is owner of the wallet
-    const walletUser = await prisma.walletUser.findFirst({
-      where: {
-        walletId: id,
-        userId,
-        role: 'owner',
-      },
-    });
-
-    if (!walletUser) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only wallet owners can share wallets',
       });
     }
 
@@ -725,7 +653,7 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
 
     // Update wallet's group and role
     const wallet = await prisma.wallet.update({
-      where: { id },
+      where: { id: walletId },
       data: {
         groupId: groupId || null,
         groupRole: groupId ? role : 'viewer', // Reset to default if removing group
@@ -742,7 +670,7 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
       groupRole: wallet.groupRole,
     });
   } catch (error: any) {
-    log.error('[WALLETS] Share with group error', { error: String(error) });
+    log.error('Share with group error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to share wallet with group',
@@ -752,12 +680,11 @@ router.post('/:id/share/group', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/wallets/:id/share/user
- * Share wallet with a specific user
+ * Share wallet with a specific user (owner only)
  */
-router.post('/:id/share/user', async (req: Request, res: Response) => {
+router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const { targetUserId, role = 'viewer' } = req.body;
 
     if (!targetUserId) {
@@ -771,22 +698,6 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Bad Request',
         message: 'role must be viewer or signer',
-      });
-    }
-
-    // Verify user is owner of the wallet
-    const walletUser = await prisma.walletUser.findFirst({
-      where: {
-        walletId: id,
-        userId,
-        role: 'owner',
-      },
-    });
-
-    if (!walletUser) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only wallet owners can share wallets',
       });
     }
 
@@ -805,7 +716,7 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
     // Check if user already has access
     const existingAccess = await prisma.walletUser.findFirst({
       where: {
-        walletId: id,
+        walletId,
         userId: targetUserId,
       },
     });
@@ -827,7 +738,7 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
     // Add user to wallet
     await prisma.walletUser.create({
       data: {
-        walletId: id,
+        walletId,
         userId: targetUserId,
         role,
       },
@@ -838,7 +749,7 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
       message: 'User added to wallet',
     });
   } catch (error: any) {
-    log.error('[WALLETS] Share with user error', { error: String(error) });
+    log.error('Share with user error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to share wallet with user',
@@ -848,33 +759,17 @@ router.post('/:id/share/user', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/wallets/:id/share/user/:targetUserId
- * Remove a user's access to wallet
+ * Remove a user's access to wallet (owner only)
  */
-router.delete('/:id/share/user/:targetUserId', async (req: Request, res: Response) => {
+router.delete('/:id/share/user/:targetUserId', requireWalletAccess('owner'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { id, targetUserId } = req.params;
-
-    // Verify user is owner of the wallet
-    const walletUser = await prisma.walletUser.findFirst({
-      where: {
-        walletId: id,
-        userId,
-        role: 'owner',
-      },
-    });
-
-    if (!walletUser) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only wallet owners can remove users',
-      });
-    }
+    const walletId = req.walletId!;
+    const { targetUserId } = req.params;
 
     // Can't remove the owner
     const targetWalletUser = await prisma.walletUser.findFirst({
       where: {
-        walletId: id,
+        walletId,
         userId: targetUserId,
       },
     });
@@ -902,7 +797,7 @@ router.delete('/:id/share/user/:targetUserId', async (req: Request, res: Respons
       message: 'User removed from wallet',
     });
   } catch (error: any) {
-    log.error('[WALLETS] Remove user error', { error: String(error) });
+    log.error('Remove user error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to remove user from wallet',
@@ -914,20 +809,12 @@ router.delete('/:id/share/user/:targetUserId', async (req: Request, res: Respons
  * GET /api/v1/wallets/:id/share
  * Get wallet sharing info (group and users)
  */
-router.get('/:id/share', async (req: Request, res: Response) => {
+router.get('/:id/share', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { id } = req.params;
+    const walletId = req.walletId!;
 
-    // Verify user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
       include: {
         group: true,
         users: {
@@ -963,7 +850,7 @@ router.get('/:id/share', async (req: Request, res: Response) => {
       })),
     });
   } catch (error: any) {
-    log.error('[WALLETS] Get share info error', { error: String(error) });
+    log.error('Get share info error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get sharing info',
@@ -994,7 +881,7 @@ router.post('/import/validate', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error: any) {
-    log.error('[WALLETS] Import validate error', { error: String(error) });
+    log.error('Import validate error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to validate import data',
@@ -1034,7 +921,7 @@ router.post('/import', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (error: any) {
-    log.error('[WALLETS] Import wallet error', { error: String(error) });
+    log.error('Import wallet error', { error });
 
     // Check for unique constraint violation (duplicate fingerprint)
     if (error.code === 'P2002' && error.meta?.target?.includes('fingerprint')) {
@@ -1059,32 +946,13 @@ router.post('/import', async (req: Request, res: Response) => {
  * GET /api/v1/wallets/:id/telegram
  * Get Telegram notification settings for a specific wallet
  */
-router.get('/:id/telegram', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/telegram', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const userId = req.user!.userId;
 
-    // Check wallet access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: { id: true },
-    });
-
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found or access denied',
-      });
-    }
-
     const { getWalletTelegramSettings } = await import('../services/telegram/telegramService');
-    const settings = await getWalletTelegramSettings(userId, id);
+    const settings = await getWalletTelegramSettings(userId, walletId);
 
     res.json({
       settings: settings || {
@@ -1095,7 +963,7 @@ router.get('/:id/telegram', authenticate, async (req: Request, res: Response) =>
       },
     });
   } catch (error) {
-    console.error('[WALLETS] Get Telegram settings error:', error);
+    log.error('Get Telegram settings error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get Telegram settings',
@@ -1107,33 +975,14 @@ router.get('/:id/telegram', authenticate, async (req: Request, res: Response) =>
  * PATCH /api/v1/wallets/:id/telegram
  * Update Telegram notification settings for a specific wallet
  */
-router.patch('/:id/telegram', authenticate, async (req: Request, res: Response) => {
+router.patch('/:id/telegram', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const walletId = req.walletId!;
     const userId = req.user!.userId;
     const { enabled, notifyReceived, notifySent, notifyConsolidation } = req.body;
 
-    // Check wallet access
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: { id: true },
-    });
-
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found or access denied',
-      });
-    }
-
     const { updateWalletTelegramSettings } = await import('../services/telegram/telegramService');
-    await updateWalletTelegramSettings(userId, id, {
+    await updateWalletTelegramSettings(userId, walletId, {
       enabled: enabled ?? false,
       notifyReceived: notifyReceived ?? true,
       notifySent: notifySent ?? true,
@@ -1145,7 +994,7 @@ router.patch('/:id/telegram', authenticate, async (req: Request, res: Response) 
       message: 'Telegram settings updated',
     });
   } catch (error) {
-    console.error('[WALLETS] Update Telegram settings error:', error);
+    log.error('Update Telegram settings error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update Telegram settings',

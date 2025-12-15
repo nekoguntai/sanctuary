@@ -23,6 +23,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useAppNotifications, AppNotification, NotificationType } from '../contexts/AppNotificationContext';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('NotificationPanel');
 
 // Icon mapping for notification types
 const getNotificationIcon = (type: NotificationType, severity: string) => {
@@ -231,7 +234,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   }, [isOpen, onClose]);
 
   const handleNavigate = (url: string) => {
-    console.log('[NotificationPanel] Navigating to:', url);
+    log.debug('Navigating to action URL', { url });
     onClose();
     // Use setTimeout to ensure panel closes before navigation
     setTimeout(() => {

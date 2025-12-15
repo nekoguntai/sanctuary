@@ -10,6 +10,9 @@ import * as bip39 from 'bip39';
 import * as bip32 from 'bip32';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('WALLET');
 
 // Number of addresses to generate when creating a wallet
 const INITIAL_ADDRESS_COUNT = 20;
@@ -260,7 +263,7 @@ export async function createWallet(
         data: addressesToCreate,
       });
     } catch (err) {
-      console.error('[WALLET] Failed to generate initial addresses:', err);
+      log.error('Failed to generate initial addresses', { error: err });
       // Don't fail wallet creation if address generation fails
     }
   }

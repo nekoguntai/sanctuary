@@ -4,6 +4,9 @@ import { Button } from './ui/Button';
 import { ArrowLeft, Plus, X, Users, TrendingDown, AlertTriangle, Loader2, CheckCircle } from 'lucide-react';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('BatchSend');
 
 interface Recipient {
   id: string;
@@ -90,7 +93,7 @@ export const BatchSend: React.FC = () => {
 
       setResult(batchResult);
     } catch (err: any) {
-      console.error('Batch transaction failed:', err);
+      log.error('Batch transaction failed', { error: err });
       setError(err.message || 'Failed to create batch transaction');
     } finally {
       setProcessing(false);

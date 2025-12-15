@@ -6,6 +6,9 @@ import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DeviceList');
 
 type ViewMode = 'list' | 'grouped';
 
@@ -43,7 +46,7 @@ export const DeviceList: React.FC = () => {
         const deviceData = await getDevices();
         setDevices(deviceData as DeviceWithWallets[]);
       } catch (error) {
-        console.error('Failed to fetch devices:', error);
+        log.error('Failed to fetch devices', { error });
       } finally {
         setLoading(false);
       }
@@ -62,7 +65,7 @@ export const DeviceList: React.FC = () => {
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, label: editValue } : d));
       setEditingId(null);
     } catch (error) {
-      console.error('Failed to update device:', error);
+      log.error('Failed to update device', { error });
     }
   };
 
@@ -73,7 +76,7 @@ export const DeviceList: React.FC = () => {
       setDevices(prev => prev.filter(d => d.id !== device.id));
       setDeleteConfirmId(null);
     } catch (error: any) {
-      console.error('Failed to delete device:', error);
+      log.error('Failed to delete device', { error });
       // Show error message from API
       const message = error.message || 'Failed to delete device';
       setDeleteError(message);

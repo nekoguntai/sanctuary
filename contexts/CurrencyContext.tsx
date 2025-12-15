@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useUser } from './UserContext';
 import * as priceApi from '../src/api/price';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Currency');
 
 export type FiatCurrency = 'USD' | 'EUR' | 'GBP' | 'JPY';
 export type BitcoinUnit = 'sats' | 'btc';
@@ -93,7 +96,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
       setPriceChange24h(priceData.change24h ?? null);
       setLastPriceUpdate(new Date(priceData.timestamp));
     } catch (error) {
-      console.error('Failed to fetch BTC price:', error);
+      log.error('Failed to fetch BTC price', { error });
       setPriceError('Failed to fetch price');
       // Keep btcPrice as null to show "-----" instead of stale fallback
     } finally {

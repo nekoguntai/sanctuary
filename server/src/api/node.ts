@@ -9,8 +9,10 @@ import { authenticate } from '../middleware/auth';
 import net from 'net';
 import tls from 'tls';
 import axios from 'axios';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
+const log = createLogger('NODE');
 
 // All routes require authentication
 router.use(authenticate);
@@ -239,7 +241,7 @@ router.post('/test', async (req: Request, res: Response) => {
   try {
     const { nodeType, host, port, protocol, rpcUser, rpcPassword, ssl } = req.body;
 
-    console.log('[NODE] Testing connection:', { nodeType, host, port, protocol, ssl });
+    log.debug('Testing connection', { nodeType, host, port, protocol, ssl });
 
     // Validate required fields
     if (!nodeType || !host || !port) {
@@ -288,10 +290,10 @@ router.post('/test', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('[NODE] Test result:', result);
+    log.debug('Test result', { result });
     res.json(result);
   } catch (error) {
-    console.error('[NODE] Test connection error:', error);
+    log.error('Test connection error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test node connection',

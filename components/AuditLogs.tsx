@@ -25,6 +25,9 @@ import {
   AuditLogQuery,
   AuditLogStats,
 } from '../src/api/admin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('AuditLogs');
 
 // Category icon mapping
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -118,7 +121,7 @@ export const AuditLogs: React.FC = () => {
       const result = await getAuditLogStats(30);
       setStats(result);
     } catch (err) {
-      console.error('Failed to load audit stats:', err);
+      log.error('Failed to load audit stats', { error: err });
     }
   };
 

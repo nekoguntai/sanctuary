@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
 import { Shield, UserPlus, Check, AlertCircle } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('SystemSettings');
 
 export const SystemSettings: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -16,7 +19,7 @@ export const SystemSettings: React.FC = () => {
         const settings = await adminApi.getSystemSettings();
         setRegistrationEnabled(settings.registrationEnabled);
       } catch (error) {
-        console.error('[SystemSettings] Failed to load settings:', error);
+        log.error('Failed to load settings', { error });
         // Default to disabled on error (admin-only)
         setRegistrationEnabled(false);
       } finally {
@@ -39,7 +42,7 @@ export const SystemSettings: React.FC = () => {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      console.error('[SystemSettings] Failed to update settings:', error);
+      log.error('Failed to update settings', { error });
       setSaveError('Failed to update settings');
     } finally {
       setIsSaving(false);

@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, Transaction, FeeEstimate, WalletType } from '../types';
-import * as walletsApi from '../src/api/wallets';
-import * as bitcoinApi from '../src/api/bitcoin';
+import { Wallet, Transaction, WalletType } from '../types';
+
+// Local fee estimate type for dashboard display
+interface DashboardFeeEstimate {
+  fast: number;
+  medium: number;
+  slow: number;
+}
 import * as syncApi from '../src/api/sync';
-import * as transactionsApi from '../src/api/transactions';
-import { ApiError } from '../src/api/client';
 import { TransactionList } from './TransactionList';
 import { BlockVisualizer } from './BlockVisualizer';
 import { Activity, TrendingUp, TrendingDown, Zap, Wallet as WalletIcon, CheckCircle2, XCircle, ChevronRight, Wifi, WifiOff, Bitcoin, RefreshCw, Check, AlertTriangle, Clock } from 'lucide-react';
@@ -15,9 +18,11 @@ import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
+import { createLogger } from '../utils/logger';
+import { useWallets, useRecentTransactions, useInvalidateAllWallets } from '../hooks/queries/useWallets';
+import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
 
-// Mempool refresh interval in milliseconds (30 seconds for real-time feel)
-const MEMPOOL_REFRESH_INTERVAL = 30000;
+const log = createLogger('Dashboard');
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
@@ -117,175 +122,95 @@ export const Dashboard: React.FC = () => {
   const { format, btcPrice, priceChange24h, currencySymbol, priceLoading, lastPriceUpdate, showFiat } = useCurrency();
   const { user } = useUser();
   const navigate = useNavigate();
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [recentTx, setRecentTx] = useState<Transaction[]>([]);
-  const [fees, setFees] = useState<FeeEstimate | null>(null);
-  const [nodeStatus, setNodeStatus] = useState<'unknown' | 'checking' | 'connected' | 'error'>('unknown');
-  const [bitcoinStatus, setBitcoinStatus] = useState<bitcoinApi.BitcoinStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<Timeframe>('1W');
-  const [mempoolBlocks, setMempoolBlocks] = useState<bitcoinApi.BlockData[]>([]);
-  const [queuedBlocksSummary, setQueuedBlocksSummary] = useState<bitcoinApi.QueuedBlocksSummary | null>(null);
-  const [lastMempoolUpdate, setLastMempoolUpdate] = useState<Date | null>(null);
-  const [mempoolRefreshing, setMempoolRefreshing] = useState(false);
 
   // WebSocket integration
   const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
   const { addNotification } = useNotifications();
+  const invalidateAllWallets = useInvalidateAllWallets();
+
+  // React Query hooks for data fetching
+  const { data: apiWallets = [], isLoading: walletsLoading } = useWallets();
+  const { data: feeEstimates, isLoading: feesLoading } = useFeeEstimates();
+  const { data: bitcoinStatus, isLoading: statusLoading } = useBitcoinStatus();
+  const { data: mempoolData, isLoading: mempoolLoading, refetch: refetchMempool, isFetching: mempoolRefreshing } = useMempoolData();
+
+  // Convert API wallets to component format
+  const wallets: Wallet[] = useMemo(() => apiWallets.map(w => ({
+    id: w.id,
+    name: w.name,
+    type: w.type as WalletType,
+    balance: w.balance,
+    scriptType: w.scriptType,
+    derivationPath: w.descriptor || '',
+    fingerprint: w.fingerprint || '',
+    label: w.name,
+    xpub: '',
+    lastSyncedAt: w.lastSyncedAt,
+    lastSyncStatus: w.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
+    syncInProgress: w.syncInProgress,
+  })), [apiWallets]);
+
+  // Fetch recent transactions from all wallets using React Query
+  const walletIds = useMemo(() => wallets.map(w => w.id), [wallets]);
+  const { data: recentTxRaw = [], isLoading: txLoading } = useRecentTransactions(walletIds, 10);
+
+  // Convert API transactions to component format
+  const recentTx: Transaction[] = useMemo(() => recentTxRaw.map(tx => {
+    const rawAmount = typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount;
+    const amount = tx.type === 'sent' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+    return {
+      id: tx.id,
+      txid: tx.txid,
+      walletId: tx.walletId,
+      amount,
+      fee: tx.fee ? (typeof tx.fee === 'string' ? parseInt(tx.fee, 10) : tx.fee) : undefined,
+      confirmations: tx.confirmations,
+      confirmed: tx.confirmations > 0,
+      blockHeight: tx.blockHeight,
+      timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
+      label: tx.label || '',
+      type: tx.type,
+    };
+  }), [recentTxRaw]);
+
+  // Derive fees from React Query data
+  const fees: DashboardFeeEstimate | null = feeEstimates ? {
+    fast: feeEstimates.fastest,
+    medium: feeEstimates.hour,
+    slow: feeEstimates.economy,
+  } : null;
+
+  // Derive node status from Bitcoin status
+  const nodeStatus: 'unknown' | 'checking' | 'connected' | 'error' =
+    statusLoading ? 'checking' :
+    bitcoinStatus === undefined ? 'unknown' :
+    bitcoinStatus?.connected ? 'connected' : 'error';
+
+  // Derive mempool blocks from React Query data
+  const mempoolBlocks = mempoolData ? [...mempoolData.mempool, ...mempoolData.blocks] : [];
+  const queuedBlocksSummary = mempoolData?.queuedBlocksSummary || null;
+  const lastMempoolUpdate = mempoolData ? new Date() : null;
+
+  // Overall loading state
+  const loading = walletsLoading && wallets.length === 0;
 
   // 24h price change from CoinGecko (via CurrencyContext)
   const priceChangePositive = priceChange24h !== null && priceChange24h >= 0;
 
   // Function to refresh mempool/block data
-  const refreshMempoolData = useCallback(async () => {
-    try {
-      setMempoolRefreshing(true);
-      const mempoolData = await bitcoinApi.getMempoolData();
-      const allBlocks = [...mempoolData.mempool, ...mempoolData.blocks];
-      setMempoolBlocks(allBlocks);
-      setQueuedBlocksSummary(mempoolData.queuedBlocksSummary || null);
-      setLastMempoolUpdate(new Date());
+  const refreshMempoolData = () => {
+    refetchMempool();
+  };
 
-      // Also update fees
-      const feeEstimates = await bitcoinApi.getFeeEstimates();
-      setFees({
-        fast: feeEstimates.fastest,
-        medium: feeEstimates.hour,
-        slow: feeEstimates.economy,
-      });
-    } catch (err) {
-      console.error('Failed to refresh mempool data:', err);
-    } finally {
-      setMempoolRefreshing(false);
-    }
-  }, []);
-
+  // Queue wallets for background sync on mount
   useEffect(() => {
-    const loadData = async () => {
-      if (!user) return;
-
-      try {
-        setLoading(true);
-
-        // Fetch wallets from database cache (instant load)
-        const apiWallets = await walletsApi.getWallets();
-
-        // Convert API wallets to component format
-        const formattedWallets: Wallet[] = apiWallets.map(w => ({
-          id: w.id,
-          name: w.name,
-          type: w.type as WalletType,
-          balance: w.balance,
-          scriptType: w.scriptType,
-          derivationPath: w.descriptor || '',
-          fingerprint: w.fingerprint || '',
-          label: w.name,
-          xpub: '',
-          // Sync metadata
-          lastSyncedAt: w.lastSyncedAt,
-          lastSyncStatus: w.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
-          syncInProgress: w.syncInProgress,
-        }));
-
-        setWallets(formattedWallets);
-
-        // Queue all wallets for background sync (runs after instant cache load)
-        // This updates the data in the background without blocking the UI
-        syncApi.queueUserWallets('normal').catch(err => {
-          console.error('Failed to queue wallets for sync:', err);
-        });
-
-        // Fetch recent transactions from all wallets
-        if (formattedWallets.length > 0) {
-          try {
-            const allTransactions: Transaction[] = [];
-
-            // Fetch transactions from each wallet (limit 5 per wallet)
-            for (const wallet of formattedWallets) {
-              const txs = await transactionsApi.getTransactions(wallet.id, { limit: 5 });
-              const formattedTxs: Transaction[] = txs.map(tx => {
-                // Parse amount - API returns positive for receives, we need to handle based on type
-                const rawAmount = typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount;
-                // Sent = negative, Consolidation = positive (just moving funds), Received = positive
-                const amount = tx.type === 'sent' ? -Math.abs(rawAmount) : Math.abs(rawAmount);
-
-                return {
-                  id: tx.id,
-                  txid: tx.txid,
-                  walletId: tx.walletId,
-                  amount,
-                  fee: tx.fee ? (typeof tx.fee === 'string' ? parseInt(tx.fee, 10) : tx.fee) : undefined,
-                  confirmations: tx.confirmations,
-                  confirmed: tx.confirmations > 0,
-                  blockHeight: tx.blockHeight,
-                  timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
-                  label: tx.label || '',
-                  type: tx.type, // Include type for consolidation detection
-                };
-              });
-              allTransactions.push(...formattedTxs);
-            }
-
-            // Sort by timestamp (most recent first) and take top 10
-            allTransactions.sort((a, b) => b.timestamp - a.timestamp);
-            setRecentTx(allTransactions.slice(0, 10));
-          } catch (err) {
-            console.error('Failed to fetch recent transactions:', err);
-            setRecentTx([]);
-          }
-        } else {
-          setRecentTx([]);
-        }
-
-        // Fetch fee estimates from Bitcoin API
-        try {
-          const feeEstimates = await bitcoinApi.getFeeEstimates();
-          setFees({
-            fast: feeEstimates.fastest,
-            medium: feeEstimates.hour,
-            slow: feeEstimates.economy,
-          });
-        } catch (err) {
-          console.error('Failed to fetch fees:', err);
-          setFees({ fast: 10, medium: 5, slow: 3 });
-        }
-
-        // Check Bitcoin network status
-        try {
-          setNodeStatus('checking');
-          const status = await bitcoinApi.getStatus();
-          setBitcoinStatus(status);
-          setNodeStatus(status.connected ? 'connected' : 'error');
-        } catch (err) {
-          console.error('Failed to check node status:', err);
-          setNodeStatus('error');
-        }
-
-        // Fetch mempool and blocks data
-        try {
-          const mempoolData = await bitcoinApi.getMempoolData();
-          const allBlocks = [...mempoolData.mempool, ...mempoolData.blocks];
-          setMempoolBlocks(allBlocks);
-          setQueuedBlocksSummary(mempoolData.queuedBlocksSummary || null);
-          setLastMempoolUpdate(new Date());
-        } catch (err) {
-          console.error('Failed to fetch mempool data:', err);
-        }
-
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-        if (error instanceof ApiError) {
-          console.error('API Error:', error.message);
-        }
-        setWallets([]);
-        setNodeStatus('error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [user]);
+    if (user && wallets.length > 0) {
+      syncApi.queueUserWallets('normal').catch(err => {
+        log.error('Failed to queue wallets for sync', { error: err });
+      });
+    }
+  }, [user, wallets.length]);
 
   // Subscribe to all wallet events
   useEffect(() => {
@@ -302,16 +227,7 @@ export const Dashboard: React.FC = () => {
     subscribe('mempool');
   }, [subscribe]);
 
-  // Set up periodic mempool refresh (every 30 seconds)
-  useEffect(() => {
-    if (!user) return;
-
-    const intervalId = setInterval(() => {
-      refreshMempoolData();
-    }, MEMPOOL_REFRESH_INTERVAL);
-
-    return () => clearInterval(intervalId);
-  }, [user, refreshMempoolData]);
+  // Note: Periodic mempool refresh is handled by React Query's refetchInterval
 
   // Handle transaction notifications
   useWebSocketEvent('transaction', (event) => {
@@ -325,36 +241,13 @@ export const Dashboard: React.FC = () => {
       data,
     });
 
-    if (user) {
-      walletsApi.getWallets().then(apiWallets => {
-        const formattedWallets: Wallet[] = apiWallets.map(w => ({
-          id: w.id,
-          name: w.name,
-          type: w.type as WalletType,
-          balance: w.balance,
-          scriptType: w.scriptType,
-          derivationPath: w.descriptor || '',
-          fingerprint: w.fingerprint || '',
-          label: w.name,
-          xpub: '',
-          lastSyncedAt: w.lastSyncedAt,
-          lastSyncStatus: w.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
-          syncInProgress: w.syncInProgress,
-        }));
-        setWallets(formattedWallets);
-      }).catch(err => console.error('Failed to refresh wallets:', err));
-    }
-  }, [user, addNotification]);
+    // Invalidate wallet queries to refresh data
+    invalidateAllWallets();
+  }, [addNotification, invalidateAllWallets]);
 
   // Handle balance updates
   useWebSocketEvent('balance', (event) => {
     const { data } = event;
-
-    setWallets(prev => prev.map(w =>
-      w.id === data.walletId
-        ? { ...w, balance: data.balance }
-        : w
-    ));
 
     if (Math.abs(data.change) > 10000) {
       addNotification({
@@ -365,13 +258,14 @@ export const Dashboard: React.FC = () => {
         data,
       });
     }
-  }, [addNotification]);
+
+    // Invalidate wallet queries to refresh data
+    invalidateAllWallets();
+  }, [addNotification, invalidateAllWallets]);
 
   // Handle new block notifications
   useWebSocketEvent('block', (event) => {
     const { data } = event;
-
-    setBitcoinStatus(prev => prev ? { ...prev, blockHeight: data.height } : null);
 
     addNotification({
       type: 'block',
@@ -382,7 +276,6 @@ export const Dashboard: React.FC = () => {
     });
 
     // Refresh mempool data when a new block is mined
-    // This triggers the block animation in BlockVisualizer
     refreshMempoolData();
   }, [addNotification, refreshMempoolData]);
 
@@ -405,27 +298,11 @@ export const Dashboard: React.FC = () => {
   useWebSocketEvent('sync', (event) => {
     const { data } = event;
 
-    // When a sync completes, refresh wallet data
+    // When a sync completes, invalidate wallet queries
     if (!data.inProgress && data.status === 'success') {
-      walletsApi.getWallets().then(apiWallets => {
-        const formattedWallets: Wallet[] = apiWallets.map(w => ({
-          id: w.id,
-          name: w.name,
-          type: w.type as WalletType,
-          balance: w.balance,
-          scriptType: w.scriptType,
-          derivationPath: w.descriptor || '',
-          fingerprint: w.fingerprint || '',
-          label: w.name,
-          xpub: '',
-          lastSyncedAt: w.lastSyncedAt,
-          lastSyncStatus: w.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
-          syncInProgress: w.syncInProgress,
-        }));
-        setWallets(formattedWallets);
-      }).catch(err => console.error('Failed to refresh wallets after sync:', err));
+      invalidateAllWallets();
     }
-  }, []);
+  }, [invalidateAllWallets]);
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 

@@ -5,6 +5,9 @@ import { Button } from './ui/Button';
 import * as authApi from '../src/api/auth';
 import * as twoFactorApi from '../src/api/twoFactor';
 import { ApiError } from '../src/api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Account');
 
 export const Account: React.FC = () => {
   const { user } = useUser();
@@ -66,7 +69,7 @@ export const Account: React.FC = () => {
 
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      console.error('[Account] Password change error:', err);
+      log.error('Password change error', { error: err });
       const message = err instanceof ApiError ? err.message : 'Failed to change password';
       setPasswordError(message);
     } finally {

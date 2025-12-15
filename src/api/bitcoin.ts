@@ -27,6 +27,7 @@ export interface FeeEstimates {
   halfHour: number;
   hour: number;
   economy: number;
+  minimum?: number;
 }
 
 export interface AddressInfo {

@@ -48,7 +48,7 @@ export interface Transaction {
   id: string;
   txid: string;
   walletId: string;
-  type: 'received' | 'sent';
+  type: 'received' | 'sent' | 'receive' | 'consolidation';
   amount: string | number;
   fee?: string | number;
   confirmations: number;
@@ -61,6 +61,7 @@ export interface Transaction {
     address: string;
     derivationPath: string;
   };
+  counterpartyAddress?: string;
 }
 
 export interface TransactionInput {
@@ -83,11 +84,14 @@ export interface UTXO {
   vout: number;
   address: string;
   amount: string | number;
-  scriptPubKey: string;
+  scriptPubKey?: string;
+  scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
   confirmations: number;
   blockHeight?: number;
-  spent: boolean;
-  createdAt: string;
+  spent?: boolean;
+  spendable?: boolean;
+  createdAt?: string;
+  date?: string;
   // UI-specific fields (may not always be present)
   label?: string;
   frozen?: boolean;
@@ -163,26 +167,38 @@ export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 export type WalletScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
 export type WalletNetwork = 'mainnet' | 'testnet' | 'regtest';
 
+export type WalletType = 'single_sig' | 'multi_sig';
+
 export interface Wallet {
   id: string;
   name: string;
-  type: 'single_sig' | 'multi_sig';
+  type: WalletType;
   scriptType: WalletScriptType;
   network: WalletNetwork;
   quorum?: number;
   totalSigners?: number;
   descriptor?: string;
   fingerprint?: string;
+  derivationPath?: string;
+  label?: string;
+  xpub?: string;
   balance: number;
-  deviceCount: number;
-  addressCount: number;
-  createdAt: string;
+  deviceCount?: number;
+  addressCount?: number;
+  createdAt?: string;
+  // Device associations
+  deviceIds?: string[];
+  // Display preferences
+  unit?: 'sats' | 'btc';
+  // Owner info
+  ownerId?: string;
+  groupIds?: string[];
   // Sync metadata
   lastSyncedAt?: string | null;
-  lastSyncStatus?: string | null;
+  lastSyncStatus?: 'success' | 'failed' | 'partial' | string | null;
   syncInProgress?: boolean;
   // Sharing info
-  isShared: boolean;
+  isShared?: boolean;
   sharedWith?: {
     groupName?: string | null;
     userCount: number;
@@ -206,6 +222,7 @@ export interface FeeEstimates {
   halfHour: number;
   hour: number;
   economy: number;
+  minimum?: number;
 }
 
 // Legacy alias for backward compatibility
@@ -213,6 +230,7 @@ export interface FeeEstimate {
   fastestFee: number;
   halfHourFee: number;
   hourFee: number;
+  economyFee?: number;
 }
 
 // ============================================================================
@@ -283,6 +301,8 @@ export interface WebSocketTransactionData {
 
 export interface WebSocketBalanceData {
   balance?: number;
+  confirmed?: number;
+  unconfirmed?: number;
   change?: number;
   walletId?: string;
 }

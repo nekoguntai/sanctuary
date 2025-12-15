@@ -43,6 +43,7 @@ export interface CreateTransactionResponse {
   changeAddress?: string;
   utxos: Array<{ txid: string; vout: number }>;
   effectiveAmount?: number;
+  inputPaths?: string[];
 }
 
 export interface BroadcastTransactionRequest {

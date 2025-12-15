@@ -3,6 +3,9 @@ import { NodeConfig as NodeConfigType } from '../types';
 import { Button } from './ui/Button';
 import { Server, Check, AlertCircle, Link as LinkIcon, CheckCircle, XCircle, Gauge, Globe } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('NodeConfig');
 
 // List of well-known public Electrum servers
 const PUBLIC_ELECTRUM_SERVERS = [
@@ -31,7 +34,7 @@ export const NodeConfig: React.FC = () => {
         const nc = await adminApi.getNodeConfig();
         setNodeConfig(nc);
       } catch (error) {
-        console.error('[NodeConfig] Failed to load data:', error);
+        log.error('Failed to load data', { error });
         // Set default node config if API call fails - use Blockstream public server
         setNodeConfig({
           type: 'electrum',
@@ -60,7 +63,7 @@ export const NodeConfig: React.FC = () => {
       setNodeSaveSuccess(true);
       setTimeout(() => setNodeSaveSuccess(false), 3000);
     } catch (error) {
-      console.error('[NodeConfig] Failed to save node config:', error);
+      log.error('Failed to save node config', { error });
       setNodeSaveError('Failed to save node configuration');
     } finally {
       setIsSavingNode(false);
@@ -84,7 +87,7 @@ export const NodeConfig: React.FC = () => {
         setTestMessage(result.message || result.error || 'Connection failed');
       }
     } catch (error: any) {
-      console.error('[NodeConfig] Test connection error:', error);
+      log.error('Test connection error', { error });
       setTestStatus('error');
       setTestMessage(error.response?.data?.message || error.message || 'Failed to test connection');
     }

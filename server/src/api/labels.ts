@@ -13,6 +13,9 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('LABELS');
 
 const router = Router();
 
@@ -68,7 +71,7 @@ router.get('/wallets/:walletId/labels', async (req: Request, res: Response) => {
 
     res.json(labelsWithCounts);
   } catch (error) {
-    console.error('[LABELS] Get labels error:', error);
+    log.error('Get labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch labels',
@@ -154,7 +157,7 @@ router.get('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
     res.json(response);
   } catch (error) {
-    console.error('[LABELS] Get label error:', error);
+    log.error('Get label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch label',
@@ -222,7 +225,7 @@ router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => 
 
     res.status(201).json(label);
   } catch (error) {
-    console.error('[LABELS] Create label error:', error);
+    log.error('Create label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to create label',
@@ -300,7 +303,7 @@ router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
     res.json(label);
   } catch (error) {
-    console.error('[LABELS] Update label error:', error);
+    log.error('Update label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update label',
@@ -355,7 +358,7 @@ router.delete('/wallets/:walletId/labels/:labelId', async (req: Request, res: Re
 
     res.status(204).send();
   } catch (error) {
-    console.error('[LABELS] Delete label error:', error);
+    log.error('Delete label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete label',
@@ -406,7 +409,7 @@ router.get('/transactions/:transactionId/labels', async (req: Request, res: Resp
     const labels = transaction.transactionLabels.map(tl => tl.label);
     res.json(labels);
   } catch (error) {
-    console.error('[LABELS] Get transaction labels error:', error);
+    log.error('Get transaction labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch transaction labels',
@@ -493,7 +496,7 @@ router.post('/transactions/:transactionId/labels', async (req: Request, res: Res
 
     res.json(updatedLabels.map(tl => tl.label));
   } catch (error) {
-    console.error('[LABELS] Add transaction labels error:', error);
+    log.error('Add transaction labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to add labels to transaction',
@@ -586,7 +589,7 @@ router.put('/transactions/:transactionId/labels', async (req: Request, res: Resp
 
     res.json(updatedLabels.map(tl => tl.label));
   } catch (error) {
-    console.error('[LABELS] Replace transaction labels error:', error);
+    log.error('Replace transaction labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to replace transaction labels',
@@ -642,7 +645,7 @@ router.delete('/transactions/:transactionId/labels/:labelId', async (req: Reques
 
     res.status(204).send();
   } catch (error) {
-    console.error('[LABELS] Remove transaction label error:', error);
+    log.error('Remove transaction label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to remove label from transaction',
@@ -693,7 +696,7 @@ router.get('/addresses/:addressId/labels', async (req: Request, res: Response) =
     const labels = address.addressLabels.map(al => al.label);
     res.json(labels);
   } catch (error) {
-    console.error('[LABELS] Get address labels error:', error);
+    log.error('Get address labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch address labels',
@@ -780,7 +783,7 @@ router.post('/addresses/:addressId/labels', async (req: Request, res: Response) 
 
     res.json(updatedLabels.map(al => al.label));
   } catch (error) {
-    console.error('[LABELS] Add address labels error:', error);
+    log.error('Add address labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to add labels to address',
@@ -873,7 +876,7 @@ router.put('/addresses/:addressId/labels', async (req: Request, res: Response) =
 
     res.json(updatedLabels.map(al => al.label));
   } catch (error) {
-    console.error('[LABELS] Replace address labels error:', error);
+    log.error('Replace address labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to replace address labels',
@@ -929,7 +932,7 @@ router.delete('/addresses/:addressId/labels/:labelId', async (req: Request, res:
 
     res.status(204).send();
   } catch (error) {
-    console.error('[LABELS] Remove address label error:', error);
+    log.error('Remove address label error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to remove label from address',

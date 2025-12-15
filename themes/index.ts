@@ -12,6 +12,9 @@
 
 import { themeRegistry } from './registry';
 import { globalPatterns } from './patterns';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Themes');
 
 // Import all themes
 import { sanctuaryTheme } from './sanctuary';
@@ -43,7 +46,7 @@ export type { ThemeDefinition, ThemeColors, BackgroundPattern, ThemeMetadata } f
  */
 export function initializeThemes(): void {
   // Themes are automatically registered on import
-  console.log(`Theme system initialized with ${themeRegistry.getAll().length} themes`);
+  log.info(`Theme system initialized with ${themeRegistry.getAll().length} themes`);
 }
 
 /**

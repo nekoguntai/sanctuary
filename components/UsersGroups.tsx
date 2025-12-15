@@ -4,6 +4,9 @@ import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye,
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('UsersGroups');
 
 export const UsersGroups: React.FC = () => {
   const { handleError } = useErrorHandler();
@@ -50,7 +53,7 @@ export const UsersGroups: React.FC = () => {
       setUsers(usersData);
       setGroups(groupsData);
     } catch (error) {
-      console.error('[UsersGroups] Failed to load data:', error);
+      log.error('Failed to load data', { error });
     } finally {
       setLoading(false);
     }
@@ -87,7 +90,7 @@ export const UsersGroups: React.FC = () => {
       // Reload users
       loadData();
     } catch (error: any) {
-      console.error('[UsersGroups] Create user error:', error);
+      log.error('Create user error', { error });
       setCreateUserError(error.message || 'Failed to create user');
     } finally {
       setIsCreatingUser(false);
@@ -130,7 +133,7 @@ export const UsersGroups: React.FC = () => {
       setEditingUser(null);
       loadData();
     } catch (error: any) {
-      console.error('[UsersGroups] Update user error:', error);
+      log.error('Update user error', { error });
       setEditUserError(error.message || 'Failed to update user');
     } finally {
       setIsUpdatingUser(false);
@@ -146,7 +149,7 @@ export const UsersGroups: React.FC = () => {
       await adminApi.deleteUser(user.id);
       loadData();
     } catch (error) {
-      console.error('[UsersGroups] Delete user error:', error);
+      log.error('Delete user error', { error });
       handleError(error, 'Delete User Failed');
     }
   };
@@ -161,7 +164,7 @@ export const UsersGroups: React.FC = () => {
       setNewGroup('');
       loadData();
     } catch (error) {
-      console.error('[UsersGroups] Create group error:', error);
+      log.error('Create group error', { error });
       handleError(error, 'Create Group Failed');
     } finally {
       setIsCreatingGroup(false);
@@ -177,7 +180,7 @@ export const UsersGroups: React.FC = () => {
       await adminApi.deleteGroup(group.id);
       loadData();
     } catch (error) {
-      console.error('[UsersGroups] Delete group error:', error);
+      log.error('Delete group error', { error });
       handleError(error, 'Delete Group Failed');
     }
   };
@@ -204,7 +207,7 @@ export const UsersGroups: React.FC = () => {
       setEditingGroup(null);
       loadData();
     } catch (error: any) {
-      console.error('[UsersGroups] Update group error:', error);
+      log.error('Update group error', { error });
       setEditGroupError(error.message || 'Failed to update group');
     } finally {
       setIsUpdatingGroup(false);

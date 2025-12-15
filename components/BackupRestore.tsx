@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import type { SanctuaryBackup, ValidationResult } from '../src/api/admin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('BackupRestore');
 
 export const BackupRestore: React.FC = () => {
   // Backup state
@@ -77,7 +80,7 @@ export const BackupRestore: React.FC = () => {
       setDescription('');
       setTimeout(() => setBackupSuccess(false), 5000);
     } catch (error) {
-      console.error('[BackupRestore] Backup failed:', error);
+      log.error('Backup failed', { error });
       setBackupError(error instanceof Error ? error.message : 'Failed to create backup');
     } finally {
       setIsCreatingBackup(false);
@@ -106,7 +109,7 @@ export const BackupRestore: React.FC = () => {
       // Auto-validate
       await validateBackup(backup);
     } catch (error) {
-      console.error('[BackupRestore] Failed to parse backup file:', error);
+      log.error('Failed to parse backup file', { error });
       setRestoreError('Invalid backup file format. Please select a valid Sanctuary backup JSON file.');
     }
 
@@ -127,7 +130,7 @@ export const BackupRestore: React.FC = () => {
       const result = await adminApi.validateBackup(backup);
       setValidationResult(result);
     } catch (error) {
-      console.error('[BackupRestore] Validation failed:', error);
+      log.error('Validation failed', { error });
       setRestoreError('Failed to validate backup file');
     } finally {
       setIsValidating(false);
@@ -162,7 +165,7 @@ export const BackupRestore: React.FC = () => {
         setRestoreError(result.error || 'Restore failed');
       }
     } catch (error) {
-      console.error('[BackupRestore] Restore failed:', error);
+      log.error('Restore failed', { error });
       setRestoreError(error instanceof Error ? error.message : 'Restore failed');
     } finally {
       setIsRestoring(false);

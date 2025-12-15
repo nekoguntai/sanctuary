@@ -23,6 +23,9 @@ import {
   X
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ConnectDevice');
 
 type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'bluetooth' | 'nfc' | 'manual';
 
@@ -73,7 +76,7 @@ export const ConnectDevice: React.FC = () => {
         const uniqueManufacturers = [...new Set(models.map(m => m.manufacturer))].sort();
         setManufacturers(uniqueManufacturers);
       } catch (err) {
-        console.error('Failed to fetch device models:', err);
+        log.error('Failed to fetch device models', { error: err });
         setError('Failed to load device models. Please try again.');
       } finally {
         setLoadingModels(false);
@@ -356,7 +359,7 @@ export const ConnectDevice: React.FC = () => {
       await createDevice(deviceData);
       navigate('/devices');
     } catch (err) {
-      console.error('Failed to save device:', err);
+      log.error('Failed to save device', { error: err });
       setError(err instanceof Error ? err.message : 'Failed to save device. Please try again.');
     } finally {
       setSaving(false);

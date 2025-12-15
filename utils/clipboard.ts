@@ -4,6 +4,10 @@
  * Cross-browser clipboard functions with fallback support
  */
 
+import { createLogger } from './logger';
+
+const log = createLogger('Clipboard');
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     // Modern API
@@ -26,7 +30,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     document.body.removeChild(textArea);
     return success;
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err);
+    log.error('Failed to copy to clipboard', { error: err });
     return false;
   }
 }

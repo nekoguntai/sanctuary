@@ -10,6 +10,9 @@ import tls from 'tls';
 import crypto from 'crypto';
 import config from '../../config';
 import prisma from '../../models/prisma';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ELECTRUM');
 
 interface ElectrumResponse {
   jsonrpc: string;
@@ -99,7 +102,7 @@ class ElectrumClient {
         }
 
         this.socket.on('connect', () => {
-          console.log(`[ELECTRUM] Connected to ${host}:${port} (${protocol})`);
+          log.info(`Connected to ${host}:${port} (${protocol})`);
           this.connected = true;
           resolve();
         });
@@ -109,22 +112,22 @@ class ElectrumClient {
         });
 
         this.socket.on('error', (error) => {
-          console.error('[ELECTRUM] Socket error:', error);
+          log.error('Socket error', { error });
           this.connected = false;
           reject(error);
         });
 
         this.socket.on('close', () => {
-          console.log('[ELECTRUM] Connection closed');
+          log.debug('Connection closed');
           this.connected = false;
         });
 
         this.socket.on('end', () => {
-          console.log('[ELECTRUM] Connection ended');
+          log.debug('Connection ended');
           this.connected = false;
         });
       } catch (error) {
-        console.error('[ELECTRUM] Connection error:', error);
+        log.error('Connection error', { error });
         reject(error);
       }
     });
@@ -177,7 +180,7 @@ class ElectrumClient {
           }
         }
       } catch (error) {
-        console.error('[ELECTRUM] Failed to parse response:', error);
+        log.error('Failed to parse response', { error });
       }
     }
   }
@@ -330,7 +333,7 @@ class ElectrumClient {
         vout,
       };
     } catch (error) {
-      console.error('[ELECTRUM] Failed to decode raw transaction:', error);
+      log.error('Failed to decode raw transaction', { error });
       throw new Error('Failed to decode transaction');
     }
   }

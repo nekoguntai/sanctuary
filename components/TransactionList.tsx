@@ -6,6 +6,9 @@ import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, MoreHorizontal, ExternalLink, Copy, X, ArrowDown, Check, Edit2 } from 'lucide-react';
 import { LabelBadges } from './LabelSelector';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('TransactionList');
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -47,7 +50,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     bitcoinApi.getStatus().then(status => {
       if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
     }).catch(err => {
-      console.error('Failed to fetch explorer URL:', err);
+      log.error('Failed to fetch explorer URL', { error: err });
     });
   }, []);
 
@@ -72,7 +75,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      log.error('Failed to copy', { error: err });
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = text;
@@ -102,7 +105,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       const labels = await labelsApi.getLabels(tx.walletId);
       setAvailableLabels(labels);
     } catch (err) {
-      console.error('Failed to load labels:', err);
+      log.error('Failed to load labels', { error: err });
     }
   };
 
@@ -117,7 +120,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       setEditingLabels(false);
       onLabelsChange?.();
     } catch (err) {
-      console.error('Failed to save labels:', err);
+      log.error('Failed to save labels', { error: err });
     } finally {
       setSavingLabels(false);
     }

@@ -7,6 +7,9 @@
 
 import axios, { AxiosInstance } from 'axios';
 import * as bitcoin from 'bitcoinjs-lib';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('BITCOIN_RPC');
 
 interface RpcConfig {
   host: string;
@@ -80,7 +83,7 @@ export class BitcoinRpcClient {
       // Test connection with getblockchaininfo
       await this.rpcCall('getblockchaininfo');
       this.connected = true;
-      console.log('[BITCOIN-RPC] Connected to Bitcoin Core');
+      log.info('Connected to Bitcoin Core');
     } catch (error: any) {
       this.connected = false;
       throw new Error(`Failed to connect to Bitcoin Core: ${error.message}`);
@@ -92,7 +95,7 @@ export class BitcoinRpcClient {
    */
   disconnect(): void {
     this.connected = false;
-    console.log('[BITCOIN-RPC] Disconnected');
+    log.debug('Disconnected');
   }
 
   /**
@@ -147,7 +150,7 @@ export class BitcoinRpcClient {
     } catch (error: any) {
       // If scantxoutset fails, try importaddress + listtransactions
       // This requires the address to be imported into the wallet
-      console.warn(`[BITCOIN-RPC] scantxoutset failed for ${address}, trying wallet method`);
+      log.warn(`scantxoutset failed for ${address}, trying wallet method`);
 
       try {
         // Import address (watch-only) if not already imported
@@ -175,7 +178,7 @@ export class BitcoinRpcClient {
 
         return history;
       } catch (walletError) {
-        console.error(`[BITCOIN-RPC] Failed to get history for ${address}:`, walletError);
+        log.error(`Failed to get history for ${address}`, { error: walletError });
         return [];
       }
     }
@@ -193,7 +196,7 @@ export class BitcoinRpcClient {
         unconfirmed: 0, // scantxoutset only returns confirmed
       };
     } catch (error) {
-      console.error(`[BITCOIN-RPC] Failed to get balance for ${address}:`, error);
+      log.error(`Failed to get balance for ${address}`, { error });
       return { confirmed: 0, unconfirmed: 0 };
     }
   }
@@ -212,7 +215,7 @@ export class BitcoinRpcClient {
         value: Math.round(utxo.amount * 100000000),
       }));
     } catch (error) {
-      console.error(`[BITCOIN-RPC] Failed to get UTXOs for ${address}:`, error);
+      log.error(`Failed to get UTXOs for ${address}`, { error });
       return [];
     }
   }
@@ -257,7 +260,7 @@ export class BitcoinRpcClient {
       // Fallback
       return blocks <= 1 ? 20 : blocks <= 3 ? 15 : blocks <= 6 ? 10 : 5;
     } catch (error) {
-      console.error('[BITCOIN-RPC] Failed to estimate fee:', error);
+      log.error('Failed to estimate fee', { error });
       return blocks <= 1 ? 20 : blocks <= 3 ? 15 : blocks <= 6 ? 10 : 5;
     }
   }

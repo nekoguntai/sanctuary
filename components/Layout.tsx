@@ -31,6 +31,9 @@ import { version } from '../package.json';
 import { NotificationBell } from './NotificationPanel';
 import { NotificationBadge } from './NotificationBadge';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Layout');
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -188,7 +191,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
           }
         }
       } catch (error) {
-        console.error('Failed to fetch sidebar data:', error);
+        log.error('Failed to fetch sidebar data', { error });
       }
     };
     fetchData();

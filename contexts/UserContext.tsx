@@ -4,6 +4,9 @@ import { themeRegistry } from '../themes';
 import * as authApi from '../src/api/auth';
 import * as twoFactorApi from '../src/api/twoFactor';
 import { ApiError } from '../src/api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('UserContext');
 
 interface TwoFactorPending {
   tempToken: string;
@@ -47,7 +50,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(currentUser as User);
         }
       } catch (err) {
-        console.error('Auth check failed:', err);
+        log.error('Auth check failed', { error: err });
         authApi.logout(); // Clear invalid token
       } finally {
         setIsLoading(false);

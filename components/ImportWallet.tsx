@@ -18,6 +18,9 @@ import {
   Upload,
   Shield
 } from 'lucide-react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ImportWallet');
 
 type ImportFormat = 'descriptor' | 'json';
 
@@ -117,7 +120,7 @@ export const ImportWallet: React.FC = () => {
       // Navigate to the new wallet
       navigate(`/wallets/${result.wallet.id}`);
     } catch (error) {
-      console.error('Failed to import wallet:', error);
+      log.error('Failed to import wallet', { error });
       if (error instanceof ApiError) {
         setImportError(error.message);
       } else {

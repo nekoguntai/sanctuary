@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
 import { AlertTriangle, TrendingUp, Zap, Users, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import * as bitcoinApi from '../src/api/bitcoin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('TransactionActions');
 
 interface TransactionActionsProps {
   txid: string;
@@ -44,7 +47,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
           setNewFeeRate(result.minNewFeeRate);
         }
       } catch (err) {
-        console.error('Failed to check RBF status:', err);
+        log.error('Failed to check RBF status', { error: err });
       } finally {
         setLoading(false);
       }
@@ -74,7 +77,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
         onActionComplete();
       }
     } catch (err: any) {
-      console.error('RBF failed:', err);
+      log.error('RBF failed', { error: err });
       setError(err.message || 'Failed to create RBF transaction');
     } finally {
       setProcessing(false);
@@ -107,7 +110,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
         onActionComplete();
       }
     } catch (err: any) {
-      console.error('CPFP failed:', err);
+      log.error('CPFP failed', { error: err });
       setError(err.message || 'Failed to create CPFP transaction');
     } finally {
       setProcessing(false);

@@ -8,6 +8,10 @@
 import { ElectrumClient, getElectrumClient, resetElectrumClient } from './electrum';
 import { BitcoinRpcClient, getBitcoinRpcClient, resetBitcoinRpcClient } from './bitcoinRpc';
 import prisma from '../../models/prisma';
+import { createLogger } from '../../utils/logger';
+import { decryptIfEncrypted } from '../../utils/encryption';
+
+const log = createLogger('NODE_CLIENT');
 
 export type NodeType = 'electrum' | 'bitcoind';
 
@@ -54,18 +58,22 @@ async function loadNodeConfig(): Promise<NodeConfig | null> {
     if (nodeConfig) {
       // Map database NodeConfig to our NodeConfig interface
       const type: NodeType = nodeConfig.type === 'bitcoin_core' ? 'bitcoind' : 'electrum';
+      // Decrypt password if it's encrypted (backward compatible with plaintext)
+      const password = nodeConfig.password
+        ? decryptIfEncrypted(nodeConfig.password)
+        : undefined;
       return {
         type,
         host: nodeConfig.host,
         port: nodeConfig.port,
         protocol: nodeConfig.useSsl ? 'ssl' : 'tcp',
         user: nodeConfig.username || undefined,
-        password: nodeConfig.password || undefined,
+        password,
         ssl: nodeConfig.useSsl,
       };
     }
   } catch (error) {
-    console.error('[NODE-CLIENT] Failed to load node config from database:', error);
+    log.error('Failed to load node config from database', { error });
   }
 
   return null;
@@ -112,7 +120,7 @@ export async function saveNodeConfig(config: NodeConfig): Promise<void> {
   activeConfig = config;
   activeClient = null;
 
-  console.log(`[NODE-CLIENT] Saved node config: ${config.type} at ${config.host}:${config.port}`);
+  log.info(`Saved node config: ${config.type} at ${config.host}:${config.port}`);
 }
 
 /**
@@ -165,7 +173,7 @@ export async function getNodeClient(): Promise<NodeClientInterface> {
     }
 
     activeClient = rpcClient;
-    console.log(`[NODE-CLIENT] Using Bitcoin RPC at ${activeConfig.host}:${activeConfig.port}`);
+    log.info(`Using Bitcoin RPC at ${activeConfig.host}:${activeConfig.port}`);
   } else {
     // Default to Electrum
     // Note: getElectrumClient reads config from database/env internally
@@ -176,7 +184,7 @@ export async function getNodeClient(): Promise<NodeClientInterface> {
     }
 
     activeClient = electrumClient;
-    console.log(`[NODE-CLIENT] Using Electrum at ${activeConfig.host}:${activeConfig.port}`);
+    log.info(`Using Electrum at ${activeConfig.host}:${activeConfig.port}`);
   }
 
   return activeClient;
@@ -213,7 +221,7 @@ export function resetNodeClient(): void {
   activeConfig = null;
   resetElectrumClient();
   resetBitcoinRpcClient();
-  console.log('[NODE-CLIENT] Client reset');
+  log.debug('Client reset');
 }
 
 /**

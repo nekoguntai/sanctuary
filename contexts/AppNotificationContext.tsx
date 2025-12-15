@@ -9,6 +9,9 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('AppNotification');
 
 // Notification types - extensible via string union
 export type NotificationType =
@@ -128,7 +131,7 @@ const loadNotifications = (): AppNotification[] => {
       return true;
     });
   } catch (err) {
-    console.error('Failed to load notifications:', err);
+    log.error('Failed to load notifications', { error: err });
     return [];
   }
 };
@@ -139,7 +142,7 @@ const saveNotifications = (notifications: AppNotification[]): void => {
     const toSave = notifications.filter(n => n.persistent);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (err) {
-    console.error('Failed to save notifications:', err);
+    log.error('Failed to save notifications', { error: err });
   }
 };
 

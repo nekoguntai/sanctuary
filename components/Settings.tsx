@@ -8,6 +8,9 @@ import { ThemeOption, BackgroundOption } from '../types';
 import { themeRegistry } from '../themes';
 import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Settings');
 
 // Telegram Settings Component
 const TelegramSettings: React.FC = () => {
@@ -291,7 +294,7 @@ export const Settings: React.FC = () => {
         setPrefsSaved(true);
         setTimeout(() => setPrefsSaved(false), 2000);
       } catch (error) {
-        console.error('Failed to save display preferences:', error);
+        log.error('Failed to save display preferences', { error });
         setIsSavingPrefs(false);
       }
   };
@@ -306,7 +309,7 @@ export const Settings: React.FC = () => {
         setPersonalizationSaved(true);
         setTimeout(() => setPersonalizationSaved(false), 2000);
       } catch (error) {
-        console.error('Failed to save personalization:', error);
+        log.error('Failed to save personalization', { error });
         setIsSavingPersonalization(false);
       }
   }

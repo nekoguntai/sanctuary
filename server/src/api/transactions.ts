@@ -10,10 +10,14 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireWalletAccess } from '../middleware/walletAccess';
 import prisma from '../models/prisma';
 import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('TRANSACTIONS');
 
 const INITIAL_ADDRESS_COUNT = 20;
 
@@ -26,29 +30,10 @@ router.use(authenticate);
  * GET /api/v1/wallets/:walletId/transactions
  * Get all transactions for a wallet
  */
-router.get('/wallets/:walletId/transactions', async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const { limit = '50', offset = '0' } = req.query;
-
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
-
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
 
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
@@ -82,7 +67,7 @@ router.get('/wallets/:walletId/transactions', async (req: Request, res: Response
 
     res.json(serializedTransactions);
   } catch (error) {
-    console.error('[TRANSACTIONS] Get transactions error:', error);
+    log.error('Get transactions error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch transactions',
@@ -145,7 +130,7 @@ router.get('/transactions/:txid', async (req: Request, res: Response) => {
 
     res.json(serializedTransaction);
   } catch (error) {
-    console.error('[TRANSACTIONS] Get transaction error:', error);
+    log.error('Get transaction error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch transaction',
@@ -157,28 +142,9 @@ router.get('/transactions/:txid', async (req: Request, res: Response) => {
  * GET /api/v1/wallets/:walletId/utxos
  * Get all unspent UTXOs for a wallet
  */
-router.get('/wallets/:walletId/utxos', async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
-
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
-
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
+    const walletId = req.walletId!;
 
     const utxos = await prisma.uTXO.findMany({
       where: {
@@ -224,7 +190,7 @@ router.get('/wallets/:walletId/utxos', async (req: Request, res: Response) => {
       totalBalance,
     });
   } catch (error) {
-    console.error('[TRANSACTIONS] Get UTXOs error:', error);
+    log.error('Get UTXOs error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch UTXOs',
@@ -237,21 +203,15 @@ router.get('/wallets/:walletId/utxos', async (req: Request, res: Response) => {
  * Get all addresses for a wallet
  * Auto-generates addresses if wallet has descriptor but no addresses
  */
-router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) => {
+router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const { used } = req.query;
 
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
+    // Get wallet for descriptor
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { descriptor: true, network: true },
     });
 
     if (!wallet) {
@@ -338,7 +298,7 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
           orderBy: { index: 'asc' },
         });
       } catch (err) {
-        console.error('[TRANSACTIONS] Failed to auto-generate addresses:', err);
+        log.error('Failed to auto-generate addresses', { error: err });
         // Return empty array if generation fails
       }
     }
@@ -372,7 +332,7 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
 
     res.json(addressesWithBalance);
   } catch (error) {
-    console.error('[TRANSACTIONS] Get addresses error:', error);
+    log.error('Get addresses error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch addresses',
@@ -384,27 +344,10 @@ router.get('/wallets/:walletId/addresses', async (req: Request, res: Response) =
  * POST /api/v1/wallets/:walletId/addresses/generate
  * Generate more addresses for a wallet (requires edit access: owner or signer)
  */
-router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/addresses/generate', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const { count = 10 } = req.body;
-
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
-    if (!canEdit) {
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'You do not have permission to edit this wallet',
-      });
-    }
 
     // Fetch wallet data
     const wallet = await prisma.wallet.findUnique({
@@ -469,7 +412,7 @@ router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: R
           used: false,
         });
       } catch (err) {
-        console.error(`[TRANSACTIONS] Failed to derive receive address ${i}:`, err);
+        log.error(`Failed to derive receive address ${i}`, { error: err });
       }
     }
 
@@ -492,7 +435,7 @@ router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: R
           used: false,
         });
       } catch (err) {
-        console.error(`[TRANSACTIONS] Failed to derive change address ${i}:`, err);
+        log.error(`Failed to derive change address ${i}`, { error: err });
       }
     }
 
@@ -510,7 +453,7 @@ router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: R
       changeAddresses: count,
     });
   } catch (error) {
-    console.error('[TRANSACTIONS] Generate addresses error:', error);
+    log.error('Generate addresses error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to generate addresses',
@@ -522,10 +465,9 @@ router.post('/wallets/:walletId/addresses/generate', async (req: Request, res: R
  * POST /api/v1/wallets/:walletId/transactions/create
  * Create a new transaction PSBT (returns PSBT for hardware wallet signing)
  */
-router.post('/wallets/:walletId/transactions/create', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const {
       recipient,
       amount,
@@ -550,22 +492,6 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       return res.status(400).json({
         error: 'Bad Request',
         message: 'feeRate must be at least 1 sat/vB',
-      });
-    }
-
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
-    if (!canEdit) {
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions to send from this wallet',
       });
     }
 
@@ -620,7 +546,7 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
       effectiveAmount: txData.effectiveAmount, // The actual amount being sent
     });
   } catch (error: any) {
-    console.error('[TRANSACTIONS] Create transaction error:', error);
+    log.error('Create transaction error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create transaction',
@@ -632,10 +558,9 @@ router.post('/wallets/:walletId/transactions/create', async (req: Request, res: 
  * POST /api/v1/wallets/:walletId/transactions/broadcast
  * Broadcast a signed PSBT
  */
-router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const {
       signedPsbtBase64,
       recipient,
@@ -654,22 +579,6 @@ router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, re
       });
     }
 
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
-    if (!canEdit) {
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions to send from this wallet',
-      });
-    }
-
     // Broadcast transaction
     const txService = await import('../services/bitcoin/transactionService');
     const result = await txService.broadcastAndSave(walletId, signedPsbtBase64, {
@@ -683,7 +592,7 @@ router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, re
 
     res.json(result);
   } catch (error: any) {
-    console.error('[TRANSACTIONS] Broadcast transaction error:', error);
+    log.error('Broadcast transaction error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',
@@ -696,10 +605,9 @@ router.post('/wallets/:walletId/transactions/broadcast', async (req: Request, re
  * Create a PSBT for hardware wallet signing
  * This is the preferred endpoint for hardware wallet integrations
  */
-router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const {
       recipients, // Array of { address, amount }
       feeRate,
@@ -732,22 +640,6 @@ router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response
       }
     }
 
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
-    if (!canEdit) {
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions to create transactions for this wallet',
-      });
-    }
-
     // For now, only support single recipient (can be extended later)
     const { address, amount } = recipients[0];
 
@@ -775,7 +667,7 @@ router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response
       utxos: txData.utxos,
     });
   } catch (error: any) {
-    console.error('[PSBT] Create PSBT error:', error);
+    log.error('Create PSBT error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to create PSBT',
@@ -787,10 +679,9 @@ router.post('/wallets/:walletId/psbt/create', async (req: Request, res: Response
  * POST /api/v1/wallets/:walletId/psbt/broadcast
  * Broadcast a signed PSBT
  */
-router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const { signedPsbt, label, memo } = req.body;
 
     // Validation
@@ -798,22 +689,6 @@ router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Respo
       return res.status(400).json({
         error: 'Bad Request',
         message: 'signedPsbt is required',
-      });
-    }
-
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
-    if (!canEdit) {
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions to broadcast from this wallet',
       });
     }
 
@@ -842,7 +717,7 @@ router.post('/wallets/:walletId/psbt/broadcast', async (req: Request, res: Respo
       broadcasted: result.broadcasted,
     });
   } catch (error: any) {
-    console.error('[PSBT] Broadcast error:', error);
+    log.error('PSBT broadcast error', { error });
     res.status(400).json({
       error: 'Bad Request',
       message: error.message || 'Failed to broadcast transaction',
@@ -920,7 +795,7 @@ router.patch('/utxos/:utxoId/freeze', async (req: Request, res: Response) => {
       message: frozen ? 'UTXO frozen successfully' : 'UTXO unfrozen successfully',
     });
   } catch (error) {
-    console.error('[TRANSACTIONS] Freeze UTXO error:', error);
+    log.error('Freeze UTXO error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update UTXO frozen status',
@@ -932,10 +807,9 @@ router.patch('/utxos/:utxoId/freeze', async (req: Request, res: Response) => {
  * POST /api/v1/wallets/:walletId/transactions/estimate
  * Estimate transaction cost before creating
  */
-router.post('/wallets/:walletId/transactions/estimate', async (req: Request, res: Response) => {
+router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const { walletId } = req.params;
+    const walletId = req.walletId!;
     const { recipient, amount, feeRate, selectedUtxoIds } = req.body;
 
     // Validation
@@ -943,25 +817,6 @@ router.post('/wallets/:walletId/transactions/estimate', async (req: Request, res
       return res.status(400).json({
         error: 'Bad Request',
         message: 'recipient, amount, and feeRate are required',
-      });
-    }
-
-    // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        users: {
-          some: {
-            userId,
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions',
       });
     }
 
@@ -977,7 +832,7 @@ router.post('/wallets/:walletId/transactions/estimate', async (req: Request, res
 
     res.json(estimate);
   } catch (error: any) {
-    console.error('[TRANSACTIONS] Estimate transaction error:', error);
+    log.error('Estimate transaction error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to estimate transaction',

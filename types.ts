@@ -76,11 +76,12 @@ export interface NodeConfig {
 
 export interface Device {
   id: string;
-  type: HardwareDevice;
+  type: HardwareDevice | string;
   label: string;
   fingerprint: string;
   xpub?: string;
   derivationPath?: string;
+  userId?: string;
 }
 
 export interface UTXO {
@@ -90,9 +91,11 @@ export interface UTXO {
   amount: number; // in sats
   address: string;
   label?: string;
-  frozen: boolean;
+  frozen?: boolean;
+  spendable?: boolean;
   confirmations: number;
-  date: number; // timestamp
+  date?: number; // timestamp
+  scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
 }
 
 export interface Address {
@@ -131,10 +134,10 @@ export interface Transaction {
   txid: string;
   amount: number; // in sats, negative for send, positive for receive
   fee?: number;
-  timestamp: number;
-  label: string;
+  timestamp?: number;
+  label?: string;
   labels?: Label[]; // Multiple labels support
-  confirmed: boolean;
+  confirmed?: boolean;
   confirmations: number;
   walletId: string;
   address?: string; // Address this transaction is associated with
@@ -142,7 +145,7 @@ export interface Transaction {
   counterpartyAddress?: string; // Sender (for receives) or recipient (for sends)
   inputs?: TransactionInput[];
   outputs?: TransactionOutput[];
-  type?: 'sent' | 'received' | 'consolidation'; // Transaction type from sync
+  type?: 'sent' | 'received' | 'consolidation' | 'receive'; // Transaction type from sync
 }
 
 export interface Quorum {
@@ -155,15 +158,19 @@ export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 export interface Wallet {
   id: string;
   name: string;
-  type: WalletType;
+  type: WalletType | 'single_sig' | 'multi_sig';
   scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
   quorum?: Quorum;
-  deviceIds: string[];
+  deviceIds?: string[];
   balance: number;
-  unit: 'BTC' | 'sats';
-  descriptor: string;
-  ownerId: string; // User ID of the creator
-  groupIds: string[]; // IDs of groups this wallet is shared with
+  unit?: 'BTC' | 'sats';
+  descriptor?: string;
+  ownerId?: string; // User ID of the creator
+  groupIds?: string[]; // IDs of groups this wallet is shared with
+  derivationPath?: string;
+  fingerprint?: string;
+  label?: string;
+  xpub?: string;
   // Sync metadata
   lastSyncedAt?: string | null;
   lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | null;
@@ -177,6 +184,16 @@ export interface FeeEstimate {
   fastestFee: number;
   halfHourFee: number;
   hourFee: number;
+  economyFee?: number;
+  minimumFee?: number;
+}
+
+export interface FeeEstimates {
+  fastest: number;
+  halfHour: number;
+  hour: number;
+  economy: number;
+  minimum?: number;
 }
 
 export interface AppState {

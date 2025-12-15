@@ -9,6 +9,9 @@
 import axios from 'axios';
 import config from '../../config';
 import prisma from '../../models/prisma';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('MEMPOOL');
 
 // Default mempool.space API (public instance)
 const DEFAULT_MEMPOOL_API = 'https://mempool.space/api';
@@ -36,7 +39,7 @@ async function getMempoolApiBase(): Promise<string> {
       return `${explorerUrl}/api`;
     }
   } catch (error) {
-    console.warn('[MEMPOOL] Could not fetch node config, using default:', error);
+    log.warn('Could not fetch node config, using default', { error });
   }
 
   return DEFAULT_MEMPOOL_API;
@@ -90,7 +93,7 @@ export async function getRecentBlocks(count: number = 10): Promise<MempoolBlock[
     // Return only the requested number of blocks
     return response.data.slice(0, count);
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch recent blocks:', error.message);
+    log.error('Failed to fetch recent blocks', { error: error.message });
     throw new Error('Failed to fetch recent blocks from mempool.space');
   }
 }
@@ -107,7 +110,7 @@ export async function getMempoolInfo(): Promise<MempoolInfo> {
 
     return response.data;
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch mempool info:', error.message);
+    log.error('Failed to fetch mempool info', { error: error.message });
     throw new Error('Failed to fetch mempool info from mempool.space');
   }
 }
@@ -130,7 +133,7 @@ export async function getRecommendedFees(): Promise<FeeEstimates> {
       minimumFee: response.data.minimumFee,
     };
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch fee estimates:', error.message);
+    log.error('Failed to fetch fee estimates', { error: error.message });
     throw new Error('Failed to fetch fee estimates from mempool.space');
   }
 }
@@ -147,7 +150,7 @@ export async function getBlock(hash: string): Promise<MempoolBlock> {
 
     return response.data;
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch block:', error.message);
+    log.error('Failed to fetch block', { error: error.message });
     throw new Error('Failed to fetch block from mempool.space');
   }
 }
@@ -165,7 +168,7 @@ export async function getBlockAtHeight(height: number): Promise<string> {
     // Returns block hash
     return response.data;
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch block at height:', error.message);
+    log.error('Failed to fetch block at height', { error: error.message });
     throw new Error('Failed to fetch block at height from mempool.space');
   }
 }
@@ -182,7 +185,7 @@ export async function getTipHeight(): Promise<number> {
 
     return response.data;
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch tip height:', error.message);
+    log.error('Failed to fetch tip height', { error: error.message });
     throw new Error('Failed to fetch tip height from mempool.space');
   }
 }
@@ -320,7 +323,7 @@ export async function getBlocksAndMempool() {
       queuedBlocksSummary,
     };
   } catch (error: any) {
-    console.error('[MEMPOOL] Failed to fetch blocks and mempool:', error.message);
+    log.error('Failed to fetch blocks and mempool', { error: error.message });
     throw error;
   }
 }

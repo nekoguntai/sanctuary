@@ -6,6 +6,9 @@
  */
 
 import type { ThemeDefinition, ThemeMetadata, BackgroundPattern } from './types';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ThemeRegistry');
 
 class ThemeRegistry {
   private themes: Map<string, ThemeDefinition> = new Map();
@@ -16,7 +19,7 @@ class ThemeRegistry {
    */
   register(theme: ThemeDefinition): void {
     if (this.themes.has(theme.id)) {
-      console.warn(`Theme "${theme.id}" is already registered. Overwriting.`);
+      log.warn(`Theme "${theme.id}" is already registered. Overwriting.`);
     }
     this.themes.set(theme.id, theme);
   }
@@ -52,8 +55,8 @@ class ThemeRegistry {
       author: theme.author,
       description: theme.description,
       preview: {
-        primaryColor: theme.colors.light.primary,
-        backgroundColor: theme.colors.light.background,
+        primaryColor: theme.colors.light.primary[500] || theme.colors.light.primary[600] || '#3B82F6',
+        backgroundColor: theme.colors.light.bg[50] || theme.colors.light.bg[100] || '#FFFFFF',
       },
     }));
   }
@@ -119,7 +122,7 @@ class ThemeRegistry {
   applyTheme(themeId: string, mode: 'light' | 'dark'): void {
     const theme = this.get(themeId);
     if (!theme) {
-      console.error(`Theme "${themeId}" not found`);
+      log.error(`Theme "${themeId}" not found`);
       return;
     }
 
@@ -128,8 +131,8 @@ class ThemeRegistry {
 
     // Apply color scale variables (bg, primary, success, warning)
     Object.entries(colors).forEach(([colorType, scale]) => {
-      if (typeof scale === 'object') {
-        Object.entries(scale).forEach(([shade, value]) => {
+      if (typeof scale === 'object' && scale !== null) {
+        Object.entries(scale as Record<string, string>).forEach(([shade, value]) => {
           if (value) {
             root.style.setProperty(`--color-${colorType}-${shade}`, value);
           }

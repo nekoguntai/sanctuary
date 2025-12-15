@@ -156,13 +156,21 @@ main() {
 
     echo ""
 
-    # Load existing JWT secret or generate new one
+    # Load existing secrets or generate new ones
     if [ -f "$INSTALL_DIR/.env.local" ]; then
         source "$INSTALL_DIR/.env.local"
-        echo -e "${GREEN}✓${NC} Using existing JWT secret"
+        echo -e "${GREEN}✓${NC} Using existing secrets from .env.local"
+
+        # Generate ENCRYPTION_KEY if missing (upgrading from older version)
+        if [ -z "$ENCRYPTION_KEY" ]; then
+            ENCRYPTION_KEY=$(generate_secret)
+            echo "ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$INSTALL_DIR/.env.local"
+            echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_KEY"
+        fi
     else
         JWT_SECRET=$(generate_secret)
-        echo -e "${GREEN}✓${NC} JWT secret generated"
+        ENCRYPTION_KEY=$(generate_secret)
+        echo -e "${GREEN}✓${NC} Generated JWT_SECRET and ENCRYPTION_KEY"
     fi
 
     # Check for port conflicts
@@ -179,7 +187,7 @@ main() {
 
     # Start the services
     cd "$INSTALL_DIR"
-    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         docker compose up -d --build
 
     # Wait for services to be healthy
@@ -223,14 +231,17 @@ main() {
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Save the JWT secret for future reference
-    echo "JWT_SECRET=$JWT_SECRET" > "$INSTALL_DIR/.env.local"
-    echo -e "${GREEN}Note:${NC} Your JWT secret has been saved to .env.local"
+    # Save secrets for future restarts/upgrades
+    cat > "$INSTALL_DIR/.env.local" << ENVEOF
+JWT_SECRET=$JWT_SECRET
+ENCRYPTION_KEY=$ENCRYPTION_KEY
+ENVEOF
+    echo -e "${GREEN}Note:${NC} Your secrets have been saved to .env.local"
     echo "      Keep this file secure - you'll need it if you restart the services."
     echo ""
     echo "To restart Sanctuary later:"
-    echo "  cd $INSTALL_DIR"
-    echo "  source .env.local && HTTPS_PORT=$HTTPS_PORT docker compose up -d"
+    echo "  cd $INSTALL_DIR && source .env.local"
+    echo "  HTTPS_PORT=$HTTPS_PORT JWT_SECRET=\$JWT_SECRET ENCRYPTION_KEY=\$ENCRYPTION_KEY docker compose up -d"
     echo ""
 }
 

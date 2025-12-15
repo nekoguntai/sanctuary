@@ -5,6 +5,9 @@ import { getDevice, updateDevice, Device as ApiDevice } from '../src/api/devices
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
 import { Edit2, Save, X, ArrowLeft } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DeviceDetail');
 
 // Extended device type with wallet info
 interface DeviceWithWallets extends ApiDevice {
@@ -51,7 +54,7 @@ export const DeviceDetail: React.FC = () => {
         setWallets(walletList);
         setEditLabel(deviceData.label);
       } catch (error) {
-        console.error('Failed to fetch device:', error);
+        log.error('Failed to fetch device', { error });
       } finally {
         setLoading(false);
       }
@@ -66,7 +69,7 @@ export const DeviceDetail: React.FC = () => {
       setDevice({ ...device, label: editLabel });
       setIsEditing(false);
     } catch (error) {
-      console.error('Failed to update device:', error);
+      log.error('Failed to update device', { error });
     }
   };
 

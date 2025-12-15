@@ -12,6 +12,9 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { getNetwork, estimateTransactionSize, calculateFee, parseTransaction } from './utils';
 import { getElectrumClient } from './electrum';
 import prisma from '../../models/prisma';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ADVANCED_TX');
 
 /**
  * RBF (Replace-By-Fee) Configuration
@@ -579,7 +582,7 @@ export async function getAdvancedFeeEstimates(): Promise<{
       minimum: { feeRate: Math.max(1, Math.ceil(minimum)), blocks: 144, minutes: 1440 },
     };
   } catch (error) {
-    console.error('[ADVANCED_TX] Failed to get fee estimates:', error);
+    log.error('Failed to get fee estimates', { error });
     // Return sensible defaults
     return {
       fastest: { feeRate: 50, blocks: 1, minutes: 10 },

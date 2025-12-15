@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType } from '../types';
 import * as walletsApi from '../src/api/wallets';
@@ -9,6 +9,15 @@ import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
 import * as draftsApi from '../src/api/drafts';
+import {
+  useWallet,
+  useWalletUtxos,
+  useWalletAddresses,
+  useWalletTransactions,
+  useWalletDevices,
+  useInvalidateWallet,
+  useSyncWallet,
+} from '../hooks/queries/useWallets';
 import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
@@ -57,6 +66,9 @@ import { useWalletEvents, useWalletLogs, WalletLogEntry } from '../hooks/useWebS
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('WalletDetail');
 
 // Per-Wallet Telegram Settings Component
 const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) => {
@@ -353,7 +365,7 @@ export const WalletDetail: React.FC = () => {
   // Subscribe to wallet events
   useWalletEvents(id, {
     onTransaction: (data) => {
-      console.log('Real-time transaction:', data);
+      log.debug('Real-time transaction received', { txid: data?.txid });
 
       // Show notification
       addNotification({
@@ -368,7 +380,7 @@ export const WalletDetail: React.FC = () => {
       fetchData();
     },
     onBalance: (data) => {
-      console.log('Real-time balance update:', data);
+      log.debug('Real-time balance update', { balance: data?.confirmed });
 
       // Update wallet balance immediately
       if (wallet) {
@@ -387,7 +399,7 @@ export const WalletDetail: React.FC = () => {
       }
     },
     onConfirmation: (data) => {
-      console.log('Transaction confirmation:', data);
+      log.debug('Transaction confirmation', { txid: data?.txid, confirmations: data?.confirmations });
 
       // Update transaction confirmations
       setTransactions(prev =>
@@ -410,7 +422,7 @@ export const WalletDetail: React.FC = () => {
       }
     },
     onSync: (data) => {
-      console.log('Sync status update:', data);
+      log.debug('Sync status update', { status: data?.status });
 
       // Update wallet sync status
       if (wallet) {
@@ -456,7 +468,7 @@ export const WalletDetail: React.FC = () => {
     try {
       apiWallet = await walletsApi.getWallet(id);
     } catch (err) {
-      console.error('Failed to fetch wallet:', err);
+      log.error('Failed to fetch wallet', { error: err });
       if (err instanceof ApiError) {
         if (err.status === 404) {
           navigate('/wallets');
@@ -512,7 +524,7 @@ export const WalletDetail: React.FC = () => {
         .then(status => {
           if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
         })
-        .catch(err => console.error('Failed to fetch explorer URL:', err))
+        .catch(err => log.error('Failed to fetch explorer URL', { error: err }))
     );
 
     // Fetch devices
@@ -532,7 +544,7 @@ export const WalletDetail: React.FC = () => {
             }));
           setDevices(walletDevices);
         })
-        .catch(err => console.error('Failed to fetch devices:', err))
+        .catch(err => log.error('Failed to fetch devices', { error: err }))
     );
 
     // Fetch transactions (initial load)
@@ -559,7 +571,7 @@ export const WalletDetail: React.FC = () => {
           setTxOffset(TX_PAGE_SIZE);
           setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
         })
-        .catch(err => console.error('Failed to fetch transactions:', err))
+        .catch(err => log.error('Failed to fetch transactions', { error: err }))
     );
 
     // Fetch UTXOs
@@ -578,13 +590,13 @@ export const WalletDetail: React.FC = () => {
           }));
           setUTXOs(formattedUTXOs);
         })
-        .catch(err => console.error('Failed to fetch UTXOs:', err))
+        .catch(err => log.error('Failed to fetch UTXOs', { error: err }))
     );
 
     // Fetch addresses
     fetchPromises.push(
       loadAddresses(id, 20, 0, true)
-        .catch(err => console.error('Failed to fetch addresses:', err))
+        .catch(err => log.error('Failed to fetch addresses', { error: err }))
     );
 
     // Fetch drafts count (for badge on tab and notifications)
@@ -612,7 +624,7 @@ export const WalletDetail: React.FC = () => {
             removeNotificationsByType('pending_drafts', id);
           }
         })
-        .catch(err => console.error('Failed to fetch drafts count:', err))
+        .catch(err => log.error('Failed to fetch drafts count', { error: err }))
     );
 
     // Wait for all fetches to complete (they handle their own errors)
@@ -623,14 +635,14 @@ export const WalletDetail: React.FC = () => {
       const userGroups = await authApi.getUserGroups();
       setGroups(userGroups);
     } catch (err) {
-      console.error('Failed to fetch user groups:', err);
+      log.error('Failed to fetch user groups', { error: err });
     }
 
     try {
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
     } catch (err) {
-      console.error('Failed to fetch wallet share info:', err);
+      log.error('Failed to fetch wallet share info', { error: err });
     }
 
     setLoading(false);
@@ -664,7 +676,7 @@ export const WalletDetail: React.FC = () => {
       setTxOffset(prev => prev + TX_PAGE_SIZE);
       setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
     } catch (err) {
-      console.error('Failed to load more transactions:', err);
+      log.error('Failed to load more transactions', { error: err });
     } finally {
       setLoadingMoreTx(false);
     }
@@ -688,7 +700,7 @@ export const WalletDetail: React.FC = () => {
 
       setAddresses(prev => reset ? formattedAddrs : [...prev, ...formattedAddrs]);
     } catch (err) {
-      console.error('Failed to load addresses:', err);
+      log.error('Failed to load addresses', { error: err });
     } finally {
       setLoadingAddresses(false);
     }
@@ -703,12 +715,12 @@ export const WalletDetail: React.FC = () => {
       // Use the new sync API for immediate sync
       const result = await syncApi.syncWallet(id);
       if (!result.success && result.error) {
-        console.error('Sync error:', result.error);
+        log.error('Sync error', { error: result.error });
       }
       // Reload wallet data after sync
       await fetchData();
     } catch (err) {
-      console.error('Failed to sync wallet:', err);
+      log.error('Failed to sync wallet', { error: err });
       handleError(err, 'Sync Failed');
     } finally {
       setSyncing(false);
@@ -730,7 +742,7 @@ export const WalletDetail: React.FC = () => {
       // Reload wallet data after resync is queued
       await fetchData();
     } catch (err) {
-      console.error('Failed to resync wallet:', err);
+      log.error('Failed to resync wallet', { error: err });
       handleError(err, 'Resync Failed');
     } finally {
       setSyncing(false);
@@ -743,7 +755,7 @@ export const WalletDetail: React.FC = () => {
       // Queue this wallet for high-priority background sync
       // Data is already loaded from DB cache, this updates it in background
       syncApi.queueSync(id, 'high').catch(err => {
-        console.error('Failed to queue wallet sync:', err);
+        log.error('Failed to queue wallet sync', { error: err });
       });
     }
   }, [id, user]);
@@ -757,7 +769,7 @@ export const WalletDetail: React.FC = () => {
         // Reload all addresses
         await loadAddresses(id, 20, 0, true);
       } catch (err) {
-        console.error('Failed to generate more addresses:', err);
+        log.error('Failed to generate more addresses', { error: err });
       } finally {
         setLoadingAddresses(false);
       }
@@ -778,7 +790,7 @@ export const WalletDetail: React.FC = () => {
       const labels = await labelsApi.getLabels(id);
       setAvailableLabels(labels);
     } catch (err) {
-      console.error('Failed to load labels:', err);
+      log.error('Failed to load labels', { error: err });
     }
   };
 
@@ -796,7 +808,7 @@ export const WalletDetail: React.FC = () => {
       );
       setEditingAddressId(null);
     } catch (err) {
-      console.error('Failed to save address labels:', err);
+      log.error('Failed to save address labels', { error: err });
     } finally {
       setSavingAddressLabels(false);
     }
@@ -821,7 +833,7 @@ export const WalletDetail: React.FC = () => {
     // Find the UTXO to toggle
     const utxo = utxos.find(u => u.txid === txid && u.vout === vout);
     if (!utxo || !utxo.id) {
-      console.error('UTXO not found or missing ID');
+      log.error('UTXO not found or missing ID');
       return;
     }
 
@@ -837,7 +849,7 @@ export const WalletDetail: React.FC = () => {
     try {
       await transactionsApi.freezeUTXO(utxo.id, newFrozenState);
     } catch (err) {
-      console.error('Failed to freeze UTXO:', err);
+      log.error('Failed to freeze UTXO', { error: err });
       // Revert optimistic update on error
       setUTXOs(current =>
         current.map(u =>
@@ -872,7 +884,7 @@ export const WalletDetail: React.FC = () => {
         descriptor: updatedData.descriptor,
       });
     } catch (err) {
-      console.error('Failed to update wallet:', err);
+      log.error('Failed to update wallet', { error: err });
       // Revert optimistic update on error
       setWallet(wallet);
       handleError(err, 'Update Failed');
@@ -889,7 +901,7 @@ export const WalletDetail: React.FC = () => {
       setWalletShareInfo(shareInfo);
       setSelectedGroupToAdd('');
     } catch (err) {
-      console.error('Failed to share with group:', err);
+      log.error('Failed to share with group', { error: err });
       handleError(err, 'Share Failed');
     } finally {
       setSharingLoading(false);
@@ -905,7 +917,7 @@ export const WalletDetail: React.FC = () => {
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
     } catch (err) {
-      console.error('Failed to update group role:', err);
+      log.error('Failed to update group role', { error: err });
       handleError(err, 'Update Role Failed');
     } finally {
       setSharingLoading(false);
@@ -922,7 +934,7 @@ export const WalletDetail: React.FC = () => {
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
     } catch (err) {
-      console.error('Failed to remove group:', err);
+      log.error('Failed to remove group', { error: err });
       handleError(err, 'Remove Group Failed');
     } finally {
       setSharingLoading(false);
@@ -940,7 +952,7 @@ export const WalletDetail: React.FC = () => {
       setUserSearchQuery('');
       setUserSearchResults([]);
     } catch (err) {
-      console.error('Failed to share with user:', err);
+      log.error('Failed to share with user', { error: err });
       handleError(err, 'Share Failed');
     } finally {
       setSharingLoading(false);
@@ -956,7 +968,7 @@ export const WalletDetail: React.FC = () => {
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
     } catch (err) {
-      console.error('Failed to remove user:', err);
+      log.error('Failed to remove user', { error: err });
       handleError(err, 'Remove User Failed');
     } finally {
       setSharingLoading(false);
@@ -976,7 +988,7 @@ export const WalletDetail: React.FC = () => {
       const existingUserIds = walletShareInfo?.users.map(u => u.id) || [];
       setUserSearchResults(results.filter(u => !existingUserIds.includes(u.id)));
     } catch (err) {
-      console.error('Failed to search users:', err);
+      log.error('Failed to search users', { error: err });
     } finally {
       setSearchingUsers(false);
     }
@@ -995,7 +1007,7 @@ export const WalletDetail: React.FC = () => {
        downloadAnchorNode.click();
        downloadAnchorNode.remove();
      } catch (err) {
-       console.error('Failed to export wallet:', err);
+       log.error('Failed to export wallet', { error: err });
        handleError(err, 'Export Failed');
      }
   }
@@ -1998,7 +2010,7 @@ export const WalletDetail: React.FC = () => {
                            try {
                              await walletsApi.exportLabelsBip329(id!, wallet.name);
                            } catch (err) {
-                             console.error('Failed to export labels:', err);
+                             log.error('Failed to export labels', { error: err });
                              handleError(err, 'Export Labels Failed');
                            }
                        }} className="w-full">
@@ -2142,7 +2154,7 @@ export const WalletDetail: React.FC = () => {
                                await walletsApi.deleteWallet(id);
                                navigate('/wallets');
                             } catch (err) {
-                               console.error('Failed to delete wallet:', err);
+                               log.error('Failed to delete wallet', { error: err });
                                handleError(err, 'Delete Failed');
                             }
                          }

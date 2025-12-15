@@ -73,6 +73,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
 
+      # Encryption (for sensitive data like node passwords)
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
+
       # Bitcoin Network
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
 

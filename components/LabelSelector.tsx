@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Tag, Plus, X, Check, ChevronDown } from 'lucide-react';
 import * as labelsApi from '../src/api/labels';
 import type { Label } from '../src/api/labels';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('LabelSelector');
 
 interface LabelSelectorProps {
   walletId: string;
@@ -57,7 +60,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
       const data = await labelsApi.getLabels(walletId);
       setLabels(data);
     } catch (err) {
-      console.error('Failed to load labels:', err);
+      log.error('Failed to load labels', { error: err });
     } finally {
       setLoading(false);
     }
@@ -90,7 +93,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
       setNewLabelName('');
       setIsCreating(false);
     } catch (err) {
-      console.error('Failed to create label:', err);
+      log.error('Failed to create label', { error: err });
     } finally {
       setCreating(false);
     }

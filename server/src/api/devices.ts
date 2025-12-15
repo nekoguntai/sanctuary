@@ -7,6 +7,9 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DEVICES');
 
 const router = Router();
 
@@ -56,7 +59,7 @@ router.get('/models', async (req: Request, res: Response) => {
 
     res.json(models);
   } catch (error) {
-    console.error('[DEVICES] Get device models error:', error);
+    log.error('Get device models error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch device models',
@@ -85,7 +88,7 @@ router.get('/models/:slug', async (req: Request, res: Response) => {
 
     res.json(model);
   } catch (error) {
-    console.error('[DEVICES] Get device model error:', error);
+    log.error('Get device model error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch device model',
@@ -108,7 +111,7 @@ router.get('/manufacturers', async (req: Request, res: Response) => {
 
     res.json(manufacturers.map(m => m.manufacturer));
   } catch (error) {
-    console.error('[DEVICES] Get manufacturers error:', error);
+    log.error('Get manufacturers error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch manufacturers',
@@ -152,7 +155,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json(devices);
   } catch (error) {
-    console.error('[DEVICES] Get devices error:', error);
+    log.error('Get devices error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch devices',
@@ -217,7 +220,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(device);
   } catch (error) {
-    console.error('[DEVICES] Create device error:', error);
+    log.error('Create device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to register device',
@@ -265,7 +268,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(device);
   } catch (error) {
-    console.error('[DEVICES] Get device error:', error);
+    log.error('Get device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch device',
@@ -307,7 +310,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     res.json(updatedDevice);
   } catch (error) {
-    console.error('[DEVICES] Update device error:', error);
+    log.error('Update device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update device',
@@ -369,7 +372,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error) {
-    console.error('[DEVICES] Delete device error:', error);
+    log.error('Delete device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete device',

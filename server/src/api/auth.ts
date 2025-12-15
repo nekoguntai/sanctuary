@@ -12,6 +12,9 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import { authenticate } from '../middleware/auth';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 import * as twoFactorService from '../services/twoFactorService';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('AUTH');
 
 const router = Router();
 
@@ -86,7 +89,7 @@ router.get('/registration-status', async (req: Request, res: Response) => {
 
     res.json({ enabled });
   } catch (error) {
-    console.error('[AUTH] Check registration status error:', error);
+    log.error('Check registration status error', { error });
     // Default to disabled on error (admin-only)
     res.json({ enabled: false });
   }
@@ -180,7 +183,7 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
       },
     });
   } catch (error) {
-    console.error('[AUTH] Register error:', error);
+    log.error('Register error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to register user',
@@ -301,7 +304,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[AUTH] Login error:', error);
+    log.error('Login error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to login',
@@ -337,7 +340,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
 
     res.json(user);
   } catch (error) {
-    console.error('[AUTH] Get me error:', error);
+    log.error('Get me error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get user',
@@ -391,7 +394,7 @@ router.patch('/me/preferences', authenticate, async (req: Request, res: Response
 
     res.json(user);
   } catch (error) {
-    console.error('[AUTH] Update preferences error:', error);
+    log.error('Update preferences error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update preferences',
@@ -434,7 +437,7 @@ router.get('/me/groups', authenticate, async (req: Request, res: Response) => {
       memberIds: g.members.map(m => m.userId),
     })));
   } catch (error) {
-    console.error('[AUTH] Get user groups error:', error);
+    log.error('Get user groups error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get groups',
@@ -473,7 +476,7 @@ router.get('/users/search', authenticate, async (req: Request, res: Response) =>
 
     res.json(users);
   } catch (error) {
-    console.error('[AUTH] Search users error:', error);
+    log.error('Search users error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to search users',
@@ -546,7 +549,7 @@ router.post('/me/change-password', authenticate, async (req: Request, res: Respo
       message: 'Password changed successfully',
     });
   } catch (error) {
-    console.error('[AUTH] Change password error:', error);
+    log.error('Change password error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to change password',
@@ -598,7 +601,7 @@ router.post('/2fa/setup', authenticate, async (req: Request, res: Response) => {
 
     res.json({ secret, qrCodeDataUrl });
   } catch (error) {
-    console.error('[AUTH] 2FA setup error:', error);
+    log.error('2FA setup error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to setup 2FA',
@@ -679,7 +682,7 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response) => 
       backupCodes, // Return plain-text codes for user to save (only shown once)
     });
   } catch (error) {
-    console.error('[AUTH] 2FA enable error:', error);
+    log.error('2FA enable error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to enable 2FA',
@@ -764,7 +767,7 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response) =>
 
     res.json({ success: true });
   } catch (error) {
-    console.error('[AUTH] 2FA disable error:', error);
+    log.error('2FA disable error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to disable 2FA',
@@ -903,7 +906,7 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
       },
     });
   } catch (error) {
-    console.error('[AUTH] 2FA verify error:', error);
+    log.error('2FA verify error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to verify 2FA',
@@ -958,7 +961,7 @@ router.post('/2fa/backup-codes', authenticate, async (req: Request, res: Respons
 
     res.json({ remaining });
   } catch (error) {
-    console.error('[AUTH] Get backup codes error:', error);
+    log.error('Get backup codes error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get backup codes',
@@ -1039,7 +1042,7 @@ router.post('/2fa/backup-codes/regenerate', authenticate, async (req: Request, r
       backupCodes,
     });
   } catch (error) {
-    console.error('[AUTH] Regenerate backup codes error:', error);
+    log.error('Regenerate backup codes error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to regenerate backup codes',
@@ -1082,7 +1085,7 @@ router.post('/telegram/test', authenticate, async (req: Request, res: Response) 
       });
     }
   } catch (error) {
-    console.error('[AUTH] Telegram test error:', error);
+    log.error('Telegram test error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test Telegram configuration',

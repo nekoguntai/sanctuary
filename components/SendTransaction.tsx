@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, UTXO, FeeEstimate, WalletType, Device } from '../types';
 import * as walletsApi from '../src/api/wallets';
@@ -18,6 +18,9 @@ import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('SendTx');
 
 // Device connection capabilities
 type ConnectionMethod = 'usb' | 'bluetooth' | 'airgap';
@@ -206,7 +209,7 @@ export const SendTransaction: React.FC = () => {
       try {
         apiWallet = await walletsApi.getWallet(id);
       } catch (err) {
-        console.error('Failed to fetch wallet:', err);
+        log.error('Failed to fetch wallet', { error: err });
         if (err instanceof ApiError) {
           setError(err.message);
         } else {
@@ -312,7 +315,7 @@ export const SendTransaction: React.FC = () => {
           );
           setWalletDevices(walletDeviceList);
         } catch (err) {
-          console.error('Failed to fetch devices:', err);
+          log.error('Failed to fetch devices', { error: err });
           // Non-critical, don't block the page
         }
 
@@ -376,7 +379,7 @@ export const SendTransaction: React.FC = () => {
           }
         }
       } catch (err) {
-        console.error('Failed to fetch UTXOs or fees:', err);
+        log.error('Failed to fetch UTXOs or fees', { error: err });
         if (err instanceof ApiError) {
           setError(err.message);
         } else {
@@ -396,7 +399,7 @@ export const SendTransaction: React.FC = () => {
           }
         } catch (err) {
           // Non-critical - don't block if drafts check fails
-          console.error('Failed to check for existing drafts:', err);
+          log.error('Failed to check for existing drafts', { error: err });
         }
       }
 
@@ -418,7 +421,7 @@ export const SendTransaction: React.FC = () => {
         requestAnimationFrame(tick);
       }
     } catch (err) {
-      console.error("Camera error", err);
+      log.error('Camera error', { error: err });
       handleError('Unable to access camera. Please check your browser permissions.', 'Camera Error');
       setShowScanner(false);
     }
@@ -471,17 +474,122 @@ export const SendTransaction: React.FC = () => {
       setSelectedUTXOs(next);
   };
 
-  const selectedTotal = utxos
-    .filter(u => selectedUTXOs.has(`${u.txid}:${u.vout}`))
-    .reduce((acc, u) => acc + u.amount, 0);
+  // Calculate total from selected UTXOs
+  const selectedTotal = useMemo(() => {
+    return utxos
+      .filter(u => selectedUTXOs.has(`${u.txid}:${u.vout}`))
+      .reduce((acc, u) => acc + u.amount, 0);
+  }, [utxos, selectedUTXOs]);
 
-  const calculateTotalFee = () => {
-      // Mock size calculation: (inputs * 148 + outputs * 34 + 10) * feeRate
-      const inputs = selectedUTXOs.size || 1; // approximate if none selected yet
-      const outputs = isSendMax ? 1 : 2; // No change output for sendMax
-      const vbytes = (inputs * 148) + (outputs * 34) + 10;
-      return vbytes * feeRate;
-  }
+  // Get spendable (non-frozen) UTXOs
+  const spendableUtxos = useMemo(() => {
+    return utxos.filter(u => !u.frozen);
+  }, [utxos]);
+
+  // Calculate input size based on script type (vbytes per input)
+  const getInputSize = useCallback((scriptType?: string) => {
+    switch (scriptType) {
+      case 'native_segwit': return 68;   // P2WPKH
+      case 'nested_segwit': return 91;   // P2SH-P2WPKH
+      case 'taproot': return 58;         // P2TR (Schnorr)
+      case 'legacy': return 148;         // P2PKH
+      default: return 68;                // Default to native segwit
+    }
+  }, []);
+
+  // Calculate output size based on script type (vbytes per output)
+  const getOutputSize = useCallback((scriptType?: string) => {
+    switch (scriptType) {
+      case 'native_segwit': return 31;   // P2WPKH
+      case 'nested_segwit': return 32;   // P2SH
+      case 'taproot': return 43;         // P2TR
+      case 'legacy': return 34;          // P2PKH
+      default: return 31;                // Default to native segwit
+    }
+  }, []);
+
+  // Calculate transaction fee given inputs, outputs, and fee rate
+  const calculateFee = useCallback((numInputs: number, numOutputs: number, rate: number) => {
+    const inputSize = getInputSize(wallet?.scriptType);
+    const outputSize = getOutputSize(wallet?.scriptType);
+    const overhead = 11; // Version (4) + locktime (4) + input count (1) + output count (1) + segwit marker/flag (1)
+    const vbytes = (numInputs * inputSize) + (numOutputs * outputSize) + overhead;
+    return Math.ceil(vbytes * rate);
+  }, [wallet?.scriptType, getInputSize, getOutputSize]);
+
+  // Calculate total fee for current transaction (for display purposes)
+  const calculateTotalFee = useCallback(() => {
+    // Determine number of inputs
+    let numInputs: number;
+    if (showCoinControl && selectedUTXOs.size > 0) {
+      numInputs = selectedUTXOs.size;
+    } else {
+      // Estimate: use minimum number of UTXOs needed to cover amount + fee
+      // For simplicity, estimate 1-3 inputs based on amount vs balance ratio
+      const amountNeeded = parseInt(amount || '0');
+      if (amountNeeded === 0) {
+        numInputs = 1;
+      } else {
+        // Rough estimate: sort UTXOs by amount desc, count how many needed
+        const sorted = [...spendableUtxos].sort((a, b) => b.amount - a.amount);
+        let running = 0;
+        numInputs = 0;
+        for (const u of sorted) {
+          running += u.amount;
+          numInputs++;
+          if (running >= amountNeeded + calculateFee(numInputs, 2, feeRate)) break;
+        }
+        numInputs = Math.max(1, numInputs);
+      }
+    }
+
+    // Number of outputs: 1 for sendMax (no change), 2 for normal (recipient + change)
+    const numOutputs = isSendMax ? 1 : 2;
+
+    return calculateFee(numInputs, numOutputs, feeRate);
+  }, [showCoinControl, selectedUTXOs.size, amount, spendableUtxos, isSendMax, feeRate, calculateFee]);
+
+  // Calculate maximum sendable amount
+  // This depends on: selected UTXOs, fee rate, subtractFeesFromAmount, wallet balance
+  const maxSendableAmount = useMemo(() => {
+    // Determine available balance
+    let availableBalance: number;
+    let numInputs: number;
+
+    if (showCoinControl && selectedUTXOs.size > 0) {
+      // Coin control mode with selection: use selected total
+      availableBalance = selectedTotal;
+      numInputs = selectedUTXOs.size;
+    } else if (showCoinControl) {
+      // Coin control mode but nothing selected: max is 0
+      return 0;
+    } else {
+      // Auto mode: use all spendable UTXOs
+      availableBalance = spendableUtxos.reduce((sum, u) => sum + u.amount, 0);
+      numInputs = spendableUtxos.length;
+    }
+
+    if (availableBalance <= 0 || numInputs === 0) return 0;
+
+    // For sendMax, there's only 1 output (no change)
+    const estimatedFee = calculateFee(numInputs, 1, feeRate);
+
+    // If subtractFeesFromAmount is checked, the max we can "send" is the full balance
+    // because the fee comes out of the amount sent
+    if (subtractFeesFromAmount) {
+      return availableBalance;
+    }
+
+    // Otherwise, max = balance - fee
+    return Math.max(0, availableBalance - estimatedFee);
+  }, [showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, feeRate, subtractFeesFromAmount, calculateFee]);
+
+  // Auto-update amount when in sendMax mode and dependencies change
+  useEffect(() => {
+    if (isSendMax && maxSendableAmount >= 0) {
+      setAmount(maxSendableAmount.toString());
+    }
+  }, [isSendMax, maxSendableAmount]);
 
   // Check if transaction can be created
   const canCreateTransaction = () => {
@@ -512,7 +620,7 @@ export const SendTransaction: React.FC = () => {
         const result = await bitcoinApi.validateAddress({ address: recipient });
         setRecipientValid(result.valid);
       } catch (err) {
-        console.error('Address validation error:', err);
+        log.error('Address validation error', { error: err });
         setRecipientValid(false);
       }
     };
@@ -592,14 +700,14 @@ export const SendTransaction: React.FC = () => {
             try {
               await draftsApi.deleteDraft(id, currentDraftId);
             } catch (e) {
-              console.error('Failed to delete draft after broadcast:', e);
+              log.error('Failed to delete draft after broadcast', { error: e });
             }
           }
 
           navigate(`/wallets/${id}`);
           return;
         } catch (hwError) {
-          console.error('Hardware wallet signing failed:', hwError);
+          log.error('Hardware wallet signing failed', { error: hwError });
           setError(hwError instanceof Error ? hwError.message : 'Hardware wallet signing failed');
           return;
         }
@@ -615,7 +723,7 @@ export const SendTransaction: React.FC = () => {
       setShowHWConnect(true);
 
     } catch (err) {
-      console.error('Transaction broadcast error:', err);
+      log.error('Transaction broadcast error', { error: err });
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
@@ -634,7 +742,7 @@ export const SendTransaction: React.FC = () => {
       // After connection, user can try broadcasting again
     } catch (err) {
       // Error handled by hardware wallet hook
-      console.error('Hardware wallet connection failed:', err);
+      log.error('Hardware wallet connection failed', { error: err });
     }
   };
 
@@ -710,7 +818,7 @@ export const SendTransaction: React.FC = () => {
       // Navigate back to wallet with drafts tab active
       navigate(`/wallets/${id}`, { state: { activeTab: 'drafts' } });
     } catch (err) {
-      console.error('Save draft error:', err);
+      log.error('Save draft error', { error: err });
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
@@ -916,22 +1024,17 @@ export const SendTransaction: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      // Mark as send max - the backend will calculate the exact amount
+                      // Enable sendMax mode - the useEffect will update the amount
                       setIsSendMax(true);
-                      // Use current fee rate or default to standard fee
-                      const currentFeeRate = feeRate || fees?.halfHourFee || 10;
-                      // For MAX send, there's no change output (only 1 output)
-                      // Native segwit: inputs ~68 vB each, output ~31 vB, overhead ~10.5 vB
-                      const numInputs = selectedUTXOs.size > 0 ? selectedUTXOs.size : utxos.length;
-                      const estimatedVBytes = (numInputs * 68) + 31 + 11; // 1 output for max send
-                      const estimatedFee = Math.ceil(estimatedVBytes * currentFeeRate);
-                      const availableBalance = selectedUTXOs.size > 0 ? selectedTotal : (wallet?.balance || 0);
-                      const maxAmount = Math.max(0, availableBalance - estimatedFee);
-                      setAmount(maxAmount.toString());
-                      // Select all UTXOs if none selected
-                      if (selectedUTXOs.size === 0 && utxos.length > 0) {
-                        setSelectedUTXOs(new Set(utxos.map(u => `${u.txid}:${u.vout}`)));
+                      // If no UTXOs selected and coin control is not active, select all spendable UTXOs
+                      if (!showCoinControl && spendableUtxos.length > 0) {
+                        const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
+                        setSelectedUTXOs(allSpendable);
                         setShowCoinControl(true);
+                      } else if (showCoinControl && selectedUTXOs.size === 0 && spendableUtxos.length > 0) {
+                        // Coin control active but nothing selected - select all spendable
+                        const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
+                        setSelectedUTXOs(allSpendable);
                       }
                     }}
                     className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
@@ -948,16 +1051,31 @@ export const SendTransaction: React.FC = () => {
                          setIsSendMax(false); // User manually changed amount, no longer send max
                        }}
                        placeholder="0"
-                       className="block w-full px-4 py-3 pr-24 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors"
+                       className={`block w-full px-4 py-3 pr-24 rounded-xl border ${
+                         isSendMax
+                           ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
+                           : 'border-sanctuary-300 dark:border-sanctuary-700'
+                       } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors`}
                    />
-                   <div className="absolute right-4 top-3.5 text-sanctuary-400 text-sm flex items-center pointer-events-none">
-                      {amountInSats > 0 && <span className="mr-2 text-sanctuary-500 dark:text-sanctuary-400">≈ {currencySymbol}{amountInFiat}</span>}
-                      <span>SATS</span>
+                   <div className="absolute right-4 top-3.5 text-sanctuary-400 text-sm flex items-center">
+                      {isSendMax && (
+                        <button
+                          type="button"
+                          onClick={() => setIsSendMax(false)}
+                          className="mr-2 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+                          title="Click to exit MAX mode and edit amount manually"
+                        >
+                          MAX
+                        </button>
+                      )}
+                      {amountInSats > 0 && <span className="mr-2 text-sanctuary-500 dark:text-sanctuary-400 pointer-events-none">≈ {currencySymbol}{amountInFiat}</span>}
+                      <span className="pointer-events-none">SATS</span>
                    </div>
                 </div>
                 {showCoinControl && (
-                   <div className="text-right text-xs text-sanctuary-500">
-                      Selected: {format(selectedTotal)}
+                   <div className="flex justify-between text-xs text-sanctuary-500">
+                      <span>Selected: {format(selectedTotal)} ({selectedUTXOs.size} UTXO{selectedUTXOs.size !== 1 ? 's' : ''})</span>
+                      <span>Max sendable: {format(maxSendableAmount)}</span>
                    </div>
                 )}
             </div>
@@ -1189,7 +1307,7 @@ export const SendTransaction: React.FC = () => {
                     // After successful connection, mark as signed (in real implementation, would sign PSBT)
                     setSignedDevices(prev => new Set([...prev, device.id]));
                   } catch (err) {
-                    console.error('Signing failed:', err);
+                    log.error('Signing failed', { error: err });
                     setError(err instanceof Error ? err.message : 'Signing failed');
                   } finally {
                     setSigningDeviceId(null);
@@ -1229,7 +1347,7 @@ export const SendTransaction: React.FC = () => {
                     URL.revokeObjectURL(url);
                     setUnsignedPsbt(txData.psbtBase64);
                   } catch (err) {
-                    console.error('Failed to download PSBT:', err);
+                    log.error('Failed to download PSBT', { error: err });
                     if (err instanceof ApiError) {
                       setError(err.message);
                     } else {
@@ -1247,7 +1365,7 @@ export const SendTransaction: React.FC = () => {
                   reader.onload = (e) => {
                     const content = e.target?.result as string;
                     // In production, validate the signed PSBT
-                    console.log('Uploaded signed PSBT:', content.substring(0, 50) + '...');
+                    log.debug('Uploaded signed PSBT', { preview: content.substring(0, 50) + '...' });
                     // Mark device as signed
                     setSignedDevices(prev => new Set([...prev, device.id]));
                     setPsbtDeviceId(null);
@@ -1489,7 +1607,7 @@ export const SendTransaction: React.FC = () => {
               URL.revokeObjectURL(url);
               setUnsignedPsbt(txData.psbtBase64);
             } catch (err) {
-              console.error('Failed to download PSBT:', err);
+              log.error('Failed to download PSBT', { error: err });
               if (err instanceof ApiError) {
                 setError(err.message);
               } else {
@@ -1505,7 +1623,7 @@ export const SendTransaction: React.FC = () => {
             const reader = new FileReader();
             reader.onload = (e) => {
               const content = e.target?.result as string;
-              console.log('Uploaded signed PSBT:', content.substring(0, 50) + '...');
+              log.debug('Uploaded signed PSBT', { preview: content.substring(0, 50) + '...' });
               // In production, this would broadcast the signed transaction
               showSuccess('Signed PSBT uploaded! Ready to broadcast.', 'PSBT Uploaded');
               setShowPsbtOptions(false);
@@ -1559,7 +1677,7 @@ export const SendTransaction: React.FC = () => {
                                       deviceType?.includes('jade') ? 'jade' : 'ledger'
                                     );
                                   } catch (err) {
-                                    console.error('Connection failed:', err);
+                                    log.error('Connection failed', { error: err });
                                   }
                                 }
                               }}

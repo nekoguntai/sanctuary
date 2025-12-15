@@ -6,6 +6,9 @@
  */
 
 import { providers, PriceData, supportedCurrencies } from './providers';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('PRICE');
 
 interface CachedPrice {
   data?: PriceData;
@@ -143,7 +146,7 @@ class PriceService {
       try {
         return await this.getPriceFrom(name, currency);
       } catch (error) {
-        console.error(`[PRICE] Failed to fetch from ${name}:`, error);
+        log.error(`Failed to fetch from ${name}`, { error });
         return null;
       }
     });
@@ -161,7 +164,7 @@ class PriceService {
         const price = await this.getPrice(currency);
         return { currency, price };
       } catch (error) {
-        console.error(`[PRICE] Failed to get price for ${currency}:`, error);
+        log.error(`Failed to get price for ${currency}`, { error });
         return null;
       }
     });
@@ -219,7 +222,7 @@ class PriceService {
       const cached = this.cache.get(cacheKey);
 
       if (cached && cached.fetchedAt && cached.price !== undefined && Date.now() - cached.fetchedAt.getTime() < this.cacheTimeout) {
-        console.log(`[PRICE] Using cached historical price for ${currency} on ${normalizedDate.toDateString()}`);
+        log.debug(`Using cached historical price for ${currency} on ${normalizedDate.toDateString()}`);
         return cached.price;
       }
 
@@ -233,11 +236,11 @@ class PriceService {
         fetchedAt: new Date(),
       });
 
-      console.log(`[PRICE] Fetched historical price from ${priceData.provider}: ${priceData.price} ${priceData.currency}`);
+      log.debug(`Fetched historical price from ${priceData.provider}: ${priceData.price} ${priceData.currency}`);
 
       return priceData.price;
     } catch (error: any) {
-      console.error('[PRICE] Failed to fetch historical price:', error.message);
+      log.error('Failed to fetch historical price', { error: error.message });
       throw new Error(`Failed to fetch historical price: ${error.message}`);
     }
   }
@@ -255,7 +258,7 @@ class PriceService {
       const cached = this.cache.get(cacheKey);
 
       if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt.getTime() < this.cacheTimeout) {
-        console.log(`[PRICE] Using cached price history for ${currency} (${days} days)`);
+        log.debug(`Using cached price history for ${currency} (${days} days)`);
         return cached.prices || [];
       }
 
@@ -273,11 +276,11 @@ class PriceService {
         prices: priceHistory,
       });
 
-      console.log(`[PRICE] Fetched price history from CoinGecko: ${priceHistory.length} data points`);
+      log.debug(`Fetched price history from CoinGecko: ${priceHistory.length} data points`);
 
       return priceHistory;
     } catch (error: any) {
-      console.error('[PRICE] Failed to fetch price history:', error.message);
+      log.error('Failed to fetch price history', { error: error.message });
       throw new Error(`Failed to fetch price history: ${error.message}`);
     }
   }
@@ -413,4 +416,4 @@ export function getPriceService(): PriceService {
 }
 
 export default PriceService;
-export { PriceData, AggregatedPrice };
+export type { PriceData, AggregatedPrice };

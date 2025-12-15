@@ -11,7 +11,9 @@
     ],
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "vite/client",
+      "w3c-web-usb"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,

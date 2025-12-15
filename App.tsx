@@ -24,6 +24,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { AppNotificationProvider } from './contexts/AppNotificationContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
+import { QueryProvider } from './providers/QueryProvider';
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
@@ -70,15 +71,17 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => {
   return (
     <HashRouter>
-      <UserProvider>
-        <CurrencyProvider>
-          <NotificationProvider>
-            <AppNotificationProvider>
-              <AppRoutes />
-            </AppNotificationProvider>
-          </NotificationProvider>
-        </CurrencyProvider>
-      </UserProvider>
+      <QueryProvider>
+        <UserProvider>
+          <CurrencyProvider>
+            <NotificationProvider>
+              <AppNotificationProvider>
+                <AppRoutes />
+              </AppNotificationProvider>
+            </NotificationProvider>
+          </CurrencyProvider>
+        </UserProvider>
+      </QueryProvider>
     </HashRouter>
   );
 };

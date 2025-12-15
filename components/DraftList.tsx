@@ -15,6 +15,9 @@ import { DraftTransaction, getDrafts, deleteDraft, updateDraft } from '../src/ap
 import { WalletType } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DraftList');
 
 interface DraftListProps {
   walletId: string;
@@ -49,13 +52,13 @@ export const DraftList: React.FC<DraftListProps> = ({
     try {
       setLoading(true);
       setError(null);
-      console.log('[DraftList] Loading drafts for wallet:', walletId);
+      log.debug('Loading drafts for wallet', { walletId });
       const data = await getDrafts(walletId);
-      console.log('[DraftList] Loaded drafts:', data.length, data);
+      log.debug('Loaded drafts', { count: data.length });
       setDrafts(data);
       onDraftsChange?.(data.length);
     } catch (err: any) {
-      console.error('[DraftList] Failed to load drafts:', err);
+      log.error('Failed to load drafts', { error: err });
       setError(err.message || 'Failed to load drafts');
     } finally {
       setLoading(false);
@@ -79,7 +82,7 @@ export const DraftList: React.FC<DraftListProps> = ({
       setDeleteConfirm(null);
       onDraftsChange?.(newDrafts.length);
     } catch (err: any) {
-      console.error('Failed to delete draft:', err);
+      log.error('Failed to delete draft', { error: err });
       setError(err.message || 'Failed to delete draft');
     }
   };
@@ -119,7 +122,7 @@ export const DraftList: React.FC<DraftListProps> = ({
       await loadDrafts();
       setUploadingFor(null);
     } catch (err: any) {
-      console.error('Failed to upload PSBT:', err);
+      log.error('Failed to upload PSBT', { error: err });
       setError(err.message || 'Failed to upload signed PSBT');
     }
   };

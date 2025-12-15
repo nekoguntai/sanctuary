@@ -10,6 +10,7 @@ import prisma from '../models/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 import { createLogger } from '../utils/logger';
+import { encrypt } from '../utils/encryption';
 
 const router = Router();
 const log = createLogger('ADMIN');
@@ -33,7 +34,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
         port: '50002',
         useSsl: true,
         user: null,
-        password: null,
+        hasPassword: false,
         explorerUrl: 'https://mempool.space',
         feeEstimatorUrl: 'https://mempool.space',
       });
@@ -45,7 +46,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
       user: nodeConfig.username,
-      password: nodeConfig.password,
+      hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
     });
@@ -99,7 +100,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
           username: user || null,
-          password: password || null,
+          password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           updatedAt: new Date(),
@@ -115,7 +116,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
           username: user || null,
-          password: password || null,
+          password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           isDefault: true,
@@ -139,7 +140,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
       user: nodeConfig.username,
-      password: nodeConfig.password,
+      hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
       message: 'Node configuration updated successfully. Backend will reconnect on next request.',
@@ -575,21 +576,26 @@ router.post('/groups', authenticate, requireAdmin, async (req: Request, res: Res
       },
     });
 
-    // Add members if provided
-    if (memberIds && Array.isArray(memberIds)) {
-      for (const userId of memberIds) {
-        // Check if user exists
-        const userExists = await prisma.user.findUnique({ where: { id: userId } });
-        if (userExists) {
-          await prisma.groupMember.create({
-            data: {
-              groupId: group.id,
-              userId,
-              role: 'member',
-            },
-          });
-        }
-      }
+    // Add members if provided (batch operation to avoid N+1 queries)
+    if (memberIds && Array.isArray(memberIds) && memberIds.length > 0) {
+      // Batch load all users to check existence in a single query
+      const existingUsers = await prisma.user.findMany({
+        where: { id: { in: memberIds } },
+        select: { id: true },
+      });
+      const validUserIds = new Set(existingUsers.map(u => u.id));
+
+      // Batch create all valid members
+      await prisma.groupMember.createMany({
+        data: memberIds
+          .filter(id => validUserIds.has(id))
+          .map(userId => ({
+            groupId: group.id,
+            userId,
+            role: 'member',
+          })),
+        skipDuplicates: true,
+      });
     }
 
     // Fetch the complete group with members
@@ -691,18 +697,26 @@ router.put('/groups/:groupId', authenticate, requireAdmin, async (req: Request, 
         });
       }
 
-      // Add new members
-      for (const userId of toAdd) {
-        const userExists = await prisma.user.findUnique({ where: { id: userId } });
-        if (userExists) {
-          await prisma.groupMember.create({
-            data: {
+      // Add new members (batch operation to avoid N+1 queries)
+      if (toAdd.length > 0) {
+        // Batch load all users to check existence in a single query
+        const existingUsers = await prisma.user.findMany({
+          where: { id: { in: toAdd } },
+          select: { id: true },
+        });
+        const validUserIds = new Set(existingUsers.map(u => u.id));
+
+        // Batch create all valid members
+        await prisma.groupMember.createMany({
+          data: toAdd
+            .filter(id => validUserIds.has(id))
+            .map(userId => ({
               groupId,
               userId,
               role: 'member',
-            },
-          });
-        }
+            })),
+          skipDuplicates: true,
+        });
       }
     }
 

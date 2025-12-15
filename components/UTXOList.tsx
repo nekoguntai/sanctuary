@@ -5,6 +5,9 @@ import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('UTXOList');
 
 interface UTXOListProps {
   utxos: UTXO[];
@@ -31,7 +34,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
     bitcoinApi.getStatus().then(status => {
       if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
     }).catch(err => {
-      console.error('Failed to fetch explorer URL:', err);
+      log.error('Failed to fetch explorer URL', { error: err });
     });
   }, []);
 

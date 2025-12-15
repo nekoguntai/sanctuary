@@ -1,43 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WalletType } from '../types';
-import * as walletsApi from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet, Upload, Users } from 'lucide-react';
+import type { Wallet } from '../src/api/wallets';
+import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useWallets } from '../hooks/queries/useWallets';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
 export const WalletList: React.FC = () => {
-  const [wallets, setWallets] = useState<walletsApi.Wallet[]>([]);
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const navigate = useNavigate();
   const { format } = useCurrency();
   const { user } = useUser();
 
-  useEffect(() => {
-    const fetchData = async () => {
-       if (!user) return;
-       try {
-         setLoading(true);
-         const apiWallets = await walletsApi.getWallets();
-         setWallets(apiWallets);
-       } catch (error) {
-         console.error('Failed to load wallets:', error);
-         setWallets([]);
-       } finally {
-         setLoading(false);
-       }
-    };
-    fetchData();
-  }, [user]);
+  // Use React Query for wallet data with automatic caching and refetching
+  const { data: wallets = [], isLoading: loading, error } = useWallets();
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 
@@ -101,7 +86,7 @@ export const WalletList: React.FC = () => {
 
         <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full surface-secondary mb-4">
-            <Wallet className="w-8 h-8 text-sanctuary-400" />
+            <WalletIcon className="w-8 h-8 text-sanctuary-400" />
           </div>
           <h3 className="text-xl font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">No Wallets Yet</h3>
           <p className="text-sanctuary-500 mb-6 max-w-md mx-auto">

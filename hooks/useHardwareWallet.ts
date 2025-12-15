@@ -3,10 +3,14 @@ import {
   HardwareWalletDevice,
   DeviceType,
   TransactionForSigning,
+  PSBTSignRequest,
   hardwareWalletService,
   isHardwareWalletSupported,
   getConnectedDevices,
 } from '../services/hardwareWallet';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('useHardwareWallet');
 
 export interface UseHardwareWalletReturn {
   // Device state
@@ -26,6 +30,7 @@ export interface UseHardwareWalletReturn {
   connect: (type?: DeviceType) => Promise<void>;
   disconnect: () => void;
   signTransaction: (tx: TransactionForSigning) => Promise<string>;
+  signPSBT: (psbtBase64: string, inputPaths?: string[]) => Promise<string>;
   refreshDevices: () => Promise<void>;
   clearError: () => void;
 }
@@ -51,7 +56,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
       const connectedDevices = await getConnectedDevices();
       setDevices(connectedDevices);
     } catch (err) {
-      console.error('Failed to refresh devices:', err);
+      log.error('Failed to refresh devices', { error: err });
     }
   }, []);
 
@@ -117,6 +122,33 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
   }, [device]);
 
   /**
+   * Sign a PSBT with hardware wallet
+   */
+  const signPSBT = useCallback(async (psbtBase64: string, inputPaths: string[] = []): Promise<string> => {
+    if (!device) {
+      throw new Error('No device connected');
+    }
+
+    try {
+      setSigning(true);
+      setError(null);
+
+      const result = await hardwareWalletService.signPSBT({
+        psbt: psbtBase64,
+        inputPaths,
+      });
+
+      return result.psbt;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sign PSBT';
+      setError(message);
+      throw err;
+    } finally {
+      setSigning(false);
+    }
+  }, [device]);
+
+  /**
    * Clear error state
    */
   const clearError = useCallback(() => {
@@ -134,6 +166,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
     connect,
     disconnect,
     signTransaction,
+    signPSBT,
     refreshDevices,
     clearError,
   };

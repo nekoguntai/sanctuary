@@ -7,6 +7,9 @@ import { Button } from './ui/Button';
 import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
 import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('CreateWallet');
 
 export const CreateWallet: React.FC = () => {
   const navigate = useNavigate();
@@ -38,7 +41,7 @@ export const CreateWallet: React.FC = () => {
         }));
         setAvailableDevices(formatted);
       } catch (error) {
-        console.error('Failed to load devices:', error);
+        log.error('Failed to load devices', { error });
         setAvailableDevices([]);
       }
     };
@@ -92,7 +95,7 @@ export const CreateWallet: React.FC = () => {
       // Navigate to wallet detail page
       navigate(`/wallets/${created.id}`);
     } catch (error) {
-      console.error('Failed to create wallet:', error);
+      log.error('Failed to create wallet', { error });
       handleError(error, 'Failed to Create Wallet');
     } finally {
       setIsSubmitting(false);

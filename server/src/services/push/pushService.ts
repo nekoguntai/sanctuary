@@ -9,7 +9,7 @@
 import prisma from '../../models/prisma';
 import { sendToAPNs, isAPNsConfigured } from './apnsProvider';
 import { sendToFCM, isFCMConfigured } from './fcmProvider';
-import { getWalletUsers, type WalletTelegramSettings } from '../telegram/telegramService';
+import { type WalletTelegramSettings } from '../telegram/telegramService';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('PUSH');
@@ -115,15 +115,26 @@ export async function notifyNewTransactions(
     });
     if (!wallet) return;
 
-    // Get all users with access to this wallet
-    const users = await getWalletUsers(walletId);
+    // Get all users with access to this wallet, including push device counts
+    // This avoids N+1 queries by fetching device counts in a single query
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { wallets: { some: { walletId } } },
+          { groupMemberships: { some: { group: { wallets: { some: { id: walletId } } } } } },
+        ],
+      },
+      select: {
+        id: true,
+        username: true,
+        preferences: true,
+        _count: { select: { pushDevices: true } },
+      },
+    });
 
     for (const user of users) {
-      // Check if user has push devices registered
-      const deviceCount = await prisma.pushDevice.count({
-        where: { userId: user.id },
-      });
-      if (deviceCount === 0) continue;
+      // Skip if user has no push devices registered (count already fetched)
+      if (user._count.pushDevices === 0) continue;
 
       // Use same wallet settings as Telegram
       const prefs = user.preferences as Record<string, unknown> | null;

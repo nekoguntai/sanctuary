@@ -24,6 +24,9 @@ import {
 } from './bitcoin/descriptorParser';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('IMPORT');
 
 const INITIAL_ADDRESS_COUNT = 20;
 
@@ -374,7 +377,7 @@ export async function importFromDescriptor(
         data: addressesToCreate,
       });
     } catch (err) {
-      console.error('[IMPORT] Failed to generate initial addresses:', err);
+      log.error('Failed to generate initial addresses', { error: err });
     }
 
     return {
@@ -528,7 +531,7 @@ export async function importFromJson(
         data: addressesToCreate,
       });
     } catch (err) {
-      console.error('[IMPORT] Failed to generate initial addresses:', err);
+      log.error('Failed to generate initial addresses', { error: err });
     }
 
     return {
@@ -711,7 +714,7 @@ export async function importFromParsedData(
         data: addressesToCreate,
       });
     } catch (err) {
-      console.error('[IMPORT] Failed to generate initial addresses:', err);
+      log.error('Failed to generate initial addresses', { error: err });
     }
 
     return {

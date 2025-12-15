@@ -25,6 +25,20 @@ import draftRoutes from './api/drafts';
 import { initializeWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
+import { createLogger } from './utils/logger';
+import { validateEncryptionKey } from './utils/encryption';
+
+const log = createLogger('SERVER');
+
+// Validate required environment variables at startup
+try {
+  validateEncryptionKey();
+} catch (error) {
+  console.error('FATAL: Missing required environment variable');
+  console.error((error as Error).message);
+  console.error('Please set ENCRYPTION_KEY in your .env file (at least 32 characters)');
+  process.exit(1);
+}
 
 // Initialize Express app
 const app: Express = express();
@@ -66,7 +80,7 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Request logging
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  log.debug(`${req.method} ${req.path}`);
   next();
 });
 
@@ -109,7 +123,7 @@ app.use((req: Request, res: Response) => {
 
 // Error handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('[ERROR]', err);
+  log.error('Unhandled error', { error: err });
   res.status(500).json({
     error: 'Internal Server Error',
     message: config.nodeEnv === 'development' ? err.message : 'Something went wrong',
@@ -128,41 +142,36 @@ const wsServer = initializeWebSocketServer(httpServer);
 
 // Start notification service
 notificationService.start().catch((err) => {
-  console.error('Failed to start notification service:', err);
+  log.error('Failed to start notification service', { error: err });
 });
 
 // Start background sync service
 const syncService = getSyncService();
 syncService.start().catch((err) => {
-  console.error('Failed to start sync service:', err);
+  log.error('Failed to start sync service', { error: err });
 });
 
 // Start listening
 httpServer.listen(config.port, () => {
-  console.log('');
-  console.log('🏛️  Sanctuary Wallet API Server');
-  console.log('=====================================');
-  console.log(`Environment: ${config.nodeEnv}`);
-  console.log(`Server:      ${config.apiUrl}`);
-  console.log(`Client:      ${config.clientUrl}`);
-  console.log(`Network:     ${config.bitcoin.network}`);
-  console.log('=====================================');
-  console.log('');
-  console.log(`✅ HTTP Server running on port ${config.port}`);
-  console.log(`✅ WebSocket Server running on ws://localhost:${config.port}/ws`);
-  console.log(`✅ Notification Service running`);
-  console.log(`✅ Background Sync Service running`);
-  console.log('');
+  log.info('Sanctuary Wallet API Server starting');
+  log.info(`Environment: ${config.nodeEnv}`);
+  log.info(`Server: ${config.apiUrl}`);
+  log.info(`Client: ${config.clientUrl}`);
+  log.info(`Network: ${config.bitcoin.network}`);
+  log.info(`HTTP Server running on port ${config.port}`);
+  log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
+  log.info('Notification Service running');
+  log.info('Background Sync Service running');
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing server...');
+  log.info('SIGTERM received, closing server...');
   wsServer.close();
   notificationService.stop();
   syncService.stop();
   httpServer.close(() => {
-    console.log('Server closed');
+    log.info('Server closed');
     process.exit(0);
   });
 });

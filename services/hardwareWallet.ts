@@ -9,6 +9,9 @@
 import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import AppBtc from '@ledgerhq/hw-app-btc';
 import apiClient from '../src/api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('HardwareWallet');
 
 export type DeviceType = 'coldcard' | 'ledger' | 'trezor' | 'bitbox' | 'passport' | 'jade' | 'unknown';
 
@@ -124,7 +127,7 @@ export const getConnectedDevices = async (): Promise<HardwareWalletDevice[]> => 
       fingerprint: undefined, // Will be set on connect
     }));
   } catch (error) {
-    console.error('Failed to enumerate devices:', error);
+    log.error('Failed to enumerate devices', { error });
     return [];
   }
 };
@@ -188,7 +191,8 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
   try {
     // Create transport (will use existing permission or request new one)
     const transport = await TransportWebUSB.create();
-    const device = transport.device;
+    // Type assertion needed due to library type definitions
+    const device = (transport as any).device as USBDevice;
 
     // Create Bitcoin app instance
     const app = new AppBtc({ transport });
@@ -196,13 +200,14 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
     // Get master fingerprint
     let fingerprint: string | undefined;
     try {
-      const result = await app.getWalletXpub({ path: "m/84'/0'/0'" });
+      // Type assertion needed - library returns object with xpub and fingerprint
+      const result = await (app as any).getWalletXpub({ path: "m/84'/0'/0'" }) as { xpub: string; masterFingerprint?: number };
       fingerprint = result.masterFingerprint?.toString(16).padStart(8, '0');
     } catch (error) {
-      console.warn('Could not get fingerprint - Bitcoin app may not be open:', error);
+      log.warn('Could not get fingerprint - Bitcoin app may not be open', { error });
     }
 
-    activeConnection = { transport, app, device };
+    activeConnection = { transport: transport as any, app, device };
 
     return {
       id: getDeviceId(device),
@@ -237,7 +242,7 @@ export const disconnectDevice = async (): Promise<void> => {
     try {
       await activeConnection.transport.close();
     } catch (error) {
-      console.warn('Error closing transport:', error);
+      log.warn('Error closing transport', { error });
     }
     activeConnection = null;
   }
@@ -252,7 +257,8 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
   }
 
   try {
-    const result = await activeConnection.app.getWalletXpub({ path });
+    // Type assertion needed - library returns object with xpub and fingerprint
+    const result = await (activeConnection.app as any).getWalletXpub({ path }) as { xpub: string; masterFingerprint?: number };
     return {
       xpub: result.xpub,
       fingerprint: result.masterFingerprint?.toString(16).padStart(8, '0') || '',
@@ -311,8 +317,8 @@ export const signPSBT = async (
 
     // Sign with Ledger
     // Note: The actual signing API depends on the hw-app-btc version
-    // This is a simplified example - production code needs proper PSBT handling
-    const result = await activeConnection.app.signPsbt(psbtBuffer, request.inputPaths);
+    // Type assertion needed due to library type definitions not including signPsbt
+    const result = await (activeConnection.app as any).signPsbt(psbtBuffer, request.inputPaths);
 
     // Re-encode signed PSBT
     const signedPsbt = Buffer.from(result.psbt).toString('base64');
@@ -406,8 +412,9 @@ export class HardwareWalletService {
 
   /**
    * Request permission and connect to a device
+   * @param type Optional device type filter (currently unused but reserved for future use)
    */
-  async connect(): Promise<HardwareWalletDevice> {
+  async connect(_type?: DeviceType): Promise<HardwareWalletDevice> {
     // First request permission
     const device = await requestDevice();
     if (!device) {

@@ -5,12 +5,11 @@ services:
   app_proxy:
     environment:
       APP_HOST: sanctuary_web_1
-      APP_PORT: 443
-      # Sanctuary handles its own authentication
+      APP_PORT: 80
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.4.2@sha256:f367cf16c574af0a23c7576f19dbff6b05365769226c4c02a29179f3ab613c8d
+    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.4.2
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -18,15 +17,13 @@ services:
     environment:
       BACKEND_HOST: sanctuary_server_1
       BACKEND_PORT: 3001
-      ENABLE_SSL: "true"
-    volumes:
-      - ${APP_DATA_DIR}/ssl:/etc/nginx/ssl:ro
+      ENABLE_SSL: "false"
     networks:
       default:
         ipv4_address: $APP_SANCTUARY_WEB_IP
 
   server:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2@sha256:726de3c846f002c61d7770f1aff7a40ea7a11a6c1b0e1c1b62e92b678d00131c
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -74,7 +71,7 @@ services:
         ipv4_address: $APP_SANCTUARY_DB_IP
 
   migrate:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2@sha256:726de3c846f002c61d7770f1aff7a40ea7a11a6c1b0e1c1b62e92b678d00131c
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2
     restart: "no"
     depends_on:
       db:

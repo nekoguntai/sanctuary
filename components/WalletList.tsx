@@ -9,7 +9,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useWallets } from '../hooks/queries/useWallets';
+import { useWallets, useBalanceHistory } from '../hooks/queries/useWallets';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
@@ -25,48 +25,10 @@ export const WalletList: React.FC = () => {
   const { data: wallets = [], isLoading: loading, error } = useWallets();
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
+  const walletIds = wallets.map(w => w.id);
 
-  // Chart data generator - shows flat line at current balance
-  // This is accurate when we don't have historical balance data
-  const getChartData = (tf: Timeframe, baseBalance: number) => {
-      const data = [];
-      let points = 7;
-      let labelFormat = (i: number) => `Day ${i}`;
-
-      switch(tf) {
-          case '1D':
-            points = 24;
-            labelFormat = (i) => `${i}:00`;
-            break;
-          case '1W':
-            points = 7;
-            labelFormat = (i) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i % 7];
-            break;
-          case '1M':
-            points = 30;
-            labelFormat = (i) => `${i+1}`;
-            break;
-          case '1Y':
-            points = 12;
-            labelFormat = (i) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i];
-            break;
-          case 'ALL':
-            points = 5;
-            labelFormat = (i) => `${2020+i}`;
-            break;
-      }
-
-      // Show flat line at current balance - accurate representation without historical data
-      for (let i = 0; i < points; i++) {
-          data.push({
-              name: labelFormat(i),
-              value: baseBalance
-          });
-      }
-      return data;
-  };
-
-  const chartData = getChartData(timeframe, totalBalance);
+  // Fetch real balance history from transactions
+  const { data: chartData, isLoading: chartLoading } = useBalanceHistory(walletIds, totalBalance, timeframe);
 
   // Loading state
   if (loading) {

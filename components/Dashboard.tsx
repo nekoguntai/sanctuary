@@ -19,7 +19,7 @@ import { useUser } from '../contexts/UserContext';
 import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
 import { createLogger } from '../utils/logger';
-import { useWallets, useRecentTransactions, useInvalidateAllWallets } from '../hooks/queries/useWallets';
+import { useWallets, useRecentTransactions, useInvalidateAllWallets, useBalanceHistory } from '../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
 
 const log = createLogger('Dashboard');
@@ -306,101 +306,14 @@ export const Dashboard: React.FC = () => {
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 
-  // Generate chart data based on timeframe and transactions
-  const getChartData = (tf: Timeframe, baseBalance: number, transactions: Transaction[]) => {
-      const now = Date.now();
-      const day = 86400000;
+  // Use the balance history hook for accurate chart data
+  const { data: balanceHistoryData } = useBalanceHistory(walletIds, totalBalance, timeframe);
 
-      // Get timeframe range in ms
-      let rangeMs: number;
-      let dateFormat: (d: Date) => string;
-
-      switch(tf) {
-          case '1D':
-            rangeMs = day;
-            dateFormat = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            break;
-          case '1W':
-            rangeMs = 7 * day;
-            dateFormat = (d) => d.toLocaleDateString([], { weekday: 'short' });
-            break;
-          case '1M':
-            rangeMs = 30 * day;
-            dateFormat = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-            break;
-          case '1Y':
-            rangeMs = 365 * day;
-            dateFormat = (d) => d.toLocaleDateString([], { month: 'short' });
-            break;
-          case 'ALL':
-          default:
-            rangeMs = 5 * 365 * day;
-            dateFormat = (d) => d.getFullYear().toString();
-            break;
-      }
-
-      const startTime = now - rangeMs;
-
-      // Filter transactions within timeframe and sort by timestamp
-      const filteredTxs = transactions
-        .filter(tx => tx.timestamp >= startTime && tx.type !== 'consolidation')
-        .sort((a, b) => a.timestamp - b.timestamp);
-
-      // If no transactions in range, show flat line at current balance
-      if (filteredTxs.length === 0) {
-          return [
-            { name: dateFormat(new Date(startTime)), sats: baseBalance },
-            { name: dateFormat(new Date()), sats: baseBalance }
-          ];
-      }
-
-      // Calculate starting balance by working backwards from current balance
-      // For each transaction in range: received adds, sent subtracts
-      let startBalance = baseBalance;
-      filteredTxs.forEach(tx => {
-        if (tx.type === 'sent') {
-          startBalance += Math.abs(tx.amount); // Add back what was sent
-        } else {
-          startBalance -= Math.abs(tx.amount); // Remove what was received
-        }
-      });
-
-      // Build chart data points
-      const data: { name: string; sats: number }[] = [];
-      let runningBalance = Math.max(0, startBalance); // Ensure non-negative
-
-      // Add starting point
-      data.push({
-        name: dateFormat(new Date(Math.min(startTime, filteredTxs[0].timestamp))),
-        sats: runningBalance
-      });
-
-      // Add point for each transaction
-      filteredTxs.forEach(tx => {
-        if (tx.type === 'sent') {
-          runningBalance -= Math.abs(tx.amount);
-        } else {
-          runningBalance += Math.abs(tx.amount);
-        }
-        data.push({
-          name: dateFormat(new Date(tx.timestamp)),
-          sats: Math.max(0, runningBalance)
-        });
-      });
-
-      // Add current point if last transaction wasn't recent
-      const lastTx = filteredTxs[filteredTxs.length - 1];
-      if (now - lastTx.timestamp > day) {
-        data.push({
-          name: dateFormat(new Date()),
-          sats: baseBalance
-        });
-      }
-
-      return data;
-  };
-
-  const chartData = getChartData(timeframe, totalBalance, recentTx);
+  // Convert to chart format (value -> sats for tooltip compatibility)
+  const chartData = useMemo(() =>
+    balanceHistoryData.map(d => ({ name: d.name, sats: d.value })),
+    [balanceHistoryData]
+  );
 
   const distributionColors = [
       'bg-primary-500',

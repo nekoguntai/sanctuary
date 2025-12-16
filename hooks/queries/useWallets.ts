@@ -1,3 +1,4 @@
+import React from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
@@ -232,6 +233,133 @@ export function useWalletShareInfo(walletId: string | undefined) {
     queryFn: () => walletsApi.getWalletShareInfo(walletId!),
     enabled: !!walletId,
   });
+}
+
+type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
+
+/**
+ * Hook to fetch all transactions from all wallets for balance history chart
+ * Matches the Dashboard chart behavior with timeframe filtering
+ */
+export function useBalanceHistory(
+  walletIds: string[],
+  totalBalance: number,
+  timeframe: Timeframe
+) {
+  const queries = useQueries({
+    queries: walletIds.map((walletId) => ({
+      queryKey: walletKeys.transactions(walletId, { limit: 500 }),
+      queryFn: () => transactionsApi.getTransactions(walletId, { limit: 500 }),
+      enabled: walletIds.length > 0,
+    })),
+  });
+
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  // Build chart data based on timeframe (matches Dashboard.getChartData)
+  const chartData = React.useMemo(() => {
+    const now = Date.now();
+    const day = 86400000;
+
+    // Get timeframe range in ms and date format
+    let rangeMs: number;
+    let dateFormat: (d: Date) => string;
+
+    switch (timeframe) {
+      case '1D':
+        rangeMs = day;
+        dateFormat = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        break;
+      case '1W':
+        rangeMs = 7 * day;
+        dateFormat = (d) => d.toLocaleDateString([], { weekday: 'short' });
+        break;
+      case '1M':
+        rangeMs = 30 * day;
+        dateFormat = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        break;
+      case '1Y':
+        rangeMs = 365 * day;
+        dateFormat = (d) => d.toLocaleDateString([], { month: 'short' });
+        break;
+      case 'ALL':
+      default:
+        rangeMs = 5 * 365 * day;
+        dateFormat = (d) => d.getFullYear().toString();
+        break;
+    }
+
+    const startTime = now - rangeMs;
+
+    // Collect all transactions with timestamps
+    const allTxs = queries
+      .flatMap((q) => q.data || [])
+      .filter((tx) => {
+        const timestamp = tx.blockTime ? new Date(tx.blockTime).getTime() : null;
+        return timestamp && timestamp >= startTime && tx.type !== 'consolidation';
+      })
+      .map((tx) => ({
+        ...tx,
+        timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
+        // Ensure amount is signed correctly
+        amount:
+          tx.type === 'sent'
+            ? -Math.abs(typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount)
+            : Math.abs(typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount),
+      }))
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    // If no transactions in range, show flat line at current balance
+    if (allTxs.length === 0) {
+      return [
+        { name: dateFormat(new Date(startTime)), value: totalBalance },
+        { name: dateFormat(new Date()), value: totalBalance },
+      ];
+    }
+
+    // Calculate starting balance by working backwards from current balance
+    let startBalance = totalBalance;
+    allTxs.forEach((tx) => {
+      startBalance -= tx.amount; // Reverse the effect
+    });
+
+    // Build chart data points
+    const data: { name: string; value: number }[] = [];
+    let runningBalance = Math.max(0, startBalance);
+
+    // Add starting point
+    data.push({
+      name: dateFormat(new Date(Math.min(startTime, allTxs[0].timestamp))),
+      value: runningBalance,
+    });
+
+    // Add point for each transaction
+    allTxs.forEach((tx) => {
+      runningBalance += tx.amount;
+      data.push({
+        name: dateFormat(new Date(tx.timestamp)),
+        value: Math.max(0, runningBalance),
+      });
+    });
+
+    // Add current point if last transaction wasn't recent
+    const lastTx = allTxs[allTxs.length - 1];
+    if (now - lastTx.timestamp > day) {
+      data.push({
+        name: dateFormat(new Date()),
+        value: totalBalance,
+      });
+    }
+
+    return data;
+  }, [queries, totalBalance, timeframe]);
+
+  return {
+    data: chartData,
+    isLoading,
+    isError,
+  };
 }
 
 /**

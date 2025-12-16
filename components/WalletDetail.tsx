@@ -328,6 +328,10 @@ export const WalletDetail: React.FC = () => {
   // Selection State for UTXOs
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
 
+  // Wallet Name Editing State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+
   // Address QR Modal State
   const [qrModalAddress, setQrModalAddress] = useState<string | null>(null);
 
@@ -1858,6 +1862,70 @@ export const WalletDetail: React.FC = () => {
             <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
                <h3 className="text-lg font-medium mb-4">Wallet Configuration</h3>
                <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                 <div className="sm:col-span-2">
+                   <dt className="text-sm font-medium text-sanctuary-500">Wallet Name</dt>
+                   <dd className="mt-1">
+                     {isEditingName ? (
+                       <div className="flex items-center gap-2">
+                         <input
+                           type="text"
+                           value={editedName}
+                           onChange={(e) => setEditedName(e.target.value)}
+                           className="flex-1 px-3 py-2 text-sm border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                           placeholder="Enter wallet name"
+                           autoFocus
+                           onKeyDown={(e) => {
+                             if (e.key === 'Enter' && editedName.trim()) {
+                               handleUpdateWallet({ name: editedName.trim() });
+                               setIsEditingName(false);
+                             } else if (e.key === 'Escape') {
+                               setIsEditingName(false);
+                               setEditedName(wallet.name);
+                             }
+                           }}
+                         />
+                         <Button
+                           size="sm"
+                           onClick={() => {
+                             if (editedName.trim()) {
+                               handleUpdateWallet({ name: editedName.trim() });
+                               setIsEditingName(false);
+                             }
+                           }}
+                           disabled={!editedName.trim() || editedName.trim() === wallet.name}
+                         >
+                           <Check className="w-4 h-4" />
+                         </Button>
+                         <Button
+                           size="sm"
+                           variant="ghost"
+                           onClick={() => {
+                             setIsEditingName(false);
+                             setEditedName(wallet.name);
+                           }}
+                         >
+                           <X className="w-4 h-4" />
+                         </Button>
+                       </div>
+                     ) : (
+                       <div className="flex items-center justify-between">
+                         <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.name}</span>
+                         {wallet.canEdit !== false && (
+                           <button
+                             onClick={() => {
+                               setEditedName(wallet.name);
+                               setIsEditingName(true);
+                             }}
+                             className="p-1.5 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700"
+                             title="Rename wallet"
+                           >
+                             <Edit2 className="w-4 h-4" />
+                           </button>
+                         )}
+                       </div>
+                     )}
+                   </dd>
+                 </div>
                  <div>
                    <dt className="text-sm font-medium text-sanctuary-500">Wallet ID</dt>
                    <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.id}</dd>

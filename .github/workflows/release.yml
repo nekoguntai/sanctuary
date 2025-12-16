@@ -182,13 +182,25 @@ Database migrations run automatically on startup.
 
 ## Umbrel Installation
 
+SSH into your Umbrel and run:
+
 \`\`\`bash
-umbreld client apps.install.mutate --appId sanctuary
+# Clone Sanctuary to Umbrel's community apps directory
+cd ~/umbrel/app-data
+git clone https://github.com/n-narusegawa/sanctuary.git
+cd sanctuary/umbrel
+
+# Install the app
+~/umbrel/scripts/app install sanctuary
 \`\`\`
+
+Sanctuary will appear in your Umbrel dashboard.
 
 **Upgrading on Umbrel:**
 \`\`\`bash
-umbreld client apps.update.mutate --appId sanctuary
+cd ~/umbrel/app-data/sanctuary
+git pull
+~/umbrel/scripts/app update sanctuary
 \`\`\`
 
 ---

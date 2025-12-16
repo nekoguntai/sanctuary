@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
     paths:
       - 'components/**'
       - 'src/**'
@@ -53,6 +55,8 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}}
 
       - name: Extract metadata for Backend
         id: meta-backend
@@ -63,6 +67,8 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}}
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v5

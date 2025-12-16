@@ -10,7 +10,7 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.4.1
+    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.4.2
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -26,7 +26,7 @@ services:
         ipv4_address: $APP_SANCTUARY_WEB_IP
 
   server:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.1
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -74,7 +74,7 @@ services:
         ipv4_address: $APP_SANCTUARY_DB_IP
 
   migrate:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.1
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.4.2
     restart: "no"
     depends_on:
       db:

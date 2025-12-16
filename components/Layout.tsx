@@ -227,7 +227,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                  <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No wallets created</div>
               )}
               {[...wallets].sort((a, b) => a.name.localeCompare(b.name)).map(w => {
-                const isMultisig = w.type === 'multi_sig';
+                const isMultisig = w.type === 'multi_sig' || w.type === WalletType.MULTI_SIG;
                 const walletType = isMultisig ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
                 // Use semantic colors (success/warning) to respect theme settings
                 const activeColor = isMultisig ? 'text-warning-700 dark:text-warning-400' : 'text-success-700 dark:text-success-400';

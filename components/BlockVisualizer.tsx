@@ -447,21 +447,21 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
       </div>
 
       {/* Legend / Info bar - block fullness indicator */}
-      <div className="flex items-center justify-center space-x-4 text-[10px] text-sanctuary-500 dark:text-sanctuary-400 mt-1">
-        <span className="opacity-70">Block Fullness:</span>
+      <div className="flex items-center justify-center space-x-4 text-[10px] font-medium text-sanctuary-700 dark:text-sanctuary-400 mt-1">
+        <span>Block Fullness:</span>
         <div className="flex items-center space-x-1">
-          <div className="w-10 h-1.5 rounded-sm bg-sanctuary-200 dark:bg-sanctuary-800 relative overflow-hidden">
-            <div className="absolute left-0 top-0 bottom-0 w-1/4 bg-sanctuary-400 dark:bg-sanctuary-500 rounded-sm" />
+          <div className="w-10 h-1.5 rounded-sm bg-sanctuary-300 dark:bg-sanctuary-800 relative overflow-hidden">
+            <div className="absolute left-0 top-0 bottom-0 w-1/4 bg-sanctuary-500 dark:bg-sanctuary-500 rounded-sm" />
           </div>
           <span>25%</span>
         </div>
         <div className="flex items-center space-x-1">
-          <div className="w-10 h-1.5 rounded-sm bg-sanctuary-200 dark:bg-sanctuary-800 relative overflow-hidden">
-            <div className="absolute left-0 top-0 bottom-0 w-full bg-sanctuary-400 dark:bg-sanctuary-500 rounded-sm" />
+          <div className="w-10 h-1.5 rounded-sm bg-sanctuary-300 dark:bg-sanctuary-800 relative overflow-hidden">
+            <div className="absolute left-0 top-0 bottom-0 w-full bg-sanctuary-500 dark:bg-sanctuary-500 rounded-sm" />
           </div>
           <span>100%</span>
         </div>
-        <span className="opacity-50 ml-2">• Hover for details</span>
+        <span className="text-sanctuary-500 dark:text-sanctuary-500 ml-2">• Hover for details</span>
       </div>
     </div>
   );

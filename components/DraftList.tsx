@@ -10,8 +10,11 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { DraftTransaction, getDrafts, deleteDraft, updateDraft } from '../src/api/drafts';
+import { TransactionFlowPreview, FlowInput, FlowOutput } from './TransactionFlowPreview';
 import { WalletType } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -43,6 +46,56 @@ export const DraftList: React.FC<DraftListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
+
+  // Build flow preview data from draft
+  const getFlowPreviewData = (draft: DraftTransaction) => {
+    // For inputs, we only have totalInput - create a summary input
+    const inputs: FlowInput[] = [{
+      txid: 'inputs',
+      vout: 0,
+      address: `${draft.selectedUtxoIds?.length || 1} input${(draft.selectedUtxoIds?.length || 1) !== 1 ? 's' : ''}`,
+      amount: draft.totalInput,
+    }];
+
+    // Build outputs from draft data
+    const flowOutputs: FlowOutput[] = [];
+
+    if (draft.outputs && draft.outputs.length > 0) {
+      draft.outputs.forEach((output) => {
+        flowOutputs.push({
+          address: output.address,
+          amount: output.sendMax ? draft.effectiveAmount : output.amount,
+          isChange: false,
+        });
+      });
+    } else {
+      // Fallback to single recipient
+      flowOutputs.push({
+        address: draft.recipient,
+        amount: draft.effectiveAmount,
+        isChange: false,
+      });
+    }
+
+    // Add change output if present
+    if (draft.changeAmount > 0 && draft.changeAddress) {
+      flowOutputs.push({
+        address: draft.changeAddress,
+        amount: draft.changeAmount,
+        isChange: true,
+      });
+    }
+
+    return {
+      inputs,
+      outputs: flowOutputs,
+      fee: draft.fee,
+      feeRate: draft.feeRate,
+      totalInput: draft.totalInput,
+      totalOutput: draft.totalOutput,
+    };
+  };
 
   useEffect(() => {
     loadDrafts();
@@ -367,6 +420,39 @@ export const DraftList: React.FC<DraftListProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Expand/Collapse Toggle */}
+            <button
+              onClick={() => setExpandedDraft(expandedDraft === draft.id ? null : draft.id)}
+              className="w-full mt-3 pt-3 border-t border-sanctuary-200 dark:border-sanctuary-700 flex items-center justify-center gap-1 text-sm text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+            >
+              {expandedDraft === draft.id ? (
+                <>
+                  <ChevronUp className="w-4 h-4" />
+                  Hide Transaction Flow
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4" />
+                  Show Transaction Flow
+                </>
+              )}
+            </button>
+
+            {/* Transaction Flow Preview */}
+            {expandedDraft === draft.id && (
+              <div className="mt-4">
+                <TransactionFlowPreview
+                  inputs={getFlowPreviewData(draft).inputs}
+                  outputs={getFlowPreviewData(draft).outputs}
+                  fee={getFlowPreviewData(draft).fee}
+                  feeRate={getFlowPreviewData(draft).feeRate}
+                  totalInput={getFlowPreviewData(draft).totalInput}
+                  totalOutput={getFlowPreviewData(draft).totalOutput}
+                  isEstimate={false}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>

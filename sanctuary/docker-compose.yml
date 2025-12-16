@@ -37,6 +37,8 @@ services:
       # JWT - generated per installation
       JWT_SECRET: ${APP_SANCTUARY_JWT_SECRET}
       JWT_EXPIRES_IN: 7d
+      # Encryption key for sensitive data
+      ENCRYPTION_KEY: ${APP_SANCTUARY_ENCRYPTION_KEY}
       # Bitcoin Network
       BITCOIN_NETWORK: mainnet
       # Electrum - connect to Umbrel's electrs

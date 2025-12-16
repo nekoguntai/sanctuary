@@ -15,6 +15,14 @@ if [ ! -f "$JWT_SECRET_FILE" ]; then
 fi
 export APP_SANCTUARY_JWT_SECRET=$(cat "$JWT_SECRET_FILE")
 
+# Generate a unique encryption key for sensitive data (node passwords, etc.)
+# Must be at least 32 characters
+ENCRYPTION_KEY_FILE="${EXPORTS_APP_DIR}/encryption_key"
+if [ ! -f "$ENCRYPTION_KEY_FILE" ]; then
+  openssl rand -base64 32 | tr -d '=/+' | head -c 48 > "$ENCRYPTION_KEY_FILE"
+fi
+export APP_SANCTUARY_ENCRYPTION_KEY=$(cat "$ENCRYPTION_KEY_FILE")
+
 # Port for accessing Sanctuary (via Umbrel's app proxy)
 export APP_SANCTUARY_PORT="3010"
 

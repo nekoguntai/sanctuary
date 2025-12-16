@@ -159,62 +159,66 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Update release notes with install instructions
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const version = '${{ needs.build-and-push.outputs.version }}';
-            const existingBody = context.payload.release.body || '';
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build-and-push.outputs.version }}
+          RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          # Get existing release body
+          EXISTING_BODY=$(gh api repos/${{ github.repository }}/releases/$RELEASE_ID --jq '.body // ""')
 
-            const installInstructions = `## Quick Install
+          # Create install instructions
+          INSTALL_INSTRUCTIONS="## Quick Install
 
-**Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
+          **Prerequisites:** Docker and Git
 
-\`\`\`bash
-git clone https://github.com/n-narusegawa/sanctuary.git
-cd sanctuary
-./install.sh
-\`\`\`
+          \`\`\`bash
+          git clone https://github.com/n-narusegawa/sanctuary.git
+          cd sanctuary
+          ./install.sh
+          \`\`\`
 
-Open **https://localhost:8443** and log in with \`admin\` / \`sanctuary\`
+          Open https://localhost:8443 and log in with admin / sanctuary
 
----
+          ---
 
-## Upgrading
+          ## Upgrading
 
-If you're already running Sanctuary:
+          \`\`\`bash
+          cd sanctuary
+          git pull
+          ./install.sh
+          \`\`\`
 
-\`\`\`bash
-cd sanctuary
-git pull
-./install.sh
-\`\`\`
+          ---
 
-Database migrations run automatically on startup.
+          ## Umbrel Installation
 
----
+          1. Open the App Store in your Umbrel
+          2. Click the ... menu in the upper right
+          3. Select Community App Stores
+          4. Paste: https://github.com/n-narusegawa/sanctuary
+          5. Click Add
+          6. Find Sanctuary and install
 
-## Umbrel Installation
+          ---
 
-1. Open the **App Store** in your Umbrel
-2. Click the **...** menu in the upper right
-3. Select **Community App Stores**
-4. Paste: \`https://github.com/n-narusegawa/sanctuary\`
-5. Click **Add**
-6. Find Sanctuary in the App Store and install
+          "
 
----
+          # Combine and update
+          if [ -n "$EXISTING_BODY" ]; then
+            NEW_BODY="${INSTALL_INSTRUCTIONS}
 
-`;
+          ## What's New
 
-            // Prepend install instructions to existing release notes
-            const newBody = installInstructions + (existingBody ? '## What\'s New\n\n' + existingBody : '');
+          ${EXISTING_BODY}"
+          else
+            NEW_BODY="$INSTALL_INSTRUCTIONS"
+          fi
 
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: context.payload.release.id,
-              body: newBody
-            });
-
-            console.log('Updated release notes with install instructions');
+          gh release edit "v$VERSION" --notes "$NEW_BODY"
+          echo "Updated release notes"

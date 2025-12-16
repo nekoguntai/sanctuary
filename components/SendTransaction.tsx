@@ -766,6 +766,29 @@ export const SendTransaction: React.FC = () => {
     return hasValidOutput && hasInputs;
   }, [outputs, outputsValid, showCoinControl, selectedUTXOs.size, spendableUtxos.length]);
 
+  // Calculate fee warning - warn if fee is high relative to send amount
+  const feeWarning = useMemo(() => {
+    const fee = calculateTotalFee();
+    // Get total send amount (excluding change)
+    const sendAmount = outputs.reduce((sum, o, idx) => {
+      if (o.sendMax) return sum + calculateMaxForOutput(idx);
+      return sum + (parseInt(o.amount) || 0);
+    }, 0);
+
+    if (sendAmount <= 0 || fee <= 0) return null;
+
+    const feePercent = (fee / sendAmount) * 100;
+
+    if (feePercent >= 50) {
+      return { level: 'critical', percent: feePercent, message: 'Fee is more than half of the amount you\'re sending!' };
+    } else if (feePercent >= 25) {
+      return { level: 'critical', percent: feePercent, message: 'Fee is more than 25% of the amount you\'re sending' };
+    } else if (feePercent >= 10) {
+      return { level: 'warning', percent: feePercent, message: 'Fee is more than 10% of the amount you\'re sending' };
+    }
+    return null;
+  }, [calculateTotalFee, outputs, calculateMaxForOutput]);
+
   // Check if any output has invalid address
   const hasInvalidAddress = outputsValid.some(v => v === false);
   const allOutputsHaveAddress = outputs.every(o => o.address && o.address.length > 0);
@@ -2133,6 +2156,39 @@ export const SendTransaction: React.FC = () => {
              <div className="mt-2 text-center text-xs text-sanctuary-400">
                  Estimated Fee: {format(calculateTotalFee(), { forceSats: true })}
              </div>
+
+             {/* Fee Warning */}
+             {feeWarning && (
+               <div className={`mt-3 p-3 rounded-lg border ${
+                 feeWarning.level === 'critical'
+                   ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800'
+                   : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+               }`}>
+                 <div className="flex items-center gap-2">
+                   <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
+                     feeWarning.level === 'critical'
+                       ? 'text-rose-500'
+                       : 'text-amber-500'
+                   }`} />
+                   <div>
+                     <p className={`text-sm font-medium ${
+                       feeWarning.level === 'critical'
+                         ? 'text-rose-700 dark:text-rose-300'
+                         : 'text-amber-700 dark:text-amber-300'
+                     }`}>
+                       {feeWarning.message}
+                     </p>
+                     <p className={`text-xs mt-0.5 ${
+                       feeWarning.level === 'critical'
+                         ? 'text-rose-600 dark:text-rose-400'
+                         : 'text-amber-600 dark:text-amber-400'
+                     }`}>
+                       Fee represents {feeWarning.percent.toFixed(1)}% of the send amount
+                     </p>
+                   </div>
+                 </div>
+               </div>
+             )}
         </div>
 
         {/* Hardware Wallet Connect Modal */}

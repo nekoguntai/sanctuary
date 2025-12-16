@@ -48,6 +48,25 @@ export const DraftList: React.FC<DraftListProps> = ({
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
 
+  // Calculate fee warning for a draft
+  const getFeeWarning = (draft: DraftTransaction) => {
+    const fee = draft.fee;
+    const sendAmount = draft.effectiveAmount;
+
+    if (sendAmount <= 0 || fee <= 0) return null;
+
+    const feePercent = (fee / sendAmount) * 100;
+
+    if (feePercent >= 50) {
+      return { level: 'critical', percent: feePercent, message: 'Fee is more than half of the amount!' };
+    } else if (feePercent >= 25) {
+      return { level: 'critical', percent: feePercent, message: 'Fee is more than 25% of the amount' };
+    } else if (feePercent >= 10) {
+      return { level: 'warning', percent: feePercent, message: 'Fee is more than 10% of the amount' };
+    }
+    return null;
+  };
+
   // Build flow preview data from draft
   const getFlowPreviewData = (draft: DraftTransaction) => {
     // For inputs, we only have totalInput - create a summary input
@@ -342,6 +361,32 @@ export const DraftList: React.FC<DraftListProps> = ({
                     </span>
                   </div>
                 </div>
+
+                {/* Fee Warning */}
+                {(() => {
+                  const warning = getFeeWarning(draft);
+                  if (!warning) return null;
+                  return (
+                    <div className={`mt-2 p-2 rounded-lg border flex items-center gap-2 ${
+                      warning.level === 'critical'
+                        ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800'
+                        : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                    }`}>
+                      <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${
+                        warning.level === 'critical'
+                          ? 'text-rose-500'
+                          : 'text-amber-500'
+                      }`} />
+                      <span className={`text-sm ${
+                        warning.level === 'critical'
+                          ? 'text-rose-700 dark:text-rose-300'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}>
+                        {warning.message} ({warning.percent.toFixed(1)}%)
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {draft.label && (
                   <div className="mt-2 text-sm text-sanctuary-500 dark:text-sanctuary-400">

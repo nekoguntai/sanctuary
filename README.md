@@ -69,6 +69,28 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **No Installation Required** — Just Docker. No elevated privileges, no system modifications.
 - **Portable** — Works on Windows, macOS, and Linux with identical setup.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" alt="Dashboard" width="800" />
+  <br/><em>Dashboard - Overview of your wallets and recent activity</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/wallet.png" alt="Wallet Detail" width="800" />
+  <br/><em>Wallet Detail - Addresses, UTXOs, and transaction history</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/send.png" alt="Send Transaction" width="800" />
+  <br/><em>Send Transaction - Build and sign transactions with your hardware wallet</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/settings.png" alt="Settings" width="800" />
+  <br/><em>Settings - Customize themes and preferences</em>
+</p>
+
 ## Features
 
 - **Multi-wallet support** — Manage multiple wallets (single-sig and multisig)

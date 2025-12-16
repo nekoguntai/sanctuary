@@ -108,26 +108,26 @@ jobs:
           echo "Backend digest: $BACKEND_DIGEST"
 
           # Update umbrel-app.yml version
-          sed -i "s/^version: .*/version: \"$VERSION\"/" umbrel/umbrel-app.yml
+          sed -i "s/^version: .*/version: \"$VERSION\"/" sanctuary/umbrel-app.yml
 
           # Update releaseNotes in umbrel-app.yml
           RELEASE_DATE=$(date +"%Y-%m-%d")
-          sed -i "s/^releaseNotes: .*/releaseNotes: \"Version $VERSION released on $RELEASE_DATE. See https:\/\/github.com\/n-narusegawa\/sanctuary\/releases\/tag\/v$VERSION for details.\"/" umbrel/umbrel-app.yml
+          sed -i "s/^releaseNotes: .*/releaseNotes: \"Version $VERSION released on $RELEASE_DATE. See https:\/\/github.com\/n-narusegawa\/sanctuary\/releases\/tag\/v$VERSION for details.\"/" sanctuary/umbrel-app.yml
 
           # Update docker-compose.yml with new image tags and digests
           # Handle both with and without existing @sha256 suffix
-          sed -i "s|ghcr.io/n-narusegawa/sanctuary-frontend:[^[:space:]]*|ghcr.io/n-narusegawa/sanctuary-frontend:v$VERSION@$FRONTEND_DIGEST|g" umbrel/docker-compose.yml
-          sed -i "s|ghcr.io/n-narusegawa/sanctuary-backend:[^[:space:]]*|ghcr.io/n-narusegawa/sanctuary-backend:v$VERSION@$BACKEND_DIGEST|g" umbrel/docker-compose.yml
+          sed -i "s|ghcr.io/n-narusegawa/sanctuary-frontend:[^[:space:]]*|ghcr.io/n-narusegawa/sanctuary-frontend:v$VERSION@$FRONTEND_DIGEST|g" sanctuary/docker-compose.yml
+          sed -i "s|ghcr.io/n-narusegawa/sanctuary-backend:[^[:space:]]*|ghcr.io/n-narusegawa/sanctuary-backend:v$VERSION@$BACKEND_DIGEST|g" sanctuary/docker-compose.yml
 
           echo "Updated files:"
-          grep -E "version:|releaseNotes:" umbrel/umbrel-app.yml
-          grep "image:" umbrel/docker-compose.yml
+          grep -E "version:|releaseNotes:" sanctuary/umbrel-app.yml
+          grep "image:" sanctuary/docker-compose.yml
 
       - name: Commit and push Umbrel updates
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add umbrel/
+          git add sanctuary/
           git diff --staged --quiet || git commit -m "Update Umbrel package to v${{ needs.build-and-push.outputs.version }}
 
           - Updated Docker image tags with SHA256 digests
@@ -177,6 +177,15 @@ git pull
 \`\`\`
 
 Database migrations run automatically on startup.
+
+---
+
+## Umbrel Installation
+
+1. Go to **Settings** → **App Stores** in your Umbrel
+2. Click **Add** under Community App Stores
+3. Enter: \`https://github.com/n-narusegawa/sanctuary\`
+4. Find Sanctuary in the App Store and install
 
 ---
 

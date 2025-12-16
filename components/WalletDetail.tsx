@@ -1072,7 +1072,7 @@ export const WalletDetail: React.FC = () => {
                   <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Sync failed. Retrying {syncRetryInfo?.retryCount || 1} of {syncRetryInfo?.maxRetries || 3}...
                </span>
              ) : syncing || wallet.syncInProgress ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
+               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-400/30">
                   <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Syncing...
                </span>
              ) : wallet.lastSyncStatus === 'success' ? (
@@ -1121,6 +1121,47 @@ export const WalletDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Initial Sync Banner - shown for newly imported wallets */}
+      {!wallet.lastSyncedAt && (syncing || wallet.syncInProgress) && (
+        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-950/30 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0">
+              <RefreshCw className="w-6 h-6 text-primary-600 dark:text-primary-300 animate-spin" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-primary-900 dark:text-sanctuary-50">
+                Initial sync in progress
+              </h3>
+              <p className="text-xs text-primary-700 dark:text-sanctuary-300 mt-0.5">
+                Scanning blockchain for transactions. This may take a few minutes for wallets with many addresses or transaction history.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Never Synced Banner - shown when sync hasn't started */}
+      {!wallet.lastSyncedAt && !syncing && !wallet.syncInProgress && wallet.lastSyncStatus !== 'retrying' && (
+        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-950/30 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0">
+              <AlertCircle className="w-6 h-6 text-warning-600 dark:text-warning-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-warning-900 dark:text-warning-100">
+                Wallet not synced
+              </h3>
+              <p className="text-xs text-warning-700 dark:text-warning-300 mt-0.5">
+                This wallet hasn't been synced with the blockchain yet. Click "Sync" to fetch your transaction history and balance.
+              </p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={handleSync}>
+              <RefreshCw className="w-3 h-3 mr-1" /> Sync Now
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">

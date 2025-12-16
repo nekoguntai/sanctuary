@@ -227,8 +227,9 @@ export async function importFromDescriptor(
     deviceLabels?: Record<string, string>; // fingerprint -> label
   }
 ): Promise<ImportWalletResult> {
-  // Parse descriptor
-  const parsed = parseDescriptorForImport(input.descriptor);
+  // Parse descriptor (use parseImportInput to handle text with comments)
+  const parseResult = parseImportInput(input.descriptor);
+  const parsed = parseResult.parsed;
   const network = input.network || parsed.network;
 
   // Check for duplicate wallet - get all user's wallets and compare device fingerprints

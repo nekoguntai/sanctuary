@@ -26,6 +26,23 @@ const MAX_CONCURRENT_SYNCS = 3;
 // Retry configuration
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [5000, 15000, 45000]; // Exponential backoff: 5s, 15s, 45s
+const SYNC_TIMEOUT_MS = 3 * 60 * 1000; // 3 minute timeout for each sync operation
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
 
 interface SyncJob {
   walletId: string;
@@ -514,8 +531,12 @@ class SyncService {
       // Get previous balance for comparison
       const previousBalance = await this.getWalletBalance(walletId);
 
-      // Execute the sync
-      const result = await syncWallet(walletId);
+      // Execute the sync with a timeout to prevent hanging
+      const result = await withTimeout(
+        syncWallet(walletId),
+        SYNC_TIMEOUT_MS,
+        `Sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`
+      );
 
       // Populate missing fields for any existing transactions
       const populatedCount = await populateMissingTransactionFields(walletId);

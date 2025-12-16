@@ -58,6 +58,6 @@ gallery: []
 path: ""
 defaultUsername: ""
 defaultPassword: ""
-releaseNotes: "Version 0.4.4: Accurate balance history charts, wallet rename feature, improved install docs. See https://github.com/n-narusegawa/sanctuary/releases/tag/v0.4.4 for details."
+releaseNotes: "Version 0.4.4 released on 2025-12-16. See https://github.com/n-narusegawa/sanctuary/releases/tag/v0.4.4 for details."
 submitter: n-narusegawa
 submission: https://github.com/getumbrel/umbrel-apps/pull/XXXX

@@ -5,6 +5,10 @@
  * device information for wallet import functionality.
  */
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('DESCRIPTOR');
+
 export interface ParsedDevice {
   fingerprint: string;
   xpub: string;
@@ -183,6 +187,7 @@ function removeChecksum(descriptor: string): string {
 export function parseDescriptorForImport(descriptor: string): ParsedDescriptor {
   // Clean up descriptor
   let cleanDescriptor = removeChecksum(descriptor.trim());
+  log.debug('parseDescriptorForImport', { cleanDescriptor: cleanDescriptor.substring(0, 100), startsWithWsh: cleanDescriptor.toLowerCase().startsWith('wsh(') });
 
   // Detect script type
   const scriptType = detectScriptType(cleanDescriptor);
@@ -645,6 +650,7 @@ export function parseImportInput(input: string): {
   suggestedName?: string;
 } {
   const trimmed = input.trim();
+  log.debug('parseImportInput called', { inputLength: trimmed.length, startsWithHash: trimmed.startsWith('#'), first50: trimmed.substring(0, 50) });
 
   // Try to detect if it's JSON
   if (trimmed.startsWith('{')) {
@@ -688,8 +694,11 @@ export function parseImportInput(input: string): {
   }
 
   // Check if it's a text file with descriptors and comments (e.g., Sparrow export)
-  if (isDescriptorTextFormat(trimmed)) {
+  const isTextFormat = isDescriptorTextFormat(trimmed);
+  log.debug('Checking text format', { isTextFormat });
+  if (isTextFormat) {
     const descriptor = extractDescriptorFromText(trimmed);
+    log.debug('Extracted descriptor from text', { descriptor: descriptor?.substring(0, 100) });
     if (descriptor) {
       return {
         format: 'descriptor',
@@ -699,6 +708,7 @@ export function parseImportInput(input: string): {
   }
 
   // Try as plain descriptor
+  log.debug('Trying as plain descriptor', { first100: trimmed.substring(0, 100) });
   return {
     format: 'descriptor',
     parsed: parseDescriptorForImport(trimmed),

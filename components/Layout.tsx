@@ -27,6 +27,7 @@ import { useUser } from '../contexts/UserContext';
 import { getWallets, Wallet as ApiWallet } from '../src/api/wallets';
 import { getDevices, Device as ApiDevice } from '../src/api/devices';
 import { getDrafts } from '../src/api/drafts';
+import * as bitcoinApi from '../src/api/bitcoin';
 import { version } from '../package.json';
 import { NotificationBell } from './NotificationPanel';
 import { NotificationBadge } from './NotificationBadge';
@@ -196,6 +197,63 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
     };
     fetchData();
   }, [user]);
+
+  // Check Electrum/Bitcoin connection status periodically
+  useEffect(() => {
+    if (!user) return;
+
+    const isAdmin = user.isAdmin;
+
+    const checkConnection = async () => {
+      try {
+        const status = await bitcoinApi.getStatus();
+        if (status.connected) {
+          // Connection is good - remove any existing error notification
+          removeNotificationsByType('connection_error');
+        } else {
+          // Connection failed - not dismissible until resolved
+          addNotification({
+            type: 'connection_error',
+            scope: 'global',
+            severity: 'critical',
+            title: 'Electrum server unreachable',
+            message: status.error || 'Unable to connect to blockchain. Wallet data may be outdated.',
+            // Only show admin action if user is admin
+            ...(isAdmin && {
+              actionUrl: '/admin/node',
+              actionLabel: 'Configure Node',
+            }),
+            dismissible: false,
+            persistent: false,
+          });
+        }
+      } catch (error) {
+        // API call itself failed - likely server issue
+        addNotification({
+          type: 'connection_error',
+          scope: 'global',
+          severity: 'critical',
+          title: 'Connection error',
+          message: 'Unable to check blockchain status. Server may be unavailable.',
+          // Only show admin action if user is admin
+          ...(isAdmin && {
+            actionUrl: '/admin/node',
+            actionLabel: 'Configure Node',
+          }),
+          dismissible: false,
+          persistent: false,
+        });
+      }
+    };
+
+    // Check immediately on mount
+    checkConnection();
+
+    // Check every 60 seconds
+    const interval = setInterval(checkConnection, 60000);
+
+    return () => clearInterval(interval);
+  }, [user, addNotification, removeNotificationsByType]);
 
   const toggleSection = (section: 'wallets' | 'devices' | 'admin') => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));

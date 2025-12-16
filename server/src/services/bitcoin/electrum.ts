@@ -8,6 +8,7 @@
 import net from 'net';
 import tls from 'tls';
 import crypto from 'crypto';
+import { EventEmitter } from 'events';
 import config from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
@@ -21,7 +22,9 @@ interface ElectrumResponse {
     code: number;
     message: string;
   };
-  id: number;
+  id: number | null;
+  method?: string;  // For subscription notifications
+  params?: any[];   // For subscription notifications
 }
 
 interface ElectrumRequest {
@@ -37,7 +40,7 @@ interface ElectrumConfig {
   protocol: 'tcp' | 'ssl';
 }
 
-class ElectrumClient {
+class ElectrumClient extends EventEmitter {
   private socket: net.Socket | tls.TLSSocket | null = null;
   private requestId = 0;
   private pendingRequests = new Map<number, {
@@ -48,12 +51,15 @@ class ElectrumClient {
   private connected = false;
   private serverVersion: { server: string; protocol: string } | null = null;
   private explicitConfig: ElectrumConfig | null = null;
+  private scriptHashToAddress = new Map<string, string>();  // Map scripthash to address
+  private subscribedHeaders = false;
 
   /**
    * Create an ElectrumClient
    * @param explicitConfig Optional config to use instead of database/env config
    */
   constructor(explicitConfig?: ElectrumConfig) {
+    super();
     this.explicitConfig = explicitConfig || null;
   }
 
@@ -61,51 +67,71 @@ class ElectrumClient {
    * Connect to Electrum server
    */
   async connect(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
+    // Get config first (async), then create socket connection (sync Promise)
+    let host: string;
+    let port: number;
+    let protocol: 'tcp' | 'ssl';
+
+    // Use explicit config if provided (for testing connections)
+    if (this.explicitConfig) {
+      host = this.explicitConfig.host;
+      port = this.explicitConfig.port;
+      protocol = this.explicitConfig.protocol;
+    } else {
+      // Get node config from database
+      const nodeConfig = await prisma.nodeConfig.findFirst({
+        where: { isDefault: true },
+      });
+
+      if (nodeConfig && nodeConfig.type === 'electrum') {
+        host = nodeConfig.host;
+        port = nodeConfig.port;
+        // Use explicit useSsl setting from config
+        protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+      } else {
+        // Fallback to env config
+        host = config.bitcoin.electrum.host;
+        port = config.bitcoin.electrum.port;
+        protocol = config.bitcoin.electrum.protocol;
+      }
+    }
+
+    // Now create the connection using a sync Promise executor
+    return new Promise((resolve, reject) => {
       try {
-        let host: string;
-        let port: number;
-        let protocol: 'tcp' | 'ssl';
-
-        // Use explicit config if provided (for testing connections)
-        if (this.explicitConfig) {
-          host = this.explicitConfig.host;
-          port = this.explicitConfig.port;
-          protocol = this.explicitConfig.protocol;
-        } else {
-          // Get node config from database
-          const nodeConfig = await prisma.nodeConfig.findFirst({
-            where: { isDefault: true },
-          });
-
-          if (nodeConfig && nodeConfig.type === 'electrum') {
-            host = nodeConfig.host;
-            port = nodeConfig.port;
-            // Use explicit useSsl setting from config
-            protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
-          } else {
-            // Fallback to env config
-            host = config.bitcoin.electrum.host;
-            port = config.bitcoin.electrum.port;
-            protocol = config.bitcoin.electrum.protocol;
-          }
-        }
-
         if (protocol === 'ssl') {
-          this.socket = tls.connect({
-            host,
-            port,
-            rejectUnauthorized: false, // Allow self-signed certs for local testing
+          log.info(`Initiating TLS connection to ${host}:${port}`);
+          const tlsSocket = tls.connect(
+            {
+              host,
+              port,
+              rejectUnauthorized: false, // Allow self-signed certs for local testing
+              servername: host, // SNI support
+            },
+            () => {
+              // This callback fires on secureConnect
+              log.info(`Connected to ${host}:${port} (${protocol}) - TLS handshake complete`);
+              this.connected = true;
+              resolve();
+            }
+          );
+          this.socket = tlsSocket;
+
+          tlsSocket.on('error', (err) => {
+            log.error(`TLS socket error`, { error: String(err) });
+            this.connected = false;
+            reject(err);
           });
         } else {
           this.socket = net.connect({ host, port });
-        }
 
-        this.socket.on('connect', () => {
-          log.info(`Connected to ${host}:${port} (${protocol})`);
-          this.connected = true;
-          resolve();
-        });
+          // For plain TCP, connect event is sufficient
+          this.socket.on('connect', () => {
+            log.info(`Connected to ${host}:${port} (${protocol})`);
+            this.connected = true;
+            resolve();
+          });
+        }
 
         this.socket.on('data', (data) => {
           this.handleData(data);
@@ -167,21 +193,68 @@ class ElectrumClient {
 
       try {
         const response: ElectrumResponse = JSON.parse(line);
-        const request = this.pendingRequests.get(response.id);
 
-        if (request) {
-          this.pendingRequests.delete(response.id);
+        // Check if this is a subscription notification (has method field, no id or null id)
+        if (response.method && (response.id === null || response.id === undefined)) {
+          this.handleNotification(response);
+          continue;
+        }
 
-          if (response.error) {
-            const errorMsg = response.error.message || JSON.stringify(response.error);
-            request.reject(new Error(errorMsg));
-          } else {
-            request.resolve(response.result);
+        // Regular request/response
+        if (response.id !== null && response.id !== undefined) {
+          const request = this.pendingRequests.get(response.id);
+
+          if (request) {
+            this.pendingRequests.delete(response.id);
+
+            if (response.error) {
+              const errorMsg = response.error.message || JSON.stringify(response.error);
+              request.reject(new Error(errorMsg));
+            } else {
+              request.resolve(response.result);
+            }
           }
         }
       } catch (error) {
         log.error('Failed to parse response', { error });
       }
+    }
+  }
+
+  /**
+   * Handle subscription notifications from server
+   */
+  private handleNotification(notification: ElectrumResponse): void {
+    const { method, params } = notification;
+
+    if (method === 'blockchain.headers.subscribe') {
+      // New block notification
+      // params[0] = { height: number, hex: string }
+      const blockHeader = params?.[0];
+      if (blockHeader) {
+        log.info(`[NOTIFICATION] New block at height ${blockHeader.height}`);
+        this.emit('newBlock', {
+          height: blockHeader.height,
+          hex: blockHeader.hex,
+        });
+      }
+    } else if (method === 'blockchain.scripthash.subscribe') {
+      // Address activity notification
+      // params[0] = scripthash, params[1] = status (hash of history)
+      const scriptHash = params?.[0];
+      const status = params?.[1];
+
+      if (scriptHash) {
+        const address = this.scriptHashToAddress.get(scriptHash);
+        log.info(`[NOTIFICATION] Address activity: ${address || scriptHash} (status: ${status?.slice(0, 8)}...)`);
+        this.emit('addressActivity', {
+          scriptHash,
+          address,
+          status,
+        });
+      }
+    } else {
+      log.debug(`[NOTIFICATION] Unknown notification: ${method}`);
     }
   }
 
@@ -357,10 +430,46 @@ class ElectrumClient {
 
   /**
    * Subscribe to address changes
+   * Returns the current status (hash of history) or null if no history
    */
-  async subscribeAddress(address: string): Promise<string> {
+  async subscribeAddress(address: string): Promise<string | null> {
     const scriptHash = this.addressToScriptHash(address);
-    return this.request('blockchain.scripthash.subscribe', [scriptHash]);
+    // Track the mapping so we can resolve address from notifications
+    this.scriptHashToAddress.set(scriptHash, address);
+    const result = await this.request('blockchain.scripthash.subscribe', [scriptHash]);
+    return result; // Returns status hash or null
+  }
+
+  /**
+   * Unsubscribe from address changes (clears local tracking only)
+   */
+  unsubscribeAddress(address: string): void {
+    const scriptHash = this.addressToScriptHash(address);
+    this.scriptHashToAddress.delete(scriptHash);
+  }
+
+  /**
+   * Subscribe to new block headers
+   * Also returns current tip height
+   */
+  async subscribeHeaders(): Promise<{ height: number; hex: string }> {
+    this.subscribedHeaders = true;
+    const result = await this.request('blockchain.headers.subscribe');
+    return result;
+  }
+
+  /**
+   * Check if subscribed to headers
+   */
+  isSubscribedToHeaders(): boolean {
+    return this.subscribedHeaders;
+  }
+
+  /**
+   * Get all subscribed addresses
+   */
+  getSubscribedAddresses(): string[] {
+    return Array.from(this.scriptHashToAddress.values());
   }
 
   /**

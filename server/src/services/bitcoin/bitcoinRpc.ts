@@ -268,10 +268,10 @@ export class BitcoinRpcClient {
   /**
    * Subscribe to address (no-op for RPC - polling based)
    */
-  async subscribeAddress(address: string): Promise<string> {
+  async subscribeAddress(address: string): Promise<string | null> {
     // Bitcoin Core RPC doesn't support push notifications
     // We'll rely on polling for updates
-    return '';
+    return null;
   }
 }
 

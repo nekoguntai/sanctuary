@@ -287,7 +287,7 @@ export class NotificationService {
   }
 
   /**
-   * Broadcast new block notification
+   * Broadcast new block notification (full details)
    */
   public broadcastBlockNotification(notification: BlockNotification) {
     const wsServer = getWebSocketServer();
@@ -304,6 +304,25 @@ export class NotificationService {
 
     wsServer.broadcast(event);
     log.debug(`Broadcast new block: ${notification.height}`);
+  }
+
+  /**
+   * Broadcast new block notification (minimal - just height)
+   * Used by real-time Electrum subscription
+   */
+  public broadcastNewBlock(block: { height: number }) {
+    const wsServer = getWebSocketServer();
+
+    const event: WebSocketEvent = {
+      type: 'newBlock',
+      data: {
+        height: block.height,
+        timestamp: new Date(),
+      },
+    };
+
+    wsServer.broadcast(event);
+    log.info(`New block at height ${block.height}`);
   }
 
   /**

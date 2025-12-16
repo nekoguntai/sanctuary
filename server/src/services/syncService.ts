@@ -10,9 +10,10 @@
 
 import prisma from '../models/prisma';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields } from './bitcoin/blockchain';
-import { getNodeClient } from './bitcoin/nodeClient';
+import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
+import { ElectrumClient } from './bitcoin/electrum';
 
 const log = createLogger('SYNC');
 
@@ -43,6 +44,9 @@ class SyncService {
   private syncInterval: NodeJS.Timeout | null = null;
   private confirmationInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
+  private subscribedToHeaders = false;
+  // Track which addresses belong to which wallets for real-time notifications
+  private addressToWalletMap: Map<string, string> = new Map();
 
   private constructor() {}
 
@@ -81,7 +85,135 @@ class SyncService {
     // Process any existing queue
     this.processQueue();
 
+    // Set up real-time subscriptions (async, don't block startup)
+    this.setupRealTimeSubscriptions().catch(err => {
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(err) });
+    });
+
     log.info('[SYNC] Background sync service started');
+  }
+
+  /**
+   * Set up real-time subscriptions for block and address notifications
+   */
+  private async setupRealTimeSubscriptions(): Promise<void> {
+    try {
+      // Get the node client to ensure it's connected
+      const client = await getNodeClient();
+
+      // Only Electrum supports real-time subscriptions
+      const electrumClient = getElectrumClientIfActive();
+      if (!electrumClient) {
+        log.info('[SYNC] Real-time subscriptions only available with Electrum (current node type does not support it)');
+        return;
+      }
+
+      // Negotiate protocol version first (required by some servers like Blockstream)
+      try {
+        const version = await electrumClient.getServerVersion();
+        log.info(`[SYNC] Connected to Electrum server: ${version.server} (protocol ${version.protocol})`);
+      } catch (versionError) {
+        log.warn('[SYNC] Could not get server version, continuing anyway', { error: String(versionError) });
+      }
+
+      // Subscribe to new block headers
+      if (!this.subscribedToHeaders) {
+        const currentHeader = await electrumClient.subscribeHeaders();
+        this.subscribedToHeaders = true;
+        log.info(`[SYNC] Subscribed to block headers, current height: ${currentHeader.height}`);
+
+        // Listen for new blocks
+        electrumClient.on('newBlock', this.handleNewBlock.bind(this));
+
+        // Listen for address activity
+        electrumClient.on('addressActivity', this.handleAddressActivity.bind(this));
+      }
+
+      // Subscribe to all wallet addresses
+      await this.subscribeAllWalletAddresses();
+
+      log.info('[SYNC] Real-time subscriptions active');
+    } catch (error) {
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(error) });
+    }
+  }
+
+  /**
+   * Subscribe to all addresses from all wallets for real-time notifications
+   */
+  private async subscribeAllWalletAddresses(): Promise<void> {
+    const electrumClient = getElectrumClientIfActive();
+    if (!electrumClient) return;
+
+    const addresses = await prisma.address.findMany({
+      select: { address: true, walletId: true },
+    });
+
+    let subscribed = 0;
+    for (const { address, walletId } of addresses) {
+      try {
+        await electrumClient.subscribeAddress(address);
+        this.addressToWalletMap.set(address, walletId);
+        subscribed++;
+      } catch (error) {
+        log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(error) });
+      }
+    }
+
+    log.info(`[SYNC] Subscribed to ${subscribed} addresses for real-time notifications`);
+  }
+
+  /**
+   * Handle new block notification - immediately update confirmations
+   */
+  private async handleNewBlock(block: { height: number; hex: string }): Promise<void> {
+    log.info(`[SYNC] New block received at height ${block.height}`);
+
+    // Immediately update confirmations for all pending transactions
+    try {
+      await this.updateAllConfirmations();
+
+      // Notify frontend of new block
+      const notificationService = getNotificationService();
+      notificationService.broadcastNewBlock({
+        height: block.height,
+      });
+    } catch (error) {
+      log.error('[SYNC] Failed to update confirmations after new block', { error: String(error) });
+    }
+  }
+
+  /**
+   * Handle address activity notification - queue affected wallet for sync
+   */
+  private async handleAddressActivity(activity: { scriptHash: string; address?: string; status: string }): Promise<void> {
+    const address = activity.address;
+    if (!address) {
+      log.warn('[SYNC] Received address activity without resolved address');
+      return;
+    }
+
+    log.info(`[SYNC] Address activity detected: ${address}`);
+
+    // Find the wallet for this address
+    const walletId = this.addressToWalletMap.get(address);
+    if (walletId) {
+      // Queue high-priority sync for this wallet
+      this.queueSync(walletId, 'high');
+      log.info(`[SYNC] Queued high-priority sync for wallet ${walletId} due to address activity`);
+    } else {
+      // Try to look up the wallet from the database
+      const addressRecord = await prisma.address.findFirst({
+        where: { address },
+        select: { walletId: true },
+      });
+
+      if (addressRecord) {
+        this.addressToWalletMap.set(address, addressRecord.walletId);
+        this.queueSync(addressRecord.walletId, 'high');
+        log.info(`[SYNC] Queued high-priority sync for wallet ${addressRecord.walletId} due to address activity`);
+      }
+    }
   }
 
   /**
@@ -119,7 +251,44 @@ class SyncService {
       this.confirmationInterval = null;
     }
 
+    // Clean up real-time subscriptions
+    this.subscribedToHeaders = false;
+    this.addressToWalletMap.clear();
+
+    // Remove event listeners from Electrum client
+    const electrumClient = getElectrumClientIfActive();
+    if (electrumClient) {
+      electrumClient.removeAllListeners('newBlock');
+      electrumClient.removeAllListeners('addressActivity');
+    }
+
     log.info('[SYNC] Background sync service stopped');
+  }
+
+  /**
+   * Subscribe to new addresses for a wallet (called when wallet is created/imported)
+   */
+  async subscribeNewWalletAddresses(walletId: string): Promise<void> {
+    const electrumClient = getElectrumClientIfActive();
+    if (!electrumClient) return;
+
+    const addresses = await prisma.address.findMany({
+      where: { walletId },
+      select: { address: true },
+    });
+
+    for (const { address } of addresses) {
+      try {
+        if (!this.addressToWalletMap.has(address)) {
+          await electrumClient.subscribeAddress(address);
+          this.addressToWalletMap.set(address, walletId);
+        }
+      } catch (error) {
+        log.error(`[SYNC] Failed to subscribe to new address ${address}`, { error: String(error) });
+      }
+    }
+
+    log.info(`[SYNC] Subscribed to ${addresses.length} addresses for new wallet ${walletId}`);
   }
 
   /**

@@ -875,7 +875,7 @@ export async function getTransactionDetails(txid: string): Promise<any> {
  * Monitor address for new transactions
  * Subscribe to address and get notifications
  */
-export async function monitorAddress(address: string): Promise<string> {
+export async function monitorAddress(address: string): Promise<string | null> {
   const client = await getNodeClient();
 
 

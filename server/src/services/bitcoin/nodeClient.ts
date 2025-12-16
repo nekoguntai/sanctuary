@@ -39,7 +39,7 @@ export interface NodeClientInterface {
   getTransaction(txid: string, verbose?: boolean): Promise<any>;
   broadcastTransaction(rawTx: string): Promise<string>;
   estimateFee(blocks: number): Promise<number>;
-  subscribeAddress(address: string): Promise<string>;
+  subscribeAddress(address: string): Promise<string | null>;
 }
 
 // Cache for the active node configuration
@@ -222,6 +222,17 @@ export function resetNodeClient(): void {
   resetElectrumClient();
   resetBitcoinRpcClient();
   log.debug('Client reset');
+}
+
+/**
+ * Get the underlying Electrum client if that's the active node type
+ * Used for subscribing to real-time notifications
+ */
+export function getElectrumClientIfActive(): ElectrumClient | null {
+  if (activeConfig?.type === 'electrum' && activeClient) {
+    return activeClient as ElectrumClient;
+  }
+  return null;
 }
 
 /**

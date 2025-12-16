@@ -54,6 +54,21 @@ Open **https://localhost:8443** and accept the certificate warning.
 
 ---
 
+## Umbrel Installation
+
+If you're running [Umbrel](https://umbrel.com/), you can install Sanctuary as a Community App:
+
+1. Open the **App Store** in your Umbrel
+2. Click the **⋯** menu in the upper right corner
+3. Select **Community App Stores**
+4. Paste: `https://github.com/n-narusegawa/sanctuary`
+5. Click **Add**
+6. Find **Sanctuary** in the App Store and click **Install**
+
+Sanctuary will automatically connect to your Umbrel's Electrum server.
+
+---
+
 ## Overview
 
 Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin wallets without exposing private keys to any networked device. It's designed for:

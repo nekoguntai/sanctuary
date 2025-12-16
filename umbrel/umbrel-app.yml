@@ -57,6 +57,6 @@ gallery: []
 path: ""
 defaultUsername: ""
 defaultPassword: ""
-releaseNotes: ""
+releaseNotes: "Version 0.4.2 released on 2025-12-16. See https://github.com/n-narusegawa/sanctuary/releases/tag/v0.4.2 for details."
 submitter: n-narusegawa
 submission: https://github.com/getumbrel/umbrel-apps/pull/XXXX

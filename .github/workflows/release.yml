@@ -182,18 +182,11 @@ Database migrations run automatically on startup.
 
 ## Umbrel Installation
 
-**Option 1: Community App Store** (Recommended)
-1. Open your Umbrel dashboard
-2. Go to App Store → Community Apps
-3. Search for "Sanctuary" and click Install
-
-**Option 2: Manual Install**
 \`\`\`bash
 umbreld client apps.install.mutate --appId sanctuary
 \`\`\`
 
 **Upgrading on Umbrel:**
-Updates are automatic via the Umbrel App Store, or:
 \`\`\`bash
 umbreld client apps.update.mutate --appId sanctuary
 \`\`\`

@@ -88,6 +88,7 @@ jobs:
     name: Update Umbrel Package
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
 
@@ -183,10 +184,11 @@ Database migrations run automatically on startup.
 
 ## Umbrel Installation
 
-1. Go to **Settings** → **App Stores** in your Umbrel
-2. Click **Add** under Community App Stores
-3. Enter: \`https://github.com/n-narusegawa/sanctuary\`
-4. Find Sanctuary in the App Store and install
+1. Open the **App Store** in your Umbrel
+2. Click the **...** menu in the upper right
+3. Click **Community App Stores** → **Add**
+4. Enter: \`https://github.com/n-narusegawa/sanctuary\`
+5. Find Sanctuary in the App Store and install
 
 ---
 

@@ -26,8 +26,14 @@
 
 **Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
 
+**Option 1: One-liner** (downloads, clones, and installs automatically)
 ```bash
-# Clone and start (that's it!)
+curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
+```
+This installs to `~/sanctuary` by default. Set `SANCTUARY_DIR` to customize the location.
+
+**Option 2: Clone first** (if you want to choose the directory)
+```bash
 git clone https://github.com/n-narusegawa/sanctuary.git
 cd sanctuary
 ./install.sh
@@ -40,9 +46,9 @@ Open **https://localhost:8443** and accept the certificate warning.
 
 1. Checks for Docker and Git
 2. Generates self-signed SSL certificates (for hardware wallet support)
-3. Generates a secure random JWT secret
+3. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
 4. Builds and starts the Docker containers
-5. Saves your configuration for future restarts
+5. Saves your configuration to `.env.local` for future restarts
 
 **After installation:**
 - Start: `./start.sh`
@@ -201,8 +207,8 @@ cd sanctuary
 # 2. Generate SSL certificates
 cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
 
-# 3. Start Sanctuary (replace your-secret-here with a random string)
-HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose up -d
+# 3. Start Sanctuary (replace secrets with random strings)
+HTTPS_PORT=8443 JWT_SECRET=your-jwt-secret ENCRYPTION_KEY=your-encryption-key docker compose up -d
 
 # 4. Open https://localhost:8443
 ```
@@ -227,6 +233,7 @@ HTTPS_PORT=8443 JWT_SECRET=your-secret-here docker compose up -d
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    copy .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
 
@@ -251,6 +258,7 @@ For users who prefer not to use Docker Desktop:
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
 
@@ -270,6 +278,7 @@ For users who prefer not to use Docker Desktop:
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
 
@@ -292,6 +301,7 @@ For users who prefer a lighter-weight solution:
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
 
@@ -328,6 +338,7 @@ For users who prefer a lighter-weight solution:
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
 
@@ -349,6 +360,7 @@ For systems where you can't or don't want to run Docker:
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
    cp .env.example .env
+   # Edit .env and replace CHANGE_ME values with random strings
    podman-compose up -d
    ```
 
@@ -364,8 +376,11 @@ Create a `.env` file in the project root:
 # Server port (default: 8080)
 FRONTEND_PORT=8080
 
-# JWT secret for session tokens (generate a random string)
+# JWT secret for session tokens (generate a random string, min 32 chars)
 JWT_SECRET=your-secret-key-here
+
+# Encryption key for sensitive data like node passwords (generate a random string, min 32 chars)
+ENCRYPTION_KEY=your-encryption-key-here
 
 # Database (default works out of box)
 DATABASE_URL=postgresql://sanctuary:sanctuary@postgres:5432/sanctuary

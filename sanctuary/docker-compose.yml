@@ -51,7 +51,7 @@ services:
         ipv4_address: $APP_SANCTUARY_SERVER_IP
 
   db:
-    image: postgres:16-alpine@sha256:de3d7b6e4b5b3fe899e997579d6dfe95a99539d3e8a8ad8c0b3b52fabc8f4830
+    image: postgres:16-alpine
     restart: on-failure
     stop_grace_period: 1m
     environment:

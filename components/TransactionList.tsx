@@ -174,7 +174,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               const { isReceive, isConsolidation } = getTxTypeInfo(tx);
               const isHighlighted = highlightedTxId === tx.id;
               const txWallet = getWallet(tx.walletId);
-              const isMultisig = txWallet?.type === WalletType.MULTI_SIG;
+              const isMultisig = txWallet?.type === WalletType.MULTI_SIG || txWallet?.type === 'multi_sig';
 
               const badgeClass = isMultisig
                   ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'

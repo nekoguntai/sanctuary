@@ -710,7 +710,7 @@ export const Dashboard: React.FC = () => {
                      </tr>
                   )}
                   {wallets.map((w, idx) => {
-                     const isMultisig = w.type === WalletType.MULTI_SIG;
+                     const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
                      const dotColorClass = distributionColors[idx % distributionColors.length];
 
                      const badgeClass = isMultisig

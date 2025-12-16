@@ -10,6 +10,7 @@ import type { DraftTransaction } from '../src/api/drafts';
 import { ApiError } from '../src/api/client';
 import { Button } from './ui/Button';
 import { BlockVisualizer } from './BlockVisualizer';
+import { TransactionFlowPreview, FlowInput, FlowOutput } from './TransactionFlowPreview';
 import type { BlockData, QueuedBlocksSummary } from '../src/api/bitcoin';
 import { HardwareWalletConnect } from './HardwareWalletConnect';
 import { useHardwareWallet } from '../hooks/useHardwareWallet';
@@ -688,6 +689,82 @@ export const SendTransaction: React.FC = () => {
 
   // Note: For sendMax outputs, the displayed value is calculated dynamically via calculateMaxForOutput(index)
   // No useEffect needed to update amounts - the input field shows the calculated value directly when sendMax is true
+
+  // Prepare data for transaction flow preview
+  const flowPreviewData = useMemo(() => {
+    // Determine which UTXOs will be used as inputs
+    let inputUtxos: UTXO[] = [];
+    if (showCoinControl && selectedUTXOs.size > 0) {
+      inputUtxos = utxos.filter(u => selectedUTXOs.has(`${u.txid}:${u.vout}`));
+    } else if (!showCoinControl && spendableUtxos.length > 0) {
+      // Estimate: select UTXOs to cover the total amount needed
+      const totalNeeded = outputs.reduce((sum, o) => {
+        if (o.sendMax) return sum;
+        return sum + (parseInt(o.amount) || 0);
+      }, 0) + calculateTotalFee();
+
+      const sorted = [...spendableUtxos].sort((a, b) => b.amount - a.amount);
+      let running = 0;
+      for (const u of sorted) {
+        inputUtxos.push(u);
+        running += u.amount;
+        if (running >= totalNeeded) break;
+      }
+    }
+
+    // Prepare inputs for preview
+    const flowInputs: FlowInput[] = inputUtxos.map(u => ({
+      txid: u.txid,
+      vout: u.vout,
+      address: u.address,
+      amount: u.amount,
+      label: u.label,
+    }));
+
+    // Prepare outputs for preview
+    const flowOutputs: FlowOutput[] = outputs
+      .filter(o => o.address && o.address.length > 0)
+      .map((o, idx) => ({
+        address: o.address,
+        amount: o.sendMax ? calculateMaxForOutput(idx) : parseInt(o.amount) || 0,
+        isChange: false,
+        label: undefined,
+      }));
+
+    // Calculate totals
+    const totalInput = flowInputs.reduce((sum, i) => sum + i.amount, 0);
+    const totalOutputAmount = flowOutputs.reduce((sum, o) => sum + o.amount, 0);
+    const estimatedFee = calculateTotalFee();
+
+    // Add estimated change output if not sendMax and there's remaining balance
+    if (!isSendMax && totalInput > totalOutputAmount + estimatedFee) {
+      const changeAmount = totalInput - totalOutputAmount - estimatedFee;
+      if (changeAmount > 546) { // Dust threshold
+        flowOutputs.push({
+          address: 'Change address',
+          amount: changeAmount,
+          isChange: true,
+        });
+      }
+    }
+
+    return {
+      inputs: flowInputs,
+      outputs: flowOutputs,
+      fee: estimatedFee,
+      totalInput,
+      totalOutput: totalOutputAmount + (flowOutputs.find(o => o.isChange)?.amount || 0),
+    };
+  }, [utxos, spendableUtxos, selectedUTXOs, showCoinControl, outputs, calculateMaxForOutput, calculateTotalFee, isSendMax]);
+
+  // Determine if we should show the flow preview
+  const showFlowPreview = useMemo(() => {
+    // Show preview when we have at least one valid output address
+    const hasValidOutput = outputs.some((o, idx) => o.address && o.address.length > 10 && outputsValid[idx] !== false);
+    // And we have some inputs (either selected or available)
+    const hasInputs = (showCoinControl && selectedUTXOs.size > 0) || (!showCoinControl && spendableUtxos.length > 0);
+    return hasValidOutput && hasInputs;
+  }, [outputs, outputsValid, showCoinControl, selectedUTXOs.size, spendableUtxos.length]);
 
   // Check if any output has invalid address
   const hasInvalidAddress = outputsValid.some(v => v === false);
@@ -1485,6 +1562,19 @@ export const SendTransaction: React.FC = () => {
              </div>
         )}
 
+        {/* Transaction Flow Preview */}
+        {showFlowPreview && (
+          <TransactionFlowPreview
+            inputs={flowPreviewData.inputs}
+            outputs={flowPreviewData.outputs}
+            fee={flowPreviewData.fee}
+            feeRate={feeRate}
+            totalInput={flowPreviewData.totalInput}
+            totalOutput={flowPreviewData.totalOutput}
+            isEstimate={!unsignedPsbt}
+          />
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="flex items-center p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-200 rounded-xl">
@@ -1494,7 +1584,7 @@ export const SendTransaction: React.FC = () => {
         )}
 
         {/* Multisig Signing Panel */}
-        {wallet?.type === WalletType.MULTI_SIG && walletDevices.length > 0 && (
+        {(wallet?.type === WalletType.MULTI_SIG || wallet?.type === 'multi_sig') && walletDevices.length > 0 && (
           <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-200 dark:border-blue-500/20">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -1784,7 +1874,7 @@ export const SendTransaction: React.FC = () => {
         )}
 
         {/* Hardware Wallet Status (Single-sig only - multisig has inline signing) */}
-        {wallet?.type !== WalletType.MULTI_SIG && hardwareWallet.isConnected && hardwareWallet.device && (
+        {wallet?.type !== WalletType.MULTI_SIG && wallet?.type !== 'multi_sig' && hardwareWallet.isConnected && hardwareWallet.device && (
           <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/20 rounded-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -1812,7 +1902,7 @@ export const SendTransaction: React.FC = () => {
         )}
 
         {/* Hardware Wallet Connect Button (Single-sig only - multisig has inline signing) */}
-        {wallet?.type !== WalletType.MULTI_SIG && !hardwareWallet.isConnected && (() => {
+        {wallet?.type !== WalletType.MULTI_SIG && wallet?.type !== 'multi_sig' && !hardwareWallet.isConnected && (() => {
           // Get the device for this single-sig wallet
           const singleSigDevice = walletDevices.length > 0 ? walletDevices[0] : null;
           const capabilities = singleSigDevice ? getDeviceCapabilities(singleSigDevice.type) : null;
@@ -1999,7 +2089,7 @@ export const SendTransaction: React.FC = () => {
                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                      {hardwareWallet.signing ? 'Signing with Device...' : 'Broadcasting...'}
                    </>
-                 ) : wallet?.type === WalletType.MULTI_SIG ? (
+                 ) : (wallet?.type === WalletType.MULTI_SIG || wallet?.type === 'multi_sig') ? (
                    hardwareWallet.isConnected ? (
                      <>
                        <Shield className="w-5 h-5 mr-2" />

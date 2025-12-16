@@ -152,57 +152,58 @@ jobs:
             const version = '${{ needs.build-and-push.outputs.version }}';
             const existingBody = context.payload.release.body || '';
 
-            const installInstructions = `
-            ## Quick Install
+            const installInstructions = `## Quick Install
 
-            **Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
+**Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
 
-            \`\`\`bash
-            git clone https://github.com/n-narusegawa/sanctuary.git
-            cd sanctuary
-            ./install.sh
-            \`\`\`
+\`\`\`bash
+git clone https://github.com/n-narusegawa/sanctuary.git
+cd sanctuary
+./install.sh
+\`\`\`
 
-            Open **https://localhost:8443** and log in with \`admin\` / \`sanctuary\`
+Open **https://localhost:8443** and log in with \`admin\` / \`sanctuary\`
 
-            ---
+---
 
-            ## Upgrading
+## Upgrading
 
-            If you're already running Sanctuary:
+If you're already running Sanctuary:
 
-            \`\`\`bash
-            cd sanctuary
-            git pull
-            ./install.sh
-            \`\`\`
+\`\`\`bash
+cd sanctuary
+git pull
+./install.sh
+\`\`\`
 
-            Database migrations run automatically on startup.
+Database migrations run automatically on startup.
 
-            ---
+---
 
-            ## Umbrel Installation
+## Umbrel Installation
 
-            Available in the Umbrel Community App Store or install manually:
+**Option 1: Community App Store** (Recommended)
+1. Open your Umbrel dashboard
+2. Go to App Store → Community Apps
+3. Search for "Sanctuary" and click Install
 
-            \`\`\`bash
-            # From your Umbrel
-            umbreld client apps.install.mutate --appId sanctuary
-            \`\`\`
+**Option 2: Manual Install**
+\`\`\`bash
+umbreld client apps.install.mutate --appId sanctuary
+\`\`\`
 
-            ---
+**Upgrading on Umbrel:**
+Updates are automatic via the Umbrel App Store, or:
+\`\`\`bash
+umbreld client apps.update.mutate --appId sanctuary
+\`\`\`
 
-            ## Docker Images
+---
 
-            - \`ghcr.io/n-narusegawa/sanctuary-frontend:v${version}\`
-            - \`ghcr.io/n-narusegawa/sanctuary-backend:v${version}\`
-
-            ---
-
-            `;
+`;
 
             // Prepend install instructions to existing release notes
-            const newBody = installInstructions + (existingBody ? '\n## Release Notes\n\n' + existingBody : '');
+            const newBody = installInstructions + (existingBody ? '## What\'s New\n\n' + existingBody : '');
 
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,

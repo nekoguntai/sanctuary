@@ -1,9 +1,10 @@
 manifestVersion: 1
 id: sanctuary
-category: bitcoin
 name: Sanctuary
-version: "0.4.2"
 tagline: Self-hosted Bitcoin wallet coordinator for hardware wallets
+icon: https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/sanctuary/images/icon.svg
+category: bitcoin
+version: "0.4.2"
 description: >-
   Sanctuary is a watch-only wallet coordinator that helps you manage Bitcoin
   wallets without exposing private keys to any networked device. All transaction

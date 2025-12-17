@@ -37,6 +37,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
         hasPassword: false,
         explorerUrl: 'https://mempool.space',
         feeEstimatorUrl: 'https://mempool.space',
+        mempoolEstimator: 'simple',
       });
     }
 
@@ -49,6 +50,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
+      mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
     });
   } catch (error) {
     log.error('[ADMIN] Get node config error', { error: String(error) });
@@ -65,9 +67,9 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl } = req.body;
+    const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator } = req.body;
     // Log non-sensitive fields only (password excluded)
-    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password });
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password, mempoolEstimator });
 
     // Validation
     if (!type || !host || !port) {
@@ -91,6 +93,10 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
 
     let nodeConfig;
 
+    // Validate mempoolEstimator if provided
+    const validEstimators = ['simple', 'mempool_space'];
+    const estimator = mempoolEstimator && validEstimators.includes(mempoolEstimator) ? mempoolEstimator : 'simple';
+
     if (existingConfig) {
       // Update existing config
       nodeConfig = await prisma.nodeConfig.update({
@@ -104,6 +110,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
+          mempoolEstimator: estimator,
           updatedAt: new Date(),
         },
       });
@@ -120,6 +127,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
+          mempoolEstimator: estimator,
           isDefault: true,
         },
       });
@@ -144,6 +152,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
+      mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
       message: 'Node configuration updated successfully. Backend will reconnect on next request.',
     });
   } catch (error) {

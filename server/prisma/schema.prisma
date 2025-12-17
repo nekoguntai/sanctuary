@@ -348,18 +348,19 @@ model DraftTransaction {
 // ========================================
 
 model NodeConfig {
-  id             String   @id @default(uuid())
-  type           String   // bitcoin_core, electrum
-  host           String
-  port           Int
-  useSsl         Boolean  @default(false)
-  username       String?
-  password       String?
-  isDefault      Boolean  @default(false)
-  explorerUrl    String?
-  feeEstimatorUrl String? // URL for mempool.space-compatible fee estimation API (defaults to mempool.space)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(uuid())
+  type             String   // bitcoin_core, electrum
+  host             String
+  port             Int
+  useSsl           Boolean  @default(false)
+  username         String?
+  password         String?
+  isDefault        Boolean  @default(false)
+  explorerUrl      String?
+  feeEstimatorUrl  String?  // URL for mempool.space-compatible API (defaults to mempool.space)
+  mempoolEstimator String   @default("mempool_space") // simple, mempool_space
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("node_configs")
 }

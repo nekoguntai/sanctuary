@@ -30,7 +30,7 @@ export interface UseHardwareWalletReturn {
   connect: (type?: DeviceType) => Promise<void>;
   disconnect: () => void;
   signTransaction: (tx: TransactionForSigning) => Promise<string>;
-  signPSBT: (psbtBase64: string, inputPaths?: string[]) => Promise<string>;
+  signPSBT: (psbtBase64: string, inputPaths?: string[]) => Promise<{ psbt: string; rawTx?: string }>;
   refreshDevices: () => Promise<void>;
   clearError: () => void;
 }
@@ -123,8 +123,9 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
 
   /**
    * Sign a PSBT with hardware wallet
+   * Returns both the signed PSBT and optionally a raw transaction hex (for Trezor)
    */
-  const signPSBT = useCallback(async (psbtBase64: string, inputPaths: string[] = []): Promise<string> => {
+  const signPSBT = useCallback(async (psbtBase64: string, inputPaths: string[] = []): Promise<{ psbt: string; rawTx?: string }> => {
     if (!device) {
       throw new Error('No device connected');
     }
@@ -138,7 +139,8 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
         inputPaths,
       });
 
-      return result.psbt;
+      // Return both psbt and rawTx (rawTx is only set for Trezor)
+      return { psbt: result.psbt, rawTx: result.rawTx };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign PSBT';
       setError(message);

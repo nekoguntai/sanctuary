@@ -210,11 +210,12 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
               <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100 mb-1">
-                  Trezor Suite Bridge
+                  Trezor Suite Required
                 </p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                  Trezor devices connect via Trezor Suite desktop app, which must be running.
-                  This provides full support for all Trezor models including Safe 7.
+                  Trezor devices require <strong>Trezor Suite</strong> desktop app to be open and running.
+                  You will need to switch between Trezor Suite (to confirm on your device) and this
+                  app during the signing process. Make sure Trezor Suite is open before connecting.
                 </p>
               </div>
             </div>

@@ -1,0 +1,118 @@
+/**
+ * Hardware Wallet Types and Interfaces
+ *
+ * Defines the contract that all hardware wallet adapters must implement,
+ * enabling extensible support for different device vendors.
+ */
+
+export type DeviceType = 'coldcard' | 'ledger' | 'trezor' | 'bitbox' | 'passport' | 'jade' | 'unknown';
+
+export interface HardwareWalletDevice {
+  id: string;
+  type: DeviceType;
+  name: string;
+  model?: string;
+  connected: boolean;
+  fingerprint?: string;
+  needsPin?: boolean;
+  needsPassphrase?: boolean;
+}
+
+export interface PSBTSignRequest {
+  psbt: string; // Base64 encoded PSBT
+  inputPaths: string[]; // Derivation paths for inputs to sign
+  changeOutputs?: number[]; // Indices of change outputs
+  accountPath?: string; // Account derivation path (e.g., "m/84'/0'/0'")
+  scriptType?: 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr'; // Script type for wallet policy
+}
+
+export interface PSBTSignResponse {
+  psbt: string; // Base64 encoded signed PSBT
+  signatures: number; // Number of signatures added
+  rawTx?: string; // Raw signed transaction hex (for devices that return complete tx)
+}
+
+export interface TransactionForSigning {
+  walletId: string;
+  recipient: string;
+  amount: number; // satoshis
+  feeRate: number; // sat/vB
+  utxos?: string[]; // Optional: specific UTXOs to use
+  changeAddress?: string;
+}
+
+export interface XpubResult {
+  xpub: string;
+  fingerprint: string;
+  path: string;
+}
+
+/**
+ * DeviceAdapter Interface
+ *
+ * All hardware wallet implementations must conform to this interface.
+ * This enables adding new device support without modifying the core service.
+ */
+export interface DeviceAdapter {
+  /** Device type identifier */
+  readonly type: DeviceType;
+
+  /** Whether this device requires external software (e.g., Trezor Suite) */
+  readonly requiresBridge: boolean;
+
+  /** Human-readable name for the device */
+  readonly displayName: string;
+
+  /**
+   * Check if this adapter is supported in the current environment
+   * (e.g., WebUSB availability, HTTPS context)
+   */
+  isSupported(): boolean;
+
+  /**
+   * Check if a device is currently connected
+   */
+  isConnected(): boolean;
+
+  /**
+   * Get the currently connected device info
+   */
+  getDevice(): HardwareWalletDevice | null;
+
+  /**
+   * Connect to a device
+   * @returns Device info on successful connection
+   */
+  connect(): Promise<HardwareWalletDevice>;
+
+  /**
+   * Disconnect from the device
+   */
+  disconnect(): Promise<void>;
+
+  /**
+   * Get extended public key from the device
+   * @param path BIP32 derivation path
+   */
+  getXpub(path: string): Promise<XpubResult>;
+
+  /**
+   * Sign a PSBT with the device
+   * @param request PSBT signing request
+   * @returns Signed PSBT and optionally raw transaction
+   */
+  signPSBT(request: PSBTSignRequest): Promise<PSBTSignResponse>;
+
+  /**
+   * Verify an address on the device display (optional)
+   * @param path Derivation path
+   * @param address Address to verify
+   * @returns true if user confirmed, false if rejected
+   */
+  verifyAddress?(path: string, address: string): Promise<boolean>;
+
+  /**
+   * Get list of previously authorized devices (optional, for WebUSB devices)
+   */
+  getAuthorizedDevices?(): Promise<HardwareWalletDevice[]>;
+}

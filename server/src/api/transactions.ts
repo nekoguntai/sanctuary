@@ -886,13 +886,17 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
 
 /**
  * POST /api/v1/wallets/:walletId/transactions/broadcast
- * Broadcast a signed PSBT
+ * Broadcast a signed PSBT or raw transaction hex
+ * Supports two signing workflows:
+ * - signedPsbtBase64: Signed PSBT from Ledger or file upload
+ * - rawTxHex: Raw transaction hex from Trezor (fully signed)
  */
 router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('edit'), async (req: Request, res: Response) => {
   try {
     const walletId = req.walletId!;
     const {
       signedPsbtBase64,
+      rawTxHex, // For Trezor: fully signed transaction hex
       recipient,
       amount,
       fee,
@@ -901,11 +905,11 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       utxos,
     } = req.body;
 
-    // Validation
-    if (!signedPsbtBase64) {
+    // Validation - require either signedPsbtBase64 or rawTxHex
+    if (!signedPsbtBase64 && !rawTxHex) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'signedPsbtBase64 is required',
+        message: 'Either signedPsbtBase64 or rawTxHex is required',
       });
     }
 
@@ -918,6 +922,7 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
       label,
       memo,
       utxos,
+      rawTxHex, // Pass raw tx for Trezor
     });
 
     // Audit log successful broadcast

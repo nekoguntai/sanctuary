@@ -537,10 +537,13 @@ export async function createTransaction(
 
 /**
  * Broadcast a signed transaction and save to database
+ * Supports two modes:
+ * 1. signedPsbtBase64: Extract and broadcast from signed PSBT (Ledger, file upload)
+ * 2. rawTxHex: Broadcast raw transaction hex directly (Trezor)
  */
 export async function broadcastAndSave(
   walletId: string,
-  signedPsbtBase64: string,
+  signedPsbtBase64: string | undefined,
   metadata: {
     recipient: string;
     amount: number;
@@ -548,26 +551,40 @@ export async function broadcastAndSave(
     label?: string;
     memo?: string;
     utxos: Array<{ txid: string; vout: number }>;
+    rawTxHex?: string; // For Trezor: fully signed raw transaction hex
   }
 ): Promise<{
   txid: string;
   broadcasted: boolean;
 }> {
-  // Parse signed PSBT
-  const psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
+  let rawTx: string;
+  let txid: string;
 
-  // Check if all inputs are already finalized (e.g., from hardware wallet signing)
-  const allFinalized = psbt.data.inputs.every(
-    (input) => input.finalScriptSig || input.finalScriptWitness
-  );
+  if (metadata.rawTxHex) {
+    // Trezor path: Use raw transaction hex directly
+    rawTx = metadata.rawTxHex;
+    // Parse the transaction to get the txid
+    const tx = bitcoin.Transaction.fromHex(rawTx);
+    txid = tx.getId();
+  } else if (signedPsbtBase64) {
+    // Ledger/file upload path: Extract from signed PSBT
+    const psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
 
-  // Only finalize if not already finalized
-  if (!allFinalized) {
-    psbt.finalizeAllInputs();
+    // Check if all inputs are already finalized (e.g., from hardware wallet signing)
+    const allFinalized = psbt.data.inputs.every(
+      (input) => input.finalScriptSig || input.finalScriptWitness
+    );
+
+    // Only finalize if not already finalized
+    if (!allFinalized) {
+      psbt.finalizeAllInputs();
+    }
+    const tx = psbt.extractTransaction();
+    rawTx = tx.toHex();
+    txid = tx.getId();
+  } else {
+    throw new Error('Either signedPsbtBase64 or rawTxHex is required');
   }
-  const tx = psbt.extractTransaction();
-  const rawTx = tx.toHex();
-  const txid = tx.getId();
 
   // Broadcast to network
   const broadcastResult = await broadcastTransaction(rawTx);

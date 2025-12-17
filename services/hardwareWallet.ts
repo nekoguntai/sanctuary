@@ -9,7 +9,7 @@
 import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import AppBtc from '@ledgerhq/hw-app-btc';
 import { AppClient, DefaultWalletPolicy, PsbtV2 } from 'ledger-bitcoin';
-import TrezorConnect, { DEVICE_EVENT, DEVICE } from '@trezor/connect-web';
+import TrezorConnect from '@trezor/connect-web';
 import * as bitcoin from 'bitcoinjs-lib';
 import apiClient from '../src/api/client';
 import { createLogger } from '../utils/logger';
@@ -185,7 +185,8 @@ export const getTrezorXpub = async (path: string): Promise<XpubResult> => {
     });
 
     if (!result.success) {
-      throw new Error(result.payload.error || 'Failed to get public key');
+      const errorMsg = 'error' in result.payload ? result.payload.error : 'Failed to get public key';
+      throw new Error(errorMsg);
     }
 
     const { xpub, fingerprint } = result.payload;
@@ -405,7 +406,8 @@ export const signPSBTWithTrezor = async (
     });
 
     if (!result.success) {
-      throw new Error(result.payload.error || 'Signing failed');
+      const errorMsg = 'error' in result.payload ? result.payload.error : 'Signing failed';
+      throw new Error(errorMsg);
     }
 
     log.info('Trezor signing successful', {

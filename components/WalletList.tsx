@@ -163,7 +163,7 @@ export const WalletList: React.FC = () => {
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {wallets.map((wallet) => {
-            const isMultisig = wallet.type === 'multi_sig' || wallet.type === WalletType.MULTI_SIG;
+            const isMultisig = wallet.type === 'multi_sig';
 
             // Standardized Badge Styling (Matching Recent Activity)
             const badgeColorClass = isMultisig
@@ -245,7 +245,7 @@ export const WalletList: React.FC = () => {
                     </thead>
                     <tbody className="surface-elevated divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
                         {wallets.map((wallet) => {
-                            const isMultisig = wallet.type === 'multi_sig' || wallet.type === WalletType.MULTI_SIG;
+                            const isMultisig = wallet.type === 'multi_sig';
                             const badgeClass = isMultisig
                                 ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
                                 : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';

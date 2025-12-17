@@ -125,7 +125,7 @@ export async function exportTransactions(
 
   const response = await fetch(`/api/v1/wallets/${walletId}/transactions/export?${params}`, {
     headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      'Authorization': `Bearer ${localStorage.getItem('sanctuary_token')}`,
     },
   });
 

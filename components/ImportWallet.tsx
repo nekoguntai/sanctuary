@@ -22,11 +22,14 @@ import {
 } from 'lucide-react';
 import { createLogger } from '../utils/logger';
 import * as hardwareWallet from '../services/hardwareWallet';
+import { DeviceType } from '../services/hardwareWallet';
+import { useSidebar } from '../contexts/SidebarContext';
 
 const log = createLogger('ImportWallet');
 
 type ImportFormat = 'descriptor' | 'json' | 'hardware';
 type ScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+type HardwareDeviceType = 'ledger' | 'trezor';
 
 // Helper: Compute derivation path from script type and account
 const getDerivationPath = (scriptType: ScriptType, account: number): string => {
@@ -63,6 +66,7 @@ const buildDescriptorFromXpub = (
 
 export const ImportWallet: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshSidebar } = useSidebar();
   const [step, setStep] = useState(1);
 
   // Form State
@@ -81,6 +85,7 @@ export const ImportWallet: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
 
   // Hardware Import State
+  const [hardwareDeviceType, setHardwareDeviceType] = useState<HardwareDeviceType>('ledger');
   const [deviceConnected, setDeviceConnected] = useState(false);
   const [deviceLabel, setDeviceLabel] = useState<string | null>(null);
   const [scriptType, setScriptType] = useState<ScriptType>('native_segwit');
@@ -91,15 +96,19 @@ export const ImportWallet: React.FC = () => {
   const [hardwareError, setHardwareError] = useState<string | null>(null);
 
   // Validate data when moving from step 2 to step 3
-  const validateData = async () => {
+  // Accepts optional dataOverride for cases where state hasn't updated yet (e.g., hardware wallet)
+  const validateData = async (dataOverride?: string) => {
     setIsValidating(true);
     setValidationError(null);
 
+    const dataToValidate = dataOverride || importData;
+
     try {
       // Send data based on selected format - server auto-detects wallet export format
+      // For hardware format, we send as descriptor since we built one from the xpub
       const result = await walletsApi.validateImport({
-        descriptor: format === 'descriptor' ? importData : undefined,
-        json: format === 'json' ? importData : undefined,
+        descriptor: (format === 'descriptor' || format === 'hardware') ? dataToValidate : undefined,
+        json: format === 'json' ? dataToValidate : undefined,
       });
 
       if (!result.valid) {
@@ -141,8 +150,8 @@ export const ImportWallet: React.FC = () => {
           xpubData.xpub
         );
         setImportData(descriptor);
-        // Validate and move to step 3
-        const isValid = await validateData();
+        // Validate with descriptor directly (state update is async)
+        const isValid = await validateData(descriptor);
         if (isValid) {
           setStep(3);
         }
@@ -187,6 +196,9 @@ export const ImportWallet: React.FC = () => {
         name: walletName.trim(),
         network,
       });
+
+      // Refresh sidebar to show new wallet
+      refreshSidebar();
 
       // Navigate to the new wallet
       navigate(`/wallets/${result.wallet.id}`);
@@ -256,14 +268,11 @@ export const ImportWallet: React.FC = () => {
         </button>
 
         <button
-          onClick={() => hardwareWallet.isSecureContext() && setFormat('hardware')}
-          disabled={!hardwareWallet.isSecureContext()}
+          onClick={() => setFormat('hardware')}
           className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
             format === 'hardware'
               ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
-              : !hardwareWallet.isSecureContext()
-                ? 'border-sanctuary-200 dark:border-sanctuary-800 opacity-50 cursor-not-allowed'
-                : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
+              : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
           }`}
         >
           <div className={`p-4 rounded-full ${
@@ -276,9 +285,7 @@ export const ImportWallet: React.FC = () => {
           <div>
             <h3 className="text-lg font-medium">Hardware Device</h3>
             <p className="text-sm text-sanctuary-500 mt-2">
-              {hardwareWallet.isSecureContext()
-                ? 'Connect a Ledger device via USB to import wallet directly from xpub.'
-                : 'USB connection requires HTTPS. Use Descriptor or JSON import instead.'}
+              Connect a Ledger or Trezor device to import wallet directly from xpub.
             </p>
           </div>
         </button>
@@ -395,9 +402,10 @@ export const ImportWallet: React.FC = () => {
     setHardwareError(null);
 
     try {
-      const device = await hardwareWallet.connectDevice();
+      // Connect using the selected device type
+      const device = await hardwareWallet.hardwareWalletService.connect(hardwareDeviceType as DeviceType);
       setDeviceConnected(true);
-      setDeviceLabel(device.name || 'Ledger Device');
+      setDeviceLabel(device.name || (hardwareDeviceType === 'trezor' ? 'Trezor Device' : 'Ledger Device'));
     } catch (error) {
       log.error('Failed to connect hardware device', { error });
       setHardwareError(error instanceof Error ? error.message : 'Failed to connect device');
@@ -415,7 +423,8 @@ export const ImportWallet: React.FC = () => {
 
     try {
       const path = getDerivationPath(scriptType, accountIndex);
-      const result = await hardwareWallet.getXpub(path);
+      // Use the service which routes to the correct device implementation
+      const result = await hardwareWallet.hardwareWalletService.getXpub(path);
 
       if (result.xpub && result.fingerprint) {
         setXpubData({
@@ -443,16 +452,93 @@ export const ImportWallet: React.FC = () => {
   ];
 
   // Step 2 (Hardware): Device Connection & Path Selection
-  const renderStep2Hardware = () => (
+  const renderStep2Hardware = () => {
+    // Check if Ledger is supported (requires HTTPS)
+    const ledgerSupported = hardwareWallet.isSecureContext();
+
+    return (
     <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
       <h2 className="text-xl font-light text-center text-sanctuary-900 dark:text-sanctuary-50 mb-2">
         Connect Hardware Device
       </h2>
       <p className="text-center text-sanctuary-500 mb-6">
-        Connect your Ledger device via USB and open the Bitcoin app.
+        Select your device type and connect via USB.
       </p>
 
       <div className="space-y-6">
+        {/* Device Type Selection */}
+        <div>
+          <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-3">
+            Device Type
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => {
+                if (ledgerSupported) {
+                  setHardwareDeviceType('ledger');
+                  setDeviceConnected(false);
+                  setXpubData(null);
+                }
+              }}
+              disabled={!ledgerSupported}
+              className={`p-4 rounded-lg border text-left transition-colors ${
+                hardwareDeviceType === 'ledger'
+                  ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
+                  : !ledgerSupported
+                    ? 'border-sanctuary-200 dark:border-sanctuary-700 opacity-50 cursor-not-allowed'
+                    : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'
+              }`}
+            >
+              <p className={`text-sm font-medium ${
+                hardwareDeviceType === 'ledger'
+                  ? 'text-primary-700 dark:text-primary-400'
+                  : 'text-sanctuary-900 dark:text-sanctuary-100'
+              }`}>
+                Ledger
+              </p>
+              <p className="text-xs text-sanctuary-500 mt-0.5">
+                {ledgerSupported ? 'Nano S, S Plus, X, Stax, Flex' : 'Requires HTTPS connection'}
+              </p>
+            </button>
+            <button
+              onClick={() => {
+                setHardwareDeviceType('trezor');
+                setDeviceConnected(false);
+                setXpubData(null);
+              }}
+              className={`p-4 rounded-lg border text-left transition-colors ${
+                hardwareDeviceType === 'trezor'
+                  ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
+                  : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'
+              }`}
+            >
+              <p className={`text-sm font-medium ${
+                hardwareDeviceType === 'trezor'
+                  ? 'text-primary-700 dark:text-primary-400'
+                  : 'text-sanctuary-900 dark:text-sanctuary-100'
+              }`}>
+                Trezor
+              </p>
+              <p className="text-xs text-sanctuary-500 mt-0.5">One, Model T, Safe 3/5/7</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">Via Trezor Suite</p>
+            </button>
+          </div>
+        </div>
+
+        {/* Trezor workflow notice */}
+        {hardwareDeviceType === 'trezor' && (
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="font-medium mb-1">Trezor Suite Required</p>
+              <p className="text-amber-700 dark:text-amber-300">
+                You'll need to switch between Sanctuary and Trezor Suite to approve requests on your device.
+                Keep Trezor Suite open and check it when prompted.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Device Connection */}
         <div className="surface-secondary rounded-xl p-6">
           {!deviceConnected ? (
@@ -461,12 +547,14 @@ export const ImportWallet: React.FC = () => {
                 <Usb className="w-8 h-8 text-sanctuary-400" />
               </div>
               <p className="text-sm text-sanctuary-500 mb-4">
-                Make sure your Ledger is connected and the Bitcoin app is open.
+                {hardwareDeviceType === 'trezor'
+                  ? 'Make sure Trezor Suite desktop app is running and your device is connected.'
+                  : 'Make sure your Ledger is connected and the Bitcoin app is open.'}
               </p>
               <Button
                 onClick={handleConnectDevice}
                 isLoading={isConnecting}
-                disabled={isConnecting}
+                disabled={isConnecting || (hardwareDeviceType === 'ledger' && !ledgerSupported)}
               >
                 {isConnecting ? 'Connecting...' : 'Connect Device'}
               </Button>
@@ -607,7 +695,8 @@ export const ImportWallet: React.FC = () => {
         )}
       </div>
     </div>
-  );
+    );
+  };
 
   // Step 3: Configuration & Device Preview
   const renderStep3 = () => {

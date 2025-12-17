@@ -7,6 +7,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+# Install Python and build tools for native modules (required for @trezor/connect-web usb dependency)
+RUN apk add --no-cache python3 make g++ linux-headers eudev-dev
+
 # Copy package files first (best cache layer)
 COPY package*.json ./
 

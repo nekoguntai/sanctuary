@@ -1278,4 +1278,118 @@ router.get('/audit-logs/stats', authenticate, requireAdmin, async (req: Request,
   }
 });
 
+// ========================================
+// VERSION CHECK
+// ========================================
+
+// Read version from package.json at startup
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+let currentVersion = '0.0.0';
+try {
+  // Try to read from root package.json (Docker build copies it)
+  const pkgPath = join(__dirname, '../../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  currentVersion = pkg.version || '0.0.0';
+} catch {
+  try {
+    // Fallback: try parent directory (development)
+    const pkgPath = join(__dirname, '../../../package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    currentVersion = pkg.version || '0.0.0';
+  } catch {
+    log.warn('[ADMIN] Could not read version from package.json');
+  }
+}
+
+// Cache for GitHub release check (avoid rate limiting)
+let releaseCache: {
+  latestVersion: string;
+  releaseUrl: string;
+  releaseName: string;
+  publishedAt: string;
+  body: string;
+  checkedAt: number;
+} | null = null;
+const RELEASE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+/**
+ * GET /api/v1/admin/version
+ * Get current version and check for updates
+ * Does not require authentication - version info is not sensitive
+ */
+router.get('/version', async (req: Request, res: Response) => {
+  try {
+    const now = Date.now();
+
+    // Check if we need to fetch from GitHub
+    if (!releaseCache || (now - releaseCache.checkedAt) > RELEASE_CACHE_TTL) {
+      try {
+        const response = await fetch(
+          'https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest',
+          {
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'Sanctuary-App',
+            },
+          }
+        );
+
+        if (response.ok) {
+          const release = await response.json() as {
+            tag_name?: string;
+            html_url?: string;
+            name?: string;
+            published_at?: string;
+            body?: string;
+          };
+          releaseCache = {
+            latestVersion: release.tag_name?.replace(/^v/, '') || '0.0.0',
+            releaseUrl: release.html_url || '',
+            releaseName: release.name || '',
+            publishedAt: release.published_at || '',
+            body: release.body || '',
+            checkedAt: now,
+          };
+        }
+      } catch (fetchError) {
+        log.warn('[ADMIN] Failed to fetch latest release from GitHub', { error: String(fetchError) });
+      }
+    }
+
+    // Compare versions
+    const compareVersions = (a: string, b: string): number => {
+      const pa = a.split('.').map(Number);
+      const pb = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const na = pa[i] || 0;
+        const nb = pb[i] || 0;
+        if (na > nb) return 1;
+        if (na < nb) return -1;
+      }
+      return 0;
+    };
+
+    const latestVersion = releaseCache?.latestVersion || currentVersion;
+    const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+
+    res.json({
+      currentVersion,
+      latestVersion,
+      updateAvailable,
+      releaseUrl: releaseCache?.releaseUrl || `https://github.com/n-narusegawa/sanctuary/releases`,
+      releaseName: releaseCache?.releaseName || '',
+      publishedAt: releaseCache?.publishedAt || '',
+      releaseNotes: releaseCache?.body || '',
+    });
+  } catch (error) {
+    log.error('[ADMIN] Version check error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to check version',
+    });
+  }
+});
+
 export default router;

@@ -382,3 +382,28 @@ export async function getAuditLogStats(days?: number): Promise<AuditLogStats> {
   const url = days ? `/admin/audit-logs/stats?days=${days}` : '/admin/audit-logs/stats';
   return apiClient.get<AuditLogStats>(url);
 }
+
+// ========================================
+// VERSION CHECK
+// ========================================
+
+/**
+ * Version check response
+ */
+export interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  releaseUrl: string;
+  releaseName: string;
+  publishedAt: string;
+  releaseNotes: string;
+}
+
+/**
+ * Check for application updates
+ * Does not require authentication
+ */
+export async function checkVersion(): Promise<VersionInfo> {
+  return apiClient.get<VersionInfo>('/admin/version');
+}

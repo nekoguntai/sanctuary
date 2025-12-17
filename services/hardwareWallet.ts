@@ -415,11 +415,28 @@ export const signPSBT = async (
   try {
     const { appClient } = activeConnection;
 
+    // First, parse the PSBT to extract actual derivation paths from inputs
+    const tempPsbt = bitcoin.Psbt.fromBase64(request.psbt);
+    let detectedAccountPath: string | null = null;
+
+    // Try to extract account path from PSBT's bip32Derivation
+    for (const input of tempPsbt.data.inputs) {
+      if (input.bip32Derivation && input.bip32Derivation.length > 0) {
+        const fullPath = input.bip32Derivation[0].path;
+        if (fullPath) {
+          // Extract account path from full path (e.g., "m/44'/0'/0'/0/0" -> "m/44'/0'/0'")
+          detectedAccountPath = extractAccountPath(fullPath);
+          console.log('[HardwareWallet] Detected account path from PSBT:', detectedAccountPath);
+          break;
+        }
+      }
+    }
+
     // Determine account path and script type
-    let accountPath = request.accountPath;
+    let accountPath = request.accountPath || detectedAccountPath;
     let scriptType = request.scriptType;
 
-    // If not provided, try to infer from input paths
+    // If still not determined, try to infer from input paths parameter
     if (!accountPath && request.inputPaths && request.inputPaths.length > 0) {
       accountPath = extractAccountPath(request.inputPaths[0]);
     }
@@ -431,11 +448,13 @@ export const signPSBT = async (
       scriptType = inferScriptTypeFromPath(accountPath);
     }
 
+    console.log('[HardwareWallet] Using account path:', accountPath, 'script type:', scriptType);
     log.info('Preparing to sign PSBT', {
       psbtLength: request.psbt.length,
       inputPathsCount: request.inputPaths?.length || 0,
       accountPath,
       scriptType,
+      detectedFromPsbt: !!detectedAccountPath,
     });
 
     // Get master fingerprint (returns hex string directly)

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Scanner } from '@yudiel/react-qr-scanner';
 import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel } from '../src/api/devices';
 import { Button } from './ui/Button';
 import {
@@ -18,7 +19,9 @@ import {
   Loader2,
   ChevronRight,
   Search,
-  X
+  X,
+  Camera,
+  Upload
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
@@ -93,6 +96,11 @@ export const ConnectDevice: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // QR scanning state
+  const [qrMode, setQrMode] = useState<'camera' | 'file'>('camera');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
   // Fetch device models on mount
   useEffect(() => {
     const fetchModels = async () => {
@@ -119,6 +127,9 @@ export const ConnectDevice: React.FC = () => {
     setScanned(false);
     setXpub('');
     setFingerprint('');
+    setCameraActive(false);
+    setCameraError(null);
+    setQrMode('camera');
     if (selectedModel) {
       setLabel(`My ${selectedModel.name}`);
     }
@@ -408,6 +419,141 @@ export const ConnectDevice: React.FC = () => {
       setScanning(false);
     };
     reader.readAsText(file);
+  };
+
+  /**
+   * Handle QR code scan result
+   * Parses various QR formats: ColdCard JSON, Keystone, plain xpub, descriptors
+   */
+  const handleQrScan = (result: { rawValue: string }[]) => {
+    if (!result || result.length === 0) return;
+
+    const content = result[0].rawValue;
+    log.info('QR code scanned', { length: content.length });
+
+    setCameraActive(false);
+    setScanning(true);
+    setError(null);
+
+    try {
+      // Try to parse as JSON first
+      let data: any;
+      try {
+        data = JSON.parse(content);
+      } catch {
+        // Not JSON, try other formats below
+        data = null;
+      }
+
+      let foundXpub = '';
+      let foundFingerprint = '';
+      let foundDerivation = '';
+      let foundLabel = '';
+
+      if (data) {
+        // FORMAT 1: ColdCard / Passport JSON format
+        // { "xfp": "DEADBEEF", "xpub": "xpub...", "deriv": "m/84'/0'/0'" }
+        if (data.xpub) {
+          foundXpub = data.xpub;
+          if (data.xfp) foundFingerprint = data.xfp;
+          if (data.deriv) foundDerivation = data.deriv;
+          if (data.name) foundLabel = data.name;
+        }
+
+        // FORMAT 2: Keystone format
+        // { coins: [{ coinCode: "BTC", accounts: [{ hdPath: "M/84'/0'/0'", xPub: "xpub..." }] }] }
+        const keystoneCoins = data.coins || data.data?.sync?.coins;
+        if (keystoneCoins && Array.isArray(keystoneCoins)) {
+          const btcCoin = keystoneCoins.find((c: any) => c.coinCode === 'BTC' || c.coin === 'BTC');
+          if (btcCoin && btcCoin.accounts && btcCoin.accounts.length > 0) {
+            const account = btcCoin.accounts[0];
+            foundXpub = account.xPub || account.xpub || '';
+            if (account.hdPath) foundDerivation = account.hdPath.replace(/^M/, 'm');
+          }
+        }
+
+        // FORMAT 3: Generic JSON with various field names
+        if (!foundXpub) {
+          foundXpub = data.ExtPubKey || data.extPubKey || data.zpub || data.ypub || data.Zpub || data.Ypub || '';
+        }
+        if (!foundFingerprint) {
+          foundFingerprint = data.MasterFingerprint || data.masterFingerprint || data.fingerprint || '';
+        }
+        if (!foundDerivation) {
+          foundDerivation = data.AccountKeyPath || data.accountKeyPath || data.derivationPath || data.path || '';
+        }
+      }
+
+      // If not JSON or no xpub found, try text patterns
+      if (!foundXpub) {
+        // Try descriptor format: [fingerprint/path]xpub
+        const descriptorMatch = content.match(/\[([a-fA-F0-9]{8})\/?([^\]]*)\]([xyztuv]pub[a-zA-Z0-9]+)/i);
+        if (descriptorMatch) {
+          foundFingerprint = descriptorMatch[1];
+          const pathPart = descriptorMatch[2].replace(/h/g, "'");
+          if (pathPart) foundDerivation = `m/${pathPart}`;
+          foundXpub = descriptorMatch[3];
+        }
+
+        // Try plain xpub
+        if (!foundXpub) {
+          const xpubMatch = content.match(/([xyztuv]pub[a-zA-Z0-9]{100,})/i);
+          if (xpubMatch) {
+            foundXpub = xpubMatch[1];
+          }
+        }
+
+        // Try multisig format (Zpub/Ypub)
+        if (!foundXpub) {
+          const multisigPubMatch = content.match(/([ZY]pub[a-zA-Z0-9]{100,})/);
+          if (multisigPubMatch) {
+            foundXpub = multisigPubMatch[1];
+          }
+        }
+      }
+
+      // Validate we found something
+      if (!foundXpub) {
+        setError('Could not find xpub in QR code. Please try again or use file upload.');
+        setScanning(false);
+        return;
+      }
+
+      // Apply found values
+      if (foundFingerprint) setFingerprint(foundFingerprint.toUpperCase());
+      if (foundXpub) setXpub(foundXpub);
+      if (foundDerivation) setDerivationPath(foundDerivation);
+      if (foundLabel && !label) setLabel(foundLabel);
+
+      setScanned(true);
+      setScanning(false);
+
+      log.info('QR code parsed successfully', {
+        hasXpub: !!foundXpub,
+        hasFingerprint: !!foundFingerprint,
+        hasDerivation: !!foundDerivation,
+      });
+    } catch (err) {
+      log.error('Failed to parse QR code', { error: err });
+      setError('Failed to parse QR code content.');
+      setScanning(false);
+    }
+  };
+
+  const handleCameraError = (error: unknown) => {
+    log.error('Camera error', { error });
+    setCameraActive(false);
+    if (error instanceof Error) {
+      if (error.name === 'NotAllowedError') {
+        setCameraError('Camera access denied. Please allow camera permissions and try again.');
+      } else if (error.name === 'NotFoundError') {
+        setCameraError('No camera found on this device.');
+      } else {
+        setCameraError(`Camera error: ${error.message}`);
+      }
+    } else {
+      setCameraError('Failed to access camera. Make sure you are using HTTPS.');
+    }
   };
 
   const handleSave = async () => {
@@ -724,14 +870,13 @@ export const ConnectDevice: React.FC = () => {
                     </div>
                   )}
 
-                  {(method === 'sd_card' || method === 'qr_code') && (
+                  {method === 'sd_card' && (
                     <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
                       {!scanning && !scanned && (
                         <>
                           <FileJson className="w-12 h-12 mx-auto text-sanctuary-400 mb-3" />
                           <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4 px-4">
-                            {method === 'sd_card' && `Upload the export file from your ${selectedModel.name} SD card.`}
-                            {method === 'qr_code' && `Upload a QR code export from your ${selectedModel.name}.`}
+                            Upload the export file from your {selectedModel.name} SD card.
                           </p>
                           <label className="cursor-pointer">
                             <span className="inline-flex items-center justify-center rounded-lg px-4 py-2 bg-sanctuary-800 text-sanctuary-50 text-sm font-medium hover:bg-sanctuary-700 transition-colors">
@@ -740,7 +885,7 @@ export const ConnectDevice: React.FC = () => {
                             <input
                               type="file"
                               className="hidden"
-                              accept=".json,.txt,.png,.jpg"
+                              accept=".json,.txt"
                               onChange={handleFileUpload}
                             />
                           </label>
@@ -756,6 +901,135 @@ export const ConnectDevice: React.FC = () => {
                         <div className="flex flex-col items-center text-emerald-600 dark:text-emerald-400">
                           <Check className="w-10 h-10 mb-2" />
                           <p className="font-medium">File Imported Successfully</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {method === 'qr_code' && (
+                    <div className="space-y-3">
+                      {/* QR Mode Toggle */}
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => { setQrMode('camera'); setCameraError(null); }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                            qrMode === 'camera'
+                              ? 'bg-sanctuary-800 text-sanctuary-50 dark:bg-sanctuary-200 dark:text-sanctuary-900'
+                              : 'bg-sanctuary-100 text-sanctuary-600 dark:bg-sanctuary-800 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                          }`}
+                        >
+                          <Camera className="w-4 h-4" />
+                          Scan with Camera
+                        </button>
+                        <button
+                          onClick={() => { setQrMode('file'); setCameraActive(false); }}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                            qrMode === 'file'
+                              ? 'bg-sanctuary-800 text-sanctuary-50 dark:bg-sanctuary-200 dark:text-sanctuary-900'
+                              : 'bg-sanctuary-100 text-sanctuary-600 dark:bg-sanctuary-800 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                          }`}
+                        >
+                          <Upload className="w-4 h-4" />
+                          Upload File
+                        </button>
+                      </div>
+
+                      {/* Camera Scanner */}
+                      {qrMode === 'camera' && !scanned && (
+                        <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+                          {!cameraActive && !cameraError && (
+                            <div className="text-center py-8">
+                              <Camera className="w-12 h-12 mx-auto text-sanctuary-400 mb-3" />
+                              <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4 px-4">
+                                Point your camera at the QR code on your {selectedModel.name}.
+                              </p>
+                              {!isSecureContext() && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mb-4 px-4">
+                                  Camera access requires HTTPS. Please use https://localhost:8443
+                                </p>
+                              )}
+                              <Button onClick={() => { setCameraActive(true); setCameraError(null); }}>
+                                Start Camera
+                              </Button>
+                            </div>
+                          )}
+                          {cameraActive && (
+                            <div className="relative">
+                              <div className="aspect-square max-w-sm mx-auto">
+                                <Scanner
+                                  onScan={handleQrScan}
+                                  onError={handleCameraError}
+                                  constraints={{ facingMode: 'environment' }}
+                                  styles={{
+                                    container: { width: '100%', height: '100%' },
+                                    video: { width: '100%', height: '100%', objectFit: 'cover' },
+                                  }}
+                                />
+                              </div>
+                              <button
+                                onClick={() => setCameraActive(false)}
+                                className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                              <p className="text-xs text-center text-sanctuary-500 py-2">
+                                Position the QR code within the frame
+                              </p>
+                            </div>
+                          )}
+                          {cameraError && (
+                            <div className="text-center py-8">
+                              <AlertCircle className="w-12 h-12 mx-auto text-rose-400 mb-3" />
+                              <p className="text-sm text-rose-600 dark:text-rose-400 mb-4 px-4">
+                                {cameraError}
+                              </p>
+                              <Button onClick={() => { setCameraActive(true); setCameraError(null); }}>
+                                Try Again
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* File Upload (alternative) */}
+                      {qrMode === 'file' && !scanned && (
+                        <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                          {!scanning && (
+                            <>
+                              <FileJson className="w-12 h-12 mx-auto text-sanctuary-400 mb-3" />
+                              <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4 px-4">
+                                Upload a file containing your QR code data (JSON or text export).
+                              </p>
+                              <label className="cursor-pointer">
+                                <span className="inline-flex items-center justify-center rounded-lg px-4 py-2 bg-sanctuary-800 text-sanctuary-50 text-sm font-medium hover:bg-sanctuary-700 transition-colors">
+                                  Select File
+                                </span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".json,.txt"
+                                  onChange={handleFileUpload}
+                                />
+                              </label>
+                            </>
+                          )}
+                          {scanning && (
+                            <div className="flex flex-col items-center">
+                              <Loader2 className="w-8 h-8 animate-spin text-sanctuary-600 dark:text-sanctuary-400 mb-3" />
+                              <p className="text-sm text-sanctuary-500">Parsing file...</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Success state */}
+                      {scanned && (
+                        <div className="text-center py-6 surface-muted rounded-xl border border-sanctuary-300 dark:border-sanctuary-700">
+                          <div className="flex flex-col items-center text-emerald-600 dark:text-emerald-400">
+                            <Check className="w-10 h-10 mb-2" />
+                            <p className="font-medium">QR Code Scanned Successfully</p>
+                            <p className="text-xs text-sanctuary-500 mt-1">Fingerprint: {fingerprint || 'Not provided'}</p>
+                          </div>
                         </div>
                       )}
                     </div>

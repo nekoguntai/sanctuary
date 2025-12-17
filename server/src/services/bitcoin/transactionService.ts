@@ -13,6 +13,24 @@ import { RBF_SEQUENCE } from './advancedTx';
 import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
 import { parseDescriptor } from './addressDerivation';
+import { getNodeClient } from './nodeClient';
+
+/**
+ * Check if a script type is legacy (requires nonWitnessUtxo)
+ */
+function isLegacyScriptType(scriptType: string | null): boolean {
+  return scriptType === 'p2pkh' || scriptType === 'P2PKH';
+}
+
+/**
+ * Fetch raw transaction hex for nonWitnessUtxo (required for legacy inputs)
+ */
+async function getRawTransactionHex(txid: string): Promise<string> {
+  const client = await getNodeClient();
+  // getTransaction with verbose=false returns raw hex
+  const rawHex = await client.getTransaction(txid, false);
+  return rawHex;
+}
 
 // Initialize BIP32 for key derivation
 const bip32 = BIP32Factory(ecc);
@@ -351,20 +369,50 @@ export async function createTransaction(
     }
   }
 
+  // Check if this is a legacy wallet (requires nonWitnessUtxo)
+  const isLegacy = isLegacyScriptType(wallet.scriptType);
+
+  // For legacy wallets, we need to fetch raw transactions for nonWitnessUtxo
+  const rawTxCache: Map<string, Buffer> = new Map();
+  if (isLegacy) {
+    // Fetch all raw transactions in parallel
+    const uniqueTxids = [...new Set(selection.utxos.map(u => u.txid))];
+    const rawTxPromises = uniqueTxids.map(async (txid) => {
+      const rawHex = await getRawTransactionHex(txid);
+      return { txid, rawTx: Buffer.from(rawHex, 'hex') };
+    });
+    const rawTxResults = await Promise.all(rawTxPromises);
+    rawTxResults.forEach(({ txid, rawTx }) => rawTxCache.set(txid, rawTx));
+  }
+
   for (const utxo of selection.utxos) {
     const derivationPath = addressPathMap.get(utxo.address) || '';
     inputPaths.push(derivationPath);
 
     // Build base input data
+    // Legacy (P2PKH) requires nonWitnessUtxo (full previous tx)
+    // SegWit (P2WPKH, P2SH-P2WPKH, P2TR) uses witnessUtxo
     const inputOptions: Parameters<typeof psbt.addInput>[0] = {
       hash: utxo.txid,
       index: utxo.vout,
       sequence,
-      witnessUtxo: {
+    };
+
+    if (isLegacy) {
+      // Legacy: use nonWitnessUtxo (full previous transaction)
+      const rawTx = rawTxCache.get(utxo.txid);
+      if (rawTx) {
+        inputOptions.nonWitnessUtxo = rawTx;
+      } else {
+        throw new Error(`Failed to fetch raw transaction for ${utxo.txid}`);
+      }
+    } else {
+      // SegWit: use witnessUtxo (just the output script and value)
+      inputOptions.witnessUtxo = {
         script: Buffer.from(utxo.scriptPubKey, 'hex'),
         value: Number(utxo.amount),
-      },
-    };
+      };
+    }
 
     psbt.addInput(inputOptions);
 
@@ -852,6 +900,21 @@ export async function createBatchTransaction(
     }
   }
 
+  // Check if this is a legacy wallet (requires nonWitnessUtxo)
+  const isLegacy = isLegacyScriptType(wallet.scriptType);
+
+  // For legacy wallets, we need to fetch raw transactions for nonWitnessUtxo
+  const rawTxCache: Map<string, Buffer> = new Map();
+  if (isLegacy) {
+    const uniqueTxids = [...new Set(utxos.map(u => u.txid))];
+    const rawTxPromises = uniqueTxids.map(async (txid) => {
+      const rawHex = await getRawTransactionHex(txid);
+      return { txid, rawTx: Buffer.from(rawHex, 'hex') };
+    });
+    const rawTxResults = await Promise.all(rawTxPromises);
+    rawTxResults.forEach(({ txid, rawTx }) => rawTxCache.set(txid, rawTx));
+  }
+
   // Add inputs with BIP32 derivation info
   for (const utxo of utxos) {
     const derivationPath = addressPathMap.get(utxo.address) || '';
@@ -861,11 +924,23 @@ export async function createBatchTransaction(
       hash: utxo.txid,
       index: utxo.vout,
       sequence,
-      witnessUtxo: {
+    };
+
+    if (isLegacy) {
+      // Legacy: use nonWitnessUtxo (full previous transaction)
+      const rawTx = rawTxCache.get(utxo.txid);
+      if (rawTx) {
+        inputOptions.nonWitnessUtxo = rawTx;
+      } else {
+        throw new Error(`Failed to fetch raw transaction for ${utxo.txid}`);
+      }
+    } else {
+      // SegWit: use witnessUtxo
+      inputOptions.witnessUtxo = {
         script: Buffer.from(utxo.scriptPubKey || '', 'hex'),
         value: Number(utxo.amount),
-      },
-    };
+      };
+    }
 
     psbt.addInput(inputOptions);
 

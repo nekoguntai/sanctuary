@@ -9,9 +9,10 @@ interface DashboardFeeEstimate {
   slow: number;
 }
 import * as syncApi from '../src/api/sync';
+import * as adminApi from '../src/api/admin';
 import { TransactionList } from './TransactionList';
 import { BlockVisualizer } from './BlockVisualizer';
-import { Activity, TrendingUp, TrendingDown, Zap, Wallet as WalletIcon, CheckCircle2, XCircle, ChevronRight, Wifi, WifiOff, Bitcoin, RefreshCw, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Zap, Wallet as WalletIcon, CheckCircle2, XCircle, ChevronRight, Wifi, WifiOff, Bitcoin, RefreshCw, Check, AlertTriangle, Clock, Download, X } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -123,6 +124,23 @@ export const Dashboard: React.FC = () => {
   const { user } = useUser();
   const navigate = useNavigate();
   const [timeframe, setTimeframe] = useState<Timeframe>('1W');
+
+  // Version check state
+  const [versionInfo, setVersionInfo] = useState<adminApi.VersionInfo | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+
+  // Check for updates on mount
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      try {
+        const info = await adminApi.checkVersion();
+        setVersionInfo(info);
+      } catch (err) {
+        log.warn('Failed to check for updates', { error: err });
+      }
+    };
+    checkForUpdates();
+  }, []);
 
   // WebSocket integration
   const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
@@ -333,6 +351,45 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
+
+      {/* Update Available Banner */}
+      {versionInfo?.updateAvailable && !updateDismissed && (
+        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-primary-100 dark:bg-primary-800/50 rounded-lg">
+                <Download className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-primary-900 dark:text-primary-100">
+                  Update Available: v{versionInfo.latestVersion}
+                </h3>
+                <p className="text-xs text-primary-600 dark:text-primary-400">
+                  You're running v{versionInfo.currentVersion}
+                  {versionInfo.releaseName && ` • ${versionInfo.releaseName}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <a
+                href={versionInfo.releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+              >
+                View Release
+              </a>
+              <button
+                onClick={() => setUpdateDismissed(true)}
+                className="p-1.5 text-primary-500 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-200 hover:bg-primary-100 dark:hover:bg-primary-800/50 rounded-lg transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Block Visualizer Section */}
       <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">

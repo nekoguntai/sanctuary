@@ -1,6 +1,6 @@
 {
   "name": "sanctuary-server",
-  "version": "0.4.7",
+  "version": "0.4.9",
   "description": "Backend API server for Sanctuary Bitcoin Wallet",
   "main": "dist/index.js",
   "prisma": {

@@ -341,6 +341,10 @@ export const verifyAddress = async (path: string, address: string): Promise<bool
 
 /**
  * Sign a PSBT with the connected device
+ *
+ * NOTE: Ledger Bitcoin app v2+ requires wallet policy registration before signing.
+ * This is not yet fully implemented. For now, users should use air-gapped signing
+ * (export PSBT file, sign with Ledger Live or other software, import signed PSBT).
  */
 export const signPSBT = async (
   request: PSBTSignRequest
@@ -353,10 +357,24 @@ export const signPSBT = async (
     // Decode PSBT from base64
     const psbtBuffer = Buffer.from(request.psbt, 'base64');
 
-    // Sign with Ledger
-    // Note: The actual signing API depends on the hw-app-btc version
-    // Type assertion needed due to library type definitions not including signPsbt
-    const result = await (activeConnection.app as any).signPsbt(psbtBuffer, request.inputPaths);
+    log.info('Attempting to sign PSBT', {
+      psbtLength: psbtBuffer.length,
+      inputPathsCount: request.inputPaths?.length || 0,
+    });
+
+    // Try using the signPsbt method if available
+    // Note: Ledger Bitcoin app v2+ requires wallet policy registration
+    // which is not yet implemented. This may fail.
+    const app = activeConnection.app as any;
+
+    if (typeof app.signPsbt !== 'function') {
+      throw new Error(
+        'PSBT signing via USB is not yet supported for this device. ' +
+        'Please use air-gapped signing: download the PSBT file, sign it with Ledger Live or compatible software, then upload the signed PSBT.'
+      );
+    }
+
+    const result = await app.signPsbt(psbtBuffer, request.inputPaths);
 
     // Re-encode signed PSBT
     const signedPsbt = Buffer.from(result.psbt).toString('base64');
@@ -367,6 +385,7 @@ export const signPSBT = async (
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    log.error('PSBT signing failed', { error: message });
 
     if (message.includes('0x6985') || message.includes('denied')) {
       throw new Error('Transaction rejected on device');
@@ -374,8 +393,22 @@ export const signPSBT = async (
     if (message.includes('0x6d00') || message.includes('0x6e00')) {
       throw new Error('Bitcoin app not open on device');
     }
+    if (message.includes('not yet supported') || message.includes('air-gapped')) {
+      throw error; // Re-throw our custom error
+    }
 
-    throw new Error(`Failed to sign: ${message}`);
+    // Provide helpful error for wallet policy issues
+    if (message.includes('policy') || message.includes('wallet') || message.includes('register')) {
+      throw new Error(
+        'Ledger requires wallet registration before signing. ' +
+        'Please use air-gapped signing: download the PSBT, sign with Ledger Live, then upload.'
+      );
+    }
+
+    throw new Error(
+      `Failed to sign PSBT: ${message}. ` +
+      'Try using air-gapped signing instead (download PSBT, sign externally, upload signed PSBT).'
+    );
   }
 };
 

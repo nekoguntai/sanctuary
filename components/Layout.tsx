@@ -20,6 +20,7 @@ import {
   Database,
   FileText,
   Bell,
+  AlertTriangle,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
@@ -456,6 +457,30 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         )}
 
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
+          {/* Default Password Warning Banner - only for admin user */}
+          {user?.isAdmin && user?.usingDefaultPassword && (
+            <div className="bg-amber-500 dark:bg-amber-600">
+              <div className="max-w-7xl mx-auto py-2 px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between flex-wrap">
+                  <div className="flex-1 flex items-center">
+                    <span className="flex p-1 rounded-lg bg-amber-600 dark:bg-amber-700">
+                      <AlertTriangle className="h-5 w-5 text-white" />
+                    </span>
+                    <p className="ml-3 font-medium text-white text-sm">
+                      <span>Security Warning: You are using the default password.</span>
+                      <Link
+                        to="/account"
+                        className="ml-2 underline hover:text-amber-100 font-semibold"
+                      >
+                        Change it now →
+                      </Link>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="py-8 px-4 sm:px-6 md:px-8 max-w-7xl mx-auto">
             {children}
           </div>

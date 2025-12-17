@@ -55,6 +55,8 @@ export interface User {
   isAdmin: boolean;
   password?: string; // Simple mock password
   preferences?: UserPreferences;
+  twoFactorEnabled?: boolean;
+  usingDefaultPassword?: boolean;
 }
 
 export interface Group {

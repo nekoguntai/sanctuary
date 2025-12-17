@@ -1,0 +1,47 @@
+# Dependencies - installed fresh in container
+node_modules
+server/node_modules
+
+# Build outputs
+dist
+server/dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files (use Docker env instead)
+.env
+.env.*
+!.env.example
+
+# Development files
+*.md
+!README.md
+LICENSE
+.dockerignore
+Dockerfile*
+
+# Test files
+coverage
+.nyc_output
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude/AI files
+.claude
+
+# Umbrel package (not needed in container)
+sanctuary/

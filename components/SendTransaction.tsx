@@ -14,7 +14,7 @@ import { TransactionFlowPreview, FlowInput, FlowOutput } from './TransactionFlow
 import type { BlockData, QueuedBlocksSummary } from '../src/api/bitcoin';
 import { HardwareWalletConnect } from './HardwareWalletConnect';
 import { useHardwareWallet } from '../hooks/useHardwareWallet';
-import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, Bluetooth, FileDown, Upload, Save, FileText, XCircle, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, Check, X, QrCode, Sliders, AlertTriangle, Loader2, Shield, Usb, RefreshCw, ChevronDown, Users, Key, Circle, CheckCircle2, FileDown, Upload, Save, FileText, XCircle, Plus, Trash2 } from 'lucide-react';
 import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -24,7 +24,8 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('SendTx');
 
 // Device connection capabilities
-type ConnectionMethod = 'usb' | 'bluetooth' | 'airgap';
+// Note: Bluetooth is not currently supported
+type ConnectionMethod = 'usb' | 'airgap';
 
 interface DeviceCapabilities {
   methods: ConnectionMethod[];
@@ -39,22 +40,15 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('coldcard')) {
     return {
       methods: ['usb', 'airgap'],
-      labels: { usb: 'USB', bluetooth: '', airgap: 'PSBT File' }
+      labels: { usb: 'USB', airgap: 'PSBT File' }
     };
   }
 
-  // Ledger - USB and Bluetooth (Nano X, Stax, Flex)
+  // Ledger - USB only (Bluetooth not supported)
   if (normalizedType.includes('ledger')) {
-    if (normalizedType.includes('nano s') && !normalizedType.includes('plus')) {
-      // Nano S only has USB
-      return {
-        methods: ['usb'],
-        labels: { usb: 'USB', bluetooth: '', airgap: '' }
-      };
-    }
     return {
-      methods: ['usb', 'bluetooth'],
-      labels: { usb: 'USB', bluetooth: 'Bluetooth', airgap: '' }
+      methods: ['usb'],
+      labels: { usb: 'USB', airgap: '' }
     };
   }
 
@@ -62,7 +56,7 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('trezor')) {
     return {
       methods: ['usb'],
-      labels: { usb: 'USB', bluetooth: '', airgap: '' }
+      labels: { usb: 'USB', airgap: '' }
     };
   }
 
@@ -70,7 +64,7 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('bitbox')) {
     return {
       methods: ['usb'],
-      labels: { usb: 'USB', bluetooth: '', airgap: '' }
+      labels: { usb: 'USB', airgap: '' }
     };
   }
 
@@ -78,15 +72,15 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('passport') || normalizedType.includes('foundation')) {
     return {
       methods: ['airgap'],
-      labels: { usb: '', bluetooth: '', airgap: 'QR / SD Card' }
+      labels: { usb: '', airgap: 'QR / SD Card' }
     };
   }
 
-  // Blockstream Jade - USB and Bluetooth
+  // Blockstream Jade - USB only (Bluetooth not supported)
   if (normalizedType.includes('jade') || normalizedType.includes('blockstream')) {
     return {
-      methods: ['usb', 'bluetooth'],
-      labels: { usb: 'USB', bluetooth: 'Bluetooth', airgap: '' }
+      methods: ['usb'],
+      labels: { usb: 'USB', airgap: '' }
     };
   }
 
@@ -94,7 +88,7 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('keystone')) {
     return {
       methods: ['airgap'],
-      labels: { usb: '', bluetooth: '', airgap: 'QR Code' }
+      labels: { usb: '', airgap: 'QR Code' }
     };
   }
 
@@ -102,7 +96,7 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('seedsigner')) {
     return {
       methods: ['airgap'],
-      labels: { usb: '', bluetooth: '', airgap: 'QR Code' }
+      labels: { usb: '', airgap: 'QR Code' }
     };
   }
 
@@ -110,7 +104,7 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   if (normalizedType.includes('sd card') || normalizedType.includes('sd-card') || normalizedType.includes('airgap') || normalizedType.includes('air-gap')) {
     return {
       methods: ['airgap'],
-      labels: { usb: '', bluetooth: '', airgap: 'PSBT File' }
+      labels: { usb: '', airgap: 'PSBT File' }
     };
   }
 
@@ -118,14 +112,13 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   // This allows users to choose their preferred signing method
   return {
     methods: ['usb', 'airgap'],
-    labels: { usb: 'USB', bluetooth: '', airgap: 'PSBT File' }
+    labels: { usb: 'USB', airgap: 'PSBT File' }
   };
 };
 
 const getConnectionIcon = (method: ConnectionMethod) => {
   switch (method) {
     case 'usb': return Usb;
-    case 'bluetooth': return Bluetooth;
     case 'airgap': return FileDown;
   }
 };

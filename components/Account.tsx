@@ -6,6 +6,7 @@ import * as authApi from '../src/api/auth';
 import * as twoFactorApi from '../src/api/twoFactor';
 import { ApiError } from '../src/api/client';
 import { createLogger } from '../utils/logger';
+import { copyToClipboard as clipboardCopy } from '../utils/clipboard';
 
 const log = createLogger('Account');
 
@@ -147,16 +148,20 @@ export const Account: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string, codeId: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(codeId);
-    setTimeout(() => setCopiedCode(null), 2000);
+  const copyToClipboard = async (text: string, codeId: string) => {
+    const success = await clipboardCopy(text);
+    if (success) {
+      setCopiedCode(codeId);
+      setTimeout(() => setCopiedCode(null), 2000);
+    }
   };
 
-  const copyAllBackupCodes = () => {
-    navigator.clipboard.writeText(backupCodes.join('\n'));
-    setCopiedCode('all');
-    setTimeout(() => setCopiedCode(null), 2000);
+  const copyAllBackupCodes = async () => {
+    const success = await clipboardCopy(backupCodes.join('\n'));
+    if (success) {
+      setCopiedCode('all');
+      setTimeout(() => setCopiedCode(null), 2000);
+    }
   };
 
   const closeSetupModal = () => {

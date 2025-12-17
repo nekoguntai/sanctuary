@@ -9,9 +9,7 @@ import {
   PenTool,
   Check,
   AlertCircle,
-  Bluetooth,
   Wifi,
-  Smartphone,
   QrCode,
   HardDrive,
   Shield,
@@ -24,17 +22,16 @@ import {
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
-import { isSecureContext } from '../services/hardwareWallet';
+import { isSecureContext, hardwareWalletService } from '../services/hardwareWallet';
 
 const log = createLogger('ConnectDevice');
 
-type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'bluetooth' | 'nfc' | 'manual';
+type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'manual';
 
 // Map connectivity types to icons and labels
+// Note: Bluetooth and NFC are not currently supported for direct device communication
 const connectivityConfig: Record<string, { icon: React.FC<{ className?: string }>, label: string, description: string }> = {
   usb: { icon: Usb, label: 'USB', description: 'Connect via USB cable' },
-  bluetooth: { icon: Bluetooth, label: 'Bluetooth', description: 'Pair via Bluetooth' },
-  nfc: { icon: Smartphone, label: 'NFC', description: 'Tap to connect' },
   sd_card: { icon: HardDrive, label: 'SD Card', description: 'Import from SD card file' },
   qr_code: { icon: QrCode, label: 'QR Code', description: 'Scan QR codes' },
 };
@@ -119,16 +116,37 @@ export const ConnectDevice: React.FC = () => {
     return methods;
   };
 
-  const handleScan = () => {
+  const handleScan = async () => {
     setScanning(true);
-    // Simulate USB/Bluetooth scan
-    setTimeout(() => {
-      setScanning(false);
+    setError(null);
+
+    try {
+      // Connect to the hardware wallet via USB
+      const device = await hardwareWalletService.connect();
+
+      if (!device || !device.connected) {
+        throw new Error('Failed to connect to device');
+      }
+
+      // Get xpub from the device
+      const xpubResult = await hardwareWalletService.getXpub(derivationPath);
+
+      setFingerprint(xpubResult.fingerprint);
+      setXpub(xpubResult.xpub);
       setScanned(true);
-      // Generate a random fingerprint for demo
-      setFingerprint(Math.random().toString(16).substring(2, 10));
-      setXpub(`zpub6r${Math.random().toString(36).substring(2, 15)}...`);
-    }, 2000);
+
+      log.info('Device connected successfully', {
+        fingerprint: xpubResult.fingerprint,
+        path: xpubResult.path,
+      });
+    } catch (err) {
+      log.error('Failed to connect to device', { error: err });
+      const message = err instanceof Error ? err.message : 'Failed to connect to device';
+      setError(message);
+      setScanned(false);
+    } finally {
+      setScanning(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -604,35 +622,49 @@ export const ConnectDevice: React.FC = () => {
               {/* Connection Action Area */}
               {method && (
                 <div className="mt-4">
-                  {(method === 'usb' || method === 'bluetooth' || method === 'nfc') && (
+                  {method === 'usb' && (
                     <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                      {!scanning && !scanned && (
+                      {!scanning && !scanned && !error && (
                         <>
                           <div className="mx-auto text-sanctuary-400 mb-3 flex justify-center">
                             {getDeviceIcon(selectedModel.name, "w-12 h-12")}
                           </div>
-                          <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4">
-                            {method === 'usb' && `Connect your ${selectedModel.name} via USB and unlock it.`}
-                            {method === 'bluetooth' && `Enable Bluetooth on your ${selectedModel.name} and pair it.`}
-                            {method === 'nfc' && `Hold your ${selectedModel.name} near this device.`}
+                          <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-2">
+                            Connect your {selectedModel.name} via USB and unlock it.
+                          </p>
+                          <p className="text-xs text-sanctuary-400 mb-4">
+                            Make sure the Bitcoin app is open on your device.
                           </p>
                           <Button onClick={handleScan}>
-                            {method === 'usb' && 'Scan for Device'}
-                            {method === 'bluetooth' && 'Pair Device'}
-                            {method === 'nfc' && 'Tap to Connect'}
+                            Connect Device
+                          </Button>
+                        </>
+                      )}
+                      {!scanning && !scanned && error && (
+                        <>
+                          <div className="mx-auto text-rose-400 mb-3 flex justify-center">
+                            <AlertCircle className="w-12 h-12" />
+                          </div>
+                          <p className="text-sm text-rose-600 dark:text-rose-400 mb-4">
+                            {error}
+                          </p>
+                          <Button onClick={handleScan}>
+                            Try Again
                           </Button>
                         </>
                       )}
                       {scanning && (
                         <div className="flex flex-col items-center">
                           <Loader2 className="w-8 h-8 animate-spin text-sanctuary-600 dark:text-sanctuary-400 mb-3" />
-                          <p className="text-sm text-sanctuary-500">Searching for device...</p>
+                          <p className="text-sm text-sanctuary-500">Connecting to device...</p>
+                          <p className="text-xs text-sanctuary-400 mt-1">Please confirm on your device if prompted.</p>
                         </div>
                       )}
-                      {scanned && (
+                      {scanned && !error && (
                         <div className="flex flex-col items-center text-emerald-600 dark:text-emerald-400">
                           <Check className="w-10 h-10 mb-2" />
-                          <p className="font-medium">Device Detected</p>
+                          <p className="font-medium">Device Connected</p>
+                          <p className="text-xs text-sanctuary-500 mt-1">Fingerprint: {fingerprint}</p>
                         </div>
                       )}
                     </div>

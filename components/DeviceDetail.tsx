@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, HardwareDevice } from '../types';
-import { getDevice, updateDevice, Device as ApiDevice } from '../src/api/devices';
+import { WalletType, HardwareDevice, HardwareDeviceModel } from '../types';
+import { getDevice, updateDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
 
@@ -38,13 +38,22 @@ export const DeviceDetail: React.FC = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState('');
+  const [editModelSlug, setEditModelSlug] = useState<string>('');
+  const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!id || !user) return;
       try {
-        const deviceData = await getDevice(id) as DeviceWithWallets;
+        // Fetch device and available models in parallel
+        const [deviceData, models] = await Promise.all([
+          getDevice(id) as Promise<DeviceWithWallets>,
+          getDeviceModels()
+        ]);
+
         setDevice(deviceData);
+        setDeviceModels(models);
+
         // Extract wallet info from device data
         const walletList = deviceData.wallets?.map(w => ({
           id: w.wallet.id,
@@ -53,6 +62,7 @@ export const DeviceDetail: React.FC = () => {
         })) || [];
         setWallets(walletList);
         setEditLabel(deviceData.label);
+        setEditModelSlug(deviceData.type || '');
       } catch (error) {
         log.error('Failed to fetch device', { error });
       } finally {
@@ -65,12 +75,28 @@ export const DeviceDetail: React.FC = () => {
   const handleSave = async () => {
     if (!device) return;
     try {
-      await updateDevice(device.id, { label: editLabel });
-      setDevice({ ...device, label: editLabel });
+      const updateData: { label?: string; modelSlug?: string } = {};
+      if (editLabel !== device.label) updateData.label = editLabel;
+      if (editModelSlug !== device.type) updateData.modelSlug = editModelSlug;
+
+      const updatedDevice = await updateDevice(device.id, updateData);
+      setDevice({ ...device, ...updatedDevice, label: editLabel, type: editModelSlug || device.type });
       setIsEditing(false);
     } catch (error) {
       log.error('Failed to update device', { error });
     }
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditLabel(device?.label || '');
+    setEditModelSlug(device?.type || '');
+  };
+
+  // Get display name for current device type
+  const getDeviceDisplayName = (type: string): string => {
+    const model = deviceModels.find(m => m.slug === type);
+    return model ? model.name : type || 'Unknown Device';
   };
 
   if (loading) return <div className="p-8 text-center text-sanctuary-400">Loading device...</div>;
@@ -96,13 +122,13 @@ export const DeviceDetail: React.FC = () => {
                             <div className="flex items-center space-x-2">
                                 {isEditing ? (
                                     <div className="flex items-center space-x-2">
-                                        <input 
+                                        <input
                                             value={editLabel}
                                             onChange={e => setEditLabel(e.target.value)}
                                             className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted text-xl font-light focus:outline-none"
                                         />
                                         <button onClick={handleSave} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-5 h-5" /></button>
-                                        <button onClick={() => { setIsEditing(false); setEditLabel(device.label); }} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-5 h-5" /></button>
+                                        <button onClick={cancelEdit} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-5 h-5" /></button>
                                     </div>
                                 ) : (
                                     <>
@@ -111,7 +137,28 @@ export const DeviceDetail: React.FC = () => {
                                     </>
                                 )}
                             </div>
-                            <p className="text-sanctuary-500 mt-1 font-mono text-sm">{device.type}</p>
+                            {isEditing ? (
+                                <div className="mt-2">
+                                    <label className="text-xs text-sanctuary-500 uppercase mb-1 block">Device Type</label>
+                                    <div className="relative">
+                                        <select
+                                            value={editModelSlug}
+                                            onChange={e => setEditModelSlug(e.target.value)}
+                                            className="w-full px-3 py-2 pr-8 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                        >
+                                            <option value="">Unknown Device</option>
+                                            {deviceModels.map(model => (
+                                                <option key={model.slug} value={model.slug}>
+                                                    {model.manufacturer} {model.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-sanctuary-400 pointer-events-none" />
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sanctuary-500 mt-1 text-sm">{getDeviceDisplayName(device.type)}</p>
+                            )}
                          </div>
                          <div className="text-right">
                              <div className="text-xs text-sanctuary-400 uppercase tracking-wide">Master Fingerprint</div>

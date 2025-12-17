@@ -278,13 +278,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/devices/:id
- * Update a device
+ * Update a device (label, derivationPath, type, or model)
  */
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
-    const { label, derivationPath } = req.body;
+    const { label, derivationPath, type, modelSlug } = req.body;
 
     const device = await prisma.device.findFirst({
       where: {
@@ -300,13 +300,38 @@ router.patch('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Build update data
+    const updateData: any = {};
+    if (label !== undefined) updateData.label = label;
+    if (derivationPath !== undefined) updateData.derivationPath = derivationPath;
+    if (type !== undefined) updateData.type = type;
+
+    // If modelSlug provided, look up the model ID
+    if (modelSlug) {
+      const model = await prisma.hardwareDeviceModel.findUnique({
+        where: { slug: modelSlug },
+      });
+      if (model) {
+        updateData.modelId = model.id;
+        // Also update the type to match the model's type
+        updateData.type = model.slug;
+      } else {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Invalid device model slug',
+        });
+      }
+    }
+
     const updatedDevice = await prisma.device.update({
       where: { id },
-      data: {
-        label,
-        derivationPath,
+      data: updateData,
+      include: {
+        model: true,
       },
     });
+
+    log.info('Device updated', { deviceId: id, userId, updates: Object.keys(updateData) });
 
     res.json(updatedDevice);
   } catch (error) {

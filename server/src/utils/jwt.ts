@@ -12,6 +12,7 @@ export interface JWTPayload {
   username: string;
   isAdmin: boolean;
   pending2FA?: boolean; // True when awaiting 2FA verification
+  usingDefaultPassword?: boolean; // True when using default 'sanctuary' password
 }
 
 /**

@@ -191,6 +191,9 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
   }
 });
 
+// Default password that should be changed
+const DEFAULT_PASSWORD = 'sanctuary';
+
 /**
  * POST /api/v1/auth/login
  * Login existing user
@@ -256,6 +259,9 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     // Check if 2FA is enabled
     if (user.twoFactorEnabled && user.twoFactorSecret) {
+      // Check if using default password before creating temp token
+      const usingDefaultPassword = password === DEFAULT_PASSWORD;
+
       // Generate a temporary token for 2FA verification (short-lived, 5 minutes)
       const tempToken = generateToken(
         {
@@ -263,6 +269,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
           username: user.username,
           isAdmin: user.isAdmin,
           pending2FA: true, // Mark as pending 2FA verification
+          usingDefaultPassword, // Pass through for after 2FA verification
         },
         '5m' // 5 minute expiry
       );
@@ -292,6 +299,9 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       success: true,
     });
 
+    // Check if using default password (for admin user warning)
+    const usingDefaultPassword = password === DEFAULT_PASSWORD;
+
     res.json({
       token,
       user: {
@@ -301,6 +311,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
         isAdmin: user.isAdmin,
         preferences: user.preferences,
         twoFactorEnabled: user.twoFactorEnabled,
+        usingDefaultPassword,
       },
     });
   } catch (error) {
@@ -328,6 +339,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
         preferences: true,
         createdAt: true,
         twoFactorEnabled: true,
+        password: true, // Need this to check default password
       },
     });
 
@@ -338,7 +350,16 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       });
     }
 
-    res.json(user);
+    // Check if user is still using the default password
+    const usingDefaultPassword = await verifyPassword(DEFAULT_PASSWORD, user.password);
+
+    // Don't send the password hash to the client
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      ...userWithoutPassword,
+      usingDefaultPassword,
+    });
   } catch (error) {
     log.error('Get me error', { error });
     res.status(500).json({
@@ -903,6 +924,7 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
         isAdmin: user.isAdmin,
         preferences: user.preferences,
         twoFactorEnabled: user.twoFactorEnabled,
+        usingDefaultPassword: decoded.usingDefaultPassword || false,
       },
     });
   } catch (error) {

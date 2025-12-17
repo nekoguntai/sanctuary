@@ -395,16 +395,8 @@ export const WalletDetail: React.FC = () => {
         setWallet({ ...wallet, balance: data.balance });
       }
 
-      // Show notification for significant changes
-      if (Math.abs(data.change) > 10000) {
-        addNotification({
-          type: 'balance',
-          title: 'Balance Updated',
-          message: `${data.change > 0 ? '+' : ''}${(data.change / 100000000).toFixed(8)} BTC`,
-          duration: 8000,
-          data,
-        });
-      }
+      // Note: Balance notifications are handled globally in Dashboard.tsx
+      // to avoid duplicate notifications when this page is open
     },
     onConfirmation: (data) => {
       log.debug('Transaction confirmation', { txid: data?.txid, confirmations: data?.confirmations });

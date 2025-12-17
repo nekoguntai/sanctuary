@@ -158,21 +158,34 @@ syncService.start().catch((err) => {
   log.error('Failed to start sync service', { error: err });
 });
 
-// Start listening
-httpServer.listen(config.port, async () => {
-  log.info('Sanctuary Wallet API Server starting');
-  log.info(`Environment: ${config.nodeEnv}`);
-  log.info(`Server: ${config.apiUrl}`);
-  log.info(`Client: ${config.clientUrl}`);
-  log.info(`Network: ${config.bitcoin.network}`);
-  log.info(`HTTP Server running on port ${config.port}`);
-  log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
-  log.info('Notification Service running');
-  log.info('Background Sync Service running');
+// Run database migrations before starting server
+(async () => {
+  log.info('Checking database migrations...');
+  const migrationResult = await migrationService.runMigrations();
 
-  // Verify database migrations at startup
-  await migrationService.logMigrationStatus();
-});
+  if (!migrationResult.success) {
+    log.error('Database migration failed - server may not function correctly', {
+      error: migrationResult.error,
+    });
+    // Continue anyway - some functionality may still work
+  }
+
+  // Start listening
+  httpServer.listen(config.port, async () => {
+    log.info('Sanctuary Wallet API Server starting');
+    log.info(`Environment: ${config.nodeEnv}`);
+    log.info(`Server: ${config.apiUrl}`);
+    log.info(`Client: ${config.clientUrl}`);
+    log.info(`Network: ${config.bitcoin.network}`);
+    log.info(`HTTP Server running on port ${config.port}`);
+    log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
+    log.info('Notification Service running');
+    log.info('Background Sync Service running');
+
+    // Log final migration status
+    await migrationService.logMigrationStatus();
+  });
+})();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

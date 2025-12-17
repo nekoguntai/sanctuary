@@ -12,6 +12,7 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { execSync } from 'child_process';
 
 const log = createLogger('MIGRATION');
 
@@ -158,6 +159,47 @@ class MigrationService {
   async isMigrationApplied(migrationName: string): Promise<boolean> {
     const migrations = await this.getAppliedMigrations();
     return migrations.some((m) => m.migration_name === migrationName);
+  }
+
+  /**
+   * Run pending database migrations using Prisma migrate deploy
+   * This is safe for production - it only applies pending migrations
+   */
+  async runMigrations(): Promise<{ success: boolean; applied: number; error?: string }> {
+    try {
+      const beforeInfo = await this.getSchemaVersionInfo();
+
+      if (beforeInfo.pendingMigrations === 0) {
+        log.info('No pending migrations to apply');
+        return { success: true, applied: 0 };
+      }
+
+      log.info('Running database migrations...', {
+        pendingMigrations: beforeInfo.pendingMigrations,
+      });
+
+      // Run prisma migrate deploy (production-safe, only applies pending migrations)
+      execSync('npx prisma migrate deploy', {
+        stdio: 'pipe',
+        cwd: process.cwd(),
+        env: process.env,
+      });
+
+      const afterInfo = await this.getSchemaVersionInfo();
+      const applied = afterInfo.version - beforeInfo.version;
+
+      log.info('Database migrations completed successfully', {
+        applied,
+        currentVersion: afterInfo.version,
+        latestMigration: afterInfo.latestMigration,
+      });
+
+      return { success: true, applied };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('Failed to run database migrations', { error: message });
+      return { success: false, applied: 0, error: message };
+    }
   }
 
   /**

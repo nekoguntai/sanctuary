@@ -27,6 +27,30 @@ INSTALL_DIR="${SANCTUARY_DIR:-$HOME/sanctuary}"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 
+# ============================================
+# Get latest release tag
+# ============================================
+get_latest_release() {
+    # Try GitHub API first (most reliable)
+    if command -v curl &> /dev/null; then
+        local tag=$(curl -fsSL "https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+        if [ -n "$tag" ]; then
+            echo "$tag"
+            return 0
+        fi
+    fi
+
+    # Fallback: use git ls-remote to get latest tag
+    local tag=$(git ls-remote --tags --sort=-v:refname "$REPO_URL" 2>/dev/null | head -1 | sed 's/.*refs\/tags\///' | sed 's/\^{}//')
+    if [ -n "$tag" ]; then
+        echo "$tag"
+        return 0
+    fi
+
+    # Last resort: return empty (will use main)
+    echo ""
+}
+
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
@@ -119,18 +143,35 @@ main() {
 
     echo ""
 
+    # Get the latest release tag
+    echo "Fetching latest release..."
+    RELEASE_TAG=$(get_latest_release)
+    if [ -n "$RELEASE_TAG" ]; then
+        echo -e "${GREEN}✓${NC} Latest release: $RELEASE_TAG"
+    else
+        echo -e "${YELLOW}⚠${NC} Could not determine latest release, using main branch"
+    fi
+
     # Clone or update repository
     if [ -d "$INSTALL_DIR" ]; then
         echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
         echo "Updating existing installation..."
         cd "$INSTALL_DIR"
-        git pull --ff-only 2>/dev/null || {
-            echo -e "${YELLOW}Could not auto-update. Continuing with existing version.${NC}"
-        }
+        git fetch --tags 2>/dev/null || true
+        if [ -n "$RELEASE_TAG" ]; then
+            git checkout "$RELEASE_TAG" 2>/dev/null || {
+                echo -e "${YELLOW}Could not checkout $RELEASE_TAG. Continuing with current version.${NC}"
+            }
+        fi
     else
         echo "Cloning Sanctuary to $INSTALL_DIR..."
         git clone "$REPO_URL" "$INSTALL_DIR"
         cd "$INSTALL_DIR"
+        if [ -n "$RELEASE_TAG" ]; then
+            git checkout "$RELEASE_TAG" 2>/dev/null || {
+                echo -e "${YELLOW}Could not checkout $RELEASE_TAG. Using main branch.${NC}"
+            }
+        fi
     fi
 
     echo -e "${GREEN}✓${NC} Repository ready"

@@ -30,7 +30,7 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
 ```
-This installs to `~/sanctuary` by default. Set `SANCTUARY_DIR` to customize the location.
+This installs the **latest release** to `~/sanctuary` by default. Set `SANCTUARY_DIR` to customize the location.
 
 **Option 2: Clone first** (if you want to choose the directory)
 ```bash
@@ -45,16 +45,18 @@ Open **https://localhost:8443** and accept the certificate warning.
 <summary><strong>What the install script does</strong></summary>
 
 1. Checks for Docker and Git
-2. Generates self-signed SSL certificates (for hardware wallet support)
-3. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
-4. Builds and starts the Docker containers
-5. Saves your configuration to `.env.local` for future restarts
+2. Fetches the latest release tag from GitHub
+3. Clones the repository and checks out the release
+4. Generates self-signed SSL certificates (for hardware wallet support)
+5. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
+6. Builds and starts the Docker containers
+7. Saves your configuration to `.env.local` for future restarts
 
 **After installation:**
 - Start: `./start.sh`
 - Stop: `./start.sh --stop`
 - View logs: `./start.sh --logs`
-- Update: `git pull && ./start.sh --rebuild`
+- Upgrade: `./install.sh` (fetches and installs the latest release)
 
 </details>
 
@@ -690,19 +692,49 @@ Users can enable TOTP-based two-factor authentication for additional account sec
 - Requires your current password and a valid 2FA code
 - This is intentionally difficult to prevent unauthorized disabling
 
-## Updating
+## Upgrading
+
+The easiest way to upgrade is to re-run the install script, which automatically fetches and installs the latest release:
 
 ```bash
-cd sanctuary
-git pull
-./start.sh --rebuild
+cd ~/sanctuary
+./install.sh
 ```
 
-Or manually:
+### Manual Upgrade
+
+If you prefer to upgrade manually:
 
 ```bash
-cd sanctuary
-git pull
+cd ~/sanctuary
+
+# Fetch all tags and checkout the latest release
+git fetch --tags
+LATEST=$(git tag --sort=-v:refname | head -1)
+git checkout "$LATEST"
+
+# Rebuild and restart
+docker compose down
+docker compose build
+docker compose up -d
+```
+
+### Checking Your Current Version
+
+```bash
+cd ~/sanctuary
+git describe --tags --always
+```
+
+### Downgrading to a Specific Version
+
+If you need to rollback to a previous release:
+
+```bash
+cd ~/sanctuary
+git fetch --tags
+git tag --sort=-v:refname  # List available versions
+git checkout v0.4.8        # Replace with desired version
 docker compose down
 docker compose build
 docker compose up -d

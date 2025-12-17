@@ -252,34 +252,9 @@ export const disconnectDevice = async (): Promise<void> => {
   }
 };
 
-// xpub version bytes for different address types
-const XPUB_VERSIONS = {
-  // Mainnet
-  xpub: 0x0488b21e,  // P2PKH (Legacy) - BIP44
-  ypub: 0x049d7cb2,  // P2SH-P2WPKH (Nested SegWit) - BIP49
-  zpub: 0x04b24746,  // P2WPKH (Native SegWit) - BIP84
-  // Testnet
-  tpub: 0x043587cf,  // P2PKH (Legacy) - BIP44 testnet
-  upub: 0x044a5262,  // P2SH-P2WPKH (Nested SegWit) - BIP49 testnet
-  vpub: 0x045f1cf6,  // P2WPKH (Native SegWit) - BIP84 testnet
-};
-
-/**
- * Get the appropriate xpub version based on derivation path
- */
-const getXpubVersionForPath = (path: string): number => {
-  // Check if testnet (coin type 1)
-  const isTestnet = path.includes("/1'/") || path.includes("/1h/");
-
-  if (path.includes("/84'") || path.includes("/84h")) {
-    return isTestnet ? XPUB_VERSIONS.vpub : XPUB_VERSIONS.zpub;
-  }
-  if (path.includes("/49'") || path.includes("/49h")) {
-    return isTestnet ? XPUB_VERSIONS.upub : XPUB_VERSIONS.ypub;
-  }
-  // Default to legacy xpub/tpub for BIP44 or unknown
-  return isTestnet ? XPUB_VERSIONS.tpub : XPUB_VERSIONS.xpub;
-};
+// xpub version bytes - Ledger always returns standard xpub format
+const XPUB_VERSION = 0x0488b21e;  // Standard xpub (mainnet)
+const TPUB_VERSION = 0x043587cf;  // Standard tpub (testnet)
 
 /**
  * Get extended public key from the connected device
@@ -290,7 +265,9 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
   }
 
   try {
-    const xpubVersion = getXpubVersionForPath(path);
+    // Check if testnet path (coin type 1)
+    const isTestnet = path.includes("/1'/") || path.includes("/1h/");
+    const xpubVersion = isTestnet ? TPUB_VERSION : XPUB_VERSION;
 
     // Type assertion needed - library returns object with xpub and fingerprint
     const result = await (activeConnection.app as any).getWalletXpub({

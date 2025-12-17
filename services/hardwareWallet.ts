@@ -394,9 +394,23 @@ const extractAccountPath = (fullPath: string): string => {
 export const signPSBT = async (
   request: PSBTSignRequest
 ): Promise<PSBTSignResponse> => {
+  log.info('signPSBT called', {
+    hasRequest: !!request,
+    psbtLength: request?.psbt?.length || 0,
+    inputPathsCount: request?.inputPaths?.length || 0,
+    accountPath: request?.accountPath,
+    scriptType: request?.scriptType,
+  });
+
   if (!activeConnection) {
+    log.error('No active connection');
     throw new Error('No device connected');
   }
+
+  log.info('Active connection exists', {
+    hasAppClient: !!activeConnection.appClient,
+    hasApp: !!activeConnection.app,
+  });
 
   try {
     const { appClient } = activeConnection;
@@ -425,11 +439,26 @@ export const signPSBT = async (
     });
 
     // Get master fingerprint (returns hex string directly)
-    const masterFpHex = await appClient.getMasterFingerprint();
+    log.info('Getting master fingerprint from device...');
+    let masterFpHex: string;
+    try {
+      masterFpHex = await appClient.getMasterFingerprint();
+      log.info('Got master fingerprint', { masterFpHex });
+    } catch (fpError) {
+      log.error('Failed to get master fingerprint', { error: fpError });
+      throw fpError;
+    }
 
     // Get account xpub
-    // Convert path format: m/84'/0'/0' -> array for getExtendedPubkey
-    const xpub = await appClient.getExtendedPubkey(accountPath);
+    log.info('Getting extended pubkey for path', { accountPath });
+    let xpub: string;
+    try {
+      xpub = await appClient.getExtendedPubkey(accountPath);
+      log.info('Got xpub', { xpubPrefix: xpub.substring(0, 20) });
+    } catch (xpubError) {
+      log.error('Failed to get xpub', { error: xpubError, accountPath });
+      throw xpubError;
+    }
 
     log.info('Got wallet info for signing', {
       masterFingerprint: masterFpHex,
@@ -499,8 +528,23 @@ export const signPSBT = async (
 
     // Sign the PSBT using ledger-bitcoin
     // DefaultWalletPolicy doesn't require registration, so walletHMAC is null
-    log.info('Calling appClient.signPsbt...');
-    const signatures = await appClient.signPsbt(updatedPsbtBase64, walletPolicy, null);
+    log.info('Calling appClient.signPsbt...', {
+      psbtBase64Length: updatedPsbtBase64.length,
+      walletPolicyName: walletPolicy.name,
+      walletPolicyDescriptorTemplate: descriptorTemplate,
+    });
+
+    let signatures: [number, { pubkey: Buffer; signature: Buffer }][];
+    try {
+      signatures = await appClient.signPsbt(updatedPsbtBase64, walletPolicy, null);
+    } catch (signError: any) {
+      log.error('appClient.signPsbt failed', {
+        error: signError?.message || signError,
+        errorCode: signError?.statusCode,
+        psbtBase64Preview: updatedPsbtBase64.substring(0, 100) + '...',
+      });
+      throw signError;
+    }
 
     log.info('Got signatures from device', {
       signatureCount: signatures.length,

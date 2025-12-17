@@ -11,6 +11,9 @@ description: >-
   signing happens exclusively on your hardware wallet.
 
 
+  **Default login: admin / sanctuary** (change after first login)
+
+
   Key features:
 
   - Multi-wallet support (single-sig and multisig)
@@ -56,8 +59,8 @@ support: https://github.com/n-narusegawa/sanctuary/issues
 port: 3010
 gallery: []
 path: ""
-defaultUsername: ""
-defaultPassword: ""
+defaultUsername: "admin"
+defaultPassword: "sanctuary"
 releaseNotes: "Version 0.4.6 released on 2025-12-16. See https://github.com/n-narusegawa/sanctuary/releases/tag/v0.4.6 for details."
 submitter: n-narusegawa
 submission: https://github.com/getumbrel/umbrel-apps/pull/XXXX

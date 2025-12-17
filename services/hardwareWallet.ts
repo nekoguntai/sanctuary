@@ -201,11 +201,16 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
     let fingerprint: string | undefined;
     try {
       // Type assertion needed - library returns object with xpub and fingerprint
-      // Use zpub version (0x04b24746) for BIP84 native segwit path
+      // Use standard xpub version - Ledger always returns this format
       const result = await (app as any).getWalletXpub({
         path: "m/84'/0'/0'",
-        xpubVersion: 0x04b24746,  // zpub for native segwit
+        xpubVersion: 0x0488b21e,  // standard xpub
       }) as { xpub: string; masterFingerprint?: number };
+      log.info('Got xpub result from device', {
+        hasXpub: !!result.xpub,
+        masterFingerprint: result.masterFingerprint,
+        xpubPrefix: result.xpub?.substring(0, 10)
+      });
       fingerprint = result.masterFingerprint?.toString(16).padStart(8, '0');
     } catch (error) {
       log.warn('Could not get fingerprint - Bitcoin app may not be open', { error });
@@ -274,6 +279,14 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
       path,
       xpubVersion,
     }) as { xpub: string; masterFingerprint?: number };
+
+    log.info('getXpub result', {
+      path,
+      xpubVersion: xpubVersion.toString(16),
+      hasXpub: !!result.xpub,
+      xpubPrefix: result.xpub?.substring(0, 10),
+      masterFingerprint: result.masterFingerprint,
+    });
 
     return {
       xpub: result.xpub,

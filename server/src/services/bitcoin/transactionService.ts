@@ -248,19 +248,67 @@ export async function createTransaction(
       changeAmount: 0, // No change for sendMax
     };
   } else if (subtractFees) {
-    // Select UTXOs for the full amount, then subtract fee from output
-    selection = await selectUTXOs(
-      walletId,
-      amount,
-      feeRate,
-      UTXOSelectionStrategy.LARGEST_FIRST,
-      selectedUtxoIds
-    );
-    // Fee is subtracted from the amount being sent
-    effectiveAmount = amount - selection.estimatedFee;
-    if (effectiveAmount <= 0) {
-      throw new Error(`Amount ${amount} sats is not enough to cover fee ${selection.estimatedFee} sats`);
+    // When subtracting fees, we only need UTXOs to cover the amount (fee comes out of it)
+    // Select UTXOs manually without requiring amount + fee coverage
+    let utxos = await prisma.uTXO.findMany({
+      where: {
+        walletId,
+        spent: false,
+        frozen: false,
+      },
+      orderBy: { amount: 'desc' },
+    });
+
+    if (selectedUtxoIds && selectedUtxoIds.length > 0) {
+      utxos = utxos.filter((utxo) =>
+        selectedUtxoIds.includes(`${utxo.txid}:${utxo.vout}`)
+      );
     }
+
+    if (utxos.length === 0) {
+      throw new Error('No spendable UTXOs available');
+    }
+
+    // Select UTXOs to cover just the amount
+    const selectedUtxos: typeof utxos = [];
+    let totalAmount = 0;
+
+    for (const utxo of utxos) {
+      selectedUtxos.push(utxo);
+      totalAmount += Number(utxo.amount);
+
+      if (totalAmount >= amount) {
+        break;
+      }
+    }
+
+    if (totalAmount < amount) {
+      throw new Error(`Insufficient funds. Have ${totalAmount} sats, need ${amount} sats`);
+    }
+
+    // Calculate fee based on actual selection
+    const estimatedSize = estimateTransactionSize(selectedUtxos.length, 2, 'native_segwit');
+    const estimatedFee = calculateFee(estimatedSize, feeRate);
+
+    // Fee is subtracted from the amount being sent
+    effectiveAmount = amount - estimatedFee;
+    if (effectiveAmount <= 546) { // dust threshold
+      throw new Error(`Amount ${amount} sats is not enough to cover fee ${estimatedFee} sats (would leave ${effectiveAmount} sats)`);
+    }
+
+    // Calculate change
+    const changeAmount = totalAmount - amount;
+
+    selection = {
+      utxos: selectedUtxos.map(u => ({
+        ...u,
+        amount: Number(u.amount),
+        scriptPubKey: u.scriptPubKey || '',
+      })),
+      totalAmount,
+      estimatedFee,
+      changeAmount,
+    };
   } else {
     // Normal selection: amount + fee must be covered
     selection = await selectUTXOs(

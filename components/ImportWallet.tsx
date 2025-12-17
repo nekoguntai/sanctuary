@@ -256,11 +256,14 @@ export const ImportWallet: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setFormat('hardware')}
+          onClick={() => hardwareWallet.isSecureContext() && setFormat('hardware')}
+          disabled={!hardwareWallet.isSecureContext()}
           className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center text-center space-y-4 ${
             format === 'hardware'
               ? 'border-primary-600 bg-primary-50 dark:border-primary-400 dark:bg-primary-900/20'
-              : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
+              : !hardwareWallet.isSecureContext()
+                ? 'border-sanctuary-200 dark:border-sanctuary-800 opacity-50 cursor-not-allowed'
+                : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'
           }`}
         >
           <div className={`p-4 rounded-full ${
@@ -273,7 +276,9 @@ export const ImportWallet: React.FC = () => {
           <div>
             <h3 className="text-lg font-medium">Hardware Device</h3>
             <p className="text-sm text-sanctuary-500 mt-2">
-              Connect a Ledger device via USB to import wallet directly from xpub.
+              {hardwareWallet.isSecureContext()
+                ? 'Connect a Ledger device via USB to import wallet directly from xpub.'
+                : 'USB connection requires HTTPS. Use Descriptor or JSON import instead.'}
             </p>
           </div>
         </button>

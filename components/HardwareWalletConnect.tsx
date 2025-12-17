@@ -116,11 +116,12 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-1">
-                Limited Browser Support
+                USB Connection Unavailable
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Hardware wallet support requires Chrome, Edge, or Opera with WebUSB/WebHID enabled.
-                Consider using a supported browser for full functionality.
+                WebUSB requires HTTPS to function. This page is not served over HTTPS, so direct USB
+                connections to hardware wallets are not available. Use the PSBT workflow instead:
+                export transactions to your hardware wallet via SD card or QR code.
               </p>
             </div>
           </div>

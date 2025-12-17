@@ -77,6 +77,90 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
 });
 
 /**
+ * GET /api/v1/wallets/:walletId/transactions/pending
+ * Get pending (unconfirmed) transactions for a wallet
+ * Returns data formatted for block queue visualization
+ */
+router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    // Get wallet name for display
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { name: true, network: true },
+    });
+
+    // Query unconfirmed transactions (confirmations === 0)
+    const pendingTxs = await prisma.transaction.findMany({
+      where: {
+        walletId,
+        confirmations: 0,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (pendingTxs.length === 0) {
+      return res.json([]);
+    }
+
+    // Fetch vsize from mempool.space for accurate fee rate calculation
+    const mempoolBaseUrl = wallet?.network === 'testnet'
+      ? 'https://mempool.space/testnet/api'
+      : 'https://mempool.space/api';
+
+    const pendingTransactions = await Promise.all(
+      pendingTxs.map(async (tx) => {
+        const fee = tx.fee ? Number(tx.fee) : 0;
+        let vsize: number | undefined;
+        let feeRate = 0;
+
+        // Try to fetch vsize from mempool.space
+        try {
+          const response = await fetch(`${mempoolBaseUrl}/tx/${tx.txid}`);
+          if (response.ok) {
+            const txData = await response.json() as { weight?: number };
+            vsize = txData.weight ? Math.ceil(txData.weight / 4) : undefined;
+            if (vsize && fee > 0) {
+              feeRate = Math.round((fee / vsize) * 10) / 10; // Round to 1 decimal
+            }
+          }
+        } catch (err) {
+          // Mempool fetch failed, use estimate if possible
+          log.warn('Failed to fetch tx from mempool.space', { txid: tx.txid, error: err });
+        }
+
+        // Calculate time in queue
+        const createdAt = tx.createdAt;
+        const timeInQueue = Math.floor((Date.now() - createdAt.getTime()) / 1000);
+
+        return {
+          txid: tx.txid,
+          walletId: tx.walletId,
+          walletName: wallet?.name,
+          type: tx.type as 'sent' | 'received',
+          amount: Number(tx.amount),
+          fee,
+          feeRate,
+          vsize,
+          recipient: tx.counterpartyAddress || undefined,
+          timeInQueue,
+          createdAt: createdAt.toISOString(),
+        };
+      })
+    );
+
+    res.json(pendingTransactions);
+  } catch (error) {
+    log.error('Get pending transactions error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch pending transactions',
+    });
+  }
+});
+
+/**
  * GET /api/v1/wallets/:walletId/transactions/export
  * Export transactions for a wallet in CSV or JSON format
  */

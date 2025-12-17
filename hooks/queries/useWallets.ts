@@ -188,6 +188,38 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
 }
 
 /**
+ * Hook to fetch pending (unconfirmed) transactions across all wallets
+ * Used for block queue visualization showing user's transactions in mempool
+ * Refreshes every 30 seconds to match mempool data updates
+ */
+export function usePendingTransactions(walletIds: string[]) {
+  const queries = useQueries({
+    queries: walletIds.map((walletId) => ({
+      queryKey: [...walletKeys.transactions(walletId), 'pending'] as const,
+      queryFn: () => transactionsApi.getPendingTransactions(walletId),
+      enabled: walletIds.length > 0,
+      refetchInterval: 30000, // 30 seconds
+      staleTime: 15000, // Consider data stale after 15 seconds
+    })),
+  });
+
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  // Aggregate all pending transactions
+  const pendingTransactions = queries
+    .flatMap((q) => q.data || [])
+    .sort((a, b) => b.feeRate - a.feeRate); // Sort by fee rate (higher first)
+
+  return {
+    data: pendingTransactions,
+    isLoading,
+    isError,
+    refetch: () => queries.forEach((q) => q.refetch()),
+  };
+}
+
+/**
  * Helper to invalidate all wallets data
  */
 export function useInvalidateAllWallets() {

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, Clock, Boxes } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { ArrowRight, Clock, Boxes, ExternalLink } from 'lucide-react';
+import type { PendingTransaction } from '../src/types';
 
 export interface BlockData {
   height: number | string;
@@ -23,6 +24,7 @@ export interface QueuedBlocksSummary {
 interface BlockVisualizerProps {
   blocks?: BlockData[];
   queuedBlocksSummary?: QueuedBlocksSummary | null;
+  pendingTxs?: PendingTransaction[]; // User's pending transactions
   onBlockClick?: (feeRate: number) => void;
   compact?: boolean;
   explorerUrl?: string;
@@ -63,7 +65,9 @@ const Block: React.FC<{
   compact: boolean;
   isAnimating: boolean;
   animationDirection: 'enter' | 'exit' | 'none';
-}> = ({ block, index, onClick, compact, isAnimating, animationDirection }) => {
+  pendingTxs?: PendingTransaction[];
+  explorerUrl: string;
+}> = ({ block, index, onClick, compact, isAnimating, animationDirection, pendingTxs = [], explorerUrl }) => {
   const isPending = block.status === 'pending';
   const colors = getBlockColors(isPending);
 
@@ -96,6 +100,32 @@ const Block: React.FC<{
           animationDelay: `${index * 50}ms`,
         }}
       >
+        {/* Pending transaction dots - top right corner */}
+        {pendingTxs.length > 0 && (
+          <div className={`
+            absolute z-20
+            ${compact ? 'top-0.5 right-0.5' : 'top-1 right-1'}
+            flex flex-wrap gap-0.5 max-w-[50%] justify-end
+          `}>
+            {pendingTxs.slice(0, compact ? 3 : 5).map((tx) => (
+              <PendingTxDot
+                key={tx.txid}
+                tx={tx}
+                explorerUrl={explorerUrl}
+                compact={compact}
+              />
+            ))}
+            {pendingTxs.length > (compact ? 3 : 5) && (
+              <span className={`
+                ${compact ? 'text-[8px]' : 'text-[9px]'}
+                font-bold text-sanctuary-700 dark:text-sanctuary-300
+              `}>
+                +{pendingTxs.length - (compact ? 3 : 5)}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className={`relative z-10 flex flex-col items-center justify-between h-full ${compact ? 'py-1.5 px-1' : 'py-2 px-1'}`}>
           {/* Top: Time - hidden in compact mode */}
@@ -237,9 +267,153 @@ const QueuedSummaryBlock: React.FC<{
   );
 };
 
+// Format seconds into human readable time
+const formatTimeInQueue = (seconds: number): string => {
+  if (seconds < 60) return '<1m';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+};
+
+// Pending transaction dot component
+const PendingTxDot: React.FC<{
+  tx: PendingTransaction;
+  explorerUrl: string;
+  compact: boolean;
+}> = ({ tx, explorerUrl, compact }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const isSent = tx.type === 'sent';
+
+  // Colors: rose for sent, green for received
+  const dotColor = isSent
+    ? 'bg-rose-500 dark:bg-rose-400'
+    : 'bg-emerald-500 dark:bg-emerald-400';
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(`${explorerUrl}/tx/${tx.txid}`, '_blank');
+  };
+
+  // Calculate ETA based on position in mempool (rough estimate)
+  const estimateEta = (): string => {
+    if (tx.feeRate >= 20) return '~10 min';
+    if (tx.feeRate >= 10) return '~30 min';
+    if (tx.feeRate >= 5) return '~1 hour';
+    return '~2+ hours';
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <button
+        onClick={handleClick}
+        className={`
+          ${compact ? 'w-2 h-2' : 'w-2.5 h-2.5'}
+          rounded-full ${dotColor}
+          hover:scale-125 transition-transform duration-150
+          ring-1 ring-white/50 dark:ring-black/30
+          cursor-pointer
+        `}
+        title={`${isSent ? 'Sending' : 'Receiving'} ${tx.feeRate} sat/vB`}
+      />
+
+      {/* Detailed tooltip */}
+      {showTooltip && !compact && (
+        <div className={`
+          absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+          bg-sanctuary-900 dark:bg-sanctuary-100
+          text-white dark:text-sanctuary-900
+          text-[10px] rounded-lg shadow-lg
+          py-2 px-3 z-[100]
+          whitespace-nowrap
+          pointer-events-none
+        `}>
+          {/* Arrow */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
+            <div className="border-4 border-transparent border-t-sanctuary-900 dark:border-t-sanctuary-100" />
+          </div>
+
+          {/* Content */}
+          <div className="space-y-1">
+            <div className="font-bold text-[11px] flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+              {isSent ? 'Sending' : 'Receiving'}
+            </div>
+
+            <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
+              <span className="text-sanctuary-400 dark:text-sanctuary-500">Fee Rate:</span>
+              <span className="font-mono font-bold">{tx.feeRate.toFixed(1)} sat/vB</span>
+
+              <span className="text-sanctuary-400 dark:text-sanctuary-500">ETA:</span>
+              <span className="font-bold">{estimateEta()}</span>
+
+              <span className="text-sanctuary-400 dark:text-sanctuary-500">Fee:</span>
+              <span className="font-mono">{tx.fee.toLocaleString()} sats</span>
+
+              <span className="text-sanctuary-400 dark:text-sanctuary-500">Amount:</span>
+              <span className="font-mono">{Math.abs(tx.amount).toLocaleString()} sats</span>
+
+              {tx.recipient && (
+                <>
+                  <span className="text-sanctuary-400 dark:text-sanctuary-500">To:</span>
+                  <span className="font-mono truncate max-w-[120px]">
+                    {tx.recipient.slice(0, 8)}...{tx.recipient.slice(-4)}
+                  </span>
+                </>
+              )}
+
+              <span className="text-sanctuary-400 dark:text-sanctuary-500">Waiting:</span>
+              <span>{formatTimeInQueue(tx.timeInQueue)}</span>
+            </div>
+
+            <div className="text-sanctuary-500 dark:text-sanctuary-400 text-[9px] pt-1 border-t border-sanctuary-700 dark:border-sanctuary-300 flex items-center gap-1">
+              <ExternalLink className="w-3 h-3" />
+              Click to view in explorer
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper to match pending transactions to blocks based on fee rate
+const getTxsForBlock = (
+  block: BlockData,
+  allPendingTxs: PendingTransaction[],
+  blockIndex: number,
+  totalPendingBlocks: number
+): PendingTransaction[] => {
+  // Only show in pending blocks
+  if (block.status !== 'pending') return [];
+
+  // Filter transactions by fee rate threshold for this block
+  // Higher fee rate = earlier block (lower index)
+  return allPendingTxs.filter(tx => {
+    // For the first block (Next), show txs with fee >= median fee of that block
+    // For subsequent blocks, show txs with fee between this block's fee and the previous block's fee
+    if (blockIndex === 0) {
+      return tx.feeRate >= block.medianFee;
+    }
+
+    // For last pending block, include everything below median fee
+    if (blockIndex === totalPendingBlocks - 1) {
+      return tx.feeRate < block.medianFee * 1.2;
+    }
+
+    // For middle blocks, use fee range
+    return tx.feeRate >= block.medianFee * 0.8 && tx.feeRate < block.medianFee * 1.5;
+  });
+};
+
 export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   blocks,
   queuedBlocksSummary,
+  pendingTxs = [],
   onBlockClick,
   compact = false,
   explorerUrl = 'https://mempool.space',
@@ -427,6 +601,8 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
                 compact={compact}
                 isAnimating={isAnimating && newBlockDetected}
                 animationDirection="none"
+                pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length)}
+                explorerUrl={explorerUrl}
               />
             ))}
 
@@ -440,6 +616,7 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
                 compact={compact}
                 isAnimating={isAnimating && newBlockDetected && idx === 0}
                 animationDirection={isAnimating && newBlockDetected && idx === 0 ? 'enter' : 'none'}
+                explorerUrl={explorerUrl}
               />
             ))}
           </>

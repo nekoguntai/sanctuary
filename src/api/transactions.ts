@@ -5,10 +5,10 @@
  */
 
 import apiClient from './client';
-import type { Label, Transaction, UTXO, Address } from '../types';
+import type { Label, Transaction, UTXO, Address, PendingTransaction } from '../types';
 
 // Re-export types for backward compatibility
-export type { Label, Transaction, UTXO, Address } from '../types';
+export type { Label, Transaction, UTXO, Address, PendingTransaction } from '../types';
 
 export interface GetTransactionsParams {
   limit?: number;
@@ -93,6 +93,14 @@ export async function getTransactions(
  */
 export async function getTransaction(txid: string): Promise<Transaction> {
   return apiClient.get<Transaction>(`/transactions/${txid}`);
+}
+
+/**
+ * Get pending (unconfirmed) transactions for a wallet
+ * Used for block queue visualization
+ */
+export async function getPendingTransactions(walletId: string): Promise<PendingTransaction[]> {
+  return apiClient.get<PendingTransaction[]>(`/wallets/${walletId}/transactions/pending`);
 }
 
 export interface ExportTransactionsOptions {

@@ -19,7 +19,7 @@ import { useUser } from '../contexts/UserContext';
 import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
 import { createLogger } from '../utils/logger';
-import { useWallets, useRecentTransactions, useInvalidateAllWallets, useBalanceHistory } from '../hooks/queries/useWallets';
+import { useWallets, useRecentTransactions, useInvalidateAllWallets, useBalanceHistory, usePendingTransactions } from '../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
 
 const log = createLogger('Dashboard');
@@ -154,6 +154,9 @@ export const Dashboard: React.FC = () => {
   // Fetch recent transactions from all wallets using React Query
   const walletIds = useMemo(() => wallets.map(w => w.id), [wallets]);
   const { data: recentTxRaw = [], isLoading: txLoading } = useRecentTransactions(walletIds, 10);
+
+  // Fetch pending transactions for block queue visualization
+  const { data: pendingTxs = [] } = usePendingTransactions(walletIds);
 
   // Convert API transactions to component format
   const recentTx: Transaction[] = useMemo(() => recentTxRaw.map(tx => {
@@ -379,6 +382,7 @@ export const Dashboard: React.FC = () => {
          <BlockVisualizer
             blocks={mempoolBlocks}
             queuedBlocksSummary={queuedBlocksSummary}
+            pendingTxs={pendingTxs}
             explorerUrl={bitcoinStatus?.explorerUrl}
             onRefresh={refreshMempoolData}
          />

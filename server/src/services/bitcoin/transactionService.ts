@@ -17,9 +17,10 @@ import { getNodeClient } from './nodeClient';
 
 /**
  * Check if a script type is legacy (requires nonWitnessUtxo)
+ * Legacy P2PKH wallets use full previous transactions instead of witnessUtxo
  */
 function isLegacyScriptType(scriptType: string | null): boolean {
-  return scriptType === 'p2pkh' || scriptType === 'P2PKH';
+  return scriptType === 'legacy' || scriptType === 'p2pkh' || scriptType === 'P2PKH';
 }
 
 /**
@@ -376,8 +377,8 @@ export async function createTransaction(
   const rawTxCache: Map<string, Buffer> = new Map();
   if (isLegacy) {
     // Fetch all raw transactions in parallel
-    const uniqueTxids = [...new Set(selection.utxos.map(u => u.txid))];
-    const rawTxPromises = uniqueTxids.map(async (txid) => {
+    const uniqueTxids = Array.from(new Set(selection.utxos.map(u => u.txid)));
+    const rawTxPromises = uniqueTxids.map(async (txid: string) => {
       const rawHex = await getRawTransactionHex(txid);
       return { txid, rawTx: Buffer.from(rawHex, 'hex') };
     });

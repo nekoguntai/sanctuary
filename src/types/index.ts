@@ -74,6 +74,24 @@ export interface TransactionOutput {
   amount: number;
 }
 
+/**
+ * Pending transaction for block queue visualization
+ * Shows user's unconfirmed transactions and their position in mempool
+ */
+export interface PendingTransaction {
+  txid: string;
+  walletId: string;
+  walletName?: string;
+  type: 'sent' | 'received';
+  amount: number;           // in satoshis
+  fee: number;              // in satoshis
+  feeRate: number;          // sat/vB (fee / vsize)
+  vsize?: number;           // virtual size in vBytes
+  recipient?: string;       // recipient address for sent txs
+  timeInQueue: number;      // seconds since broadcast
+  createdAt: string;        // ISO timestamp
+}
+
 // ============================================================================
 // UTXO TYPES
 // ============================================================================

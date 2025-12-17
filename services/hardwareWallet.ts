@@ -197,21 +197,18 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
     // Create Bitcoin app instance
     const app = new AppBtc({ transport });
 
-    // Get master fingerprint
+    // Get master fingerprint from the AppClient
     let fingerprint: string | undefined;
     try {
-      // Type assertion needed - library returns object with xpub and fingerprint
-      // Use standard xpub version - Ledger always returns this format
-      const result = await (app as any).getWalletXpub({
-        path: "m/84'/0'/0'",
-        xpubVersion: 0x0488b21e,  // standard xpub
-      }) as { xpub: string; masterFingerprint?: number };
-      log.info('Got xpub result from device', {
-        hasXpub: !!result.xpub,
-        masterFingerprint: result.masterFingerprint,
-        xpubPrefix: result.xpub?.substring(0, 10)
-      });
-      fingerprint = result.masterFingerprint?.toString(16).padStart(8, '0');
+      // Access the internal AppClient which has getMasterFingerprint()
+      const client = (app as any)._impl?.client;
+      if (client && typeof client.getMasterFingerprint === 'function') {
+        const fpBuffer = await client.getMasterFingerprint();
+        fingerprint = fpBuffer.toString('hex');
+        log.info('Got master fingerprint from device', { fingerprint });
+      } else {
+        log.warn('AppClient not available for getMasterFingerprint');
+      }
     } catch (error) {
       log.warn('Could not get fingerprint - Bitcoin app may not be open', { error });
     }
@@ -274,23 +271,35 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
     const isTestnet = path.includes("/1'/") || path.includes("/1h/");
     const xpubVersion = isTestnet ? TPUB_VERSION : XPUB_VERSION;
 
-    // Type assertion needed - library returns object with xpub and fingerprint
-    const result = await (activeConnection.app as any).getWalletXpub({
+    // getWalletXpub returns just the xpub string
+    const xpub = await activeConnection.app.getWalletXpub({
       path,
       xpubVersion,
-    }) as { xpub: string; masterFingerprint?: number };
+    });
+
+    // Get master fingerprint from the AppClient
+    let fingerprint = '';
+    try {
+      const client = (activeConnection.app as any)._impl?.client;
+      if (client && typeof client.getMasterFingerprint === 'function') {
+        const fpBuffer = await client.getMasterFingerprint();
+        fingerprint = fpBuffer.toString('hex');
+      }
+    } catch (fpError) {
+      log.warn('Could not get fingerprint', { error: fpError });
+    }
 
     log.info('getXpub result', {
       path,
       xpubVersion: xpubVersion.toString(16),
-      hasXpub: !!result.xpub,
-      xpubPrefix: result.xpub?.substring(0, 10),
-      masterFingerprint: result.masterFingerprint,
+      hasXpub: !!xpub,
+      xpubPrefix: xpub?.substring(0, 10),
+      fingerprint,
     });
 
     return {
-      xpub: result.xpub,
-      fingerprint: result.masterFingerprint?.toString(16).padStart(8, '0') || '',
+      xpub,
+      fingerprint,
       path,
     };
   } catch (error) {

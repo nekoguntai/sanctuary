@@ -475,6 +475,10 @@ export const signPSBT = async (
     const descriptorTemplate = getDescriptorTemplate(scriptType);
     const walletPolicy = new DefaultWalletPolicy(descriptorTemplate, keyInfo);
 
+    console.log('[HardwareWallet] Created wallet policy:', {
+      descriptorTemplate,
+      keyInfo,
+    });
     log.info('Created wallet policy', {
       descriptorTemplate,
       keyInfo,
@@ -484,33 +488,50 @@ export const signPSBT = async (
     const psbt = bitcoin.Psbt.fromBase64(request.psbt);
     const connectedFpBuffer = Buffer.from(masterFpHex, 'hex');
 
+    // Use console.log directly to ensure visibility
+    console.log('[HardwareWallet] PSBT has', psbt.data.inputs.length, 'inputs');
+
     // Log PSBT input details and fix fingerprint mismatches
     let fingerprintMismatchFixed = false;
+    let missingBip32Derivation = false;
+
     psbt.data.inputs.forEach((input, idx) => {
-      log.info(`PSBT Input ${idx} details`, {
+      const inputInfo = {
         hasWitnessUtxo: !!input.witnessUtxo,
         witnessUtxoValue: input.witnessUtxo?.value,
         hasNonWitnessUtxo: !!input.nonWitnessUtxo,
         hasBip32Derivation: !!input.bip32Derivation && input.bip32Derivation.length > 0,
         bip32DerivationCount: input.bip32Derivation?.length || 0,
-      });
+      };
+
+      console.log(`[HardwareWallet] PSBT Input ${idx}:`, inputInfo);
+      log.info(`PSBT Input ${idx} details`, inputInfo);
+
+      if (!input.bip32Derivation || input.bip32Derivation.length === 0) {
+        missingBip32Derivation = true;
+        console.warn(`[HardwareWallet] Input ${idx} is MISSING bip32Derivation - Ledger will reject this!`);
+        log.warn(`Input ${idx} is missing bip32Derivation`);
+      }
 
       // Log and fix bip32Derivation details if present
       if (input.bip32Derivation && input.bip32Derivation.length > 0) {
         input.bip32Derivation.forEach((deriv, dIdx) => {
           const fpHex = deriv.masterFingerprint.toString('hex');
           const matches = fpHex.toLowerCase() === masterFpHex.toLowerCase();
-          log.info(`  Derivation ${dIdx}`, {
+
+          const derivInfo = {
             masterFingerprint: fpHex,
             connectedFingerprint: masterFpHex,
-            pubkey: deriv.pubkey.toString('hex').substring(0, 20) + '...',
+            pubkey: deriv.pubkey.toString('hex'),
             path: deriv.path,
             fingerprintMatches: matches,
-          });
+          };
+          console.log(`[HardwareWallet]   Derivation ${dIdx}:`, derivInfo);
+          log.info(`  Derivation ${dIdx}`, derivInfo);
 
           // If fingerprint doesn't match, update it to use connected device's fingerprint
-          // This handles the case where the stored fingerprint differs from the connected device
           if (!matches) {
+            console.warn(`[HardwareWallet] Updating fingerprint from ${fpHex} to ${masterFpHex} for input ${idx}`);
             log.warn(`Updating fingerprint from ${fpHex} to ${masterFpHex} for input ${idx}`);
             deriv.masterFingerprint = connectedFpBuffer;
             fingerprintMismatchFixed = true;
@@ -520,7 +541,13 @@ export const signPSBT = async (
     });
 
     if (fingerprintMismatchFixed) {
+      console.log('[HardwareWallet] Fixed fingerprint mismatches in PSBT bip32Derivation');
       log.info('Fixed fingerprint mismatches in PSBT bip32Derivation');
+    }
+
+    if (missingBip32Derivation) {
+      console.error('[HardwareWallet] CRITICAL: PSBT is missing bip32Derivation data - this is required for Ledger signing!');
+      log.error('PSBT is missing bip32Derivation data - Ledger requires this');
     }
 
     // Use the potentially updated PSBT

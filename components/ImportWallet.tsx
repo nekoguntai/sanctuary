@@ -177,9 +177,9 @@ export const ImportWallet: React.FC = () => {
             <FileJson className="w-12 h-12" />
           </div>
           <div>
-            <h3 className="text-lg font-medium">JSON Configuration</h3>
+            <h3 className="text-lg font-medium">JSON/Text File</h3>
             <p className="text-sm text-sanctuary-500 mt-2">
-              Import using a JSON file with wallet and device details. Includes device labels and types.
+              Import using a JSON or text file with wallet and device details. Supports Sparrow exports.
             </p>
           </div>
         </button>
@@ -208,12 +208,12 @@ export const ImportWallet: React.FC = () => {
   const renderStep2 = () => (
     <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
       <h2 className="text-xl font-light text-center text-sanctuary-900 dark:text-sanctuary-50 mb-2">
-        {format === 'descriptor' ? 'Enter Output Descriptor' : 'Enter JSON Configuration'}
+        {format === 'descriptor' ? 'Enter Output Descriptor' : 'Enter Configuration'}
       </h2>
       <p className="text-center text-sanctuary-500 mb-6">
         {format === 'descriptor'
           ? 'Paste your Bitcoin output descriptor or upload a file.'
-          : 'Paste your JSON wallet configuration or upload a file.'}
+          : 'Paste your wallet configuration or upload a JSON/text file.'}
       </p>
 
       <div className="space-y-4">

@@ -354,17 +354,17 @@ export const Dashboard: React.FC = () => {
 
       {/* Update Available Banner */}
       {versionInfo?.updateAvailable && !updateDismissed && (
-        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20">
+        <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-success-300 dark:border-success-700 bg-success-50 dark:bg-success-900/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary-100 dark:bg-primary-800/50 rounded-lg">
-                <Download className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+              <div className="p-2 bg-success-100 dark:bg-success-800/50 rounded-lg">
+                <Download className="w-5 h-5 text-success-600 dark:text-success-400" />
               </div>
               <div>
-                <h3 className="text-sm font-medium text-primary-900 dark:text-primary-100">
+                <h3 className="text-sm font-semibold text-sanctuary-900 dark:text-sanctuary-50">
                   Update Available: v{versionInfo.latestVersion}
                 </h3>
-                <p className="text-xs text-primary-600 dark:text-primary-400">
+                <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400">
                   You're running v{versionInfo.currentVersion}
                   {versionInfo.releaseName && ` • ${versionInfo.releaseName}`}
                 </p>
@@ -375,13 +375,13 @@ export const Dashboard: React.FC = () => {
                 href={versionInfo.releaseUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-sm font-semibold text-white bg-sanctuary-800 hover:bg-sanctuary-900 dark:bg-sanctuary-100 dark:text-sanctuary-900 dark:hover:bg-white rounded-lg transition-colors"
               >
                 View Release
               </a>
               <button
                 onClick={() => setUpdateDismissed(true)}
-                className="p-1.5 text-primary-500 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-200 hover:bg-primary-100 dark:hover:bg-primary-800/50 rounded-lg transition-colors"
+                className="p-1.5 text-sanctuary-400 hover:text-sanctuary-600 dark:text-sanctuary-500 dark:hover:text-sanctuary-300 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded-lg transition-colors"
                 title="Dismiss"
               >
                 <X className="w-4 h-4" />

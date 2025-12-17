@@ -62,6 +62,13 @@ Open **https://localhost:8443** and accept the certificate warning.
 
 ## Umbrel Installation
 
+> **⚠️ Limited Functionality:** Umbrel serves apps over HTTP (not HTTPS), which means **WebUSB hardware wallet connections will not work**. You can still use Sanctuary on Umbrel for:
+> - Importing wallets via output descriptors or JSON files
+> - Viewing balances and transaction history
+> - Creating unsigned PSBTs for air-gapped signing (ColdCard, Keystone, etc.)
+>
+> For full hardware wallet support via USB, use the [Quick Install](#quick-install) method which enables HTTPS.
+
 If you're running [Umbrel](https://umbrel.com/), you can install Sanctuary as a Community App:
 
 1. Open the **App Store** in your Umbrel

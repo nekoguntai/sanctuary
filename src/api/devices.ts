@@ -22,6 +22,8 @@ export interface CreateDeviceRequest {
 export interface UpdateDeviceRequest {
   label?: string;
   derivationPath?: string;
+  type?: string;
+  modelSlug?: string;
 }
 
 /**

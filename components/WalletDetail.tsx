@@ -2021,6 +2021,7 @@ export const WalletDetail: React.FC = () => {
                                <div>
                                    <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
                                    <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
+                                   <p className="text-xs font-mono text-sanctuary-400">{d.derivationPath}</p>
                                </div>
                            </div>
                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">

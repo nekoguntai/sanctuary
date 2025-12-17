@@ -5,11 +5,20 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
+import { BIP32Factory } from 'bip32';
 import { getNetwork, estimateTransactionSize, calculateFee } from './utils';
 import { broadcastTransaction } from './blockchain';
 import { RBF_SEQUENCE } from './advancedTx';
 import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
+import { parseDescriptor } from './addressDerivation';
+
+// Initialize BIP32 for key derivation
+const bip32 = BIP32Factory(ecc);
+
+// Initialize ECC for bitcoinjs-lib (required for Taproot)
+bitcoin.initEccLib(ecc);
 
 /**
  * UTXO Selection Strategy
@@ -135,9 +144,16 @@ export async function createTransaction(
 }> {
   const { selectedUtxoIds, enableRBF = true, label, memo, sendMax = false, subtractFees = false } = options;
 
-  // Get wallet info
+  // Get wallet info including devices (for fingerprint)
   const wallet = await prisma.wallet.findUnique({
     where: { id: walletId },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
   });
 
   if (!wallet) {
@@ -147,6 +163,37 @@ export async function createTransaction(
   // Validate recipient address
   const network = wallet.network === 'testnet' ? 'testnet' : 'mainnet';
   const networkObj = getNetwork(network);
+
+  // Get wallet fingerprint and xpub for BIP32 derivation info
+  // For single-sig wallets, get from the first associated device
+  // For multi-sig, this is more complex (not yet fully supported)
+  let masterFingerprint: Buffer | undefined;
+  let accountXpub: string | undefined;
+
+  if (wallet.devices && wallet.devices.length > 0) {
+    const primaryDevice = wallet.devices[0].device;
+    if (primaryDevice.fingerprint) {
+      masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
+    }
+    if (primaryDevice.xpub) {
+      accountXpub = primaryDevice.xpub;
+    }
+  } else if (wallet.fingerprint) {
+    // Fallback to wallet fingerprint if available
+    masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
+  }
+
+  // Try to get xpub from descriptor if not from device
+  if (!accountXpub && wallet.descriptor) {
+    try {
+      const parsed = parseDescriptor(wallet.descriptor);
+      if (parsed.xpub) {
+        accountXpub = parsed.xpub;
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
 
   try {
     bitcoin.address.toOutputScript(recipient, networkObj);
@@ -246,8 +293,22 @@ export async function createTransaction(
   });
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
+  // Parse account xpub for deriving public keys
+  let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
+  if (accountXpub) {
+    try {
+      accountNode = bip32.fromBase58(accountXpub, networkObj);
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+
   for (const utxo of selection.utxos) {
-    psbt.addInput({
+    const derivationPath = addressPathMap.get(utxo.address) || '';
+    inputPaths.push(derivationPath);
+
+    // Build base input data
+    const inputOptions: Parameters<typeof psbt.addInput>[0] = {
       hash: utxo.txid,
       index: utxo.vout,
       sequence,
@@ -255,11 +316,50 @@ export async function createTransaction(
         script: Buffer.from(utxo.scriptPubKey, 'hex'),
         value: Number(utxo.amount),
       },
-    });
+    };
 
-    // Get derivation path for this input (for hardware wallet signing)
-    const derivationPath = addressPathMap.get(utxo.address) || '';
-    inputPaths.push(derivationPath);
+    psbt.addInput(inputOptions);
+
+    // Add BIP32 derivation info if we have the master fingerprint
+    if (masterFingerprint && derivationPath && accountNode) {
+      try {
+        // Parse the derivation path
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+
+        // For BIP44/49/84/86, account path is first 3 levels (purpose'/coin'/account')
+        // Address derivation is the remaining levels (change/index)
+        // The accountNode is at the account level, so we derive from there
+        let pubkeyNode = accountNode;
+
+        // Find where the account path ends (after 3 hardened levels)
+        let accountPathEnd = 0;
+        for (let i = 0; i < pathParts.length && i < 3; i++) {
+          if (pathParts[i].endsWith("'") || pathParts[i].endsWith('h')) {
+            accountPathEnd = i + 1;
+          }
+        }
+
+        // Derive from account node using the remaining path (change/index)
+        for (let i = accountPathEnd; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          const idx = parseInt(part.replace(/['h]/g, ''), 10);
+          pubkeyNode = pubkeyNode.derive(idx);
+        }
+
+        if (pubkeyNode.publicKey) {
+          // Update input with bip32Derivation using the correct path format (string)
+          psbt.updateInput(inputPaths.length - 1, {
+            bip32Derivation: [{
+              masterFingerprint,
+              path: derivationPath,
+              pubkey: pubkeyNode.publicKey,
+            }],
+          });
+        }
+      } catch (e) {
+        // Skip BIP32 derivation if we can't derive the key
+      }
+    }
   }
 
   // Add recipient output
@@ -522,9 +622,16 @@ export async function createBatchTransaction(
 }> {
   const { selectedUtxoIds, enableRBF = true } = options;
 
-  // Get wallet info
+  // Get wallet info including devices (for fingerprint)
   const wallet = await prisma.wallet.findUnique({
     where: { id: walletId },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
   });
 
   if (!wallet) {
@@ -537,6 +644,33 @@ export async function createBatchTransaction(
 
   const network = wallet.network === 'testnet' ? 'testnet' : 'mainnet';
   const networkObj = getNetwork(network);
+
+  // Get wallet fingerprint and xpub for BIP32 derivation info
+  let masterFingerprint: Buffer | undefined;
+  let accountXpub: string | undefined;
+
+  if (wallet.devices && wallet.devices.length > 0) {
+    const primaryDevice = wallet.devices[0].device;
+    if (primaryDevice.fingerprint) {
+      masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
+    }
+    if (primaryDevice.xpub) {
+      accountXpub = primaryDevice.xpub;
+    }
+  } else if (wallet.fingerprint) {
+    masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
+  }
+
+  if (!accountXpub && wallet.descriptor) {
+    try {
+      const parsed = parseDescriptor(wallet.descriptor);
+      if (parsed.xpub) {
+        accountXpub = parsed.xpub;
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
 
   // Validate all output addresses
   for (const output of outputs) {
@@ -660,9 +794,22 @@ export async function createBatchTransaction(
   });
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
-  // Add inputs
+  // Parse account xpub for deriving public keys
+  let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
+  if (accountXpub) {
+    try {
+      accountNode = bip32.fromBase58(accountXpub, networkObj);
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+
+  // Add inputs with BIP32 derivation info
   for (const utxo of utxos) {
-    psbt.addInput({
+    const derivationPath = addressPathMap.get(utxo.address) || '';
+    inputPaths.push(derivationPath);
+
+    const inputOptions: Parameters<typeof psbt.addInput>[0] = {
       hash: utxo.txid,
       index: utxo.vout,
       sequence,
@@ -670,8 +817,44 @@ export async function createBatchTransaction(
         script: Buffer.from(utxo.scriptPubKey || '', 'hex'),
         value: Number(utxo.amount),
       },
-    });
-    inputPaths.push(addressPathMap.get(utxo.address) || '');
+    };
+
+    psbt.addInput(inputOptions);
+
+    // Add BIP32 derivation info if we have the master fingerprint
+    if (masterFingerprint && derivationPath && accountNode) {
+      try {
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+        let pubkeyNode = accountNode;
+
+        // Find where the account path ends (after 3 hardened levels)
+        let accountPathEnd = 0;
+        for (let i = 0; i < pathParts.length && i < 3; i++) {
+          if (pathParts[i].endsWith("'") || pathParts[i].endsWith('h')) {
+            accountPathEnd = i + 1;
+          }
+        }
+
+        // Derive from account node using the remaining path (change/index)
+        for (let i = accountPathEnd; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          const idx = parseInt(part.replace(/['h]/g, ''), 10);
+          pubkeyNode = pubkeyNode.derive(idx);
+        }
+
+        if (pubkeyNode.publicKey) {
+          psbt.updateInput(inputPaths.length - 1, {
+            bip32Derivation: [{
+              masterFingerprint,
+              path: derivationPath,
+              pubkey: pubkeyNode.publicKey,
+            }],
+          });
+        }
+      } catch (e) {
+        // Skip BIP32 derivation if we can't derive the key
+      }
+    }
   }
 
   // Add recipient outputs

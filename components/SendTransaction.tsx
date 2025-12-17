@@ -908,13 +908,27 @@ export const SendTransaction: React.FC = () => {
         ? txData.outputs.reduce((sum: number, o: any) => sum + o.amount, 0)
         : totalAmount;
 
-      // Step 2: Sign with hardware wallet
-      if (hardwareWallet.isConnected && hardwareWallet.device) {
-        try {
-          // Sign the PSBT with hardware wallet
-          const signedPsbt = await hardwareWallet.signPSBT(txData.psbtBase64);
+      // Step 2: Sign and broadcast
+      let signedPsbt: string | undefined;
 
-          // Step 3: Broadcast the signed transaction
+      // Case 1: Signed PSBT was uploaded via file
+      if (signedDevices.has('psbt-signed') && unsignedPsbt) {
+        signedPsbt = unsignedPsbt; // This now contains the signed PSBT
+      }
+      // Case 2: Sign with connected hardware wallet
+      else if (hardwareWallet.isConnected && hardwareWallet.device) {
+        try {
+          signedPsbt = await hardwareWallet.signPSBT(txData.psbtBase64);
+        } catch (hwError) {
+          log.error('Hardware wallet signing failed', { error: hwError });
+          setError(hwError instanceof Error ? hwError.message : 'Hardware wallet signing failed');
+          return;
+        }
+      }
+
+      // Step 3: Broadcast if we have a signed PSBT
+      if (signedPsbt) {
+        try {
           const broadcastResult = await transactionsApi.broadcastTransaction(id, {
             signedPsbtBase64: signedPsbt,
             recipient: outputs[0].address, // Primary recipient for logging
@@ -929,6 +943,10 @@ export const SendTransaction: React.FC = () => {
             'Transaction Broadcast'
           );
 
+          // Reset signing state
+          setSignedDevices(new Set());
+          setUnsignedPsbt(null);
+
           // Delete draft after successful broadcast
           if (currentDraftId) {
             try {
@@ -940,17 +958,17 @@ export const SendTransaction: React.FC = () => {
 
           navigate(`/wallets/${id}`);
           return;
-        } catch (hwError) {
-          log.error('Hardware wallet signing failed', { error: hwError });
-          setError(hwError instanceof Error ? hwError.message : 'Hardware wallet signing failed');
+        } catch (broadcastError) {
+          log.error('Transaction broadcast failed', { error: broadcastError });
+          setError(broadcastError instanceof Error ? broadcastError.message : 'Failed to broadcast transaction');
           return;
         }
       }
 
-      // If no hardware wallet, show connection prompt
+      // If no signing method available, show connection prompt
       showInfo(
-        `Transaction ready for signing. Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}. Connect a hardware wallet to sign securely.`,
-        'Connect Hardware Wallet'
+        `Transaction ready for signing. Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}. Connect a hardware wallet or use PSBT file signing.`,
+        'Sign Transaction'
       );
 
       // Prompt to connect hardware wallet
@@ -2094,38 +2112,178 @@ export const SendTransaction: React.FC = () => {
 
         {/* Action Bar */}
         <div className="fixed bottom-0 left-0 right-0 p-4 surface-elevated border-t border-sanctuary-200 dark:border-sanctuary-800 md:static md:bg-transparent md:border-0 md:p-0">
-             <Button
-               size="lg"
-               className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
-               disabled={!allOutputsHaveAddress || hasInvalidAddress || broadcasting || hardwareWallet.signing}
-               onClick={handleBroadcast}
-             >
-                 {broadcasting || hardwareWallet.signing ? (
-                   <>
-                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                     {hardwareWallet.signing ? 'Signing with Device...' : 'Broadcasting...'}
-                   </>
-                 ) : (wallet?.type === WalletType.MULTI_SIG || wallet?.type === 'multi_sig') ? (
-                   hardwareWallet.isConnected ? (
+             {/* For single-sig, require hardware wallet connection OR signed PSBT to broadcast */}
+             {(() => {
+               const isSingleSig = wallet?.type !== WalletType.MULTI_SIG && wallet?.type !== 'multi_sig';
+               const canBroadcast = hardwareWallet.isConnected || (isSingleSig && unsignedPsbt && signedDevices.size > 0);
+
+               // Get device capabilities for single-sig wallet
+               const singleSigDevice = walletDevices.length > 0 ? walletDevices[0] : null;
+               const deviceCapabilities = singleSigDevice ? getDeviceCapabilities(singleSigDevice.type) : null;
+               const supportsUsb = deviceCapabilities?.methods.includes('usb') ?? false;
+               const supportsAirgap = deviceCapabilities?.methods.includes('airgap') ?? false;
+
+               // Single-sig without connection or signed PSBT - show signing options
+               if (isSingleSig && !canBroadcast) {
+                 return (
+                   <div className="space-y-2">
+                     {/* USB connection option - only if device supports USB */}
+                     {supportsUsb && (
+                       <Button
+                         size="lg"
+                         className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
+                         disabled={!allOutputsHaveAddress || hasInvalidAddress}
+                         onClick={() => setShowHWConnect(true)}
+                       >
+                         <Usb className="w-5 h-5 mr-2" />
+                         Connect {singleSigDevice?.label || 'Hardware Wallet'} via USB
+                       </Button>
+                     )}
+
+                     {/* Show "or" divider if both options available */}
+                     {supportsUsb && supportsAirgap && (
+                       <div className="flex items-center justify-center text-xs text-sanctuary-500">
+                         <span className="px-2">or</span>
+                       </div>
+                     )}
+
+                     {/* PSBT/Air-gap option - only if device supports it */}
+                     {supportsAirgap && (
+                       <>
+                         <Button
+                           size="lg"
+                           variant={supportsUsb ? "outline" : "default"}
+                           className="w-full"
+                           disabled={!allOutputsHaveAddress || hasInvalidAddress}
+                           onClick={async () => {
+                             // Create PSBT for download
+                             if (!id || !outputs[0]?.address) return;
+                             try {
+                               const apiOutputs = outputs.map(o => ({
+                                 address: o.address,
+                                 amount: o.sendMax ? 0 : parseInt(o.amount || '0'),
+                                 sendMax: o.sendMax,
+                               }));
+                               let txData: any;
+                               if (outputs.length > 1 || outputs.some(o => o.sendMax)) {
+                                 txData = await transactionsApi.createBatchTransaction(id, {
+                                   outputs: apiOutputs,
+                                   feeRate,
+                                   selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+                                   enableRBF,
+                                 });
+                               } else {
+                                 txData = await transactionsApi.createTransaction(id, {
+                                   recipient: outputs[0].address,
+                                   amount: parseInt(outputs[0].amount || '0'),
+                                   feeRate,
+                                   selectedUtxoIds: selectedUTXOs.size > 0 ? Array.from(selectedUTXOs) : undefined,
+                                   enableRBF,
+                                   sendMax: outputs[0].sendMax || false,
+                                   subtractFees: subtractFeesFromAmount,
+                                 });
+                               }
+                               // Download PSBT
+                               const blob = new Blob([txData.psbtBase64], { type: 'text/plain' });
+                               const url = URL.createObjectURL(blob);
+                               const a = document.createElement('a');
+                               a.href = url;
+                               a.download = `${wallet?.name || 'transaction'}_unsigned.psbt`;
+                               document.body.appendChild(a);
+                               a.click();
+                               document.body.removeChild(a);
+                               URL.revokeObjectURL(url);
+                               setUnsignedPsbt(txData.psbtBase64);
+                               showSuccess(`PSBT downloaded. Sign it with ${singleSigDevice?.label || 'your device'} and upload the signed file.`, 'PSBT Ready');
+                             } catch (err) {
+                               log.error('Failed to create PSBT', { error: err });
+                               setError(err instanceof Error ? err.message : 'Failed to create PSBT');
+                             }
+                           }}
+                         >
+                           <FileDown className="w-5 h-5 mr-2" />
+                           {deviceCapabilities?.labels.airgap || 'Download PSBT'} for Signing
+                         </Button>
+                         {unsignedPsbt && (
+                           <label className="flex items-center justify-center w-full py-2.5 px-4 text-sm font-medium text-sanctuary-600 dark:text-sanctuary-300 bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 rounded-xl cursor-pointer transition-colors">
+                             <Upload className="w-4 h-4 mr-2" />
+                             Upload Signed PSBT
+                             <input
+                               type="file"
+                               accept=".psbt,.txt"
+                               className="hidden"
+                               onChange={(e) => {
+                                 const file = e.target.files?.[0];
+                                 if (!file) return;
+                                 const reader = new FileReader();
+                                 reader.onload = (ev) => {
+                                   const content = ev.target?.result as string;
+                                   setUnsignedPsbt(content.trim());
+                                   setSignedDevices(new Set(['psbt-signed']));
+                                   showSuccess('Signed PSBT uploaded. Ready to broadcast.', 'PSBT Uploaded');
+                                 };
+                                 reader.readAsText(file);
+                               }}
+                             />
+                           </label>
+                         )}
+                       </>
+                     )}
+
+                     {/* Fallback if no device or unknown capabilities */}
+                     {!singleSigDevice && (
+                       <Button
+                         size="lg"
+                         className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
+                         disabled={!allOutputsHaveAddress || hasInvalidAddress}
+                         onClick={() => setShowHWConnect(true)}
+                       >
+                         <Usb className="w-5 h-5 mr-2" />
+                         Connect Hardware Wallet to Sign
+                       </Button>
+                     )}
+                   </div>
+                 );
+               }
+
+               return (
+                 <Button
+                   size="lg"
+                   className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
+                   disabled={!allOutputsHaveAddress || hasInvalidAddress || broadcasting || hardwareWallet.signing}
+                   onClick={handleBroadcast}
+                 >
+                   {broadcasting || hardwareWallet.signing ? (
+                     <>
+                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                       {hardwareWallet.signing ? 'Signing with Device...' : 'Broadcasting...'}
+                     </>
+                   ) : (wallet?.type === WalletType.MULTI_SIG || wallet?.type === 'multi_sig') ? (
+                     hardwareWallet.isConnected ? (
+                       <>
+                         <Shield className="w-5 h-5 mr-2" />
+                         Sign with {hardwareWallet.device?.name} ({signedDevices.size + 1}/{wallet.quorum?.m})
+                       </>
+                     ) : (
+                       <>
+                         <Users className="w-5 h-5 mr-2" />
+                         Collect Signatures ({signedDevices.size}/{wallet.quorum?.m} of {wallet.quorum?.n})
+                       </>
+                     )
+                   ) : signedDevices.has('psbt-signed') ? (
                      <>
                        <Shield className="w-5 h-5 mr-2" />
-                       Sign with {hardwareWallet.device?.name} ({signedDevices.size + 1}/{wallet.quorum?.m})
+                       Broadcast Signed Transaction
                      </>
                    ) : (
                      <>
-                       <Users className="w-5 h-5 mr-2" />
-                       Collect Signatures ({signedDevices.size}/{wallet.quorum?.m} of {wallet.quorum?.n})
+                       <Shield className="w-5 h-5 mr-2" />
+                       Sign & Broadcast with {hardwareWallet.device?.name}
                      </>
-                   )
-                 ) : hardwareWallet.isConnected ? (
-                   <>
-                     <Shield className="w-5 h-5 mr-2" />
-                     Sign with {hardwareWallet.device?.name}
-                   </>
-                 ) : (
-                   'Sign & Broadcast Transaction'
-                 )}
-             </Button>
+                   )}
+                 </Button>
+               );
+             })()}
 
              {/* Save as Draft Button */}
              <button

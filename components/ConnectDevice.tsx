@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
+import { isSecureContext } from '../services/hardwareWallet';
 
 const log = createLogger('ConnectDevice');
 
@@ -104,6 +105,10 @@ export const ConnectDevice: React.FC = () => {
     // Add methods based on device connectivity, plus always allow manual
     selectedModel.connectivity.forEach(conn => {
       if (conn in connectivityConfig) {
+        // Filter out USB if not in secure context (HTTPS required for WebUSB)
+        if (conn === 'usb' && !isSecureContext()) {
+          return;
+        }
         methods.push(conn as ConnectionMethod);
       }
     });

@@ -18,6 +18,7 @@ import {
   useInvalidateWallet,
   useSyncWallet,
 } from '../hooks/queries/useWallets';
+import { useBitcoinStatus } from '../hooks/queries/useBitcoin';
 import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
@@ -261,6 +262,7 @@ export const WalletDetail: React.FC = () => {
   const { handleError, showSuccess } = useErrorHandler();
   const { addNotification: addAppNotification, removeNotificationsByType } = useAppNotifications();
   const highlightTxId = (location.state as any)?.highlightTxId;
+  const { data: bitcoinStatus } = useBitcoinStatus();
 
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -1201,6 +1203,7 @@ export const WalletDetail: React.FC = () => {
                onLabelsChange={handleLabelsChange}
                walletAddresses={addresses.map(a => a.address)}
                canEdit={wallet?.canEdit !== false}
+               confirmationThreshold={bitcoinStatus?.confirmationThreshold}
              />
              {hasMoreTx && transactions.length > 0 && (
                <div className="mt-4 text-center">

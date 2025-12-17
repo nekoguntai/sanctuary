@@ -38,6 +38,14 @@ router.get('/status', async (req: Request, res: Response) => {
       where: { isDefault: true },
     });
 
+    // Get confirmation threshold setting
+    const thresholdSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'confirmationThreshold' },
+    });
+    const confirmationThreshold = thresholdSetting
+      ? JSON.parse(thresholdSetting.value)
+      : 3; // Default to 3
+
     res.json({
       connected: true,
       server: version.server,
@@ -47,6 +55,7 @@ router.get('/status', async (req: Request, res: Response) => {
       host: nodeConfig ? `${nodeConfig.host}:${nodeConfig.port}` : undefined,
       useSsl: nodeConfig?.useSsl,
       explorerUrl: nodeConfig?.explorerUrl || 'https://mempool.space',
+      confirmationThreshold,
     });
   } catch (error: any) {
     res.json({

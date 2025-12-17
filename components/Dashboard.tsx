@@ -704,6 +704,7 @@ export const Dashboard: React.FC = () => {
            wallets={wallets}
            onWalletClick={(id) => navigate(`/wallets/${id}`)}
            onTransactionClick={(tx) => navigate(`/wallets/${tx.walletId}`, { state: { highlightTxId: tx.id } })}
+           confirmationThreshold={bitcoinStatus?.confirmationThreshold}
         />
       </div>
     </div>

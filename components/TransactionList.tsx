@@ -20,6 +20,7 @@ interface TransactionListProps {
   highlightedTxId?: string;
   onLabelsChange?: () => void;
   canEdit?: boolean; // Whether user can edit labels (default: true for backwards compat)
+  confirmationThreshold?: number; // Number of confirmations required (default: 3)
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -31,7 +32,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onTransactionClick,
   highlightedTxId,
   onLabelsChange,
-  canEdit = true
+  canEdit = true,
+  confirmationThreshold = 3
 }) => {
   const { format } = useCurrency();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -239,14 +241,22 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   <td className="px-4 py-3 whitespace-nowrap text-center">
                     <span
                       className="inline-flex items-center text-sm font-medium"
-                      title={tx.confirmed ? `${tx.confirmations?.toLocaleString() || ''} confirmations` : 'Pending confirmation'}
+                      title={tx.confirmations > 0 ? `${tx.confirmations.toLocaleString()} confirmation${tx.confirmations !== 1 ? 's' : ''}` : 'Pending confirmation'}
                     >
-                      {tx.confirmed ? (
+                      {tx.confirmations >= confirmationThreshold ? (
+                        // Fully confirmed
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-success-500" />
                           <span className="text-sanctuary-700 dark:text-sanctuary-300">{tx.confirmations?.toLocaleString() || ''}</span>
                         </>
+                      ) : tx.confirmations > 0 ? (
+                        // Confirming (1 to threshold-1)
+                        <span className="inline-flex items-center text-primary-600 dark:text-primary-400">
+                          <Clock className="w-3.5 h-3.5 mr-1" />
+                          {tx.confirmations}/{confirmationThreshold}
+                        </span>
                       ) : (
+                        // Pending (0 confirmations)
                         <span className="inline-flex items-center text-warning-600 dark:text-warning-400">
                           <Clock className="w-3.5 h-3.5 mr-1" />
                           Pending
@@ -320,11 +330,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                            className="items-center"
                          />
                       </div>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${selectedTx.confirmed ? 'bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-300' : 'bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-300'}`}>
-                         {selectedTx.confirmed ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Clock className="w-4 h-4 mr-2" />}
-                         {selectedTx.confirmed
-                           ? `${selectedTx.confirmations?.toLocaleString() || ''} Confirmations`
-                           : 'Pending Confirmation'}
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                        selectedTx.confirmations >= confirmationThreshold
+                          ? 'bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-300'
+                          : selectedTx.confirmations > 0
+                          ? 'bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-300'
+                          : 'bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-300'
+                      }`}>
+                         {selectedTx.confirmations >= confirmationThreshold ? (
+                           <><CheckCircle2 className="w-4 h-4 mr-2" />{selectedTx.confirmations.toLocaleString()} Confirmations</>
+                         ) : selectedTx.confirmations > 0 ? (
+                           <><Clock className="w-4 h-4 mr-2" />Confirming ({selectedTx.confirmations}/{confirmationThreshold})</>
+                         ) : (
+                           <><Clock className="w-4 h-4 mr-2" />Pending Confirmation</>
+                         )}
                       </span>
                   </div>
 

@@ -754,8 +754,15 @@ class SyncService {
 
       for (const { walletId } of walletsWithPending) {
         try {
+          // First, try to populate missing blockHeight for transactions that were discovered in mempool
+          // This handles servers like Blockstream that don't support verbose transaction responses
+          const populated = await populateMissingTransactionFields(walletId);
+          if (populated > 0) {
+            log.debug(`[SYNC] Populated missing fields for ${populated} transactions in wallet ${walletId}`);
+          }
+
           const updated = await updateTransactionConfirmations(walletId);
-          totalUpdated += updated;
+          totalUpdated += updated + populated;
 
           // Notify frontend of updates
           if (updated > 0) {

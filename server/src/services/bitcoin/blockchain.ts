@@ -1009,6 +1009,44 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
   const currentHeight = await getBlockHeight();
 
+  // PHASE 0: Get block heights from address history (more reliable than verbose tx for some servers)
+  // This handles servers like Blockstream that don't support verbose transaction responses
+  const txHeightFromHistory = new Map<string, number>();
+  const addressesForHistory = new Set<string>();
+
+  // Collect addresses that have transactions with missing blockHeight
+  for (const tx of transactions) {
+    if (tx.blockHeight === null && tx.wallet.addresses) {
+      for (const addr of tx.wallet.addresses) {
+        addressesForHistory.add(addr.address);
+      }
+    }
+  }
+
+  // Fetch address histories to get transaction heights
+  const HISTORY_BATCH_SIZE = 10;
+  const addressList = Array.from(addressesForHistory);
+  for (let i = 0; i < addressList.length; i += HISTORY_BATCH_SIZE) {
+    const batch = addressList.slice(i, i + HISTORY_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (address) => {
+        try {
+          const history = await client.getAddressHistory(address);
+          return history;
+        } catch (error) {
+          return [];
+        }
+      })
+    );
+    for (const history of results) {
+      for (const item of history) {
+        if (item.height > 0) {
+          txHeightFromHistory.set(item.tx_hash, item.height);
+        }
+      }
+    }
+  }
+
   // PHASE 1: Batch fetch all transaction details in parallel
   const TX_BATCH_SIZE = 5;
   const txDetailsCache = new Map<string, any>();
@@ -1040,19 +1078,40 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
   for (const tx of transactions) {
     try {
-      // Get transaction details from cache
+      // Get transaction details from cache (may be null if verbose not supported)
       const txDetails = txDetailsCache.get(tx.txid);
-
-      if (!txDetails) {
-        continue;
-      }
 
       const updates: any = {};
 
       // Populate blockHeight if missing
-      if (tx.blockHeight === null && txDetails.blockheight) {
-        updates.blockHeight = txDetails.blockheight;
-        updates.confirmations = Math.max(0, currentHeight - txDetails.blockheight + 1);
+      // Handle Electrum (blockheight), Bitcoin Core RPC (confirmations), or address history
+      if (tx.blockHeight === null) {
+        if (txDetails?.blockheight) {
+          // Electrum provides blockheight directly
+          updates.blockHeight = txDetails.blockheight;
+          updates.confirmations = Math.max(0, currentHeight - txDetails.blockheight + 1);
+        } else if (txDetails?.confirmations && txDetails.confirmations > 0) {
+          // Bitcoin Core RPC provides confirmations, calculate blockHeight
+          const calculatedBlockHeight = currentHeight - txDetails.confirmations + 1;
+          updates.blockHeight = calculatedBlockHeight;
+          updates.confirmations = txDetails.confirmations;
+        } else if (txHeightFromHistory.has(tx.txid)) {
+          // Fallback: get height from address history (for servers like Blockstream that don't support verbose)
+          const heightFromHistory = txHeightFromHistory.get(tx.txid)!;
+          updates.blockHeight = heightFromHistory;
+          updates.confirmations = Math.max(0, currentHeight - heightFromHistory + 1);
+          log.debug(`[BLOCKCHAIN] Got blockHeight ${heightFromHistory} from address history for tx ${tx.txid}`);
+        }
+      }
+
+      // Skip remaining field population if we don't have transaction details
+      if (!txDetails) {
+        // Still save blockHeight update if we got it from address history
+        if (Object.keys(updates).length > 0) {
+          pendingUpdates.push({ id: tx.id, data: updates });
+          updated++;
+        }
+        continue;
       }
 
       // Populate blockTime if missing

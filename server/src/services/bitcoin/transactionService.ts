@@ -70,12 +70,21 @@ export async function selectUTXOs(
   estimatedFee: number;
   changeAmount: number;
 }> {
-  // Get available UTXOs (exclude frozen UTXOs)
+  // Get confirmation threshold setting
+  const thresholdSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'confirmationThreshold' },
+  });
+  const confirmationThreshold = thresholdSetting
+    ? JSON.parse(thresholdSetting.value)
+    : 3; // Default to 3
+
+  // Get available UTXOs (exclude frozen and unconfirmed UTXOs)
   let utxos = await prisma.uTXO.findMany({
     where: {
       walletId,
       spent: false,
       frozen: false, // Frozen UTXOs cannot be spent
+      confirmations: { gte: confirmationThreshold }, // Must have enough confirmations
     },
     orderBy:
       strategy === UTXOSelectionStrategy.LARGEST_FIRST

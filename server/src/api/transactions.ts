@@ -350,6 +350,14 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
   try {
     const walletId = req.walletId!;
 
+    // Get confirmation threshold setting
+    const thresholdSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'confirmationThreshold' },
+    });
+    const confirmationThreshold = thresholdSetting
+      ? JSON.parse(thresholdSetting.value)
+      : 3; // Default to 3
+
     const utxos = await prisma.uTXO.findMany({
       where: {
         walletId,
@@ -380,6 +388,8 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
         ...utxo,
         amount: Number(utxo.amount),
         blockHeight: utxo.blockHeight ? Number(utxo.blockHeight) : null,
+        // Spendable if not frozen and has enough confirmations
+        spendable: !utxo.frozen && utxo.confirmations >= confirmationThreshold,
         // Use blockTime from transaction if available, otherwise fall back to createdAt
         createdAt: blockTime ? blockTime.toISOString() : utxo.createdAt.toISOString(),
       };

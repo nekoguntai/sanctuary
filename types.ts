@@ -161,7 +161,6 @@ export interface Transaction {
   timestamp?: number;
   label?: string;
   labels?: Label[]; // Multiple labels support
-  confirmed?: boolean;
   confirmations: number;
   walletId: string;
   address?: string; // Address this transaction is associated with

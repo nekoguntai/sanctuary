@@ -960,6 +960,7 @@ router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Re
     // Return defaults for any missing settings
     res.json({
       registrationEnabled: false, // Default to disabled (admin-only)
+      confirmationThreshold: 3, // Default confirmations required
       ...settingsObj,
     });
   } catch (error) {
@@ -999,6 +1000,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
     const settings = await prisma.systemSetting.findMany();
     const settingsObj: Record<string, any> = {
       registrationEnabled: false, // Default to disabled (admin-only)
+      confirmationThreshold: 3, // Default confirmations required
     };
     for (const setting of settings) {
       try {

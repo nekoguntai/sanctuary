@@ -179,6 +179,8 @@ export async function createTransaction(
     throw new Error('Wallet not found');
   }
 
+  console.log('[TransactionService] createTransaction - walletId:', walletId, 'scriptType:', wallet.scriptType);
+
   // Validate recipient address
   const network = wallet.network === 'testnet' ? 'testnet' : 'mainnet';
   const networkObj = getNetwork(network);

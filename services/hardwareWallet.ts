@@ -8,6 +8,8 @@
 
 import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import AppBtc from '@ledgerhq/hw-app-btc';
+import { AppClient, DefaultWalletPolicy, PsbtV2 } from 'ledger-bitcoin';
+import * as bitcoin from 'bitcoinjs-lib';
 import apiClient from '../src/api/client';
 import { createLogger } from '../utils/logger';
 
@@ -30,6 +32,8 @@ export interface PSBTSignRequest {
   psbt: string; // Base64 encoded PSBT
   inputPaths: string[]; // Derivation paths for inputs to sign
   changeOutputs?: number[]; // Indices of change outputs
+  accountPath?: string; // Account derivation path (e.g., "m/84'/0'/0'")
+  scriptType?: 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr'; // Script type for wallet policy
 }
 
 export interface PSBTSignResponse {
@@ -59,6 +63,7 @@ const LEDGER_VENDOR_ID = 0x2c97;
 interface LedgerConnection {
   transport: TransportWebUSB;
   app: AppBtc;
+  appClient: AppClient; // ledger-bitcoin AppClient for PSBT signing
   device: USBDevice;
 }
 
@@ -194,26 +199,21 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
     // Type assertion needed due to library type definitions
     const device = (transport as any).device as USBDevice;
 
-    // Create Bitcoin app instance
+    // Create Bitcoin app instances
     const app = new AppBtc({ transport });
+    // Create ledger-bitcoin AppClient for PSBT signing
+    const appClient = new AppClient(transport as any);
 
     // Get master fingerprint from the AppClient
     let fingerprint: string | undefined;
     try {
-      // Access the internal AppClient which has getMasterFingerprint()
-      const client = (app as any)._impl?.client;
-      if (client && typeof client.getMasterFingerprint === 'function') {
-        const fpBuffer = await client.getMasterFingerprint();
-        fingerprint = fpBuffer.toString('hex');
-        log.info('Got master fingerprint from device', { fingerprint });
-      } else {
-        log.warn('AppClient not available for getMasterFingerprint');
-      }
+      fingerprint = await appClient.getMasterFingerprint();
+      log.info('Got master fingerprint from device', { fingerprint });
     } catch (error) {
       log.warn('Could not get fingerprint - Bitcoin app may not be open', { error });
     }
 
-    activeConnection = { transport: transport as any, app, device };
+    activeConnection = { transport: transport as any, app, appClient, device };
 
     return {
       id: getDeviceId(device),
@@ -280,11 +280,7 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
     // Get master fingerprint from the AppClient
     let fingerprint = '';
     try {
-      const client = (activeConnection.app as any)._impl?.client;
-      if (client && typeof client.getMasterFingerprint === 'function') {
-        const fpBuffer = await client.getMasterFingerprint();
-        fingerprint = fpBuffer.toString('hex');
-      }
+      fingerprint = await activeConnection.appClient.getMasterFingerprint();
     } catch (fpError) {
       log.warn('Could not get fingerprint', { error: fpError });
     }
@@ -340,11 +336,60 @@ export const verifyAddress = async (path: string, address: string): Promise<bool
 };
 
 /**
- * Sign a PSBT with the connected device
+ * Get descriptor template for wallet policy based on script type
+ */
+const getDescriptorTemplate = (scriptType: string): 'wpkh(@0/**)' | 'sh(wpkh(@0/**))' | 'pkh(@0/**)' | 'tr(@0/**)' => {
+  switch (scriptType) {
+    case 'p2wpkh':
+      return 'wpkh(@0/**)';
+    case 'p2sh-p2wpkh':
+      return 'sh(wpkh(@0/**))';
+    case 'p2pkh':
+      return 'pkh(@0/**)';
+    case 'p2tr':
+      return 'tr(@0/**)';
+    default:
+      return 'wpkh(@0/**)'; // Default to native segwit
+  }
+};
+
+/**
+ * Infer script type from derivation path
+ */
+const inferScriptTypeFromPath = (path: string): 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr' => {
+  if (path.startsWith("m/84'") || path.startsWith("84'")) {
+    return 'p2wpkh'; // BIP84 - Native SegWit
+  }
+  if (path.startsWith("m/49'") || path.startsWith("49'")) {
+    return 'p2sh-p2wpkh'; // BIP49 - Wrapped SegWit
+  }
+  if (path.startsWith("m/44'") || path.startsWith("44'")) {
+    return 'p2pkh'; // BIP44 - Legacy
+  }
+  if (path.startsWith("m/86'") || path.startsWith("86'")) {
+    return 'p2tr'; // BIP86 - Taproot
+  }
+  return 'p2wpkh'; // Default to native segwit
+};
+
+/**
+ * Extract account path from a full derivation path
+ * e.g., "m/84'/0'/0'/0/5" -> "m/84'/0'/0'"
+ */
+const extractAccountPath = (fullPath: string): string => {
+  const parts = fullPath.replace(/h/g, "'").split('/');
+  // Account path is typically the first 4 parts: m/purpose'/coin'/account'
+  if (parts.length >= 4) {
+    return parts.slice(0, 4).join('/');
+  }
+  return fullPath;
+};
+
+/**
+ * Sign a PSBT with the connected device using DefaultWalletPolicy
  *
- * NOTE: Ledger Bitcoin app v2+ requires wallet policy registration before signing.
- * This is not yet fully implemented. For now, users should use air-gapped signing
- * (export PSBT file, sign with Ledger Live or other software, import signed PSBT).
+ * For standard single-sig wallets (BIP44/49/84/86), this uses DefaultWalletPolicy
+ * which doesn't require wallet registration on the device.
  */
 export const signPSBT = async (
   request: PSBTSignRequest
@@ -354,61 +399,116 @@ export const signPSBT = async (
   }
 
   try {
-    // Decode PSBT from base64
-    const psbtBuffer = Buffer.from(request.psbt, 'base64');
+    const { appClient } = activeConnection;
 
-    log.info('Attempting to sign PSBT', {
-      psbtLength: psbtBuffer.length,
-      inputPathsCount: request.inputPaths?.length || 0,
-    });
+    // Determine account path and script type
+    let accountPath = request.accountPath;
+    let scriptType = request.scriptType;
 
-    // Try using the signPsbt method if available
-    // Note: Ledger Bitcoin app v2+ requires wallet policy registration
-    // which is not yet implemented. This may fail.
-    const app = activeConnection.app as any;
-
-    if (typeof app.signPsbt !== 'function') {
-      throw new Error(
-        'PSBT signing via USB is not yet supported for this device. ' +
-        'Please use air-gapped signing: download the PSBT file, sign it with Ledger Live or compatible software, then upload the signed PSBT.'
-      );
+    // If not provided, try to infer from input paths
+    if (!accountPath && request.inputPaths && request.inputPaths.length > 0) {
+      accountPath = extractAccountPath(request.inputPaths[0]);
+    }
+    if (!accountPath) {
+      accountPath = "m/84'/0'/0'"; // Default to BIP84 mainnet
     }
 
-    const result = await app.signPsbt(psbtBuffer, request.inputPaths);
+    if (!scriptType) {
+      scriptType = inferScriptTypeFromPath(accountPath);
+    }
 
-    // Re-encode signed PSBT
-    const signedPsbt = Buffer.from(result.psbt).toString('base64');
+    log.info('Preparing to sign PSBT', {
+      psbtLength: request.psbt.length,
+      inputPathsCount: request.inputPaths?.length || 0,
+      accountPath,
+      scriptType,
+    });
 
+    // Get master fingerprint (returns hex string directly)
+    const masterFpHex = await appClient.getMasterFingerprint();
+
+    // Get account xpub
+    // Convert path format: m/84'/0'/0' -> array for getExtendedPubkey
+    const xpub = await appClient.getExtendedPubkey(accountPath);
+
+    log.info('Got wallet info for signing', {
+      masterFingerprint: masterFpHex,
+      xpubPrefix: xpub.substring(0, 15),
+      accountPath,
+    });
+
+    // Create wallet policy key string
+    // Format: [fingerprint/path]xpub
+    const pathWithoutM = accountPath.replace(/^m\//, '');
+    const keyInfo = `[${masterFpHex}/${pathWithoutM}]${xpub}`;
+
+    // Create DefaultWalletPolicy for standard single-sig wallet
+    const descriptorTemplate = getDescriptorTemplate(scriptType);
+    const walletPolicy = new DefaultWalletPolicy(descriptorTemplate, keyInfo);
+
+    log.info('Created wallet policy', {
+      descriptorTemplate,
+      keyInfoPrefix: keyInfo.substring(0, 30),
+    });
+
+    // Parse the PSBT using bitcoinjs-lib
+    const psbt = bitcoin.Psbt.fromBase64(request.psbt);
+
+    // Sign the PSBT using ledger-bitcoin
+    // DefaultWalletPolicy doesn't require registration, so walletHMAC is null
+    const signatures = await appClient.signPsbt(request.psbt, walletPolicy, null);
+
+    log.info('Got signatures from device', {
+      signatureCount: signatures.length,
+    });
+
+    // Apply each signature to the PSBT
+    for (const [inputIndex, partialSig] of signatures) {
+      log.info('Applying signature', {
+        inputIndex,
+        pubkeyHex: partialSig.pubkey.toString('hex').substring(0, 20),
+        signatureLength: partialSig.signature.length,
+      });
+
+      // Update the input with the partial signature
+      psbt.updateInput(inputIndex, {
+        partialSig: [{
+          pubkey: partialSig.pubkey,
+          signature: partialSig.signature,
+        }],
+      });
+    }
+
+    // Finalize all inputs
+    psbt.finalizeAllInputs();
+
+    log.info('PSBT signed and finalized successfully', {
+      signatureCount: signatures.length,
+    });
+
+    // Return the signed PSBT as base64
     return {
-      psbt: signedPsbt,
-      signatures: result.signatures?.length || request.inputPaths.length,
+      psbt: psbt.toBase64(),
+      signatures: signatures.length,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     log.error('PSBT signing failed', { error: message });
 
-    if (message.includes('0x6985') || message.includes('denied')) {
-      throw new Error('Transaction rejected on device');
+    if (message.includes('0x6985') || message.includes('denied') || message.includes('rejected')) {
+      throw new Error('Transaction rejected on device. Please approve the transaction on your Ledger.');
     }
-    if (message.includes('0x6d00') || message.includes('0x6e00')) {
-      throw new Error('Bitcoin app not open on device');
+    if (message.includes('0x6d00') || message.includes('0x6e00') || message.includes('CLA_NOT_SUPPORTED')) {
+      throw new Error('Bitcoin app not open on device. Please open the Bitcoin app on your Ledger.');
     }
-    if (message.includes('not yet supported') || message.includes('air-gapped')) {
-      throw error; // Re-throw our custom error
+    if (message.includes('0x6982') || message.includes('locked')) {
+      throw new Error('Device is locked. Please unlock your Ledger with your PIN.');
     }
-
-    // Provide helpful error for wallet policy issues
-    if (message.includes('policy') || message.includes('wallet') || message.includes('register')) {
-      throw new Error(
-        'Ledger requires wallet registration before signing. ' +
-        'Please use air-gapped signing: download the PSBT, sign with Ledger Live, then upload.'
-      );
+    if (message.includes('No device')) {
+      throw new Error('Device disconnected. Please reconnect your Ledger and try again.');
     }
 
-    throw new Error(
-      `Failed to sign PSBT: ${message}. ` +
-      'Try using air-gapped signing instead (download PSBT, sign externally, upload signed PSBT).'
-    );
+    throw new Error(`Failed to sign transaction: ${message}`);
   }
 };
 

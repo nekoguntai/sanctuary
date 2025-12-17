@@ -381,32 +381,46 @@ const PendingTxDot: React.FC<{
   );
 };
 
+// Parse fee range string "min-max" into [min, max] numbers
+const parseFeeRange = (feeRange: string): [number, number] => {
+  const parts = feeRange.split('-').map(s => parseFloat(s.trim()));
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return [parts[0], parts[1]];
+  }
+  return [0, Infinity]; // Fallback
+};
+
 // Helper to match pending transactions to blocks based on fee rate
+// Uses actual fee ranges from mempool data for accurate predictions
 const getTxsForBlock = (
   block: BlockData,
   allPendingTxs: PendingTransaction[],
   blockIndex: number,
-  totalPendingBlocks: number
+  totalPendingBlocks: number,
+  allBlocks: BlockData[]
 ): PendingTransaction[] => {
   // Only show in pending blocks
   if (block.status !== 'pending') return [];
 
-  // Filter transactions by fee rate threshold for this block
-  // Higher fee rate = earlier block (lower index)
+  const [minFee, maxFee] = parseFeeRange(block.feeRange);
+
+  // Get the next block's min fee (if exists) to set upper bound
+  const nextBlock = blockIndex > 0 ? allBlocks[blockIndex - 1] : null;
+  const nextBlockMinFee = nextBlock ? parseFeeRange(nextBlock.feeRange)[0] : Infinity;
+
   return allPendingTxs.filter(tx => {
-    // For the first block (Next), show txs with fee >= median fee of that block
-    // For subsequent blocks, show txs with fee between this block's fee and the previous block's fee
+    // First block (Next): tx fee rate >= this block's min fee
     if (blockIndex === 0) {
-      return tx.feeRate >= block.medianFee;
+      return tx.feeRate >= minFee;
     }
 
-    // For last pending block, include everything below median fee
+    // Last pending block: anything below this block's max fee that didn't fit in earlier blocks
     if (blockIndex === totalPendingBlocks - 1) {
-      return tx.feeRate < block.medianFee * 1.2;
+      return tx.feeRate < nextBlockMinFee && tx.feeRate >= Math.max(minFee * 0.5, 1);
     }
 
-    // For middle blocks, use fee range
-    return tx.feeRate >= block.medianFee * 0.8 && tx.feeRate < block.medianFee * 1.5;
+    // Middle blocks: fee rate between this block's range and next block's min
+    return tx.feeRate >= minFee && tx.feeRate < nextBlockMinFee;
   });
 };
 
@@ -601,7 +615,7 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
                 compact={compact}
                 isAnimating={isAnimating && newBlockDetected}
                 animationDirection="none"
-                pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length)}
+                pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length, pendingBlocks)}
                 explorerUrl={explorerUrl}
               />
             ))}

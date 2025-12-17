@@ -122,7 +122,8 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ## Features
 
 - **Multi-wallet support** — Manage multiple wallets (single-sig and multisig)
-- **Hardware wallet integration** — Connect Ledger devices directly via WebUSB (HTTPS required)
+- **Hardware wallet integration** — Connect Ledger and Trezor devices directly
+- **QR code scanning** — Import device xpubs via camera (Keystone, Passport, ColdCard Q)
 - **Real-time sync** — Monitor transactions and balances via Electrum or your own Bitcoin node
 - **Address management** — Receive/change address tracking with labels
 - **UTXO control** — Coin selection for privacy-conscious transactions
@@ -165,25 +166,26 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Frontend** — React-based web interface served via nginx (HTTPS for WebUSB)
 - **Backend** — Node.js API server handling wallet logic and blockchain queries
 - **Database** — PostgreSQL for storing wallet metadata, addresses, and transaction history
-- **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger devices)
+- **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger, Trezor)
 
-## HTTPS Required
+## HTTP and HTTPS Ports
 
-> **IMPORTANT:** Sanctuary is designed to run **HTTPS-only**. This is not optional.
-
-HTTPS is mandatory for:
-- **WebUSB API** — Browsers require HTTPS (secure context) to access USB devices like hardware wallets
-- **Secure Credentials** — Protects login tokens and wallet data in transit
-- **Modern Security** — Required for many browser APIs and security features
-
-**How it works:**
-- HTTP (port 80) automatically redirects to HTTPS
-- Self-signed certificates are included for local development
-- For production, replace with real certificates (Let's Encrypt, etc.)
+Sanctuary runs on both HTTP and HTTPS to support different hardware wallet types:
 
 **Default ports:**
 - `HTTPS_PORT=8443` — Main application (https://localhost:8443)
-- `HTTP_PORT=80` — Redirects only
+- `HTTP_PORT=8080` — Alternative port (http://localhost:8080)
+
+**Why two ports?**
+
+| Device Type | Required Port | Reason |
+|-------------|---------------|--------|
+| **Ledger** | HTTPS (8443) | WebUSB requires a secure context |
+| **Trezor** | Any | Works on both HTTP and HTTPS |
+| **QR Camera** | HTTPS (8443) | Camera access requires a secure context |
+| **File import** | Any | No special browser API required |
+
+**Recommendation:** Use HTTPS (8443) as your default. Only switch to HTTP if you encounter issues.
 
 ## Requirements
 
@@ -540,56 +542,81 @@ Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scan
 
 ### Hardware Wallet Setup
 
-Sanctuary uses WebUSB to communicate directly with Ledger hardware wallets from your browser. **HTTPS is required** for WebUSB to work.
+Sanctuary supports multiple hardware wallet types through different connection methods.
 
-#### Requirements
+#### Supported Devices
 
-- **HTTPS** — Enable SSL (see [Enabling HTTPS](#enabling-https) above)
-- **Chrome/Edge/Brave** — WebUSB is not supported in Firefox or Safari
-- **Ledger device** — Currently supported: Nano S, Nano S Plus, Nano X, Stax, Flex
+| Device | Connection | Port | Status |
+|--------|------------|------|--------|
+| **Ledger Nano S/S+/X** | WebUSB | HTTPS (8443) | Supported |
+| **Ledger Stax/Flex** | WebUSB | HTTPS (8443) | Supported |
+| **Trezor Model One/T** | Trezor Connect | Either | Supported |
+| **Trezor Safe 3/5/7** | Trezor Connect | Either | Supported |
+| **ColdCard** | File (MicroSD) | Any | Supported |
+| **ColdCard Q** | QR code or file | HTTPS for QR camera | Supported |
+| **Keystone** | QR code or file | HTTPS for QR camera | Supported |
+| **Passport** | QR code or file | HTTPS for QR camera | Supported |
 
-#### Connecting Your Device
+#### Connecting a Ledger
 
-1. **Enable HTTPS** in Sanctuary (required for WebUSB)
-2. **Connect your Ledger** via USB
-3. **Unlock the device** with your PIN
-4. **Open the Bitcoin app** on your Ledger
-5. In Sanctuary, click **Connect Device** — your browser will show a device picker
-6. **Select your Ledger** to authorize access
+1. Open **https://localhost:8443** (HTTPS required for WebUSB)
+2. Connect your Ledger via USB
+3. Unlock the device with your PIN
+4. Open the **Bitcoin app** on your Ledger
+5. Click **Connect Device** — your browser will show a USB device picker
+6. Select your Ledger to authorize access
+
+#### Connecting a Trezor
+
+1. Open Sanctuary (HTTPS or HTTP)
+2. Connect your Trezor via USB
+3. Click **Connect Device** and select a Trezor model
+4. A popup will open to **connect.trezor.io**
+5. Follow the prompts to authorize and export your xpub
+6. **Note:** You may need to switch between Trezor Suite and Sanctuary for device operations
+
+#### Air-Gapped Devices (ColdCard, ColdCard Q, Keystone, Passport)
+
+Air-gapped devices work via PSBT file or QR code — no USB connection needed:
+
+**Option 1: QR Code Scanning** (requires HTTPS for camera access)
+1. Open **https://localhost:8443**
+2. Click **Connect Device** → **QR Code**
+3. Use your camera to scan the device's xpub QR code
+
+**Option 2: File Import**
+1. Export the xpub/descriptor as a JSON file from your device
+2. Click **Connect Device** → **File Upload**
+3. Select the exported file
 
 Once connected, you can:
 - Export xpubs for watch-only wallet setup
 - Sign transactions (PSBT)
 - Verify addresses on the device display
 
-#### Supported Devices
-
-| Device | Connection | Status |
-|--------|------------|--------|
-| **Ledger Nano S/S+/X** | WebUSB | Supported |
-| **Ledger Stax/Flex** | WebUSB | Supported |
-| **ColdCard** | PSBT file (air-gap) | Supported |
-| **Trezor** | Coming soon | Planned |
-| **Others** | PSBT file (air-gap) | Supported |
-
-**Air-gapped devices** (ColdCard, Keystone, Passport) work via PSBT file export/import — no USB connection needed.
-
 #### Troubleshooting
 
-**"WebUSB not supported"**
-- Ensure you're using Chrome, Edge, or Brave
-- Verify HTTPS is enabled (check for 🔒 in address bar)
-- Try `https://localhost` instead of `http://localhost`
+**Ledger: "WebUSB not supported"**
+- Ensure you're using Chrome, Edge, or Brave (Firefox/Safari don't support WebUSB)
+- Use HTTPS: https://localhost:8443 (check for 🔒 in address bar)
+- Don't use HTTP for Ledger devices
 
-**"Device not found"**
+**Ledger: "Device not found"**
 - Ensure device is plugged in and unlocked
 - Open the Bitcoin app on your Ledger
-- Close other apps using the device (Ledger Live)
+- Close Ledger Live (it locks the USB connection)
 - Try a different USB port or cable
 
-**"Access denied"**
-- Click "Connect Device" again to trigger the permission dialog
-- Select your device in the browser's USB picker
+**Trezor: Connection fails or popup blocked**
+- Allow popups from connect.trezor.io
+- Close Trezor Suite if it's open
+- If issues persist on HTTPS, try HTTP: http://localhost:8080
+- Try a different browser if issues persist
+
+**QR Camera: "Camera access denied"**
+- Use HTTPS: https://localhost:8443
+- Allow camera permissions when prompted
+- Check browser settings if previously denied
 
 ## Usage
 
@@ -606,7 +633,8 @@ Once connected, you can:
 Sanctuary supports multiple import methods:
 
 - **Output Descriptor** — Paste a descriptor like `wpkh([fingerprint/84'/0'/0']xpub.../0/*)`
-- **Hardware Wallet** — Connect via WebUSB (HTTPS required) to read the xpub directly
+- **Hardware Wallet** — Connect Ledger or Trezor to read the xpub directly
+- **QR Code Scan** — Scan xpub QR codes from Keystone, Passport, ColdCard Q (HTTPS required for camera)
 - **JSON Export** — Import from Sparrow, Specter, or other compatible wallets
 
 ### Creating Transactions

@@ -170,6 +170,7 @@ export const SendTransaction: React.FC = () => {
     address: string;
     amount: string;
     sendMax: boolean;
+    displayValue?: string; // Temporary display value while typing decimals
   }
   const [outputs, setOutputs] = useState<OutputEntry[]>([{ address: '', amount: '', sendMax: false }]);
   const [scanningOutputIndex, setScanningOutputIndex] = useState<number | null>(null);
@@ -202,7 +203,7 @@ export const SendTransaction: React.FC = () => {
     }
   };
 
-  const updateOutput = (index: number, field: keyof OutputEntry, value: string | boolean) => {
+  const updateOutput = (index: number, field: keyof OutputEntry, value: string | boolean | undefined) => {
     const newOutputs = [...outputs];
     newOutputs[index] = { ...newOutputs[index], [field]: value };
     // If setting sendMax, clear the amount and unset sendMax on other outputs
@@ -565,9 +566,9 @@ export const SendTransaction: React.FC = () => {
       .reduce((acc, u) => acc + u.amount, 0);
   }, [utxos, selectedUTXOs]);
 
-  // Get spendable (non-frozen) UTXOs
+  // Get spendable UTXOs (not frozen and meets confirmation threshold)
   const spendableUtxos = useMemo(() => {
-    return utxos.filter(u => !u.frozen);
+    return utxos.filter(u => u.spendable !== false && !u.frozen);
   }, [utxos]);
 
   // Calculate input size based on script type (vbytes per input)
@@ -956,6 +957,7 @@ export const SendTransaction: React.FC = () => {
 
       // Step 2: Sign and broadcast
       let signedPsbt: string | undefined;
+      let rawTxHex: string | undefined; // Raw transaction hex from Trezor
 
       // Case 1: Signed PSBT was uploaded via file
       if (signedDevices.has('psbt-signed') && unsignedPsbt) {
@@ -964,7 +966,9 @@ export const SendTransaction: React.FC = () => {
       // Case 2: Sign with connected hardware wallet
       else if (hardwareWallet.isConnected && hardwareWallet.device) {
         try {
-          signedPsbt = await hardwareWallet.signPSBT(txData.psbtBase64);
+          const signResult = await hardwareWallet.signPSBT(txData.psbtBase64);
+          signedPsbt = signResult.psbt;
+          rawTxHex = signResult.rawTx; // Trezor returns fully signed tx directly
         } catch (hwError) {
           log.error('Hardware wallet signing failed', { error: hwError });
           setError(hwError instanceof Error ? hwError.message : 'Hardware wallet signing failed');
@@ -972,11 +976,12 @@ export const SendTransaction: React.FC = () => {
         }
       }
 
-      // Step 3: Broadcast if we have a signed PSBT
-      if (signedPsbt) {
+      // Step 3: Broadcast if we have a signed PSBT or raw tx
+      if (signedPsbt || rawTxHex) {
         try {
           const broadcastResult = await transactionsApi.broadcastTransaction(id, {
             signedPsbtBase64: signedPsbt,
+            rawTxHex: rawTxHex, // For Trezor: broadcast raw tx directly
             recipient: outputs[0].address, // Primary recipient for logging
             amount: effectiveAmount,
             fee: txData.fee,
@@ -1509,12 +1514,35 @@ export const SendTransaction: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <div className="flex-1 relative">
                       <input
-                        type="number"
-                        step={unit === 'btc' ? '0.00000001' : '1'}
-                        value={output.sendMax ? satsToDisplay(calculateMaxForOutput(index)) : satsToDisplay(output.amount)}
+                        type="text"
+                        inputMode={unit === 'btc' ? 'decimal' : 'numeric'}
+                        value={output.sendMax ? satsToDisplay(calculateMaxForOutput(index)) : (output.displayValue ?? satsToDisplay(output.amount))}
                         onChange={(e) => {
-                          updateOutput(index, 'amount', displayToSats(e.target.value));
-                          if (output.sendMax) updateOutput(index, 'sendMax', false);
+                          const value = e.target.value;
+                          // Allow empty, digits, and decimal point for BTC mode
+                          const isValidBtc = value === '' || /^[0-9]*\.?[0-9]*$/.test(value);
+                          const isValidSats = value === '' || /^[0-9]*$/.test(value);
+
+                          if ((unit === 'btc' && isValidBtc) || (unit !== 'btc' && isValidSats)) {
+                            setOutputs(prev => {
+                              const newOutputs = [...prev];
+                              newOutputs[index] = {
+                                ...newOutputs[index],
+                                displayValue: value,
+                                amount: displayToSats(value),
+                                sendMax: false,
+                              };
+                              return newOutputs;
+                            });
+                          }
+                        }}
+                        onBlur={() => {
+                          // On blur, clear displayValue to use canonical sats display
+                          setOutputs(prev => {
+                            const newOutputs = [...prev];
+                            newOutputs[index] = { ...newOutputs[index], displayValue: undefined };
+                            return newOutputs;
+                          });
                         }}
                         placeholder="0"
                         readOnly={output.sendMax || isResumingDraft}
@@ -1565,12 +1593,14 @@ export const SendTransaction: React.FC = () => {
                 </div>
               ))}
 
-              {showCoinControl && (
-                <div className="flex justify-between text-xs text-sanctuary-500 mt-2">
+              <div className="flex justify-between text-xs text-sanctuary-500 mt-2">
+                {showCoinControl ? (
                   <span>Selected: {format(selectedTotal)} ({selectedUTXOs.size} UTXO{selectedUTXOs.size !== 1 ? 's' : ''})</span>
-                  <span>Max sendable: {format(maxSendableAmount)}</span>
-                </div>
-              )}
+                ) : (
+                  <span>Available: {format(spendableUtxos.reduce((sum, u) => sum + u.amount, 0))} ({spendableUtxos.length} UTXO{spendableUtxos.length !== 1 ? 's' : ''})</span>
+                )}
+                <span>Max sendable: {format(maxSendableAmount)}</span>
+              </div>
             </div>
 
             {/* Advanced Options */}

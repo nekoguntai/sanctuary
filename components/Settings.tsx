@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Link as LinkIcon, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
 import { ThemeOption, BackgroundOption } from '../types';
@@ -277,43 +277,6 @@ export const Settings: React.FC = () => {
   const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders, refreshPrice, priceLoading, lastPriceUpdate, btcPrice, currencySymbol } = useCurrency();
   const { user, updatePreferences } = useUser();
 
-  // Prefs saving state
-  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
-  const [prefsSaved, setPrefsSaved] = useState(false);
-
-  const [isSavingPersonalization, setIsSavingPersonalization] = useState(false);
-  const [personalizationSaved, setPersonalizationSaved] = useState(false);
-
-  const handleSavePreferences = async () => {
-      setIsSavingPrefs(true);
-      try {
-        // updatePreferences already called by CurrencyContext hooks
-        // This is just for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setIsSavingPrefs(false);
-        setPrefsSaved(true);
-        setTimeout(() => setPrefsSaved(false), 2000);
-      } catch (error) {
-        log.error('Failed to save display preferences', { error });
-        setIsSavingPrefs(false);
-      }
-  };
-
-  const handleSavePersonalization = async () => {
-      setIsSavingPersonalization(true);
-      try {
-        // updatePreferences already called by the theme/background/darkMode buttons
-        // This is just for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setIsSavingPersonalization(false);
-        setPersonalizationSaved(true);
-        setTimeout(() => setPersonalizationSaved(false), 2000);
-      } catch (error) {
-        log.error('Failed to save personalization', { error });
-        setIsSavingPersonalization(false);
-      }
-  }
-
   // Theme Helpers
   const currentTheme = user?.preferences?.theme || 'sanctuary';
   const currentBg = user?.preferences?.background || 'zen';
@@ -402,19 +365,13 @@ export const Settings: React.FC = () => {
            {/* Dark Mode Toggle */}
            <div className="flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
               <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Dark Mode</span>
-              <button 
+              <button
                 onClick={() => updatePreferences({ darkMode: !isDark })}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${isDark ? 'bg-primary-600' : 'bg-sanctuary-300'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
            </div>
-
-           <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800 flex justify-end">
-             <Button onClick={handleSavePersonalization} isLoading={isSavingPersonalization} variant={personalizationSaved ? 'secondary' : 'primary'}>
-                {personalizationSaved ? <><Check className="w-4 h-4 mr-2" /> Saved</> : 'Save Personalization'}
-             </Button>
-          </div>
         </div>
       </div>
 
@@ -472,7 +429,7 @@ export const Settings: React.FC = () => {
                <p className="text-sm text-sanctuary-500">Select your local currency.</p>
              </div>
              <div className="relative">
-                <select 
+                <select
                   value={fiatCurrency}
                   onChange={(e) => setFiatCurrency(e.target.value as FiatCurrency)}
                   className="appearance-none surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -486,12 +443,6 @@ export const Settings: React.FC = () => {
                    <Globe className="w-4 h-4" />
                 </div>
              </div>
-          </div>
-          
-          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800 flex justify-end">
-             <Button onClick={handleSavePreferences} isLoading={isSavingPrefs} variant={prefsSaved ? 'secondary' : 'primary'}>
-                {prefsSaved ? <><Check className="w-4 h-4 mr-2" /> Saved</> : 'Save Display Configuration'}
-             </Button>
           </div>
         </div>
       </div>

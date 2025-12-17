@@ -96,6 +96,7 @@ export interface NodeConfig {
   password?: string;
   explorerUrl?: string; // e.g., https://mempool.space
   feeEstimatorUrl?: string; // e.g., https://mempool.space (mempool.space-compatible API for fee estimation)
+  mempoolEstimator?: 'simple' | 'mempool_space'; // Algorithm for block confirmation estimation
 }
 
 export interface Device {

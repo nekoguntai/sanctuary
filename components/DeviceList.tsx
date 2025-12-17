@@ -208,7 +208,7 @@ export const DeviceList: React.FC = () => {
                       <div className="flex flex-wrap gap-2">
                         {associatedWallets.length > 0 ? (
                           associatedWallets.map(w => {
-                            const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
+                            const isMultisig = w.type === WalletType.MULTI_SIG;
                             const badgeClass = isMultisig
                               ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
                               : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
@@ -353,7 +353,7 @@ export const DeviceList: React.FC = () => {
                                      <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-sanctuary-50 dark:border-sanctuary-800">
                                          {associatedWallets.length > 0 ? (
                                              associatedWallets.map(w => {
-                                                 const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
+                                                 const isMultisig = w.type === WalletType.MULTI_SIG;
                                                  const tagClass = isMultisig
                                                     ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
                                                     : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';

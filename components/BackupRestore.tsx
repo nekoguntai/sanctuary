@@ -165,6 +165,7 @@ export const BackupRestore: React.FC = () => {
           result.warnings.forEach((warning) => {
             addNotification({
               type: 'warning',
+              scope: 'global',
               title: 'Restore Warning',
               message: warning,
               persistent: true,

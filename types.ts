@@ -20,6 +20,28 @@ export enum HardwareDevice {
   GENERIC = 'Generic SD',
 }
 
+export interface HardwareDeviceModel {
+  id: string;
+  name: string;
+  slug: string;
+  manufacturer: string;
+  connectivity: string[];
+  secureElement: boolean;
+  openSource: boolean;
+  airGapped: boolean;
+  supportsBitcoinOnly: boolean;
+  supportsMultisig: boolean;
+  supportsTaproot: boolean;
+  supportsPassphrase: boolean;
+  scriptTypes: string[];
+  hasScreen: boolean;
+  screenType?: string;
+  releaseYear?: number;
+  discontinued: boolean;
+  imageUrl?: string;
+  websiteUrl?: string;
+}
+
 export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber' | 'sunrise';
 export type BackgroundOption = 'minimal' | 'zen' | 'circuit' | 'topography' | 'waves' | 'lines' | 'sanctuary' | 'sanctuary-hero';
 

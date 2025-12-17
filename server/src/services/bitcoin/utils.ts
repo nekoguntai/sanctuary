@@ -6,6 +6,11 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
+
+// Initialize ECC library for Taproot/P2TR support
+// This is required by bitcoinjs-lib v6+ for bech32m address validation
+bitcoin.initEccLib(ecc);
 
 /**
  * Convert satoshis to BTC

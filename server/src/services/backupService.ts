@@ -41,12 +41,14 @@ const TABLE_ORDER = [
   'groupMember',     // FK: userId, groupId
   'device',          // FK: userId, modelId
   'wallet',          // FK: groupId
+  'pushDevice',      // FK: userId
 
   // Second-level dependencies
   'walletUser',      // FK: walletId, userId
   'walletDevice',    // FK: walletId, deviceId
   'address',         // FK: walletId
   'label',           // FK: walletId
+  'draftTransaction', // FK: walletId, userId
 
   // Third-level dependencies
   'transaction',     // FK: walletId, userId, addressId

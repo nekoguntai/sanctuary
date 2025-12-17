@@ -685,16 +685,20 @@ export const SendTransaction: React.FC = () => {
 
   // Prepare data for transaction flow preview
   const flowPreviewData = useMemo(() => {
+    const estimatedFee = calculateTotalFee();
+
     // Determine which UTXOs will be used as inputs
     let inputUtxos: UTXO[] = [];
     if (showCoinControl && selectedUTXOs.size > 0) {
       inputUtxos = utxos.filter(u => selectedUTXOs.has(`${u.txid}:${u.vout}`));
     } else if (!showCoinControl && spendableUtxos.length > 0) {
       // Estimate: select UTXOs to cover the total amount needed
-      const totalNeeded = outputs.reduce((sum, o) => {
+      // When subtractFees is enabled, fee comes from the amount, not added to it
+      const baseAmount = outputs.reduce((sum, o) => {
         if (o.sendMax) return sum;
         return sum + (parseInt(o.amount) || 0);
-      }, 0) + calculateTotalFee();
+      }, 0);
+      const totalNeeded = subtractFeesFromAmount ? baseAmount : baseAmount + estimatedFee;
 
       const sorted = [...spendableUtxos].sort((a, b) => b.amount - a.amount);
       let running = 0;
@@ -715,23 +719,42 @@ export const SendTransaction: React.FC = () => {
     }));
 
     // Prepare outputs for preview
+    // When subtractFees is enabled, the recipient receives amount - fee
     const flowOutputs: FlowOutput[] = outputs
       .filter(o => o.address && o.address.length > 0)
-      .map((o, idx) => ({
-        address: o.address,
-        amount: o.sendMax ? calculateMaxForOutput(idx) : parseInt(o.amount) || 0,
-        isChange: false,
-        label: undefined,
-      }));
+      .map((o, idx) => {
+        let outputAmount: number;
+        if (o.sendMax) {
+          outputAmount = calculateMaxForOutput(idx);
+        } else {
+          const enteredAmount = parseInt(o.amount) || 0;
+          // If subtracting fees and this is the first (or only) output, subtract fee from it
+          outputAmount = subtractFeesFromAmount && idx === 0 && !isSendMax
+            ? Math.max(0, enteredAmount - estimatedFee)
+            : enteredAmount;
+        }
+        return {
+          address: o.address,
+          amount: outputAmount,
+          isChange: false,
+          label: subtractFeesFromAmount && idx === 0 && !isSendMax && !o.sendMax
+            ? `(fee subtracted)`
+            : undefined,
+        };
+      });
 
     // Calculate totals
     const totalInput = flowInputs.reduce((sum, i) => sum + i.amount, 0);
     const totalOutputAmount = flowOutputs.reduce((sum, o) => sum + o.amount, 0);
-    const estimatedFee = calculateTotalFee();
 
     // Add estimated change output if not sendMax and there's remaining balance
-    if (!isSendMax && totalInput > totalOutputAmount + estimatedFee) {
-      const changeAmount = totalInput - totalOutputAmount - estimatedFee;
+    // When subtractFees is enabled, change = totalInput - original amount (fee already taken from output)
+    if (!isSendMax) {
+      const originalAmount = outputs.reduce((sum, o) => sum + (parseInt(o.amount) || 0), 0);
+      const changeAmount = subtractFeesFromAmount
+        ? totalInput - originalAmount
+        : totalInput - totalOutputAmount - estimatedFee;
+
       if (changeAmount > 546) { // Dust threshold
         flowOutputs.push({
           address: 'Change address',
@@ -741,14 +764,16 @@ export const SendTransaction: React.FC = () => {
       }
     }
 
+    const finalTotalOutput = flowOutputs.reduce((sum, o) => sum + o.amount, 0);
+
     return {
       inputs: flowInputs,
       outputs: flowOutputs,
       fee: estimatedFee,
       totalInput,
-      totalOutput: totalOutputAmount + (flowOutputs.find(o => o.isChange)?.amount || 0),
+      totalOutput: finalTotalOutput,
     };
-  }, [utxos, spendableUtxos, selectedUTXOs, showCoinControl, outputs, calculateMaxForOutput, calculateTotalFee, isSendMax]);
+  }, [utxos, spendableUtxos, selectedUTXOs, showCoinControl, outputs, calculateMaxForOutput, calculateTotalFee, isSendMax, subtractFeesFromAmount]);
 
   // Determine if we should show the flow preview
   const showFlowPreview = useMemo(() => {
@@ -965,13 +990,38 @@ export const SendTransaction: React.FC = () => {
         }
       }
 
-      // If no signing method available, show connection prompt
+      // If no signing method available, try to connect hardware wallet directly
+      // If we know the device type, connect directly instead of showing a picker
+      const singleSigDevice = walletDevices.length > 0 ? walletDevices[0] : null;
+      if (singleSigDevice) {
+        const deviceType = singleSigDevice.type?.toLowerCase() || '';
+        const hwType = deviceType.includes('ledger') ? 'ledger' :
+                       deviceType.includes('trezor') ? 'trezor' :
+                       deviceType.includes('coldcard') ? 'coldcard' :
+                       deviceType.includes('bitbox') ? 'bitbox' :
+                       deviceType.includes('jade') ? 'jade' : null;
+
+        if (hwType) {
+          showInfo(
+            `Connecting to ${singleSigDevice.label || hwType}...`,
+            'Hardware Wallet'
+          );
+          try {
+            await hardwareWallet.connect(hwType);
+            // After connection, retry broadcast automatically
+            // Don't call handleBroadcast recursively - user needs to click again
+            return;
+          } catch (connErr) {
+            log.error('Direct connection failed, showing picker', { error: connErr });
+          }
+        }
+      }
+
+      // Fallback: show connection prompt
       showInfo(
-        `Transaction ready for signing. Amount: ${format(amountSats)}, Fee: ${format(txData.fee)}. Connect a hardware wallet or use PSBT file signing.`,
+        `Transaction ready for signing. Connect a hardware wallet or use PSBT file signing.`,
         'Sign Transaction'
       );
-
-      // Prompt to connect hardware wallet
       setShowHWConnect(true);
 
     } catch (err) {
@@ -1241,6 +1291,83 @@ export const SendTransaction: React.FC = () => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Coin Control Toggle */}
+            <div className="flex items-center justify-between">
+               <button
+                 onClick={() => !isResumingDraft && setShowCoinControl(!showCoinControl)}
+                 disabled={isResumingDraft}
+                 className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
+               >
+                  <Sliders className="w-4 h-4 mr-2" />
+                  {showCoinControl ? 'Hide Coin Control' : 'Coin Control (Auto)'}
+                  {isResumingDraft && showCoinControl && <span className="ml-2 text-xs text-sanctuary-400">(locked)</span>}
+               </button>
+            </div>
+
+            {/* UTXO Selection Table */}
+            {showCoinControl && (
+                <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in ${isResumingDraft ? 'opacity-60' : ''}`}>
+                    <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
+                        <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                          {isResumingDraft ? 'Selected Inputs (locked)' : 'Select Inputs'}
+                        </span>
+                        <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                        {utxos.map(utxo => {
+                            const id = `${utxo.txid}:${utxo.vout}`;
+                            const isSelected = selectedUTXOs.has(id);
+                            const isDisabled = utxo.frozen || isResumingDraft;
+                            // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
+                            const frozenStyle = utxo.frozen ? {
+                              backgroundImage: `repeating-linear-gradient(
+                                45deg,
+                                transparent,
+                                transparent 4px,
+                                rgba(190,18,60,0.08) 4px,
+                                rgba(190,18,60,0.08) 8px
+                              )`
+                            } : {};
+                            return (
+                                <div
+                                    key={id}
+                                    onClick={() => !isDisabled && toggleUTXO(id)}
+                                    style={frozenStyle}
+                                    className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                    <div className="flex items-center space-x-3">
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
+                                            {isSelected && <Check className="w-3 h-3" />}
+                                        </div>
+                                        <div>
+                                            <div className="font-mono text-sm font-medium">{format(utxo.amount)}</div>
+                                            <div className="text-xs text-sanctuary-400 truncate w-48">{utxo.address}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        {utxo.frozen && (
+                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 mb-1 mr-1">
+                                            Frozen
+                                          </span>
+                                        )}
+                                        {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
+                                        <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Warning if insufficient funds selected via coin control (not shown for sendMax) */}
+            {showCoinControl && !isSendMax && selectedTotal < (parseInt(amount || '0') + calculateTotalFee()) && parseInt(amount || '0') > 0 && (
+                 <div className="flex items-center p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-xl">
+                     <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
+                     <span className="text-sm">Selected inputs are insufficient to cover amount + estimated fees.</span>
+                 </div>
             )}
 
             {/* Outputs Section */}
@@ -1518,83 +1645,6 @@ export const SendTransaction: React.FC = () => {
                 </div>
              </div>
         </div>
-
-        {/* Coin Control Toggle */}
-        <div className="flex items-center justify-between">
-           <button
-             onClick={() => !isResumingDraft && setShowCoinControl(!showCoinControl)}
-             disabled={isResumingDraft}
-             className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-           >
-              <Sliders className="w-4 h-4 mr-2" />
-              {showCoinControl ? 'Hide Coin Control' : 'Coin Control (Auto)'}
-              {isResumingDraft && showCoinControl && <span className="ml-2 text-xs text-sanctuary-400">(locked)</span>}
-           </button>
-        </div>
-
-        {/* UTXO Selection Table */}
-        {showCoinControl && (
-            <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in ${isResumingDraft ? 'opacity-60' : ''}`}>
-                <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
-                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                      {isResumingDraft ? 'Selected Inputs (locked)' : 'Select Inputs'}
-                    </span>
-                    <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                    {utxos.map(utxo => {
-                        const id = `${utxo.txid}:${utxo.vout}`;
-                        const isSelected = selectedUTXOs.has(id);
-                        const isDisabled = utxo.frozen || isResumingDraft;
-                        // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
-                        const frozenStyle = utxo.frozen ? {
-                          backgroundImage: `repeating-linear-gradient(
-                            45deg,
-                            transparent,
-                            transparent 4px,
-                            rgba(190,18,60,0.08) 4px,
-                            rgba(190,18,60,0.08) 8px
-                          )`
-                        } : {};
-                        return (
-                            <div
-                                key={id}
-                                onClick={() => !isDisabled && toggleUTXO(id)}
-                                style={frozenStyle}
-                                className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                            >
-                                <div className="flex items-center space-x-3">
-                                    <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
-                                        {isSelected && <Check className="w-3 h-3" />}
-                                    </div>
-                                    <div>
-                                        <div className="font-mono text-sm font-medium">{format(utxo.amount)}</div>
-                                        <div className="text-xs text-sanctuary-400 truncate w-48">{utxo.address}</div>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    {utxo.frozen && (
-                                      <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 mb-1 mr-1">
-                                        Frozen
-                                      </span>
-                                    )}
-                                    {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
-                                    <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        )}
-        
-        {/* Warning if insufficient funds selected via coin control (not shown for sendMax) */}
-        {showCoinControl && !isSendMax && selectedTotal < (parseInt(amount || '0') + calculateTotalFee()) && parseInt(amount || '0') > 0 && (
-             <div className="flex items-center p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-xl">
-                 <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
-                 <span className="text-sm">Selected inputs are insufficient to cover amount + estimated fees.</span>
-             </div>
-        )}
 
         {/* Transaction Flow Preview */}
         {showFlowPreview && (
@@ -2125,6 +2175,35 @@ export const SendTransaction: React.FC = () => {
 
                // Single-sig without connection or signed PSBT - show signing options
                if (isSingleSig && !canBroadcast) {
+                 // Determine device type for direct connection
+                 const getDeviceType = (deviceLabel: string | undefined): 'ledger' | 'trezor' | 'coldcard' | 'bitbox' | 'jade' | 'unknown' => {
+                   if (!deviceLabel) return 'unknown';
+                   const lower = deviceLabel.toLowerCase();
+                   if (lower.includes('ledger')) return 'ledger';
+                   if (lower.includes('trezor')) return 'trezor';
+                   if (lower.includes('coldcard')) return 'coldcard';
+                   if (lower.includes('bitbox')) return 'bitbox';
+                   if (lower.includes('jade')) return 'jade';
+                   return 'unknown';
+                 };
+
+                 const knownDeviceType = getDeviceType(singleSigDevice?.type || singleSigDevice?.label);
+
+                 // Direct USB connection handler - skips device picker if we know the device type
+                 const handleDirectUsbConnect = async () => {
+                   if (knownDeviceType !== 'unknown') {
+                     try {
+                       await hardwareWallet.connect(knownDeviceType);
+                     } catch (err) {
+                       log.error('Hardware wallet connection failed', { error: err });
+                       setError(err instanceof Error ? err.message : 'Failed to connect hardware wallet');
+                     }
+                   } else {
+                     // Fallback to device picker if type is unknown
+                     setShowHWConnect(true);
+                   }
+                 };
+
                  return (
                    <div className="space-y-2">
                      {/* USB connection option - only if device supports USB */}
@@ -2132,11 +2211,20 @@ export const SendTransaction: React.FC = () => {
                        <Button
                          size="lg"
                          className="w-full shadow-lg shadow-sanctuary-900/10 dark:shadow-black/20"
-                         disabled={!allOutputsHaveAddress || hasInvalidAddress}
-                         onClick={() => setShowHWConnect(true)}
+                         disabled={!allOutputsHaveAddress || hasInvalidAddress || hardwareWallet.connecting}
+                         onClick={handleDirectUsbConnect}
                        >
-                         <Usb className="w-5 h-5 mr-2" />
-                         Connect {singleSigDevice?.label || 'Hardware Wallet'} via USB
+                         {hardwareWallet.connecting ? (
+                           <>
+                             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                             Connecting...
+                           </>
+                         ) : (
+                           <>
+                             <Usb className="w-5 h-5 mr-2" />
+                             Connect {singleSigDevice?.label || 'Hardware Wallet'} via USB
+                           </>
+                         )}
                        </Button>
                      )}
 

@@ -448,15 +448,59 @@ export const signPSBT = async (
 
     log.info('Created wallet policy', {
       descriptorTemplate,
-      keyInfoPrefix: keyInfo.substring(0, 30),
+      keyInfo,
     });
 
-    // Parse the PSBT using bitcoinjs-lib
+    // Parse the PSBT using bitcoinjs-lib to inspect and potentially fix it
     const psbt = bitcoin.Psbt.fromBase64(request.psbt);
+    const connectedFpBuffer = Buffer.from(masterFpHex, 'hex');
+
+    // Log PSBT input details and fix fingerprint mismatches
+    let fingerprintMismatchFixed = false;
+    psbt.data.inputs.forEach((input, idx) => {
+      log.info(`PSBT Input ${idx} details`, {
+        hasWitnessUtxo: !!input.witnessUtxo,
+        witnessUtxoValue: input.witnessUtxo?.value,
+        hasNonWitnessUtxo: !!input.nonWitnessUtxo,
+        hasBip32Derivation: !!input.bip32Derivation && input.bip32Derivation.length > 0,
+        bip32DerivationCount: input.bip32Derivation?.length || 0,
+      });
+
+      // Log and fix bip32Derivation details if present
+      if (input.bip32Derivation && input.bip32Derivation.length > 0) {
+        input.bip32Derivation.forEach((deriv, dIdx) => {
+          const fpHex = deriv.masterFingerprint.toString('hex');
+          const matches = fpHex.toLowerCase() === masterFpHex.toLowerCase();
+          log.info(`  Derivation ${dIdx}`, {
+            masterFingerprint: fpHex,
+            connectedFingerprint: masterFpHex,
+            pubkey: deriv.pubkey.toString('hex').substring(0, 20) + '...',
+            path: deriv.path,
+            fingerprintMatches: matches,
+          });
+
+          // If fingerprint doesn't match, update it to use connected device's fingerprint
+          // This handles the case where the stored fingerprint differs from the connected device
+          if (!matches) {
+            log.warn(`Updating fingerprint from ${fpHex} to ${masterFpHex} for input ${idx}`);
+            deriv.masterFingerprint = connectedFpBuffer;
+            fingerprintMismatchFixed = true;
+          }
+        });
+      }
+    });
+
+    if (fingerprintMismatchFixed) {
+      log.info('Fixed fingerprint mismatches in PSBT bip32Derivation');
+    }
+
+    // Use the potentially updated PSBT
+    const updatedPsbtBase64 = psbt.toBase64();
 
     // Sign the PSBT using ledger-bitcoin
     // DefaultWalletPolicy doesn't require registration, so walletHMAC is null
-    const signatures = await appClient.signPsbt(request.psbt, walletPolicy, null);
+    log.info('Calling appClient.signPsbt...');
+    const signatures = await appClient.signPsbt(updatedPsbtBase64, walletPolicy, null);
 
     log.info('Got signatures from device', {
       signatureCount: signatures.length,

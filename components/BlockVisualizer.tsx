@@ -285,10 +285,10 @@ const PendingTxDot: React.FC<{
   const [showTooltip, setShowTooltip] = useState(false);
   const isSent = tx.type === 'sent';
 
-  // Colors: rose for sent, green for received
+  // Colors: rose for sent, muted red/coral for received
   const dotColor = isSent
     ? 'bg-rose-500 dark:bg-rose-400'
-    : 'bg-emerald-500 dark:bg-emerald-400';
+    : 'bg-red-400/80 dark:bg-red-400/70';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();

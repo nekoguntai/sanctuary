@@ -48,6 +48,12 @@ description: >-
   - Any device that supports PSBT (BIP-174)
 
 
+  **Note for Umbrel users:** Only air-gapped wallets using PSBT files will work.
+  WebUSB (used for direct Ledger connections) requires HTTPS, which is not
+  available to Umbrel containers. Use the PSBT workflow instead: export transactions
+  to your hardware wallet via SD card or QR code.
+
+
   Sanctuary never sees, stores, or transmits private keys. Your keys stay on
   your hardware wallet where they belong.
 developer: Sanctuary

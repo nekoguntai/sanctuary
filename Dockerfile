@@ -1,12 +1,13 @@
 # =============================================
 # Sanctuary Frontend - Multi-stage Dockerfile
+# Optimized for fast builds with better layer caching
 # =============================================
 
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy package files
+# Copy package files first (best cache layer)
 COPY package*.json ./
 
 # Install dependencies
@@ -20,7 +21,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
 
-# Copy source code
+# Copy source files (server/ excluded via .dockerignore)
 COPY . .
 
 # Build argument for API URL (can be overridden at build time)

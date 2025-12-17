@@ -423,11 +423,15 @@ function getAccountPath(
 
   // Try to detect from xpub prefix
   if (xpub.startsWith('xpub')) {
-    // Could be legacy or nested segwit
-    if (scriptType === 'nested_segwit') {
+    // xpub can be used for any script type - use scriptType to determine path
+    if (scriptType === 'native_segwit') {
+      return `m/84'/${coinType}'/0'`; // BIP84 - native segwit
+    } else if (scriptType === 'nested_segwit') {
       return `m/49'/${coinType}'/0'`; // BIP49
+    } else if (scriptType === 'taproot') {
+      return `m/86'/${coinType}'/0'`; // BIP86
     } else {
-      return `m/44'/${coinType}'/0'`; // BIP44
+      return `m/44'/${coinType}'/0'`; // BIP44 - legacy
     }
   } else if (xpub.startsWith('ypub')) {
     return `m/49'/${coinType}'/0'`; // BIP49 - nested segwit

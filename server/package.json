@@ -25,9 +25,7 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.7.0",
-    "@types/bcrypt": "^6.0.0",
     "axios": "^1.6.2",
-    "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "bip32": "^4.0.0",
     "bip39": "^3.1.0",

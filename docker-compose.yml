@@ -51,6 +51,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: sanctuary-backend:local
     container_name: sanctuary-backend
     restart: unless-stopped
     depends_on:
@@ -99,13 +100,14 @@ services:
 
   # ============================================
   # Database Migrations & Seeding (one-time run)
+  # Uses the same image as backend (no rebuild)
   # ============================================
   migrate:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: sanctuary-backend:local
     container_name: sanctuary-migrate
     depends_on:
+      backend:
+        condition: service_started
       postgres:
         condition: service_healthy
     environment:

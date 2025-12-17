@@ -547,8 +547,15 @@ export async function broadcastAndSave(
   // Parse signed PSBT
   const psbt = bitcoin.Psbt.fromBase64(signedPsbtBase64);
 
-  // Finalize and extract transaction
-  psbt.finalizeAllInputs();
+  // Check if all inputs are already finalized (e.g., from hardware wallet signing)
+  const allFinalized = psbt.data.inputs.every(
+    (input) => input.finalScriptSig || input.finalScriptWitness
+  );
+
+  // Only finalize if not already finalized
+  if (!allFinalized) {
+    psbt.finalizeAllInputs();
+  }
   const tx = psbt.extractTransaction();
   const rawTx = tx.toHex();
   const txid = tx.getId();
@@ -575,12 +582,20 @@ export async function broadcastAndSave(
     });
   }
 
+  // Check if recipient is a wallet address (consolidation) or external (sent)
+  const isConsolidation = await prisma.address.findFirst({
+    where: {
+      walletId,
+      address: metadata.recipient,
+    },
+  });
+
   // Save transaction to database
   await prisma.transaction.create({
     data: {
       txid,
       walletId,
-      type: 'sent',
+      type: isConsolidation ? 'consolidation' : 'sent',
       amount: BigInt(metadata.amount),
       fee: BigInt(metadata.fee),
       confirmations: 0,

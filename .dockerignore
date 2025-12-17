@@ -45,3 +45,9 @@ Thumbs.db
 
 # Umbrel package (not needed in container)
 sanctuary/
+
+# Backend server (built separately)
+server/
+
+# Docker compose files
+docker-compose*.yml

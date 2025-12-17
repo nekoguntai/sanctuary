@@ -1,15 +1,16 @@
 # =============================================
 # Sanctuary Backend - Multi-stage Dockerfile
+# Optimized for fast builds with bcryptjs (no native deps)
 # =============================================
 
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install dependencies needed for native modules (bcrypt) and OpenSSL for Prisma
-RUN apk add --no-cache python3 make g++ openssl
+# Only openssl needed for Prisma (no python/make/g++ since bcryptjs is pure JS)
+RUN apk add --no-cache openssl
 
-# Copy package files
+# Copy package files first (better layer caching)
 COPY package*.json ./
 COPY prisma ./prisma/
 
@@ -26,15 +27,21 @@ WORKDIR /app
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
+COPY --from=deps /app/prisma ./prisma
 
-# Copy source code
-COPY . .
+# Copy only source files needed for build (better cache invalidation)
+COPY tsconfig.json ./
+COPY src ./src
 
 # Build TypeScript (main app)
 RUN npm run build
 
 # Compile seed script separately
+COPY prisma/seed.ts ./prisma/
 RUN npx tsc prisma/seed.ts --outDir dist/prisma --esModuleInterop --skipLibCheck --resolveJsonModule
+
+# Prune dev dependencies for production
+RUN npm prune --production
 
 # Stage 3: Production
 FROM node:20-alpine AS runner
@@ -51,7 +58,7 @@ RUN adduser --system --uid 1001 sanctuary
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Copy necessary files from builder
+# Copy only necessary files from builder (already pruned)
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./

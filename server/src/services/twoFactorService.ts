@@ -1,6 +1,6 @@
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
 // Configure TOTP settings

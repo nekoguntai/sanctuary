@@ -1975,6 +1975,31 @@ export const WalletDetail: React.FC = () => {
                    <dt className="text-sm font-medium text-sanctuary-500">Type</dt>
                    <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.type}</dd>
                  </div>
+                 <div>
+                   <dt className="text-sm font-medium text-sanctuary-500">Script Type</dt>
+                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">
+                     {wallet.scriptType === 'native_segwit' && 'Native SegWit (BIP84)'}
+                     {wallet.scriptType === 'nested_segwit' && 'Nested SegWit (BIP49)'}
+                     {wallet.scriptType === 'taproot' && 'Taproot (BIP86)'}
+                     {wallet.scriptType === 'legacy' && 'Legacy (BIP44)'}
+                     {!wallet.scriptType && 'Unknown'}
+                   </dd>
+                 </div>
+                 {wallet.descriptor && (
+                   <div>
+                     <dt className="text-sm font-medium text-sanctuary-500">Derivation Path</dt>
+                     <dd className="mt-1 text-sm font-mono text-sanctuary-900 dark:text-sanctuary-100">
+                       {(() => {
+                         // Extract path from descriptor like wpkh([fingerprint/84'/0'/0']xpub...)
+                         const match = wallet.descriptor.match(/\[([a-fA-F0-9]+)\/([^\]]+)\]/);
+                         if (match) {
+                           return `m/${match[2].replace(/h/g, "'")}`;
+                         }
+                         return wallet.derivationPath || 'Unknown';
+                       })()}
+                     </dd>
+                   </div>
+                 )}
                  {wallet.quorum && (
                     <div>
                         <dt className="text-sm font-medium text-sanctuary-500">Quorum</dt>

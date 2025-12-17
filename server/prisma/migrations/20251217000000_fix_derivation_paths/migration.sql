@@ -3,27 +3,29 @@
 --
 -- Root cause: getAccountPath() was returning m/44'/... for xpub-prefix keys
 -- regardless of the actual scriptType (native_segwit should use 84', etc.)
+--
+-- Note: Prisma uses lowercase table names (addresses, wallets)
 
 -- Fix native_segwit wallets: 44' -> 84'
-UPDATE "Address"
+UPDATE addresses
 SET "derivationPath" = REPLACE("derivationPath", '44''', '84''')
 WHERE "walletId" IN (
-  SELECT id FROM "Wallet" WHERE "scriptType" = 'native_segwit'
+  SELECT id FROM wallets WHERE "scriptType" = 'native_segwit'
 )
 AND "derivationPath" LIKE 'm/44''/%';
 
 -- Fix nested_segwit wallets: 44' -> 49'
-UPDATE "Address"
+UPDATE addresses
 SET "derivationPath" = REPLACE("derivationPath", '44''', '49''')
 WHERE "walletId" IN (
-  SELECT id FROM "Wallet" WHERE "scriptType" = 'nested_segwit'
+  SELECT id FROM wallets WHERE "scriptType" = 'nested_segwit'
 )
 AND "derivationPath" LIKE 'm/44''/%';
 
 -- Fix taproot wallets: 44' -> 86'
-UPDATE "Address"
+UPDATE addresses
 SET "derivationPath" = REPLACE("derivationPath", '44''', '86''')
 WHERE "walletId" IN (
-  SELECT id FROM "Wallet" WHERE "scriptType" = 'taproot'
+  SELECT id FROM wallets WHERE "scriptType" = 'taproot'
 )
 AND "derivationPath" LIKE 'm/44''/%';

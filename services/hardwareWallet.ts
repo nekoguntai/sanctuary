@@ -201,7 +201,11 @@ export const connectDevice = async (deviceId?: string): Promise<HardwareWalletDe
     let fingerprint: string | undefined;
     try {
       // Type assertion needed - library returns object with xpub and fingerprint
-      const result = await (app as any).getWalletXpub({ path: "m/84'/0'/0'" }) as { xpub: string; masterFingerprint?: number };
+      // Use zpub version (0x04b24746) for BIP84 native segwit path
+      const result = await (app as any).getWalletXpub({
+        path: "m/84'/0'/0'",
+        xpubVersion: 0x04b24746,  // zpub for native segwit
+      }) as { xpub: string; masterFingerprint?: number };
       fingerprint = result.masterFingerprint?.toString(16).padStart(8, '0');
     } catch (error) {
       log.warn('Could not get fingerprint - Bitcoin app may not be open', { error });
@@ -248,6 +252,35 @@ export const disconnectDevice = async (): Promise<void> => {
   }
 };
 
+// xpub version bytes for different address types
+const XPUB_VERSIONS = {
+  // Mainnet
+  xpub: 0x0488b21e,  // P2PKH (Legacy) - BIP44
+  ypub: 0x049d7cb2,  // P2SH-P2WPKH (Nested SegWit) - BIP49
+  zpub: 0x04b24746,  // P2WPKH (Native SegWit) - BIP84
+  // Testnet
+  tpub: 0x043587cf,  // P2PKH (Legacy) - BIP44 testnet
+  upub: 0x044a5262,  // P2SH-P2WPKH (Nested SegWit) - BIP49 testnet
+  vpub: 0x045f1cf6,  // P2WPKH (Native SegWit) - BIP84 testnet
+};
+
+/**
+ * Get the appropriate xpub version based on derivation path
+ */
+const getXpubVersionForPath = (path: string): number => {
+  // Check if testnet (coin type 1)
+  const isTestnet = path.includes("/1'/") || path.includes("/1h/");
+
+  if (path.includes("/84'") || path.includes("/84h")) {
+    return isTestnet ? XPUB_VERSIONS.vpub : XPUB_VERSIONS.zpub;
+  }
+  if (path.includes("/49'") || path.includes("/49h")) {
+    return isTestnet ? XPUB_VERSIONS.upub : XPUB_VERSIONS.ypub;
+  }
+  // Default to legacy xpub/tpub for BIP44 or unknown
+  return isTestnet ? XPUB_VERSIONS.tpub : XPUB_VERSIONS.xpub;
+};
+
 /**
  * Get extended public key from the connected device
  */
@@ -257,8 +290,14 @@ export const getXpub = async (path: string): Promise<XpubResult> => {
   }
 
   try {
+    const xpubVersion = getXpubVersionForPath(path);
+
     // Type assertion needed - library returns object with xpub and fingerprint
-    const result = await (activeConnection.app as any).getWalletXpub({ path }) as { xpub: string; masterFingerprint?: number };
+    const result = await (activeConnection.app as any).getWalletXpub({
+      path,
+      xpubVersion,
+    }) as { xpub: string; masterFingerprint?: number };
+
     return {
       xpub: result.xpub,
       fingerprint: result.masterFingerprint?.toString(16).padStart(8, '0') || '',

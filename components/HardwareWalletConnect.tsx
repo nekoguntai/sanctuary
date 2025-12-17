@@ -18,6 +18,7 @@ interface DeviceOption {
   description: string;
   icon: string;
   color: string;
+  usesBridge?: boolean; // True if device uses bridge mode (works without HTTPS)
 }
 
 const deviceOptions: DeviceOption[] = [
@@ -38,9 +39,10 @@ const deviceOptions: DeviceOption[] = [
   {
     type: 'trezor',
     name: 'Trezor',
-    description: 'One, Model T, Safe 3',
+    description: 'One, Model T, Safe 3/5/7',
     icon: '🔐',
     color: 'emerald',
+    usesBridge: true, // Trezor uses Suite bridge, works without HTTPS
   },
   {
     type: 'bitbox',
@@ -116,12 +118,12 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-100 mb-1">
-                USB Connection Unavailable
+                Limited USB Support
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                WebUSB requires HTTPS to function. This page is not served over HTTPS, so direct USB
-                connections to hardware wallets are not available. Use the PSBT workflow instead:
-                export transactions to your hardware wallet via SD card or QR code.
+                WebUSB requires HTTPS for most devices. <span className="font-medium">Trezor devices work</span> via
+                Trezor Suite bridge (requires Trezor Suite desktop app). For other devices, use the PSBT workflow:
+                export transactions via SD card or QR code.
               </p>
             </div>
           </div>
@@ -143,33 +145,46 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
         {/* Device Grid */}
         <div className="p-6 overflow-y-auto max-h-[60vh]">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {deviceOptions.map((deviceOption) => (
-              <button
-                key={deviceOption.type}
-                onClick={() => handleDeviceClick(deviceOption.type)}
-                disabled={connecting || !isSupported}
-                className={`
-                  p-6 rounded-xl border-2 transition-all text-left
-                  ${
-                    connecting
-                      ? 'border-sanctuary-300 dark:border-sanctuary-700 opacity-50 cursor-not-allowed'
-                      : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-primary-500 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
-                  }
-                  ${!isSupported ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="text-4xl">{deviceOption.icon}</div>
-                  {connecting && (
-                    <Loader2 className="w-5 h-5 text-sanctuary-400 animate-spin" />
+            {deviceOptions.map((deviceOption) => {
+              // Trezor uses bridge mode (via Trezor Suite) so it works without HTTPS
+              const deviceEnabled = isSupported || deviceOption.usesBridge;
+
+              return (
+                <button
+                  key={deviceOption.type}
+                  onClick={() => handleDeviceClick(deviceOption.type)}
+                  disabled={connecting || !deviceEnabled}
+                  className={`
+                    p-6 rounded-xl border-2 transition-all text-left
+                    ${
+                      connecting
+                        ? 'border-sanctuary-300 dark:border-sanctuary-700 opacity-50 cursor-not-allowed'
+                        : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-primary-500 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
+                    }
+                    ${!deviceEnabled ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="text-4xl">{deviceOption.icon}</div>
+                    {connecting && (
+                      <Loader2 className="w-5 h-5 text-sanctuary-400 animate-spin" />
+                    )}
+                    {deviceOption.usesBridge && !isSupported && (
+                      <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full">
+                        Bridge
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-50 mb-1">
+                    {deviceOption.name}
+                  </h3>
+                  <p className="text-sm text-sanctuary-500">{deviceOption.description}</p>
+                  {deviceOption.usesBridge && (
+                    <p className="text-xs text-sanctuary-400 mt-1">Requires Trezor Suite</p>
                   )}
-                </div>
-                <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-50 mb-1">
-                  {deviceOption.name}
-                </h3>
-                <p className="text-sm text-sanctuary-500">{deviceOption.description}</p>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
 
           {/* Info Box */}
@@ -189,24 +204,18 @@ export const HardwareWalletConnect: React.FC<HardwareWalletConnectProps> = ({
             </div>
           </div>
 
-          {/* Demo Mode Notice */}
-          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-500/20 rounded-xl">
+          {/* Trezor Info */}
+          <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/20 rounded-xl">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-                  Demo Mode Active
+                <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100 mb-1">
+                  Trezor Suite Bridge
                 </p>
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  This is a demonstration of the hardware wallet connection flow. In production, this would:
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  Trezor devices connect via Trezor Suite desktop app, which must be running.
+                  This provides full support for all Trezor models including Safe 7.
                 </p>
-                <ul className="mt-2 text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                  <li>• Detect actual USB devices via WebUSB/WebHID</li>
-                  <li>• Communicate with device firmware</li>
-                  <li>• Display transaction details on device screen</li>
-                  <li>• Require physical button confirmation</li>
-                  <li>• Return cryptographically signed transaction</li>
-                </ul>
               </div>
             </div>
           </div>

@@ -22,6 +22,7 @@ import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { AppNotificationProvider } from './contexts/AppNotificationContext';
+import { SidebarProvider } from './contexts/SidebarContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
 import { QueryProvider } from './providers/QueryProvider';
@@ -76,7 +77,9 @@ const App: React.FC = () => {
           <CurrencyProvider>
             <NotificationProvider>
               <AppNotificationProvider>
-                <AppRoutes />
+                <SidebarProvider>
+                  <AppRoutes />
+                </SidebarProvider>
               </AppNotificationProvider>
             </NotificationProvider>
           </CurrencyProvider>

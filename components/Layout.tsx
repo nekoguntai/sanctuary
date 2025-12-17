@@ -32,6 +32,7 @@ import { version } from '../package.json';
 import { NotificationBell } from './NotificationPanel';
 import { NotificationBadge } from './NotificationBadge';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
+import { useSidebar } from '../contexts/SidebarContext';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Layout');
@@ -127,6 +128,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { getWalletCount, getDeviceCount, addNotification, removeNotificationsByType } = useAppNotifications();
+  const { refreshKey } = useSidebar();
 
   // Auto-expand sections based on current route
   const getExpandedState = (pathname: string) => {
@@ -196,7 +198,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
       }
     };
     fetchData();
-  }, [user]);
+  }, [user, refreshKey]);
 
   // Check Electrum/Bitcoin connection status periodically
   useEffect(() => {

@@ -8,12 +8,14 @@ import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
 import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { createLogger } from '../utils/logger';
+import { useSidebar } from '../contexts/SidebarContext';
 
 const log = createLogger('CreateWallet');
 
 export const CreateWallet: React.FC = () => {
   const navigate = useNavigate();
   const { handleError } = useErrorHandler();
+  const { refreshSidebar } = useSidebar();
   const [step, setStep] = useState(1);
   const [availableDevices, setAvailableDevices] = useState<Device[]>([]);
   
@@ -91,6 +93,9 @@ export const CreateWallet: React.FC = () => {
         totalSigners: walletType === WalletType.MULTI_SIG ? selectedDeviceIds.size : undefined,
         deviceIds: Array.from(selectedDeviceIds),
       });
+
+      // Refresh sidebar to show new wallet
+      refreshSidebar();
 
       // Navigate to wallet detail page
       navigate(`/wallets/${created.id}`);

@@ -9,11 +9,488 @@
 import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
 import AppBtc from '@ledgerhq/hw-app-btc';
 import { AppClient, DefaultWalletPolicy, PsbtV2 } from 'ledger-bitcoin';
+import TrezorConnect, { DEVICE_EVENT, DEVICE } from '@trezor/connect-web';
 import * as bitcoin from 'bitcoinjs-lib';
 import apiClient from '../src/api/client';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('HardwareWallet');
+
+// =============================================================================
+// TREZOR INTEGRATION (Bridge Mode - supports Safe 7 and all Trezor devices)
+// =============================================================================
+
+interface TrezorConnection {
+  initialized: boolean;
+  connected: boolean;
+  deviceId?: string;
+  fingerprint?: string;
+  model?: string;
+  label?: string;
+}
+
+let trezorConnection: TrezorConnection = {
+  initialized: false,
+  connected: false,
+};
+
+/**
+ * Initialize Trezor Connect with bridge mode configuration
+ * Bridge mode uses Trezor Suite desktop app for communication
+ * This is required for Safe 7 and provides better stability for all devices
+ */
+export const initializeTrezor = async (): Promise<void> => {
+  if (trezorConnection.initialized) {
+    log.info('Trezor already initialized');
+    return;
+  }
+
+  try {
+    await TrezorConnect.init({
+      manifest: {
+        email: 'support@sanctuary.bitcoin',
+        appUrl: window.location.origin || 'https://sanctuary.bitcoin',
+        // appName is REQUIRED for the new Trezor Suite flow (Safe 7)
+        appName: 'Sanctuary',
+      },
+      // Use auto mode - TrezorConnect will detect Trezor Suite's WebSocket
+      // and route requests through it (required for Safe 7)
+      coreMode: 'auto',
+      debug: true, // Enable debug to see what's happening
+      lazyLoad: false,
+    });
+
+    trezorConnection.initialized = true;
+    log.info('Trezor Connect initialized with bridge mode');
+  } catch (error) {
+    log.error('Failed to initialize Trezor Connect', { error });
+    throw new Error('Failed to initialize Trezor. Please ensure Trezor Suite is running.');
+  }
+};
+
+/**
+ * Connect to a Trezor device via Trezor Suite bridge
+ */
+export const connectTrezorDevice = async (): Promise<HardwareWalletDevice> => {
+  if (!trezorConnection.initialized) {
+    await initializeTrezor();
+  }
+
+  try {
+    log.info('Requesting Trezor device features...');
+
+    // Get device features to verify connection and get fingerprint
+    const result = await TrezorConnect.getFeatures();
+
+    log.info('Trezor getFeatures response', {
+      success: result.success,
+      payload: result.success ? 'features received' : result.payload
+    });
+
+    if (!result.success) {
+      const errorPayload = result.payload as { error?: string; code?: string };
+      log.error('Trezor getFeatures failed', { payload: errorPayload });
+      throw new Error(errorPayload.error || 'Failed to connect to Trezor');
+    }
+
+    const features = result.payload;
+
+    // Get master fingerprint
+    let fingerprint: string | undefined;
+    try {
+      const fpResult = await TrezorConnect.getPublicKey({
+        path: "m/0'",
+        showOnTrezor: false,
+      });
+      if (fpResult.success) {
+        fingerprint = fpResult.payload.fingerprint?.toString(16).padStart(8, '0');
+      }
+    } catch {
+      log.warn('Could not get fingerprint from Trezor');
+    }
+
+    // Determine model name
+    let modelName = 'Trezor';
+    if (features.model === 'T') {
+      modelName = 'Trezor Model T';
+    } else if (features.model === '1') {
+      modelName = 'Trezor Model One';
+    } else if (features.internal_model === 'T2B1') {
+      modelName = 'Trezor Safe 3';
+    } else if (features.internal_model === 'T3T1') {
+      modelName = 'Trezor Safe 5';
+    } else if (features.internal_model === 'T3W1') {
+      modelName = 'Trezor Safe 7';
+    }
+
+    trezorConnection = {
+      initialized: true,
+      connected: true,
+      deviceId: features.device_id || undefined,
+      fingerprint,
+      model: modelName,
+      label: features.label || undefined,
+    };
+
+    log.info('Trezor connected', {
+      model: modelName,
+      label: features.label,
+      fingerprint,
+    });
+
+    return {
+      id: `trezor-${features.device_id || 'unknown'}`,
+      type: 'trezor',
+      name: features.label || modelName,
+      model: modelName,
+      connected: true,
+      fingerprint,
+      needsPin: features.pin_protection && !features.unlocked,
+      needsPassphrase: features.passphrase_protection,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Failed to connect Trezor', { error: message });
+
+    if (message.includes('Popup closed') || message.includes('cancelled')) {
+      throw new Error('Connection cancelled by user');
+    }
+    if (message.includes('Device not found') || message.includes('no device')) {
+      throw new Error('No Trezor device found. Please connect your device and ensure Trezor Suite is running.');
+    }
+    if (message.includes('Bridge not running')) {
+      throw new Error('Trezor Suite bridge not running. Please open Trezor Suite desktop app.');
+    }
+
+    throw new Error(`Failed to connect Trezor: ${message}`);
+  }
+};
+
+/**
+ * Get extended public key from Trezor
+ */
+export const getTrezorXpub = async (path: string): Promise<XpubResult> => {
+  if (!trezorConnection.connected) {
+    throw new Error('Trezor not connected');
+  }
+
+  try {
+    // Determine coin type for proper xpub format
+    const isTestnet = path.includes("/1'/") || path.includes("/1h/");
+
+    const result = await TrezorConnect.getPublicKey({
+      path,
+      showOnTrezor: false,
+      coin: isTestnet ? 'Testnet' : 'Bitcoin',
+    });
+
+    if (!result.success) {
+      throw new Error(result.payload.error || 'Failed to get public key');
+    }
+
+    const { xpub, fingerprint } = result.payload;
+    const fpHex = fingerprint?.toString(16).padStart(8, '0') || trezorConnection.fingerprint || '';
+
+    log.info('Got Trezor xpub', {
+      path,
+      xpubPrefix: xpub.substring(0, 15),
+      fingerprint: fpHex,
+    });
+
+    return {
+      xpub,
+      fingerprint: fpHex,
+      path,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('cancelled') || message.includes('Cancelled')) {
+      throw new Error('Request cancelled on device');
+    }
+
+    throw new Error(`Failed to get xpub from Trezor: ${message}`);
+  }
+};
+
+/**
+ * Determine Trezor script type from BIP path
+ */
+const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' => {
+  if (path.startsWith("m/44'") || path.startsWith("44'")) {
+    return 'SPENDADDRESS'; // Legacy P2PKH
+  }
+  if (path.startsWith("m/49'") || path.startsWith("49'")) {
+    return 'SPENDP2SHWITNESS'; // Nested SegWit P2SH-P2WPKH
+  }
+  if (path.startsWith("m/84'") || path.startsWith("84'")) {
+    return 'SPENDWITNESS'; // Native SegWit P2WPKH
+  }
+  if (path.startsWith("m/86'") || path.startsWith("86'")) {
+    return 'SPENDTAPROOT'; // Taproot P2TR
+  }
+  return 'SPENDWITNESS'; // Default to native segwit
+};
+
+/**
+ * Convert path string to Trezor address_n array
+ */
+const pathToAddressN = (path: string): number[] => {
+  return path
+    .replace(/^m\//, '')
+    .split('/')
+    .map(part => {
+      const hardened = part.endsWith("'") || part.endsWith('h');
+      const index = parseInt(part.replace(/['h]/g, ''), 10);
+      return hardened ? index + 0x80000000 : index;
+    });
+};
+
+/**
+ * Fetch reference transactions needed for Trezor signing
+ */
+const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
+  const refTxs: any[] = [];
+  const seenTxids = new Set<string>();
+
+  for (const input of psbt.data.inputs) {
+    // Get the previous transaction ID from the unsigned tx
+    const txInput = psbt.txInputs[psbt.data.inputs.indexOf(input)];
+    const txid = Buffer.from(txInput.hash).reverse().toString('hex');
+
+    if (seenTxids.has(txid)) continue;
+    seenTxids.add(txid);
+
+    try {
+      // Fetch the raw transaction from backend
+      const response = await apiClient.get<{ hex: string }>(`/transactions/${txid}/raw`);
+      const rawTx = bitcoin.Transaction.fromHex(response.hex);
+
+      // Convert to Trezor RefTransaction format
+      const refTx = {
+        hash: txid,
+        version: rawTx.version,
+        lock_time: rawTx.locktime,
+        inputs: rawTx.ins.map(input => ({
+          prev_hash: Buffer.from(input.hash).reverse().toString('hex'),
+          prev_index: input.index,
+          script_sig: input.script.toString('hex'),
+          sequence: input.sequence,
+        })),
+        bin_outputs: rawTx.outs.map(output => ({
+          amount: output.value,
+          script_pubkey: output.script.toString('hex'),
+        })),
+      };
+
+      refTxs.push(refTx);
+    } catch (error) {
+      log.warn('Failed to fetch reference transaction', { txid, error });
+      // Continue without this ref tx - Trezor may still work for SegWit inputs
+    }
+  }
+
+  return refTxs;
+};
+
+/**
+ * Sign a PSBT with Trezor
+ */
+export const signPSBTWithTrezor = async (
+  request: PSBTSignRequest
+): Promise<PSBTSignResponse> => {
+  if (!trezorConnection.connected) {
+    throw new Error('Trezor not connected');
+  }
+
+  log.info('Trezor signPSBT called', {
+    psbtLength: request.psbt.length,
+    inputPathsCount: request.inputPaths?.length || 0,
+  });
+
+  try {
+    const psbt = bitcoin.Psbt.fromBase64(request.psbt);
+
+    // Determine script type from first input path or account path
+    let scriptType: 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' = 'SPENDWITNESS';
+    if (request.accountPath) {
+      scriptType = getTrezorScriptType(request.accountPath);
+    } else if (request.inputPaths && request.inputPaths.length > 0) {
+      scriptType = getTrezorScriptType(request.inputPaths[0]);
+    }
+
+    // Determine coin based on path
+    const isTestnet = (request.accountPath || request.inputPaths?.[0] || '').includes("/1'/");
+    const coin = isTestnet ? 'Testnet' : 'Bitcoin';
+
+    // Build Trezor inputs
+    const inputs = psbt.data.inputs.map((input, idx) => {
+      // Get derivation path
+      let addressN: number[] = [];
+      if (input.bip32Derivation && input.bip32Derivation.length > 0) {
+        addressN = pathToAddressN(input.bip32Derivation[0].path);
+      } else if (request.inputPaths && request.inputPaths[idx]) {
+        addressN = pathToAddressN(request.inputPaths[idx]);
+      }
+
+      const txInput = psbt.txInputs[idx];
+      const prevHash = Buffer.from(txInput.hash).reverse().toString('hex');
+
+      const trezorInput: any = {
+        address_n: addressN,
+        prev_hash: prevHash,
+        prev_index: txInput.index,
+        sequence: txInput.sequence,
+        script_type: scriptType,
+      };
+
+      // Add amount for SegWit inputs
+      if (input.witnessUtxo) {
+        trezorInput.amount = input.witnessUtxo.value.toString();
+      }
+
+      return trezorInput;
+    });
+
+    // Build Trezor outputs
+    const outputs = psbt.txOutputs.map((output, idx) => {
+      // Check if this is a change output (has bip32Derivation in output)
+      const psbtOutput = psbt.data.outputs[idx];
+      const isChange = request.changeOutputs?.includes(idx) ||
+        (psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0);
+
+      if (isChange && psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0) {
+        // Change output - use address_n
+        const outputScriptType = scriptType === 'SPENDADDRESS' ? 'PAYTOADDRESS' :
+          scriptType === 'SPENDP2SHWITNESS' ? 'PAYTOP2SHWITNESS' :
+          scriptType === 'SPENDTAPROOT' ? 'PAYTOTAPROOT' : 'PAYTOWITNESS';
+
+        return {
+          address_n: pathToAddressN(psbtOutput.bip32Derivation[0].path),
+          amount: output.value.toString(),
+          script_type: outputScriptType,
+        };
+      } else {
+        // External output - use address
+        const address = bitcoin.address.fromOutputScript(
+          output.script,
+          isTestnet ? bitcoin.networks.testnet : bitcoin.networks.bitcoin
+        );
+
+        return {
+          address,
+          amount: output.value.toString(),
+          script_type: 'PAYTOADDRESS',
+        };
+      }
+    });
+
+    // Fetch reference transactions (needed for legacy inputs, optional for SegWit)
+    const refTxs = await fetchRefTxs(psbt);
+
+    log.info('Calling TrezorConnect.signTransaction', {
+      inputCount: inputs.length,
+      outputCount: outputs.length,
+      refTxCount: refTxs.length,
+      coin,
+    });
+
+    // Sign with Trezor
+    const result = await TrezorConnect.signTransaction({
+      inputs,
+      outputs,
+      refTxs: refTxs.length > 0 ? refTxs : undefined,
+      coin,
+      push: false,
+    });
+
+    if (!result.success) {
+      throw new Error(result.payload.error || 'Signing failed');
+    }
+
+    log.info('Trezor signing successful', {
+      signedTxLength: result.payload.serializedTx?.length,
+    });
+
+    // Trezor returns the fully signed transaction hex
+    // We need to create a new PSBT with the final transaction
+    const signedTx = bitcoin.Transaction.fromHex(result.payload.serializedTx);
+
+    // Apply signatures back to PSBT
+    psbt.data.inputs.forEach((input, idx) => {
+      const txInput = signedTx.ins[idx];
+      if (txInput.witness && txInput.witness.length > 0) {
+        psbt.updateInput(idx, {
+          finalScriptWitness: bitcoin.script.compile(txInput.witness),
+        });
+      }
+      if (txInput.script && txInput.script.length > 0) {
+        psbt.updateInput(idx, {
+          finalScriptSig: txInput.script,
+        });
+      }
+    });
+
+    // Finalize
+    try {
+      psbt.finalizeAllInputs();
+    } catch {
+      // Already finalized by Trezor
+    }
+
+    return {
+      psbt: psbt.toBase64(),
+      signatures: inputs.length,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Trezor signing failed', { error: message });
+
+    if (message.includes('Cancelled') || message.includes('cancelled') || message.includes('rejected')) {
+      throw new Error('Transaction rejected on Trezor. Please approve the transaction on your device.');
+    }
+    if (message.includes('PIN')) {
+      throw new Error('Incorrect PIN. Please try again.');
+    }
+    if (message.includes('Passphrase')) {
+      throw new Error('Passphrase entry cancelled.');
+    }
+    if (message.includes('Device disconnected') || message.includes('no device')) {
+      throw new Error('Trezor disconnected. Please reconnect and try again.');
+    }
+
+    throw new Error(`Failed to sign with Trezor: ${message}`);
+  }
+};
+
+/**
+ * Disconnect Trezor
+ */
+export const disconnectTrezor = async (): Promise<void> => {
+  trezorConnection = {
+    initialized: trezorConnection.initialized,
+    connected: false,
+  };
+  log.info('Trezor disconnected');
+};
+
+/**
+ * Check if Trezor is connected
+ */
+export const isTrezorConnected = (): boolean => {
+  return trezorConnection.connected;
+};
+
+/**
+ * Get Trezor connection state
+ */
+export const getTrezorConnection = (): TrezorConnection => {
+  return { ...trezorConnection };
+};
+
+// =============================================================================
+// LEDGER INTEGRATION (WebUSB)
+// =============================================================================
 
 export type DeviceType = 'coldcard' | 'ledger' | 'trezor' | 'bitbox' | 'passport' | 'jade' | 'unknown';
 
@@ -683,14 +1160,23 @@ export const broadcastSignedPSBT = async (
 
 /**
  * Hardware Wallet Service Class
+ *
+ * Supports both Ledger (WebUSB) and Trezor (Suite Bridge) devices.
+ * Automatically routes operations to the correct device implementation.
  */
 export class HardwareWalletService {
   private connectedDevice: HardwareWalletDevice | null = null;
 
   /**
-   * Check if WebUSB is supported
+   * Check if hardware wallet is supported
+   * @param type Optional device type - Trezor uses bridge (always works), Ledger needs WebUSB
    */
-  isSupported(): boolean {
+  isSupported(type?: DeviceType): boolean {
+    if (type === 'trezor') {
+      // Trezor uses bridge mode - works on any browser with Trezor Suite running
+      return true;
+    }
+    // Ledger requires WebUSB
     return isHardwareWalletSupported();
   }
 
@@ -698,6 +1184,9 @@ export class HardwareWalletService {
    * Check if a device is connected
    */
   isConnected(): boolean {
+    if (this.connectedDevice?.type === 'trezor') {
+      return isTrezorConnected();
+    }
     return this.connectedDevice !== null && this.connectedDevice.connected;
   }
 
@@ -709,7 +1198,7 @@ export class HardwareWalletService {
   }
 
   /**
-   * Get all authorized devices
+   * Get all authorized devices (Ledger only - Trezor doesn't persist authorization)
    */
   async getDevices(): Promise<HardwareWalletDevice[]> {
     return getConnectedDevices();
@@ -717,9 +1206,16 @@ export class HardwareWalletService {
 
   /**
    * Request permission and connect to a device
-   * @param type Optional device type filter (currently unused but reserved for future use)
+   * @param type Device type - 'trezor' uses Trezor Suite bridge, others use WebUSB
    */
-  async connect(_type?: DeviceType): Promise<HardwareWalletDevice> {
+  async connect(type?: DeviceType): Promise<HardwareWalletDevice> {
+    if (type === 'trezor') {
+      // Connect via Trezor Suite bridge
+      this.connectedDevice = await connectTrezorDevice();
+      return this.connectedDevice;
+    }
+
+    // Default to Ledger WebUSB flow
     // First request permission
     const device = await requestDevice();
     if (!device) {
@@ -732,7 +1228,16 @@ export class HardwareWalletService {
   }
 
   /**
-   * Connect to an already authorized device
+   * Connect to Trezor device specifically
+   * Uses Trezor Suite bridge for Safe 7 compatibility
+   */
+  async connectTrezor(): Promise<HardwareWalletDevice> {
+    this.connectedDevice = await connectTrezorDevice();
+    return this.connectedDevice;
+  }
+
+  /**
+   * Connect to an already authorized Ledger device
    */
   async connectAuthorized(): Promise<HardwareWalletDevice> {
     this.connectedDevice = await connectDevice();
@@ -743,14 +1248,22 @@ export class HardwareWalletService {
    * Disconnect from the device
    */
   async disconnect(): Promise<void> {
-    await disconnectDevice();
+    if (this.connectedDevice?.type === 'trezor') {
+      await disconnectTrezor();
+    } else {
+      await disconnectDevice();
+    }
     this.connectedDevice = null;
   }
 
   /**
    * Get xpub from device
+   * Routes to Trezor or Ledger based on connected device
    */
   async getXpub(path: string): Promise<XpubResult> {
+    if (this.connectedDevice?.type === 'trezor') {
+      return getTrezorXpub(path);
+    }
     return getXpub(path);
   }
 
@@ -758,13 +1271,18 @@ export class HardwareWalletService {
    * Verify address on device
    */
   async verifyAddress(path: string, address: string): Promise<boolean> {
+    // TODO: Add Trezor address verification
     return verifyAddress(path, address);
   }
 
   /**
    * Sign a PSBT
+   * Routes to Trezor or Ledger based on connected device
    */
   async signPSBT(request: PSBTSignRequest): Promise<PSBTSignResponse> {
+    if (this.connectedDevice?.type === 'trezor') {
+      return signPSBTWithTrezor(request);
+    }
     return signPSBT(request);
   }
 
@@ -779,8 +1297,8 @@ export class HardwareWalletService {
     // Create PSBT
     const { psbt, inputPaths } = await createPSBTForSigning(tx);
 
-    // Sign
-    const signed = await signPSBT({ psbt, inputPaths });
+    // Sign (will route to correct device)
+    const signed = await this.signPSBT({ psbt, inputPaths });
 
     // Broadcast
     const result = await broadcastSignedPSBT(tx.walletId, signed.psbt);

@@ -22,9 +22,38 @@ import {
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
-import { isSecureContext, hardwareWalletService } from '../services/hardwareWallet';
+import { isSecureContext, hardwareWalletService, DeviceType } from '../services/hardwareWallet';
+import { useSidebar } from '../contexts/SidebarContext';
 
 const log = createLogger('ConnectDevice');
+
+/**
+ * Determine the hardware wallet device type from model name/manufacturer
+ */
+const getDeviceTypeFromModel = (model: HardwareDeviceModel): DeviceType => {
+  const name = model.name.toLowerCase();
+  const manufacturer = model.manufacturer.toLowerCase();
+
+  if (manufacturer === 'trezor' || name.includes('trezor')) {
+    return 'trezor';
+  }
+  if (manufacturer === 'ledger' || name.includes('ledger')) {
+    return 'ledger';
+  }
+  if (manufacturer === 'coldcard' || name.includes('coldcard')) {
+    return 'coldcard';
+  }
+  if (manufacturer === 'bitbox' || name.includes('bitbox')) {
+    return 'bitbox';
+  }
+  if (manufacturer === 'foundation' || name.includes('passport')) {
+    return 'passport';
+  }
+  if (manufacturer === 'blockstream' || name.includes('jade')) {
+    return 'jade';
+  }
+  return 'unknown';
+};
 
 type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'manual';
 
@@ -38,6 +67,7 @@ const connectivityConfig: Record<string, { icon: React.FC<{ className?: string }
 
 export const ConnectDevice: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshSidebar } = useSidebar();
 
   // Device models from database
   const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
@@ -99,11 +129,15 @@ export const ConnectDevice: React.FC = () => {
     if (!selectedModel) return [];
     const methods: ConnectionMethod[] = [];
 
+    // Check if this is a Trezor device (uses bridge mode, doesn't require HTTPS)
+    const isTrezor = getDeviceTypeFromModel(selectedModel) === 'trezor';
+
     // Add methods based on device connectivity, plus always allow manual
     selectedModel.connectivity.forEach(conn => {
       if (conn in connectivityConfig) {
         // Filter out USB if not in secure context (HTTPS required for WebUSB)
-        if (conn === 'usb' && !isSecureContext()) {
+        // Exception: Trezor uses bridge mode which works without HTTPS
+        if (conn === 'usb' && !isSecureContext() && !isTrezor) {
           return;
         }
         methods.push(conn as ConnectionMethod);
@@ -117,12 +151,23 @@ export const ConnectDevice: React.FC = () => {
   };
 
   const handleScan = async () => {
+    if (!selectedModel) return;
+
     setScanning(true);
     setError(null);
 
     try {
-      // Connect to the hardware wallet via USB
-      const device = await hardwareWalletService.connect();
+      // Determine device type from selected model
+      const deviceType = getDeviceTypeFromModel(selectedModel);
+
+      log.info('Connecting to device', {
+        model: selectedModel.name,
+        deviceType,
+      });
+
+      // Connect to the hardware wallet
+      // Trezor uses Suite bridge, others use WebUSB
+      const device = await hardwareWalletService.connect(deviceType);
 
       if (!device || !device.connected) {
         throw new Error('Failed to connect to device');
@@ -138,6 +183,7 @@ export const ConnectDevice: React.FC = () => {
       log.info('Device connected successfully', {
         fingerprint: xpubResult.fingerprint,
         path: xpubResult.path,
+        deviceType,
       });
     } catch (err) {
       log.error('Failed to connect to device', { error: err });
@@ -380,6 +426,8 @@ export const ConnectDevice: React.FC = () => {
         modelSlug: selectedModel.slug
       };
       await createDevice(deviceData);
+      // Refresh sidebar to show new device
+      refreshSidebar();
       navigate('/devices');
     } catch (err) {
       log.error('Failed to save device', { error: err });
@@ -632,9 +680,15 @@ export const ConnectDevice: React.FC = () => {
                           <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-2">
                             Connect your {selectedModel.name} via USB and unlock it.
                           </p>
-                          <p className="text-xs text-sanctuary-400 mb-4">
-                            Make sure the Bitcoin app is open on your device.
-                          </p>
+                          {getDeviceTypeFromModel(selectedModel) === 'trezor' ? (
+                            <p className="text-xs text-sanctuary-400 mb-4">
+                              Requires <span className="font-medium">Trezor Suite</span> desktop app to be running.
+                            </p>
+                          ) : (
+                            <p className="text-xs text-sanctuary-400 mb-4">
+                              Make sure the Bitcoin app is open on your device.
+                            </p>
+                          )}
                           <Button onClick={handleScan}>
                             Connect Device
                           </Button>

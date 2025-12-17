@@ -198,6 +198,8 @@ jobs:
 
           ## Umbrel Installation
 
+          > ⚠️ **Limited Functionality:** Umbrel serves apps over HTTP (not HTTPS), which means **WebUSB hardware wallet connections will not work**. You can still use Sanctuary on Umbrel for importing wallets via descriptors, viewing balances/history, and creating unsigned PSBTs for air-gapped signing. For full hardware wallet USB support, use the Quick Install method above.
+
           1. Open the App Store in your Umbrel
           2. Click the ... menu in the upper right
           3. Select Community App Stores

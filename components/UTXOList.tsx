@@ -56,12 +56,13 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       return 'bg-sanctuary-700 border-sanctuary-700'; // Ancient
   };
 
-  const getSizeClass = (amount: number) => {
-      const ratio = amount / maxAmount;
-      if (ratio < 0.05) return 'w-8 h-8';
-      if (ratio < 0.2) return 'w-12 h-12';
-      if (ratio < 0.5) return 'w-16 h-16';
-      return 'w-24 h-24';
+  // Calculate proportional size using square root scaling (area proportional to amount)
+  const MIN_SIZE = 14; // Minimum size in pixels
+  const MAX_SIZE = 48; // Maximum size in pixels
+  const getSize = (amount: number) => {
+      // Use square root so circle AREA is proportional to amount (more perceptually accurate)
+      const ratio = Math.sqrt(amount / maxAmount);
+      return Math.round(MIN_SIZE + ratio * (MAX_SIZE - MIN_SIZE));
   };
 
   return (
@@ -82,13 +83,12 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       </div>
 
       {/* Visualization Section - Always Visible */}
-      <div className="surface-elevated rounded-2xl p-6 border border-sanctuary-200 dark:border-sanctuary-800 min-h-[160px]">
-        <div className="flex flex-wrap gap-4 items-center justify-center">
+      <div className="surface-elevated rounded-xl p-3 border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="flex flex-wrap gap-1.5 items-center justify-start">
             {utxos.map((utxo) => {
                 const id = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selectedUtxos.has(id);
                 const colorClass = utxo.frozen ? '' : getAgeColor(utxo.date);
-                const sizeClass = getSizeClass(utxo.amount);
 
                 // Red striped pattern for frozen UTXOs - matches the row list styling
                 // Using zen-vermilion color (#e05a47)
@@ -102,33 +102,37 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                   )`
                 } : {};
 
+                const size = getSize(utxo.amount);
                 return (
                     <div
                         key={id}
                         onClick={() => !utxo.frozen && onToggleSelect && onToggleSelect(id)}
-                        style={frozenStyle}
+                        style={{
+                            width: size,
+                            height: size,
+                            ...frozenStyle
+                        }}
                         className={`
-                            relative rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 hover:scale-110
-                            ${sizeClass}
+                            relative rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-125 hover:z-10
                             ${utxo.frozen ? 'cursor-not-allowed' : ''}
-                            ${isSelected ? 'ring-4 ring-offset-2 ring-sanctuary-400 dark:ring-offset-sanctuary-900' : ''}
-                            ${colorClass} text-white shadow-lg
+                            ${isSelected ? 'ring-2 ring-offset-1 ring-sanctuary-400 dark:ring-offset-sanctuary-900' : ''}
+                            ${colorClass} text-white shadow-md
                         `}
                         title={`${format(utxo.amount)} - ${utxo.label || 'No Label'} ${utxo.frozen ? '(Frozen)' : ''}`}
                     >
-                       <span className="text-[10px] font-bold opacity-0 hover:opacity-100 transition-opacity absolute bg-black/80 text-white px-2 py-1 rounded whitespace-nowrap -top-8 z-10 pointer-events-none">
+                       <span className="text-[9px] font-bold opacity-0 hover:opacity-100 transition-opacity absolute bg-black/80 text-white px-1.5 py-0.5 rounded whitespace-nowrap -top-6 z-20 pointer-events-none">
                           {format(utxo.amount)}
                        </span>
                     </div>
                 );
             })}
         </div>
-        <div className="mt-8 flex justify-center space-x-4 text-xs text-sanctuary-500">
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-zen-matcha mr-1"></span> Fresh</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-zen-indigo mr-1"></span> &lt; 1mo</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-zen-gold mr-1"></span> &lt; 1yr</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-sanctuary-700 mr-1"></span> Ancient</div>
-            <div className="flex items-center ml-4 border-l border-sanctuary-200 dark:border-sanctuary-700 pl-4"><span className="w-3 h-3 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #e05a47, #e05a47 2px, #c44a3a 2px, #c44a3a 4px)'}}></span> Frozen</div>
+        <div className="mt-3 pt-2 border-t border-sanctuary-100 dark:border-sanctuary-800 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-sanctuary-500">
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-matcha mr-1"></span>Fresh</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-indigo mr-1"></span>&lt;1mo</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-gold mr-1"></span>&lt;1yr</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-sanctuary-700 mr-1"></span>Ancient</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #e05a47, #e05a47 2px, #c44a3a 2px, #c44a3a 4px)'}}></span>Frozen</div>
         </div>
       </div>
 

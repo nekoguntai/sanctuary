@@ -478,10 +478,13 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
     prevBlocksRef.current = newBlocks;
   }, [blocks]);
 
-  const handleBlockClick = useCallback((block: BlockData) => {
-    // Open in explorer for confirmed blocks
+  const handleBlockClick = useCallback((block: BlockData, pendingIndex?: number) => {
+    // Open in explorer
     if (block.status === 'confirmed' && typeof block.height === 'number') {
       window.open(`${explorerUrl}/block/${block.height}`, '_blank');
+    } else if (block.status === 'pending' && pendingIndex !== undefined) {
+      // For pending blocks, link to mempool-block view (mempool.space compatible)
+      window.open(`${explorerUrl}/mempool-block/${pendingIndex}`, '_blank');
     }
     // Call callback for fee selection
     if (onBlockClick) {
@@ -606,19 +609,23 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
             )}
 
             {/* Pending/Mempool blocks */}
-            {pendingBlocks.map((block, idx) => (
-              <Block
-                key={`pending-${block.height}-${idx}`}
-                block={block}
-                index={idx}
-                onClick={() => handleBlockClick(block)}
-                compact={compact}
-                isAnimating={isAnimating && newBlockDetected}
-                animationDirection="none"
-                pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length, pendingBlocks)}
-                explorerUrl={explorerUrl}
-              />
-            ))}
+            {pendingBlocks.map((block, idx) => {
+              // Mempool-block index: rightmost (closest to confirmed) = 0, leftmost = highest
+              const mempoolBlockIndex = pendingBlocks.length - 1 - idx;
+              return (
+                <Block
+                  key={`pending-${block.height}-${idx}`}
+                  block={block}
+                  index={idx}
+                  onClick={() => handleBlockClick(block, mempoolBlockIndex)}
+                  compact={compact}
+                  isAnimating={isAnimating && newBlockDetected}
+                  animationDirection="none"
+                  pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length, pendingBlocks)}
+                  explorerUrl={explorerUrl}
+                />
+              );
+            })}
 
             {/* Confirmed blocks */}
             {confirmedBlocks.map((block, idx) => (

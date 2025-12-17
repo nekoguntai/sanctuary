@@ -136,7 +136,9 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     if (useSats) {
       return `${sats.toLocaleString()} sats`;
     } else {
-      return `${(sats / 100_000_000).toFixed(8)} BTC`;
+      // Trim trailing zeros from BTC display
+      const btcValue = (sats / 100_000_000).toFixed(8).replace(/\.?0+$/, '');
+      return `${btcValue} BTC`;
     }
   };
 

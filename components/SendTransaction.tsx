@@ -130,8 +130,29 @@ export const SendTransaction: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { format, getFiatValue, currencySymbol } = useCurrency();
+  const { format, getFiatValue, currencySymbol, unit } = useCurrency();
   const { user } = useUser();
+
+  // Unit conversion helpers - amounts are stored internally as sats
+  const satsToDisplay = (sats: number | string): string => {
+    const satsNum = typeof sats === 'string' ? parseInt(sats) || 0 : sats;
+    if (unit === 'btc') {
+      // Trim trailing zeros from BTC display
+      return satsNum > 0 ? (satsNum / 100_000_000).toFixed(8).replace(/\.?0+$/, '') : '';
+    }
+    return satsNum > 0 ? satsNum.toString() : '';
+  };
+
+  const displayToSats = (display: string): string => {
+    if (!display || display === '') return '';
+    if (unit === 'btc') {
+      const btcNum = parseFloat(display) || 0;
+      return Math.round(btcNum * 100_000_000).toString();
+    }
+    return display;
+  };
+
+  const unitLabel = unit === 'btc' ? 'BTC' : 'SATS';
   const { handleError, showSuccess, showInfo } = useErrorHandler();
 
   // Hardware wallet integration
@@ -1489,9 +1510,10 @@ export const SendTransaction: React.FC = () => {
                     <div className="flex-1 relative">
                       <input
                         type="number"
-                        value={output.sendMax ? calculateMaxForOutput(index).toString() : output.amount}
+                        step={unit === 'btc' ? '0.00000001' : '1'}
+                        value={output.sendMax ? satsToDisplay(calculateMaxForOutput(index)) : satsToDisplay(output.amount)}
                         onChange={(e) => {
-                          updateOutput(index, 'amount', e.target.value);
+                          updateOutput(index, 'amount', displayToSats(e.target.value));
                           if (output.sendMax) updateOutput(index, 'sendMax', false);
                         }}
                         placeholder="0"
@@ -1514,7 +1536,7 @@ export const SendTransaction: React.FC = () => {
                             MAX
                           </button>
                         )}
-                        <span className="pointer-events-none">SATS</span>
+                        <span className="pointer-events-none">{unitLabel}</span>
                       </div>
                     </div>
                     {!isResumingDraft && (
@@ -1615,33 +1637,33 @@ export const SendTransaction: React.FC = () => {
                 </div>
              </div>
 
-             <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+             <div className="surface-elevated p-3 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
+                <div className="flex flex-wrap items-center gap-2">
                     {[
-                        { label: 'High Priority', rate: fees?.fastestFee, time: '~10 mins' },
-                        { label: 'Standard', rate: fees?.halfHourFee, time: '~30 mins' },
-                        { label: 'Economy', rate: fees?.hourFee, time: '~1 hour' },
+                        { label: 'High Priority', rate: fees?.fastestFee, time: '~10m' },
+                        { label: 'Standard', rate: fees?.halfHourFee, time: '~30m' },
+                        { label: 'Economy', rate: fees?.hourFee, time: '~1hr' },
                     ].map((opt) => (
-                        <div
+                        <button
                            key={opt.label}
                            onClick={() => !isResumingDraft && setFeeRate(opt.rate || 1)}
-                           className={`p-4 rounded-xl border transition-all ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 surface-secondary' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'} ${isResumingDraft ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                           className={`px-3 py-2 rounded-lg border transition-all text-left ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 bg-sanctuary-100 dark:bg-sanctuary-800' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'} ${isResumingDraft ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                         >
-                            <div className="font-medium text-sm">{opt.label}</div>
-                            <div className="text-2xl font-bold my-1">{opt.rate} <span className="text-xs font-normal text-sanctuary-500">sat/vB</span></div>
-                            <div className="text-xs text-sanctuary-400">{opt.time}</div>
-                        </div>
+                            <div className="text-xs text-sanctuary-500">{opt.label}</div>
+                            <div className="text-sm font-semibold">{opt.rate} <span className="text-[10px] font-normal text-sanctuary-400">sat/vB</span></div>
+                        </button>
                     ))}
-                </div>
-                <div className="pt-4 mt-2 border-t border-sanctuary-100 dark:border-sanctuary-800">
-                    <label className="text-xs font-medium text-sanctuary-500 uppercase">Custom Fee Rate</label>
-                    <input
-                       type="number"
-                       value={feeRate}
-                       onChange={(e) => !isResumingDraft && setFeeRate(parseInt(e.target.value))}
-                       disabled={isResumingDraft}
-                       className={`mt-1 block w-32 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${isResumingDraft ? 'cursor-not-allowed' : ''}`}
-                    />
+                    <div className="flex items-center gap-2 ml-auto">
+                        <label className="text-xs text-sanctuary-500">Custom:</label>
+                        <input
+                           type="number"
+                           value={feeRate}
+                           onChange={(e) => !isResumingDraft && setFeeRate(parseInt(e.target.value))}
+                           disabled={isResumingDraft}
+                           className={`w-20 px-2 py-1.5 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${isResumingDraft ? 'cursor-not-allowed' : ''}`}
+                        />
+                        <span className="text-xs text-sanctuary-400">sat/vB</span>
+                    </div>
                 </div>
              </div>
         </div>

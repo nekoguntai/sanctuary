@@ -11,7 +11,7 @@ import type { ThemeDefinition } from '../types';
 
 export const sunriseTheme: ThemeDefinition = {
   id: 'sunrise',
-  name: 'Sun/Rise/Set',
+  name: 'Sun+rise/set',
   author: 'Sanctuary Wallet Team',
   version: '1.0.0',
   description: 'Sunrise warmth in light mode, pastel sunset serenity in dark mode',

@@ -47,6 +47,7 @@
   - [First Run](#first-run)
   - [Importing a Wallet](#importing-a-wallet)
   - [Creating Transactions](#creating-transactions)
+  - [Bumping Fees (RBF)](#bumping-fees-rbf)
   - [User Roles & Permissions](#user-roles--permissions)
   - [Admin Settings](#admin-settings)
   - [Two-Factor Authentication](#two-factor-authentication)
@@ -170,6 +171,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Address management** — Receive/change address tracking with labels
 - **UTXO control** — Coin selection for privacy-conscious transactions
 - **Transaction building** — Create PSBTs for hardware wallet signing
+- **Replace-By-Fee (RBF)** — Bump fees on pending transactions to speed up confirmation
 - **Multi-user access** — Share wallet visibility with family or team members
 - **Role-based permissions** — Fine-grained access control (owner, signer, viewer)
 - **Group permissions** — Organize users into groups with shared wallet access
@@ -746,10 +748,30 @@ Sanctuary supports multiple import methods:
 1. Go to a wallet and click **Send**
 2. Enter recipient address and amount
 3. Select fee rate and optionally choose specific UTXOs
+   - Click on blocks in the mempool visualizer to populate the fee rate
+   - Fee rates support decimals as low as 0.1 sat/vB
 4. Review the transaction details
 5. Click **Sign with Hardware Wallet**
 6. Confirm on your hardware device
 7. Broadcast the signed transaction
+
+### Bumping Fees (RBF)
+
+If a transaction is stuck in the mempool, you can bump the fee using Replace-By-Fee:
+
+1. Go to the wallet's **Transactions** tab
+2. Click on a pending (unconfirmed) transaction
+3. In the transaction details modal, click **Bump Fee (RBF)**
+4. Enter a new fee rate (must be higher than the current rate)
+5. Click **Bump Fee** to create a replacement transaction
+6. Sign with your hardware wallet and broadcast
+
+**Requirements:**
+- Transaction must have RBF enabled (sequence number < 0xfffffffe)
+- You must be the sender (can't bump received transactions)
+- New fee rate must be at least 1 sat/vB higher than the current rate
+
+**Note:** RBF creates a new transaction that replaces the original. Only one will confirm.
 
 ### User Roles & Permissions
 

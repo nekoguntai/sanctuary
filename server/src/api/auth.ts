@@ -163,8 +163,10 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
           priceProvider: 'auto',
           notificationSounds: {
             enabled: true,
-            confirmationChime: true,
             volume: 50,
+            confirmation: { enabled: true, sound: 'chime' },
+            receive: { enabled: true, sound: 'coin' },
+            send: { enabled: true, sound: 'success' },
           },
         },
       },
@@ -393,8 +395,10 @@ router.patch('/me/preferences', authenticate, async (req: Request, res: Response
       priceProvider: 'auto',
       notificationSounds: {
         enabled: true,
-        confirmationChime: true,
         volume: 50,
+        confirmation: { enabled: true, sound: 'chime' },
+        receive: { enabled: true, sound: 'coin' },
+        send: { enabled: true, sound: 'success' },
       },
     };
 

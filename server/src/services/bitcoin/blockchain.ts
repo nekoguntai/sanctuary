@@ -633,6 +633,21 @@ export async function syncWallet(walletId: string): Promise<{
       log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
     });
 
+    // Broadcast WebSocket events for real-time frontend notifications and sounds
+    const { getNotificationService } = await import('../../websocket/notifications');
+    const notificationService = getNotificationService();
+    for (const tx of uniqueTxArray) {
+      notificationService.broadcastTransactionNotification({
+        txid: tx.txid,
+        walletId,
+        type: tx.type === 'received' ? 'received' : 'sent',
+        amount: Number(tx.amount),
+        confirmations: tx.confirmations || 0,
+        blockHeight: tx.blockHeight ?? undefined,
+        timestamp: tx.blockTime || new Date(),
+      });
+    }
+
     // PHASE 5.5: Auto-apply address labels to new transactions
     // When an address has labels, new transactions at that address inherit them
     try {

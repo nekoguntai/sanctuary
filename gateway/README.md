@@ -165,10 +165,14 @@ WebSocket client that connects to the backend to receive transaction events.
 
 ### With Docker Compose
 
+The gateway is included in the main `docker-compose.yml` and starts automatically:
+
 ```bash
 # From project root
-docker compose -f docker-compose.yml -f docker-compose.gateway.yml up -d
+docker compose up -d
 ```
+
+The gateway will be available at `http://localhost:4000` (or your configured `GATEWAY_PORT`).
 
 ### For Development
 

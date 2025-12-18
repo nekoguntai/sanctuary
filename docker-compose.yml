@@ -14,10 +14,15 @@
 #   - HTTP_PORT: HTTP redirect port (default: 80)
 #   - JWT_SECRET: Required for authentication (must be set)
 #   - LOG_LEVEL: Logging verbosity - debug, info, warn, error (default: info)
+#   - GATEWAY_PORT: Mobile API gateway port (default: 4000)
 #
 # SSL Certificates:
 #   Self-signed certs are in ./docker/nginx/ssl/
 #   For production, replace with real certificates.
+#
+# Mobile App Gateway:
+#   The gateway container provides API access for iOS/Android apps.
+#   It runs on port 4000 by default. See gateway/README.md for details.
 #
 # =============================================
 
@@ -149,6 +154,67 @@ services:
       - ./docker/nginx/ssl:/etc/nginx/ssl:ro
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "--no-check-certificate", "https://localhost:443/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sanctuary-network
+
+  # ============================================
+  # Mobile API Gateway
+  # ============================================
+  # Public-facing gateway for mobile app access.
+  # Handles authentication, rate limiting, and proxying to backend.
+  # Push notifications via FCM (Android) and APNs (iOS).
+  #
+  # To enable push notifications, set these environment variables:
+  #   - FCM_ENABLED=true + mount fcm-service-account.json
+  #   - APNS_ENABLED=true + mount apns-key.p8 + set APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
+  # ============================================
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: sanctuary-gateway:local
+    container_name: sanctuary-gateway
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+
+      # Backend connection (internal)
+      BACKEND_URL: http://backend:3001
+      BACKEND_WS_URL: ws://backend:3001
+
+      # JWT (must match backend)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+
+      # Rate limiting
+      RATE_LIMIT_WINDOW_MS: ${GATEWAY_RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${GATEWAY_RATE_LIMIT_MAX:-60}
+
+      # Firebase Cloud Messaging (Android) - disabled by default
+      FCM_ENABLED: ${FCM_ENABLED:-false}
+
+      # Apple Push Notification Service (iOS) - disabled by default
+      APNS_ENABLED: ${APNS_ENABLED:-false}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
+    ports:
+      - "${GATEWAY_PORT:-4000}:4000"
+    volumes:
+      # Mount FCM service account (optional) - create this file from Firebase Console
+      - ${FCM_SERVICE_ACCOUNT:-/dev/null}:/app/config/fcm-service-account.json:ro
+      # Mount APNs key (optional) - create this file from Apple Developer Portal
+      - ${APNS_KEY_FILE:-/dev/null}:/app/config/apns-key.p8:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

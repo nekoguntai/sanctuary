@@ -89,7 +89,7 @@ async function getDevicesForUser(userId: string): Promise<DeviceInfo[]> {
       return [];
     }
 
-    return await response.json();
+    return (await response.json()) as DeviceInfo[];
   } catch (err) {
     log.error('Error fetching devices', { error: (err as Error).message });
     return [];

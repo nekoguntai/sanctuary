@@ -12,7 +12,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
-import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
+import { checkWalletAccess, checkWalletEditAccess, checkWalletAccessWithRole } from '../services/wallet';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('LABELS');
@@ -182,17 +182,15 @@ router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => 
       });
     }
 
-    // Check edit access (owner or signer only)
-    const canEdit = await checkWalletEditAccess(walletId, userId);
+    // Check access and edit permission in a single query
+    const { hasAccess, canEdit } = await checkWalletAccessWithRole(walletId, userId);
+    if (!hasAccess) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
     if (!canEdit) {
-      // Check if user has read access to give appropriate error
-      const hasAccess = await checkWalletAccess(walletId, userId);
-      if (!hasAccess) {
-        return res.status(404).json({
-          error: 'Not Found',
-          message: 'Wallet not found',
-        });
-      }
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You do not have permission to edit this wallet',

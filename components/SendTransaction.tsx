@@ -1211,7 +1211,10 @@ export const SendTransaction: React.FC = () => {
         </button>
 
         <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">Send Bitcoin</h1>
+            <div>
+                <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">Send Bitcoin</h1>
+                <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 mt-1">From: {wallet.name}</p>
+            </div>
             <div className="text-right">
                 <div className="text-sm text-sanctuary-500">Available Balance</div>
                 <Amount sats={wallet.balance} size="lg" className="font-medium text-sanctuary-900 dark:text-sanctuary-100 items-end" />

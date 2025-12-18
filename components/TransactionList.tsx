@@ -4,7 +4,8 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
-import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2, TrendingUp } from 'lucide-react';
+import { TransactionActions } from './TransactionActions';
 import { LabelBadges } from './LabelSelector';
 import { createLogger } from '../utils/logger';
 
@@ -387,6 +388,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         View on Block Explorer
                      </a>
                   </div>
+
+                  {/* Transaction Actions (RBF/CPFP) for pending transactions */}
+                  {selectedTx.confirmations === 0 && (
+                    <TransactionActions
+                      txid={selectedTx.txid}
+                      walletId={selectedTx.walletId}
+                      confirmed={false}
+                      isReceived={selectedTx.amount > 0}
+                      onActionComplete={() => {
+                        setSelectedTx(null);
+                        onLabelsChange?.();
+                      }}
+                    />
+                  )}
 
                   {/* Transaction Details Grid */}
                   <div className="space-y-4">

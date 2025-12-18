@@ -44,7 +44,7 @@ export interface DeviceResolution {
 export interface ImportValidationResult {
   valid: boolean;
   error?: string;
-  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
+  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text' | 'coldcard';
   walletType: 'single_sig' | 'multi_sig';
   scriptType: ScriptType;
   network: Network;

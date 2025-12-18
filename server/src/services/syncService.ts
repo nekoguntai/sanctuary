@@ -529,7 +529,8 @@ class SyncService {
         : 'Sync started');
 
       // Get previous balance for comparison
-      const previousBalance = await this.getWalletBalance(walletId);
+      const previousBalances = await this.getWalletBalance(walletId);
+      const previousTotal = previousBalances.confirmed + previousBalances.unconfirmed;
 
       // Execute the sync with a timeout to prevent hanging
       const result = await withTimeout(
@@ -545,8 +546,9 @@ class SyncService {
         walletLog(walletId, 'info', 'SYNC', `Populated details for ${populatedCount} transactions`);
       }
 
-      // Get new balance
-      const newBalance = await this.getWalletBalance(walletId);
+      // Get new balance (confirmed and unconfirmed)
+      const newBalances = await this.getWalletBalance(walletId);
+      const newTotal = newBalances.confirmed + newBalances.unconfirmed;
 
       // Update sync metadata
       await prisma.wallet.update({
@@ -574,14 +576,14 @@ class SyncService {
         lastSyncedAt: new Date(),
       });
 
-      // Notify via WebSocket if balance changed
-      if (newBalance !== previousBalance) {
+      // Notify via WebSocket if balance changed (confirmed or unconfirmed)
+      if (newTotal !== previousTotal || newBalances.unconfirmed !== previousBalances.unconfirmed) {
         notificationService.broadcastBalanceUpdate({
           walletId,
-          balance: newBalance,
-          unconfirmed: 0, // TODO: Calculate unconfirmed
-          previousBalance,
-          change: newBalance - previousBalance,
+          balance: newBalances.confirmed,
+          unconfirmed: newBalances.unconfirmed,
+          previousBalance: previousBalances.confirmed,
+          change: newBalances.confirmed - previousBalances.confirmed,
         });
       }
 
@@ -686,20 +688,38 @@ class SyncService {
   }
 
   /**
-   * Get wallet balance from UTXOs
+   * Get wallet balance from UTXOs, separated into confirmed and unconfirmed
    */
-  private async getWalletBalance(walletId: string): Promise<number> {
-    const result = await prisma.uTXO.aggregate({
-      where: {
-        walletId,
-        spent: false,
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+  private async getWalletBalance(walletId: string): Promise<{ confirmed: number; unconfirmed: number }> {
+    const [confirmedResult, unconfirmedResult] = await Promise.all([
+      // Confirmed: UTXOs with a block height
+      prisma.uTXO.aggregate({
+        where: {
+          walletId,
+          spent: false,
+          blockHeight: { not: null },
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      // Unconfirmed: UTXOs without a block height (still in mempool)
+      prisma.uTXO.aggregate({
+        where: {
+          walletId,
+          spent: false,
+          blockHeight: null,
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+    ]);
 
-    return Number(result._sum.amount || 0);
+    return {
+      confirmed: Number(confirmedResult._sum.amount || 0),
+      unconfirmed: Number(unconfirmedResult._sum.amount || 0),
+    };
   }
 
   /**

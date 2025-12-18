@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount, RegistryTypes } from '@keystonehq/bc-ur-registry';
 import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel } from '../src/api/devices';
 import { Button } from './ui/Button';
 import {
@@ -100,6 +101,8 @@ export const ConnectDevice: React.FC = () => {
   const [qrMode, setQrMode] = useState<'camera' | 'file'>('camera');
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [urProgress, setUrProgress] = useState<number>(0); // Progress for multi-part UR codes
+  const urDecoderRef = useRef<URRegistryDecoder | null>(null);
 
   // Fetch device models on mount
   useEffect(() => {
@@ -130,6 +133,8 @@ export const ConnectDevice: React.FC = () => {
     setCameraActive(false);
     setCameraError(null);
     setQrMode('camera');
+    setUrProgress(0);
+    urDecoderRef.current = null;
     if (selectedModel) {
       setLabel(`My ${selectedModel.name}`);
     }
@@ -422,15 +427,163 @@ export const ConnectDevice: React.FC = () => {
   };
 
   /**
+   * Try to extract xpub data from UR registry result
+   */
+  const extractFromUrResult = (registryType: any): { xpub: string; fingerprint: string; path: string } | null => {
+    try {
+      // Handle CryptoHDKey
+      if (registryType instanceof CryptoHDKey) {
+        const hdKey = registryType as CryptoHDKey;
+        const xpub = hdKey.getBip32Key();
+        const origin = hdKey.getOrigin();
+        const fingerprint = origin?.getSourceFingerprint()?.toString('hex') || '';
+        const pathComponents = origin?.getComponents() || [];
+        const path = pathComponents.length > 0
+          ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+          : '';
+        return { xpub, fingerprint, path };
+      }
+
+      // Handle CryptoOutput (output descriptor)
+      if (registryType instanceof CryptoOutput) {
+        const output = registryType as CryptoOutput;
+        const hdKey = output.getHDKey();
+        if (hdKey) {
+          const xpub = hdKey.getBip32Key();
+          const origin = hdKey.getOrigin();
+          const fingerprint = origin?.getSourceFingerprint()?.toString('hex') || '';
+          const pathComponents = origin?.getComponents() || [];
+          const path = pathComponents.length > 0
+            ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+            : '';
+          return { xpub, fingerprint, path };
+        }
+      }
+
+      // Handle CryptoAccount (multi-account format)
+      if (registryType instanceof CryptoAccount) {
+        const account = registryType as CryptoAccount;
+        const masterFingerprint = account.getMasterFingerprint()?.toString('hex') || '';
+        const outputs = account.getOutputDescriptors();
+
+        // Find a suitable output (prefer native segwit BIP84)
+        for (const output of outputs) {
+          const hdKey = output.getHDKey();
+          if (hdKey) {
+            const xpub = hdKey.getBip32Key();
+            const origin = hdKey.getOrigin();
+            const pathComponents = origin?.getComponents() || [];
+            const path = pathComponents.length > 0
+              ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+              : '';
+            // Return the first valid one (or one with 84' in path for native segwit)
+            if (path.includes("84'")) {
+              return { xpub, fingerprint: masterFingerprint, path };
+            }
+          }
+        }
+
+        // Fall back to first output if no BIP84 found
+        if (outputs.length > 0) {
+          const hdKey = outputs[0].getHDKey();
+          if (hdKey) {
+            const xpub = hdKey.getBip32Key();
+            const origin = hdKey.getOrigin();
+            const pathComponents = origin?.getComponents() || [];
+            const path = pathComponents.length > 0
+              ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+              : '';
+            return { xpub, fingerprint: masterFingerprint, path };
+          }
+        }
+      }
+
+      return null;
+    } catch (err) {
+      log.error('Failed to extract from UR result', { error: err });
+      return null;
+    }
+  };
+
+  /**
    * Handle QR code scan result
-   * Parses various QR formats: ColdCard JSON, Keystone, plain xpub, descriptors
+   * Parses various QR formats: UR format, ColdCard JSON, Keystone, plain xpub, descriptors
    */
   const handleQrScan = (result: { rawValue: string }[]) => {
     if (!result || result.length === 0) return;
 
     const content = result[0].rawValue;
-    log.info('QR code scanned', { length: content.length });
+    log.info('QR code scanned', { length: content.length, prefix: content.substring(0, 20) });
 
+    // Check if this is UR format (Foundation Passport, Keystone, etc.)
+    if (content.toLowerCase().startsWith('ur:')) {
+      try {
+        // Initialize decoder if needed
+        if (!urDecoderRef.current) {
+          urDecoderRef.current = new URRegistryDecoder();
+        }
+
+        // Feed the part to the decoder
+        urDecoderRef.current.receivePart(content);
+
+        // Check progress for multi-part QR codes
+        const progress = urDecoderRef.current.estimatedPercentComplete();
+        setUrProgress(Math.round(progress * 100));
+        log.info('UR progress', { progress: Math.round(progress * 100) });
+
+        // Check if complete
+        if (!urDecoderRef.current.isComplete()) {
+          // Not complete yet - keep scanning for more parts
+          // Don't turn off camera, let user continue scanning
+          return;
+        }
+
+        // Decode is complete
+        setCameraActive(false);
+        setScanning(true);
+        setError(null);
+
+        if (!urDecoderRef.current.isSuccess()) {
+          throw new Error('Failed to decode UR QR code');
+        }
+
+        // Get the decoded registry type
+        const registryType = urDecoderRef.current.resultRegistryType();
+        log.info('UR decoded', { type: registryType?.constructor?.name });
+
+        const extracted = extractFromUrResult(registryType);
+        if (extracted && extracted.xpub) {
+          setXpub(extracted.xpub);
+          if (extracted.fingerprint) setFingerprint(extracted.fingerprint.toUpperCase());
+          if (extracted.path) setDerivationPath(extracted.path);
+          setScanned(true);
+          setScanning(false);
+          setUrProgress(0);
+          urDecoderRef.current = null;
+
+          log.info('UR QR code parsed successfully', {
+            hasXpub: !!extracted.xpub,
+            hasFingerprint: !!extracted.fingerprint,
+            hasPath: !!extracted.path,
+          });
+          return;
+        }
+
+        // Could not extract xpub from UR
+        throw new Error('Could not extract xpub from UR format');
+
+      } catch (err) {
+        log.error('Failed to decode UR QR code', { error: err });
+        setError('Failed to decode UR QR code. Please try again or use file upload.');
+        setCameraActive(false);
+        setScanning(false);
+        setUrProgress(0);
+        urDecoderRef.current = null;
+        return;
+      }
+    }
+
+    // Not UR format - use existing parsing logic
     setCameraActive(false);
     setScanning(true);
     setError(null);
@@ -967,14 +1120,29 @@ export const ConnectDevice: React.FC = () => {
                                 />
                               </div>
                               <button
-                                onClick={() => setCameraActive(false)}
+                                onClick={() => { setCameraActive(false); setUrProgress(0); urDecoderRef.current = null; }}
                                 className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
                               >
                                 <X className="w-4 h-4" />
                               </button>
-                              <p className="text-xs text-center text-sanctuary-500 py-2">
-                                Position the QR code within the frame
-                              </p>
+                              {urProgress > 0 && urProgress < 100 ? (
+                                <div className="py-2 px-4">
+                                  <div className="flex items-center justify-between text-xs text-sanctuary-500 mb-1">
+                                    <span>Scanning animated QR...</span>
+                                    <span>{urProgress}%</span>
+                                  </div>
+                                  <div className="w-full bg-sanctuary-200 dark:bg-sanctuary-700 rounded-full h-1.5">
+                                    <div
+                                      className="bg-sanctuary-600 dark:bg-sanctuary-400 h-1.5 rounded-full transition-all duration-300"
+                                      style={{ width: `${urProgress}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-center text-sanctuary-500 py-2">
+                                  Position the QR code within the frame
+                                </p>
+                              )}
                             </div>
                           )}
                           {cameraError && (

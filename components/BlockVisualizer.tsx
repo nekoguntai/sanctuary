@@ -154,7 +154,7 @@ const Block: React.FC<{
           {/* Bottom: Height label - darker background */}
           <div className="w-full text-center">
             <div className={`${compact ? 'text-[9px] py-0.5 mx-0.5' : 'text-[10px] py-0.5 mx-1'} font-mono font-bold rounded ${colors.label}`}>
-              {isPending ? `${compact ? '' : 'BLK '}${block.height}` : `#${typeof block.height === 'number' ? (compact ? block.height : block.height.toLocaleString()) : block.height}`}
+              {isPending ? `${compact ? '' : 'BLK '}${block.height}` : `${typeof block.height === 'number' ? (compact ? block.height : block.height.toLocaleString()) : block.height}`}
             </div>
           </div>
         </div>

@@ -91,17 +91,18 @@ export const DeviceList: React.FC = () => {
   const handleEdit = (device: DeviceWithWallets) => {
     setEditingId(device.id);
     setEditValue(device.label);
-    setEditType(device.type || '');
+    // Use model.slug if available, otherwise empty (model slug is what dropdown uses)
+    setEditType(device.model?.slug || '');
   };
 
   const handleSave = async (device: DeviceWithWallets) => {
     try {
       const updateData: { label?: string; modelSlug?: string } = {};
       if (editValue !== device.label) updateData.label = editValue;
-      if (editType !== device.type) updateData.modelSlug = editType;
+      if (editType !== (device.model?.slug || '')) updateData.modelSlug = editType;
 
-      await updateDevice(device.id, updateData);
-      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, label: editValue, type: editType || d.type } : d));
+      const updatedDevice = await updateDevice(device.id, updateData);
+      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...updatedDevice, label: editValue } : d));
       setEditingId(null);
     } catch (error) {
       log.error('Failed to update device', { error });

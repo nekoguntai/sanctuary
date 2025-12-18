@@ -14,6 +14,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   // Track timeouts for cleanup
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Track recently shown transaction notifications to prevent duplicates
+  const recentTxidsRef = useRef<Set<string>>(new Set());
 
   // Cleanup all timeouts on unmount
   useEffect(() => {
@@ -34,6 +36,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
+    // Deduplicate transaction/confirmation notifications by txid
+    const txid = notification.data?.txid;
+    if (txid && (notification.type === 'transaction' || notification.type === 'confirmation')) {
+      const dedupeKey = `${notification.type}:${txid}:${notification.data?.confirmations || 0}`;
+      if (recentTxidsRef.current.has(dedupeKey)) {
+        console.log('[NOTIFY] Skipping duplicate notification:', dedupeKey);
+        return; // Skip duplicate
+      }
+      recentTxidsRef.current.add(dedupeKey);
+      // Clean up after 30 seconds to allow future notifications for same tx
+      setTimeout(() => {
+        recentTxidsRef.current.delete(dedupeKey);
+      }, 30000);
+    }
+
     const id = generateNotificationId();
     const newNotification: Notification = {
       ...notification,

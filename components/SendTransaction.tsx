@@ -19,6 +19,7 @@ import { HardwareDevice } from '../types';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('SendTx');
@@ -154,6 +155,7 @@ export const SendTransaction: React.FC = () => {
 
   const unitLabel = unit === 'btc' ? 'BTC' : 'SATS';
   const { handleError, showSuccess, showInfo } = useErrorHandler();
+  const { playEventSound } = useNotificationSound();
 
   // Hardware wallet integration
   const hardwareWallet = useHardwareWallet();
@@ -1030,6 +1032,9 @@ export const SendTransaction: React.FC = () => {
             `Transaction broadcast successfully! TXID: ${broadcastResult.txid.substring(0, 16)}... Amount: ${outputsMsg}, Fee: ${format(txData.fee)}`,
             'Transaction Broadcast'
           );
+
+          // Play send notification sound
+          playEventSound('send');
 
           // Reset signing state
           setSignedDevices(new Set());

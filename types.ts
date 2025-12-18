@@ -59,6 +59,12 @@ export interface TelegramConfig {
   wallets: Record<string, WalletTelegramSettings>;
 }
 
+export interface NotificationSounds {
+  enabled: boolean;
+  confirmationChime: boolean; // Play sound on first confirmation
+  volume: number; // 0-100
+}
+
 export interface UserPreferences {
   darkMode: boolean;
   unit: 'sats' | 'btc';
@@ -68,6 +74,7 @@ export interface UserPreferences {
   background: BackgroundOption;
   priceProvider?: string;
   telegram?: TelegramConfig;
+  notificationSounds?: NotificationSounds;
 }
 
 export interface User {

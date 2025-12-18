@@ -161,6 +161,11 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
           fiatCurrency: 'USD',
           showFiat: true,
           priceProvider: 'auto',
+          notificationSounds: {
+            enabled: true,
+            confirmationChime: true,
+            volume: 50,
+          },
         },
       },
     });
@@ -386,6 +391,11 @@ router.patch('/me/preferences', authenticate, async (req: Request, res: Response
       fiatCurrency: 'USD',
       showFiat: true,
       priceProvider: 'auto',
+      notificationSounds: {
+        enabled: true,
+        confirmationChime: true,
+        volume: 50,
+      },
     };
 
     // First get current preferences to merge with

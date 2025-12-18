@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { WalletType, HardwareDevice } from '../types';
 import { getDevices, updateDevice, deleteDevice, Device as ApiDevice } from '../src/api/devices';
-import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2 } from 'lucide-react';
+import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +11,8 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('DeviceList');
 
 type ViewMode = 'list' | 'grouped';
+type SortField = 'label' | 'type' | 'fingerprint' | 'wallets';
+type SortOrder = 'asc' | 'desc';
 
 // Extended device type with wallet info from API
 interface DeviceWithWallets extends ApiDevice {
@@ -38,6 +40,21 @@ export const DeviceList: React.FC = () => {
       viewSettings: {
         ...user?.preferences?.viewSettings,
         devices: { ...user?.preferences?.viewSettings?.devices, layout: mode }
+      }
+    });
+  };
+
+  // Get sort settings from user preferences
+  const sortBy = (user?.preferences?.viewSettings?.devices?.sortBy as SortField) || 'label';
+  const sortOrder = (user?.preferences?.viewSettings?.devices?.sortOrder as SortOrder) || 'asc';
+
+  const setSortBy = (field: SortField) => {
+    // If clicking the same field, toggle order; otherwise set new field with asc
+    const newOrder = field === sortBy ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc';
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        devices: { ...user?.preferences?.viewSettings?.devices, sortBy: field, sortOrder: newOrder }
       }
     });
   };
@@ -101,6 +118,34 @@ export const DeviceList: React.FC = () => {
       type: w.wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG
     })) || [];
   };
+
+  // Sort devices based on current sort settings
+  const sortedDevices = useMemo(() => {
+    if (!devices.length) return devices;
+
+    return [...devices].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'label':
+          comparison = a.label.localeCompare(b.label);
+          break;
+        case 'type':
+          comparison = a.type.localeCompare(b.type);
+          break;
+        case 'fingerprint':
+          comparison = a.fingerprint.localeCompare(b.fingerprint);
+          break;
+        case 'wallets':
+          comparison = (a.wallets?.length || 0) - (b.wallets?.length || 0);
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [devices, sortBy, sortOrder]);
 
   // Group devices by Type
   const groupedDevices = devices.reduce((acc, device) => {
@@ -173,109 +218,177 @@ export const DeviceList: React.FC = () => {
         </div>
       </div>
 
-      {/* List View */}
+      {/* Table View */}
       {viewMode === 'list' && (
-        <div className="grid gap-4">
-          {devices.map((device) => {
-            const associatedWallets = getAssociatedWallets(device);
-            const isEditing = editingId === device.id;
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
+              <thead className="surface-muted">
+                <tr>
+                  <th
+                    scope="col"
+                    onClick={() => setSortBy('label')}
+                    className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Label
+                      {sortBy === 'label' ? (
+                        sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                      ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                    </span>
+                  </th>
+                  <th
+                    scope="col"
+                    onClick={() => setSortBy('type')}
+                    className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Type
+                      {sortBy === 'type' ? (
+                        sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                      ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                    </span>
+                  </th>
+                  <th
+                    scope="col"
+                    onClick={() => setSortBy('fingerprint')}
+                    className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Fingerprint
+                      {sortBy === 'fingerprint' ? (
+                        sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                      ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                    </span>
+                  </th>
+                  <th
+                    scope="col"
+                    onClick={() => setSortBy('wallets')}
+                    className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Wallets
+                      {sortBy === 'wallets' ? (
+                        sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                      ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                    </span>
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="surface-elevated divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
+                {sortedDevices.map((device) => {
+                  const associatedWallets = getAssociatedWallets(device);
+                  const isEditing = editingId === device.id;
 
-            return (
-              <div key={device.id} className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 flex flex-col md:flex-row md:items-center justify-between shadow-sm animate-fade-in">
-                 <div className="flex items-start space-x-4 mb-4 md:mb-0">
-                    <div className="p-3 rounded-xl surface-secondary text-sanctuary-600 dark:text-sanctuary-300">
-                      {getDeviceIcon(device.type as HardwareDevice, "w-6 h-6")}
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                         {isEditing ? (
-                           <div className="flex items-center space-x-2">
-                             <input 
-                               type="text" 
-                               value={editValue}
-                               onChange={(e) => setEditValue(e.target.value)}
-                               className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
-                               autoFocus
-                             />
-                             <button onClick={() => handleSave(device)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-4 h-4" /></button>
-                             <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-4 h-4" /></button>
-                           </div>
-                         ) : (
-                           <>
-                             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</h3>
-                             <button onClick={() => handleEdit(device)} className="text-sanctuary-400 hover:text-sanctuary-600"><Edit2 className="w-3 h-3" /></button>
-                           </>
-                         )}
-                      </div>
-                      <div className="text-sm text-sanctuary-500 font-mono mt-1">
-                        {device.type} • <span className="surface-secondary px-1 rounded text-xs">{device.fingerprint}</span>
-                      </div>
-                    </div>
-                 </div>
-
-                 <div className="flex items-center space-x-4">
-                    <div className="flex flex-col md:items-end">
-                      <span className="text-xs font-medium text-sanctuary-400 uppercase mb-2">Used in Wallets</span>
-                      <div className="flex flex-wrap gap-2">
-                        {associatedWallets.length > 0 ? (
-                          associatedWallets.map(w => {
-                            const isMultisig = w.type === WalletType.MULTI_SIG;
-                            const badgeClass = isMultisig
-                              ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-                              : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-                            return (
-                              <span key={w.id} className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${badgeClass}`}>
-                                <HardDrive className="w-3 h-3 mr-1" />
-                                {w.name}
-                              </span>
-                            );
-                          })
-                        ) : (
-                          <span className="text-xs text-sanctuary-400 italic">Unused</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Delete Button - only show for unused devices */}
-                    {associatedWallets.length === 0 && (
-                      <div className="relative">
-                        {deleteConfirmId === device.id ? (
-                          <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/30 p-2 rounded-lg">
-                            <span className="text-xs text-rose-700 dark:text-rose-300">Delete?</span>
-                            <button
-                              onClick={() => handleDelete(device)}
-                              className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors"
-                            >
-                              Yes
-                            </button>
-                            <button
-                              onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
-                              className="px-2 py-1 text-xs bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300 rounded hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors"
-                            >
-                              No
-                            </button>
+                  return (
+                    <tr key={device.id} className="hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors">
+                      {/* Label */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-8 w-8 rounded-full surface-secondary flex items-center justify-center text-sanctuary-600 dark:text-sanctuary-300">
+                            {getDeviceIcon(device.type as HardwareDevice, "w-4 h-4")}
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteConfirmId(device.id)}
-                            className="p-2 text-sanctuary-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
-                            title="Delete device"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                        {deleteError && deleteConfirmId === device.id && (
-                          <div className="absolute right-0 top-full mt-1 p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-xs rounded shadow-lg z-10 whitespace-nowrap">
-                            {deleteError}
+                          <div className="ml-4">
+                            {isEditing ? (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  className="px-2 py-1 text-sm border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                  autoFocus
+                                />
+                                <button onClick={() => handleSave(device)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-4 h-4" /></button>
+                                <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-4 h-4" /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center group">
+                                <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</span>
+                                <button onClick={() => handleEdit(device)} className="ml-2 opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Type */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{device.type}</span>
+                      </td>
+
+                      {/* Fingerprint */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="font-mono text-xs surface-secondary px-2 py-1 rounded text-sanctuary-600 dark:text-sanctuary-400">{device.fingerprint}</span>
+                      </td>
+
+                      {/* Wallets */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {associatedWallets.length > 0 ? (
+                            associatedWallets.map(w => {
+                              const isMultisig = w.type === WalletType.MULTI_SIG;
+                              const badgeClass = isMultisig
+                                ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+                                : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
+
+                              return (
+                                <span key={w.id} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badgeClass}`}>
+                                  {w.name}
+                                </span>
+                              );
+                            })
+                          ) : (
+                            <span className="text-xs text-sanctuary-400 italic">Unused</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {associatedWallets.length === 0 && (
+                          <div className="relative inline-block">
+                            {deleteConfirmId === device.id ? (
+                              <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/30 p-2 rounded-lg">
+                                <span className="text-xs text-rose-700 dark:text-rose-300">Delete?</span>
+                                <button
+                                  onClick={() => handleDelete(device)}
+                                  className="px-2 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors"
+                                >
+                                  Yes
+                                </button>
+                                <button
+                                  onClick={() => { setDeleteConfirmId(null); setDeleteError(null); }}
+                                  className="px-2 py-1 text-xs bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300 rounded hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirmId(device.id)}
+                                className="p-2 text-sanctuary-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                title="Delete device"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {deleteError && deleteConfirmId === device.id && (
+                              <div className="absolute right-0 top-full mt-1 p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-xs rounded shadow-lg z-10 whitespace-nowrap">
+                                {deleteError}
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
-                    )}
-                 </div>
-              </div>
-            );
-          })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

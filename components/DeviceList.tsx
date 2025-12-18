@@ -28,8 +28,19 @@ export const DeviceList: React.FC = () => {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<DeviceWithWallets[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const { user } = useUser();
+  const { user, updatePreferences } = useUser();
+
+  // Get view mode from user preferences, fallback to 'list'
+  const viewMode = (user?.preferences?.viewSettings?.devices?.layout as ViewMode) || 'list';
+
+  const setViewMode = (mode: ViewMode) => {
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        devices: { ...user?.preferences?.viewSettings?.devices, layout: mode }
+      }
+    });
+  };
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);

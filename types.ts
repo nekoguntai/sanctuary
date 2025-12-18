@@ -123,6 +123,18 @@ export interface NotificationSounds {
 // USER & GROUP TYPES
 // ============================================================================
 
+// View settings for a single page/component
+export interface PageViewSettings {
+  layout?: string;          // 'grid' | 'table' | 'list' | 'grouped' | etc.
+  sortBy?: string;          // Column to sort by (future)
+  sortOrder?: 'asc' | 'desc'; // Sort direction (future)
+}
+
+// View settings keyed by page name (wallets, devices, transactions, etc.)
+export interface ViewSettings {
+  [pageKey: string]: PageViewSettings;
+}
+
 export interface UserPreferences {
   darkMode: boolean;
   unit: 'sats' | 'btc';
@@ -133,6 +145,7 @@ export interface UserPreferences {
   priceProvider?: string;
   telegram?: TelegramConfig;
   notificationSounds?: NotificationSounds;
+  viewSettings?: ViewSettings;
 }
 
 export interface User {

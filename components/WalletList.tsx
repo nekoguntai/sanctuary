@@ -15,11 +15,22 @@ type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
 export const WalletList: React.FC = () => {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const navigate = useNavigate();
   const { format } = useCurrency();
-  const { user } = useUser();
+  const { user, updatePreferences } = useUser();
+
+  // Get view mode from user preferences, fallback to 'grid'
+  const viewMode = (user?.preferences?.viewSettings?.wallets?.layout as ViewMode) || 'grid';
+
+  const setViewMode = (mode: ViewMode) => {
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        wallets: { ...user?.preferences?.viewSettings?.wallets, layout: mode }
+      }
+    });
+  };
 
   // Use React Query for wallet data with automatic caching and refetching
   const { data: wallets = [], isLoading: loading, error } = useWallets();

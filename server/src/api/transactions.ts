@@ -126,16 +126,20 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
 
     const pendingTransactions = await Promise.all(
       pendingTxs.map(async (tx) => {
-        const fee = tx.fee ? Number(tx.fee) : 0;
+        let fee = tx.fee ? Number(tx.fee) : 0;
         let vsize: number | undefined;
         let feeRate = 0;
 
-        // Try to fetch vsize from mempool.space
+        // Try to fetch vsize and fee from mempool.space
         try {
           const response = await fetch(`${mempoolBaseUrl}/tx/${tx.txid}`);
           if (response.ok) {
-            const txData = await response.json() as { weight?: number };
+            const txData = await response.json() as { weight?: number; fee?: number };
             vsize = txData.weight ? Math.ceil(txData.weight / 4) : undefined;
+            // Use fee from mempool.space if not in database
+            if (fee === 0 && txData.fee) {
+              fee = txData.fee;
+            }
             if (vsize && fee > 0) {
               feeRate = Math.round((fee / vsize) * 10) / 10; // Round to 1 decimal
             }
@@ -149,11 +153,15 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
         const createdAt = tx.createdAt;
         const timeInQueue = Math.floor((Date.now() - createdAt.getTime()) / 1000);
 
+        // Map 'consolidation' to 'sent' for display (consolidation is sending to yourself)
+        const displayType: 'sent' | 'received' =
+          tx.type === 'received' || tx.type === 'receive' ? 'received' : 'sent';
+
         return {
           txid: tx.txid,
           walletId: tx.walletId,
           walletName: wallet?.name,
-          type: tx.type as 'sent' | 'received',
+          type: displayType,
           amount: Number(tx.amount),
           fee,
           feeRate,

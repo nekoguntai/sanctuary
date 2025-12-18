@@ -494,18 +494,47 @@ export async function syncWallet(walletId: string): Promise<{
         }
       }
 
-      // Calculate output destinations
+      // Calculate output destinations and total outputs
       let totalToExternal = 0;
       let totalToWallet = 0;
+      let totalOutputs = 0;
       for (const out of outputs) {
+        const outValue = Math.round(out.value * 100000000);
+        totalOutputs += outValue;
         const outAddr = out.scriptPubKey?.address ||
           (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
         if (outAddr && !walletAddressSet.has(outAddr)) {
-          totalToExternal += Math.round(out.value * 100000000);
+          totalToExternal += outValue;
         } else if (outAddr) {
-          totalToWallet += Math.round(out.value * 100000000);
+          totalToWallet += outValue;
         }
       }
+
+      // Calculate total inputs for fee calculation (only for sent/consolidation txs)
+      let totalInputs = 0;
+      if (isSent) {
+        for (const input of inputs) {
+          if (input.coinbase) continue;
+
+          let inputValue = 0;
+          if (input.prevout && input.prevout.value !== undefined) {
+            // mempool.space/esplora format - value in sats or BTC
+            inputValue = input.prevout.value >= 1000000
+              ? input.prevout.value  // already in sats
+              : Math.round(input.prevout.value * 100000000);  // BTC to sats
+          } else if (input.txid && input.vout !== undefined) {
+            // Look up from cached transaction
+            const prevTx = txDetailsCache.get(input.txid);
+            if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+              inputValue = Math.round(prevTx.vout[input.vout].value * 100000000);
+            }
+          }
+          totalInputs += inputValue;
+        }
+      }
+
+      // Calculate fee (only meaningful for sent/consolidation transactions)
+      const fee = isSent && totalInputs > 0 ? totalInputs - totalOutputs : null;
 
       // Determine transaction type and create appropriate record
       // Priority: consolidation > sent > received
@@ -520,6 +549,7 @@ export async function syncWallet(walletId: string): Promise<{
           addressId: addressRecord.id,
           type: 'consolidation',
           amount: BigInt(totalToWallet),
+          fee: fee !== null ? BigInt(fee) : null,
           confirmations,
           blockHeight: item.height > 0 ? item.height : null,
           blockTime,
@@ -533,6 +563,7 @@ export async function syncWallet(walletId: string): Promise<{
           addressId: addressRecord.id,
           type: 'sent',
           amount: BigInt(totalToExternal),
+          fee: fee !== null ? BigInt(fee) : null,
           confirmations,
           blockHeight: item.height > 0 ? item.height : null,
           blockTime,
@@ -1146,10 +1177,11 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       const inputs = txDetails.vin || [];
       const outputs = txDetails.vout || [];
       const isSentTx = tx.type === 'sent' || tx.type === 'send';
+      const isConsolidationTx = tx.type === 'consolidation';
       const isReceivedTx = tx.type === 'received' || tx.type === 'receive';
 
-      // Populate fee if missing - only for sent transactions (receiver doesn't pay fees)
-      if (tx.fee === null && isSentTx) {
+      // Populate fee if missing - for sent and consolidation transactions (receiver doesn't pay fees)
+      if (tx.fee === null && (isSentTx || isConsolidationTx)) {
         try {
           // Some Electrum servers provide fee directly
           if (txDetails.fee != null) {

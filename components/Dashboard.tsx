@@ -146,7 +146,7 @@ export const Dashboard: React.FC = () => {
   // WebSocket integration
   const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
   const { addNotification } = useNotifications();
-  const { playConfirmationChime } = useNotificationSound();
+  const { playEventSound } = useNotificationSound();
   const invalidateAllWallets = useInvalidateAllWallets();
 
   // React Query hooks for data fetching
@@ -264,9 +264,16 @@ export const Dashboard: React.FC = () => {
       data,
     });
 
+    // Play sound for receive/send events
+    if (data.type === 'received') {
+      playEventSound('receive');
+    } else if (data.type === 'sent') {
+      playEventSound('send');
+    }
+
     // Invalidate wallet queries to refresh data
     invalidateAllWallets();
-  }, [addNotification, invalidateAllWallets]);
+  }, [addNotification, invalidateAllWallets, playEventSound]);
 
   // Handle balance updates
   useWebSocketEvent('balance', (event) => {
@@ -315,12 +322,12 @@ export const Dashboard: React.FC = () => {
         data,
       });
 
-      // Play chime on first confirmation
+      // Play sound on first confirmation
       if (data.confirmations === 1) {
-        playConfirmationChime();
+        playEventSound('confirmation');
       }
     }
-  }, [addNotification, playConfirmationChime]);
+  }, [addNotification, playEventSound]);
 
   // Handle sync completion - refresh wallet data when background sync finishes
   useWebSocketEvent('sync', (event) => {

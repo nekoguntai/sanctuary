@@ -100,10 +100,23 @@ export interface TelegramConfig {
   wallets: Record<string, WalletTelegramSettings>;
 }
 
+export type SoundType = 'chime' | 'bell' | 'coin' | 'success' | 'gentle' | 'zen' | 'ping' | 'pop' | 'harp' | 'retro' | 'none';
+
+export interface EventSoundConfig {
+  enabled: boolean;
+  sound: SoundType;
+}
+
 export interface NotificationSounds {
   enabled: boolean;
-  confirmationChime: boolean; // Play sound on first confirmation
   volume: number; // 0-100
+  // Per-event sound configuration
+  confirmation?: EventSoundConfig; // Transaction confirmed
+  receive?: EventSoundConfig;      // Bitcoin received
+  send?: EventSoundConfig;         // Transaction broadcast
+  // Legacy fields for backwards compatibility
+  confirmationChime?: boolean;
+  soundType?: SoundType;
 }
 
 // ============================================================================

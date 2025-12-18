@@ -116,8 +116,11 @@ export async function canReplaceTransaction(txid: string): Promise<{
     }
 
     const currentFee = inputValue - outputValue;
-    const currentFeeRate = Math.ceil(currentFee / vsize);
-    const minNewFeeRate = currentFeeRate + MIN_RBF_FEE_BUMP;
+    // Preserve decimal precision for fee rate (2 decimal places)
+    const currentFeeRate = parseFloat((currentFee / vsize).toFixed(2));
+    // Minimum bump is 1 sat/vB or 10% higher, whichever is greater
+    const minBump = Math.max(MIN_RBF_FEE_BUMP, currentFeeRate * 0.1);
+    const minNewFeeRate = parseFloat((currentFeeRate + minBump).toFixed(2));
 
     return {
       replaceable: true,

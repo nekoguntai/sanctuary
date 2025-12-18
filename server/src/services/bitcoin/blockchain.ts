@@ -606,46 +606,63 @@ export async function syncWallet(walletId: string): Promise<{
     const uniqueTxArray = Array.from(uniqueTxs.values());
     log.debug(`[BLOCKCHAIN] Inserting ${uniqueTxArray.length} transactions...`);
 
+    // Check which transactions already exist (to avoid duplicate notifications)
+    const existingTxids = new Set(
+      (await prisma.transaction.findMany({
+        where: {
+          walletId,
+          txid: { in: uniqueTxArray.map(tx => tx.txid) },
+        },
+        select: { txid: true },
+      })).map(tx => tx.txid)
+    );
+
+    // Filter to only truly new transactions
+    const newTransactions = uniqueTxArray.filter(tx => !existingTxids.has(tx.txid));
+
     // Use createMany for bulk insert (note: doesn't return created records)
     await prisma.transaction.createMany({
       data: uniqueTxArray,
       skipDuplicates: true,
     });
-    totalTransactions = uniqueTxArray.length;
+    totalTransactions = newTransactions.length;
 
-    // Log transaction type breakdown
-    const received = uniqueTxArray.filter(t => t.type === 'received').length;
-    const sent = uniqueTxArray.filter(t => t.type === 'sent').length;
-    const consolidation = uniqueTxArray.filter(t => t.type === 'consolidation').length;
-    walletLog(walletId, 'info', 'BLOCKCHAIN', `Recorded ${totalTransactions} transactions`, {
+    // Log transaction type breakdown (only new ones)
+    const received = newTransactions.filter(t => t.type === 'received').length;
+    const sent = newTransactions.filter(t => t.type === 'sent').length;
+    const consolidation = newTransactions.filter(t => t.type === 'consolidation').length;
+    walletLog(walletId, 'info', 'BLOCKCHAIN', `Recorded ${totalTransactions} new transactions`, {
       received,
       sent,
       consolidation,
     });
 
-    // Send notifications for new transactions (Telegram + Push, async, don't block sync)
-    const { notifyNewTransactions } = await import('../notifications/notificationService');
-    notifyNewTransactions(walletId, uniqueTxArray.map(tx => ({
-      txid: tx.txid,
-      type: tx.type,
-      amount: tx.amount,
-    }))).catch(err => {
-      log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
-    });
-
-    // Broadcast WebSocket events for real-time frontend notifications and sounds
-    const { getNotificationService } = await import('../../websocket/notifications');
-    const notificationService = getNotificationService();
-    for (const tx of uniqueTxArray) {
-      notificationService.broadcastTransactionNotification({
+    // Only send notifications for NEW transactions (not already in database)
+    if (newTransactions.length > 0) {
+      // Send notifications for new transactions (Telegram + Push, async, don't block sync)
+      const { notifyNewTransactions } = await import('../notifications/notificationService');
+      notifyNewTransactions(walletId, newTransactions.map(tx => ({
         txid: tx.txid,
-        walletId,
-        type: tx.type === 'received' ? 'received' : 'sent',
-        amount: Number(tx.amount),
-        confirmations: tx.confirmations || 0,
-        blockHeight: tx.blockHeight ?? undefined,
-        timestamp: tx.blockTime || new Date(),
+        type: tx.type,
+        amount: tx.amount,
+      }))).catch(err => {
+        log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
       });
+
+      // Broadcast WebSocket events for real-time frontend notifications and sounds
+      const { getNotificationService } = await import('../../websocket/notifications');
+      const notificationService = getNotificationService();
+      for (const tx of newTransactions) {
+        notificationService.broadcastTransactionNotification({
+          txid: tx.txid,
+          walletId,
+          type: tx.type === 'received' ? 'received' : 'sent',
+          amount: Number(tx.amount),
+          confirmations: tx.confirmations || 0,
+          blockHeight: tx.blockHeight ?? undefined,
+          timestamp: tx.blockTime || new Date(),
+        });
+      }
     }
 
     // PHASE 5.5: Auto-apply address labels to new transactions

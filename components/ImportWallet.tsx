@@ -27,6 +27,10 @@ import { useImportWallet } from '../hooks/queries/useWallets';
 
 const log = createLogger('ImportWallet');
 
+// Input validation constants
+const MAX_INPUT_SIZE = 100 * 1024; // 100KB max input size
+const MAX_FILE_SIZE = 1024 * 1024; // 1MB max file size
+
 type ImportFormat = 'descriptor' | 'json' | 'hardware';
 type ScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
 type HardwareDeviceType = 'ledger' | 'trezor';
@@ -290,14 +294,59 @@ export const ImportWallet: React.FC = () => {
     </div>
   );
 
+  // Validate input data size and basic format
+  const validateInputData = (data: string): string | null => {
+    if (data.length > MAX_INPUT_SIZE) {
+      return `Input too large (${(data.length / 1024).toFixed(1)}KB). Maximum allowed: ${MAX_INPUT_SIZE / 1024}KB. Please check you're importing the correct file.`;
+    }
+
+    // For JSON format, do a quick syntax check
+    if (format === 'json' && data.trim().startsWith('{')) {
+      try {
+        JSON.parse(data);
+      } catch (e) {
+        // Only show JSON error if it looks like they're trying to paste JSON
+        if (data.length > 500) {
+          return 'Invalid JSON format. Please check the file contents.';
+        }
+      }
+    }
+
+    return null;
+  };
+
   // Handle file upload
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setValidationError(`File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum allowed: ${MAX_FILE_SIZE / 1024 / 1024}MB. Please check you're importing the correct file.`);
+      event.target.value = ''; // Reset file input
+      return;
+    }
+
+    // Validate file extension
+    const validExtensions = format === 'json' ? ['.json', '.txt'] : ['.txt'];
+    const fileExt = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    if (!validExtensions.includes(fileExt)) {
+      setValidationError(`Invalid file type. Expected: ${validExtensions.join(' or ')}`);
+      event.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
+
+      // Validate content size
+      const error = validateInputData(content);
+      if (error) {
+        setValidationError(error);
+        return;
+      }
+
       setImportData(content);
       setValidationError(null);
     };
@@ -349,13 +398,32 @@ export const ImportWallet: React.FC = () => {
         <textarea
           value={importData}
           onChange={(e) => {
-            setImportData(e.target.value);
+            const newValue = e.target.value;
+
+            // Reject input that exceeds max size
+            if (newValue.length > MAX_INPUT_SIZE) {
+              setValidationError(`Input too large (${(newValue.length / 1024).toFixed(1)}KB). Maximum allowed: ${MAX_INPUT_SIZE / 1024}KB. Please check you're importing the correct file.`);
+              return; // Don't update state with oversized data
+            }
+
+            setImportData(newValue);
+
+            // Validate on paste (detect large pastes)
+            if (newValue.length > 1000) {
+              const error = validateInputData(newValue);
+              if (error) {
+                setValidationError(error);
+                return;
+              }
+            }
+
             setValidationError(null);
           }}
           placeholder={format === 'descriptor'
             ? 'wpkh([a1b2c3d4/84h/0h/0h]xpub6E.../0/*)'
             : '{\n  "type": "multi_sig",\n  "scriptType": "native_segwit",\n  "quorum": 2,\n  "devices": [...]\n}'}
           rows={10}
+          maxLength={MAX_INPUT_SIZE}
           className={`w-full px-4 py-3 rounded-xl border surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm ${
             validationError
               ? 'border-red-500 dark:border-red-400'

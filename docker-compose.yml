@@ -168,9 +168,9 @@ services:
   # Handles authentication, rate limiting, and proxying to backend.
   # Push notifications via FCM (Android) and APNs (iOS).
   #
-  # To enable push notifications, set these environment variables:
-  #   - FCM_ENABLED=true + mount fcm-service-account.json
-  #   - APNS_ENABLED=true + mount apns-key.p8 + set APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
+  # Push notifications auto-enable when credentials are provided:
+  #   - FCM: Mount fcm-service-account.json from Firebase Console
+  #   - APNs: Mount apns-key.p8 + set APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID
   # ============================================
   gateway:
     build:
@@ -197,11 +197,8 @@ services:
       RATE_LIMIT_WINDOW_MS: ${GATEWAY_RATE_LIMIT_WINDOW_MS:-60000}
       RATE_LIMIT_MAX_REQUESTS: ${GATEWAY_RATE_LIMIT_MAX:-60}
 
-      # Firebase Cloud Messaging (Android) - disabled by default
-      FCM_ENABLED: ${FCM_ENABLED:-false}
-
-      # Apple Push Notification Service (iOS) - disabled by default
-      APNS_ENABLED: ${APNS_ENABLED:-false}
+      # Apple Push Notification Service (iOS)
+      # Auto-enabled when APNS_KEY_ID, APNS_TEAM_ID, and key file are provided
       APNS_KEY_ID: ${APNS_KEY_ID:-}
       APNS_TEAM_ID: ${APNS_TEAM_ID:-}
       APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}

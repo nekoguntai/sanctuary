@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WalletType } from '../types';
 import type { Wallet } from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -13,6 +13,8 @@ import { useWallets, useBalanceHistory } from '../hooks/queries/useWallets';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
+type SortField = 'name' | 'type' | 'devices' | 'network' | 'balance';
+type SortOrder = 'asc' | 'desc';
 
 export const WalletList: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
@@ -32,8 +34,54 @@ export const WalletList: React.FC = () => {
     });
   };
 
+  // Get sort settings from user preferences
+  const sortBy = (user?.preferences?.viewSettings?.wallets?.sortBy as SortField) || 'name';
+  const sortOrder = (user?.preferences?.viewSettings?.wallets?.sortOrder as SortOrder) || 'asc';
+
+  const setSortBy = (field: SortField) => {
+    // If clicking the same field, toggle order; otherwise set new field with asc
+    const newOrder = field === sortBy ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc';
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        wallets: { ...user?.preferences?.viewSettings?.wallets, sortBy: field, sortOrder: newOrder }
+      }
+    });
+  };
+
   // Use React Query for wallet data with automatic caching and refetching
   const { data: wallets = [], isLoading: loading, error } = useWallets();
+
+  // Sort wallets based on current sort settings
+  const sortedWallets = useMemo(() => {
+    if (!wallets.length) return wallets;
+
+    return [...wallets].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'type':
+          comparison = a.type.localeCompare(b.type);
+          break;
+        case 'devices':
+          comparison = a.deviceCount - b.deviceCount;
+          break;
+        case 'network':
+          comparison = a.network.localeCompare(b.network);
+          break;
+        case 'balance':
+          comparison = a.balance - b.balance;
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [wallets, sortBy, sortOrder]);
 
   const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
   const walletIds = wallets.map(w => w.id);
@@ -90,6 +138,35 @@ export const WalletList: React.FC = () => {
           <p className="text-sanctuary-500">Manage your wallets and spending accounts</p>
         </div>
         <div className="flex items-center space-x-3">
+            {/* Sort dropdown - shown in grid view */}
+            {viewMode === 'grid' && (
+              <div className="relative">
+                <select
+                  value={`${sortBy}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [field, order] = e.target.value.split('-') as [SortField, SortOrder];
+                    updatePreferences({
+                      viewSettings: {
+                        ...user?.preferences?.viewSettings,
+                        wallets: { ...user?.preferences?.viewSettings?.wallets, sortBy: field, sortOrder: order }
+                      }
+                    });
+                  }}
+                  className="appearance-none surface-elevated border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg px-3 py-2 pr-8 text-sm text-sanctuary-700 dark:text-sanctuary-300 cursor-pointer hover:border-sanctuary-300 dark:hover:border-sanctuary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="name-asc">Name (A-Z)</option>
+                  <option value="name-desc">Name (Z-A)</option>
+                  <option value="balance-desc">Balance (High-Low)</option>
+                  <option value="balance-asc">Balance (Low-High)</option>
+                  <option value="type-asc">Type (A-Z)</option>
+                  <option value="type-desc">Type (Z-A)</option>
+                  <option value="devices-desc">Devices (Most)</option>
+                  <option value="devices-asc">Devices (Least)</option>
+                  <option value="network-asc">Network (A-Z)</option>
+                </select>
+                <ArrowUpDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-sanctuary-400 pointer-events-none" />
+              </div>
+            )}
             <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                 <button
                     onClick={() => setViewMode('grid')}
@@ -173,7 +250,7 @@ export const WalletList: React.FC = () => {
       {/* Grid View */}
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {wallets.map((wallet) => {
+            {sortedWallets.map((wallet) => {
             const isMultisig = wallet.type === 'multi_sig';
 
             // Standardized Badge Styling (Matching Recent Activity)
@@ -247,15 +324,70 @@ export const WalletList: React.FC = () => {
                 <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
                     <thead className="surface-muted">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Name</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Type</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Devices</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Network</th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
+                            <th
+                              scope="col"
+                              onClick={() => setSortBy('name')}
+                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                Name
+                                {sortBy === 'name' ? (
+                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                              </span>
+                            </th>
+                            <th
+                              scope="col"
+                              onClick={() => setSortBy('type')}
+                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                Type
+                                {sortBy === 'type' ? (
+                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                              </span>
+                            </th>
+                            <th
+                              scope="col"
+                              onClick={() => setSortBy('devices')}
+                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                Devices
+                                {sortBy === 'devices' ? (
+                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                              </span>
+                            </th>
+                            <th
+                              scope="col"
+                              onClick={() => setSortBy('network')}
+                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                Network
+                                {sortBy === 'network' ? (
+                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                              </span>
+                            </th>
+                            <th
+                              scope="col"
+                              onClick={() => setSortBy('balance')}
+                              className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
+                            >
+                              <span className="inline-flex items-center gap-1 justify-end">
+                                Balance
+                                {sortBy === 'balance' ? (
+                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                              </span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="surface-elevated divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-                        {wallets.map((wallet) => {
+                        {sortedWallets.map((wallet) => {
                             const isMultisig = wallet.type === 'multi_sig';
                             const badgeClass = isMultisig
                                 ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'

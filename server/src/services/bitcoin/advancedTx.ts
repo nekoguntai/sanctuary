@@ -74,10 +74,26 @@ export async function canReplaceTransaction(txid: string): Promise<{
 
     // Parse transaction to check RBF signal
     const txHex = txDetails.hex;
-    if (!isRBFSignaled(txHex)) {
+    if (!txHex) {
+      log.warn('Transaction hex not available for RBF check', { txid });
       return {
         replaceable: false,
-        reason: 'Transaction does not signal RBF (BIP-125)',
+        reason: 'Transaction data not available from server',
+      };
+    }
+
+    if (!isRBFSignaled(txHex)) {
+      // Log more details for debugging
+      try {
+        const tx = bitcoin.Transaction.fromHex(txHex);
+        const sequences = tx.ins.map(input => input.sequence.toString(16));
+        log.debug('RBF check failed', { txid, sequences });
+      } catch (e) {
+        log.debug('Could not parse tx for sequence logging', { txid });
+      }
+      return {
+        replaceable: false,
+        reason: 'Transaction does not signal RBF (BIP-125). All inputs have final sequence numbers.',
       };
     }
 

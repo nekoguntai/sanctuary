@@ -454,6 +454,7 @@ class ElectrumClient extends EventEmitter {
         locktime: tx.locktime,
         vin,
         vout,
+        hex: rawTx, // Include raw hex for RBF checking
       };
     } catch (error) {
       log.error('Failed to decode raw transaction', { error });

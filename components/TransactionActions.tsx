@@ -224,8 +224,9 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                 <input
                   type="number"
                   value={newFeeRate}
-                  onChange={(e) => setNewFeeRate(parseInt(e.target.value))}
-                  min={rbfStatus.minNewFeeRate || 1}
+                  onChange={(e) => setNewFeeRate(parseFloat(e.target.value) || 0)}
+                  min={rbfStatus.minNewFeeRate || 0.1}
+                  step={0.01}
                   className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
                 {rbfStatus.minNewFeeRate && (
@@ -246,7 +247,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                 </Button>
                 <Button
                   onClick={handleRBF}
-                  disabled={processing || newFeeRate < (rbfStatus.minNewFeeRate || 1)}
+                  disabled={processing || newFeeRate < (rbfStatus.minNewFeeRate || 0.1)}
                   className="flex-1"
                 >
                   {processing ? (
@@ -290,8 +291,9 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
                 <input
                   type="number"
                   value={targetFeeRate}
-                  onChange={(e) => setTargetFeeRate(parseInt(e.target.value))}
-                  min={1}
+                  onChange={(e) => setTargetFeeRate(parseFloat(e.target.value) || 0)}
+                  min={0.1}
+                  step={0.01}
                   placeholder="e.g., 50"
                   className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />

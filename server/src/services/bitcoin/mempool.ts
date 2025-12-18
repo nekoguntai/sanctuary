@@ -117,10 +117,50 @@ export async function getMempoolInfo(): Promise<MempoolInfo> {
 
 /**
  * Get recommended fee estimates from mempool.space
+ * Uses projected blocks API for decimal precision, falls back to recommended endpoint
  */
 export async function getRecommendedFees(): Promise<FeeEstimates> {
   try {
     const apiBase = await getMempoolApiBase();
+
+    // Try projected blocks first for decimal precision
+    try {
+      const projectedResponse = await axios.get(`${apiBase}/v1/fees/mempool-blocks`, {
+        timeout: 10000,
+      });
+
+      const blocks: ProjectedMempoolBlock[] = projectedResponse.data;
+
+      if (blocks.length > 0) {
+        // Derive fee estimates from projected blocks with decimal precision
+        // Block 0 = next block (highest priority), Block 1 = +1 block, etc.
+        const nextBlock = blocks[0];
+        const secondBlock = blocks[1] || nextBlock;
+        const thirdBlock = blocks[2] || secondBlock;
+        const lastBlock = blocks[blocks.length - 1];
+
+        // Get minimum fee from the fee range of the last projected block
+        const minimumFee = lastBlock?.feeRange?.[0] ?? 1;
+
+        // Format fee with decimal precision
+        const formatFee = (fee: number): number => {
+          if (fee >= 10) return Math.round(fee);
+          return parseFloat(fee.toFixed(1));
+        };
+
+        return {
+          fastestFee: formatFee(nextBlock.medianFee),
+          halfHourFee: formatFee(secondBlock.medianFee),
+          hourFee: formatFee(thirdBlock.medianFee),
+          economyFee: formatFee(lastBlock.medianFee),
+          minimumFee: formatFee(minimumFee),
+        };
+      }
+    } catch (projectedError: any) {
+      log.debug('Projected blocks failed, trying recommended endpoint', { error: projectedError.message });
+    }
+
+    // Fallback to recommended endpoint (returns integers)
     const response = await axios.get(`${apiBase}/v1/fees/recommended`, {
       timeout: 10000,
     });
@@ -303,26 +343,28 @@ export async function getBlocksAndMempool() {
         const blockLabels = ['Next', '+2', '+3'];
         const blockTimes = ['~10m', '~20m', '~30m'];
 
-        // Helper to format fee rate - preserve decimals for accuracy
+        // Helper to format fee rate - always 2 decimal places
         const formatFeeRate = (rate: number): string => {
-          if (rate >= 10) return Math.round(rate).toString();
-          if (rate >= 1) return rate.toFixed(1);
-          if (rate >= 0.1) return rate.toFixed(2);
           return rate.toFixed(2);
         };
 
-        mempoolBlocks = projectedBlocks.slice(0, 3).map((block, idx) => ({
-          height: blockLabels[idx] || `+${idx + 1}`,
-          medianFee: block.medianFee < 1 ? parseFloat(block.medianFee.toFixed(2)) : Math.round(block.medianFee),
-          feeRange: block.feeRange.length >= 2
-            ? `${formatFeeRate(block.feeRange[0])}-${formatFeeRate(block.feeRange[block.feeRange.length - 1])}`
-            : formatFeeRate(block.medianFee),
-          size: block.blockVSize / 1000000, // Convert to MB
-          time: blockTimes[idx] || `~${(idx + 1) * 10}m`,
-          status: 'pending' as const,
-          txCount: block.nTx,
-          totalFees: block.totalFees / 100000000, // Convert satoshis to BTC
-        }));
+        mempoolBlocks = projectedBlocks.slice(0, 3).map((block, idx) => {
+          // Calculate average fee rate: totalFees (sats) / blockVSize (vbytes)
+          const avgFeeRate = block.blockVSize > 0 ? block.totalFees / block.blockVSize : 0;
+          return {
+            height: blockLabels[idx] || `+${idx + 1}`,
+            medianFee: block.medianFee < 1 ? parseFloat(block.medianFee.toFixed(2)) : Math.round(block.medianFee),
+            avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
+            feeRange: block.feeRange.length >= 2
+              ? `${formatFeeRate(block.feeRange[0])}-${formatFeeRate(block.feeRange[block.feeRange.length - 1])} sat/vB`
+              : `${formatFeeRate(block.medianFee)} sat/vB`,
+            size: block.blockVSize / 1000000, // Convert to MB
+            time: blockTimes[idx] || `~${(idx + 1) * 10}m`,
+            status: 'pending' as const,
+            txCount: block.nTx,
+            totalFees: block.totalFees / 100000000, // Convert satoshis to BTC
+          };
+        });
 
         // Calculate summary for additional blocks beyond the 3 displayed
         if (projectedBlocks.length > 3) {
@@ -357,15 +399,27 @@ export async function getBlocksAndMempool() {
       return getBlocksAndMempoolSimple(blocks, mempoolInfo, fees, mempoolSizeMB);
     }
 
+    // Helper to format fee rate - always 2 decimal places
+    const formatFeeRateConfirmed = (rate: number): string => {
+      return rate.toFixed(2);
+    };
+
     // Format confirmed blocks
     const confirmedBlocks = blocks.slice(0, 4).map((block) => {
       const age = Math.floor((Date.now() / 1000 - block.timestamp) / 60);
+      // Calculate average fee rate from totalFees and block weight
+      // block.weight is in weight units, vsize = weight / 4
+      const vsize = (block.weight || block.size) / 4;
+      const totalFeesSats = block.extras?.totalFees || 0;
+      const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
+      const feeRangeArr = block.extras?.feeRange;
       return {
         height: block.height,
         medianFee: block.extras?.medianFee ?? block.medianFee ?? 50,
-        feeRange: block.extras?.feeRange
-          ? `${block.extras.feeRange[0]}-${block.extras.feeRange[block.extras.feeRange.length - 1]}`
-          : '40-200',
+        avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
+        feeRange: feeRangeArr && feeRangeArr.length >= 2
+          ? `${formatFeeRateConfirmed(feeRangeArr[0])}-${formatFeeRateConfirmed(feeRangeArr[feeRangeArr.length - 1])} sat/vB`
+          : '40.00-200.00 sat/vB',
         size: block.size / 1000000,
         time: age < 60 ? `${age}m ago` : `${Math.floor(age / 60)}h ago`,
         status: 'confirmed' as const,
@@ -413,9 +467,15 @@ function getBlocksAndMempoolSimple(
     return (medianFee * avgTxSize * txCount) / 100000000;
   };
 
+  // Helper to format fee rate - always 2 decimal places
+  const formatFeeRate = (rate: number): string => {
+    return rate.toFixed(2);
+  };
+
   const mempoolBlocks: Array<{
     height: string;
     medianFee: number;
+    avgFeeRate: number;
     feeRange: string;
     size: number;
     time: string;
@@ -427,56 +487,74 @@ function getBlocksAndMempoolSimple(
   if (blocksInMempool >= 1) {
     const blockSize = Math.min(mempoolSizeMB, avgBlockSize);
     const txCount = estimateTxCount(blockSize);
+    const totalFees = estimateTotalFees(fees.fastestFee, txCount);
+    const minFee = Math.max(fees.fastestFee - 5, 0.1);
+    const maxFee = fees.fastestFee + 50;
     mempoolBlocks.push({
       height: 'Next',
       medianFee: fees.fastestFee,
-      feeRange: `${Math.max(fees.fastestFee - 5, 1)}-${fees.fastestFee + 50}`,
+      avgFeeRate: fees.fastestFee, // Simple estimate: avg ~= median
+      feeRange: `${formatFeeRate(minFee)}-${formatFeeRate(maxFee)} sat/vB`,
       size: blockSize,
       time: '~10m',
       status: 'pending' as const,
       txCount,
-      totalFees: estimateTotalFees(fees.fastestFee, txCount),
+      totalFees,
     });
   }
 
   if (blocksInMempool >= 2) {
     const blockSize = Math.min(mempoolSizeMB - avgBlockSize, avgBlockSize);
     const txCount = estimateTxCount(blockSize);
+    const totalFees = estimateTotalFees(fees.halfHourFee, txCount);
+    const minFee = Math.max(fees.halfHourFee - 5, 0.1);
+    const maxFee = fees.halfHourFee + 20;
     mempoolBlocks.push({
       height: '+2',
       medianFee: fees.halfHourFee,
-      feeRange: `${Math.max(fees.halfHourFee - 5, 1)}-${fees.halfHourFee + 20}`,
+      avgFeeRate: fees.halfHourFee, // Simple estimate: avg ~= median
+      feeRange: `${formatFeeRate(minFee)}-${formatFeeRate(maxFee)} sat/vB`,
       size: blockSize,
       time: '~20m',
       status: 'pending' as const,
       txCount,
-      totalFees: estimateTotalFees(fees.halfHourFee, txCount),
+      totalFees,
     });
   }
 
   if (blocksInMempool >= 3) {
     const blockSize = Math.min(mempoolSizeMB - (avgBlockSize * 2), avgBlockSize);
     const txCount = estimateTxCount(blockSize);
+    const totalFees = estimateTotalFees(fees.hourFee, txCount);
+    const minFee = Math.max(fees.hourFee - 3, 0.1);
+    const maxFee = fees.hourFee + 10;
     mempoolBlocks.push({
       height: '+3',
       medianFee: fees.hourFee,
-      feeRange: `${Math.max(fees.hourFee - 3, 1)}-${fees.hourFee + 10}`,
+      avgFeeRate: fees.hourFee, // Simple estimate: avg ~= median
+      feeRange: `${formatFeeRate(minFee)}-${formatFeeRate(maxFee)} sat/vB`,
       size: blockSize,
       time: '~30m',
       status: 'pending' as const,
       txCount,
-      totalFees: estimateTotalFees(fees.hourFee, txCount),
+      totalFees,
     });
   }
 
   const confirmedBlocks = blocks.slice(0, 4).map((block) => {
     const age = Math.floor((Date.now() / 1000 - block.timestamp) / 60);
+    // Calculate average fee rate from totalFees and block weight
+    const vsize = (block.weight || block.size) / 4;
+    const totalFeesSats = block.extras?.totalFees || 0;
+    const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
+    const feeRangeArr = block.extras?.feeRange;
     return {
       height: block.height,
       medianFee: block.extras?.medianFee ?? block.medianFee ?? 50,
-      feeRange: block.extras?.feeRange
-        ? `${block.extras.feeRange[0]}-${block.extras.feeRange[block.extras.feeRange.length - 1]}`
-        : '40-200',
+      avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
+      feeRange: feeRangeArr && feeRangeArr.length >= 2
+        ? `${formatFeeRate(feeRangeArr[0])}-${formatFeeRate(feeRangeArr[feeRangeArr.length - 1])} sat/vB`
+        : '40.00-200.00 sat/vB',
       size: block.size / 1000000,
       time: age < 60 ? `${age}m ago` : `${Math.floor(age / 60)}h ago`,
       status: 'confirmed' as const,

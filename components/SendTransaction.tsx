@@ -1727,8 +1727,10 @@ export const SendTransaction: React.FC = () => {
                         <label className="text-xs text-sanctuary-500">Custom:</label>
                         <input
                            type="number"
+                           min={0.1}
+                           step={0.01}
                            value={feeRate}
-                           onChange={(e) => !isResumingDraft && setFeeRate(parseInt(e.target.value))}
+                           onChange={(e) => !isResumingDraft && setFeeRate(parseFloat(e.target.value) || 0)}
                            disabled={isResumingDraft}
                            className={`w-20 px-2 py-1.5 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${isResumingDraft ? 'cursor-not-allowed' : ''}`}
                         />

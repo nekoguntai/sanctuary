@@ -5,6 +5,7 @@ import type { PendingTransaction } from '../src/types';
 export interface BlockData {
   height: number | string;
   medianFee: number;
+  avgFeeRate?: number; // Average fee rate in sat/vB
   feeRange: string;
   size: number; // in MB (approx)
   time: string;
@@ -136,13 +137,18 @@ const Block: React.FC<{
             </div>
           )}
 
-          {/* Middle: Median Fee - main focus */}
+          {/* Middle: Average Fee Rate - main focus */}
           <div className="text-center">
-            {!compact && <div className={`text-[10px] uppercase font-bold ${colors.text} mb-0.5`}>Median</div>}
+            {!compact && <div className={`text-[10px] uppercase font-bold ${colors.text} mb-0.5`}>Avg Fee</div>}
             <div className={`${compact ? 'text-base' : 'text-xl md:text-2xl'} font-black leading-none ${colors.text}`}>
-              {Math.round(block.medianFee)}
+              {block.avgFeeRate !== undefined ? (block.avgFeeRate < 1 ? block.avgFeeRate.toFixed(1) : Math.round(block.avgFeeRate)) : Math.round(block.medianFee)}
             </div>
             <div className={`${compact ? 'text-[9px]' : 'text-[10px]'} font-bold ${colors.text}`}>sat/vB</div>
+            {!compact && block.feeRange && (
+              <div className={`text-[9px] font-medium ${colors.text} opacity-70 mt-0.5`}>
+                {block.feeRange}
+              </div>
+            )}
           </div>
 
           {/* Bottom: Height label - darker background */}
@@ -181,7 +187,7 @@ const Block: React.FC<{
           opacity-0 group-hover:opacity-100 transition-opacity duration-200
           whitespace-nowrap z-50 pointer-events-none shadow-lg
         `}>
-          {block.txCount.toLocaleString()} txs • {Math.round(fillPercentage)}% full
+          {block.txCount.toLocaleString()} txs • Median: {block.medianFee < 1 ? block.medianFee.toFixed(1) : Math.round(block.medianFee)} • Range: {block.feeRange} • {Math.round(fillPercentage)}% full
         </div>
       )}
     </div>

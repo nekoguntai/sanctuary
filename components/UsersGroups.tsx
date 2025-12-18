@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
-import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye, EyeOff } from 'lucide-react';
+import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye, EyeOff, Info } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
 import { useErrorHandler } from '../hooks/useErrorHandler';
@@ -307,6 +307,10 @@ export const UsersGroups: React.FC = () => {
                     <Button size="sm" onClick={handleCreateGroup} disabled={!newGroup || isCreatingGroup} isLoading={isCreatingGroup}>
                        <Plus className="w-4 h-4 mr-2" /> Create
                     </Button>
+                 </div>
+                 <div className="flex items-center gap-2 mt-3 text-xs text-sanctuary-500 dark:text-sanctuary-400">
+                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>You are not automatically added to groups you create. Add yourself as a member to see wallets shared with the group.</span>
                  </div>
               </div>
               <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800 max-h-96 overflow-y-auto">

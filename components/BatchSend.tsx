@@ -235,8 +235,9 @@ export const BatchSend: React.FC = () => {
             <input
               type="number"
               value={feeRate}
-              onChange={(e) => setFeeRate(parseInt(e.target.value))}
-              min={1}
+              onChange={(e) => setFeeRate(parseFloat(e.target.value) || 0)}
+              min={0.1}
+              step={0.01}
               className="block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
             />
           </div>

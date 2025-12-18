@@ -16,6 +16,28 @@ export const Login: React.FC = () => {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const twoFactorInputRef = useRef<HTMLInputElement>(null);
 
+  // Apply system color scheme preference on login screen
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applySystemTheme = (isDark: boolean) => {
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    // Apply initial preference
+    applySystemTheme(mediaQuery.matches);
+
+    // Listen for changes
+    const handler = (e: MediaQueryListEvent) => applySystemTheme(e.matches);
+    mediaQuery.addEventListener('change', handler);
+
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
   // Check API status and registration status on mount
   React.useEffect(() => {
     const checkApi = async () => {

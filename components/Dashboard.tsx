@@ -204,6 +204,14 @@ export const Dashboard: React.FC = () => {
     slow: feeEstimates.economy,
   } : null;
 
+  // Format fee rate: show decimals only when meaningful
+  const formatFeeRate = (rate: number | undefined): string => {
+    if (rate === undefined) return '---';
+    if (rate >= 10) return Math.round(rate).toString();
+    if (Number.isInteger(rate)) return rate.toString();
+    return rate.toFixed(1);
+  };
+
   // Derive node status from Bitcoin status
   const nodeStatus: 'unknown' | 'checking' | 'connected' | 'error' =
     statusLoading ? 'checking' :
@@ -513,21 +521,21 @@ export const Dashboard: React.FC = () => {
                 <div className="w-2 h-2 rounded-full bg-success-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Fast</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{fees?.fast?.toFixed(1)} sat/vB</span>
+              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.fast)} sat/vB</span>
             </div>
             <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-warning-500 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Normal</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{fees?.medium?.toFixed(1)} sat/vB</span>
+              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.medium)} sat/vB</span>
             </div>
             <div className="flex justify-between items-center p-2.5 surface-secondary rounded-xl">
               <div className="flex items-center">
                 <div className="w-2 h-2 rounded-full bg-sanctuary-400 mr-2"></div>
                 <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">Slow</span>
               </div>
-              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{fees?.slow?.toFixed(1)} sat/vB</span>
+              <span className="font-bold text-sm text-sanctuary-900 dark:text-sanctuary-100">{formatFeeRate(fees?.slow)} sat/vB</span>
             </div>
           </div>
         </div>

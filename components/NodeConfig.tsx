@@ -201,44 +201,69 @@ export const NodeConfig: React.FC = () => {
             </div>
 
             <div className="p-5 space-y-5">
-              {/* Fee Estimator URL */}
+              {/* Fee Estimator Source Toggle */}
               <div>
-                <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Fee Estimator URL</label>
-                <input
-                  type="text"
-                  value={nodeConfig.feeEstimatorUrl || ''}
-                  onChange={(e) => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: e.target.value })}
-                  placeholder="https://mempool.space"
-                  className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                />
-                <div className="flex space-x-2 mt-3">
+                <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Fee Estimation Source</label>
+                <div className="flex space-x-2">
                   <button
-                    onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: 'https://mempool.space' })}
-                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                      nodeConfig.feeEstimatorUrl === 'https://mempool.space'
+                    onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space' })}
+                    className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                      nodeConfig.feeEstimatorUrl
                         ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
                         : 'surface-secondary border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
                     }`}
                   >
-                    mempool.space
+                    <div className="font-medium">Mempool API</div>
+                    <div className="text-[10px] opacity-70">mempool.space compatible</div>
                   </button>
                   <button
                     onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: '' })}
-                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
                       !nodeConfig.feeEstimatorUrl
                         ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
                         : 'surface-secondary border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
                     }`}
                   >
-                    Use Block Explorer
+                    <div className="font-medium">Electrum Server</div>
+                    <div className="text-[10px] opacity-70">From node connection</div>
                   </button>
                 </div>
-                <p className="text-xs text-sanctuary-400 mt-2">
-                  {nodeConfig.feeEstimatorUrl
-                    ? `Using ${nodeConfig.feeEstimatorUrl} for fee rates and block confirmation`
-                    : `Using Block Explorer (${nodeConfig.explorerUrl || 'https://mempool.space'}) for fee rates and block confirmation`}
-                </p>
               </div>
+
+              {/* Fee Estimator URL - only shown when using Mempool API */}
+              {nodeConfig.feeEstimatorUrl !== '' && nodeConfig.feeEstimatorUrl !== undefined && (
+                <div>
+                  <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Mempool API URL</label>
+                  <input
+                    type="text"
+                    value={nodeConfig.feeEstimatorUrl || 'https://mempool.space'}
+                    onChange={(e) => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: e.target.value })}
+                    placeholder="https://mempool.space"
+                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                  />
+                  <div className="flex space-x-2 mt-2">
+                    <button
+                      onClick={() => setNodeConfig({ ...nodeConfig, feeEstimatorUrl: 'https://mempool.space' })}
+                      className={`text-xs px-2 py-1 rounded border transition-colors ${
+                        nodeConfig.feeEstimatorUrl === 'https://mempool.space'
+                          ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                          : 'surface-secondary border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
+                      }`}
+                    >
+                      mempool.space
+                    </button>
+                  </div>
+                  <p className="text-xs text-sanctuary-400 mt-2">
+                    Enter custom mempool.space instance URL or use default
+                  </p>
+                </div>
+              )}
+
+              {!nodeConfig.feeEstimatorUrl && (
+                <p className="text-xs text-sanctuary-400 p-3 surface-secondary rounded-lg">
+                  Fee estimates will be fetched from the Electrum server configured below. Note: Electrum provides less detailed fee data than mempool.space.
+                </p>
+              )}
 
               <div className="border-t border-sanctuary-100 dark:border-sanctuary-800" />
 

@@ -73,30 +73,41 @@ router.get('/status', async (req: Request, res: Response) => {
 
 /**
  * GET /api/v1/bitcoin/fees
- * Get current fee estimates (uses mempool.space for accuracy, falls back to Electrum)
+ * Get current fee estimates from configured source (mempool.space API or Electrum)
  */
 router.get('/fees', async (req: Request, res: Response) => {
   try {
-    // Try mempool.space first for more accurate fee estimates
-    try {
-      const mempoolFees = await mempool.getRecommendedFees();
-      res.json({
-        fastest: mempoolFees.fastestFee,
-        halfHour: mempoolFees.halfHourFee,
-        hour: mempoolFees.hourFee,
-        economy: mempoolFees.economyFee,
-        minimum: mempoolFees.minimumFee,
-      });
-      return;
-    } catch (mempoolError) {
-      log.warn('[BITCOIN] Mempool.space fee fetch failed, falling back to Electrum', { error: String(mempoolError) });
+    // Check configured fee estimator source
+    const nodeConfig = await prisma.nodeConfig.findFirst({
+      where: { isDefault: true },
+    });
+
+    const useMempoolApi = nodeConfig?.feeEstimatorUrl !== '' && nodeConfig?.feeEstimatorUrl !== undefined;
+
+    if (useMempoolApi) {
+      // Use mempool.space API (or configured URL)
+      try {
+        const mempoolFees = await mempool.getRecommendedFees();
+        res.json({
+          fastest: mempoolFees.fastestFee,
+          halfHour: mempoolFees.halfHourFee,
+          hour: mempoolFees.hourFee,
+          economy: mempoolFees.economyFee,
+          minimum: mempoolFees.minimumFee,
+          source: 'mempool',
+        });
+        return;
+      } catch (mempoolError) {
+        log.warn('[BITCOIN] Mempool API fee fetch failed, falling back to Electrum', { error: String(mempoolError) });
+      }
     }
 
-    // Fallback to Electrum estimates
+    // Use Electrum server estimates
     const fees = await blockchain.getFeeEstimates();
     res.json({
       ...fees,
-      minimum: 1,
+      minimum: fees.economy || 1,
+      source: 'electrum',
     });
   } catch (error) {
     log.error('[BITCOIN] Get fees error', { error: String(error) });

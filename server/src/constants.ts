@@ -74,8 +74,9 @@ export const DEFAULT_DUST_THRESHOLD = 546;
 
 /**
  * Minimum fee rate in sat/vB
+ * Can be as low as 0.1 for low-fee environments
  */
-export const MIN_FEE_RATE = 1;
+export const MIN_FEE_RATE = 0.1;
 
 /**
  * Maximum reasonable fee rate in sat/vB (to prevent accidents)

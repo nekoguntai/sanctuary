@@ -304,7 +304,7 @@ model DraftTransaction {
   // Transaction parameters (user inputs)
   recipient       String
   amount          BigInt
-  feeRate         Int
+  feeRate         Float
   selectedUtxoIds String[] // Format: "txid:vout"
   enableRBF       Boolean  @default(true)
   subtractFees    Boolean  @default(false)
@@ -367,9 +367,9 @@ model NodeConfig {
 
 model FeeEstimate {
   id          String   @id @default(uuid())
-  fastest     Int      // sat/vB
-  halfHour    Int      // sat/vB
-  hour        Int      // sat/vB
+  fastest     Float    // sat/vB
+  halfHour    Float    // sat/vB
+  hour        Float    // sat/vB
   createdAt   DateTime @default(now())
 
   @@map("fee_estimates")

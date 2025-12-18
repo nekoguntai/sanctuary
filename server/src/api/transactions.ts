@@ -19,7 +19,7 @@ import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 import { getBlockHeight } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
-import { INITIAL_ADDRESS_COUNT } from '../constants';
+import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
 
 const log = createLogger('TRANSACTIONS');
 
@@ -725,10 +725,10 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       });
     }
 
-    if (!feeRate || feeRate < 1) {
+    if (!feeRate || feeRate < MIN_FEE_RATE) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'feeRate must be at least 1 sat/vB',
+        message: `feeRate must be at least ${MIN_FEE_RATE} sat/vB`,
       });
     }
 
@@ -815,10 +815,10 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
       });
     }
 
-    if (!feeRate || feeRate < 1) {
+    if (!feeRate || feeRate < MIN_FEE_RATE) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'feeRate must be at least 1 sat/vB',
+        message: `feeRate must be at least ${MIN_FEE_RATE} sat/vB`,
       });
     }
 
@@ -1005,10 +1005,10 @@ router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async
       });
     }
 
-    if (!feeRate || feeRate < 1) {
+    if (!feeRate || feeRate < MIN_FEE_RATE) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'feeRate must be at least 1 sat/vB',
+        message: `feeRate must be at least ${MIN_FEE_RATE} sat/vB`,
       });
     }
 

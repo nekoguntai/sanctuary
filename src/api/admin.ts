@@ -4,7 +4,7 @@
  * API calls for admin-only functionality
  */
 
-import apiClient from './client';
+import apiClient, { API_BASE_URL } from './client';
 import { NodeConfig } from '../../types';
 
 // ========================================
@@ -255,7 +255,7 @@ export interface RestoreResult {
 export async function createBackup(options?: BackupOptions): Promise<Blob> {
   const token = apiClient.getToken();
 
-  const response = await fetch('/api/v1/admin/backup', {
+  const response = await fetch(`${API_BASE_URL}/admin/backup`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

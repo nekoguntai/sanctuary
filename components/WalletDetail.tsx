@@ -163,7 +163,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
           </div>
         </div>
       ) : !telegramEnabled ? (
-        <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-900/50 border border-sanctuary-200 dark:border-sanctuary-800 rounded-xl">
+        <div className="p-4 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl">
           <div className="flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-sanctuary-400 mt-0.5 flex-shrink-0" />
             <div>

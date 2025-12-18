@@ -4,7 +4,7 @@
  * API calls for transaction and UTXO management
  */
 
-import apiClient from './client';
+import apiClient, { API_BASE_URL } from './client';
 import type { Label, Transaction, UTXO, Address, PendingTransaction } from '../types';
 
 // Re-export types for backward compatibility
@@ -124,9 +124,9 @@ export async function exportTransactions(
   if (options.startDate) params.set('startDate', options.startDate);
   if (options.endDate) params.set('endDate', options.endDate);
 
-  const response = await fetch(`/api/v1/wallets/${walletId}/transactions/export?${params}`, {
+  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/transactions/export?${params}`, {
     headers: {
-      'Authorization': `Bearer ${localStorage.getItem('sanctuary_token')}`,
+      'Authorization': `Bearer ${apiClient.getToken()}`,
     },
   });
 

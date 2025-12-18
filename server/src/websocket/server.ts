@@ -124,17 +124,24 @@ export class SanctauryWebSocketServer {
 
   /**
    * Extract JWT token from request
+   *
+   * SECURITY NOTE: Token in query parameter is supported for backwards compatibility
+   * but is discouraged. The frontend client uses 'auth' message after connection instead.
+   * Query parameter support may be removed in a future version.
    */
   private extractToken(request: IncomingMessage): string | null {
-    // Try query parameter
-    const url = new URL(request.url || '', `http://${request.headers.host}`);
-    const tokenParam = url.searchParams.get('token');
-    if (tokenParam) return tokenParam;
-
-    // Try Authorization header
+    // Try Authorization header first (preferred)
     const authHeader = request.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       return authHeader.substring(7);
+    }
+
+    // Fallback to query parameter (deprecated - avoid using in new code)
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const tokenParam = url.searchParams.get('token');
+    if (tokenParam) {
+      log.debug('Client using deprecated query parameter auth');
+      return tokenParam;
     }
 
     return null;

@@ -19,6 +19,9 @@ const getApiBaseUrl = (): string => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// Export for use by functions that need direct fetch (e.g., file downloads)
+export { API_BASE_URL };
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;

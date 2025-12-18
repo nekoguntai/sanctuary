@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { Notification, generateNotificationId } from '../components/NotificationToast';
 
 interface NotificationContextType {
@@ -12,6 +12,26 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  // Track timeouts for cleanup
+  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Cleanup all timeouts on unmount
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      timeoutsRef.current.clear();
+    };
+  }, []);
+
+  const removeNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    // Clear the timeout if it exists
+    const timeout = timeoutsRef.current.get(id);
+    if (timeout) {
+      clearTimeout(timeout);
+      timeoutsRef.current.delete(id);
+    }
+  }, []);
 
   const addNotification = useCallback((notification: Omit<Notification, 'id'>) => {
     const id = generateNotificationId();
@@ -24,17 +44,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Auto-remove after duration if specified
     if (notification.duration) {
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         removeNotification(id);
       }, notification.duration);
+      timeoutsRef.current.set(id, timeout);
     }
-  }, []);
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  }, [removeNotification]);
 
   const clearAll = useCallback(() => {
+    // Clear all timeouts
+    timeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+    timeoutsRef.current.clear();
     setNotifications([]);
   }, []);
 

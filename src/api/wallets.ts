@@ -4,7 +4,7 @@
  * API calls for wallet management
  */
 
-import apiClient from './client';
+import apiClient, { API_BASE_URL } from './client';
 import type { Wallet, WalletRole } from '../types';
 
 // Re-export types for backward compatibility
@@ -266,7 +266,7 @@ export async function exportWallet(walletId: string): Promise<WalletExport> {
  */
 export async function exportLabelsBip329(walletId: string, walletName: string): Promise<void> {
   const token = apiClient.getToken();
-  const response = await fetch(`/api/v1/wallets/${walletId}/export/labels`, {
+  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/export/labels`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },

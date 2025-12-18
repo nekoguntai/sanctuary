@@ -120,6 +120,7 @@ export const useWebSocketEvent = (
 
 /**
  * Hook for subscribing to wallet events
+ * Uses refs for callbacks to avoid re-subscribing when callbacks change
  */
 export const useWalletEvents = (
   walletId: string | undefined,
@@ -132,22 +133,29 @@ export const useWalletEvents = (
 ) => {
   const { subscribeWallet, unsubscribeWallet } = useWebSocket();
 
+  // Use refs to store callbacks to avoid re-subscribing when callbacks change
+  const callbacksRef = useRef(callbacks);
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  });
+
   useEffect(() => {
     if (!walletId) return;
 
     // Subscribe to wallet
     subscribeWallet(walletId);
 
-    // Setup event handlers
+    // Setup event handlers - use ref to get latest callbacks
     const handleEvent = (event: WebSocketEvent) => {
-      if (event.event === 'transaction' && callbacks.onTransaction) {
-        callbacks.onTransaction(event.data as WebSocketTransactionData);
-      } else if (event.event === 'balance' && callbacks.onBalance) {
-        callbacks.onBalance(event.data as WebSocketBalanceData);
-      } else if (event.event === 'confirmation' && callbacks.onConfirmation) {
-        callbacks.onConfirmation(event.data as WebSocketConfirmationData);
-      } else if (event.event === 'sync' && callbacks.onSync) {
-        callbacks.onSync(event.data as WebSocketSyncData);
+      const cbs = callbacksRef.current;
+      if (event.event === 'transaction' && cbs.onTransaction) {
+        cbs.onTransaction(event.data as WebSocketTransactionData);
+      } else if (event.event === 'balance' && cbs.onBalance) {
+        cbs.onBalance(event.data as WebSocketBalanceData);
+      } else if (event.event === 'confirmation' && cbs.onConfirmation) {
+        cbs.onConfirmation(event.data as WebSocketConfirmationData);
+      } else if (event.event === 'sync' && cbs.onSync) {
+        cbs.onSync(event.data as WebSocketSyncData);
       }
     };
 
@@ -163,7 +171,7 @@ export const useWalletEvents = (
       websocketClient.off('confirmation', handleEvent);
       websocketClient.off('sync', handleEvent);
     };
-  }, [walletId, subscribeWallet, unsubscribeWallet, callbacks.onTransaction, callbacks.onBalance, callbacks.onConfirmation, callbacks.onSync]);
+  }, [walletId, subscribeWallet, unsubscribeWallet]);
 };
 
 /**

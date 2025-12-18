@@ -699,6 +699,7 @@ export const WalletDetail: React.FC = () => {
         index: addr.index,
         used: addr.used,
         balance: addr.balance || 0,
+        labels: addr.labels || [], // Include labels from API response
         walletId: walletId,
       }));
 

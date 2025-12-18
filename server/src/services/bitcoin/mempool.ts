@@ -279,14 +279,35 @@ export async function getBlocksAndMempool() {
       try {
         const projectedBlocks = await getProjectedMempoolBlocks();
 
+        // IMPORTANT: Block ordering documentation
+        // =========================================
+        // mempool.space API returns blocks in order of confirmation priority:
+        //   - projectedBlocks[0] = Next block (highest fee, confirms first)
+        //   - projectedBlocks[1] = +2 blocks out
+        //   - projectedBlocks[2] = +3 blocks out
+        //
+        // We convert them with labels and then REVERSE at the end (line ~350),
+        // so the final 'mempool' array returned to frontend is:
+        //   - mempool[0] = +3 block (furthest from confirmation, leftmost in UI)
+        //   - mempool[1] = +2 block
+        //   - mempool[2] = Next block (closest to confirmation, rightmost pending)
+        //
+        // The frontend displays blocks left-to-right in array order:
+        //   [+3] [+2] [Next] | [Confirmed blocks...]
+        //
+        // When matching pending transactions to blocks, use:
+        //   - Index 0 = +3 (lowest priority, lowest fees)
+        //   - Index (length-1) = Next block (highest priority, highest fees)
+
         // Convert projected blocks to our format (show up to 3)
         const blockLabels = ['Next', '+2', '+3'];
         const blockTimes = ['~10m', '~20m', '~30m'];
 
-        // Helper to format fee rate - preserve decimals for low fees
+        // Helper to format fee rate - preserve decimals for accuracy
         const formatFeeRate = (rate: number): string => {
-          if (rate >= 1) return Math.round(rate).toString();
-          if (rate >= 0.1) return rate.toFixed(1);
+          if (rate >= 10) return Math.round(rate).toString();
+          if (rate >= 1) return rate.toFixed(1);
+          if (rate >= 0.1) return rate.toFixed(2);
           return rate.toFixed(2);
         };
 

@@ -390,6 +390,22 @@ const parseFeeRange = (feeRange: string): [number, number] => {
   return [0, Infinity]; // Fallback
 };
 
+// IMPORTANT: Block ordering documentation
+// =========================================
+// The backend returns mempool blocks in display order (left-to-right):
+//   - pendingBlocks[0] = +3 block (furthest from confirmation, LOWEST fees)
+//   - pendingBlocks[1] = +2 block
+//   - pendingBlocks[2] = Next block (closest to confirmation, HIGHEST fees)
+//
+// Visual layout:  [+3] [+2] [Next] | [Confirmed blocks...]
+//                  ^              ^
+//               idx=0          idx=length-1
+//            (lowest fee)     (highest fee)
+//
+// Transaction matching logic:
+//   - "Next" block (rightmost): transactions with fee >= block's min fee
+//   - Other blocks: transactions with fee >= block's min fee AND < closer block's min fee
+//
 // Helper to match pending transactions to blocks based on fee rate
 // Uses actual fee ranges from mempool data for accurate predictions
 const getTxsForBlock = (
@@ -404,23 +420,27 @@ const getTxsForBlock = (
 
   const [minFee, maxFee] = parseFeeRange(block.feeRange);
 
-  // Get the next block's min fee (if exists) to set upper bound
-  const nextBlock = blockIndex > 0 ? allBlocks[blockIndex - 1] : null;
-  const nextBlockMinFee = nextBlock ? parseFeeRange(nextBlock.feeRange)[0] : Infinity;
+  // Check if this is the "Next" block (closest to confirmation)
+  // It's the last in the display order (rightmost pending block)
+  const isNextBlock = blockIndex === totalPendingBlocks - 1;
+
+  // Get the block closer to confirmation (to the right, higher index)
+  const closerBlock = blockIndex < totalPendingBlocks - 1 ? allBlocks[blockIndex + 1] : null;
+  const closerBlockMinFee = closerBlock ? parseFeeRange(closerBlock.feeRange)[0] : Infinity;
 
   return allPendingTxs.filter(tx => {
-    // First block (Next): tx fee rate >= this block's min fee
-    if (blockIndex === 0) {
+    // "Next" block (rightmost): tx fee rate >= this block's min fee
+    if (isNextBlock) {
       return tx.feeRate >= minFee;
     }
 
-    // Last pending block: anything below this block's max fee that didn't fit in earlier blocks
-    if (blockIndex === totalPendingBlocks - 1) {
-      return tx.feeRate < nextBlockMinFee && tx.feeRate >= Math.max(minFee * 0.5, 1);
+    // Furthest block (+3, leftmost): low fee transactions
+    if (blockIndex === 0) {
+      return tx.feeRate >= minFee && tx.feeRate < closerBlockMinFee;
     }
 
-    // Middle blocks: fee rate between this block's range and next block's min
-    return tx.feeRate >= minFee && tx.feeRate < nextBlockMinFee;
+    // Middle blocks: fee rate between this block's min and closer block's min
+    return tx.feeRate >= minFee && tx.feeRate < closerBlockMinFee;
   });
 };
 

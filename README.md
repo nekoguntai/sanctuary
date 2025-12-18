@@ -136,6 +136,9 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Admin controls** — Configure public registration and system settings
 - **Dark mode** — Easy on the eyes, day or night
 - **Two-factor authentication** — Optional TOTP-based 2FA with backup codes
+- **Telegram notifications** — Receive transaction alerts via your own Telegram bot
+- **Notification sounds** — Configurable audio alerts for transactions and confirmations
+- **Update notifications** — Dashboard alerts when new versions are available
 - **Audit logging** — Track security-relevant events and user actions
 - **Backup & restore** — Export/import all data via the web UI
 
@@ -691,6 +694,42 @@ Users can enable TOTP-based two-factor authentication for additional account sec
 **Disabling 2FA:**
 - Requires your current password and a valid 2FA code
 - This is intentionally difficult to prevent unauthorized disabling
+
+### Notifications
+
+Sanctuary supports multiple notification methods to keep you informed about wallet activity.
+
+#### Telegram Notifications
+
+Receive transaction alerts via Telegram using your own bot:
+
+1. **Create a Telegram bot:**
+   - Open Telegram and message [@BotFather](https://t.me/BotFather)
+   - Send `/newbot` and follow the prompts
+   - Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+2. **Get your Chat ID:**
+   - Send `/start` to your new bot in Telegram
+   - In Sanctuary, go to **Settings → Telegram Notifications**
+   - Paste your bot token and click **Fetch** to auto-detect your Chat ID
+
+3. **Configure per-wallet notifications:**
+   - Go to any wallet's **Settings** tab
+   - Enable Telegram notifications for that wallet
+   - Choose which events to receive: received, sent, consolidation
+
+#### Notification Sounds
+
+Configure audio alerts for different transaction events:
+
+1. Go to **Settings → Notification Sounds**
+2. Enable sounds globally with the master toggle
+3. Configure each event type independently:
+   - **Confirmation** — Plays when a transaction gets its first confirmation
+   - **Receive** — Plays when Bitcoin is received
+   - **Send** — Plays when a transaction is broadcast
+
+Each event can have its own sound from 20 built-in presets (chime, bell, coin, zen, etc.) or be disabled individually.
 
 ## Upgrading
 

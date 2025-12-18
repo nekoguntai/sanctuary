@@ -26,7 +26,7 @@ Core service handling all transaction logic:
 **Transaction Creation**
 - `createTransaction()` - Creates PSBT for hardware wallet signing
 - Validates recipient addresses
-- Handles change outputs (dust threshold: 546 sats)
+- Handles change outputs (configurable dust threshold, default: 546 sats)
 - RBF enabled by default
 - Returns unsigned PSBT in base64 format
 
@@ -224,7 +224,7 @@ Users can manually select specific UTXOs through coin control interface.
 ### Change Handling
 
 - Automatically creates change output when needed
-- Dust threshold: 546 sats
+- Configurable dust threshold (default: 546 sats, see Admin → Variables)
 - Uses unused change addresses from wallet
 - Falls back to receiving address if no change address available
 
@@ -375,9 +375,9 @@ The system logs important events:
 - Ensure SegWit discount applied
 
 **Change output issues:**
-- Check dust threshold (546 sats)
+- Check dust threshold setting (Admin → Variables, default: 546 sats)
 - Verify change address derivation
-- Ensure change output not below dust
+- Ensure change output not below dust threshold
 
 ## Future Enhancements
 

@@ -187,7 +187,7 @@ console.log(`Medium: ${fees.medium.feeRate} sat/vB (~${fees.medium.minutes} min)
 ### UTXO Selection
 - Largest-first selection for batch transactions
 - Automatic change output creation
-- Dust threshold: 546 sats
+- Configurable dust threshold (default: 546 sats, see Admin → Variables)
 
 ### Safety Features
 - Validates all addresses before creating transactions

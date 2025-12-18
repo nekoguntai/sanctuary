@@ -674,12 +674,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     </div>
                   </div>
 
-                  {/* Lightning */}
+                  {/* Lightning Address */}
                   <div className="p-3 rounded-lg surface-secondary">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-sanctuary-500 uppercase flex items-center space-x-1">
                         <Zap className="h-3 w-3 text-amber-500" />
-                        <span>Lightning</span>
+                        <span>Lightning Address</span>
                       </span>
                       <button
                         onClick={() => copyToClipboard('sanctuary@getalby.com', 'ln')}
@@ -704,6 +704,40 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                       </div>
                       <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
                         sanctuary@getalby.com
+                      </code>
+                    </div>
+                  </div>
+
+                  {/* BOLT12 Offer */}
+                  <div className="p-3 rounded-lg surface-secondary">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-sanctuary-500 uppercase flex items-center space-x-1">
+                        <Zap className="h-3 w-3 text-amber-500" />
+                        <span>BOLT12 Offer</span>
+                      </span>
+                      <button
+                        onClick={() => copyToClipboard('lno1zrxq8pjw7qjlm68mtp7e3yvxee4y5xrgjhhyf2fxhlphpckrvevh50u0q0k69ewp6vpr8cpc4fd86z8zx6vfsw9mygjvpanytty0rf7dadr2jqsrl3hc5zp5ethevj9fgtw2507ug4qvfaqeejk637u03dmqpy9fyq6sqv6wau6w883t4n4l5yqjfr4ge4ugpttxgeq9cy4gtxhlckats0ce9mph6k4kwrz7dl648999emgcv5p90yl8q25qslw2dfndv3n2gtv20wpkhahexj93dh7w35g832h33e55h3tagqqsu0hv9rtuadpk5rahzc9uj9fdzy', 'bolt12')}
+                        className="flex items-center space-x-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        {copiedAddress === 'bolt12' ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <div className="bg-white p-1.5 rounded-lg flex-shrink-0">
+                        <QRCodeSVG value="lno1zrxq8pjw7qjlm68mtp7e3yvxee4y5xrgjhhyf2fxhlphpckrvevh50u0q0k69ewp6vpr8cpc4fd86z8zx6vfsw9mygjvpanytty0rf7dadr2jqsrl3hc5zp5ethevj9fgtw2507ug4qvfaqeejk637u03dmqpy9fyq6sqv6wau6w883t4n4l5yqjfr4ge4ugpttxgeq9cy4gtxhlckats0ce9mph6k4kwrz7dl648999emgcv5p90yl8q25qslw2dfndv3n2gtv20wpkhahexj93dh7w35g832h33e55h3tagqqsu0hv9rtuadpk5rahzc9uj9fdzy" size={64} level="L" />
+                      </div>
+                      <code className="text-[10px] text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono leading-tight">
+                        lno1zrxq8pjw7qjlm68mtp7e3yvxee4y5xrgjhhyf2fxhlphpckrvevh50u0q0k69ewp6vpr8cpc4fd86z8zx6vfsw9mygjvpanytty0rf7dadr2jqsrl3hc5zp5ethevj9fgtw2507ug4qvfaqeejk637u03dmqpy9fyq6sqv6wau6w883t4n4l5yqjfr4ge4ugpttxgeq9cy4gtxhlckats0ce9mph6k4kwrz7dl648999emgcv5p90yl8q25qslw2dfndv3n2gtv20wpkhahexj93dh7w35g832h33e55h3tagqqsu0hv9rtuadpk5rahzc9uj9fdzy
                       </code>
                     </div>
                   </div>

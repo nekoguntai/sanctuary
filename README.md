@@ -22,6 +22,47 @@
 
 > **Disclaimer:** Sanctuary is provided free of charge, "as is", without warranty of any kind, express or implied. The authors and contributors accept no liability for any damages, loss of funds, or other issues arising from the use of this software. You are solely responsible for the security of your Bitcoin and the verification of all transactions. Always verify addresses and amounts on your hardware wallet before signing.
 
+## Table of Contents
+
+- [Quick Install](#quick-install)
+- [Umbrel Installation](#umbrel-installation)
+- [Overview](#overview)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Architecture](#architecture)
+- [HTTP and HTTPS Ports](#http-and-https-ports)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [Manual Installation](#manual-installation)
+  - [Windows Installation](#windows-installation)
+  - [macOS Installation](#macos-installation)
+  - [Linux Installation](#linux-installation)
+- [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+  - [Logging](#logging)
+  - [Enabling HTTPS](#enabling-https)
+  - [Connecting to Your Own Bitcoin Node](#connecting-to-your-own-bitcoin-node)
+  - [Hardware Wallet Setup](#hardware-wallet-setup)
+- [Usage](#usage)
+  - [First Run](#first-run)
+  - [Importing a Wallet](#importing-a-wallet)
+  - [Creating Transactions](#creating-transactions)
+  - [User Roles & Permissions](#user-roles--permissions)
+  - [Admin Settings](#admin-settings)
+  - [Two-Factor Authentication](#two-factor-authentication)
+  - [Notifications](#notifications)
+- [Upgrading](#upgrading)
+- [Backup & Restore](#backup--restore)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Donations](#donations)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+---
+
 ## Quick Install
 
 **Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
@@ -146,26 +187,44 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Your Browser                              │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    Sanctuary Web UI                          │ │
-│  │              (WebUSB → Hardware Wallet)                      │ │
-│  └────────────────────────────┬────────────────────────────────┘ │
-└───────────────────────────────┼─────────────────────────────────┘
-                                │ HTTPS
-┌───────────────────────────────▼─────────────────────────┐
-│                  Docker Compose Stack                    │
-│  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐    │
-│  │  Frontend   │  │   Backend   │  │   PostgreSQL  │    │
-│  │   (nginx)   │  │  (Node.js)  │  │   (Database)  │    │
-│  └─────────────┘  └──────┬──────┘  └───────────────┘    │
-└──────────────────────────┼──────────────────────────────┘
-                           │
-            ┌──────────────▼──────────────┐
-            │   Bitcoin Network Access     │
-            │  (Electrum / Bitcoin Node)   │
-            └─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Your Browser                                     │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                        Sanctuary Web UI                                │  │
+│  │                  (WebUSB → Hardware Wallet)                            │  │
+│  └────────────────────────────────┬──────────────────────────────────────┘  │
+└───────────────────────────────────┼─────────────────────────────────────────┘
+                                    │ HTTPS (:8443)
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                          Docker Compose Stack                                │
+│                                                                              │
+│  ┌─────────────┐      ┌─────────────┐      ┌───────────────┐                │
+│  │  Frontend   │      │   Backend   │◄────►│   PostgreSQL  │                │
+│  │   (nginx)   │─────►│  (Node.js)  │      │   (Database)  │                │
+│  │   :8443     │      │    :3001    │      │     :5432     │                │
+│  └─────────────┘      └──────┬──────┘      └───────────────┘                │
+│                              │ ▲                                             │
+│                              │ │ WebSocket                                   │
+│                              │ │                                             │
+│  ┌─────────────┐             │ │                                             │
+│  │   Gateway   │─────────────┘ │                                             │
+│  │  (Node.js)  │◄──────────────┘                                             │
+│  │    :4000    │                                                             │
+│  └──────┬──────┘                                                             │
+│         │                                                                    │
+└─────────┼────────────────────────────────────────────────────────────────────┘
+          │ HTTPS (:4000)                       │
+          │                                     │
+          ▼                                     ▼
+┌───────────────────┐              ┌─────────────────────────────┐
+│   Mobile Apps     │              │   Bitcoin Network Access     │
+│  (iOS / Android)  │              │  (Electrum / Bitcoin Node)   │
+│                   │              └─────────────────────────────┘
+│  ┌─────┐ ┌─────┐  │
+│  │ iOS │ │ And │  │
+│  └─────┘ └─────┘  │
+└───────────────────┘
 ```
 
 **Components:**
@@ -987,6 +1046,22 @@ Contributions are welcome! Please:
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
+
+## Donations
+
+If you find Sanctuary useful and want to support its development, consider sending a donation.
+
+**Bitcoin (on-chain):**
+```
+bc1q... (coming soon)
+```
+
+**Lightning Network:**
+```
+lnurl... (coming soon)
+```
+
+Your support helps cover development costs and keeps the project independent.
 
 ## License
 

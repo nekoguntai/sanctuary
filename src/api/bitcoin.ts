@@ -20,6 +20,7 @@ export interface BitcoinStatus {
   useSsl?: boolean;
   explorerUrl?: string;
   confirmationThreshold?: number;
+  deepConfirmationThreshold?: number;
   error?: string;
 }
 

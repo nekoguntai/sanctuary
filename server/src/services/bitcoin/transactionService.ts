@@ -14,6 +14,17 @@ import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
 import { parseDescriptor } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
+import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
+
+/**
+ * Get dust threshold from system settings
+ */
+async function getDustThreshold(): Promise<number> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: 'dustThreshold' },
+  });
+  return setting ? JSON.parse(setting.value) : DEFAULT_DUST_THRESHOLD;
+}
 
 /**
  * Check if a script type is legacy (requires nonWitnessUtxo)
@@ -76,7 +87,7 @@ export async function selectUTXOs(
   });
   const confirmationThreshold = thresholdSetting
     ? JSON.parse(thresholdSetting.value)
-    : 3; // Default to 3
+    : DEFAULT_CONFIRMATION_THRESHOLD;
 
   // Get available UTXOs (exclude frozen and unconfirmed UTXOs)
   let utxos = await prisma.uTXO.findMany({
@@ -171,6 +182,9 @@ export async function createTransaction(
   effectiveAmount: number; // The actual amount being sent
 }> {
   const { selectedUtxoIds, enableRBF = true, label, memo, sendMax = false, subtractFees = false } = options;
+
+  // Get configurable thresholds
+  const dustThreshold = await getDustThreshold();
 
   // Get wallet info including devices (for fingerprint)
   const wallet = await prisma.wallet.findUnique({
@@ -322,7 +336,7 @@ export async function createTransaction(
 
     // Fee is subtracted from the amount being sent
     effectiveAmount = amount - estimatedFee;
-    if (effectiveAmount <= 546) { // dust threshold
+    if (effectiveAmount <= dustThreshold) {
       throw new Error(`Amount ${amount} sats is not enough to cover fee ${estimatedFee} sats (would leave ${effectiveAmount} sats)`);
     }
 
@@ -477,7 +491,6 @@ export async function createTransaction(
   });
 
   // Add change output if needed (skip for sendMax - no change)
-  const dustThreshold = 546;
   let changeAddress: string | undefined;
 
   if (!sendMax && selection.changeAmount >= dustThreshold) {
@@ -709,6 +722,7 @@ export async function estimateTransaction(
   error?: string;
 }> {
   try {
+    const dustThreshold = await getDustThreshold();
     const selection = await selectUTXOs(
       walletId,
       amount,
@@ -717,7 +731,7 @@ export async function estimateTransaction(
       selectedUtxoIds
     );
 
-    const outputCount = selection.changeAmount >= 546 ? 2 : 1;
+    const outputCount = selection.changeAmount >= dustThreshold ? 2 : 1;
 
     return {
       fee: selection.estimatedFee,
@@ -775,6 +789,9 @@ export async function createBatchTransaction(
   outputs: Array<{ address: string; amount: number }>;
 }> {
   const { selectedUtxoIds, enableRBF = true } = options;
+
+  // Get configurable thresholds
+  const dustThreshold = await getDustThreshold();
 
   // Get wallet info including devices (for fingerprint)
   const wallet = await prisma.wallet.findUnique({
@@ -1047,7 +1064,6 @@ export async function createBatchTransaction(
   }
 
   // Add change output if needed
-  const dustThreshold = 546;
   let changeAddress: string | undefined;
 
   if (!hasSendMax && changeAmount >= dustThreshold) {

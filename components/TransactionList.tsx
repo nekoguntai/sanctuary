@@ -4,7 +4,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
-import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ExternalLink, Copy, X, Check, Edit2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2 } from 'lucide-react';
 import { LabelBadges } from './LabelSelector';
 import { createLogger } from '../utils/logger';
 
@@ -20,7 +20,8 @@ interface TransactionListProps {
   highlightedTxId?: string;
   onLabelsChange?: () => void;
   canEdit?: boolean; // Whether user can edit labels (default: true for backwards compat)
-  confirmationThreshold?: number; // Number of confirmations required (default: 3)
+  confirmationThreshold?: number; // Number of confirmations required (from system settings)
+  deepConfirmationThreshold?: number; // Number of confirmations for "deeply confirmed" status
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -33,7 +34,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   highlightedTxId,
   onLabelsChange,
   canEdit = true,
-  confirmationThreshold = 3
+  confirmationThreshold = 1,
+  deepConfirmationThreshold = 3
 }) => {
   const { format } = useCurrency();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -243,17 +245,23 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       className="inline-flex items-center text-sm font-medium"
                       title={tx.confirmations > 0 ? `${tx.confirmations.toLocaleString()} confirmation${tx.confirmations !== 1 ? 's' : ''}` : 'Pending confirmation'}
                     >
-                      {tx.confirmations >= confirmationThreshold ? (
-                        // Fully confirmed
+                      {tx.confirmations >= deepConfirmationThreshold ? (
+                        // Deeply confirmed
+                        <>
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1 text-indigo-500" />
+                          <span className="text-indigo-600 dark:text-indigo-400">{tx.confirmations?.toLocaleString() || ''}</span>
+                        </>
+                      ) : tx.confirmations >= confirmationThreshold ? (
+                        // Confirmed (spendable)
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-success-500" />
-                          <span className="text-sanctuary-700 dark:text-sanctuary-300">{tx.confirmations?.toLocaleString() || ''}</span>
+                          <span className="text-sanctuary-700 dark:text-sanctuary-300">{tx.confirmations}/{deepConfirmationThreshold}</span>
                         </>
                       ) : tx.confirmations > 0 ? (
                         // Confirming (1 to threshold-1)
                         <span className="inline-flex items-center text-primary-600 dark:text-primary-400">
                           <Clock className="w-3.5 h-3.5 mr-1" />
-                          {tx.confirmations}/{confirmationThreshold}
+                          {tx.confirmations}/{deepConfirmationThreshold}
                         </span>
                       ) : (
                         // Pending (0 confirmations)
@@ -331,16 +339,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                          />
                       </div>
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                        selectedTx.confirmations >= confirmationThreshold
+                        selectedTx.confirmations >= deepConfirmationThreshold
+                          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300'
+                          : selectedTx.confirmations >= confirmationThreshold
                           ? 'bg-success-100 text-success-800 dark:bg-success-500/20 dark:text-success-300'
                           : selectedTx.confirmations > 0
                           ? 'bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-300'
                           : 'bg-warning-100 text-warning-800 dark:bg-warning-500/20 dark:text-warning-300'
                       }`}>
-                         {selectedTx.confirmations >= confirmationThreshold ? (
-                           <><CheckCircle2 className="w-4 h-4 mr-2" />{selectedTx.confirmations.toLocaleString()} Confirmations</>
+                         {selectedTx.confirmations >= deepConfirmationThreshold ? (
+                           <><ShieldCheck className="w-4 h-4 mr-2" />{selectedTx.confirmations.toLocaleString()} Confirmations (Final)</>
+                         ) : selectedTx.confirmations >= confirmationThreshold ? (
+                           <><CheckCircle2 className="w-4 h-4 mr-2" />{selectedTx.confirmations}/{deepConfirmationThreshold} Confirmations</>
                          ) : selectedTx.confirmations > 0 ? (
-                           <><Clock className="w-4 h-4 mr-2" />Confirming ({selectedTx.confirmations}/{confirmationThreshold})</>
+                           <><Clock className="w-4 h-4 mr-2" />Confirming ({selectedTx.confirmations}/{deepConfirmationThreshold})</>
                          ) : (
                            <><Clock className="w-4 h-4 mr-2" />Pending Confirmation</>
                          )}

@@ -12,6 +12,7 @@ import { getElectrumClient } from '../services/bitcoin/electrum';
 import * as mempool from '../services/bitcoin/mempool';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../constants';
 
 const router = Router();
 const log = createLogger('BITCOIN');
@@ -38,13 +39,17 @@ router.get('/status', async (req: Request, res: Response) => {
       where: { isDefault: true },
     });
 
-    // Get confirmation threshold setting
-    const thresholdSetting = await prisma.systemSetting.findUnique({
-      where: { key: 'confirmationThreshold' },
-    });
+    // Get confirmation threshold settings
+    const [thresholdSetting, deepThresholdSetting] = await Promise.all([
+      prisma.systemSetting.findUnique({ where: { key: 'confirmationThreshold' } }),
+      prisma.systemSetting.findUnique({ where: { key: 'deepConfirmationThreshold' } }),
+    ]);
     const confirmationThreshold = thresholdSetting
       ? JSON.parse(thresholdSetting.value)
-      : 3; // Default to 3
+      : DEFAULT_CONFIRMATION_THRESHOLD;
+    const deepConfirmationThreshold = deepThresholdSetting
+      ? JSON.parse(deepThresholdSetting.value)
+      : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
 
     res.json({
       connected: true,
@@ -56,6 +61,7 @@ router.get('/status', async (req: Request, res: Response) => {
       useSsl: nodeConfig?.useSsl,
       explorerUrl: nodeConfig?.explorerUrl || 'https://mempool.space',
       confirmationThreshold,
+      deepConfirmationThreshold,
     });
   } catch (error: any) {
     res.json({

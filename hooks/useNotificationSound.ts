@@ -855,7 +855,7 @@ export const SOUND_EVENTS: Array<{
   name: string;
   description: string;
 }> = [
-  { id: 'confirmation', name: 'Confirmation', description: 'When a transaction confirms' },
+  { id: 'confirmation', name: 'First Confirmation', description: 'When a transaction gets its first confirmation' },
   { id: 'receive', name: 'Receive', description: 'When Bitcoin is received' },
   { id: 'send', name: 'Send', description: 'When a transaction is broadcast' },
 ];

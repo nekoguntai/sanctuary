@@ -540,10 +540,10 @@ class SyncService {
       );
 
       // Populate missing fields for any existing transactions
-      const populatedCount = await populateMissingTransactionFields(walletId);
-      if (populatedCount > 0) {
-        log.info(`[SYNC] Populated missing fields for ${populatedCount} existing transactions`);
-        walletLog(walletId, 'info', 'SYNC', `Populated details for ${populatedCount} transactions`);
+      const populateResult = await populateMissingTransactionFields(walletId);
+      if (populateResult.updated > 0) {
+        log.info(`[SYNC] Populated missing fields for ${populateResult.updated} existing transactions`);
+        walletLog(walletId, 'info', 'SYNC', `Populated details for ${populateResult.updated} transactions`);
       }
 
       // Get new balance (confirmed and unconfirmed)
@@ -776,20 +776,23 @@ class SyncService {
         try {
           // First, try to populate missing blockHeight for transactions that were discovered in mempool
           // This handles servers like Blockstream that don't support verbose transaction responses
-          const populated = await populateMissingTransactionFields(walletId);
-          if (populated > 0) {
-            log.debug(`[SYNC] Populated missing fields for ${populated} transactions in wallet ${walletId}`);
+          const populateResult = await populateMissingTransactionFields(walletId);
+          if (populateResult.updated > 0) {
+            log.debug(`[SYNC] Populated missing fields for ${populateResult.updated} transactions in wallet ${walletId}`);
           }
 
           // updateTransactionConfirmations now returns detailed info about changes
           const updates = await updateTransactionConfirmations(walletId);
-          totalUpdated += updates.length + populated;
+          totalUpdated += updates.length + populateResult.updated;
+
+          // Combine confirmation updates from both sources
+          const allConfirmationUpdates = [...populateResult.confirmationUpdates, ...updates];
 
           // Notify frontend of updates - only broadcast transactions that actually changed
-          if (updates.length > 0) {
+          if (allConfirmationUpdates.length > 0) {
             const notificationService = getNotificationService();
 
-            for (const update of updates) {
+            for (const update of allConfirmationUpdates) {
               // Broadcast with milestone info so frontend knows if this is first confirmation
               notificationService.broadcastConfirmationUpdate(walletId, {
                 txid: update.txid,

@@ -10,6 +10,7 @@ import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 import { createLogger } from '../../utils/logger';
 import { walletLog } from '../../websocket/notifications';
+import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';
 
 const log = createLogger('BLOCKCHAIN');
 
@@ -1038,10 +1039,18 @@ export interface ConfirmationUpdate {
  * Returns detailed info about which transactions changed, for milestone notifications
  */
 export async function updateTransactionConfirmations(walletId: string): Promise<ConfirmationUpdate[]> {
+  // Get deep confirmation threshold from settings
+  const deepThresholdSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'deepConfirmationThreshold' },
+  });
+  const deepConfirmationThreshold = deepThresholdSetting
+    ? JSON.parse(deepThresholdSetting.value)
+    : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
+
   const transactions = await prisma.transaction.findMany({
     where: {
       walletId,
-      confirmations: { lt: 6 }, // Only update transactions with less than 6 confirmations
+      confirmations: { lt: deepConfirmationThreshold }, // Only update transactions below deep confirmation threshold
       blockHeight: { not: null },
     },
     select: { id: true, txid: true, blockHeight: true, confirmations: true },
@@ -1088,12 +1097,21 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
 }
 
 /**
+ * Result from populating missing transaction fields
+ */
+export interface PopulateFieldsResult {
+  updated: number;
+  confirmationUpdates: ConfirmationUpdate[];
+}
+
+/**
  * Populate missing transaction fields (blockHeight, addressId, blockTime, fee) from blockchain
  * Called during sync to fill in data for transactions that were created before
  * these fields existed or were populated
  * OPTIMIZED with batch fetching and batch updates
+ * Returns both count and confirmation updates for notification broadcasting
  */
-export async function populateMissingTransactionFields(walletId: string): Promise<number> {
+export async function populateMissingTransactionFields(walletId: string): Promise<PopulateFieldsResult> {
   const client = await getNodeClient();
 
 
@@ -1119,7 +1137,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   });
 
   if (transactions.length === 0) {
-    return 0;
+    return { updated: 0, confirmationUpdates: [] };
   }
 
   log.debug(`[BLOCKCHAIN] Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
@@ -1190,13 +1208,14 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   }
 
   // Collect all pending updates
-  const pendingUpdates: Array<{ id: string; data: any }> = [];
+  const pendingUpdates: Array<{ id: string; txid: string; oldConfirmations: number; data: any }> = [];
   let updated = 0;
 
   for (const tx of transactions) {
     try {
       // Get transaction details from cache (may be null if verbose not supported)
       const txDetails = txDetailsCache.get(tx.txid);
+      const oldConfirmations = tx.confirmations;
 
       const updates: any = {};
 
@@ -1225,7 +1244,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       if (!txDetails) {
         // Still save blockHeight update if we got it from address history
         if (Object.keys(updates).length > 0) {
-          pendingUpdates.push({ id: tx.id, data: updates });
+          pendingUpdates.push({ id: tx.id, txid: tx.txid, oldConfirmations, data: updates });
           updated++;
         }
         continue;
@@ -1410,7 +1429,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
       // Collect updates if any
       if (Object.keys(updates).length > 0) {
-        pendingUpdates.push({ id: tx.id, data: updates });
+        pendingUpdates.push({ id: tx.id, txid: tx.txid, oldConfirmations, data: updates });
       }
     } catch (error) {
       log.warn(`[BLOCKCHAIN] Failed to populate fields for tx ${tx.txid}`, { error: String(error) });
@@ -1431,6 +1450,16 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     updated = pendingUpdates.length;
   }
 
-  log.debug(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions`);
-  return updated;
+  // Extract confirmation updates for notification broadcasting
+  // Only include updates where confirmations actually changed
+  const confirmationUpdates: ConfirmationUpdate[] = pendingUpdates
+    .filter(u => u.data.confirmations !== undefined && u.data.confirmations !== u.oldConfirmations)
+    .map(u => ({
+      txid: u.txid,
+      oldConfirmations: u.oldConfirmations,
+      newConfirmations: u.data.confirmations,
+    }));
+
+  log.debug(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions, ${confirmationUpdates.length} confirmation updates`);
+  return { updated, confirmationUpdates };
 }

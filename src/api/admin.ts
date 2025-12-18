@@ -169,6 +169,9 @@ export async function removeGroupMember(groupId: string, userId: string): Promis
 
 export interface SystemSettings {
   registrationEnabled: boolean;
+  confirmationThreshold?: number;
+  deepConfirmationThreshold?: number;
+  dustThreshold?: number;
 }
 
 /**

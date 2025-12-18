@@ -18,6 +18,15 @@ const log = createLogger('WALLET');
 // Roles that can edit wallet data (labels, etc.)
 const EDIT_ROLES = ['owner', 'signer'];
 
+/**
+ * Result of checking wallet access with edit permission
+ */
+export interface WalletAccessCheckResult {
+  hasAccess: boolean;
+  canEdit: boolean;
+  role: WalletRole;
+}
+
 // ========================================
 // WALLET ACCESS HELPERS
 // ========================================
@@ -78,6 +87,24 @@ export async function checkWalletEditAccess(walletId: string, userId: string): P
 export async function checkWalletOwnerAccess(walletId: string, userId: string): Promise<boolean> {
   const role = await getUserWalletRole(walletId, userId);
   return role === 'owner';
+}
+
+/**
+ * Check wallet access and edit permission in a single query
+ * Use this to avoid N+1 queries when checking both access and edit permission
+ *
+ * Returns: { hasAccess, canEdit, role }
+ * - hasAccess: true if user can view the wallet
+ * - canEdit: true if user can modify the wallet (owner or signer)
+ * - role: the user's role ('owner' | 'signer' | 'viewer' | null)
+ */
+export async function checkWalletAccessWithRole(walletId: string, userId: string): Promise<WalletAccessCheckResult> {
+  const role = await getUserWalletRole(walletId, userId);
+  return {
+    hasAccess: role !== null,
+    canEdit: role !== null && EDIT_ROLES.includes(role),
+    role,
+  };
 }
 
 interface CreateWalletInput {

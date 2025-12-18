@@ -273,6 +273,155 @@ export class BitcoinRpcClient {
     // We'll rely on polling for updates
     return null;
   }
+
+  /**
+   * Make a batch RPC call to Bitcoin Core
+   * Sends multiple requests in a single HTTP POST
+   */
+  private async batchRpcCall(requests: Array<{ method: string; params: any[] }>): Promise<any[]> {
+    if (requests.length === 0) return [];
+
+    const batchPayload = requests.map((req, index) => ({
+      jsonrpc: '1.0',
+      id: ++this.requestId,
+      method: req.method,
+      params: req.params,
+    }));
+
+    const response = await this.client.post('/', batchPayload);
+
+    // Response is an array of results in the same order as requests
+    const results = response.data;
+
+    // Extract results, handling errors
+    return results.map((r: any, index: number) => {
+      if (r.error) {
+        log.warn(`Batch RPC error for ${requests[index].method}: ${r.error.message}`);
+        return null;
+      }
+      return r.result;
+    });
+  }
+
+  /**
+   * Batch: Get transaction history for multiple addresses
+   * Note: Bitcoin Core doesn't natively index by address, so this uses scantxoutset
+   * which is slower than Electrum but works without additional indexing
+   */
+  async getAddressHistoryBatch(addresses: string[]): Promise<Map<string, AddressHistory[]>> {
+    const resultMap = new Map<string, AddressHistory[]>();
+    if (addresses.length === 0) return resultMap;
+
+    // Bitcoin Core's scantxoutset can scan multiple descriptors at once
+    const descriptors = addresses.map(addr => `addr(${addr})`);
+
+    try {
+      const scanResult = await this.rpcCall('scantxoutset', ['start', descriptors]);
+
+      // Group UTXOs by address
+      const addressUtxos = new Map<string, Set<string>>();
+      for (const utxo of scanResult.unspents || []) {
+        // Extract address from descriptor in result
+        const addr = utxo.desc?.match(/addr\(([^)]+)\)/)?.[1];
+        if (addr) {
+          if (!addressUtxos.has(addr)) {
+            addressUtxos.set(addr, new Set());
+          }
+          addressUtxos.get(addr)!.add(JSON.stringify({
+            tx_hash: utxo.txid,
+            height: utxo.height || 0,
+          }));
+        }
+      }
+
+      // Convert to expected format
+      for (const address of addresses) {
+        const txSet = addressUtxos.get(address);
+        if (txSet) {
+          resultMap.set(address, Array.from(txSet).map(s => JSON.parse(s)));
+        } else {
+          resultMap.set(address, []);
+        }
+      }
+    } catch (error) {
+      log.error('Batch address history failed', { error });
+      // Return empty results for all addresses
+      for (const address of addresses) {
+        resultMap.set(address, []);
+      }
+    }
+
+    return resultMap;
+  }
+
+  /**
+   * Batch: Get UTXOs for multiple addresses
+   * Uses scantxoutset with multiple descriptors
+   */
+  async getAddressUTXOsBatch(addresses: string[]): Promise<Map<string, AddressUTXO[]>> {
+    const resultMap = new Map<string, AddressUTXO[]>();
+    if (addresses.length === 0) return resultMap;
+
+    const descriptors = addresses.map(addr => `addr(${addr})`);
+
+    try {
+      const scanResult = await this.rpcCall('scantxoutset', ['start', descriptors]);
+
+      // Group UTXOs by address
+      const addressUtxos = new Map<string, AddressUTXO[]>();
+      for (const utxo of scanResult.unspents || []) {
+        const addr = utxo.desc?.match(/addr\(([^)]+)\)/)?.[1];
+        if (addr) {
+          if (!addressUtxos.has(addr)) {
+            addressUtxos.set(addr, []);
+          }
+          addressUtxos.get(addr)!.push({
+            tx_hash: utxo.txid,
+            tx_pos: utxo.vout,
+            height: utxo.height || 0,
+            value: Math.round(utxo.amount * 100000000),
+          });
+        }
+      }
+
+      // Set results for all addresses (empty array if no UTXOs)
+      for (const address of addresses) {
+        resultMap.set(address, addressUtxos.get(address) || []);
+      }
+    } catch (error) {
+      log.error('Batch UTXO fetch failed', { error });
+      for (const address of addresses) {
+        resultMap.set(address, []);
+      }
+    }
+
+    return resultMap;
+  }
+
+  /**
+   * Batch: Get multiple transactions in a single RPC batch
+   */
+  async getTransactionsBatch(txids: string[], verbose: boolean = true): Promise<Map<string, any>> {
+    const resultMap = new Map<string, any>();
+    if (txids.length === 0) return resultMap;
+
+    // Prepare batch requests for getrawtransaction
+    const requests = txids.map(txid => ({
+      method: 'getrawtransaction',
+      params: [txid, verbose],
+    }));
+
+    const results = await this.batchRpcCall(requests);
+
+    // Map results back to txids
+    for (let i = 0; i < txids.length; i++) {
+      if (results[i]) {
+        resultMap.set(txids[i], results[i]);
+      }
+    }
+
+    return resultMap;
+  }
 }
 
 // Singleton instance

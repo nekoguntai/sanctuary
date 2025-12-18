@@ -318,26 +318,32 @@ export async function syncWallet(walletId: string): Promise<{
     change: changeAddrs,
   });
 
-  // PHASE 1: Batch fetch all address histories in parallel
-  log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses...`);
-  const HISTORY_BATCH_SIZE = 10; // Concurrent history fetches
+  // PHASE 1: Batch fetch all address histories using true RPC batching
+  log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses using batch RPC...`);
+  const BATCH_SIZE = 50; // Number of addresses per batch RPC call
   const historyResults: Map<string, Array<{ tx_hash: string; height: number }>> = new Map();
 
-  for (let i = 0; i < addresses.length; i += HISTORY_BATCH_SIZE) {
-    const batch = addresses.slice(i, i + HISTORY_BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async (addr) => {
+  // Process addresses in batches for true RPC batching
+  for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+    const batchAddresses = addresses.slice(i, i + BATCH_SIZE).map(a => a.address);
+    try {
+      const batchResults = await client.getAddressHistoryBatch(batchAddresses);
+      // Merge results into historyResults
+      for (const [addr, history] of batchResults) {
+        historyResults.set(addr, history);
+      }
+    } catch (error) {
+      log.warn(`[BLOCKCHAIN] Batch history failed, falling back to individual requests`, { error: String(error) });
+      // Fallback to individual requests if batch fails
+      for (const addr of batchAddresses) {
         try {
-          const history = await client.getAddressHistory(addr.address);
-          return { address: addr.address, history };
-        } catch (error) {
-          log.warn(`[BLOCKCHAIN] Failed to get history for ${addr.address}`, { error: String(error) });
-          return { address: addr.address, history: [] };
+          const history = await client.getAddressHistory(addr);
+          historyResults.set(addr, history);
+        } catch (e) {
+          log.warn(`[BLOCKCHAIN] Failed to get history for ${addr}`, { error: String(e) });
+          historyResults.set(addr, []);
         }
-      })
-    );
-    for (const result of batchResults) {
-      historyResults.set(result.address, result.history);
+      }
     }
   }
 
@@ -378,26 +384,28 @@ export async function syncWallet(walletId: string): Promise<{
     });
   }
 
-  // PHASE 3: Batch fetch transaction details for new txids
+  // PHASE 3: Batch fetch transaction details for new txids using true RPC batching
   const txDetailsCache: Map<string, any> = new Map();
-  const TX_BATCH_SIZE = 5; // Concurrent tx fetches
+  const TX_BATCH_SIZE = 25; // Number of transactions per batch RPC call
 
   for (let i = 0; i < newTxids.length; i += TX_BATCH_SIZE) {
-    const batch = newTxids.slice(i, i + TX_BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async (txid) => {
+    const batchTxids = newTxids.slice(i, i + TX_BATCH_SIZE);
+    try {
+      const batchResults = await client.getTransactionsBatch(batchTxids, true);
+      // Merge results into cache
+      for (const [txid, details] of batchResults) {
+        txDetailsCache.set(txid, details);
+      }
+    } catch (error) {
+      log.warn(`[BLOCKCHAIN] Batch tx fetch failed, falling back to individual requests`, { error: String(error) });
+      // Fallback to individual requests if batch fails
+      for (const txid of batchTxids) {
         try {
           const details = await client.getTransaction(txid, true);
-          return { txid, details };
-        } catch (error) {
-          log.warn(`[BLOCKCHAIN] Failed to get tx ${txid}`, { error: String(error) });
-          return { txid, details: null };
+          txDetailsCache.set(txid, details);
+        } catch (e) {
+          log.warn(`[BLOCKCHAIN] Failed to get tx ${txid}`, { error: String(e) });
         }
-      })
-    );
-    for (const result of batchResults) {
-      if (result.details) {
-        txDetailsCache.set(result.txid, result.details);
       }
     }
   }
@@ -650,24 +658,31 @@ export async function syncWallet(walletId: string): Promise<{
     }
   }
 
-  // PHASE 6: Batch fetch all UTXOs for all addresses in parallel
-  log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses...`);
+  // PHASE 6: Batch fetch all UTXOs for all addresses using true RPC batching
+  log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses using batch RPC...`);
   const utxoResults: Array<{ address: string; utxos: any[] }> = [];
 
-  for (let i = 0; i < addresses.length; i += HISTORY_BATCH_SIZE) {
-    const batch = addresses.slice(i, i + HISTORY_BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async (addr) => {
+  for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+    const batchAddresses = addresses.slice(i, i + BATCH_SIZE).map(a => a.address);
+    try {
+      const batchResults = await client.getAddressUTXOsBatch(batchAddresses);
+      // Convert Map to array format
+      for (const [addr, utxos] of batchResults) {
+        utxoResults.push({ address: addr, utxos });
+      }
+    } catch (error) {
+      log.warn(`[BLOCKCHAIN] Batch UTXO fetch failed, falling back to individual requests`, { error: String(error) });
+      // Fallback to individual requests if batch fails
+      for (const addr of batchAddresses) {
         try {
-          const utxos = await client.getAddressUTXOs(addr.address);
-          return { address: addr.address, utxos };
-        } catch (error) {
-          log.warn(`[BLOCKCHAIN] Failed to get UTXOs for ${addr.address}`, { error: String(error) });
-          return { address: addr.address, utxos: [] };
+          const utxos = await client.getAddressUTXOs(addr);
+          utxoResults.push({ address: addr, utxos });
+        } catch (e) {
+          log.warn(`[BLOCKCHAIN] Failed to get UTXOs for ${addr}`, { error: String(e) });
+          utxoResults.push({ address: addr, utxos: [] });
         }
-      })
-    );
-    utxoResults.push(...batchResults);
+      }
+    }
   }
 
   // Collect all UTXO identifiers

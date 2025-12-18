@@ -291,6 +291,56 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Send multiple requests to Electrum server in a single batch
+   * Each request is sent on its own line but in quick succession
+   * Returns results in the same order as requests
+   */
+  private async batchRequest(requests: Array<{ method: string; params: any[] }>): Promise<any[]> {
+    if (requests.length === 0) return [];
+
+    if (!this.connected || !this.socket) {
+      await this.connect();
+    }
+
+    // Create all requests with sequential IDs
+    const startId = this.requestId + 1;
+    const requestPromises: Promise<any>[] = [];
+    const messages: string[] = [];
+
+    for (let i = 0; i < requests.length; i++) {
+      const id = ++this.requestId;
+      const request: ElectrumRequest = {
+        jsonrpc: '2.0',
+        method: requests[i].method,
+        params: requests[i].params,
+        id,
+      };
+
+      const promise = new Promise((resolve, reject) => {
+        this.pendingRequests.set(id, { resolve, reject });
+
+        // Timeout after 60 seconds for batch requests (longer than single requests)
+        setTimeout(() => {
+          if (this.pendingRequests.has(id)) {
+            this.pendingRequests.delete(id);
+            reject(new Error(`Batch request timeout for id ${id}`));
+          }
+        }, 60000);
+      });
+
+      requestPromises.push(promise);
+      messages.push(JSON.stringify(request));
+    }
+
+    // Send all requests in a single write (separated by newlines)
+    const batchMessage = messages.join('\n') + '\n';
+    this.socket!.write(batchMessage);
+
+    // Wait for all responses
+    return Promise.all(requestPromises);
+  }
+
+  /**
    * Get server version (cached - can only be called once per connection)
    */
   async getServerVersion(): Promise<{ server: string; protocol: string }> {
@@ -485,6 +535,99 @@ class ElectrumClient extends EventEmitter {
   async getBlockHeight(): Promise<number> {
     const headers = await this.request('blockchain.headers.subscribe');
     return headers.height;
+  }
+
+  /**
+   * Batch: Get transaction history for multiple addresses in a single RPC batch
+   * Returns a Map of address -> history array
+   */
+  async getAddressHistoryBatch(addresses: string[]): Promise<Map<string, Array<{ tx_hash: string; height: number }>>> {
+    if (addresses.length === 0) return new Map();
+
+    // Prepare batch requests
+    const requests = addresses.map(address => ({
+      method: 'blockchain.scripthash.get_history',
+      params: [this.addressToScriptHash(address)],
+    }));
+
+    // Execute batch
+    const results = await this.batchRequest(requests);
+
+    // Map results back to addresses
+    const resultMap = new Map<string, Array<{ tx_hash: string; height: number }>>();
+    for (let i = 0; i < addresses.length; i++) {
+      resultMap.set(addresses[i], results[i] || []);
+    }
+
+    return resultMap;
+  }
+
+  /**
+   * Batch: Get UTXOs for multiple addresses in a single RPC batch
+   * Returns a Map of address -> UTXO array
+   */
+  async getAddressUTXOsBatch(addresses: string[]): Promise<Map<string, Array<{ tx_hash: string; tx_pos: number; height: number; value: number }>>> {
+    if (addresses.length === 0) return new Map();
+
+    // Prepare batch requests
+    const requests = addresses.map(address => ({
+      method: 'blockchain.scripthash.listunspent',
+      params: [this.addressToScriptHash(address)],
+    }));
+
+    // Execute batch
+    const results = await this.batchRequest(requests);
+
+    // Map results back to addresses
+    const resultMap = new Map<string, Array<{ tx_hash: string; tx_pos: number; height: number; value: number }>>();
+    for (let i = 0; i < addresses.length; i++) {
+      resultMap.set(addresses[i], results[i] || []);
+    }
+
+    return resultMap;
+  }
+
+  /**
+   * Batch: Get multiple transactions in a single RPC batch
+   * Returns a Map of txid -> transaction data
+   */
+  async getTransactionsBatch(txids: string[], verbose: boolean = true): Promise<Map<string, any>> {
+    if (txids.length === 0) return new Map();
+
+    // Prepare batch requests
+    const requests = txids.map(txid => ({
+      method: 'blockchain.transaction.get',
+      params: [txid, verbose],
+    }));
+
+    // Execute batch
+    let results: any[];
+    try {
+      results = await this.batchRequest(requests);
+    } catch (error: any) {
+      // If verbose not supported by server, retry without verbose and decode locally
+      if (verbose && (error.message?.includes('verbose') || error.message?.includes('unsupported'))) {
+        log.debug('Verbose transactions not supported, falling back to raw tx decoding');
+        const rawRequests = txids.map(txid => ({
+          method: 'blockchain.transaction.get',
+          params: [txid, false],
+        }));
+        const rawResults = await this.batchRequest(rawRequests);
+        results = rawResults.map(rawTx => this.decodeRawTransaction(rawTx));
+      } else {
+        throw error;
+      }
+    }
+
+    // Map results back to txids
+    const resultMap = new Map<string, any>();
+    for (let i = 0; i < txids.length; i++) {
+      if (results[i]) {
+        resultMap.set(txids[i], results[i]);
+      }
+    }
+
+    return resultMap;
   }
 
   /**

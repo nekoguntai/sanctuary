@@ -40,6 +40,11 @@ export interface NodeClientInterface {
   broadcastTransaction(rawTx: string): Promise<string>;
   estimateFee(blocks: number): Promise<number>;
   subscribeAddress(address: string): Promise<string | null>;
+
+  // Batch methods - send multiple requests in a single RPC call
+  getAddressHistoryBatch(addresses: string[]): Promise<Map<string, Array<{ tx_hash: string; height: number }>>>;
+  getAddressUTXOsBatch(addresses: string[]): Promise<Map<string, Array<{ tx_hash: string; tx_pos: number; height: number; value: number }>>>;
+  getTransactionsBatch(txids: string[], verbose?: boolean): Promise<Map<string, any>>;
 }
 
 // Cache for the active node configuration

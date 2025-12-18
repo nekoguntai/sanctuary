@@ -100,7 +100,7 @@ export interface TelegramConfig {
   wallets: Record<string, WalletTelegramSettings>;
 }
 
-export type SoundType = 'chime' | 'bell' | 'coin' | 'success' | 'gentle' | 'zen' | 'ping' | 'pop' | 'harp' | 'retro' | 'none';
+export type SoundType = 'chime' | 'bell' | 'coin' | 'success' | 'gentle' | 'zen' | 'ping' | 'pop' | 'harp' | 'retro' | 'marimba' | 'glass' | 'synth' | 'drop' | 'sparkle' | 'drums' | 'whistle' | 'brass' | 'windchime' | 'click' | 'none';
 
 export interface EventSoundConfig {
   enabled: boolean;

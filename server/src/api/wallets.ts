@@ -960,6 +960,7 @@ router.get('/:id/telegram', requireWalletAccess('view'), async (req: Request, re
         notifyReceived: true,
         notifySent: true,
         notifyConsolidation: false,
+        notifyDraft: true,
       },
     });
   } catch (error) {

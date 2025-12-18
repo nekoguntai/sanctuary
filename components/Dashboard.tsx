@@ -19,6 +19,7 @@ import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
 import { useWallets, useRecentTransactions, useInvalidateAllWallets, useBalanceHistory, usePendingTransactions } from '../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
@@ -145,6 +146,7 @@ export const Dashboard: React.FC = () => {
   // WebSocket integration
   const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
   const { addNotification } = useNotifications();
+  const { playConfirmationChime } = useNotificationSound();
   const invalidateAllWallets = useInvalidateAllWallets();
 
   // React Query hooks for data fetching
@@ -312,8 +314,13 @@ export const Dashboard: React.FC = () => {
         duration: 5000,
         data,
       });
+
+      // Play chime on first confirmation
+      if (data.confirmations === 1) {
+        playConfirmationChime();
+      }
     }
-  }, [addNotification]);
+  }, [addNotification, playConfirmationChime]);
 
   // Handle sync completion - refresh wallet data when background sync finishes
   useWebSocketEvent('sync', (event) => {

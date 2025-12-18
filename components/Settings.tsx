@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2 } from 'lucide-react';
+import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
 import { ThemeOption, BackgroundOption } from '../types';
@@ -273,6 +274,146 @@ const TelegramSettings: React.FC = () => {
   );
 };
 
+// Notification Sound Settings Component
+const NotificationSoundSettings: React.FC = () => {
+  const { user, updatePreferences } = useUser();
+  const { playConfirmationChime } = useNotificationSound();
+
+  const soundPrefs = user?.preferences?.notificationSounds || {
+    enabled: true,
+    confirmationChime: true,
+    volume: 50,
+  };
+
+  const handleToggleSounds = async () => {
+    const newEnabled = !soundPrefs.enabled;
+    await updatePreferences({
+      notificationSounds: {
+        ...soundPrefs,
+        enabled: newEnabled,
+        // Also toggle confirmationChime when master toggle changes
+        confirmationChime: newEnabled ? soundPrefs.confirmationChime : false,
+      },
+    });
+  };
+
+  const handleToggleConfirmation = async () => {
+    await updatePreferences({
+      notificationSounds: {
+        ...soundPrefs,
+        confirmationChime: !soundPrefs.confirmationChime,
+      },
+    });
+  };
+
+  const handleVolumeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const volume = parseInt(e.target.value, 10);
+    await updatePreferences({
+      notificationSounds: {
+        ...soundPrefs,
+        volume,
+      },
+    });
+  };
+
+  const handleTestSound = () => {
+    // Temporarily override to play the sound for testing
+    const originalPrefs = user?.preferences?.notificationSounds;
+    if (user?.preferences) {
+      user.preferences.notificationSounds = { enabled: true, confirmationChime: true, volume: soundPrefs.volume };
+    }
+    playConfirmationChime();
+    if (user?.preferences && originalPrefs) {
+      user.preferences.notificationSounds = originalPrefs;
+    }
+  };
+
+  return (
+    <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+      <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
+            <Volume2 className="w-5 h-5" />
+          </div>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Notification Sounds</h3>
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        <p className="text-sm text-sanctuary-600 dark:text-sanctuary-400">
+          Play audio notifications for important wallet events.
+        </p>
+
+        {/* Master Toggle */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Enable Sounds</label>
+            <p className="text-sm text-sanctuary-500">Play notification sounds for wallet events</p>
+          </div>
+          <button
+            onClick={handleToggleSounds}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              soundPrefs.enabled ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
+            }`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              soundPrefs.enabled ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
+        {/* Confirmation Chime Toggle */}
+        <div className={`flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800 ${!soundPrefs.enabled ? 'opacity-50' : ''}`}>
+          <div className="space-y-1">
+            <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Confirmation Chime</label>
+            <p className="text-sm text-sanctuary-500">Play a gentle chime when transactions confirm</p>
+          </div>
+          <button
+            onClick={handleToggleConfirmation}
+            disabled={!soundPrefs.enabled}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              soundPrefs.confirmationChime && soundPrefs.enabled ? 'bg-success-500' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
+            } ${!soundPrefs.enabled ? 'cursor-not-allowed' : ''}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              soundPrefs.confirmationChime && soundPrefs.enabled ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
+        {/* Volume Slider */}
+        <div className={`pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800 ${!soundPrefs.enabled ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Volume</label>
+            <span className="text-sm text-sanctuary-500">{soundPrefs.volume}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={soundPrefs.volume}
+            onChange={handleVolumeChange}
+            disabled={!soundPrefs.enabled}
+            className="w-full h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+          />
+        </div>
+
+        {/* Test Button */}
+        <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+          <Button
+            variant="secondary"
+            onClick={handleTestSound}
+            className="w-full"
+          >
+            <Volume2 className="w-4 h-4 mr-2" />
+            Test Sound
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const Settings: React.FC = () => {
   const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders, refreshPrice, priceLoading, lastPriceUpdate, btcPrice, currencySymbol } = useCurrency();
   const { user, updatePreferences } = useUser();
@@ -517,6 +658,9 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Notification Sounds */}
+      <NotificationSoundSettings />
 
       {/* Telegram Notifications */}
       <TelegramSettings />

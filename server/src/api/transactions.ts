@@ -16,11 +16,20 @@ import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
+import { getBlockHeight } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT } from '../constants';
 
 const log = createLogger('TRANSACTIONS');
+
+/**
+ * Calculate confirmations dynamically from block height
+ */
+function calculateConfirmations(txBlockHeight: number | null, currentBlockHeight: number): number {
+  if (!txBlockHeight || txBlockHeight <= 0) return 0;
+  return Math.max(0, currentBlockHeight - txBlockHeight + 1);
+}
 
 const router = Router();
 
@@ -38,6 +47,9 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       req.query.limit as string,
       req.query.offset as string
     );
+
+    // Get current block height for confirmation calculation
+    const currentBlockHeight = await getBlockHeight();
 
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
@@ -59,15 +71,19 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       skip: offset,
     });
 
-    // Convert BigInt amounts to numbers for JSON serialization
-    const serializedTransactions = transactions.map(tx => ({
-      ...tx,
-      amount: bigIntToNumberOrZero(tx.amount),
-      fee: bigIntToNumber(tx.fee),
-      blockHeight: bigIntToNumber(tx.blockHeight),
-      labels: tx.transactionLabels.map(tl => tl.label),
-      transactionLabels: undefined, // Remove the raw join data
-    }));
+    // Convert BigInt amounts to numbers and calculate confirmations dynamically
+    const serializedTransactions = transactions.map(tx => {
+      const blockHeight = bigIntToNumber(tx.blockHeight);
+      return {
+        ...tx,
+        amount: bigIntToNumberOrZero(tx.amount),
+        fee: bigIntToNumber(tx.fee),
+        blockHeight,
+        confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
+        labels: tx.transactionLabels.map(tl => tl.label),
+        transactionLabels: undefined, // Remove the raw join data
+      };
+    });
 
     res.json(serializedTransactions);
   } catch (error: unknown) {

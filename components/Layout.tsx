@@ -25,15 +25,16 @@ import {
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice } from '../types';
 import { useUser } from '../contexts/UserContext';
-import { getWallets, Wallet as ApiWallet } from '../src/api/wallets';
-import { getDevices, Device as ApiDevice } from '../src/api/devices';
+import { Wallet as ApiWallet } from '../src/api/wallets';
+import { Device as ApiDevice } from '../src/api/devices';
 import { getDrafts } from '../src/api/drafts';
+import { useWallets } from '../hooks/queries/useWallets';
+import { useDevices } from '../hooks/queries/useDevices';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { version } from '../package.json';
 import { NotificationBell } from './NotificationPanel';
 import { NotificationBadge } from './NotificationBadge';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
-import { useSidebar } from '../contexts/SidebarContext';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Layout');
@@ -129,7 +130,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { getWalletCount, getDeviceCount, addNotification, removeNotificationsByType } = useAppNotifications();
-  const { refreshKey } = useSidebar();
 
   // Auto-expand sections based on current route
   const getExpandedState = (pathname: string) => {
@@ -154,52 +154,43 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
     setExpanded(getExpandedState(location.pathname));
   }, [location.pathname]);
 
-  // Data for Sidebar
-  const [wallets, setWallets] = useState<ApiWallet[]>([]);
-  const [devices, setDevices] = useState<ApiDevice[]>([]);
+  // Data for Sidebar - using React Query for automatic updates
+  const { data: wallets = [] } = useWallets();
+  const { data: devices = [] } = useDevices();
 
+  // Fetch drafts for notifications when wallets change
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
-      try {
-        const [w, d] = await Promise.all([
-          getWallets(),
-          getDevices()
-        ]);
-        setWallets(w);
-        setDevices(d);
+    if (!user || wallets.length === 0) return;
 
-        // Fetch drafts for all wallets and add notifications
-        for (const wallet of w) {
-          try {
-            const drafts = await getDrafts(wallet.id);
-            if (drafts.length > 0) {
-              addNotification({
-                type: 'pending_drafts',
-                scope: 'wallet',
-                scopeId: wallet.id,
-                severity: 'warning',
-                title: `${drafts.length} pending draft${drafts.length > 1 ? 's' : ''}`,
-                message: `${wallet.name}: Resume or broadcast`,
-                count: drafts.length,
-                actionUrl: `/wallets/${wallet.id}`,
-                actionLabel: 'View Drafts',
-                dismissible: true,
-                persistent: false,
-              });
-            } else {
-              removeNotificationsByType('pending_drafts', wallet.id);
-            }
-          } catch (err) {
-            // Non-critical - continue with other wallets
+    const fetchDrafts = async () => {
+      for (const wallet of wallets) {
+        try {
+          const drafts = await getDrafts(wallet.id);
+          if (drafts.length > 0) {
+            addNotification({
+              type: 'pending_drafts',
+              scope: 'wallet',
+              scopeId: wallet.id,
+              severity: 'warning',
+              title: `${drafts.length} pending draft${drafts.length > 1 ? 's' : ''}`,
+              message: `${wallet.name}: Resume or broadcast`,
+              count: drafts.length,
+              actionUrl: `/wallets/${wallet.id}`,
+              actionLabel: 'View Drafts',
+              dismissible: true,
+              persistent: false,
+            });
+          } else {
+            removeNotificationsByType('pending_drafts', wallet.id);
           }
+        } catch (err) {
+          // Non-critical - continue with other wallets
         }
-      } catch (error) {
-        log.error('Failed to fetch sidebar data', { error });
       }
     };
-    fetchData();
-  }, [user, refreshKey]);
+
+    fetchDrafts();
+  }, [user, wallets]);
 
   // Check Electrum/Bitcoin connection status periodically
   useEffect(() => {

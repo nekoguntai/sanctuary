@@ -23,7 +23,7 @@ import {
 import { createLogger } from '../utils/logger';
 import * as hardwareWallet from '../services/hardwareWallet';
 import { DeviceType } from '../services/hardwareWallet';
-import { useSidebar } from '../contexts/SidebarContext';
+import { useImportWallet } from '../hooks/queries/useWallets';
 
 const log = createLogger('ImportWallet');
 
@@ -66,7 +66,7 @@ const buildDescriptorFromXpub = (
 
 export const ImportWallet: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshSidebar } = useSidebar();
+  const importWalletMutation = useImportWallet();
   const [step, setStep] = useState(1);
 
   // Form State
@@ -191,16 +191,13 @@ export const ImportWallet: React.FC = () => {
     setImportError(null);
 
     try {
-      const result = await walletsApi.importWallet({
+      const result = await importWalletMutation.mutateAsync({
         data: importData,
         name: walletName.trim(),
         network,
       });
 
-      // Refresh sidebar to show new wallet
-      refreshSidebar();
-
-      // Navigate to the new wallet
+      // Navigate to the new wallet (React Query automatically invalidates wallet list)
       navigate(`/wallets/${result.wallet.id}`);
     } catch (error) {
       log.error('Failed to import wallet', { error });

@@ -77,6 +77,21 @@ export function useCreateWallet() {
 }
 
 /**
+ * Hook to import a wallet
+ */
+export function useImportWallet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: walletsApi.importWallet,
+    onSuccess: () => {
+      // Invalidate wallet list to refetch
+      queryClient.invalidateQueries({ queryKey: walletKeys.lists() });
+    },
+  });
+}
+
+/**
  * Hook to delete a wallet
  */
 export function useDeleteWallet() {

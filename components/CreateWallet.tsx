@@ -8,14 +8,14 @@ import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
 import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { createLogger } from '../utils/logger';
-import { useSidebar } from '../contexts/SidebarContext';
+import { useCreateWallet } from '../hooks/queries/useWallets';
 
 const log = createLogger('CreateWallet');
 
 export const CreateWallet: React.FC = () => {
   const navigate = useNavigate();
   const { handleError } = useErrorHandler();
-  const { refreshSidebar } = useSidebar();
+  const createWalletMutation = useCreateWallet();
   const [step, setStep] = useState(1);
   const [availableDevices, setAvailableDevices] = useState<Device[]>([]);
   
@@ -84,7 +84,7 @@ export const CreateWallet: React.FC = () => {
     try {
       // Create wallet via API with device IDs
       // The backend will automatically generate descriptors from device xpubs
-      const created = await walletsApi.createWallet({
+      const created = await createWalletMutation.mutateAsync({
         name: walletName,
         type: walletType === WalletType.SINGLE_SIG ? 'single_sig' : 'multi_sig',
         scriptType: scriptType,
@@ -94,10 +94,7 @@ export const CreateWallet: React.FC = () => {
         deviceIds: Array.from(selectedDeviceIds),
       });
 
-      // Refresh sidebar to show new wallet
-      refreshSidebar();
-
-      // Navigate to wallet detail page
+      // Navigate to wallet detail page (React Query automatically invalidates wallet list)
       navigate(`/wallets/${created.id}`);
     } catch (error) {
       log.error('Failed to create wallet', { error });

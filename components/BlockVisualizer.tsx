@@ -137,11 +137,11 @@ const Block: React.FC<{
             </div>
           )}
 
-          {/* Middle: Average Fee Rate - main focus */}
+          {/* Middle: Median Fee Rate - main focus */}
           <div className="text-center">
-            {!compact && <div className={`text-[10px] uppercase font-bold ${colors.text} mb-0.5`}>Avg Fee</div>}
+            {!compact && <div className={`text-[10px] uppercase font-bold ${colors.text} mb-0.5`}>Median Fee</div>}
             <div className={`${compact ? 'text-base' : 'text-xl md:text-2xl'} font-black leading-none ${colors.text}`}>
-              {block.avgFeeRate !== undefined ? (block.avgFeeRate < 1 ? block.avgFeeRate.toFixed(1) : Math.round(block.avgFeeRate)) : Math.round(block.medianFee)}
+              {block.medianFee < 1 ? block.medianFee.toFixed(1) : Math.round(block.medianFee)}
             </div>
             <div className={`${compact ? 'text-[9px]' : 'text-[10px]'} font-bold ${colors.text}`}>sat/vB</div>
             {!compact && block.feeRange && (
@@ -219,9 +219,9 @@ const QueuedSummaryBlock: React.FC<{
           {/* Top spacer - hidden in compact */}
           {!compact && <div className="text-[10px] font-bold text-white dark:text-warning-900">Queue</div>}
 
-          {/* Middle: Average Fee */}
+          {/* Middle: Median Fee */}
           <div className="text-center">
-            {!compact && <div className="text-[10px] uppercase font-bold text-white dark:text-warning-900 mb-0.5">Avg Fee</div>}
+            {!compact && <div className="text-[10px] uppercase font-bold text-white dark:text-warning-900 mb-0.5">Median Fee</div>}
             <div className={`${compact ? 'text-base' : 'text-xl'} font-black leading-none text-white dark:text-warning-900`}>
               {Math.round(summary.averageFee)}
             </div>
@@ -507,9 +507,7 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   const handleBlockClick = useCallback((block: BlockData, pendingIndex?: number) => {
     // If onBlockClick is provided, use it for fee selection instead of opening explorer
     if (onBlockClick) {
-      // Use avgFeeRate if available (matches the displayed value), otherwise medianFee
-      const feeRate = block.avgFeeRate !== undefined ? block.avgFeeRate : block.medianFee;
-      onBlockClick(feeRate);
+      onBlockClick(block.medianFee);
       return;
     }
     // Otherwise open in explorer

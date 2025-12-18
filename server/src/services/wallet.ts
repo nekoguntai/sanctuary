@@ -11,11 +11,9 @@ import * as bip32 from 'bip32';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
+import { INITIAL_ADDRESS_COUNT } from '../constants';
 
 const log = createLogger('WALLET');
-
-// Number of addresses to generate when creating a wallet
-const INITIAL_ADDRESS_COUNT = 20;
 
 // Roles that can edit wallet data (labels, etc.)
 const EDIT_ROLES = ['owner', 'signer'];

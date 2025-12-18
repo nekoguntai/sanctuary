@@ -465,10 +465,10 @@ router.put('/users/:userId', authenticate, requireAdmin, async (req: Request, re
 router.delete('/users/:userId', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    const currentUser = (req as any).user;
+    const currentUser = req.user;
 
     // Prevent self-deletion
-    if (userId === currentUser.id) {
+    if (userId === currentUser?.userId) {
       return res.status(400).json({
         error: 'Bad Request',
         message: 'Cannot delete your own account',
@@ -567,7 +567,6 @@ router.get('/groups', authenticate, requireAdmin, async (req: Request, res: Resp
 router.post('/groups', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { name, description, purpose, memberIds } = req.body;
-    const currentUser = (req as any).user;
 
     // Validation
     if (!name) {
@@ -1049,7 +1048,7 @@ import { auditService, AuditAction, AuditCategory, getClientInfo } from '../serv
 router.post('/backup', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { includeCache, description } = req.body;
-    const adminUser = (req as any).user?.username || 'unknown';
+    const adminUser = req.user?.username || 'unknown';
 
     log.info('[ADMIN] Creating backup', { adminUser, includeCache });
 
@@ -1134,7 +1133,7 @@ router.post('/backup/validate', authenticate, requireAdmin, async (req: Request,
 router.post('/restore', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { backup, confirmationCode } = req.body;
-    const adminUser = (req as any).user?.username || 'unknown';
+    const adminUser = req.user?.username || 'unknown';
 
     // Require explicit confirmation
     if (confirmationCode !== 'CONFIRM_RESTORE') {

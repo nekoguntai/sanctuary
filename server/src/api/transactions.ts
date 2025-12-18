@@ -17,10 +17,10 @@ import { auditService, AuditCategory, AuditAction } from '../services/auditServi
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 import { createLogger } from '../utils/logger';
+import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
+import { INITIAL_ADDRESS_COUNT } from '../constants';
 
 const log = createLogger('TRANSACTIONS');
-
-const INITIAL_ADDRESS_COUNT = 20;
 
 const router = Router();
 
@@ -34,7 +34,10 @@ router.use(authenticate);
 router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const walletId = req.walletId!;
-    const { limit = '50', offset = '0' } = req.query;
+    const { limit, offset } = validatePagination(
+      req.query.limit as string,
+      req.query.offset as string
+    );
 
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
@@ -52,27 +55,23 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
         },
       },
       orderBy: { blockTime: 'desc' },
-      take: parseInt(limit as string),
-      skip: parseInt(offset as string),
+      take: limit,
+      skip: offset,
     });
 
     // Convert BigInt amounts to numbers for JSON serialization
     const serializedTransactions = transactions.map(tx => ({
       ...tx,
-      amount: Number(tx.amount),
-      fee: tx.fee ? Number(tx.fee) : null,
-      blockHeight: tx.blockHeight ? Number(tx.blockHeight) : null,
+      amount: bigIntToNumberOrZero(tx.amount),
+      fee: bigIntToNumber(tx.fee),
+      blockHeight: bigIntToNumber(tx.blockHeight),
       labels: tx.transactionLabels.map(tl => tl.label),
       transactionLabels: undefined, // Remove the raw join data
     }));
 
     res.json(serializedTransactions);
-  } catch (error) {
-    log.error('Get transactions error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to fetch transactions',
-    });
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get transactions');
   }
 });
 

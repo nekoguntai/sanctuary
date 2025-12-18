@@ -6,14 +6,15 @@ import * as bitcoinApi from '../../src/api/bitcoin';
 import * as devicesApi from '../../src/api/devices';
 
 // Query key factory for wallet-related queries
+// Note: Params are spread into the key array to ensure stable references
 export const walletKeys = {
   all: ['wallets'] as const,
   lists: () => [...walletKeys.all, 'list'] as const,
   detail: (id: string) => [...walletKeys.all, 'detail', id] as const,
   utxos: (id: string) => [...walletKeys.all, 'utxos', id] as const,
   addresses: (id: string) => [...walletKeys.all, 'addresses', id] as const,
-  transactions: (id: string, params?: { page?: number; limit?: number }) =>
-    [...walletKeys.all, 'transactions', id, params] as const,
+  transactions: (id: string, params?: { page?: number; limit?: number; offset?: number }) =>
+    [...walletKeys.all, 'transactions', id, params?.page, params?.limit, params?.offset] as const,
   balance: (id: string) => [...walletKeys.all, 'balance', id] as const,
 };
 

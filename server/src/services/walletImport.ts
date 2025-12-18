@@ -25,10 +25,9 @@ import {
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
+import { INITIAL_ADDRESS_COUNT } from '../constants';
 
 const log = createLogger('IMPORT');
-
-const INITIAL_ADDRESS_COUNT = 20;
 
 export interface DeviceResolution {
   fingerprint: string;

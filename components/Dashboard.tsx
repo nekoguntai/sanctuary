@@ -330,7 +330,10 @@ export const Dashboard: React.FC = () => {
         playEventSound('confirmation');
       }
     }
-  }, [addNotification, playEventSound]);
+
+    // Refresh wallet data to update confirmation counts in the UI
+    invalidateAllWallets();
+  }, [addNotification, playEventSound, invalidateAllWallets]);
 
   // Handle sync completion - refresh wallet data when background sync finishes
   useWebSocketEvent('sync', (event) => {
@@ -779,6 +782,7 @@ export const Dashboard: React.FC = () => {
            onWalletClick={(id) => navigate(`/wallets/${id}`)}
            onTransactionClick={(tx) => navigate(`/wallets/${tx.walletId}`, { state: { highlightTxId: tx.id } })}
            confirmationThreshold={bitcoinStatus?.confirmationThreshold}
+           deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
         />
       </div>
     </div>

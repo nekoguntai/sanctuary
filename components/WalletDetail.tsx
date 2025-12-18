@@ -1207,6 +1207,7 @@ export const WalletDetail: React.FC = () => {
                walletAddresses={addresses.map(a => a.address)}
                canEdit={wallet?.canEdit !== false}
                confirmationThreshold={bitcoinStatus?.confirmationThreshold}
+               deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
              />
              {hasMoreTx && transactions.length > 0 && (
                <div className="mt-4 text-center">

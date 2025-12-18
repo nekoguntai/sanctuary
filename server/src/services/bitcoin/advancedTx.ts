@@ -13,8 +13,19 @@ import { getNetwork, estimateTransactionSize, calculateFee, parseTransaction } f
 import { getElectrumClient } from './electrum';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { DEFAULT_DUST_THRESHOLD } from '../../constants';
 
 const log = createLogger('ADVANCED_TX');
+
+/**
+ * Get dust threshold from system settings
+ */
+async function getDustThreshold(): Promise<number> {
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: 'dustThreshold' },
+  });
+  return setting ? JSON.parse(setting.value) : DEFAULT_DUST_THRESHOLD;
+}
 
 /**
  * RBF (Replace-By-Fee) Configuration
@@ -126,6 +137,9 @@ export async function createRBFTransaction(
     await client.connect();
   }
 
+  // Get configurable thresholds
+  const dustThreshold = await getDustThreshold();
+
   // Check if transaction can be replaced
   const rbfCheck = await canReplaceTransaction(originalTxid);
   if (!rbfCheck.replaceable) {
@@ -211,7 +225,6 @@ export async function createRBFTransaction(
     outputs[changeOutputIndex].value -= feeDelta;
 
     // Ensure change output is still above dust threshold
-    const dustThreshold = 546;
     if (outputs[changeOutputIndex].value < dustThreshold) {
       throw new Error(
         `Insufficient funds in change output to increase fee. Need ${feeDelta} sats more, but change would be dust.`
@@ -305,6 +318,9 @@ export async function createCPFPTransaction(
     await client.connect();
   }
 
+  // Get configurable thresholds
+  const dustThreshold = await getDustThreshold();
+
   // Get parent transaction
   const parentTx = await client.getTransaction(parentTxid);
   const parentVsize = bitcoin.Transaction.fromHex(parentTx.hex).virtualSize();
@@ -362,7 +378,6 @@ export async function createCPFPTransaction(
   }
 
   const outputValue = utxoValue - cpfpCalc.childFee;
-  const dustThreshold = 546;
   if (outputValue < dustThreshold) {
     throw new Error(
       `Output would be dust (${outputValue} sats). Minimum is ${dustThreshold} sats.`
@@ -420,6 +435,9 @@ export async function createBatchTransaction(
   if (recipients.length === 0) {
     throw new Error('At least one recipient is required');
   }
+
+  // Get configurable thresholds
+  const dustThreshold = await getDustThreshold();
 
   // Get available UTXOs
   let utxos = await prisma.uTXO.findMany({
@@ -515,7 +533,6 @@ export async function createBatchTransaction(
   }
 
   // Add change output
-  const dustThreshold = 546;
   if (changeAmount >= dustThreshold) {
     // Get a change address from the wallet
     const changeAddress = await prisma.address.findFirst({

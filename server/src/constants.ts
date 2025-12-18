@@ -43,14 +43,16 @@ export const MAX_PAGE_SIZE = 1000;
 // ============================================================================
 
 /**
- * Number of confirmations considered "confirmed"
+ * Default number of confirmations required before UTXOs can be spent
+ * This is the default value - actual value is stored in system settings
  */
-export const CONFIRMATION_THRESHOLD = 1;
+export const DEFAULT_CONFIRMATION_THRESHOLD = 1;
 
 /**
- * Number of confirmations considered "deeply confirmed"
+ * Default number of confirmations considered "deeply confirmed"
+ * This is the default value - actual value is stored in system settings
  */
-export const DEEP_CONFIRMATION_THRESHOLD = 6;
+export const DEFAULT_DEEP_CONFIRMATION_THRESHOLD = 3;
 
 // ============================================================================
 // BITCOIN CONSTANTS
@@ -60,6 +62,15 @@ export const DEEP_CONFIRMATION_THRESHOLD = 6;
  * Satoshis per Bitcoin
  */
 export const SATOSHIS_PER_BTC = 100_000_000;
+
+/**
+ * Default dust threshold in satoshis
+ * Outputs below this value are considered "dust" and won't be relayed by nodes.
+ * Based on 3 × minimum relay fee × output size for P2PKH outputs.
+ * SegWit outputs have a lower threshold (~294 sats) but 546 is used as a safe universal minimum.
+ * This is the default value - actual value is stored in system settings.
+ */
+export const DEFAULT_DUST_THRESHOLD = 546;
 
 /**
  * Minimum fee rate in sat/vB

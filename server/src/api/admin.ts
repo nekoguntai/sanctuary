@@ -11,6 +11,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
+import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../constants';
 
 const router = Router();
 const log = createLogger('ADMIN');
@@ -968,7 +969,9 @@ router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Re
     // Return defaults for any missing settings
     res.json({
       registrationEnabled: false, // Default to disabled (admin-only)
-      confirmationThreshold: 3, // Default confirmations required
+      confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
+      deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
+      dustThreshold: DEFAULT_DUST_THRESHOLD,
       ...settingsObj,
     });
   } catch (error) {
@@ -1008,7 +1011,9 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
     const settings = await prisma.systemSetting.findMany();
     const settingsObj: Record<string, any> = {
       registrationEnabled: false, // Default to disabled (admin-only)
-      confirmationThreshold: 3, // Default confirmations required
+      confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
+      deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
+      dustThreshold: DEFAULT_DUST_THRESHOLD,
     };
     for (const setting of settings) {
       try {

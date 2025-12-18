@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import * as walletService from '../services/wallet';
+import { notifyNewDraft } from '../services/notifications/notificationService';
 
 const router = Router();
 const log = createLogger('DRAFTS');
@@ -192,6 +193,17 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
     });
 
     log.info('[DRAFTS] Created draft', { draftId: draft.id, walletId, userId });
+
+    // Send notifications to other wallet users (async, don't block response)
+    notifyNewDraft(walletId, {
+      id: draft.id,
+      amount: draft.amount,
+      recipient: draft.recipient,
+      label: draft.label,
+      feeRate: draft.feeRate,
+    }, userId).catch(err => {
+      log.warn('[DRAFTS] Failed to send draft notification', { error: String(err) });
+    });
 
     // Convert BigInt to numbers for JSON serialization
     const serializedDraft = {

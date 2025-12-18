@@ -17,6 +17,14 @@ export interface TransactionData {
   amount: bigint;
 }
 
+export interface DraftData {
+  id: string;
+  amount: bigint;
+  recipient: string;
+  label?: string | null;
+  feeRate: number;
+}
+
 /**
  * Notify all eligible users about new transactions
  *
@@ -50,5 +58,31 @@ export async function notifyNewTransactions(
       const channelName = i === 0 ? 'Telegram' : 'Push';
       log.error(`${channelName} notification failed: ${result.reason}`);
     }
+  }
+}
+
+/**
+ * Notify all eligible users about a new draft transaction
+ *
+ * Useful for multi-user wallets where one person creates the draft
+ * and another needs to sign it with their hardware wallet.
+ *
+ * @param walletId - The wallet the draft was created for
+ * @param draft - The draft transaction data
+ * @param createdByUserId - The user who created the draft (won't be notified)
+ */
+export async function notifyNewDraft(
+  walletId: string,
+  draft: DraftData,
+  createdByUserId: string
+): Promise<void> {
+  log.debug(`Sending draft notification for wallet ${walletId}`);
+
+  // Currently only Telegram supports draft notifications
+  // Push can be added later if needed
+  try {
+    await telegramService.notifyNewDraft(walletId, draft, createdByUserId);
+  } catch (err) {
+    log.error(`Draft notification failed: ${err}`);
   }
 }

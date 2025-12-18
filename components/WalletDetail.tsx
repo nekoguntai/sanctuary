@@ -80,6 +80,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
     notifyReceived: true,
     notifySent: true,
     notifyConsolidation: false,
+    notifyDraft: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -241,6 +242,18 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
                   type="checkbox"
                   checked={settings.notifyConsolidation}
                   onChange={() => handleToggle('notifyConsolidation')}
+                  disabled={saving}
+                  className="h-4 w-4 rounded border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-primary-600 focus:ring-primary-500 dark:focus:ring-primary-400"
+                />
+              </label>
+
+              {/* Draft transactions */}
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">Draft transactions (awaiting signature)</span>
+                <input
+                  type="checkbox"
+                  checked={settings.notifyDraft}
+                  onChange={() => handleToggle('notifyDraft')}
                   disabled={saving}
                   className="h-4 w-4 rounded border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-primary-600 focus:ring-primary-500 dark:focus:ring-primary-400"
                 />

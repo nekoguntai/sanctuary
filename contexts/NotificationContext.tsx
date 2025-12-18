@@ -41,7 +41,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (txid && (notification.type === 'transaction' || notification.type === 'confirmation')) {
       const dedupeKey = `${notification.type}:${txid}:${notification.data?.confirmations || 0}`;
       if (recentTxidsRef.current.has(dedupeKey)) {
-        console.log('[NOTIFY] Skipping duplicate notification:', dedupeKey);
         return; // Skip duplicate
       }
       recentTxidsRef.current.add(dedupeKey);

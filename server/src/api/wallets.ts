@@ -979,7 +979,7 @@ router.patch('/:id/telegram', requireWalletAccess('view'), async (req: Request, 
   try {
     const walletId = req.walletId!;
     const userId = req.user!.userId;
-    const { enabled, notifyReceived, notifySent, notifyConsolidation } = req.body;
+    const { enabled, notifyReceived, notifySent, notifyConsolidation, notifyDraft } = req.body;
 
     const { updateWalletTelegramSettings } = await import('../services/telegram/telegramService');
     await updateWalletTelegramSettings(userId, walletId, {
@@ -987,6 +987,7 @@ router.patch('/:id/telegram', requireWalletAccess('view'), async (req: Request, 
       notifyReceived: notifyReceived ?? true,
       notifySent: notifySent ?? true,
       notifyConsolidation: notifyConsolidation ?? false,
+      notifyDraft: notifyDraft ?? true,
     });
 
     res.json({

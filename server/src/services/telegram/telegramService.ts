@@ -24,6 +24,7 @@ export interface WalletTelegramSettings {
   notifyReceived: boolean;
   notifySent: boolean;
   notifyConsolidation: boolean;
+  notifyDraft: boolean;
 }
 
 export interface TransactionData {
@@ -247,6 +248,100 @@ export async function notifyNewTransactions(
     }
   } catch (err) {
     log.error(`Error sending Telegram notifications: ${err}`);
+  }
+}
+
+/**
+ * Format a draft transaction message for Telegram
+ */
+function formatDraftMessage(
+  draft: { amount: bigint; recipient: string; label?: string | null; feeRate: number },
+  wallet: { name: string },
+  createdBy: string
+): string {
+  const amountBtc = Number(draft.amount) / 100_000_000;
+  const shortRecipient = `${draft.recipient.slice(0, 12)}...${draft.recipient.slice(-8)}`;
+
+  let message =
+    `📝 <b>Draft Transaction Created</b>\n\n` +
+    `Wallet: ${escapeHtml(wallet.name)}\n` +
+    `Amount: ${amountBtc.toFixed(8)} BTC\n` +
+    `To: <code>${shortRecipient}</code>\n` +
+    `Fee Rate: ${draft.feeRate} sat/vB\n` +
+    `Created by: ${escapeHtml(createdBy)}\n`;
+
+  if (draft.label) {
+    message += `Label: ${escapeHtml(draft.label)}\n`;
+  }
+
+  message += `\n<i>Awaiting signature</i>`;
+
+  return message;
+}
+
+export interface DraftData {
+  id: string;
+  amount: bigint;
+  recipient: string;
+  label?: string | null;
+  feeRate: number;
+}
+
+/**
+ * Notify all eligible users about a new draft transaction
+ */
+export async function notifyNewDraft(
+  walletId: string,
+  draft: DraftData,
+  createdByUserId: string
+): Promise<void> {
+  try {
+    // Get wallet info
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { id: true, name: true },
+    });
+    if (!wallet) return;
+
+    // Get creator's username
+    const creator = await prisma.user.findUnique({
+      where: { id: createdByUserId },
+      select: { username: true },
+    });
+    const createdBy = creator?.username || 'Unknown';
+
+    // Get all users with access to this wallet
+    const users = await getWalletUsers(walletId);
+
+    for (const user of users) {
+      // Skip notifying the creator (they already know)
+      if (user.id === createdByUserId) continue;
+
+      const prefs = user.preferences as Record<string, any> | null;
+      const telegram = prefs?.telegram as TelegramConfig | undefined;
+
+      // Skip if Telegram not configured or not enabled
+      if (!telegram?.enabled || !telegram?.botToken || !telegram?.chatId) {
+        continue;
+      }
+
+      // Get wallet-specific settings
+      const walletSettings = telegram.wallets?.[walletId];
+      if (!walletSettings?.enabled || !walletSettings?.notifyDraft) {
+        continue;
+      }
+
+      const message = formatDraftMessage(draft, wallet, createdBy);
+      const result = await sendTelegramMessage(telegram.botToken, telegram.chatId, message);
+
+      if (result.success) {
+        log.debug(`Sent draft notification to ${user.username}`);
+      } else {
+        log.warn(`Failed to send draft notification to ${user.username}: ${result.error}`);
+      }
+    }
+  } catch (err) {
+    log.error(`Error sending draft notifications: ${err}`);
   }
 }
 

@@ -91,6 +91,7 @@ export interface WalletTelegramSettings {
   notifyReceived: boolean;
   notifySent: boolean;
   notifyConsolidation: boolean;
+  notifyDraft: boolean;
 }
 
 export interface TelegramConfig {

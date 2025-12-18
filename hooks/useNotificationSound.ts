@@ -941,12 +941,20 @@ export function useNotificationSound() {
    */
   const playEventSound = useCallback((event: SoundEvent) => {
     const prefs = user?.preferences?.notificationSounds;
-    if (!prefs?.enabled) return;
+    console.log('[SOUND] playEventSound called:', { event, prefs, enabled: prefs?.enabled });
+    if (!prefs?.enabled) {
+      console.log('[SOUND] Sounds disabled or prefs not loaded');
+      return;
+    }
 
     const config = getEventConfig(event);
+    console.log('[SOUND] Event config:', config);
     if (config.enabled && config.sound !== 'none') {
       const volume = prefs.volume ?? 50;
+      console.log('[SOUND] Playing sound:', { sound: config.sound, volume });
       playSound(config.sound, volume);
+    } else {
+      console.log('[SOUND] Sound not enabled for this event or set to none');
     }
   }, [user?.preferences?.notificationSounds, getEventConfig, playSound]);
 

@@ -58,8 +58,23 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       return [{ name: 'Now', amount: balance }];
     }
 
-    // Filter out consolidations - they don't affect balance
-    const balanceChangingTxs = transactions.filter(tx => tx.type !== 'consolidation');
+    // Get wallet addresses from UTXOs AND transactions to detect consolidations
+    // We need both because spent UTXOs won't be in the UTXO list anymore
+    const walletAddresses = new Set<string>();
+    utxos.forEach(u => walletAddresses.add(u.address));
+    transactions.forEach(tx => {
+      if (tx.address) walletAddresses.add(tx.address);
+    });
+
+    // Filter out consolidations - they don't affect net balance
+    // A consolidation is when you send to yourself (counterparty is your own address)
+    const balanceChangingTxs = transactions.filter(tx => {
+      // Explicit consolidation type
+      if (tx.type === 'consolidation') return false;
+      // Implicit consolidation: counterparty address belongs to this wallet
+      if (tx.counterpartyAddress && walletAddresses.has(tx.counterpartyAddress)) return false;
+      return true;
+    });
 
     if (balanceChangingTxs.length === 0) {
       return [{ name: 'Now', amount: balance }];

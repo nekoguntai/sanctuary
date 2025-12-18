@@ -7,8 +7,61 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
+import bs58check from 'bs58check';
 
 const bip32 = BIP32Factory(ecc);
+
+/**
+ * Version bytes for different extended key formats (SLIP-132)
+ * These are the 4-byte prefixes that determine the key format
+ */
+const XPUB_VERSIONS: Record<string, { prefix: string; targetPrefix: string; targetVersion: Buffer }> = {
+  // Mainnet
+  'xpub': { prefix: 'xpub', targetPrefix: 'xpub', targetVersion: Buffer.from([0x04, 0x88, 0xB2, 0x1E]) },
+  'ypub': { prefix: 'ypub', targetPrefix: 'xpub', targetVersion: Buffer.from([0x04, 0x88, 0xB2, 0x1E]) }, // BIP49 nested segwit
+  'zpub': { prefix: 'zpub', targetPrefix: 'xpub', targetVersion: Buffer.from([0x04, 0x88, 0xB2, 0x1E]) }, // BIP84 native segwit
+  'Ypub': { prefix: 'Ypub', targetPrefix: 'xpub', targetVersion: Buffer.from([0x04, 0x88, 0xB2, 0x1E]) }, // Multisig nested segwit
+  'Zpub': { prefix: 'Zpub', targetPrefix: 'xpub', targetVersion: Buffer.from([0x04, 0x88, 0xB2, 0x1E]) }, // Multisig native segwit
+  // Testnet
+  'tpub': { prefix: 'tpub', targetPrefix: 'tpub', targetVersion: Buffer.from([0x04, 0x35, 0x87, 0xCF]) },
+  'upub': { prefix: 'upub', targetPrefix: 'tpub', targetVersion: Buffer.from([0x04, 0x35, 0x87, 0xCF]) }, // BIP49 nested segwit
+  'vpub': { prefix: 'vpub', targetPrefix: 'tpub', targetVersion: Buffer.from([0x04, 0x35, 0x87, 0xCF]) }, // BIP84 native segwit
+  'Upub': { prefix: 'Upub', targetPrefix: 'tpub', targetVersion: Buffer.from([0x04, 0x35, 0x87, 0xCF]) }, // Multisig nested segwit
+  'Vpub': { prefix: 'Vpub', targetPrefix: 'tpub', targetVersion: Buffer.from([0x04, 0x35, 0x87, 0xCF]) }, // Multisig native segwit
+};
+
+/**
+ * Convert extended public key to standard xpub/tpub format
+ * This handles zpub, ypub, Zpub, Ypub, vpub, upub, Vpub, Upub formats
+ * which use different version bytes but contain the same key material
+ */
+function convertToStandardXpub(extendedKey: string): string {
+  // Detect the prefix (first 4 characters)
+  const prefix = extendedKey.slice(0, 4);
+  const versionInfo = XPUB_VERSIONS[prefix];
+
+  // If already standard format or unknown, return as-is
+  if (!versionInfo || prefix === versionInfo.targetPrefix) {
+    return extendedKey;
+  }
+
+  try {
+    // Decode the base58check encoded key
+    const decoded = bs58check.decode(extendedKey);
+
+    // Replace the version bytes (first 4 bytes) with target version
+    const converted = Buffer.concat([
+      versionInfo.targetVersion,
+      decoded.slice(4)
+    ]);
+
+    // Re-encode with base58check
+    return bs58check.encode(converted);
+  } catch (error) {
+    // If conversion fails, return original and let downstream handle the error
+    return extendedKey;
+  }
+}
 
 /**
  * Multisig key info extracted from descriptor
@@ -162,8 +215,11 @@ export function deriveAddress(
 
   const networkObj = getNetwork(network);
 
+  // Convert zpub/ypub/etc to standard xpub format for parsing
+  const standardXpub = convertToStandardXpub(xpub);
+
   // Parse xpub
-  const node = bip32.fromBase58(xpub, networkObj);
+  const node = bip32.fromBase58(standardXpub, networkObj);
 
   // Derive address: m/<change>/<index>
   const changeIndex = change ? 1 : 0;
@@ -314,7 +370,9 @@ function deriveMultisigAddress(
   // Derive public keys from each xpub at the given index
   const pubkeys: Buffer[] = [];
   for (const keyInfo of parsed.keys) {
-    const node = bip32.fromBase58(keyInfo.xpub, networkObj);
+    // Convert zpub/ypub/Zpub/Ypub to standard xpub format for parsing
+    const standardXpub = convertToStandardXpub(keyInfo.xpub);
+    const node = bip32.fromBase58(standardXpub, networkObj);
     // Derivation path after xpub is typically <0;1>/* or 0/* (external/internal)
     // Handle both formats:
     // - "0/*" -> derive at 0/index (receive only)
@@ -460,15 +518,18 @@ export function validateXpub(xpub: string, network: 'mainnet' | 'testnet' | 'reg
 } {
   try {
     const networkObj = getNetwork(network);
-    bip32.fromBase58(xpub, networkObj);
 
-    // Detect script type from prefix
+    // Convert zpub/ypub/etc to standard xpub format for validation
+    const standardXpub = convertToStandardXpub(xpub);
+    bip32.fromBase58(standardXpub, networkObj);
+
+    // Detect script type from original prefix
     let scriptType: 'native_segwit' | 'nested_segwit' | 'legacy' = 'native_segwit';
-    if (xpub.startsWith('ypub') || xpub.startsWith('Ypub')) {
+    if (xpub.startsWith('ypub') || xpub.startsWith('Ypub') || xpub.startsWith('upub') || xpub.startsWith('Upub')) {
       scriptType = 'nested_segwit';
-    } else if (xpub.startsWith('xpub')) {
+    } else if (xpub.startsWith('xpub') || xpub.startsWith('tpub')) {
       scriptType = 'legacy'; // Could be either, but default to legacy
-    } else if (xpub.startsWith('zpub') || xpub.startsWith('Zpub')) {
+    } else if (xpub.startsWith('zpub') || xpub.startsWith('Zpub') || xpub.startsWith('vpub') || xpub.startsWith('Vpub')) {
       scriptType = 'native_segwit';
     }
 

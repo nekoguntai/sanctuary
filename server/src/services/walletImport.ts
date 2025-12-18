@@ -784,6 +784,16 @@ export async function importWallet(
     });
   }
 
+  // For Coldcard JSON export - import using parsed data
+  if (parseResult.format === 'coldcard') {
+    return importFromParsedData(userId, {
+      parsed: parseResult.parsed,
+      name: input.name,
+      network: input.network,
+      deviceLabels: input.deviceLabels,
+    });
+  }
+
   // For plain descriptor format
   return importFromDescriptor(userId, {
     descriptor: trimmed,

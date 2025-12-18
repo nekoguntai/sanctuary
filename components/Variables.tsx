@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, AlertCircle, Variable, Info } from 'lucide-react';
+import { Check, AlertCircle, AlertTriangle, Variable, Info } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { createLogger } from '../utils/logger';
 
@@ -31,6 +31,12 @@ export const Variables: React.FC = () => {
   }, []);
 
   const handleSave = async () => {
+    // Validate: deep confirmation must be >= confirmation threshold
+    if (deepConfirmationThreshold < confirmationThreshold) {
+      setSaveError('Deep confirmation threshold must be greater than or equal to confirmation threshold');
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -60,6 +66,19 @@ export const Variables: React.FC = () => {
       <div>
         <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">System Variables</h2>
         <p className="text-sanctuary-500">Configure system-wide variables for Sanctuary</p>
+      </div>
+
+      {/* Warning Banner */}
+      <div className="flex items-start space-x-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <h4 className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            Advanced Settings
+          </h4>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            These values affect how Sanctuary handles Bitcoin transactions. Do not change them unless you understand the implications.
+          </p>
+        </div>
       </div>
 
       {/* Confirmation Thresholds */}

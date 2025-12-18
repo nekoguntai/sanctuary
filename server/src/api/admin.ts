@@ -991,6 +991,35 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
   try {
     const updates = req.body;
 
+    // Validate confirmation thresholds relationship
+    if (updates.confirmationThreshold !== undefined || updates.deepConfirmationThreshold !== undefined) {
+      // Get current values for comparison
+      const currentSettings = await prisma.systemSetting.findMany({
+        where: { key: { in: ['confirmationThreshold', 'deepConfirmationThreshold'] } },
+      });
+      const currentValues: Record<string, number> = {
+        confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
+        deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
+      };
+      for (const s of currentSettings) {
+        try {
+          currentValues[s.key] = JSON.parse(s.value);
+        } catch {
+          // Keep default
+        }
+      }
+
+      const newConfirmation = updates.confirmationThreshold ?? currentValues.confirmationThreshold;
+      const newDeepConfirmation = updates.deepConfirmationThreshold ?? currentValues.deepConfirmationThreshold;
+
+      if (newDeepConfirmation < newConfirmation) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: 'Deep confirmation threshold must be greater than or equal to confirmation threshold',
+        });
+      }
+    }
+
     // Validate and update each setting
     for (const [key, value] of Object.entries(updates)) {
       await prisma.systemSetting.upsert({

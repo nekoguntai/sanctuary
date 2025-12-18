@@ -3,6 +3,33 @@
  *
  * Handles device token registration for iOS (APNs) and Android (FCM) push notifications.
  * Mobile apps call these endpoints to register/unregister their device tokens.
+ *
+ * ## Architecture Overview
+ *
+ * The push notification system has two main components:
+ *
+ * 1. **Backend (this file)** - Stores device tokens in PostgreSQL, manages registration
+ * 2. **Gateway** - Connects to FCM/APNs and sends actual push notifications
+ *
+ * ## Flow
+ *
+ * 1. Mobile app authenticates with backend via gateway
+ * 2. App calls POST /api/v1/push/register with its FCM/APNs token
+ * 3. Token is stored in PushDevice table
+ * 4. When a transaction occurs, backend emits WebSocket event
+ * 5. Gateway receives event, fetches user's devices via internal endpoint
+ * 6. Gateway sends push notification via FCM (Android) or APNs (iOS)
+ *
+ * ## Internal Endpoints
+ *
+ * Some endpoints are internal (X-Gateway-Request: true) and not exposed to mobile apps:
+ * - GET /api/v1/push/by-user/:userId - Fetch devices for gateway push delivery
+ *
+ * ## Security
+ *
+ * - All user-facing endpoints require JWT authentication
+ * - Internal endpoints check X-Gateway-Request header
+ * - Device tokens are only modifiable by the owning user
  */
 
 import { Router, Request, Response } from 'express';
@@ -229,6 +256,57 @@ router.delete('/devices/:id', authenticate, async (req: Request, res: Response) 
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete device',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/push/by-user/:userId
+ *
+ * INTERNAL ENDPOINT - Called by gateway to fetch devices for push notification delivery.
+ * This endpoint is NOT proxied to mobile apps (blocked by gateway whitelist).
+ *
+ * The gateway uses this when it receives a transaction event from the backend WebSocket
+ * and needs to know which devices to send push notifications to.
+ *
+ * Security: Requires X-Gateway-Request header (set by gateway)
+ */
+router.get('/by-user/:userId', async (req: Request, res: Response) => {
+  try {
+    // Only allow internal gateway requests
+    if (req.headers['x-gateway-request'] !== 'true') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'This endpoint is for internal gateway use only',
+      });
+    }
+
+    const { userId } = req.params;
+
+    const devices = await prisma.pushDevice.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        token: true,
+        platform: true,
+        userId: true,
+      },
+    });
+
+    // Map to gateway's expected format
+    res.json(
+      devices.map((d) => ({
+        id: d.id,
+        platform: d.platform,
+        pushToken: d.token,
+        userId: d.userId,
+      }))
+    );
+  } catch (error) {
+    log.error('Fetch devices by user error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch devices',
     });
   }
 });

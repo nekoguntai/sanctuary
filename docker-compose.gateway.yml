@@ -1,0 +1,78 @@
+# =============================================
+# Sanctuary Gateway - Docker Compose Extension
+# =============================================
+#
+# This extends the main docker-compose.yml to add the mobile API gateway.
+# The gateway provides secure public access for iOS/Android apps.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gateway.yml up -d
+#
+# Environment Variables:
+#   - GATEWAY_PORT: Public gateway port (default: 4000)
+#   - FCM_SERVICE_ACCOUNT: Path to Firebase service account JSON
+#   - APNS_KEY_FILE: Path to APNs auth key (.p8)
+#   - APNS_KEY_ID: APNs key ID
+#   - APNS_TEAM_ID: Apple Developer Team ID
+#   - APNS_BUNDLE_ID: iOS app bundle identifier
+#
+# =============================================
+
+services:
+  # ============================================
+  # Mobile API Gateway
+  # ============================================
+  # Public-facing gateway for mobile app access.
+  # Handles authentication, rate limiting, and proxying to backend.
+  # Push notifications via FCM (Android) and APNs (iOS).
+  # ============================================
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: sanctuary-gateway:local
+    container_name: sanctuary-gateway
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+
+      # Backend connection (internal)
+      BACKEND_URL: http://backend:3001
+      BACKEND_WS_URL: ws://backend:3001
+
+      # JWT (must match backend)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+
+      # Rate limiting
+      RATE_LIMIT_WINDOW_MS: ${GATEWAY_RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${GATEWAY_RATE_LIMIT_MAX:-60}
+
+      # Firebase Cloud Messaging (Android)
+      # Set to 'true' when FCM_SERVICE_ACCOUNT is mounted
+      FCM_ENABLED: ${FCM_ENABLED:-false}
+
+      # Apple Push Notification Service (iOS)
+      APNS_ENABLED: ${APNS_ENABLED:-false}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
+    ports:
+      - "${GATEWAY_PORT:-4000}:4000"
+    volumes:
+      # Mount FCM service account (optional)
+      - ${FCM_SERVICE_ACCOUNT:-/dev/null}:/app/config/fcm-service-account.json:ro
+      # Mount APNs key (optional)
+      - ${APNS_KEY_FILE:-/dev/null}:/app/config/apns-key.p8:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sanctuary-network

@@ -38,6 +38,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
   admin: <Settings className="w-4 h-4" />,
   backup: <Database className="w-4 h-4" />,
   system: <Settings className="w-4 h-4" />,
+  gateway: <Shield className="w-4 h-4" />, // Mobile API gateway events
 };
 
 // Category color classes
@@ -49,6 +50,7 @@ const categoryColors: Record<string, string> = {
   admin: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   backup: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   system: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  gateway: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
 };
 
 // Format action name for display
@@ -278,6 +280,7 @@ export const AuditLogs: React.FC = () => {
                 <option value="admin">Admin</option>
                 <option value="backup">Backup</option>
                 <option value="system">System</option>
+                <option value="gateway">Gateway (Mobile API)</option>
               </select>
             </div>
             <div>

@@ -139,7 +139,8 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Telegram notifications** — Receive transaction alerts via your own Telegram bot
 - **Notification sounds** — Configurable audio alerts for transactions and confirmations
 - **Update notifications** — Dashboard alerts when new versions are available
-- **Audit logging** — Track security-relevant events and user actions
+- **Audit logging** — Track security-relevant events and user actions (including gateway/mobile API events)
+- **Mobile API gateway** — Secure API for iOS/Android apps with push notifications
 - **Backup & restore** — Export/import all data via the web UI
 
 ## Architecture
@@ -171,7 +172,41 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Frontend** — React-based web interface served via nginx (HTTPS for WebUSB)
 - **Backend** — Node.js API server handling wallet logic and blockchain queries
 - **Database** — PostgreSQL for storing wallet metadata, addresses, and transaction history
+- **Gateway** — API gateway for mobile apps with JWT auth, rate limiting, and push notifications
 - **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger, Trezor)
+
+### Mobile API Gateway
+
+The gateway container provides a secure API for iOS and Android mobile apps:
+
+**Features:**
+- **JWT Authentication** — Same tokens as web app (shared secret)
+- **Route Whitelisting** — Only safe read/write endpoints exposed
+- **Rate Limiting** — 60 requests/min default, 5 login attempts/15min
+- **Push Notifications** — FCM (Android) and APNs (iOS) support
+- **Audit Logging** — Security events logged to database for admin visibility
+
+**How it works:**
+1. Mobile apps authenticate via `/api/v1/auth/login`
+2. Gateway validates JWT and proxies allowed routes to backend
+3. Gateway subscribes to backend WebSocket for transaction events
+4. When transactions occur, gateway sends push notifications to registered devices
+
+**Exposed endpoints:**
+- Authentication (login, profile)
+- Wallets (list, view, sync)
+- Transactions (list, view)
+- Addresses (list, generate)
+- Labels (full CRUD)
+- Push device registration
+
+**Blocked by design:**
+- Admin routes (`/api/v1/admin/*`)
+- User management (create/delete users)
+- Node configuration
+- Backup/restore operations
+
+The gateway runs on port 4000 by default and starts automatically with `docker compose up`.
 
 ## HTTP and HTTPS Ports
 
@@ -458,6 +493,12 @@ LOG_LEVEL=error docker compose up
 - `[ADMIN]` — Admin API operations
 - `[BITCOIN]` — Bitcoin RPC/network operations
 - `[PRICE]` — Price feed service
+- `[GATEWAY]` — Mobile API gateway operations
+- `[REQUEST]` — Gateway request logging
+- `[AUTH]` — Gateway authentication
+- `[PROXY]` — Gateway backend proxy
+- `[FCM]` — Firebase Cloud Messaging (Android push)
+- `[APNS]` — Apple Push Notification Service (iOS push)
 
 ### Enabling HTTPS
 
@@ -925,6 +966,11 @@ sanctuary/
 │   │   ├── services/  # Business logic
 │   │   └── models/    # Prisma database models
 │   └── prisma/        # Database schema and migrations
+├── gateway/           # Mobile API gateway
+│   └── src/
+│       ├── middleware/ # Auth, rate limiting, logging
+│       ├── routes/     # Proxy routes to backend
+│       └── services/   # Push notifications (FCM/APNs)
 ├── src/
 │   └── api/           # Frontend API client
 ├── services/          # Frontend services (hardware wallet, etc.)

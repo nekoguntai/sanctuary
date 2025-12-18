@@ -33,10 +33,56 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { createLogger } from '../utils/logger';
+import { config } from '../config';
 import { AuthenticatedRequest } from './auth';
 import crypto from 'crypto';
 
 const log = createLogger('REQUEST');
+
+/**
+ * Send audit event to backend (fire-and-forget)
+ *
+ * This posts security events to the backend's audit log endpoint
+ * so they can be viewed in the admin UI. Failures are logged but
+ * don't affect request processing.
+ */
+async function sendToBackendAudit(
+  event: string,
+  details: Record<string, unknown>
+): Promise<void> {
+  try {
+    const response = await fetch(`${config.backendUrl}/api/v1/push/gateway-audit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Gateway-Request': 'true',
+      },
+      body: JSON.stringify({
+        event,
+        category: 'gateway',
+        severity: details.severity || 'info',
+        details,
+        ip: details.ip,
+        userAgent: details.userAgent,
+        userId: details.userId,
+        username: details.username,
+      }),
+    });
+
+    if (!response.ok) {
+      log.warn('Failed to send audit event to backend', {
+        event,
+        status: response.status,
+      });
+    }
+  } catch (err) {
+    // Log but don't throw - audit failures shouldn't affect requests
+    log.warn('Error sending audit event to backend', {
+      event,
+      error: (err as Error).message,
+    });
+  }
+}
 
 /**
  * Generate a short unique request ID
@@ -167,14 +213,26 @@ export function requestLogger(
  * - Rate limit exceeded
  * - Blocked routes
  * - Suspicious activity
+ *
+ * Events are:
+ * 1. Logged locally to stdout (for docker logs)
+ * 2. Sent to backend for storage in audit_logs table (for admin UI)
  */
 export function logSecurityEvent(
   event: string,
   details: Record<string, unknown>
 ): void {
-  log.warn(`SECURITY: ${event}`, {
+  const eventDetails = {
     ...details,
     timestamp: new Date().toISOString(),
+  };
+
+  // Log locally
+  log.warn(`SECURITY: ${event}`, eventDetails);
+
+  // Send to backend (async, fire-and-forget)
+  sendToBackendAudit(event, eventDetails).catch(() => {
+    // Errors already logged in sendToBackendAudit
   });
 }
 

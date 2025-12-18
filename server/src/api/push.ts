@@ -311,4 +311,84 @@ router.get('/by-user/:userId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/v1/push/gateway-audit
+ *
+ * INTERNAL ENDPOINT - Called by gateway to log security/audit events.
+ * This allows the gateway to store audit logs in the backend database
+ * for centralized monitoring and admin visibility.
+ *
+ * Security: Requires X-Gateway-Request header (set by gateway)
+ *
+ * Request body:
+ *   - event: string - Event type (e.g., AUTH_INVALID_TOKEN, RATE_LIMIT_EXCEEDED)
+ *   - category: string - Event category (gateway, auth, security)
+ *   - severity: string - Event severity (low, medium, high)
+ *   - details: object - Additional event details
+ *   - ip: string - Client IP address
+ *   - userAgent: string - Client user agent
+ *   - userId: string (optional) - User ID if authenticated
+ *   - username: string (optional) - Username if known
+ */
+router.post('/gateway-audit', async (req: Request, res: Response) => {
+  try {
+    // Only allow internal gateway requests
+    if (req.headers['x-gateway-request'] !== 'true') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'This endpoint is for internal gateway use only',
+      });
+    }
+
+    const {
+      event,
+      category,
+      severity,
+      details,
+      ip,
+      userAgent,
+      userId,
+      username,
+    } = req.body;
+
+    // Validate required fields
+    if (!event) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Event type is required',
+      });
+    }
+
+    // Create audit log entry
+    await prisma.auditLog.create({
+      data: {
+        userId: userId || null,
+        username: username || 'gateway',
+        action: `gateway.${event.toLowerCase()}`,
+        category: category || 'gateway',
+        details: {
+          ...(details || {}),
+          severity: severity || 'info',
+          source: 'gateway',
+        },
+        ipAddress: ip || null,
+        userAgent: userAgent || null,
+        success: !event.includes('FAILED') && !event.includes('EXCEEDED') && !event.includes('BLOCKED'),
+        errorMsg: event.includes('FAILED') || event.includes('EXCEEDED') || event.includes('BLOCKED')
+          ? event
+          : null,
+      },
+    });
+
+    log.debug('Gateway audit event logged', { event, category });
+    res.json({ success: true });
+  } catch (error) {
+    log.error('Gateway audit log error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to log audit event',
+    });
+  }
+});
+
 export default router;

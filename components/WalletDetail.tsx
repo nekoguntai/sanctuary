@@ -218,7 +218,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
                   checked={settings.notifyReceived}
                   onChange={() => handleToggle('notifyReceived')}
                   disabled={saving}
-                  className="h-4 w-4 rounded border-sanctuary-300 text-primary-600 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-primary-600 focus:ring-primary-500 dark:focus:ring-primary-400"
                 />
               </label>
 
@@ -230,7 +230,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
                   checked={settings.notifySent}
                   onChange={() => handleToggle('notifySent')}
                   disabled={saving}
-                  className="h-4 w-4 rounded border-sanctuary-300 text-primary-600 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-primary-600 focus:ring-primary-500 dark:focus:ring-primary-400"
                 />
               </label>
 
@@ -242,7 +242,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
                   checked={settings.notifyConsolidation}
                   onChange={() => handleToggle('notifyConsolidation')}
                   disabled={saving}
-                  className="h-4 w-4 rounded border-sanctuary-300 text-primary-600 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-primary-600 focus:ring-primary-500 dark:focus:ring-primary-400"
                 />
               </label>
             </div>

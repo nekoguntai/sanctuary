@@ -1091,6 +1091,45 @@ router.post('/2fa/backup-codes/regenerate', authenticate, async (req: Request, r
 // ============================================================================
 
 /**
+ * POST /api/v1/auth/telegram/chat-id
+ * Fetch chat ID from bot's recent messages (user must message the bot first)
+ */
+router.post('/telegram/chat-id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { botToken } = req.body;
+
+    if (!botToken) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Bot token is required',
+      });
+    }
+
+    const { getChatIdFromBot } = await import('../services/telegram/telegramService');
+    const result = await getChatIdFromBot(botToken);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        chatId: result.chatId,
+        username: result.username,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to fetch chat ID',
+      });
+    }
+  } catch (error) {
+    log.error('Telegram chat-id fetch error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch chat ID',
+    });
+  }
+});
+
+/**
  * POST /api/v1/auth/telegram/test
  * Test Telegram configuration by sending a test message
  */

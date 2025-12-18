@@ -160,6 +160,18 @@ export async function getRegistrationStatus(): Promise<{ enabled: boolean }> {
 }
 
 /**
+ * Fetch Telegram chat ID from bot's recent messages
+ */
+export async function fetchTelegramChatId(
+  botToken: string
+): Promise<{ success: boolean; chatId?: string; username?: string; error?: string }> {
+  return apiClient.post<{ success: boolean; chatId?: string; username?: string; error?: string }>(
+    '/auth/telegram/chat-id',
+    { botToken }
+  );
+}
+
+/**
  * Test Telegram configuration by sending a test message
  */
 export async function testTelegramConfig(

@@ -71,6 +71,55 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Get Chat ID from bot's recent messages
+ * User must send /start or any message to the bot first
+ */
+export async function getChatIdFromBot(
+  botToken: string
+): Promise<{ success: boolean; chatId?: string; username?: string; error?: string }> {
+  try {
+    const response = await fetch(`${TELEGRAM_API}${botToken}/getUpdates?limit=10`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = (errorData as any)?.description || `HTTP ${response.status}`;
+      return { success: false, error: errorMsg };
+    }
+
+    const data = await response.json();
+    const updates = (data as any)?.result || [];
+
+    if (updates.length === 0) {
+      return {
+        success: false,
+        error: 'No messages found. Please send /start to your bot first.',
+      };
+    }
+
+    // Get the most recent message's chat ID
+    const latestUpdate = updates[updates.length - 1];
+    const chat = latestUpdate?.message?.chat || latestUpdate?.my_chat_member?.chat;
+
+    if (!chat?.id) {
+      return {
+        success: false,
+        error: 'Could not extract chat ID from messages. Please send /start to your bot.',
+      };
+    }
+
+    return {
+      success: true,
+      chatId: String(chat.id),
+      username: chat.username || chat.first_name || undefined,
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    log.error(`Failed to get chat ID: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+}
+
+/**
  * Test Telegram configuration by sending a test message
  */
 export async function testTelegramConfig(

@@ -24,6 +24,7 @@ const TelegramSettings: React.FC = () => {
 
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingChatId, setIsFetchingChatId] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,33 @@ const TelegramSettings: React.FC = () => {
       setTestResult({ success: false, message });
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const handleFetchChatId = async () => {
+    if (!botToken) {
+      setError('Please enter your bot token first');
+      return;
+    }
+
+    setIsFetchingChatId(true);
+    setError(null);
+    setTestResult(null);
+
+    try {
+      const result = await authApi.fetchTelegramChatId(botToken);
+      if (result.success && result.chatId) {
+        setChatId(result.chatId);
+        const username = result.username ? ` (@${result.username})` : '';
+        setTestResult({ success: true, message: `Chat ID found${username}!` });
+      } else {
+        setTestResult({ success: false, message: result.error || 'Failed to fetch chat ID' });
+      }
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Failed to fetch chat ID';
+      setTestResult({ success: false, message });
+    } finally {
+      setIsFetchingChatId(false);
     }
   };
 
@@ -165,14 +193,30 @@ const TelegramSettings: React.FC = () => {
           <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
             Chat ID
           </label>
-          <input
-            type="text"
-            value={chatId}
-            onChange={(e) => setChatId(e.target.value)}
-            placeholder="123456789"
-            className="w-full px-4 py-2.5 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all font-mono text-sm"
-          />
-          <p className="text-xs text-sanctuary-500">Your Telegram user ID from @userinfobot</p>
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              value={chatId}
+              onChange={(e) => setChatId(e.target.value)}
+              placeholder="123456789"
+              className="flex-1 px-4 py-2.5 surface-secondary border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all font-mono text-sm"
+            />
+            <Button
+              variant="secondary"
+              onClick={handleFetchChatId}
+              disabled={!botToken || isFetchingChatId}
+              title="Fetch chat ID from bot (send /start to your bot first)"
+            >
+              {isFetchingChatId ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                'Fetch'
+              )}
+            </Button>
+          </div>
+          <p className="text-xs text-sanctuary-500">
+            Send <code className="px-1 py-0.5 bg-sanctuary-100 dark:bg-sanctuary-800 rounded">/start</code> to your bot, then click Fetch
+          </p>
         </div>
 
         {/* Error */}

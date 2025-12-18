@@ -781,28 +781,20 @@ class SyncService {
             log.debug(`[SYNC] Populated missing fields for ${populated} transactions in wallet ${walletId}`);
           }
 
-          const updated = await updateTransactionConfirmations(walletId);
-          totalUpdated += updated + populated;
+          // updateTransactionConfirmations now returns detailed info about changes
+          const updates = await updateTransactionConfirmations(walletId);
+          totalUpdated += updates.length + populated;
 
-          // Notify frontend of updates
-          if (updated > 0) {
+          // Notify frontend of updates - only broadcast transactions that actually changed
+          if (updates.length > 0) {
             const notificationService = getNotificationService();
-            // Get the updated transactions to send specific notifications
-            const updatedTxs = await prisma.transaction.findMany({
-              where: {
-                walletId,
-                confirmations: { gte: 1, lte: 6 },
-              },
-              select: {
-                txid: true,
-                confirmations: true,
-              },
-            });
 
-            for (const tx of updatedTxs) {
+            for (const update of updates) {
+              // Broadcast with milestone info so frontend knows if this is first confirmation
               notificationService.broadcastConfirmationUpdate(walletId, {
-                txid: tx.txid,
-                confirmations: tx.confirmations,
+                txid: update.txid,
+                confirmations: update.newConfirmations,
+                previousConfirmations: update.oldConfirmations,
               });
             }
           }

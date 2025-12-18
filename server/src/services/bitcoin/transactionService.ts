@@ -617,11 +617,12 @@ export async function broadcastAndSave(
   });
 
   // Save transaction to database
+  const txType = isConsolidation ? 'consolidation' : 'sent';
   await prisma.transaction.create({
     data: {
       txid,
       walletId,
-      type: isConsolidation ? 'consolidation' : 'sent',
+      type: txType,
       amount: BigInt(metadata.amount),
       fee: BigInt(metadata.fee),
       confirmations: 0,
@@ -630,6 +631,19 @@ export async function broadcastAndSave(
       blockHeight: null,
       blockTime: null,
     },
+  });
+
+  // Send notifications for the broadcast transaction (Telegram + Push)
+  // This is async and fire-and-forget to not block the response
+  import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
+    notifyNewTransactions(walletId, [{
+      txid,
+      type: txType,
+      amount: BigInt(metadata.amount),
+    }]).catch(err => {
+      // Log but don't fail the broadcast
+      console.warn(`[TRANSACTION] Failed to send notifications: ${err}`);
+    });
   });
 
   return {

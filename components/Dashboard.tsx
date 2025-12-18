@@ -313,7 +313,10 @@ export const Dashboard: React.FC = () => {
   useWebSocketEvent('confirmation', (event) => {
     const { data } = event;
 
-    if ([1, 3, 6].includes(data.confirmations)) {
+    // Check if this is a first confirmation milestone (0→1+)
+    const isFirstConfirmation = data.previousConfirmations === 0 && data.confirmations >= 1;
+
+    if ([1, 3, 6].includes(data.confirmations) || isFirstConfirmation) {
       addNotification({
         type: 'confirmation',
         title: 'Transaction Confirmed',
@@ -322,8 +325,8 @@ export const Dashboard: React.FC = () => {
         data,
       });
 
-      // Play sound on first confirmation
-      if (data.confirmations === 1) {
+      // Play sound on first confirmation (when previousConfirmations was 0)
+      if (isFirstConfirmation) {
         playEventSound('confirmation');
       }
     }

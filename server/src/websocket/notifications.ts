@@ -367,8 +367,9 @@ export class NotificationService {
 
   /**
    * Broadcast confirmation update for a transaction
+   * Includes previousConfirmations so frontend can detect milestone transitions (e.g., 0→1)
    */
-  public broadcastConfirmationUpdate(walletId: string, update: { txid: string; confirmations: number }) {
+  public broadcastConfirmationUpdate(walletId: string, update: { txid: string; confirmations: number; previousConfirmations?: number }) {
     const wsServer = getWebSocketServer();
 
     const event: WebSocketEvent = {
@@ -377,12 +378,19 @@ export class NotificationService {
       data: {
         txid: update.txid,
         confirmations: update.confirmations,
+        previousConfirmations: update.previousConfirmations,
         timestamp: new Date(),
       },
     };
 
     wsServer.broadcast(event);
-    log.debug(`Broadcast confirmation update: ${update.txid} (${update.confirmations} confs)`);
+
+    // Log at info level for first confirmation milestone (0→1)
+    if (update.previousConfirmations === 0 && update.confirmations >= 1) {
+      log.info(`First confirmation: ${update.txid.slice(0, 8)}... (${update.confirmations} confs)`);
+    } else {
+      log.debug(`Broadcast confirmation update: ${update.txid} (${update.previousConfirmations ?? '?'}→${update.confirmations} confs)`);
+    }
   }
 
   /**

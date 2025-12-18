@@ -557,7 +557,8 @@ export const WalletDetail: React.FC = () => {
             id: tx.id,
             txid: tx.txid,
             type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-            amount: (tx.type === 'received' || tx.type === 'receive' || tx.type === 'consolidation') ? Number(tx.amount) : -Number(tx.amount),
+            // Consolidations show as negative (fees spent only), receives positive, sends negative
+            amount: tx.type === 'consolidation' ? -(tx.fee ? Number(tx.fee) : 0) : (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
             timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
             confirmations: tx.confirmations,
             confirmed: tx.confirmations >= 1,
@@ -661,7 +662,8 @@ export const WalletDetail: React.FC = () => {
         id: tx.id,
         txid: tx.txid,
         type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-        amount: (tx.type === 'received' || tx.type === 'receive' || tx.type === 'consolidation') ? Number(tx.amount) : -Number(tx.amount),
+        // Consolidations show as negative (fees spent only), receives positive, sends negative
+        amount: tx.type === 'consolidation' ? -(tx.fee ? Number(tx.fee) : 0) : (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
         timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
         confirmations: tx.confirmations,
         confirmed: tx.confirmations >= 1,

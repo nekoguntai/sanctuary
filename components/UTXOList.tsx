@@ -169,9 +169,17 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                     <div className={`font-mono font-medium ${isFrozen ? 'text-zen-vermilion' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
                       <Amount sats={utxo.amount} size="lg" />
                     </div>
-                    <p className="text-xs text-sanctuary-500 font-mono break-all max-w-md">
+                    <a
+                      href={`${explorerUrl}/address/${utxo.address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-sanctuary-500 font-mono break-all max-w-md hover:text-primary-500 dark:hover:text-primary-400 hover:underline inline-flex items-center"
+                      title={`View address ${utxo.address} on block explorer`}
+                    >
                     {utxo.address}
-                    </p>
+                    <ExternalLink className="w-2.5 h-2.5 ml-1 flex-shrink-0" />
+                    </a>
                     {utxo.label && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-sanctuary-100 text-sanctuary-800 dark:bg-sanctuary-800 dark:text-sanctuary-300">
                         {utxo.label}

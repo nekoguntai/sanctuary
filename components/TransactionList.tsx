@@ -229,7 +229,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         : 'text-sanctuary-900 dark:text-sanctuary-100'
                     }`}>
                       <Amount
-                        sats={isConsolidation ? Math.abs(tx.amount) : tx.amount}
+                        sats={tx.amount}
                         showSign={isReceive}
                         size="sm"
                         className="justify-end"

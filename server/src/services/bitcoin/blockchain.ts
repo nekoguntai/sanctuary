@@ -728,16 +728,68 @@ export async function syncWallet(walletId: string): Promise<{
     }
   }
 
-  // PHASE 7: Batch check which UTXOs already exist
+  // PHASE 7: UTXO Reconciliation - Make blockchain authoritative
+  // Get all UTXOs from DB (both spent and unspent)
   const existingUtxos = await prisma.uTXO.findMany({
     where: { walletId },
-    select: { txid: true, vout: true },
+    select: { id: true, txid: true, vout: true, spent: true, confirmations: true, blockHeight: true },
   });
-  const existingUtxoSet = new Set(existingUtxos.map(u => `${u.txid}:${u.vout}`));
+  const existingUtxoMap = new Map(existingUtxos.map(u => [`${u.txid}:${u.vout}`, u]));
+  const existingUtxoSet = new Set(existingUtxoMap.keys());
 
-  // Filter to only new UTXOs
+  // Reconcile: Mark UTXOs as spent if they no longer exist on blockchain
+  const utxosToMarkSpent: string[] = [];
+  const utxosToUpdate: Array<{ id: string; confirmations: number; blockHeight: number | null }> = [];
+
+  for (const [key, dbUtxo] of existingUtxoMap) {
+    const blockchainUtxo = utxoDataMap.get(key);
+
+    if (!blockchainUtxo) {
+      // UTXO not on blockchain anymore - mark as spent
+      if (!dbUtxo.spent) {
+        utxosToMarkSpent.push(dbUtxo.id);
+      }
+    } else {
+      // UTXO still exists - update confirmations if changed
+      const utxo = blockchainUtxo.utxo;
+      const newConfirmations = utxo.height > 0 ? Math.max(0, currentHeight - utxo.height + 1) : 0;
+      const newBlockHeight = utxo.height > 0 ? utxo.height : null;
+
+      if (dbUtxo.confirmations !== newConfirmations || dbUtxo.blockHeight !== newBlockHeight) {
+        utxosToUpdate.push({
+          id: dbUtxo.id,
+          confirmations: newConfirmations,
+          blockHeight: newBlockHeight,
+        });
+      }
+    }
+  }
+
+  // Batch mark spent UTXOs
+  if (utxosToMarkSpent.length > 0) {
+    await prisma.uTXO.updateMany({
+      where: { id: { in: utxosToMarkSpent } },
+      data: { spent: true },
+    });
+    walletLog(walletId, 'info', 'UTXO', `Marked ${utxosToMarkSpent.length} UTXOs as spent (no longer on blockchain)`);
+  }
+
+  // Batch update UTXO confirmations
+  if (utxosToUpdate.length > 0) {
+    await prisma.$transaction(
+      utxosToUpdate.map(u =>
+        prisma.uTXO.update({
+          where: { id: u.id },
+          data: { confirmations: u.confirmations, blockHeight: u.blockHeight },
+        })
+      )
+    );
+    log.debug(`[BLOCKCHAIN] Updated confirmations for ${utxosToUpdate.length} UTXOs`);
+  }
+
+  // Filter to only new UTXOs (not already in DB)
   const newUtxoKeys = Array.from(allUtxoKeys).filter(key => !existingUtxoSet.has(key));
-  log.debug(`[BLOCKCHAIN] Found ${newUtxoKeys.length} new UTXOs (${existingUtxoSet.size} already exist)`);
+  log.debug(`[BLOCKCHAIN] Found ${newUtxoKeys.length} new UTXOs (${existingUtxoSet.size} already exist, ${utxosToMarkSpent.length} marked spent)`);
 
   // PHASE 8: Fetch tx details for new UTXOs (use cache when available)
   const utxosToCreate: any[] = [];
@@ -973,30 +1025,45 @@ export async function checkAddress(
 }
 
 /**
- * Update confirmations for pending transactions - OPTIMIZED with batch updates
+ * Confirmation update result with milestone tracking
  */
-export async function updateTransactionConfirmations(walletId: string): Promise<number> {
+export interface ConfirmationUpdate {
+  txid: string;
+  oldConfirmations: number;
+  newConfirmations: number;
+}
+
+/**
+ * Update confirmations for pending transactions - OPTIMIZED with batch updates
+ * Returns detailed info about which transactions changed, for milestone notifications
+ */
+export async function updateTransactionConfirmations(walletId: string): Promise<ConfirmationUpdate[]> {
   const transactions = await prisma.transaction.findMany({
     where: {
       walletId,
       confirmations: { lt: 6 }, // Only update transactions with less than 6 confirmations
       blockHeight: { not: null },
     },
-    select: { id: true, blockHeight: true, confirmations: true },
+    select: { id: true, txid: true, blockHeight: true, confirmations: true },
   });
 
-  if (transactions.length === 0) return 0;
+  if (transactions.length === 0) return [];
 
   const currentHeight = await getBlockHeight();
 
   // Calculate new confirmations and collect updates
-  const updates: Array<{ id: string; confirmations: number }> = [];
+  const updates: Array<{ id: string; txid: string; oldConfirmations: number; newConfirmations: number }> = [];
 
   for (const tx of transactions) {
     if (tx.blockHeight) {
       const newConfirmations = Math.max(0, currentHeight - tx.blockHeight + 1);
       if (newConfirmations !== tx.confirmations) {
-        updates.push({ id: tx.id, confirmations: newConfirmations });
+        updates.push({
+          id: tx.id,
+          txid: tx.txid,
+          oldConfirmations: tx.confirmations,
+          newConfirmations,
+        });
       }
     }
   }
@@ -1007,13 +1074,17 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
       updates.map(u =>
         prisma.transaction.update({
           where: { id: u.id },
-          data: { confirmations: u.confirmations },
+          data: { confirmations: u.newConfirmations },
         })
       )
     );
   }
 
-  return updates.length;
+  return updates.map(u => ({
+    txid: u.txid,
+    oldConfirmations: u.oldConfirmations,
+    newConfirmations: u.newConfirmations,
+  }));
 }
 
 /**

@@ -507,7 +507,9 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   const handleBlockClick = useCallback((block: BlockData, pendingIndex?: number) => {
     // If onBlockClick is provided, use it for fee selection instead of opening explorer
     if (onBlockClick) {
-      onBlockClick(block.medianFee);
+      // Use avgFeeRate if available (matches the displayed value), otherwise medianFee
+      const feeRate = block.avgFeeRate !== undefined ? block.avgFeeRate : block.medianFee;
+      onBlockClick(feeRate);
       return;
     }
     // Otherwise open in explorer

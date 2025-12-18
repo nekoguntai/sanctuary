@@ -56,8 +56,7 @@
 - [Security Considerations](#security-considerations)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
-- [Contributing](#contributing)
-- [Donations](#donations)
+- [Support the Project](#support-the-project)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -1038,28 +1037,44 @@ sanctuary/
 └── docker-compose.yml
 ```
 
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## Donations
+## Support the Project
 
 If you find Sanctuary useful and want to support its development, consider sending a donation.
 
-**Bitcoin (on-chain):**
+### Bitcoin (on-chain)
+
+<p align="center">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=bitcoin%3Abc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq" alt="Bitcoin QR Code" />
+</p>
+
 ```
-bc1q... (coming soon)
+bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq
 ```
 
-**Lightning Network:**
+### Lightning Address
+
+<p align="center">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=lightning%3Acarpalbutton44%40phoenixwallet.me" alt="Lightning Address QR Code" />
+</p>
+
 ```
-lnurl... (coming soon)
+carpalbutton44@phoenixwallet.me
 ```
+
+### BOLT12 Offer
+
+<p align="center">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=lno1zrxq8pjw7qjlm68mtp7e3yvxee4y5xrgjhhyf2fxhlphpckrvevh50u0q0k69ewp6vpr8cpc4fd86z8zx6vfsw9mygjvpanytty0rf7dadr2jqsrl3hc5zp5ethevj9fgtw2507ug4qvfaqeejk637u03dmqpy9fyq6sqv6wau6w883t4n4l5yqjfr4ge4ugpttxgeq9cy4gtxhlckats0ce9mph6k4kwrz7dl648999emgcv5p90yl8q25qslw2dfndv3n2gtv20wpkhahexj93dh7w35g832h33e55h3tagqqsu0hv9rtuadpk5rahzc9uj9fdzy" alt="BOLT12 Offer QR Code" />
+</p>
+
+<details>
+<summary>BOLT12 Offer (click to expand)</summary>
+
+```
+lno1zrxq8pjw7qjlm68mtp7e3yvxee4y5xrgjhhyf2fxhlphpckrvevh50u0q0k69ewp6vpr8cpc4fd86z8zx6vfsw9mygjvpanytty0rf7dadr2jqsrl3hc5zp5ethevj9fgtw2507ug4qvfaqeejk637u03dmqpy9fyq6sqv6wau6w883t4n4l5yqjfr4ge4ugpttxgeq9cy4gtxhlckats0ce9mph6k4kwrz7dl648999emgcv5p90yl8q25qslw2dfndv3n2gtv20wpkhahexj93dh7w35g832h33e55h3tagqqsu0hv9rtuadpk5rahzc9uj9fdzy
+```
+
+</details>
 
 Your support helps cover development costs and keeps the project independent.
 

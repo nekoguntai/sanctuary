@@ -283,12 +283,19 @@ export async function getBlocksAndMempool() {
         const blockLabels = ['Next', '+2', '+3'];
         const blockTimes = ['~10m', '~20m', '~30m'];
 
+        // Helper to format fee rate - preserve decimals for low fees
+        const formatFeeRate = (rate: number): string => {
+          if (rate >= 1) return Math.round(rate).toString();
+          if (rate >= 0.1) return rate.toFixed(1);
+          return rate.toFixed(2);
+        };
+
         mempoolBlocks = projectedBlocks.slice(0, 3).map((block, idx) => ({
           height: blockLabels[idx] || `+${idx + 1}`,
-          medianFee: Math.round(block.medianFee),
+          medianFee: block.medianFee < 1 ? parseFloat(block.medianFee.toFixed(2)) : Math.round(block.medianFee),
           feeRange: block.feeRange.length >= 2
-            ? `${Math.round(block.feeRange[0])}-${Math.round(block.feeRange[block.feeRange.length - 1])}`
-            : `${Math.round(block.medianFee)}`,
+            ? `${formatFeeRate(block.feeRange[0])}-${formatFeeRate(block.feeRange[block.feeRange.length - 1])}`
+            : formatFeeRate(block.medianFee),
           size: block.blockVSize / 1000000, // Convert to MB
           time: blockTimes[idx] || `~${(idx + 1) * 10}m`,
           status: 'pending' as const,
@@ -308,7 +315,7 @@ export async function getBlocksAndMempool() {
           queuedBlocksSummary = {
             blockCount: additionalBlocks.length,
             totalTransactions: totalTxCount,
-            averageFee: Math.round(avgFee),
+            averageFee: avgFee < 1 ? parseFloat(avgFee.toFixed(2)) : Math.round(avgFee),
             totalFees: totalFees / 100000000,
           };
         }

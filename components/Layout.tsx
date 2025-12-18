@@ -682,7 +682,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                         <span>Lightning Address</span>
                       </span>
                       <button
-                        onClick={() => copyToClipboard('sanctuary@getalby.com', 'ln')}
+                        onClick={() => copyToClipboard('carpalbutton44@phoenixwallet.me', 'ln')}
                         className="flex items-center space-x-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         {copiedAddress === 'ln' ? (
@@ -700,10 +700,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     </div>
                     <div className="flex items-center space-x-3">
                       <div className="bg-white p-1.5 rounded-lg flex-shrink-0">
-                        <QRCodeSVG value="lightning:sanctuary@getalby.com" size={64} level="L" />
+                        <QRCodeSVG value="lightning:carpalbutton44@phoenixwallet.me" size={64} level="L" />
                       </div>
                       <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
-                        sanctuary@getalby.com
+                        carpalbutton44@phoenixwallet.me
                       </code>
                     </div>
                   </div>

@@ -388,6 +388,47 @@ export interface WalletExportFormat {
 }
 
 /**
+ * Coldcard JSON export format
+ * Contains xfp (fingerprint) and multiple derivation paths (bip44, bip49, bip84, bip48)
+ */
+export interface ColdcardJsonExport {
+  chain?: string;
+  xfp: string;
+  xpub?: string;
+  account?: number;
+  bip44?: {
+    xpub: string;
+    deriv: string;
+    name?: string;
+    first?: string;
+  };
+  bip49?: {
+    xpub: string;
+    deriv: string;
+    name?: string;
+    first?: string;
+    _pub?: string;
+  };
+  bip84?: {
+    xpub: string;
+    deriv: string;
+    name?: string;
+    first?: string;
+    _pub?: string;
+  };
+  bip48_1?: {
+    xpub: string;
+    deriv: string;
+    name?: string;
+  };
+  bip48_2?: {
+    xpub: string;
+    deriv: string;
+    name?: string;
+  };
+}
+
+/**
  * BlueWallet multisig text format parser
  *
  * Format example:
@@ -587,6 +628,79 @@ function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
 }
 
 /**
+ * Check if JSON is a Coldcard export format (has xfp and bip paths)
+ */
+function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const cc = obj as ColdcardJsonExport;
+  // Coldcard exports have xfp (fingerprint) and at least one BIP path
+  return (
+    typeof cc.xfp === 'string' &&
+    cc.xfp.length === 8 &&
+    (cc.bip44 !== undefined || cc.bip49 !== undefined || cc.bip84 !== undefined || cc.bip48_1 !== undefined || cc.bip48_2 !== undefined)
+  );
+}
+
+/**
+ * Parse Coldcard JSON export into ParsedDescriptor
+ * Coldcard exports contain multiple derivation paths - we need to pick one based on priority
+ * Priority: bip84 (native segwit) > bip49 (nested segwit) > bip44 (legacy)
+ */
+function parseColdcardExport(cc: ColdcardJsonExport): { parsed: ParsedDescriptor; availablePaths: Array<{ scriptType: ScriptType; path: string }> } {
+  const fingerprint = cc.xfp.toLowerCase();
+  const availablePaths: Array<{ scriptType: ScriptType; path: string }> = [];
+
+  // Collect all available paths
+  if (cc.bip84) {
+    availablePaths.push({ scriptType: 'native_segwit', path: cc.bip84.deriv });
+  }
+  if (cc.bip49) {
+    availablePaths.push({ scriptType: 'nested_segwit', path: cc.bip49.deriv });
+  }
+  if (cc.bip44) {
+    availablePaths.push({ scriptType: 'legacy', path: cc.bip44.deriv });
+  }
+
+  // Pick the best available path (prefer native segwit)
+  let selectedPath: { xpub: string; deriv: string; scriptType: ScriptType };
+
+  if (cc.bip84) {
+    selectedPath = { xpub: cc.bip84.xpub, deriv: cc.bip84.deriv, scriptType: 'native_segwit' };
+  } else if (cc.bip49) {
+    selectedPath = { xpub: cc.bip49.xpub, deriv: cc.bip49.deriv, scriptType: 'nested_segwit' };
+  } else if (cc.bip44) {
+    selectedPath = { xpub: cc.bip44.xpub, deriv: cc.bip44.deriv, scriptType: 'legacy' };
+  } else if (cc.bip48_2) {
+    // P2WSH multisig derivation - but for single sig import we treat it as single sig
+    selectedPath = { xpub: cc.bip48_2.xpub, deriv: cc.bip48_2.deriv, scriptType: 'native_segwit' };
+  } else if (cc.bip48_1) {
+    // P2SH-P2WSH multisig derivation
+    selectedPath = { xpub: cc.bip48_1.xpub, deriv: cc.bip48_1.deriv, scriptType: 'nested_segwit' };
+  } else {
+    throw new Error('Coldcard export does not contain any recognized BIP derivation paths');
+  }
+
+  const device: ParsedDevice = {
+    fingerprint,
+    xpub: selectedPath.xpub,
+    derivationPath: normalizeDerivationPath(selectedPath.deriv),
+  };
+
+  const network = detectNetwork(device.xpub, device.derivationPath);
+
+  return {
+    parsed: {
+      type: 'single_sig',
+      scriptType: selectedPath.scriptType,
+      devices: [device],
+      network,
+      isChange: false,
+    },
+    availablePaths,
+  };
+}
+
+/**
  * Extract descriptor from text that may contain comments
  * Returns the first valid descriptor line found
  */
@@ -644,10 +758,11 @@ function isDescriptorTextFormat(input: string): boolean {
  * Returns the parsed result or throws an error
  */
 export function parseImportInput(input: string): {
-  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
+  format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text' | 'coldcard';
   parsed: ParsedDescriptor;
   originalDevices?: JsonImportDevice[];
   suggestedName?: string;
+  availablePaths?: Array<{ scriptType: ScriptType; path: string }>;
 } {
   const trimmed = input.trim();
   log.debug('parseImportInput called', { inputLength: trimmed.length, startsWithHash: trimmed.startsWith('#'), first50: trimmed.substring(0, 50) });
@@ -664,6 +779,16 @@ export function parseImportInput(input: string): {
           format: 'wallet_export',
           parsed,
           suggestedName: json.label || json.name,
+        };
+      }
+
+      // Check if it's a Coldcard JSON export (has xfp and bip paths)
+      if (isColdcardExportFormat(json)) {
+        const { parsed, availablePaths } = parseColdcardExport(json);
+        return {
+          format: 'coldcard',
+          parsed,
+          availablePaths,
         };
       }
 

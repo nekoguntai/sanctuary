@@ -62,7 +62,7 @@ export const DeviceDetail: React.FC = () => {
         })) || [];
         setWallets(walletList);
         setEditLabel(deviceData.label);
-        setEditModelSlug(deviceData.type || '');
+        setEditModelSlug(deviceData.model?.slug || '');
       } catch (error) {
         log.error('Failed to fetch device', { error });
       } finally {
@@ -77,10 +77,10 @@ export const DeviceDetail: React.FC = () => {
     try {
       const updateData: { label?: string; modelSlug?: string } = {};
       if (editLabel !== device.label) updateData.label = editLabel;
-      if (editModelSlug !== device.type) updateData.modelSlug = editModelSlug;
+      if (editModelSlug !== (device.model?.slug || '')) updateData.modelSlug = editModelSlug;
 
       const updatedDevice = await updateDevice(device.id, updateData);
-      setDevice({ ...device, ...updatedDevice, label: editLabel, type: editModelSlug || device.type });
+      setDevice({ ...device, ...updatedDevice, label: editLabel });
       setIsEditing(false);
     } catch (error) {
       log.error('Failed to update device', { error });
@@ -90,7 +90,7 @@ export const DeviceDetail: React.FC = () => {
   const cancelEdit = () => {
     setIsEditing(false);
     setEditLabel(device?.label || '');
-    setEditModelSlug(device?.type || '');
+    setEditModelSlug(device?.model?.slug || '');
   };
 
   // Get display name for current device type

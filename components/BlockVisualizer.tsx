@@ -505,16 +505,17 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   }, [blocks]);
 
   const handleBlockClick = useCallback((block: BlockData, pendingIndex?: number) => {
-    // Open in explorer
+    // If onBlockClick is provided, use it for fee selection instead of opening explorer
+    if (onBlockClick) {
+      onBlockClick(block.medianFee);
+      return;
+    }
+    // Otherwise open in explorer
     if (block.status === 'confirmed' && typeof block.height === 'number') {
       window.open(`${explorerUrl}/block/${block.height}`, '_blank');
     } else if (block.status === 'pending' && pendingIndex !== undefined) {
       // For pending blocks, link to mempool-block view (mempool.space compatible)
       window.open(`${explorerUrl}/mempool-block/${pendingIndex}`, '_blank');
-    }
-    // Call callback for fee selection
-    if (onBlockClick) {
-      onBlockClick(block.medianFee);
     }
   }, [explorerUrl, onBlockClick]);
 

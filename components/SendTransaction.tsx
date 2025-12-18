@@ -249,6 +249,15 @@ export const SendTransaction: React.FC = () => {
   const [existingDraftsCount, setExistingDraftsCount] = useState(0);
   const [showDraftsBanner, setShowDraftsBanner] = useState(false);
   const [isResumingDraft, setIsResumingDraft] = useState(false);
+  const [savedDraftTxData, setSavedDraftTxData] = useState<{
+    psbtBase64: string;
+    fee: number;
+    totalInput: number;
+    totalOutput: number;
+    changeAmount: number;
+    effectiveAmount: number;
+    utxos: Array<{ txid: string; vout: number }>;
+  } | null>(null);
   const draftData = (location.state as { draft?: DraftTransaction })?.draft;
   
   // Camera refs
@@ -454,10 +463,25 @@ export const SendTransaction: React.FC = () => {
               setShowCoinControl(true);
             }
           }
-          if (draftData.signedPsbtBase64) {
-            setUnsignedPsbt(draftData.signedPsbtBase64);
-          } else if (draftData.psbtBase64) {
-            setUnsignedPsbt(draftData.psbtBase64);
+          // Save the draft's PSBT and transaction data for use when signing
+          const psbtToUse = draftData.signedPsbtBase64 || draftData.psbtBase64;
+          if (psbtToUse) {
+            setUnsignedPsbt(psbtToUse);
+            // Convert selectedUtxoIds (strings like "txid:vout") to utxos array
+            const utxos = (draftData.selectedUtxoIds || []).map(id => {
+              const [txid, voutStr] = id.split(':');
+              return { txid, vout: parseInt(voutStr, 10) };
+            });
+            // Store the saved transaction data so we don't need to re-create
+            setSavedDraftTxData({
+              psbtBase64: psbtToUse,
+              fee: draftData.fee,
+              totalInput: draftData.totalInput,
+              totalOutput: draftData.totalOutput,
+              changeAmount: draftData.changeAmount,
+              effectiveAmount: draftData.effectiveAmount,
+              utxos,
+            });
           }
           if (draftData.signedDeviceIds && draftData.signedDeviceIds.length > 0) {
             setSignedDevices(new Set(draftData.signedDeviceIds));
@@ -918,9 +942,22 @@ export const SendTransaction: React.FC = () => {
 
       const totalAmount = apiOutputs.reduce((sum, o) => sum + (o.sendMax ? 0 : o.amount), 0);
 
-      // Step 1: Create transaction PSBT
+      // Step 1: Get or create transaction PSBT
       let txData: any;
-      if (outputs.length > 1 || outputs.some(o => o.sendMax)) {
+
+      // If resuming a draft with saved transaction data, use it directly instead of re-creating
+      if (isResumingDraft && savedDraftTxData) {
+        log.info('Using saved draft transaction data', { draftId: currentDraftId });
+        txData = {
+          psbtBase64: savedDraftTxData.psbtBase64,
+          fee: savedDraftTxData.fee,
+          totalInput: savedDraftTxData.totalInput,
+          totalOutput: savedDraftTxData.totalOutput,
+          changeAmount: savedDraftTxData.changeAmount,
+          effectiveAmount: savedDraftTxData.effectiveAmount,
+          utxos: savedDraftTxData.utxos,
+        };
+      } else if (outputs.length > 1 || outputs.some(o => o.sendMax)) {
         // Use batch API for multiple outputs or sendMax
         txData = await transactionsApi.createBatchTransaction(id, {
           outputs: apiOutputs,
@@ -941,8 +978,8 @@ export const SendTransaction: React.FC = () => {
         });
       }
 
-      // Check if balance is sufficient (skip for sendMax since backend already validated)
-      if (!isSendMax && !subtractFeesFromAmount) {
+      // Check if balance is sufficient (skip for sendMax, subtractFees, or draft resume since already validated)
+      if (!isSendMax && !subtractFeesFromAmount && !isResumingDraft) {
         const totalNeeded = totalAmount + txData.fee;
         if (wallet.balance < totalNeeded) {
           setError(`Insufficient funds. Need ${format(totalNeeded)} but have ${format(wallet.balance)}`);
@@ -951,9 +988,9 @@ export const SendTransaction: React.FC = () => {
       }
 
       // Calculate effective amount for display
-      const effectiveAmount = txData.outputs
+      const effectiveAmount = txData.effectiveAmount || (txData.outputs
         ? txData.outputs.reduce((sum: number, o: any) => sum + o.amount, 0)
-        : totalAmount;
+        : totalAmount);
 
       // Step 2: Sign and broadcast
       let signedPsbt: string | undefined;

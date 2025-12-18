@@ -565,7 +565,7 @@ export const WalletDetail: React.FC = () => {
             walletId: id,
             label: tx.label || tx.memo || '',
             labels: tx.labels || [], // Map labels from API
-            address: tx.address?.address,
+            address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
             blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
             counterpartyAddress: tx.counterpartyAddress || undefined,
           }));
@@ -669,7 +669,7 @@ export const WalletDetail: React.FC = () => {
         walletId: id,
         label: tx.label || tx.memo || '',
         labels: tx.labels || [],
-        address: tx.address?.address,
+        address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
         blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
         counterpartyAddress: tx.counterpartyAddress || undefined,
       }));

@@ -1,8 +1,41 @@
+/**
+ * Central Type Definitions
+ *
+ * Single source of truth for all shared types across the Sanctuary codebase.
+ * This file contains both UI-facing types (enums for display) and API-facing types.
+ */
 
+// ============================================================================
+// WALLET TYPE ENUMS & ALIASES
+// ============================================================================
+
+/**
+ * WalletType enum for UI display purposes (icons, labels)
+ * Values are human-readable display strings
+ */
 export enum WalletType {
   SINGLE_SIG = 'Single Sig',
   MULTI_SIG = 'Multi Sig',
 }
+
+/**
+ * API wallet type - what the backend returns
+ */
+export type ApiWalletType = 'single_sig' | 'multi_sig';
+
+/**
+ * Script type for wallet address derivation
+ */
+export type WalletScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+
+/**
+ * Bitcoin network
+ */
+export type WalletNetwork = 'mainnet' | 'testnet' | 'regtest';
+
+// ============================================================================
+// HARDWARE DEVICE ENUMS & TYPES
+// ============================================================================
 
 export enum HardwareDevice {
   COLDCARD_MK4 = 'ColdCardMk4',
@@ -42,8 +75,16 @@ export interface HardwareDeviceModel {
   websiteUrl?: string;
 }
 
+// ============================================================================
+// THEME & UI TYPES
+// ============================================================================
+
 export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber' | 'sunrise';
 export type BackgroundOption = 'minimal' | 'zen' | 'circuit' | 'topography' | 'waves' | 'lines' | 'sanctuary' | 'sanctuary-hero';
+
+// ============================================================================
+// TELEGRAM & NOTIFICATION TYPES
+// ============================================================================
 
 export interface WalletTelegramSettings {
   enabled: boolean;
@@ -64,6 +105,10 @@ export interface NotificationSounds {
   confirmationChime: boolean; // Play sound on first confirmation
   volume: number; // 0-100
 }
+
+// ============================================================================
+// USER & GROUP TYPES
+// ============================================================================
 
 export interface UserPreferences {
   darkMode: boolean;
@@ -94,6 +139,10 @@ export interface Group {
   memberIds: string[];
 }
 
+// ============================================================================
+// NODE CONFIGURATION
+// ============================================================================
+
 export interface NodeConfig {
   type: 'bitcoind' | 'electrum';
   host: string;
@@ -106,15 +155,68 @@ export interface NodeConfig {
   mempoolEstimator?: 'simple' | 'mempool_space'; // Algorithm for block confirmation estimation
 }
 
+// ============================================================================
+// DEVICE TYPES
+// ============================================================================
+
 export interface Device {
   id: string;
   type: HardwareDevice | string;
   label: string;
   fingerprint: string;
-  xpub?: string;
   derivationPath?: string;
+  xpub?: string; // Optional for backward compat, but typically present
   userId?: string;
+  createdAt?: string;
+  model?: HardwareDeviceModel;
+  wallets?: Array<{
+    wallet: {
+      id: string;
+      name: string;
+      type: string;
+      scriptType?: string;
+    };
+  }>;
 }
+
+// ============================================================================
+// LABEL TYPES
+// ============================================================================
+
+export interface Label {
+  id: string;
+  walletId: string;
+  name: string;
+  color: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Optional counts (present on list responses)
+  transactionCount?: number;
+  addressCount?: number;
+}
+
+export interface LabelWithItems extends Label {
+  transactions: Array<{
+    id: string;
+    txid: string;
+    type: string;
+    amount: number;
+    confirmations: number;
+    blockTime?: string;
+  }>;
+  addresses: Array<{
+    id: string;
+    address: string;
+    derivationPath: string;
+    index: number;
+    used: boolean;
+  }>;
+}
+
+// ============================================================================
+// UTXO TYPES
+// ============================================================================
 
 export interface UTXO {
   id?: string; // Database ID (needed for freeze API)
@@ -125,10 +227,18 @@ export interface UTXO {
   label?: string;
   frozen?: boolean;
   spendable?: boolean;
+  spent?: boolean;
   confirmations: number;
-  date?: number; // timestamp
-  scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+  date?: number | string; // timestamp
+  scriptType?: WalletScriptType;
+  scriptPubKey?: string;
+  blockHeight?: number;
+  createdAt?: string;
 }
+
+// ============================================================================
+// ADDRESS TYPES
+// ============================================================================
 
 export interface Address {
   id?: string;
@@ -139,7 +249,12 @@ export interface Address {
   labels?: Label[]; // Multiple labels support
   used: boolean;
   balance: number;
+  createdAt?: string;
 }
+
+// ============================================================================
+// TRANSACTION TYPES
+// ============================================================================
 
 export interface TransactionInput {
   address: string;
@@ -151,33 +266,47 @@ export interface TransactionOutput {
   amount: number;
 }
 
-export interface Label {
-  id: string;
-  walletId: string;
-  name: string;
-  color: string;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface Transaction {
   id: string;
   txid: string;
+  walletId: string;
   amount: number; // in sats, negative for send, positive for receive
   fee?: number;
-  timestamp?: number;
+  timestamp?: number; // Unix timestamp (legacy field)
+  blockTime?: string; // ISO timestamp (preferred)
   label?: string;
+  memo?: string;
   labels?: Label[]; // Multiple labels support
   confirmations: number;
-  walletId: string;
-  address?: string; // Address this transaction is associated with
+  address?: string | { address: string; derivationPath?: string }; // Address this transaction is associated with
   blockHeight?: number; // Block height when confirmed
   counterpartyAddress?: string; // Sender (for receives) or recipient (for sends)
   inputs?: TransactionInput[];
   outputs?: TransactionOutput[];
   type?: 'sent' | 'received' | 'consolidation' | 'receive'; // Transaction type from sync
 }
+
+/**
+ * Pending transaction for block queue visualization
+ * Shows user's unconfirmed transactions and their position in mempool
+ */
+export interface PendingTransaction {
+  txid: string;
+  walletId: string;
+  walletName?: string;
+  type: 'sent' | 'received';
+  amount: number; // in satoshis
+  fee: number; // in satoshis
+  feeRate: number; // sat/vB (fee / vsize)
+  vsize?: number; // virtual size in vBytes
+  recipient?: string; // recipient address for sent txs
+  timeInQueue: number; // seconds since broadcast
+  createdAt: string; // ISO timestamp
+}
+
+// ============================================================================
+// WALLET TYPES
+// ============================================================================
 
 export interface Quorum {
   m: number;
@@ -189,12 +318,14 @@ export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 export interface Wallet {
   id: string;
   name: string;
-  type: WalletType | 'single_sig' | 'multi_sig';
-  scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
-  quorum?: Quorum;
+  type: WalletType | ApiWalletType; // Supports both enum values and API strings
+  scriptType?: WalletScriptType;
+  network?: WalletNetwork;
+  quorum?: Quorum | number; // Quorum object or just m value
+  totalSigners?: number; // n value when quorum is a number
   deviceIds?: string[];
   balance: number;
-  unit?: 'BTC' | 'sats';
+  unit?: 'BTC' | 'sats' | 'btc';
   descriptor?: string;
   ownerId?: string; // User ID of the creator
   groupIds?: string[]; // IDs of groups this wallet is shared with
@@ -202,14 +333,29 @@ export interface Wallet {
   fingerprint?: string;
   label?: string;
   xpub?: string;
+  // Counts
+  deviceCount?: number;
+  addressCount?: number;
+  // Timestamps
+  createdAt?: string;
   // Sync metadata
   lastSyncedAt?: string | null;
-  lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | null;
+  lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | string | null;
   syncInProgress?: boolean;
+  // Sharing info
+  isShared?: boolean;
+  sharedWith?: {
+    groupName?: string | null;
+    userCount: number;
+  };
   // User permissions for this wallet
   userRole?: WalletRole;
   canEdit?: boolean;
 }
+
+// ============================================================================
+// FEE ESTIMATE TYPES
+// ============================================================================
 
 export interface FeeEstimate {
   fastestFee: number;
@@ -226,6 +372,126 @@ export interface FeeEstimates {
   economy: number;
   minimum?: number;
 }
+
+// ============================================================================
+// BITCOIN TRANSACTION DETAILS (for Electrum/mempool.space responses)
+// ============================================================================
+
+export interface BitcoinTransactionDetails {
+  txid: string;
+  version: number;
+  locktime: number;
+  size: number;
+  weight: number;
+  fee: number;
+  vin: Array<{
+    txid: string;
+    vout: number;
+    scriptSig?: string;
+    sequence: number;
+    prevout?: {
+      value: number;
+      scriptPubKey: {
+        type: string;
+        address?: string;
+      };
+    };
+  }>;
+  vout: Array<{
+    value: number;
+    n: number;
+    scriptPubKey: {
+      type: string;
+      address?: string;
+      addresses?: string[];
+    };
+  }>;
+  status: {
+    confirmed: boolean;
+    block_height?: number;
+    block_hash?: string;
+    block_time?: number;
+  };
+}
+
+export interface BlockHeader {
+  height: number;
+  hash: string;
+  time: number;
+  mediantime: number;
+  nonce: number;
+  bits: string;
+  difficulty: number;
+  merkleroot: string;
+  previousblockhash?: string;
+  nextblockhash?: string;
+}
+
+// ============================================================================
+// WEBSOCKET EVENT TYPES
+// ============================================================================
+
+export interface WebSocketTransactionData {
+  txid?: string;
+  type?: 'received' | 'sent' | 'consolidation';
+  amount?: number;
+  confirmations?: number;
+  walletId?: string;
+}
+
+export interface WebSocketBalanceData {
+  balance?: number;
+  confirmed?: number;
+  unconfirmed?: number;
+  change?: number;
+  walletId?: string;
+}
+
+export interface WebSocketConfirmationData {
+  txid?: string;
+  confirmations?: number;
+  walletId?: string;
+}
+
+export interface WebSocketSyncData {
+  inProgress?: boolean;
+  status?: 'scanning' | 'complete' | 'error' | 'retry' | 'retrying' | 'success' | 'failed';
+  lastSyncedAt?: string;
+  error?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  walletId?: string;
+}
+
+// Generic event data for backward compatibility
+export interface WebSocketEventData {
+  walletId?: string;
+  balance?: number;
+  txid?: string;
+  amount?: number;
+  type?: string;
+  confirmations?: number;
+  message?: string;
+  change?: number;
+  inProgress?: boolean;
+  status?: string;
+  lastSyncedAt?: string;
+  error?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  [key: string]: unknown;
+}
+
+export interface WebSocketCallbacks {
+  onTransaction?: (data: WebSocketTransactionData) => void;
+  onBalance?: (data: WebSocketBalanceData) => void;
+  onConfirmation?: (data: WebSocketConfirmationData) => void;
+  onSync?: (data: WebSocketSyncData) => void;
+}
+
+// ============================================================================
+// APP STATE
+// ============================================================================
 
 export interface AppState {
   isAuthenticated: boolean;

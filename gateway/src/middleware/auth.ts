@@ -37,6 +37,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { createLogger } from '../utils/logger';
+import { logSecurityEvent, logAuditEvent } from './requestLogger';
 
 const log = createLogger('AUTH');
 
@@ -77,7 +78,11 @@ export function authenticate(
   const token = extractToken(req);
 
   if (!token) {
-    log.warn('Missing authorization token', { ip: req.ip, path: req.path });
+    logSecurityEvent('AUTH_MISSING_TOKEN', {
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent'],
+    });
     res.status(401).json({ error: 'Unauthorized', message: 'Missing authorization token' });
     return;
   }
@@ -96,10 +101,21 @@ export function authenticate(
     next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
-      log.warn('Token expired', { ip: req.ip, path: req.path });
+      logSecurityEvent('AUTH_TOKEN_EXPIRED', {
+        ip: req.ip,
+        path: req.path,
+        userAgent: req.headers['user-agent'],
+      });
       res.status(401).json({ error: 'Unauthorized', message: 'Token expired' });
     } else if (err instanceof jwt.JsonWebTokenError) {
-      log.warn('Invalid token', { ip: req.ip, path: req.path, error: (err as Error).message });
+      logSecurityEvent('AUTH_INVALID_TOKEN', {
+        ip: req.ip,
+        path: req.path,
+        userAgent: req.headers['user-agent'],
+        error: (err as Error).message,
+        // Invalid tokens could indicate an attack attempt
+        severity: 'medium',
+      });
       res.status(401).json({ error: 'Unauthorized', message: 'Invalid token' });
     } else {
       log.error('Auth error', { error: (err as Error).message });

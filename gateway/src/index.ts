@@ -10,6 +10,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { config, validateConfig } from './config';
 import { createLogger } from './utils/logger';
+import { requestLogger } from './middleware/requestLogger';
 import { authRateLimiter } from './middleware/rateLimit';
 import proxyRoutes from './routes/proxy';
 import { initializePushServices, shutdownPushServices } from './services/push';
@@ -33,6 +34,9 @@ app.use(cors({
 
 // Body parsing
 app.use(express.json({ limit: '1mb' }));
+
+// Request logging - captures all requests for auditing
+app.use(requestLogger);
 
 // Health check (no auth required)
 app.get('/health', (_req, res) => {

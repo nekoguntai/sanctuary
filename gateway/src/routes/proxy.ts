@@ -47,6 +47,7 @@ import { config } from '../config';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { defaultRateLimiter } from '../middleware/rateLimit';
 import { createLogger } from '../utils/logger';
+import { logSecurityEvent } from '../middleware/requestLogger';
 
 const log = createLogger('PROXY');
 const router = Router();
@@ -115,12 +116,25 @@ function isAllowedRoute(method: string, path: string): boolean {
 
 /**
  * Middleware to check if route is whitelisted
+ *
+ * SECURITY: Blocked routes are logged as security events.
+ * Repeated attempts to access non-whitelisted routes may indicate
+ * reconnaissance or an attempt to find vulnerabilities.
  */
 function checkWhitelist(req: Request, res: Response, next: () => void): void {
   const { method, path } = req;
+  const authReq = req as AuthenticatedRequest;
 
   if (!isAllowedRoute(method, path)) {
-    log.warn('Blocked non-whitelisted route', { method, path, ip: req.ip });
+    logSecurityEvent('ROUTE_BLOCKED', {
+      method,
+      path,
+      ip: req.ip,
+      userId: authReq.user?.userId,
+      userAgent: req.headers['user-agent'],
+      // Could indicate probing for vulnerabilities
+      severity: 'low',
+    });
     res.status(403).json({
       error: 'Forbidden',
       message: 'This endpoint is not available via the mobile API',

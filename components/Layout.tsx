@@ -38,6 +38,7 @@ import { useAppNotifications } from '../contexts/AppNotificationContext';
 import { createLogger } from '../utils/logger';
 import * as adminApi from '../src/api/admin';
 import { ExternalLink, Github, Heart, Zap, Copy, Check } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 const log = createLogger('Layout');
 
@@ -647,7 +648,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-sanctuary-500 uppercase">Bitcoin</span>
                       <button
-                        onClick={() => copyToClipboard('bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', 'btc')}
+                        onClick={() => copyToClipboard('bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq', 'btc')}
                         className="flex items-center space-x-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         {copiedAddress === 'btc' ? (
@@ -663,9 +664,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                         )}
                       </button>
                     </div>
-                    <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
-                      bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
-                    </code>
+                    <div className="flex items-center space-x-3">
+                      <div className="bg-white p-1.5 rounded-lg flex-shrink-0">
+                        <QRCodeSVG value="bitcoin:bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq" size={64} level="L" />
+                      </div>
+                      <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
+                        bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq
+                      </code>
+                    </div>
                   </div>
 
                   {/* Lightning */}
@@ -692,9 +698,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                         )}
                       </button>
                     </div>
-                    <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
-                      sanctuary@getalby.com
-                    </code>
+                    <div className="flex items-center space-x-3">
+                      <div className="bg-white p-1.5 rounded-lg flex-shrink-0">
+                        <QRCodeSVG value="lightning:sanctuary@getalby.com" size={64} level="L" />
+                      </div>
+                      <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">
+                        sanctuary@getalby.com
+                      </code>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { WalletType, HardwareDevice } from '../types';
-import { getDevices, updateDevice, deleteDevice, Device as ApiDevice } from '../src/api/devices';
+import { WalletType, HardwareDevice, HardwareDeviceModel } from '../types';
+import { getDevices, updateDevice, deleteDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
 import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
@@ -62,6 +62,8 @@ export const DeviceList: React.FC = () => {
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editType, setEditType] = useState('');
+  const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
 
   // Delete state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -71,8 +73,12 @@ export const DeviceList: React.FC = () => {
     const fetchData = async () => {
       if (!user) return;
       try {
-        const deviceData = await getDevices();
+        const [deviceData, models] = await Promise.all([
+          getDevices(),
+          getDeviceModels()
+        ]);
         setDevices(deviceData as DeviceWithWallets[]);
+        setDeviceModels(models);
       } catch (error) {
         log.error('Failed to fetch devices', { error });
       } finally {
@@ -85,12 +91,17 @@ export const DeviceList: React.FC = () => {
   const handleEdit = (device: DeviceWithWallets) => {
     setEditingId(device.id);
     setEditValue(device.label);
+    setEditType(device.type || '');
   };
 
   const handleSave = async (device: DeviceWithWallets) => {
     try {
-      await updateDevice(device.id, { label: editValue });
-      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, label: editValue } : d));
+      const updateData: { label?: string; modelSlug?: string } = {};
+      if (editValue !== device.label) updateData.label = editValue;
+      if (editType !== device.type) updateData.modelSlug = editType;
+
+      await updateDevice(device.id, updateData);
+      setDevices(prev => prev.map(d => d.id === device.id ? { ...d, label: editValue, type: editType || d.type } : d));
       setEditingId(null);
     } catch (error) {
       log.error('Failed to update device', { error });
@@ -284,7 +295,11 @@ export const DeviceList: React.FC = () => {
                   const isEditing = editingId === device.id;
 
                   return (
-                    <tr key={device.id} className="hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors">
+                    <tr
+                      key={device.id}
+                      onClick={() => navigate(`/devices/${device.id}`)}
+                      className="hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors cursor-pointer"
+                    >
                       {/* Label */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -293,21 +308,36 @@ export const DeviceList: React.FC = () => {
                           </div>
                           <div className="ml-4">
                             {isEditing ? (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="text"
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  className="px-2 py-1 text-sm border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
-                                  autoFocus
-                                />
-                                <button onClick={() => handleSave(device)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-4 h-4" /></button>
-                                <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-4 h-4" /></button>
+                              <div className="flex flex-col space-y-2" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="text"
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    placeholder="Label"
+                                    className="px-2 py-1 text-sm border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                    autoFocus
+                                  />
+                                  <button onClick={() => handleSave(device)} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-4 h-4" /></button>
+                                  <button onClick={() => setEditingId(null)} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-4 h-4" /></button>
+                                </div>
+                                <select
+                                  value={editType}
+                                  onChange={(e) => setEditType(e.target.value)}
+                                  className="px-2 py-1 text-xs border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                >
+                                  <option value="">Unknown Device</option>
+                                  {deviceModels.map(model => (
+                                    <option key={model.slug} value={model.slug}>
+                                      {model.manufacturer} {model.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             ) : (
                               <div className="flex items-center group">
                                 <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</span>
-                                <button onClick={() => handleEdit(device)} className="ml-2 opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="ml-2 opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
                               </div>
                             )}
                           </div>
@@ -347,7 +377,7 @@ export const DeviceList: React.FC = () => {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
                         {associatedWallets.length === 0 && (
                           <div className="relative inline-block">
                             {deleteConfirmId === device.id ? (
@@ -420,28 +450,46 @@ export const DeviceList: React.FC = () => {
                               const isEditing = editingId === device.id;
                               
                               return (
-                                 <li key={device.id} className="p-3 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors surface-elevated">
+                                 <li
+                                   key={device.id}
+                                   onClick={() => navigate(`/devices/${device.id}`)}
+                                   className="p-3 rounded-xl border border-sanctuary-100 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-600 transition-colors surface-elevated cursor-pointer"
+                                 >
                                      <div className="flex justify-between items-start mb-2">
                                         <div className="flex-1 min-w-0">
                                             {isEditing ? (
-                                                <div className="flex items-center space-x-1 mb-1">
-                                                    <input 
-                                                        type="text" 
-                                                        value={editValue}
-                                                        onChange={(e) => setEditValue(e.target.value)}
-                                                        className="w-full px-2 py-1 text-xs border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none"
-                                                        autoFocus
-                                                    />
-                                                    <button onClick={() => handleSave(device)} className="p-1 text-emerald-600"><Save className="w-3 h-3" /></button>
-                                                    <button onClick={() => setEditingId(null)} className="p-1 text-rose-600"><X className="w-3 h-3" /></button>
+                                                <div className="flex flex-col space-y-1 mb-1" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="flex items-center space-x-1">
+                                                        <input
+                                                            type="text"
+                                                            value={editValue}
+                                                            onChange={(e) => setEditValue(e.target.value)}
+                                                            className="w-full px-2 py-1 text-xs border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none"
+                                                            autoFocus
+                                                        />
+                                                        <button onClick={() => handleSave(device)} className="p-1 text-emerald-600"><Save className="w-3 h-3" /></button>
+                                                        <button onClick={() => setEditingId(null)} className="p-1 text-rose-600"><X className="w-3 h-3" /></button>
+                                                    </div>
+                                                    <select
+                                                        value={editType}
+                                                        onChange={(e) => setEditType(e.target.value)}
+                                                        className="w-full px-2 py-1 text-[10px] border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted focus:outline-none"
+                                                    >
+                                                        <option value="">Unknown Device</option>
+                                                        {deviceModels.map(model => (
+                                                            <option key={model.slug} value={model.slug}>
+                                                                {model.manufacturer} {model.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center group">
                                                     <span className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100 truncate mr-2">{device.label}</span>
-                                                    <button onClick={() => handleEdit(device)} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
                                                     {associatedWallets.length === 0 && (
                                                       <button
-                                                        onClick={() => setDeleteConfirmId(device.id)}
+                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(device.id); }}
                                                         className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-rose-600 transition-opacity ml-1"
                                                         title="Delete device"
                                                       >
@@ -455,7 +503,7 @@ export const DeviceList: React.FC = () => {
 
                                         {/* Delete confirmation */}
                                         {deleteConfirmId === device.id && (
-                                          <div className="flex items-center space-x-1">
+                                          <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                                             <span className="text-[10px] text-rose-600">Delete?</span>
                                             <button
                                               onClick={() => handleDelete(device)}

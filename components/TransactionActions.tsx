@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/Button';
 import { AlertTriangle, TrendingUp, Zap, Users, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import * as bitcoinApi from '../src/api/bitcoin';
+import * as draftsApi from '../src/api/drafts';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('TransactionActions');
@@ -21,6 +23,7 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
   isReceived,
   onActionComplete,
 }) => {
+  const navigate = useNavigate();
   const [rbfStatus, setRbfStatus] = useState<bitcoinApi.RBFCheckResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -63,15 +66,45 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       setProcessing(true);
       setError(null);
 
+      // Create the RBF transaction (returns unsigned PSBT)
       const result = await bitcoinApi.createRBFTransaction(txid, {
         newFeeRate,
         walletId,
       });
 
-      setSuccess(
-        `RBF transaction created! Fee increased by ${result.feeDelta} sats (${result.feeRate} sat/vB)`
-      );
+      // Find the primary recipient (non-change output)
+      // For RBF, we keep the same recipient as the original transaction
+      const primaryOutput = result.outputs[0]; // First output is typically the recipient
+
+      // Calculate totals from the result
+      const totalInput = result.inputs.reduce((sum, inp) => sum + inp.value, 0);
+      const totalOutput = result.outputs.reduce((sum, out) => sum + out.value, 0);
+
+      // Create a draft transaction for signing
+      const draft = await draftsApi.createDraft(walletId, {
+        recipient: primaryOutput.address,
+        amount: primaryOutput.value,
+        feeRate: result.feeRate,
+        selectedUtxoIds: result.inputs.map(inp => `${inp.txid}:${inp.vout}`),
+        enableRBF: true,
+        subtractFees: false,
+        sendMax: false,
+        outputs: result.outputs.map(out => ({ address: out.address, amount: out.value })),
+        label: `RBF: Fee bump from ${rbfStatus.currentFeeRate} to ${result.feeRate} sat/vB`,
+        memo: `Replacing transaction ${txid}`,
+        psbtBase64: result.psbtBase64,
+        fee: result.fee,
+        totalInput,
+        totalOutput,
+        changeAmount: 0, // Already accounted for in outputs
+        effectiveAmount: primaryOutput.value,
+        inputPaths: [], // Will be populated during signing
+      });
+
       setShowRBFModal(false);
+
+      // Navigate to send page with the draft to continue signing
+      navigate(`/wallets/${walletId}/send`, { state: { draft } });
 
       if (onActionComplete) {
         onActionComplete();

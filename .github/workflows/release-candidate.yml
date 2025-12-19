@@ -1,0 +1,340 @@
+name: Release Candidate Validation
+
+# This workflow runs the FULL install test suite including upgrade tests.
+# Use this before cutting a release to thoroughly validate the installation process.
+#
+# Recommended workflow:
+# 1. Run this workflow manually on the commit you plan to release
+# 2. Wait for all tests to pass (including upgrade tests)
+# 3. Create the release tag
+# 4. The regular install-test workflow will run release-critical tests on the tag
+#
+# Total runtime: ~25-35 minutes
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to test (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+        type: string
+      version:
+        description: 'Version being validated (for logging only)'
+        required: false
+        type: string
+
+env:
+  HTTPS_PORT: 8443
+  HTTP_PORT: 8080
+
+jobs:
+  # ============================================
+  # Validation Info
+  # ============================================
+  validation-info:
+    name: Validation Info
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display validation context
+        run: |
+          echo "## Release Candidate Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Git Ref | \`${{ github.event.inputs.ref || 'main' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ github.event.inputs.version || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This workflow runs the **full** install test suite including upgrade tests." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================
+  # Unit Tests
+  # ============================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh
+
+      - name: Run unit tests
+        run: ./tests/install/unit/install-script.test.sh
+
+  # ============================================
+  # Fresh Install E2E Test
+  # ============================================
+  fresh-install-test:
+    name: Fresh Install E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh
+
+      - name: Run fresh install test
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+          HTTP_PORT: ${{ env.HTTP_PORT }}
+        run: ./tests/install/e2e/fresh-install.test.sh --verbose
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps || true
+          echo ""
+          echo "=== Database Logs ==="
+          docker logs sanctuary-db --tail 100 2>&1 || true
+          echo ""
+          echo "=== Backend Logs ==="
+          docker logs sanctuary-backend --tail 100 2>&1 || true
+          echo ""
+          echo "=== Frontend Logs ==="
+          docker logs sanctuary-frontend --tail 100 2>&1 || true
+          echo ""
+          echo "=== Gateway Logs ==="
+          docker logs sanctuary-gateway --tail 100 2>&1 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker system prune -f || true
+
+  # ============================================
+  # Container Health Test
+  # ============================================
+  container-health-test:
+    name: Container Health
+    runs-on: ubuntu-latest
+    needs: fresh-install-test
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh
+
+      - name: Start containers
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+          HTTP_PORT: ${{ env.HTTP_PORT }}
+        run: |
+          JWT_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+          ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+          cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
+          JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+            HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
+            docker compose up -d --build
+          sleep 30
+
+      - name: Run container health tests
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+        run: ./tests/install/e2e/container-health.test.sh --verbose
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  # ============================================
+  # Authentication Flow Test
+  # ============================================
+  auth-flow-test:
+    name: Auth Flow
+    runs-on: ubuntu-latest
+    needs: fresh-install-test
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh
+
+      - name: Start containers
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+          HTTP_PORT: ${{ env.HTTP_PORT }}
+        run: |
+          JWT_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+          ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+          cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
+          JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+            HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
+            docker compose up -d --build
+          timeout 120 bash -c 'until docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null | grep -q exited; do sleep 5; done' || true
+          sleep 30
+
+      - name: Run auth flow tests
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+        run: ./tests/install/e2e/auth-flow.test.sh --verbose
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  # ============================================
+  # Upgrade Test (FULL - takes 10-15 min)
+  # ============================================
+  upgrade-test:
+    name: Upgrade Install
+    runs-on: ubuntu-latest
+    needs: fresh-install-test
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh
+
+      - name: Run upgrade test
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+          HTTP_PORT: ${{ env.HTTP_PORT }}
+        run: ./tests/install/e2e/upgrade-install.test.sh --verbose
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker logs sanctuary-db --tail 50 2>&1 || true
+          docker logs sanctuary-backend --tail 100 2>&1 || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
+  # ============================================
+  # Validation Summary
+  # ============================================
+  validation-summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, fresh-install-test, container-health-test, auth-flow-test, upgrade-test]
+    if: always()
+
+    steps:
+      - name: Generate validation report
+        run: |
+          echo "## Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall status
+          ALL_PASSED=true
+
+          echo "| Test Suite | Result | Duration |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+
+          # Unit tests
+          if [ "${{ needs.unit-tests.result }}" == "success" ]; then
+            echo "| Unit Tests | :white_check_mark: Passed | ~5s |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Unit Tests | :x: Failed | - |" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+          fi
+
+          # Fresh install
+          if [ "${{ needs.fresh-install-test.result }}" == "success" ]; then
+            echo "| Fresh Install E2E | :white_check_mark: Passed | ~5-10m |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Fresh Install E2E | :x: Failed | - |" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+          fi
+
+          # Container health
+          if [ "${{ needs.container-health-test.result }}" == "success" ]; then
+            echo "| Container Health | :white_check_mark: Passed | ~2m |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Container Health | :x: Failed | - |" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+          fi
+
+          # Auth flow
+          if [ "${{ needs.auth-flow-test.result }}" == "success" ]; then
+            echo "| Auth Flow | :white_check_mark: Passed | ~2m |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Auth Flow | :x: Failed | - |" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+          fi
+
+          # Upgrade test
+          if [ "${{ needs.upgrade-test.result }}" == "success" ]; then
+            echo "| Upgrade Install | :white_check_mark: Passed | ~10-15m |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Upgrade Install | :x: Failed | - |" >> $GITHUB_STEP_SUMMARY
+            ALL_PASSED=false
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$ALL_PASSED" == "true" ]; then
+            echo "## :rocket: Release Candidate APPROVED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All install tests passed. This commit is ready for release." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Next steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Create a release tag on this commit" >> $GITHUB_STEP_SUMMARY
+            echo "2. The release workflow will run additional validation" >> $GITHUB_STEP_SUMMARY
+            echo "3. Docker images will be built and pushed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## :stop_sign: Release Candidate REJECTED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "One or more install tests failed. **Do not release this commit.**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Review the failed tests and fix issues before attempting release." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check validation result
+        run: |
+          if [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.fresh-install-test.result }}" != "success" ] || \
+             [ "${{ needs.container-health-test.result }}" != "success" ] || \
+             [ "${{ needs.auth-flow-test.result }}" != "success" ] || \
+             [ "${{ needs.upgrade-test.result }}" != "success" ]; then
+            echo "::error::Release candidate validation FAILED. Do not proceed with release."
+            exit 1
+          fi
+          echo "Release candidate validation PASSED!"

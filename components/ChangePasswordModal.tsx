@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Lock, AlertCircle, Eye, EyeOff, Check, X } from 'lucide-react';
 import { Button } from './ui/Button';
 import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
@@ -95,6 +95,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
             <p className="text-sm text-amber-800 dark:text-amber-300">
               You are currently using the default password. Please choose a strong, unique password to secure your account.
             </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+              This is a one-time setup step. You won't see this screen again.
+            </p>
           </div>
 
           {error && (
@@ -150,7 +153,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
                 {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-xs text-sanctuary-500 mt-1">Minimum 8 characters</p>
+            <p className="text-xs text-sanctuary-500 mt-1">
+              Minimum 8 characters. Use a mix of letters, numbers, and symbols for better security.
+            </p>
           </div>
 
           <div>
@@ -175,6 +180,26 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
                 {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
+            {/* Real-time password match indicator */}
+            {confirmPassword.length > 0 && (
+              <div className={`flex items-center mt-1.5 text-xs ${
+                newPassword === confirmPassword
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-rose-600 dark:text-rose-400'
+              }`}>
+                {newPassword === confirmPassword ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 mr-1" />
+                    <span>Passwords match</span>
+                  </>
+                ) : (
+                  <>
+                    <X className="w-3.5 h-3.5 mr-1" />
+                    <span>Passwords do not match</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">

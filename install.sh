@@ -224,6 +224,7 @@ main() {
 
     echo ""
     echo "Starting Sanctuary..."
+    echo -e "${YELLOW}Note: First-time build may take 2-5 minutes. Subsequent starts are much faster.${NC}"
     echo ""
 
     # Start the services
@@ -285,14 +286,16 @@ main() {
 JWT_SECRET=$JWT_SECRET
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 ENVEOF
-    echo -e "${GREEN}Note:${NC} Your secrets have been saved to .env.local"
-    echo "      Keep this file secure - you'll need it if you restart the services."
+    echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env.local"
     echo ""
-    echo "To restart Sanctuary later:"
-    echo "  cd $INSTALL_DIR && source .env.local"
-    echo "  HTTPS_PORT=$HTTPS_PORT JWT_SECRET=\$JWT_SECRET ENCRYPTION_KEY=\$ENCRYPTION_KEY docker compose up -d"
+    echo "Common commands:"
+    echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
+    echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
+    echo "  ${GREEN}./start.sh --logs${NC}    View logs"
+    echo "  ${GREEN}./install.sh${NC}         Upgrade to latest version"
     echo ""
 }
+
 
 # Run main function
 main "$@"

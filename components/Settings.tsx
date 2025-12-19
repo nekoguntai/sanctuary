@@ -601,12 +601,16 @@ export const Settings: React.FC = () => {
                     <Contrast className="w-4 h-4 text-sanctuary-500" />
                     <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Contrast</span>
                  </div>
-                 <span className="text-xs text-sanctuary-500 font-mono">
-                    {(user?.preferences?.contrastLevel ?? 0) === 0
-                      ? 'Default'
-                      : (user?.preferences?.contrastLevel ?? 0) > 0
-                      ? `+${user?.preferences?.contrastLevel}`
-                      : user?.preferences?.contrastLevel}
+                 <span className="text-xs text-sanctuary-500">
+                    {(() => {
+                      const level = user?.preferences?.contrastLevel ?? 0;
+                      if (level === 0) return 'Default';
+                      if (level === -2) return 'Much lighter';
+                      if (level === -1) return 'Lighter';
+                      if (level === 1) return 'Darker';
+                      if (level === 2) return 'Much darker';
+                      return 'Default';
+                    })()}
                  </span>
               </div>
               <div className="flex items-center space-x-3">

@@ -307,18 +307,20 @@ export const Login: React.FC = () => {
                 : 'Contact administrator for account access'}
           </p>
           {!isRegisterMode && apiStatus === 'connected' && (
-            <div className="mt-3 p-3 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
-              <p className="text-[10px] text-sanctuary-400 dark:text-sanctuary-500 font-medium mb-1">
-                First time logging in?
+            <div className="mt-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-2">
+                First time? Use the default credentials:
               </p>
-              <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400">
-                Username: <span className="font-mono font-medium">admin</span>
-              </p>
-              <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400">
-                Password: <span className="font-mono font-medium">sanctuary</span>
-              </p>
-              <p className="text-[10px] text-sanctuary-400 dark:text-sanctuary-500 mt-1">
-                You'll be asked to change this password after login
+              <div className="space-y-1">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Username: <span className="font-mono font-semibold">admin</span>
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Password: <span className="font-mono font-semibold">sanctuary</span>
+                </p>
+              </div>
+              <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
+                You'll set your own secure password after logging in.
               </p>
             </div>
           )}

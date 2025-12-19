@@ -25,6 +25,7 @@
 ## Table of Contents
 
 - [Quick Install](#quick-install)
+- [First Run](#first-run)
 - [Umbrel Installation](#umbrel-installation)
 - [Overview](#overview)
 - [Screenshots](#screenshots)
@@ -44,7 +45,6 @@
   - [Connecting to Your Own Bitcoin Node](#connecting-to-your-own-bitcoin-node)
   - [Hardware Wallet Setup](#hardware-wallet-setup)
 - [Usage](#usage)
-  - [First Run](#first-run)
   - [Importing a Wallet](#importing-a-wallet)
   - [Creating Transactions](#creating-transactions)
   - [Bumping Fees (RBF)](#bumping-fees-rbf)
@@ -82,6 +82,8 @@ cd sanctuary
 
 Open **https://localhost:8443** and accept the certificate warning.
 
+> **Time estimate:** First-time installation takes 2-5 minutes (Docker build). Subsequent starts are nearly instant.
+
 <details>
 <summary><strong>What the install script does</strong></summary>
 
@@ -103,6 +105,34 @@ Open **https://localhost:8443** and accept the certificate warning.
 - Upgrade: `./install.sh` (fetches and installs the latest release)
 
 </details>
+
+---
+
+## First Run
+
+After installation, follow these steps to set up your Sanctuary:
+
+1. **Open the application**
+   - Navigate to **https://localhost:8443** in Chrome, Edge, or Brave
+   - Accept the self-signed certificate warning (click "Advanced" then "Proceed")
+
+2. **Log in with default credentials**
+   - Username: `admin`
+   - Password: `sanctuary`
+
+3. **Set your secure password**
+   - You'll be prompted to change the default password immediately
+   - Choose a strong password (minimum 8 characters, mix of letters, numbers, symbols)
+   - This is a one-time setup step
+
+4. **Add your first wallet**
+   - Connect a hardware wallet (Ledger, Trezor) or import via QR code/file
+   - Sanctuary will scan for existing transactions
+
+**Troubleshooting first run:**
+- **Can't connect?** Wait 30 seconds after install for services to start, then try again
+- **Certificate warning?** This is expected for self-signed certificates. Click Advanced and Proceed.
+- **API Error?** Run `./start.sh --logs` to check for issues
 
 ---
 
@@ -732,18 +762,7 @@ Once connected, you can:
 
 ## Usage
 
-### First Run
-
-1. Open https://localhost:8443 in Chrome, Edge, or Brave
-2. Accept the self-signed certificate warning (Advanced → Proceed)
-3. Log in with the default credentials:
-   - **Username:** `admin`
-   - **Password:** `sanctuary`
-4. **Change your password** — you will be required to set a new password immediately for security
-5. Add a wallet by importing an output descriptor or connecting a hardware wallet
-6. Sanctuary will scan the blockchain for your transaction history
-
-> **Note:** The default password is shown on the login page and must be changed on first login. This is much easier than searching through Docker logs!
+> See [First Run](#first-run) for initial setup steps after installation.
 
 ### Importing a Wallet
 

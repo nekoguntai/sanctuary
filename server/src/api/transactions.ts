@@ -1539,4 +1539,108 @@ router.get('/transactions/pending', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Helper to get timeframe start date
+ */
+function getTimeframeStartDate(timeframe: string): Date {
+  const now = new Date();
+  switch (timeframe) {
+    case '1D':
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    case '1W':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '1M':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case '1Y':
+      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    case 'ALL':
+    default:
+      return new Date(0); // Beginning of time
+  }
+}
+
+/**
+ * GET /api/v1/transactions/balance-history
+ * Get balance history chart data across all wallets the user has access to
+ * This is an optimized aggregate endpoint that replaces N separate API calls
+ *
+ * Query params:
+ * - timeframe: '1D' | '1W' | '1M' | '1Y' | 'ALL' (default: '1W')
+ * - totalBalance: current total balance in satoshis (required for chart calculation)
+ */
+router.get('/transactions/balance-history', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const timeframe = (req.query.timeframe as string) || '1W';
+    const totalBalance = parseInt(req.query.totalBalance as string) || 0;
+
+    // Get all wallet IDs the user has access to
+    const accessibleWallets = await prisma.wallet.findMany({
+      where: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (accessibleWallets.length === 0) {
+      return res.json([
+        { name: 'Start', value: totalBalance },
+        { name: 'Now', value: totalBalance },
+      ]);
+    }
+
+    const walletIds = accessibleWallets.map(w => w.id);
+    const startDate = getTimeframeStartDate(timeframe);
+
+    // Fetch transactions within timeframe from all accessible wallets
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        walletId: { in: walletIds },
+        blockTime: { gte: startDate },
+      },
+      select: {
+        amount: true,
+        blockTime: true,
+      },
+      orderBy: { blockTime: 'asc' }, // Oldest first for building history
+    });
+
+    if (transactions.length === 0) {
+      // No transactions in range - return flat line
+      return res.json([
+        { name: 'Start', value: totalBalance },
+        { name: 'Now', value: totalBalance },
+      ]);
+    }
+
+    // Calculate running balance backwards from current total
+    let runningBalance = totalBalance;
+    const chartData: { name: string; value: number }[] = [];
+
+    // Start with current balance
+    chartData.push({ name: 'Now', value: totalBalance });
+
+    // Work backwards through transactions to reconstruct history
+    // Transactions are sorted oldest first, so reverse iterate
+    for (let i = transactions.length - 1; i >= 0; i--) {
+      const tx = transactions[i];
+      const amount = bigIntToNumberOrZero(tx.amount);
+      // Subtract the transaction amount to get balance before
+      runningBalance -= amount;
+      const txDate = tx.blockTime ? new Date(tx.blockTime) : new Date();
+      chartData.unshift({
+        name: txDate.toLocaleDateString(),
+        value: runningBalance,
+      });
+    }
+
+    res.json(chartData);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get balance history');
+  }
+});
+
 export default router;

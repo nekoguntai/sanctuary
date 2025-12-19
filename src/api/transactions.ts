@@ -330,3 +330,30 @@ export interface AggregatedPendingTransaction {
 export async function getAllPendingTransactions(): Promise<AggregatedPendingTransaction[]> {
   return apiClient.get<AggregatedPendingTransaction[]>('/transactions/pending');
 }
+
+/**
+ * Chart data point for balance history
+ */
+export interface BalanceHistoryPoint {
+  name: string;
+  value: number;
+}
+
+/**
+ * Timeframe options for balance history
+ */
+export type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
+
+/**
+ * Get balance history chart data across all wallets
+ * This is an optimized aggregate endpoint that replaces N separate API calls
+ */
+export async function getBalanceHistory(
+  timeframe: Timeframe,
+  totalBalance: number
+): Promise<BalanceHistoryPoint[]> {
+  return apiClient.get<BalanceHistoryPoint[]>('/transactions/balance-history', {
+    timeframe,
+    totalBalance,
+  });
+}

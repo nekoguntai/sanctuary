@@ -38,82 +38,74 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Need parent commit
+          fetch-depth: 10  # Need recent ancestors
 
-      - name: Get commit SHA and parent
+      - name: Get commit SHA
         id: get-sha
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            # For release events, get the SHA of the tagged commit
             SHA="${{ github.event.release.target_commitish }}"
-            # If target_commitish is a branch name, resolve to SHA
             if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
               SHA="${{ github.sha }}"
             fi
           else
             SHA="${{ github.sha }}"
           fi
-          # Get parent commit SHA (for version bump commits)
-          PARENT_SHA=$(git rev-parse HEAD~1 2>/dev/null || echo "")
           echo "sha=$SHA" >> $GITHUB_OUTPUT
-          echo "parent_sha=$PARENT_SHA" >> $GITHUB_OUTPUT
           echo "Validating release for commit: $SHA"
-          echo "Parent commit: $PARENT_SHA"
 
       - name: Check for successful Release Candidate run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Checking for successful Release Candidate Validation workflow run..."
+          echo "Checking for successful Release Candidate Validation..."
           echo ""
 
           COMMIT_SHA="${{ steps.get-sha.outputs.sha }}"
-          PARENT_SHA="${{ steps.get-sha.outputs.parent_sha }}"
 
-          # Check current commit first
-          RUNS=$(gh api repos/${{ github.repository }}/actions/workflows/release-candidate.yml/runs \
-            --jq ".workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\" and .conclusion == \"success\") | {id: .id, created_at: .created_at, conclusion: .conclusion}" \
-            2>/dev/null || echo "")
+          # Check current commit and up to 5 ancestors
+          # This handles version bump commits and minor fixes after RC validation
+          for i in 0 1 2 3 4 5; do
+            if [ $i -eq 0 ]; then
+              CHECK_SHA="$COMMIT_SHA"
+              echo "Checking current commit: $CHECK_SHA"
+            else
+              CHECK_SHA=$(git rev-parse HEAD~$i 2>/dev/null || echo "")
+              if [ -z "$CHECK_SHA" ]; then
+                break
+              fi
+              echo "Checking ancestor ~$i: $CHECK_SHA"
+            fi
 
-          if [ -n "$RUNS" ] && [ "$RUNS" != "" ]; then
-            echo "✓ Found successful Release Candidate Validation run for commit $COMMIT_SHA:"
-            echo "$RUNS" | head -1
-            echo ""
-            echo "Release validation passed. Proceeding with release..."
-            exit 0
-          fi
-
-          # If not found, check parent commit (for version bump commits)
-          if [ -n "$PARENT_SHA" ]; then
-            echo "No validation for current commit, checking parent commit $PARENT_SHA..."
-            PARENT_RUNS=$(gh api repos/${{ github.repository }}/actions/workflows/release-candidate.yml/runs \
-              --jq ".workflow_runs[] | select(.head_sha == \"$PARENT_SHA\" and .conclusion == \"success\") | {id: .id, created_at: .created_at, conclusion: .conclusion}" \
+            RUNS=$(gh api repos/${{ github.repository }}/actions/workflows/release-candidate.yml/runs \
+              --jq ".workflow_runs[] | select(.head_sha == \"$CHECK_SHA\" and .conclusion == \"success\") | {id: .id, created_at: .created_at}" \
               2>/dev/null || echo "")
 
-            if [ -n "$PARENT_RUNS" ] && [ "$PARENT_RUNS" != "" ]; then
-              echo "✓ Found successful Release Candidate Validation run for parent commit $PARENT_SHA:"
-              echo "$PARENT_RUNS" | head -1
+            if [ -n "$RUNS" ] && [ "$RUNS" != "" ]; then
               echo ""
-              echo "Release validation passed (via parent commit). Proceeding with release..."
+              echo "✓ Found successful Release Candidate Validation:"
+              echo "  Commit: $CHECK_SHA"
+              echo "  $RUNS" | head -1
+              echo ""
+              echo "Release validation passed. Proceeding with release..."
               exit 0
             fi
-          fi
+          done
 
-          echo "::error::No successful Release Candidate Validation found for commit $COMMIT_SHA or its parent"
+          echo ""
+          echo "::error::No successful Release Candidate Validation found in recent commits"
           echo ""
           echo "=========================================="
           echo "RELEASE BLOCKED"
           echo "=========================================="
           echo ""
           echo "Before releasing, you must:"
-          echo "1. Run the 'Release Candidate Validation' workflow on this commit"
-          echo "2. Wait for ALL tests to pass (including upgrade tests)"
+          echo "1. Run the 'Release Candidate Validation' workflow"
+          echo "2. Wait for ALL tests to pass"
           echo "3. Then retry the release"
           echo ""
           echo "To run Release Candidate Validation:"
-          echo "  gh workflow run release-candidate.yml --field ref=$COMMIT_SHA"
-          echo ""
-          echo "Or via GitHub UI: Actions > Release Candidate Validation > Run workflow"
+          echo "  gh workflow run release-candidate.yml --field ref=main"
           echo ""
           exit 1
 
@@ -262,56 +254,70 @@ jobs:
           # Get existing release body
           EXISTING_BODY=$(gh api repos/${{ github.repository }}/releases/$RELEASE_ID --jq '.body // ""')
 
-          # Create install instructions
-          INSTALL_INSTRUCTIONS="## Quick Install
-
-          **Prerequisites:** Docker and Git
-
-          \`\`\`bash
-          git clone https://github.com/n-narusegawa/sanctuary.git
-          cd sanctuary
-          ./install.sh
-          \`\`\`
-
-          Open https://localhost:8443 and log in with admin / sanctuary
-
-          ---
-
-          ## Upgrading
-
-          \`\`\`bash
-          cd sanctuary
-          git pull
-          ./install.sh
-          \`\`\`
-
-          ---
-
-          ## Umbrel Installation
-
-          > ⚠️ **Limited Functionality:** Umbrel serves apps over HTTP (not HTTPS), which means **WebUSB hardware wallet connections will not work**. You can still use Sanctuary on Umbrel for importing wallets via descriptors, viewing balances/history, and creating unsigned PSBTs for air-gapped signing. For full hardware wallet USB support, use the Quick Install method above.
-
-          1. Open the App Store in your Umbrel
-          2. Click the ... menu in the upper right
-          3. Select Community App Stores
-          4. Paste: https://github.com/n-narusegawa/sanctuary
-          5. Click Add
-          6. Find Sanctuary and install
-
-          ---
-
-          "
-
-          # Combine and update
-          if [ -n "$EXISTING_BODY" ]; then
-            NEW_BODY="${INSTALL_INSTRUCTIONS}
-
-          ## What's New
-
-          ${EXISTING_BODY}"
-          else
-            NEW_BODY="$INSTALL_INSTRUCTIONS"
+          # Check if install instructions already exist (avoid duplication)
+          if echo "$EXISTING_BODY" | grep -q "## Quick Install"; then
+            echo "Install instructions already present, skipping update"
+            exit 0
           fi
 
-          gh release edit "v$VERSION" --notes "$NEW_BODY"
+          # Create install instructions file to avoid heredoc issues
+          cat > /tmp/install_instructions.md << 'INSTRUCTIONS'
+## Quick Install
+
+**Prerequisites:** Docker and Docker Compose
+
+```bash
+git clone https://github.com/n-narusegawa/sanctuary.git
+cd sanctuary
+./install.sh
+```
+
+Open **https://localhost:8443** and log in with:
+- **Username:** `admin`
+- **Password:** `sanctuary`
+
+> ⚠️ Change these credentials immediately after first login.
+
+---
+
+## Upgrading
+
+Your data and configuration will be preserved automatically.
+
+```bash
+cd sanctuary
+git pull
+./install.sh
+```
+
+The install script handles database migrations and restarts services.
+
+---
+
+<details>
+<summary><strong>Umbrel Installation</strong> (alternative method)</summary>
+
+> **Note:** Umbrel serves apps over HTTP, so WebUSB hardware wallet connections will not work. Use the Quick Install method above for full hardware wallet support.
+
+1. Open the App Store in your Umbrel
+2. Click the **...** menu and select **Community App Stores**
+3. Paste: `https://github.com/n-narusegawa/sanctuary`
+4. Click **Add**, then find Sanctuary and install
+
+</details>
+
+---
+
+INSTRUCTIONS
+
+          # Build final release body
+          if [ -n "$EXISTING_BODY" ]; then
+            cat /tmp/install_instructions.md > /tmp/release_body.md
+            echo -e "\n## What's New\n" >> /tmp/release_body.md
+            echo "$EXISTING_BODY" >> /tmp/release_body.md
+          else
+            cat /tmp/install_instructions.md > /tmp/release_body.md
+          fi
+
+          gh release edit "v$VERSION" --notes-file /tmp/release_body.md
           echo "Updated release notes"

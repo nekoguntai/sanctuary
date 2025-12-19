@@ -38,53 +38,56 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getIcon = () => {
+    // Use theme colors: success (green) for receives/confirmations, warning (gold) for sends
     switch (notification.type) {
       case 'transaction':
         return notification.data?.type === 'received' ? (
-          <ArrowDownLeft className="w-5 h-5 text-green-600" />
+          <ArrowDownLeft className="w-5 h-5 text-success-600 dark:text-success-400" />
         ) : (
-          <ArrowUpRight className="w-5 h-5 text-blue-600" />
+          <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />
         );
       case 'balance':
-        return <TrendingUp className="w-5 h-5 text-primary-600" />;
+        return <TrendingUp className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
       case 'confirmation':
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
+        return <CheckCircle className="w-5 h-5 text-success-600 dark:text-success-400" />;
       case 'block':
-        return <Activity className="w-5 h-5 text-purple-600" />;
+        return <Activity className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
+        return <CheckCircle className="w-5 h-5 text-success-600 dark:text-success-400" />;
       case 'error':
-        return <X className="w-5 h-5 text-rose-600" />;
+        return <X className="w-5 h-5 text-rose-600 dark:text-rose-400" />;
       default:
-        return <Activity className="w-5 h-5 text-blue-600" />;
+        return <Activity className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
     }
   };
 
   const getColors = () => {
+    // Use theme colors for notifications - success (green) for receives, warning (gold) for sends
+    // Use surface templates for neutral notifications to ensure proper dark mode handling
     switch (notification.type) {
       case 'transaction':
         return notification.data?.type === 'received'
-          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-500/20'
-          : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-500/20';
+          ? 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700'
+          : 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
       case 'balance':
-        return 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-500/20';
+        return 'surface-secondary border-primary-200 dark:border-primary-700';
       case 'confirmation':
-        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-500/20';
+        return 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700';
       case 'block':
-        return 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-500/20';
+        return 'surface-secondary border-primary-200 dark:border-primary-700';
       case 'success':
-        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-500/20';
+        return 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700';
       case 'error':
-        return 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-500/20';
+        return 'bg-rose-50 dark:bg-rose-950/80 border-rose-300 dark:border-rose-700';
       default:
-        return 'surface-secondary/50 border-sanctuary-200 dark:border-sanctuary-700';
+        return 'surface-secondary border-primary-200 dark:border-primary-700';
     }
   };
 
   return (
     <div
       className={`
-        flex items-start space-x-3 p-4 rounded-xl border shadow-lg
+        flex items-start space-x-3 p-4 rounded-xl border shadow-xl backdrop-blur-sm
         ${getColors()}
         ${isExiting ? 'animate-slide-out-right' : 'animate-slide-in-right'}
         transition-all duration-300

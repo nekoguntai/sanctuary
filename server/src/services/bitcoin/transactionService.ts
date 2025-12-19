@@ -8,7 +8,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { BIP32Factory } from 'bip32';
 import { getNetwork, estimateTransactionSize, calculateFee } from './utils';
-import { broadcastTransaction } from './blockchain';
+import { broadcastTransaction, recalculateWalletBalances } from './blockchain';
 import { RBF_SEQUENCE } from './advancedTx';
 import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
@@ -645,6 +645,9 @@ export async function broadcastAndSave(
       blockTime: null,
     },
   });
+
+  // Recalculate running balances for all transactions in this wallet
+  await recalculateWalletBalances(walletId);
 
   // Send notifications for the broadcast transaction (Telegram + Push)
   // This is async and fire-and-forget to not block the response

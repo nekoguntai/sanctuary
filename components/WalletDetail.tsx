@@ -287,6 +287,7 @@ export const WalletDetail: React.FC = () => {
   const [txOffset, setTxOffset] = useState(0);
   const [hasMoreTx, setHasMoreTx] = useState(true);
   const [loadingMoreTx, setLoadingMoreTx] = useState(false);
+  const [transactionStats, setTransactionStats] = useState<transactionsApi.TransactionStats | null>(null);
 
   // Addresses State
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -572,6 +573,7 @@ export const WalletDetail: React.FC = () => {
             type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
             // Amount is already signed by the API: positive for received, negative for sent/consolidation
             amount: Number(tx.amount),
+            balanceAfter: tx.balanceAfter != null ? Number(tx.balanceAfter) : undefined,
             timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
             confirmations: tx.confirmations,
             confirmed: tx.confirmations >= 1,
@@ -588,6 +590,13 @@ export const WalletDetail: React.FC = () => {
           setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
         })
         .catch(err => log.error('Failed to fetch transactions', { error: err }))
+    );
+
+    // Fetch transaction stats (for summary across all transactions)
+    fetchPromises.push(
+      transactionsApi.getTransactionStats(id)
+        .then(stats => setTransactionStats(stats))
+        .catch(err => log.error('Failed to fetch transaction stats', { error: err }))
     );
 
     // Fetch UTXOs
@@ -677,6 +686,7 @@ export const WalletDetail: React.FC = () => {
         type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
         // Amount is already signed by the API: positive for received, negative for sent/consolidation
         amount: Number(tx.amount),
+        balanceAfter: tx.balanceAfter != null ? Number(tx.balanceAfter) : undefined,
         timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
         confirmations: tx.confirmations,
         confirmed: tx.confirmations >= 1,
@@ -1222,6 +1232,7 @@ export const WalletDetail: React.FC = () => {
                confirmationThreshold={bitcoinStatus?.confirmationThreshold}
                deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
                walletBalance={wallet?.balance}
+               transactionStats={transactionStats || undefined}
              />
              {hasMoreTx && transactions.length > 0 && (
                <div className="mt-4 text-center">

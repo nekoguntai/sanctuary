@@ -12,6 +12,38 @@
  *
  * Backup Format Version History:
  *   1.0.0 - Initial backup format
+ *
+ * SECURITY CONSIDERATIONS FOR BACKUP ENCRYPTION:
+ * ================================================
+ * Current Status: Backups are exported as unencrypted JSON files.
+ *
+ * Sensitive Data in Backups:
+ *   - User password hashes (bcrypt) - Already hashed, relatively safe
+ *   - Node configuration passwords (AES-256-GCM encrypted)
+ *   - 2FA secrets and backup codes (stored encrypted)
+ *   - Wallet descriptors and xpubs (sensitive financial data)
+ *   - Transaction history and addresses
+ *
+ * Recommendation:
+ *   While password hashes and node passwords are already protected, we recommend:
+ *
+ *   1. IMMEDIATE: Users should store backup files in encrypted storage (e.g.,
+ *      encrypted disk, password manager, or encrypted cloud storage).
+ *
+ *   2. FUTURE ENHANCEMENT: Add optional client-side encryption for backup exports
+ *      using a user-provided passphrase. This would encrypt the entire backup
+ *      JSON before download using AES-256-GCM with a key derived from the
+ *      passphrase via Argon2id or scrypt.
+ *
+ *   3. DO NOT implement server-side backup encryption with a stored key, as this
+ *      provides no real security benefit - if the server is compromised, the
+ *      encryption key would also be compromised.
+ *
+ * The current approach is acceptable because:
+ *   - Backups require admin authentication to create
+ *   - Sensitive passwords are already encrypted/hashed
+ *   - Users are responsible for secure storage of exported files
+ *   - The restore process requires explicit confirmation
  */
 
 import prisma from '../models/prisma';

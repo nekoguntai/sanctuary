@@ -19,6 +19,7 @@ import { SystemSettings } from './components/SystemSettings';
 import { Variables } from './components/Variables';
 import { BackupRestore } from './components/BackupRestore';
 import { AuditLogs } from './components/AuditLogs';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -27,10 +28,35 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
 import { QueryProvider } from './providers/QueryProvider';
+import * as authApi from './src/api/auth';
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
   const { notifications, removeNotification } = useNotifications();
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  // Check if user is using default password and show modal
+  useEffect(() => {
+    if (isAuthenticated && user?.usingDefaultPassword) {
+      setShowPasswordModal(true);
+    }
+  }, [isAuthenticated, user?.usingDefaultPassword]);
+
+  const handlePasswordChanged = async () => {
+    // Refresh user data to clear the usingDefaultPassword flag
+    try {
+      const updatedUser = await authApi.getCurrentUser();
+      // The user context will be updated, and the modal will close
+      setShowPasswordModal(false);
+      // Force a page reload to ensure all user data is fresh
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+      // Still close the modal on success
+      setShowPasswordModal(false);
+      window.location.reload();
+    }
+  };
 
   if (!isAuthenticated) {
     return <Login />;
@@ -67,6 +93,9 @@ const AppRoutes: React.FC = () => {
         </Routes>
       </Layout>
       <NotificationContainer notifications={notifications} onDismiss={removeNotification} />
+
+      {/* Force password change modal for users with default password */}
+      {showPasswordModal && <ChangePasswordModal onPasswordChanged={handlePasswordChanged} />}
     </>
   );
 };

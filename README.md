@@ -91,9 +91,12 @@ Open **https://localhost:8443** and accept the certificate warning.
 4. Generates self-signed SSL certificates (for hardware wallet support)
 5. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
 6. Builds and starts the Docker containers
-7. Saves your configuration to `.env.local` for future restarts
+7. Creates a default `admin` user with password `sanctuary` (must be changed on first login)
+8. Saves your configuration to `.env.local` for future restarts
 
 **After installation:**
+- **Login credentials:** Username: `admin` / Password: `sanctuary`
+- You'll be required to change the password on first login
 - Start: `./start.sh`
 - Stop: `./start.sh --stop`
 - View logs: `./start.sh --logs`
@@ -177,6 +180,9 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Group permissions** — Organize users into groups with shared wallet access
 - **Admin controls** — Configure public registration and system settings
 - **Dark mode** — Easy on the eyes, day or night
+- **8 color themes** — Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Nordic, Midnight
+- **Background patterns** — 16 patterns with adjustable opacity
+- **Contrast control** — Adjust background contrast for accessibility
 - **Two-factor authentication** — Optional TOTP-based 2FA with backup codes
 - **Telegram notifications** — Receive transaction alerts via your own Telegram bot
 - **Notification sounds** — Configurable audio alerts for transactions and confirmations
@@ -730,9 +736,14 @@ Once connected, you can:
 
 1. Open https://localhost:8443 in Chrome, Edge, or Brave
 2. Accept the self-signed certificate warning (Advanced → Proceed)
-3. Create an account (stored locally in your database)
-4. Add a wallet by importing an output descriptor or connecting a hardware wallet
-5. Sanctuary will scan the blockchain for your transaction history
+3. Log in with the default credentials:
+   - **Username:** `admin`
+   - **Password:** `sanctuary`
+4. **Change your password** — you will be required to set a new password immediately for security
+5. Add a wallet by importing an output descriptor or connecting a hardware wallet
+6. Sanctuary will scan the blockchain for your transaction history
+
+> **Note:** The default password is shown on the login page and must be changed on first login. This is much easier than searching through Docker logs!
 
 ### Importing a Wallet
 
@@ -959,6 +970,18 @@ Sanctuary **never** stores:
 - **Backup your hardware wallet seed** — Sanctuary cannot recover funds
 - **Keep Docker updated** for security patches
 - **Use strong passwords** for your Sanctuary account
+
+### First-Login Security
+
+- The default admin password (`sanctuary`) must be changed on first login
+- A modal will block access until you set a secure password
+- Minimum password length: 8 characters
+
+### TLS Certificate Verification
+
+- Sanctuary verifies TLS certificates when connecting to Electrum servers
+- Self-signed certificates are rejected by default for security
+- To allow self-signed certificates (e.g., for local servers), enable "Allow Self-Signed Certificates" in Admin → Node Config
 
 ### Network Exposure
 

@@ -17,6 +17,7 @@ export interface User {
     theme?: string;
     background?: string;
     contrastLevel?: number;
+    patternOpacity?: number;
     unit?: string;
     fiatCurrency?: string;
     showFiat?: boolean;

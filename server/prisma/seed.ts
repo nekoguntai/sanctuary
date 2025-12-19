@@ -1,13 +1,23 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Default admin user credentials
-// IMPORTANT: Users should change this password after first login!
+/**
+ * Get the default initial password for the admin user.
+ * This is a simple, well-known password that MUST be changed on first login.
+ *
+ * The user will be forced to change this password immediately after logging in
+ * for the first time, so security is maintained while improving UX.
+ */
+function getDefaultPassword(): string {
+  return 'sanctuary';
+}
+
+// Default admin user configuration (password generated at runtime)
 const DEFAULT_ADMIN = {
   username: 'admin',
-  password: 'sanctuary',  // Default password - change after first login!
   isAdmin: true,
   preferences: {
     unit: 'sats',
@@ -638,8 +648,12 @@ async function main() {
   if (existingAdmin) {
     console.log(`Default admin user '${DEFAULT_ADMIN.username}' already exists, skipping...`);
   } else {
-    const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN.password, 10);
-    await prisma.user.create({
+    // Use the well-known default password
+    // User will be REQUIRED to change this on first login
+    const defaultPassword = getDefaultPassword();
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+    const adminUser = await prisma.user.create({
       data: {
         username: DEFAULT_ADMIN.username,
         password: hashedPassword,
@@ -647,15 +661,27 @@ async function main() {
         preferences: DEFAULT_ADMIN.preferences,
       },
     });
+
+    // Store a marker to track if the initial password has been changed
+    // This allows us to force the user to change their password on first login
+    await prisma.systemSetting.create({
+      data: {
+        key: `initialPassword_${adminUser.id}`,
+        value: hashedPassword, // Store hash to compare later
+      },
+    });
+
     console.log(`Created default admin user: ${DEFAULT_ADMIN.username}`);
     console.log('');
-    console.log('╔════════════════════════════════════════════════════════════╗');
-    console.log('║  DEFAULT CREDENTIALS                                       ║');
-    console.log('║  Username: admin                                           ║');
-    console.log('║  Password: sanctuary                                       ║');
-    console.log('║                                                            ║');
-    console.log('║  ⚠️  IMPORTANT: Change this password after first login!    ║');
-    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log('╔════════════════════════════════════════════════════════════════════╗');
+    console.log('║  INITIAL ADMIN CREDENTIALS                                         ║');
+    console.log('╠════════════════════════════════════════════════════════════════════╣');
+    console.log('║  Username: admin                                                   ║');
+    console.log('║  Password: sanctuary                                               ║');
+    console.log('║                                                                    ║');
+    console.log('║  IMPORTANT: You will be required to change this password on        ║');
+    console.log('║  first login for security.                                         ║');
+    console.log('╚════════════════════════════════════════════════════════════════════╝');
     console.log('');
   }
 

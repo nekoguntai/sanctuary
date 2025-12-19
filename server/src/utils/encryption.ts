@@ -2,11 +2,41 @@ import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
-const SALT = 'sanctuary-node-config';
+
+// Salt for key derivation - configurable via environment variable
+// IMPORTANT: Changing this will invalidate all existing encrypted data
+function getEncryptionSalt(): string {
+  const salt = process.env.ENCRYPTION_SALT;
+  if (!salt) {
+    // Fall back to default for backward compatibility with existing installations
+    // New installations should set ENCRYPTION_SALT for better security
+    console.warn('');
+    console.warn('SECURITY WARNING: ENCRYPTION_SALT environment variable is not set.');
+    console.warn('Using default salt for backward compatibility.');
+    console.warn('For better security, set a unique ENCRYPTION_SALT in your environment.');
+    console.warn('');
+    console.warn('CAUTION: If you set ENCRYPTION_SALT after data has been encrypted,');
+    console.warn('existing encrypted data (like node passwords) will become unreadable.');
+    console.warn('You will need to re-enter those values after changing the salt.');
+    console.warn('');
+    return 'sanctuary-node-config'; // Default for backward compatibility
+  }
+  return salt;
+}
 
 let encryptionKeyCache: Buffer | null = null;
+let encryptionSaltCache: string | null = null;
 
 function getEncryptionKey(): Buffer {
+  // Get the salt (cached after first call with warning)
+  const currentSalt = getEncryptionSalt();
+
+  // If salt changed, invalidate the key cache
+  if (encryptionSaltCache !== null && encryptionSaltCache !== currentSalt) {
+    encryptionKeyCache = null;
+  }
+  encryptionSaltCache = currentSalt;
+
   if (encryptionKeyCache) {
     return encryptionKeyCache;
   }
@@ -18,7 +48,7 @@ function getEncryptionKey(): Buffer {
     );
   }
 
-  encryptionKeyCache = crypto.scryptSync(key, SALT, 32);
+  encryptionKeyCache = crypto.scryptSync(key, currentSalt, 32);
   return encryptionKeyCache;
 }
 

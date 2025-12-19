@@ -198,8 +198,52 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
   }
 });
 
-// Default password that should be changed
-const DEFAULT_PASSWORD = 'sanctuary';
+// Default password detection
+// Instead of hardcoding a password, we check against a system setting
+// that stores whether the initial admin password has been changed.
+// The initial password is now generated randomly during first setup (see seed.ts).
+// We still need to detect if user is using the initial password by checking a marker.
+async function isUsingInitialPassword(userId: string, password: string): Promise<boolean> {
+  try {
+    // Check if the user's password matches the initial generated password hash
+    // stored in system settings during first setup
+    const initialPasswordSetting = await prisma.systemSetting.findUnique({
+      where: { key: `initialPassword_${userId}` },
+    });
+
+    if (!initialPasswordSetting) {
+      // No initial password marker - user was created after initial setup
+      // or marker was cleared after password change
+      return false;
+    }
+
+    // The setting stores the hash of the initial password
+    // If the current password matches, user hasn't changed it
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true },
+    });
+
+    if (!user) return false;
+
+    // Check if current password matches the initial password hash stored in settings
+    return initialPasswordSetting.value === user.password;
+  } catch (error) {
+    log.error('Error checking initial password status', { error });
+    return false;
+  }
+}
+
+// Mark initial password as changed (remove the marker)
+async function clearInitialPasswordMarker(userId: string): Promise<void> {
+  try {
+    await prisma.systemSetting.deleteMany({
+      where: { key: `initialPassword_${userId}` },
+    });
+  } catch (error) {
+    log.error('Error clearing initial password marker', { error });
+  }
+}
 
 /**
  * POST /api/v1/auth/login
@@ -266,8 +310,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     // Check if 2FA is enabled
     if (user.twoFactorEnabled && user.twoFactorSecret) {
-      // Check if using default password before creating temp token
-      const usingDefaultPassword = password === DEFAULT_PASSWORD;
+      // Check if using initial password before creating temp token
+      const usingDefaultPassword = await isUsingInitialPassword(user.id, password);
 
       // Generate a temporary token for 2FA verification (short-lived, 5 minutes)
       const tempToken = generateToken(
@@ -306,8 +350,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       success: true,
     });
 
-    // Check if using default password (for admin user warning)
-    const usingDefaultPassword = password === DEFAULT_PASSWORD;
+    // Check if using initial password (for admin user warning)
+    const usingDefaultPassword = await isUsingInitialPassword(user.id, password);
 
     res.json({
       token,
@@ -357,8 +401,12 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       });
     }
 
-    // Check if user is still using the default password
-    const usingDefaultPassword = await verifyPassword(DEFAULT_PASSWORD, user.password);
+    // Check if user is still using the initial password
+    // We check by looking for the initial password marker in system settings
+    const initialPasswordSetting = await prisma.systemSetting.findUnique({
+      where: { key: `initialPassword_${user.id}` },
+    });
+    const usingDefaultPassword = initialPasswordSetting?.value === user.password;
 
     // Don't send the password hash to the client
     const { password: _, ...userWithoutPassword } = user;
@@ -574,6 +622,9 @@ router.post('/me/change-password', authenticate, async (req: Request, res: Respo
         password: hashedPassword,
       },
     });
+
+    // Clear the initial password marker since user has changed their password
+    await clearInitialPasswordMarker(user.id);
 
     // Audit password change
     await auditService.logFromRequest(req, AuditAction.PASSWORD_CHANGE, AuditCategory.AUTH, {

@@ -49,6 +49,41 @@ interface Config {
   };
 }
 
+// Validate JWT_SECRET is set - this is critical for security
+// We no longer allow a default secret in ANY environment
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error('');
+    console.error('================================================================================');
+    console.error('FATAL SECURITY ERROR: JWT_SECRET environment variable is not set!');
+    console.error('');
+    console.error('The JWT_SECRET is required for secure authentication. Without it, tokens');
+    console.error('could be forged by attackers, compromising all user accounts.');
+    console.error('');
+    console.error('To fix this:');
+    console.error('  1. Generate a secure random secret (at least 32 characters):');
+    console.error('     openssl rand -base64 32');
+    console.error('');
+    console.error('  2. Set it in your .env file or environment:');
+    console.error('     JWT_SECRET=your-generated-secret-here');
+    console.error('================================================================================');
+    console.error('');
+    throw new Error('JWT_SECRET environment variable is required but not set. See error above for instructions.');
+  }
+
+  // Warn if the secret appears to be weak
+  if (secret.length < 32) {
+    console.warn('');
+    console.warn('SECURITY WARNING: JWT_SECRET is shorter than 32 characters.');
+    console.warn('A longer secret provides better security. Generate one with:');
+    console.warn('  openssl rand -base64 32');
+    console.warn('');
+  }
+
+  return secret;
+}
+
 const config: Config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3001', 10),
@@ -57,7 +92,7 @@ const config: Config = {
 
   databaseUrl: process.env.DATABASE_URL || '',
 
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+  jwtSecret: getJwtSecret(),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
 
   bitcoin: {
@@ -82,14 +117,12 @@ const config: Config = {
   },
 };
 
-// Validation
+// Validation for production environment
 if (config.nodeEnv === 'production') {
   if (!config.databaseUrl) {
     throw new Error('DATABASE_URL is required in production');
   }
-  if (config.jwtSecret === 'default-secret-change-in-production') {
-    throw new Error('JWT_SECRET must be set in production');
-  }
+  // Note: JWT_SECRET is now validated at startup in getJwtSecret() for ALL environments
 }
 
 export default config;

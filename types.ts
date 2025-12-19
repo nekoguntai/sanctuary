@@ -144,6 +144,7 @@ export interface UserPreferences {
   theme: ThemeOption;
   background: BackgroundOption;
   contrastLevel?: number; // -2 to +2, adjusts background contrast (0 = default)
+  patternOpacity?: number; // 0 to 100, controls background pattern visibility (default 50)
   priceProvider?: string;
   telegram?: TelegramConfig;
   notificationSounds?: NotificationSounds;

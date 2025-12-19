@@ -11,6 +11,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
+import { validatePasswordStrength } from '../utils/password';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../constants';
 
 const router = Router();
@@ -39,6 +40,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
         host: 'electrum.blockstream.info',
         port: '50002',
         useSsl: true,
+        allowSelfSignedCert: false, // Verify certificates by default
         user: null,
         hasPassword: false,
         explorerUrl: 'https://mempool.space',
@@ -57,6 +59,7 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       host: nodeConfig.host,
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
+      allowSelfSignedCert: nodeConfig.allowSelfSignedCert ?? false,
       user: nodeConfig.username,
       hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
@@ -83,9 +86,9 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing } = req.body;
+    const { type, host, port, useSsl, allowSelfSignedCert, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing } = req.body;
     // Log non-sensitive fields only (password excluded)
-    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing });
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, allowSelfSignedCert, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing });
 
     // Validation
     if (!type || !host || !port) {
@@ -126,6 +129,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           host,
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
+          allowSelfSignedCert: allowSelfSignedCert === true, // Opt-in to disable certificate verification
           username: user || null,
           password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
@@ -147,6 +151,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           host,
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
+          allowSelfSignedCert: allowSelfSignedCert === true, // Opt-in to disable certificate verification
           username: user || null,
           password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
@@ -176,6 +181,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       host: nodeConfig.host,
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
+      allowSelfSignedCert: nodeConfig.allowSelfSignedCert ?? false,
       user: nodeConfig.username,
       hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
@@ -312,10 +318,13 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
       });
     }
 
-    if (password.length < 6) {
+    // Validate password strength using the same rules as user registration
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Password must be at least 6 characters',
+        message: 'Password does not meet security requirements',
+        details: passwordValidation.errors,
       });
     }
 
@@ -437,10 +446,13 @@ router.put('/users/:userId', authenticate, requireAdmin, async (req: Request, re
     }
 
     if (password) {
-      if (password.length < 6) {
+      // Validate password strength using the same rules as user registration
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: 'Password must be at least 6 characters',
+          message: 'Password does not meet security requirements',
+          details: passwordValidation.errors,
         });
       }
       updateData.password = await bcrypt.hash(password, 10);

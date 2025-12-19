@@ -366,6 +366,11 @@ model NodeConfig {
   feeEstimatorUrl  String?  // URL for mempool.space-compatible API (defaults to mempool.space)
   mempoolEstimator String   @default("mempool_space") // simple, mempool_space
 
+  // TLS certificate verification (for SSL connections)
+  // When true, self-signed certificates are allowed (verification disabled)
+  // Default: false (verify certificates for security)
+  allowSelfSignedCert Boolean @default(false)
+
   // Connection pooling settings (Electrum only)
   poolEnabled        Boolean @default(false)  // false = single server mode, true = multi-server pool
   poolMinConnections Int     @default(1)

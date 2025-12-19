@@ -38,6 +38,7 @@ interface ElectrumConfig {
   host: string;
   port: number;
   protocol: 'tcp' | 'ssl';
+  allowSelfSignedCert?: boolean; // Optional: allow self-signed TLS certificates (default: false)
 }
 
 class ElectrumClient extends EventEmitter {
@@ -72,12 +73,15 @@ class ElectrumClient extends EventEmitter {
     let host: string;
     let port: number;
     let protocol: 'tcp' | 'ssl';
+    let allowSelfSignedCert = false; // Default: verify certificates
 
     // Use explicit config if provided (for testing connections)
     if (this.explicitConfig) {
       host = this.explicitConfig.host;
       port = this.explicitConfig.port;
       protocol = this.explicitConfig.protocol;
+      // For explicit configs (testing), check if allowSelfSignedCert was passed
+      allowSelfSignedCert = this.explicitConfig.allowSelfSignedCert ?? false;
     } else {
       // Get node config from database
       const nodeConfig = await prisma.nodeConfig.findFirst({
@@ -89,11 +93,15 @@ class ElectrumClient extends EventEmitter {
         port = nodeConfig.port;
         // Use explicit useSsl setting from config
         protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+        // Check if self-signed certificates are allowed (opt-in for security)
+        allowSelfSignedCert = nodeConfig.allowSelfSignedCert ?? false;
       } else {
         // Fallback to env config
         host = config.bitcoin.electrum.host;
         port = config.bitcoin.electrum.port;
         protocol = config.bitcoin.electrum.protocol;
+        // Default to verifying certificates
+        allowSelfSignedCert = false;
       }
     }
 
@@ -101,12 +109,20 @@ class ElectrumClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       try {
         if (protocol === 'ssl') {
-          log.info(`Initiating TLS connection to ${host}:${port}`);
+          // Log whether TLS verification is enabled or disabled
+          if (allowSelfSignedCert) {
+            log.warn(`Initiating TLS connection to ${host}:${port} with certificate verification DISABLED (self-signed allowed)`);
+          } else {
+            log.info(`Initiating TLS connection to ${host}:${port} with certificate verification enabled`);
+          }
+
           const tlsSocket = tls.connect(
             {
               host,
               port,
-              rejectUnauthorized: false, // Allow self-signed certs for local testing
+              // Only disable certificate verification if explicitly allowed
+              // This protects against MITM attacks by default
+              rejectUnauthorized: !allowSelfSignedCert,
               servername: host, // SNI support
             },
             () => {

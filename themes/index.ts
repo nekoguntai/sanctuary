@@ -22,6 +22,9 @@ import { serenityTheme } from './serenity';
 import { forestTheme } from './forest';
 import { cyberTheme } from './cyber';
 import { sunriseTheme } from './sunrise';
+import { oceanTheme } from './ocean';
+import { nordicTheme } from './sunset';
+import { midnightTheme } from './midnight';
 
 // Register all themes
 themeRegistry.registerMany([
@@ -30,6 +33,9 @@ themeRegistry.registerMany([
   forestTheme,
   cyberTheme,
   sunriseTheme,
+  oceanTheme,
+  nordicTheme,
+  midnightTheme,
 ]);
 
 // Register global patterns

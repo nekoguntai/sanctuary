@@ -286,6 +286,21 @@ class ThemeRegistry {
   }
 
   /**
+   * Apply pattern opacity to the document
+   * @param opacity - Pattern opacity value (0 to 100, default 50)
+   */
+  applyPatternOpacity(opacity: number): void {
+    const root = document.documentElement;
+    // Convert 0-100 scale to 0-1 multiplier
+    // At 50 (default), multiplier is 1.0 (design opacity)
+    // At 0, multiplier is 0 (invisible)
+    // At 100, multiplier is 2.0 (maximum visibility)
+    const clampedOpacity = Math.max(0, Math.min(100, opacity));
+    const multiplier = clampedOpacity / 50;
+    root.style.setProperty('--pattern-opacity', String(multiplier));
+  }
+
+  /**
    * Inject pattern SVG styles into the document
    */
   private injectPatternStyles(patternId: string, pattern: BackgroundPattern): void {

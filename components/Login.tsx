@@ -306,6 +306,22 @@ export const Login: React.FC = () => {
                 ? 'Use existing credentials to sign in'
                 : 'Contact administrator for account access'}
           </p>
+          {!isRegisterMode && apiStatus === 'connected' && (
+            <div className="mt-3 p-3 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
+              <p className="text-[10px] text-sanctuary-400 dark:text-sanctuary-500 font-medium mb-1">
+                First time logging in?
+              </p>
+              <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400">
+                Username: <span className="font-mono font-medium">admin</span>
+              </p>
+              <p className="text-xs text-sanctuary-600 dark:text-sanctuary-400">
+                Password: <span className="font-mono font-medium">sanctuary</span>
+              </p>
+              <p className="text-[10px] text-sanctuary-400 dark:text-sanctuary-500 mt-1">
+                You'll be asked to change this password after login
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

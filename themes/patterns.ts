@@ -58,4 +58,52 @@ export const globalPatterns: BackgroundPattern[] = [
     // This pattern uses CSS from index.html for fixed background positioning
     // We set empty SVGs here so the registry doesn't override the CSS
   },
+  {
+    id: 'hexagons',
+    name: 'Hexagons',
+    description: 'Honeycomb hexagonal grid',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'triangles',
+    name: 'Triangles',
+    description: 'Geometric triangle tessellation',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'stars',
+    name: 'Stars',
+    description: 'Scattered starfield pattern',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'aurora',
+    name: 'Aurora',
+    description: 'Flowing aurora gradient mesh',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'dots',
+    name: 'Polka Dots',
+    description: 'Regular dot grid pattern',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'cross',
+    name: 'Crosshatch',
+    description: 'Subtle cross-stitch texture',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'mountains',
+    name: 'Mountains',
+    description: 'Layered mountain silhouettes',
+    // Defined in index.html CSS
+  },
+  {
+    id: 'noise',
+    name: 'Noise',
+    description: 'Subtle grainy texture',
+    // Defined in index.html CSS
+  },
 ];

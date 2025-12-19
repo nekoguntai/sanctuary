@@ -500,15 +500,25 @@ wait_for_migration_complete() {
 # Check if admin user exists in database
 check_admin_user_exists() {
     local container="${1:-sanctuary-db}"
+    local max_attempts=5
+    local attempt=1
 
-    local result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
-        "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>/dev/null | tr -d ' ')
+    # Retry a few times since seeding might still be completing
+    while [ $attempt -le $max_attempts ]; do
+        local result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
+            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>/dev/null | tr -d ' \n\r')
 
-    if [ "$result" = "1" ]; then
-        return 0
-    else
-        return 1
-    fi
+        if [ "$result" = "1" ]; then
+            return 0
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            sleep 2
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    return 1
 }
 
 # Check if default password marker exists

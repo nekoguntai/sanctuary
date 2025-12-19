@@ -644,25 +644,38 @@ test_password_change_flow() {
 test_basic_api_endpoints() {
     log_info "Testing basic API endpoints..."
 
-    # Login to get token
+    # Login to get token - try new password first (set by password change test)
     local login_response=$(curl -k -s -X POST \
         -H "Content-Type: application/json" \
         -d '{"username":"admin","password":"NewSecurePassword123!"}' \
         "$API_BASE_URL/api/v1/auth/login")
 
+    log_debug "Login attempt 1 response: $login_response"
+
+    # Extract token using multiple methods for robustness
     local token=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    if [ -z "$token" ]; then
+        # Try alternative extraction using sed
+        token=$(echo "$login_response" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    fi
 
     # If login with new password fails, try default password
     if [ -z "$token" ]; then
+        log_debug "New password login failed, trying default password..."
         login_response=$(curl -k -s -X POST \
             -H "Content-Type: application/json" \
             -d '{"username":"admin","password":"sanctuary"}' \
             "$API_BASE_URL/api/v1/auth/login")
+        log_debug "Login attempt 2 response: $login_response"
         token=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$token" ]; then
+            token=$(echo "$login_response" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+        fi
     fi
 
     if [ -z "$token" ]; then
         log_error "Failed to get login token for API tests"
+        log_error "Last response: $login_response"
         return 1
     fi
 

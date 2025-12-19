@@ -28,7 +28,8 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   ];
 
   utxos.forEach(u => {
-    const age = now - u.date;
+    const utxoDate = typeof u.date === 'string' ? new Date(u.date).getTime() : (u.date ?? now);
+    const age = now - utxoDate;
     if (age < day * 30) { ageData[0].count++; ageData[0].amount += u.amount; }
     else if (age < day * 180) { ageData[1].count++; ageData[1].amount += u.amount; }
     else if (age < day * 365) { ageData[2].count++; ageData[2].amount += u.amount; }
@@ -37,7 +38,10 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
 
   // Calculate average UTXO age in days
   const avgUtxoAgeDays = utxos.length > 0
-    ? Math.round(utxos.reduce((sum, u) => sum + (now - u.date), 0) / utxos.length / day)
+    ? Math.round(utxos.reduce((sum, u) => {
+        const utxoDate = typeof u.date === 'string' ? new Date(u.date).getTime() : (u.date ?? now);
+        return sum + (now - utxoDate);
+      }, 0) / utxos.length / day)
     : 0;
 
   // Format age display (days, months, or years)

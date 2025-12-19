@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { WalletType } from '../types';
+import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
 import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { Button } from './ui/Button';
@@ -307,7 +307,7 @@ export const WalletList: React.FC = () => {
                     {wallet.quorum && wallet.totalSigners && (
                         <>
                             <span className="mx-2 text-sanctuary-300">•</span>
-                            <span className="text-sanctuary-400">{wallet.quorum} of {wallet.totalSigners}</span>
+                            <span className="text-sanctuary-400">{getQuorumM(wallet.quorum)} of {wallet.totalSigners}</span>
                         </>
                     )}
                 </div>

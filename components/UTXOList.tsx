@@ -88,7 +88,8 @@ export const UTXOList: React.FC<UTXOListProps> = ({
             {utxos.map((utxo) => {
                 const id = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selectedUtxos.has(id);
-                const colorClass = utxo.frozen ? '' : getAgeColor(utxo.date);
+                const utxoTimestamp = typeof utxo.date === 'string' ? new Date(utxo.date).getTime() : (utxo.date ?? now);
+                const colorClass = utxo.frozen ? '' : getAgeColor(utxoTimestamp);
 
                 // Red striped pattern for frozen UTXOs - matches the row list styling
                 // Using zen-vermilion color (#e05a47)

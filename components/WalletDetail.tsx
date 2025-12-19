@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType } from '../types';
+import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN } from '../types';
 import * as walletsApi from '../src/api/wallets';
 import * as transactionsApi from '../src/api/transactions';
 import * as labelsApi from '../src/api/labels';
@@ -1078,7 +1078,7 @@ export const WalletDetail: React.FC = () => {
           <div className="flex flex-wrap gap-2 mb-3">
              {/* Wallet Type Badge */}
              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
-               {wallet.type === 'Multi Sig' ? `${wallet.quorum?.m} of ${wallet.quorum?.n} Multisig` : 'Single Signature'}
+               {wallet.type === 'Multi Sig' ? `${getQuorumM(wallet.quorum)} of ${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Signature'}
              </span>
              {devices.map(d => (
                  <span key={d.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sanctuary-50 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-300 dark:border-sanctuary-700">
@@ -1518,7 +1518,7 @@ export const WalletDetail: React.FC = () => {
             <DraftList
               walletId={id!}
               walletType={wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
-              quorum={wallet.quorum && wallet.totalSigners ? { m: wallet.quorum, n: wallet.totalSigners } : undefined}
+              quorum={wallet.quorum ? { m: getQuorumM(wallet.quorum), n: getQuorumN(wallet.quorum, wallet.totalSigners) } : undefined}
               canEdit={wallet.userRole !== 'viewer'}
               onDraftsChange={(count) => {
                 setDraftsCount(count);
@@ -2052,7 +2052,7 @@ export const WalletDetail: React.FC = () => {
                  {wallet.quorum && (
                     <div>
                         <dt className="text-sm font-medium text-sanctuary-500">Quorum</dt>
-                        <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.quorum.m} of {wallet.quorum.n}</dd>
+                        <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{getQuorumM(wallet.quorum)} of {getQuorumN(wallet.quorum, wallet.totalSigners)}</dd>
                     </div>
                  )}
                </dl>

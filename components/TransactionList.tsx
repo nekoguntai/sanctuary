@@ -685,7 +685,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                               {selectedTx.amount > 0 ? 'Your Receiving Address' : 'Your Sending Address'}
                            </p>
                            <code className="text-xs font-mono break-all text-sanctuary-700 dark:text-sanctuary-300">
-                              {selectedTx.address}
+                              {typeof selectedTx.address === 'string' ? selectedTx.address : selectedTx.address.address}
                            </code>
                         </div>
                       )}

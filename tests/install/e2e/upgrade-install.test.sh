@@ -175,10 +175,15 @@ EOF
         cd "$PROJECT_ROOT"
     fi
 
-    # Start initial installation
+    # Build images first (migrate container depends on backend image)
     JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
-        docker compose up -d --build 2>&1
+        docker compose build 2>&1
+
+    # Then start containers
+    JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
+        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        docker compose up -d 2>&1
 
     # Wait for containers
     if ! wait_for_all_containers_healthy 300; then

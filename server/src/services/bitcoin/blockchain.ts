@@ -483,6 +483,7 @@ export async function syncWallet(walletId: string): Promise<{
   utxos: number;
 }> {
   const startTime = Date.now();
+  walletLog(walletId, 'info', 'SYNC', 'Starting wallet sync...');
   const client = await getNodeClient();
 
 
@@ -508,6 +509,7 @@ export async function syncWallet(walletId: string): Promise<{
   });
 
   // PHASE 1: Batch fetch all address histories using true RPC batching
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 1: Fetching address histories...');
   log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses using batch RPC...`);
   const BATCH_SIZE = 50; // Number of addresses per batch RPC call
   const historyResults: Map<string, Array<{ tx_hash: string; height: number }>> = new Map();
@@ -553,6 +555,7 @@ export async function syncWallet(walletId: string): Promise<{
   });
 
   // PHASE 2: Batch check which transactions already exist in DB
+  walletLog(walletId, 'debug', 'SYNC', `Phase 2: Checking ${allTxids.size} transactions against database...`);
   const existingTxs = await prisma.transaction.findMany({
     where: {
       walletId,
@@ -574,6 +577,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 3: Batch fetch transaction details for new txids using true RPC batching
+  walletLog(walletId, 'debug', 'SYNC', `Phase 3: Fetching ${newTxids.length} transaction details...`);
   const txDetailsCache: Map<string, any> = new Map();
   const TX_BATCH_SIZE = 25; // Number of transactions per batch RPC call
 
@@ -600,6 +604,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 4: Process transactions and collect records to insert
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 4: Processing transactions...');
   const transactionsToCreate: any[] = [];
   const currentHeight = await getBlockHeight();
 
@@ -920,6 +925,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses using true RPC batching
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 6: Fetching UTXOs...');
   log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses using batch RPC...`);
   const utxoResults: Array<{ address: string; utxos: any[] }> = [];
 
@@ -959,6 +965,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 7: UTXO Reconciliation - Make blockchain authoritative
+  walletLog(walletId, 'debug', 'SYNC', `Phase 7: Reconciling ${allUtxoKeys.size} UTXOs with database...`);
   // Get all UTXOs from DB (both spent and unspent)
   const existingUtxos = await prisma.uTXO.findMany({
     where: { walletId },
@@ -1077,6 +1084,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 10: Batch update used addresses
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 10: Updating address states...');
   const usedAddresses = new Set<string>();
   for (const [addressStr, history] of historyResults) {
     if (history.length > 0) {
@@ -1098,6 +1106,7 @@ export async function syncWallet(walletId: string): Promise<{
   // PHASE 11: Gap limit expansion
   // After marking addresses as used, check if we need to generate more addresses
   // to maintain the BIP-44 gap limit (20 consecutive unused addresses)
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 11: Checking address gap limit...');
   const newAddresses = await ensureGapLimit(walletId);
 
   // If new addresses were generated, scan them for transactions
@@ -1140,6 +1149,12 @@ export async function syncWallet(walletId: string): Promise<{
   const finalTxCount = totalTransactions + additionalTxCount;
   const finalUtxoCount = totalUtxos + additionalUtxoCount;
   log.debug(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${finalTxCount} tx, ${finalUtxoCount} utxos`);
+
+  walletLog(walletId, 'info', 'SYNC', `Sync completed in ${(elapsed / 1000).toFixed(1)}s`, {
+    addresses: addresses.length + newAddresses.length,
+    transactions: finalTxCount,
+    utxos: finalUtxoCount,
+  });
 
   return {
     addresses: addresses.length + newAddresses.length,

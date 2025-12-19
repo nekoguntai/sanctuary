@@ -53,6 +53,7 @@ import {
   X,
   AlertTriangle,
   RefreshCw,
+  RotateCcw,
   Tag,
   Edit2,
   ExternalLink,
@@ -1557,6 +1558,27 @@ export const WalletDetail: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center space-x-2">
+                {/* Sync buttons */}
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded transition-colors disabled:opacity-50 flex items-center space-x-1"
+                  title="Sync wallet with blockchain"
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+                  <span>Sync</span>
+                </button>
+                <button
+                  onClick={handleFullResync}
+                  disabled={syncing}
+                  className="px-2.5 py-1 text-xs font-medium text-warning-600 dark:text-warning-400 hover:bg-warning-100 dark:hover:bg-warning-900/30 rounded transition-colors disabled:opacity-50 flex items-center space-x-1"
+                  title="Clear all transactions and re-sync from blockchain"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Full Resync</span>
+                </button>
+                <div className="w-px h-4 bg-sanctuary-200 dark:bg-sanctuary-700" />
+                {/* Log controls */}
                 <button
                   onClick={togglePause}
                   className={`p-1.5 rounded transition-colors ${

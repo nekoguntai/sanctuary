@@ -16,7 +16,7 @@ import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
-import { getBlockHeight } from '../services/bitcoin/blockchain';
+import { getBlockHeight, recalculateWalletBalances } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
@@ -310,27 +310,17 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
           },
         },
       },
-      orderBy: { blockTime: 'desc' },
+      orderBy: { blockTime: 'asc' },  // Oldest first to match Sparrow format
     });
 
     // Convert to export format
-    // Sign amounts based on type:
-    // - sent: negative (what you sent away)
-    // - consolidation: negative fee only (you only lose the fee)
-    // - received: positive (what you received)
+    // The amount in DB is already correctly signed:
+    // - sent: negative (includes fee)
+    // - consolidation: negative (just the fee)
+    // - received: positive
     const exportData = transactions.map(tx => {
-      const rawAmount = Math.abs(Number(tx.amount));
-      const fee = tx.fee ? Math.abs(Number(tx.fee)) : 0;
-
-      let signedAmount: number;
-      if (tx.type === 'consolidation') {
-        signedAmount = -fee;
-      } else if (tx.type === 'sent') {
-        // Sent: both amount AND fee are deducted from balance
-        signedAmount = -(rawAmount + fee);
-      } else {
-        signedAmount = rawAmount;
-      }
+      // Use the stored amount directly - it's already correctly signed
+      const signedAmount = Number(tx.amount);
 
       return {
         date: tx.blockTime?.toISOString() || tx.createdAt.toISOString(),
@@ -338,6 +328,8 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
         type: tx.type,
         amountBtc: signedAmount / 100000000,
         amountSats: signedAmount,
+        balanceAfterBtc: tx.balanceAfter ? Number(tx.balanceAfter) / 100000000 : null,
+        balanceAfterSats: tx.balanceAfter ? Number(tx.balanceAfter) : null,
         feeSats: tx.fee ? Number(tx.fee) : null,
         confirmations: tx.confirmations,
         label: tx.label || '',
@@ -363,6 +355,8 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
       'Type',
       'Amount (BTC)',
       'Amount (sats)',
+      'Balance After (BTC)',
+      'Balance After (sats)',
       'Fee (sats)',
       'Confirmations',
       'Label',
@@ -386,6 +380,8 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
       escapeCSV(tx.type),
       escapeCSV(tx.amountBtc),
       escapeCSV(tx.amountSats),
+      escapeCSV(tx.balanceAfterBtc),
+      escapeCSV(tx.balanceAfterSats),
       escapeCSV(tx.feeSats),
       escapeCSV(tx.confirmations),
       escapeCSV(tx.label),
@@ -404,6 +400,38 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to export transactions',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:walletId/transactions/recalculate
+ * Recalculate running balances (balanceAfter) for all transactions in a wallet
+ */
+router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    await recalculateWalletBalances(walletId);
+
+    // Get the final balance after recalculation
+    const lastTx = await prisma.transaction.findFirst({
+      where: { walletId },
+      orderBy: [{ blockTime: 'desc' }, { createdAt: 'desc' }],
+      select: { balanceAfter: true },
+    });
+
+    res.json({
+      success: true,
+      message: 'Balances recalculated',
+      finalBalance: lastTx?.balanceAfter ? Number(lastTx.balanceAfter) : 0,
+      finalBalanceBtc: lastTx?.balanceAfter ? Number(lastTx.balanceAfter) / 100000000 : 0,
+    });
+  } catch (error) {
+    log.error('Failed to recalculate balances', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to recalculate balances',
     });
   }
 });

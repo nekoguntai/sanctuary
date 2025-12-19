@@ -157,27 +157,63 @@ class SyncService {
 
   /**
    * Subscribe to all addresses from all wallets for real-time notifications
+   * Uses batch subscription for efficiency (single RPC call vs N calls)
    */
   private async subscribeAllWalletAddresses(): Promise<void> {
     const electrumClient = getElectrumClientIfActive();
     if (!electrumClient) return;
 
-    const addresses = await prisma.address.findMany({
+    const addressRecords = await prisma.address.findMany({
       select: { address: true, walletId: true },
     });
 
-    let subscribed = 0;
-    for (const { address, walletId } of addresses) {
-      try {
-        await electrumClient.subscribeAddress(address);
-        this.addressToWalletMap.set(address, walletId);
-        subscribed++;
-      } catch (error) {
-        log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(error) });
-      }
+    if (addressRecords.length === 0) {
+      log.info('[SYNC] No addresses to subscribe to');
+      return;
     }
 
-    log.info(`[SYNC] Subscribed to ${subscribed} addresses for real-time notifications`);
+    // Build address to wallet mapping
+    const addressToWallet = new Map<string, string>();
+    const addresses: string[] = [];
+    for (const { address, walletId } of addressRecords) {
+      addresses.push(address);
+      addressToWallet.set(address, walletId);
+    }
+
+    try {
+      // Batch subscribe to all addresses in a single RPC call
+      const results = await electrumClient.subscribeAddressBatch(addresses);
+
+      // Update our address to wallet mapping for successfully subscribed addresses
+      let subscribed = 0;
+      for (const [address, status] of results) {
+        const walletId = addressToWallet.get(address);
+        if (walletId) {
+          this.addressToWalletMap.set(address, walletId);
+          subscribed++;
+        }
+      }
+
+      log.info(`[SYNC] Batch subscribed to ${subscribed} addresses for real-time notifications`);
+    } catch (error) {
+      log.error('[SYNC] Batch subscription failed, falling back to individual subscriptions', { error: String(error) });
+
+      // Fallback to individual subscriptions if batch fails
+      let subscribed = 0;
+      for (const address of addresses) {
+        try {
+          await electrumClient.subscribeAddress(address);
+          const walletId = addressToWallet.get(address);
+          if (walletId) {
+            this.addressToWalletMap.set(address, walletId);
+            subscribed++;
+          }
+        } catch (err) {
+          log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(err) });
+        }
+      }
+      log.info(`[SYNC] Fallback: subscribed to ${subscribed} addresses individually`);
+    }
   }
 
   /**

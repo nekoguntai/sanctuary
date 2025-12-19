@@ -40,6 +40,7 @@ export interface NodeClientInterface {
   broadcastTransaction(rawTx: string): Promise<string>;
   estimateFee(blocks: number): Promise<number>;
   subscribeAddress(address: string): Promise<string | null>;
+  subscribeAddressBatch(addresses: string[]): Promise<Map<string, string | null>>;
 
   // Batch methods - send multiple requests in a single RPC call
   getAddressHistoryBatch(addresses: string[]): Promise<Map<string, Array<{ tx_hash: string; height: number }>>>;

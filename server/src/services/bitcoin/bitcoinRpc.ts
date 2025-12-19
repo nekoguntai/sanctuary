@@ -275,6 +275,19 @@ export class BitcoinRpcClient {
   }
 
   /**
+   * Batch subscribe to addresses (no-op for RPC - polling based)
+   */
+  async subscribeAddressBatch(addresses: string[]): Promise<Map<string, string | null>> {
+    // Bitcoin Core RPC doesn't support push notifications
+    // Return empty statuses for all addresses
+    const result = new Map<string, string | null>();
+    for (const address of addresses) {
+      result.set(address, null);
+    }
+    return result;
+  }
+
+  /**
    * Make a batch RPC call to Bitcoin Core
    * Sends multiple requests in a single HTTP POST
    */

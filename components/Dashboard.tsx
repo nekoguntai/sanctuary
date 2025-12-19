@@ -26,6 +26,11 @@ import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/quer
 
 const log = createLogger('Dashboard');
 
+// Stable empty arrays to prevent re-renders when hook data is undefined
+const EMPTY_WALLETS: never[] = [];
+const EMPTY_TRANSACTIONS: never[] = [];
+const EMPTY_PENDING: never[] = [];
+
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
 // Animated number component for smooth price transitions
@@ -150,13 +155,16 @@ export const Dashboard: React.FC = () => {
   const invalidateAllWallets = useInvalidateAllWallets();
 
   // React Query hooks for data fetching
-  const { data: apiWallets = [], isLoading: walletsLoading } = useWallets();
+  const { data: apiWallets, isLoading: walletsLoading } = useWallets();
   const { data: feeEstimates, isLoading: feesLoading } = useFeeEstimates();
   const { data: bitcoinStatus, isLoading: statusLoading } = useBitcoinStatus();
   const { data: mempoolData, isLoading: mempoolLoading, refetch: refetchMempool, isFetching: mempoolRefreshing } = useMempoolData();
 
+  // Use stable empty arrays when data is undefined to prevent re-renders
+  const safeApiWallets = apiWallets ?? EMPTY_WALLETS;
+
   // Convert API wallets to component format
-  const wallets: Wallet[] = useMemo(() => apiWallets.map(w => ({
+  const wallets: Wallet[] = useMemo(() => safeApiWallets.map(w => ({
     id: w.id,
     name: w.name,
     type: w.type as WalletType,
@@ -169,14 +177,16 @@ export const Dashboard: React.FC = () => {
     lastSyncedAt: w.lastSyncedAt,
     lastSyncStatus: w.lastSyncStatus as 'success' | 'failed' | 'partial' | null,
     syncInProgress: w.syncInProgress,
-  })), [apiWallets]);
+  })), [safeApiWallets]);
 
   // Fetch recent transactions from all wallets using React Query
   const walletIds = useMemo(() => wallets.map(w => w.id), [wallets]);
-  const { data: recentTxRaw = [], isLoading: txLoading } = useRecentTransactions(walletIds, 10);
+  const { data: recentTxRawData, isLoading: txLoading } = useRecentTransactions(walletIds, 10);
+  const recentTxRaw = recentTxRawData ?? EMPTY_TRANSACTIONS;
 
   // Fetch pending transactions for block queue visualization
-  const { data: pendingTxs = [] } = usePendingTransactions(walletIds);
+  const { data: pendingTxsData } = usePendingTransactions(walletIds);
+  const pendingTxs = pendingTxsData ?? EMPTY_PENDING;
 
   // Convert API transactions to component format
   const recentTx: Transaction[] = useMemo(() => recentTxRaw.map(tx => {

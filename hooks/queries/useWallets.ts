@@ -174,36 +174,52 @@ export function useWalletTransactions(
  * Aggregates transactions from multiple wallets and sorts by timestamp
  */
 export function useRecentTransactions(walletIds: string[], limit: number = 10) {
-  const queries = useQueries({
-    queries: walletIds.map((walletId) => ({
-      queryKey: walletKeys.transactions(walletId, { limit: 5 }),
-      queryFn: () => transactionsApi.getTransactions(walletId, { limit: 5 }),
-      enabled: walletIds.length > 0,
-    })),
-  });
+  // Memoize query configs to prevent useQueries from recreating queries
+  const queryConfigs = useMemo(
+    () =>
+      walletIds.map((walletId) => ({
+        queryKey: walletKeys.transactions(walletId, { limit: 5 }),
+        queryFn: () => transactionsApi.getTransactions(walletId, { limit: 5 }),
+        enabled: walletIds.length > 0,
+      })),
+    [walletIds]
+  );
+
+  const queries = useQueries({ queries: queryConfigs });
 
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
 
-  // Memoize the aggregated transactions to prevent infinite re-renders
-  // Use dataUpdatedAt timestamps as stable dependency - changes only when data actually changes
-  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  // Collect all query data - stable array that only changes when data changes
+  const allQueryData = useMemo(
+    () => queries.map((q) => q.data),
+    [queries.map((q) => q.dataUpdatedAt).join(',')]
+  );
+
+  // Memoize the aggregated transactions
   const transactions = useMemo(() => {
-    return queries
-      .flatMap((q) => q.data || [])
+    return allQueryData
+      .filter((data): data is NonNullable<typeof data> => data != null)
+      .flat()
       .sort((a, b) => {
         const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
         const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
         return timeB - timeA;
       })
       .slice(0, limit);
-  }, [queryDataKey, limit]);
+  }, [allQueryData, limit]);
+
+  // Memoize refetch function
+  const refetch = useMemo(
+    () => () => queries.forEach((q) => q.refetch()),
+    [queries]
+  );
 
   return {
     data: transactions,
     isLoading,
     isError,
-    refetch: () => queries.forEach((q) => q.refetch()),
+    refetch,
   };
 }
 
@@ -213,33 +229,49 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
  * Refreshes every 30 seconds to match mempool data updates
  */
 export function usePendingTransactions(walletIds: string[]) {
-  const queries = useQueries({
-    queries: walletIds.map((walletId) => ({
-      queryKey: [...walletKeys.transactions(walletId), 'pending'] as const,
-      queryFn: () => transactionsApi.getPendingTransactions(walletId),
-      enabled: walletIds.length > 0,
-      refetchInterval: 30000, // 30 seconds
-      staleTime: 15000, // Consider data stale after 15 seconds
-    })),
-  });
+  // Memoize query configs
+  const queryConfigs = useMemo(
+    () =>
+      walletIds.map((walletId) => ({
+        queryKey: [...walletKeys.transactions(walletId), 'pending'] as const,
+        queryFn: () => transactionsApi.getPendingTransactions(walletId),
+        enabled: walletIds.length > 0,
+        refetchInterval: 30000, // 30 seconds
+        staleTime: 15000, // Consider data stale after 15 seconds
+      })),
+    [walletIds]
+  );
+
+  const queries = useQueries({ queries: queryConfigs });
 
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
 
-  // Memoize the aggregated pending transactions to prevent infinite re-renders
-  // Use dataUpdatedAt timestamps as stable dependency
-  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  // Collect all query data
+  const allQueryData = useMemo(
+    () => queries.map((q) => q.data),
+    [queries.map((q) => q.dataUpdatedAt).join(',')]
+  );
+
+  // Memoize the aggregated pending transactions
   const pendingTransactions = useMemo(() => {
-    return queries
-      .flatMap((q) => q.data || [])
+    return allQueryData
+      .filter((data): data is NonNullable<typeof data> => data != null)
+      .flat()
       .sort((a, b) => b.feeRate - a.feeRate); // Sort by fee rate (higher first)
-  }, [queryDataKey]);
+  }, [allQueryData]);
+
+  // Memoize refetch function
+  const refetch = useMemo(
+    () => () => queries.forEach((q) => q.refetch()),
+    [queries]
+  );
 
   return {
     data: pendingTransactions,
     isLoading,
     isError,
-    refetch: () => queries.forEach((q) => q.refetch()),
+    refetch,
   };
 }
 
@@ -302,19 +334,27 @@ export function useBalanceHistory(
   totalBalance: number,
   timeframe: Timeframe
 ) {
-  const queries = useQueries({
-    queries: walletIds.map((walletId) => ({
-      queryKey: walletKeys.transactions(walletId, { limit: 500 }),
-      queryFn: () => transactionsApi.getTransactions(walletId, { limit: 500 }),
-      enabled: walletIds.length > 0,
-    })),
-  });
+  // Memoize query configs
+  const queryConfigs = useMemo(
+    () =>
+      walletIds.map((walletId) => ({
+        queryKey: walletKeys.transactions(walletId, { limit: 500 }),
+        queryFn: () => transactionsApi.getTransactions(walletId, { limit: 500 }),
+        enabled: walletIds.length > 0,
+      })),
+    [walletIds]
+  );
+
+  const queries = useQueries({ queries: queryConfigs });
 
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
 
-  // Use dataUpdatedAt timestamps as stable dependency for memoization
-  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  // Collect all query data with stable dependency
+  const allQueryData = useMemo(
+    () => queries.map((q) => q.data),
+    [queries.map((q) => q.dataUpdatedAt).join(',')]
+  );
 
   // Build chart data based on timeframe (matches Dashboard.getChartData)
   const chartData = React.useMemo(() => {
@@ -352,8 +392,9 @@ export function useBalanceHistory(
     const startTime = now - rangeMs;
 
     // Collect all transactions with timestamps and balanceAfter
-    const allTxs = queries
-      .flatMap((q) => q.data || [])
+    const allTxs = allQueryData
+      .filter((data): data is NonNullable<typeof data> => data != null)
+      .flat()
       .filter((tx) => {
         const timestamp = tx.blockTime ? new Date(tx.blockTime).getTime() : null;
         return timestamp && timestamp >= startTime && tx.type !== 'consolidation';
@@ -400,7 +441,7 @@ export function useBalanceHistory(
     }
 
     return data;
-  }, [queryDataKey, totalBalance, timeframe]);
+  }, [allQueryData, totalBalance, timeframe]);
 
   return {
     data: chartData,

@@ -27,9 +27,73 @@ jobs:
       - name: Skip
         run: echo "Release workflow skipped for push events"
 
+  # ============================================
+  # Validate Release Candidate
+  # ============================================
+  validate-release-candidate:
+    name: Validate Release Candidate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Get commit SHA
+        id: get-sha
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # For release events, get the SHA of the tagged commit
+            SHA="${{ github.event.release.target_commitish }}"
+            # If target_commitish is a branch name, resolve to SHA
+            if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              SHA="${{ github.sha }}"
+            fi
+          else
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Validating release for commit: $SHA"
+
+      - name: Check for successful Release Candidate run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking for successful Release Candidate Validation workflow run..."
+          echo ""
+
+          COMMIT_SHA="${{ steps.get-sha.outputs.sha }}"
+
+          # Get workflow runs for release-candidate.yml
+          RUNS=$(gh api repos/${{ github.repository }}/actions/workflows/release-candidate.yml/runs \
+            --jq ".workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\" and .conclusion == \"success\") | {id: .id, created_at: .created_at, conclusion: .conclusion}" \
+            2>/dev/null || echo "")
+
+          if [ -z "$RUNS" ] || [ "$RUNS" = "" ]; then
+            echo "::error::No successful Release Candidate Validation found for commit $COMMIT_SHA"
+            echo ""
+            echo "=========================================="
+            echo "RELEASE BLOCKED"
+            echo "=========================================="
+            echo ""
+            echo "Before releasing, you must:"
+            echo "1. Run the 'Release Candidate Validation' workflow on this commit"
+            echo "2. Wait for ALL tests to pass (including upgrade tests)"
+            echo "3. Then retry the release"
+            echo ""
+            echo "To run Release Candidate Validation:"
+            echo "  gh workflow run release-candidate.yml --field ref=$COMMIT_SHA"
+            echo ""
+            echo "Or via GitHub UI: Actions > Release Candidate Validation > Run workflow"
+            echo ""
+            exit 1
+          fi
+
+          echo "✓ Found successful Release Candidate Validation run:"
+          echo "$RUNS" | head -1
+          echo ""
+          echo "Release validation passed. Proceeding with release..."
+
   build-and-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
+    needs: validate-release-candidate
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write

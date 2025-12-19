@@ -500,24 +500,31 @@ wait_for_migration_complete() {
 # Check if admin user exists in database
 check_admin_user_exists() {
     local container="${1:-sanctuary-db}"
-    local max_attempts=5
+    local max_attempts=15
     local attempt=1
 
-    # Retry a few times since seeding might still be completing
+    log_debug "Checking for admin user in database (max $max_attempts attempts)..."
+
+    # Retry multiple times since seeding might still be completing
+    # Total wait time: up to 45 seconds (15 attempts × 3 seconds)
     while [ $attempt -le $max_attempts ]; do
         local result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
-            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>/dev/null | tr -d ' \n\r')
+            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>/dev/null | tr -d ' \n\r\t')
+
+        log_debug "Attempt $attempt: admin user count = '$result'"
 
         if [ "$result" = "1" ]; then
+            log_debug "Admin user found on attempt $attempt"
             return 0
         fi
 
         if [ $attempt -lt $max_attempts ]; then
-            sleep 2
+            sleep 3
         fi
         attempt=$((attempt + 1))
     done
 
+    log_debug "Admin user not found after $max_attempts attempts"
     return 1
 }
 

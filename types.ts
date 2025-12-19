@@ -180,6 +180,58 @@ export interface NodeConfig {
   explorerUrl?: string; // e.g., https://mempool.space
   feeEstimatorUrl?: string; // e.g., https://mempool.space (mempool.space-compatible API for fee estimation)
   mempoolEstimator?: 'simple' | 'mempool_space'; // Algorithm for block confirmation estimation
+  // Connection pooling settings (Electrum only)
+  poolEnabled?: boolean; // false = single connection mode
+  poolMinConnections?: number;
+  poolMaxConnections?: number;
+  poolLoadBalancing?: 'round_robin' | 'least_connections' | 'failover_only';
+  // Electrum server list (multi-server pool support)
+  servers?: ElectrumServer[];
+}
+
+// Electrum server configuration
+export interface ElectrumServer {
+  id: string;
+  nodeConfigId: string;
+  label: string;
+  host: string;
+  port: number;
+  useSsl: boolean;
+  priority: number;
+  enabled: boolean;
+  // Health tracking
+  lastHealthCheck?: string | null;
+  healthCheckFails?: number;
+  isHealthy?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Per-server statistics (from pool stats)
+export interface ElectrumServerStats {
+  serverId: string;
+  label: string;
+  host: string;
+  port: number;
+  connectionCount: number;
+  healthyConnections: number;
+  totalRequests: number;
+  failedRequests: number;
+  isHealthy: boolean;
+  lastHealthCheck: string | null;
+}
+
+// Electrum connection pool statistics
+export interface ElectrumPoolStats {
+  totalConnections: number;
+  activeConnections: number;
+  idleConnections: number;
+  waitingRequests: number;
+  totalAcquisitions: number;
+  averageAcquisitionTimeMs: number;
+  healthCheckFailures: number;
+  serverCount: number;
+  servers: ElectrumServerStats[];
 }
 
 // ============================================================================

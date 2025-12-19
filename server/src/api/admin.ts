@@ -22,9 +22,14 @@ const log = createLogger('ADMIN');
  */
 router.get('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    // Get the default node config
+    // Get the default node config with servers
     const nodeConfig = await prisma.nodeConfig.findFirst({
       where: { isDefault: true },
+      include: {
+        servers: {
+          orderBy: { priority: 'asc' },
+        },
+      },
     });
 
     if (!nodeConfig) {
@@ -39,6 +44,11 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
         explorerUrl: 'https://mempool.space',
         feeEstimatorUrl: 'https://mempool.space',
         mempoolEstimator: 'simple',
+        poolEnabled: true,
+        poolMinConnections: 1,
+        poolMaxConnections: 5,
+        poolLoadBalancing: 'round_robin',
+        servers: [],
       });
     }
 
@@ -52,6 +62,11 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
       mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
+      poolEnabled: nodeConfig.poolEnabled,
+      poolMinConnections: nodeConfig.poolMinConnections,
+      poolMaxConnections: nodeConfig.poolMaxConnections,
+      poolLoadBalancing: nodeConfig.poolLoadBalancing || 'round_robin',
+      servers: nodeConfig.servers,
     });
   } catch (error) {
     log.error('[ADMIN] Get node config error', { error: String(error) });
@@ -68,9 +83,9 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator } = req.body;
+    const { type, host, port, useSsl, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing } = req.body;
     // Log non-sensitive fields only (password excluded)
-    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password, mempoolEstimator });
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing });
 
     // Validation
     if (!type || !host || !port) {
@@ -98,6 +113,10 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
     const validEstimators = ['simple', 'mempool_space'];
     const estimator = mempoolEstimator && validEstimators.includes(mempoolEstimator) ? mempoolEstimator : 'simple';
 
+    // Validate load balancing strategy
+    const validLoadBalancing = ['round_robin', 'least_connections', 'failover_only'];
+    const loadBalancing = poolLoadBalancing && validLoadBalancing.includes(poolLoadBalancing) ? poolLoadBalancing : 'round_robin';
+
     if (existingConfig) {
       // Update existing config
       nodeConfig = await prisma.nodeConfig.update({
@@ -112,6 +131,10 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
+          poolEnabled: poolEnabled ?? true,
+          poolMinConnections: poolMinConnections ?? 1,
+          poolMaxConnections: poolMaxConnections ?? 5,
+          poolLoadBalancing: loadBalancing,
           updatedAt: new Date(),
         },
       });
@@ -129,6 +152,10 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
+          poolEnabled: poolEnabled ?? true,
+          poolMinConnections: poolMinConnections ?? 1,
+          poolMaxConnections: poolMaxConnections ?? 5,
+          poolLoadBalancing: loadBalancing,
           isDefault: true,
         },
       });
@@ -142,7 +169,7 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
     });
 
     // Reset the active node client so it reconnects with new config
-    resetNodeClient();
+    await resetNodeClient();
 
     res.json({
       type: nodeConfig.type,
@@ -154,6 +181,10 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
       mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
+      poolEnabled: nodeConfig.poolEnabled,
+      poolMinConnections: nodeConfig.poolMinConnections,
+      poolMaxConnections: nodeConfig.poolMaxConnections,
+      poolLoadBalancing: nodeConfig.poolLoadBalancing || 'round_robin',
       message: 'Node configuration updated successfully. Backend will reconnect on next request.',
     });
   } catch (error) {
@@ -1430,6 +1461,285 @@ router.get('/version', async (req: Request, res: Response) => {
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to check version',
+    });
+  }
+});
+
+// ========================================
+// ELECTRUM SERVER MANAGEMENT
+// ========================================
+
+/**
+ * GET /api/v1/admin/electrum-servers
+ * Get all Electrum servers for the default node config
+ */
+router.get('/electrum-servers', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const nodeConfig = await prisma.nodeConfig.findFirst({
+      where: { isDefault: true },
+    });
+
+    if (!nodeConfig) {
+      return res.json([]);
+    }
+
+    const servers = await prisma.electrumServer.findMany({
+      where: { nodeConfigId: nodeConfig.id },
+      orderBy: { priority: 'asc' },
+    });
+
+    res.json(servers);
+  } catch (error) {
+    log.error('[ADMIN] Get electrum servers error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Electrum servers',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/electrum-servers
+ * Add a new Electrum server
+ */
+router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { label, host, port, useSsl, priority, enabled } = req.body;
+
+    // Validation
+    if (!label || !host || !port) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Label, host, and port are required',
+      });
+    }
+
+    // Get or create default node config
+    let nodeConfig = await prisma.nodeConfig.findFirst({
+      where: { isDefault: true },
+    });
+
+    if (!nodeConfig) {
+      // Create default electrum config if none exists
+      nodeConfig = await prisma.nodeConfig.create({
+        data: {
+          id: 'default',
+          type: 'electrum',
+          host: host,
+          port: parseInt(port.toString(), 10),
+          useSsl: useSsl ?? true,
+          isDefault: true,
+        },
+      });
+    }
+
+    // Get highest priority to set new server at end if not specified
+    const highestPriority = await prisma.electrumServer.findFirst({
+      where: { nodeConfigId: nodeConfig.id },
+      orderBy: { priority: 'desc' },
+      select: { priority: true },
+    });
+
+    const server = await prisma.electrumServer.create({
+      data: {
+        nodeConfigId: nodeConfig.id,
+        label,
+        host,
+        port: parseInt(port.toString(), 10),
+        useSsl: useSsl ?? true,
+        priority: priority ?? (highestPriority ? highestPriority.priority + 1 : 0),
+        enabled: enabled ?? true,
+      },
+    });
+
+    log.info('[ADMIN] Electrum server added', { id: server.id, label, host, port });
+
+    // Reset node client to pick up new server
+    await resetNodeClient();
+
+    res.status(201).json(server);
+  } catch (error) {
+    log.error('[ADMIN] Add electrum server error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to add Electrum server',
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/electrum-servers/:id
+ * Update an Electrum server
+ */
+router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { label, host, port, useSsl, priority, enabled } = req.body;
+
+    const server = await prisma.electrumServer.findUnique({
+      where: { id },
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Electrum server not found',
+      });
+    }
+
+    const updatedServer = await prisma.electrumServer.update({
+      where: { id },
+      data: {
+        label: label ?? server.label,
+        host: host ?? server.host,
+        port: port ? parseInt(port.toString(), 10) : server.port,
+        useSsl: useSsl ?? server.useSsl,
+        priority: priority ?? server.priority,
+        enabled: enabled ?? server.enabled,
+        updatedAt: new Date(),
+      },
+    });
+
+    log.info('[ADMIN] Electrum server updated', { id, label: updatedServer.label });
+
+    // Reset node client to pick up changes
+    await resetNodeClient();
+
+    res.json(updatedServer);
+  } catch (error) {
+    log.error('[ADMIN] Update electrum server error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update Electrum server',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/electrum-servers/:id
+ * Delete an Electrum server
+ */
+router.delete('/electrum-servers/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const server = await prisma.electrumServer.findUnique({
+      where: { id },
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Electrum server not found',
+      });
+    }
+
+    await prisma.electrumServer.delete({
+      where: { id },
+    });
+
+    log.info('[ADMIN] Electrum server deleted', { id, label: server.label });
+
+    // Reset node client to pick up changes
+    await resetNodeClient();
+
+    res.json({ success: true, message: 'Server deleted' });
+  } catch (error) {
+    log.error('[ADMIN] Delete electrum server error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to delete Electrum server',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/electrum-servers/:id/test
+ * Test connection to a specific Electrum server
+ */
+router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const server = await prisma.electrumServer.findUnique({
+      where: { id },
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Electrum server not found',
+      });
+    }
+
+    // Test connection using nodeClient's testNodeConfig
+    const result = await testNodeConfig({
+      type: 'electrum',
+      host: server.host,
+      port: server.port,
+      protocol: server.useSsl ? 'ssl' : 'tcp',
+    });
+
+    // Update health status based on test result
+    await prisma.electrumServer.update({
+      where: { id },
+      data: {
+        lastHealthCheck: new Date(),
+        isHealthy: result.success,
+        healthCheckFails: result.success ? 0 : server.healthCheckFails + 1,
+      },
+    });
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      info: result.info,
+    });
+  } catch (error) {
+    log.error('[ADMIN] Test electrum server error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to test Electrum server',
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/electrum-servers/reorder
+ * Reorder Electrum servers (update priorities)
+ */
+router.put('/electrum-servers/reorder', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { serverIds } = req.body;
+
+    if (!Array.isArray(serverIds)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'serverIds must be an array',
+      });
+    }
+
+    // Update priorities based on array order
+    await Promise.all(
+      serverIds.map((id: string, index: number) =>
+        prisma.electrumServer.update({
+          where: { id },
+          data: { priority: index },
+        })
+      )
+    );
+
+    log.info('[ADMIN] Electrum servers reordered', { count: serverIds.length });
+
+    // Reset node client to pick up new order
+    await resetNodeClient();
+
+    res.json({ success: true, message: 'Servers reordered' });
+  } catch (error) {
+    log.error('[ADMIN] Reorder electrum servers error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to reorder Electrum servers',
     });
   }
 });

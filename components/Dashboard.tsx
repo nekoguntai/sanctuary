@@ -601,7 +601,38 @@ export const Dashboard: React.FC = () => {
                       <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">{bitcoinStatus.blockHeight.toLocaleString()}</span>
                     </div>
                   )}
-                  {bitcoinStatus.host && (
+                  {/* Show Host when pool is disabled, Pool when enabled */}
+                  {bitcoinStatus.pool?.enabled ? (
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center">
+                        <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Pool:</span>
+                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">
+                          {bitcoinStatus.pool.stats ? (
+                            <span>
+                              {bitcoinStatus.pool.stats.activeConnections}/{bitcoinStatus.pool.stats.totalConnections}
+                              <span className="text-sanctuary-400 ml-1">
+                                (active/total)
+                              </span>
+                            </span>
+                          ) : 'initializing...'}
+                        </span>
+                      </div>
+                      {/* Per-server stats when multiple servers configured */}
+                      {bitcoinStatus.pool.stats?.servers && bitcoinStatus.pool.stats.servers.length > 0 && (
+                        <div className="ml-14 space-y-0.5">
+                          {bitcoinStatus.pool.stats.servers.map((server: { serverId: string; label: string; connectionCount: number; healthyConnections: number; isHealthy: boolean }) => (
+                            <div key={server.serverId} className="flex items-center text-[10px]">
+                              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${server.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                              <span className="text-sanctuary-500 truncate max-w-[100px]">{server.label}</span>
+                              <span className="text-sanctuary-400 ml-1">
+                                ({server.connectionCount} conn{server.connectionCount !== 1 ? 's' : ''})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : bitcoinStatus.host && (
                     <div className="flex items-center text-xs">
                       <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Host:</span>
                       <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono truncate">

@@ -7,6 +7,11 @@
 
 import { ElectrumClient, getElectrumClient, resetElectrumClient } from './electrum';
 import { BitcoinRpcClient, getBitcoinRpcClient, resetBitcoinRpcClient } from './bitcoinRpc';
+import {
+  initializeElectrumPool,
+  resetElectrumPool,
+  getElectrumPool,
+} from './electrumPool';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { decryptIfEncrypted } from '../../utils/encryption';
@@ -25,6 +30,8 @@ export interface NodeConfig {
   user?: string;
   password?: string;
   ssl?: boolean;
+  // Pool mode - when true, use multi-server pool; when false, use single server
+  poolEnabled?: boolean;
 }
 
 export interface NodeClientInterface {
@@ -76,6 +83,7 @@ async function loadNodeConfig(): Promise<NodeConfig | null> {
         user: nodeConfig.username || undefined,
         password,
         ssl: nodeConfig.useSsl,
+        poolEnabled: nodeConfig.poolEnabled,
       };
     }
   } catch (error) {
@@ -181,16 +189,39 @@ export async function getNodeClient(): Promise<NodeClientInterface> {
     activeClient = rpcClient;
     log.info(`Using Bitcoin RPC at ${activeConfig.host}:${activeConfig.port}`);
   } else {
-    // Default to Electrum
-    // Note: getElectrumClient reads config from database/env internally
-    const electrumClient = getElectrumClient();
+    // Default to Electrum - check if pool mode is enabled
+    if (activeConfig.poolEnabled) {
+      // Pool mode - use multi-server connection pool
+      try {
+        const pool = await initializeElectrumPool();
+        const handle = await pool.acquire({ purpose: 'nodeClient' });
 
-    if (!electrumClient.isConnected()) {
-      await electrumClient.connect();
+        // Return the client directly - pool handles connection lifecycle
+        activeClient = handle.client;
+        log.info('Using Electrum connection pool');
+      } catch (error) {
+        // Fall back to singleton if pool fails
+        log.warn('Pool initialization failed, falling back to singleton', { error: String(error) });
+        const electrumClient = getElectrumClient();
+
+        if (!electrumClient.isConnected()) {
+          await electrumClient.connect();
+        }
+
+        activeClient = electrumClient;
+        log.info(`Using Electrum singleton at ${activeConfig.host}:${activeConfig.port}`);
+      }
+    } else {
+      // Single server mode - use direct connection to configured host
+      const electrumClient = getElectrumClient();
+
+      if (!electrumClient.isConnected()) {
+        await electrumClient.connect();
+      }
+
+      activeClient = electrumClient;
+      log.info(`Using Electrum single server at ${activeConfig.host}:${activeConfig.port}`);
     }
-
-    activeClient = electrumClient;
-    log.info(`Using Electrum at ${activeConfig.host}:${activeConfig.port}`);
   }
 
   return activeClient;
@@ -219,7 +250,7 @@ export async function getActiveNodeConfig(): Promise<NodeConfig> {
 /**
  * Reset the active client (for reconnection or config change)
  */
-export function resetNodeClient(): void {
+export async function resetNodeClient(): Promise<void> {
   if (activeClient) {
     activeClient.disconnect();
   }
@@ -227,16 +258,38 @@ export function resetNodeClient(): void {
   activeConfig = null;
   resetElectrumClient();
   resetBitcoinRpcClient();
+  await resetElectrumPool();
   log.debug('Client reset');
 }
 
 /**
  * Get the underlying Electrum client if that's the active node type
  * Used for subscribing to real-time notifications
+ * Returns the dedicated subscription connection from the pool
  */
-export function getElectrumClientIfActive(): ElectrumClient | null {
-  if (activeConfig?.type === 'electrum' && activeClient) {
-    return activeClient as ElectrumClient;
+export async function getElectrumClientIfActive(): Promise<ElectrumClient | null> {
+  if (!activeConfig) {
+    activeConfig = await loadNodeConfig();
+  }
+
+  if (activeConfig?.type === 'electrum') {
+    // Only use pool for subscriptions if pool mode is enabled
+    if (activeConfig.poolEnabled) {
+      try {
+        const pool = getElectrumPool();
+        if (pool.isPoolInitialized()) {
+          // Return the dedicated subscription connection
+          return await pool.getSubscriptionConnection();
+        }
+      } catch {
+        // Pool not available, fall back to singleton
+      }
+    }
+
+    // Fall back to singleton client (or use singleton when pool disabled)
+    if (activeClient) {
+      return activeClient as ElectrumClient;
+    }
   }
   return null;
 }

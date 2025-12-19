@@ -119,7 +119,7 @@ class SyncService {
       const client = await getNodeClient();
 
       // Only Electrum supports real-time subscriptions
-      const electrumClient = getElectrumClientIfActive();
+      const electrumClient = await getElectrumClientIfActive();
       if (!electrumClient) {
         log.info('[SYNC] Real-time subscriptions only available with Electrum (current node type does not support it)');
         return;
@@ -160,7 +160,7 @@ class SyncService {
    * Uses batch subscription for efficiency (single RPC call vs N calls)
    */
   private async subscribeAllWalletAddresses(): Promise<void> {
-    const electrumClient = getElectrumClientIfActive();
+    const electrumClient = await getElectrumClientIfActive();
     if (!electrumClient) return;
 
     const addressRecords = await prisma.address.findMany({
@@ -221,7 +221,7 @@ class SyncService {
    * Prevents memory leak by cleaning up the addressToWalletMap
    */
   async unsubscribeWalletAddresses(walletId: string): Promise<void> {
-    const electrumClient = getElectrumClientIfActive();
+    const electrumClient = await getElectrumClientIfActive();
 
     let unsubscribed = 0;
     for (const [address, wId] of this.addressToWalletMap.entries()) {
@@ -334,7 +334,7 @@ class SyncService {
   /**
    * Stop the background sync service
    */
-  stop(): void {
+  async stop(): Promise<void> {
     log.info('[SYNC] Stopping background sync service...');
     this.isRunning = false;
 
@@ -353,7 +353,7 @@ class SyncService {
     this.addressToWalletMap.clear();
 
     // Remove event listeners from Electrum client
-    const electrumClient = getElectrumClientIfActive();
+    const electrumClient = await getElectrumClientIfActive();
     if (electrumClient) {
       electrumClient.removeAllListeners('newBlock');
       electrumClient.removeAllListeners('addressActivity');
@@ -366,7 +366,7 @@ class SyncService {
    * Subscribe to new addresses for a wallet (called when wallet is created/imported)
    */
   async subscribeNewWalletAddresses(walletId: string): Promise<void> {
-    const electrumClient = getElectrumClientIfActive();
+    const electrumClient = await getElectrumClientIfActive();
     if (!electrumClient) return;
 
     const addresses = await prisma.address.findMany({

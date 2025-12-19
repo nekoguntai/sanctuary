@@ -356,8 +356,8 @@ model DraftTransaction {
 model NodeConfig {
   id               String   @id @default(uuid())
   type             String   // bitcoin_core, electrum
-  host             String
-  port             Int
+  host             String   // Primary/legacy server host (kept for backward compatibility)
+  port             Int      // Primary/legacy server port
   useSsl           Boolean  @default(false)
   username         String?
   password         String?
@@ -367,14 +367,46 @@ model NodeConfig {
   mempoolEstimator String   @default("mempool_space") // simple, mempool_space
 
   // Connection pooling settings (Electrum only)
-  poolEnabled        Boolean @default(true)  // false = single connection mode
+  poolEnabled        Boolean @default(false)  // false = single server mode, true = multi-server pool
   poolMinConnections Int     @default(1)
   poolMaxConnections Int     @default(5)
+
+  // Load balancing strategy: round_robin, least_connections, failover_only
+  poolLoadBalancing  String  @default("round_robin")
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Relationship to server list
+  servers          ElectrumServer[]
+
   @@map("node_configs")
+}
+
+// Electrum server configuration for multi-server pool
+model ElectrumServer {
+  id           String   @id @default(uuid())
+  nodeConfigId String
+  label        String   // User-friendly name (e.g., "Blockstream SSL", "My Umbrel")
+  host         String
+  port         Int
+  useSsl       Boolean  @default(true)
+  priority     Int      @default(0)  // Lower = higher priority (0 is highest)
+  enabled      Boolean  @default(true)
+
+  // Health tracking
+  lastHealthCheck   DateTime?
+  healthCheckFails  Int       @default(0)  // Consecutive failures
+  isHealthy         Boolean   @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  nodeConfig   NodeConfig @relation(fields: [nodeConfigId], references: [id], onDelete: Cascade)
+
+  @@index([nodeConfigId])
+  @@index([priority])
+  @@map("electrum_servers")
 }
 
 model FeeEstimate {

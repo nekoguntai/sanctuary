@@ -10,6 +10,20 @@ import type { BitcoinTransactionDetails, BlockHeader } from '../types';
 // Re-export types for convenience
 export type { BitcoinTransactionDetails, BlockHeader } from '../types';
 
+export interface PoolStats {
+  totalConnections: number;
+  availableConnections: number;
+  inUseConnections: number;
+  waitingRequests: number;
+  healthyConnections: number;
+  unhealthyConnections: number;
+  reconnecting: number;
+  totalAcquisitions: number;
+  totalReleases: number;
+  averageAcquisitionTime: number;
+  peakConnections: number;
+}
+
 export interface BitcoinStatus {
   connected: boolean;
   server?: string;
@@ -22,6 +36,12 @@ export interface BitcoinStatus {
   confirmationThreshold?: number;
   deepConfirmationThreshold?: number;
   error?: string;
+  pool?: {
+    enabled: boolean;
+    minConnections: number;
+    maxConnections: number;
+    stats: PoolStats | null;
+  } | null;
 }
 
 export interface FeeEstimates {

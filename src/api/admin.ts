@@ -5,7 +5,7 @@
  */
 
 import apiClient, { API_BASE_URL } from './client';
-import { NodeConfig } from '../../types';
+import { NodeConfig, ElectrumServer } from '../../types';
 
 // ========================================
 // TYPE DEFINITIONS
@@ -409,4 +409,55 @@ export interface VersionInfo {
  */
 export async function checkVersion(): Promise<VersionInfo> {
   return apiClient.get<VersionInfo>('/admin/version');
+}
+
+// ========================================
+// ELECTRUM SERVER MANAGEMENT
+// ========================================
+
+/**
+ * Get all Electrum servers
+ */
+export async function getElectrumServers(): Promise<ElectrumServer[]> {
+  return apiClient.get<ElectrumServer[]>('/admin/electrum-servers');
+}
+
+/**
+ * Add a new Electrum server
+ */
+export async function addElectrumServer(server: Omit<ElectrumServer, 'id' | 'nodeConfigId' | 'createdAt' | 'updatedAt'>): Promise<ElectrumServer> {
+  return apiClient.post<ElectrumServer>('/admin/electrum-servers', server);
+}
+
+/**
+ * Update an Electrum server
+ */
+export async function updateElectrumServer(id: string, data: Partial<ElectrumServer>): Promise<ElectrumServer> {
+  return apiClient.put<ElectrumServer>(`/admin/electrum-servers/${id}`, data);
+}
+
+/**
+ * Delete an Electrum server
+ */
+export async function deleteElectrumServer(id: string): Promise<{ success: boolean; message: string }> {
+  return apiClient.delete<{ success: boolean; message: string }>(`/admin/electrum-servers/${id}`);
+}
+
+/**
+ * Test an Electrum server connection
+ */
+export async function testElectrumServer(id: string): Promise<{
+  success: boolean;
+  message: string;
+  blockHeight?: number;
+  serverVersion?: string;
+}> {
+  return apiClient.post(`/admin/electrum-servers/${id}/test`);
+}
+
+/**
+ * Reorder Electrum server priorities
+ */
+export async function reorderElectrumServers(serverIds: string[]): Promise<ElectrumServer[]> {
+  return apiClient.put<ElectrumServer[]>('/admin/electrum-servers/reorder', { serverIds });
 }

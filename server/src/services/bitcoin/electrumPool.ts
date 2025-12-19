@@ -3,8 +3,10 @@
  *
  * Manages a pool of Electrum server connections for improved
  * performance and resilience. Provides:
+ * - Multi-server support with load balancing
  * - Connection pooling with min/max limits
  * - Health checks and automatic reconnection
+ * - Per-server health tracking and failover
  * - Dedicated subscription connection for real-time events
  * - Acquisition queue when pool is exhausted
  */
@@ -17,6 +19,40 @@ import prisma from '../../models/prisma';
 const log = createLogger('ELECTRUM_POOL');
 
 /**
+ * Load balancing strategies
+ */
+export type LoadBalancingStrategy = 'round_robin' | 'least_connections' | 'failover_only';
+
+/**
+ * Server configuration
+ */
+export interface ServerConfig {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  useSsl: boolean;
+  priority: number;
+  enabled: boolean;
+}
+
+/**
+ * Per-server statistics
+ */
+export interface ServerStats {
+  serverId: string;
+  label: string;
+  host: string;
+  port: number;
+  connectionCount: number;
+  healthyConnections: number;
+  totalRequests: number;
+  failedRequests: number;
+  isHealthy: boolean;
+  lastHealthCheck: Date | null;
+}
+
+/**
  * Pool configuration options
  */
 export interface ElectrumPoolConfig {
@@ -26,6 +62,9 @@ export interface ElectrumPoolConfig {
   // Pool sizing
   minConnections: number;
   maxConnections: number;
+
+  // Load balancing
+  loadBalancing: LoadBalancingStrategy;
 
   // Connection lifecycle
   connectionTimeoutMs: number;
@@ -48,6 +87,7 @@ const DEFAULT_POOL_CONFIG: ElectrumPoolConfig = {
   enabled: true, // Set to false for single-connection mode
   minConnections: 1,
   maxConnections: 5,
+  loadBalancing: 'round_robin',
   connectionTimeoutMs: 10000,
   idleTimeoutMs: 300000,
   healthCheckIntervalMs: 30000,
@@ -74,6 +114,11 @@ interface PooledConnection {
   lastHealthCheck: Date;
   useCount: number;
   isDedicated: boolean;
+  // Multi-server support
+  serverId: string;
+  serverLabel: string;
+  serverHost: string;
+  serverPort: number;
 }
 
 /**
@@ -87,6 +132,9 @@ export interface PoolStats {
   totalAcquisitions: number;
   averageAcquisitionTimeMs: number;
   healthCheckFailures: number;
+  // Multi-server stats
+  serverCount: number;
+  servers: ServerStats[];
 }
 
 /**
@@ -120,8 +168,8 @@ interface WaitingRequest {
 /**
  * Electrum Connection Pool
  *
- * Manages a pool of connections to an Electrum server for improved
- * concurrency and resilience.
+ * Manages a pool of connections to multiple Electrum servers for improved
+ * concurrency, resilience, and failover.
  */
 export class ElectrumPool extends EventEmitter {
   private config: ElectrumPoolConfig;
@@ -133,6 +181,11 @@ export class ElectrumPool extends EventEmitter {
   private isInitialized = false;
   private subscriptionConnectionId: string | null = null;
 
+  // Multi-server support
+  private servers: ServerConfig[] = [];
+  private serverStats: Map<string, { totalRequests: number; failedRequests: number; lastHealthCheck: Date | null; isHealthy: boolean }> = new Map();
+  private roundRobinIndex = 0;
+
   // Statistics
   private stats = {
     totalAcquisitions: 0,
@@ -143,6 +196,91 @@ export class ElectrumPool extends EventEmitter {
   constructor(poolConfig?: Partial<ElectrumPoolConfig>) {
     super();
     this.config = { ...DEFAULT_POOL_CONFIG, ...poolConfig };
+  }
+
+  /**
+   * Set the server list for the pool
+   */
+  setServers(servers: ServerConfig[]): void {
+    this.servers = servers.filter(s => s.enabled).sort((a, b) => a.priority - b.priority);
+    // Initialize stats for each server
+    for (const server of this.servers) {
+      if (!this.serverStats.has(server.id)) {
+        this.serverStats.set(server.id, {
+          totalRequests: 0,
+          failedRequests: 0,
+          lastHealthCheck: null,
+          isHealthy: true,
+        });
+      }
+    }
+    log.info(`Pool configured with ${this.servers.length} servers`);
+  }
+
+  /**
+   * Get the list of configured servers
+   */
+  getServers(): ServerConfig[] {
+    return [...this.servers];
+  }
+
+  /**
+   * Reload servers from database (can be called to pick up config changes)
+   */
+  async reloadServers(): Promise<void> {
+    try {
+      const nodeConfig = await prisma.nodeConfig.findFirst({
+        where: { isDefault: true, type: 'electrum' },
+        include: {
+          servers: {
+            where: { enabled: true },
+            orderBy: { priority: 'asc' },
+          },
+        },
+      });
+
+      if (nodeConfig) {
+        const servers: ServerConfig[] = nodeConfig.servers.map(s => ({
+          id: s.id,
+          label: s.label,
+          host: s.host,
+          port: s.port,
+          useSsl: s.useSsl,
+          priority: s.priority,
+          enabled: s.enabled,
+        }));
+
+        this.setServers(servers);
+
+        // Update load balancing strategy
+        if (nodeConfig.poolLoadBalancing) {
+          this.config.loadBalancing = nodeConfig.poolLoadBalancing as LoadBalancingStrategy;
+        }
+
+        log.info(`Reloaded ${servers.length} servers from database`);
+      }
+    } catch (error) {
+      log.error('Failed to reload servers from database', { error: String(error) });
+    }
+  }
+
+  /**
+   * Mark a server as healthy or unhealthy in the database
+   */
+  private async updateServerHealthInDb(serverId: string, isHealthy: boolean, failCount?: number): Promise<void> {
+    try {
+      await prisma.electrumServer.update({
+        where: { id: serverId },
+        data: {
+          isHealthy,
+          lastHealthCheck: new Date(),
+          ...(failCount !== undefined ? { healthCheckFails: failCount } : {}),
+        },
+      });
+    } catch (error) {
+      // Don't log loudly - this is a background operation
+      log.debug(`Failed to update server health in db: ${error}`);
+    }
   }
 
   /**
@@ -401,6 +539,26 @@ export class ElectrumPool extends EventEmitter {
     const activeCount = connections.filter((c) => c.state === 'active').length;
     const idleCount = connections.filter((c) => c.state === 'idle').length;
 
+    // Build per-server stats
+    const serverStatsArray: ServerStats[] = this.servers.map(server => {
+      const serverConnections = connections.filter(c => c.serverId === server.id);
+      const healthyConns = serverConnections.filter(c => c.state !== 'closed' && c.client.isConnected()).length;
+      const stats = this.serverStats.get(server.id);
+
+      return {
+        serverId: server.id,
+        label: server.label,
+        host: server.host,
+        port: server.port,
+        connectionCount: serverConnections.length,
+        healthyConnections: healthyConns,
+        totalRequests: stats?.totalRequests || 0,
+        failedRequests: stats?.failedRequests || 0,
+        isHealthy: stats?.isHealthy ?? true,
+        lastHealthCheck: stats?.lastHealthCheck || null,
+      };
+    });
+
     return {
       totalConnections: connections.length,
       activeConnections: activeCount,
@@ -412,6 +570,8 @@ export class ElectrumPool extends EventEmitter {
           ? Math.round(this.stats.totalAcquisitionTimeMs / this.stats.totalAcquisitions)
           : 0,
       healthCheckFailures: this.stats.healthCheckFailures,
+      serverCount: this.servers.length,
+      servers: serverStatsArray,
     };
   }
 
@@ -434,13 +594,70 @@ export class ElectrumPool extends EventEmitter {
   // Private methods
 
   /**
-   * Create a new connection
+   * Select a server based on load balancing strategy
    */
-  private async createConnection(): Promise<PooledConnection> {
-    const id = `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const client = new ElectrumClient();
+  private selectServer(): ServerConfig | null {
+    const healthyServers = this.servers.filter(s => {
+      const stats = this.serverStats.get(s.id);
+      return s.enabled && (!stats || stats.isHealthy);
+    });
 
-    log.debug(`Creating connection ${id}...`);
+    if (healthyServers.length === 0) {
+      // If no healthy servers, try all enabled servers
+      const enabledServers = this.servers.filter(s => s.enabled);
+      if (enabledServers.length === 0) return null;
+      // In failover mode, use first by priority
+      return enabledServers[0];
+    }
+
+    switch (this.config.loadBalancing) {
+      case 'failover_only':
+        // Always use highest priority (lowest number) healthy server
+        return healthyServers[0];
+
+      case 'least_connections':
+        // Select server with fewest active connections
+        let minConnections = Infinity;
+        let selectedServer = healthyServers[0];
+        for (const server of healthyServers) {
+          const serverConnections = Array.from(this.connections.values())
+            .filter(c => c.serverId === server.id && c.state === 'active').length;
+          if (serverConnections < minConnections) {
+            minConnections = serverConnections;
+            selectedServer = server;
+          }
+        }
+        return selectedServer;
+
+      case 'round_robin':
+      default:
+        // Cycle through healthy servers
+        const server = healthyServers[this.roundRobinIndex % healthyServers.length];
+        this.roundRobinIndex = (this.roundRobinIndex + 1) % healthyServers.length;
+        return server;
+    }
+  }
+
+  /**
+   * Create a new connection to a specific server or auto-select
+   */
+  private async createConnection(server?: ServerConfig): Promise<PooledConnection> {
+    // Select server if not provided
+    const targetServer = server || this.selectServer();
+
+    const id = `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create client with specific server config if available
+    const client = targetServer
+      ? new ElectrumClient({
+          host: targetServer.host,
+          port: targetServer.port,
+          protocol: targetServer.useSsl ? 'ssl' : 'tcp',
+        })
+      : new ElectrumClient();
+
+    const serverLabel = targetServer?.label || 'default';
+    log.debug(`Creating connection ${id} to ${serverLabel}...`);
 
     await client.connect();
 
@@ -456,16 +673,20 @@ export class ElectrumPool extends EventEmitter {
       lastHealthCheck: new Date(),
       useCount: 0,
       isDedicated: false,
+      serverId: targetServer?.id || 'default',
+      serverLabel: targetServer?.label || 'default',
+      serverHost: targetServer?.host || 'unknown',
+      serverPort: targetServer?.port || 0,
     };
 
     // Set up error handling
     client.on('error', (error) => {
-      log.error(`Connection ${id} error`, { error: String(error) });
+      log.error(`Connection ${id} error (${conn.serverLabel})`, { error: String(error) });
       this.handleConnectionError(conn);
     });
 
     this.connections.set(id, conn);
-    log.debug(`Created connection ${id}`);
+    log.debug(`Created connection ${id} to ${conn.serverLabel} (${conn.serverHost}:${conn.serverPort})`);
 
     return conn;
   }
@@ -541,8 +762,16 @@ export class ElectrumPool extends EventEmitter {
    * Perform health checks on all connections
    */
   private async performHealthChecks(): Promise<void> {
+    // Track health status per server during this check cycle
+    const serverHealthResults: Map<string, { success: number; fail: number }> = new Map();
+
     for (const [id, conn] of this.connections) {
       if (conn.state === 'idle' || (conn.state === 'active' && conn.isDedicated)) {
+        // Initialize server tracking
+        if (!serverHealthResults.has(conn.serverId)) {
+          serverHealthResults.set(conn.serverId, { success: 0, fail: 0 });
+        }
+
         try {
           if (!conn.client.isConnected()) {
             throw new Error('Connection not connected');
@@ -550,9 +779,15 @@ export class ElectrumPool extends EventEmitter {
           // Lightweight health check
           await conn.client.getBlockHeight();
           conn.lastHealthCheck = new Date();
+
+          // Track success for this server
+          serverHealthResults.get(conn.serverId)!.success++;
         } catch (error) {
           this.stats.healthCheckFailures++;
-          log.warn(`Health check failed for connection ${id}`, { error: String(error) });
+          log.warn(`Health check failed for connection ${id} (${conn.serverLabel})`, { error: String(error) });
+
+          // Track failure for this server
+          serverHealthResults.get(conn.serverId)!.fail++;
 
           if (conn.isDedicated) {
             // For dedicated connection, try to reconnect
@@ -560,6 +795,26 @@ export class ElectrumPool extends EventEmitter {
           } else {
             this.handleConnectionError(conn);
           }
+        }
+      }
+    }
+
+    // Update per-server health stats and database
+    for (const [serverId, results] of serverHealthResults) {
+      const stats = this.serverStats.get(serverId);
+      if (stats) {
+        stats.lastHealthCheck = new Date();
+
+        // If all connections to this server failed, mark unhealthy
+        if (results.fail > 0 && results.success === 0) {
+          stats.isHealthy = false;
+          // Update database (fire and forget)
+          this.updateServerHealthInDb(serverId, false, (stats as { failCount?: number }).failCount || 1);
+          log.warn(`Server ${serverId} marked unhealthy after all connections failed health check`);
+        } else if (results.success > 0) {
+          // At least one success - mark healthy
+          stats.isHealthy = true;
+          this.updateServerHealthInDb(serverId, true, 0);
         }
       }
     }
@@ -677,24 +932,47 @@ let poolInstance: ElectrumPool | null = null;
 /**
  * Load pool configuration from database
  */
-async function loadPoolConfigFromDatabase(): Promise<Partial<ElectrumPoolConfig>> {
+async function loadPoolConfigFromDatabase(): Promise<{
+  config: Partial<ElectrumPoolConfig>;
+  servers: ServerConfig[];
+}> {
   try {
     const nodeConfig = await prisma.nodeConfig.findFirst({
       where: { isDefault: true, type: 'electrum' },
+      include: {
+        servers: {
+          where: { enabled: true },
+          orderBy: { priority: 'asc' },
+        },
+      },
     });
 
     if (nodeConfig) {
+      const servers: ServerConfig[] = nodeConfig.servers.map(s => ({
+        id: s.id,
+        label: s.label,
+        host: s.host,
+        port: s.port,
+        useSsl: s.useSsl,
+        priority: s.priority,
+        enabled: s.enabled,
+      }));
+
       return {
-        enabled: nodeConfig.poolEnabled,
-        minConnections: nodeConfig.poolMinConnections,
-        maxConnections: nodeConfig.poolMaxConnections,
+        config: {
+          enabled: nodeConfig.poolEnabled,
+          minConnections: nodeConfig.poolMinConnections,
+          maxConnections: nodeConfig.poolMaxConnections,
+          loadBalancing: nodeConfig.poolLoadBalancing as LoadBalancingStrategy,
+        },
+        servers,
       };
     }
   } catch (error) {
     log.warn('Failed to load pool config from database, using defaults', { error: String(error) });
   }
 
-  return {};
+  return { config: {}, servers: [] };
 }
 
 /**
@@ -730,8 +1008,8 @@ export function getElectrumPool(config?: Partial<ElectrumPoolConfig>): ElectrumP
  */
 export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
   if (!poolInstance) {
-    // Load config from database first
-    const dbConfig = await loadPoolConfigFromDatabase();
+    // Load config and servers from database
+    const { config: dbConfig, servers } = await loadPoolConfigFromDatabase();
 
     // Environment variables as fallback
     const envConfig: Partial<ElectrumPoolConfig> = {
@@ -755,10 +1033,20 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       ...dbConfig,
     });
 
+    // Set servers if any were loaded from database
+    if (servers.length > 0) {
+      poolInstance.setServers(servers);
+      log.info('Electrum pool configured with servers from database', {
+        serverCount: servers.length,
+        servers: servers.map(s => `${s.label} (${s.host}:${s.port})`),
+      });
+    }
+
     log.info('Electrum pool created', {
       enabled: poolInstance['config'].enabled,
       minConnections: poolInstance['config'].minConnections,
       maxConnections: poolInstance['config'].maxConnections,
+      loadBalancing: poolInstance['config'].loadBalancing,
     });
   }
   return poolInstance;
@@ -807,4 +1095,21 @@ export function getPoolConfig(): ElectrumPoolConfig | null {
 export function isPoolEnabled(): boolean {
   if (!poolInstance) return true; // Default is enabled
   return poolInstance['config'].enabled;
+}
+
+/**
+ * Reload servers from database (call after adding/removing servers)
+ */
+export async function reloadElectrumServers(): Promise<void> {
+  if (poolInstance) {
+    await poolInstance.reloadServers();
+  }
+}
+
+/**
+ * Get the list of configured servers
+ */
+export function getElectrumServers(): ServerConfig[] {
+  if (!poolInstance) return [];
+  return poolInstance.getServers();
 }

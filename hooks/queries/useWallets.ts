@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
@@ -185,15 +185,19 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
 
-  // Aggregate and sort all transactions
-  const transactions = queries
-    .flatMap((q) => q.data || [])
-    .sort((a, b) => {
-      const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
-      const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
-      return timeB - timeA;
-    })
-    .slice(0, limit);
+  // Memoize the aggregated transactions to prevent infinite re-renders
+  // Use dataUpdatedAt timestamps as stable dependency - changes only when data actually changes
+  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  const transactions = useMemo(() => {
+    return queries
+      .flatMap((q) => q.data || [])
+      .sort((a, b) => {
+        const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
+        const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
+        return timeB - timeA;
+      })
+      .slice(0, limit);
+  }, [queryDataKey, limit]);
 
   return {
     data: transactions,
@@ -222,10 +226,14 @@ export function usePendingTransactions(walletIds: string[]) {
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
 
-  // Aggregate all pending transactions
-  const pendingTransactions = queries
-    .flatMap((q) => q.data || [])
-    .sort((a, b) => b.feeRate - a.feeRate); // Sort by fee rate (higher first)
+  // Memoize the aggregated pending transactions to prevent infinite re-renders
+  // Use dataUpdatedAt timestamps as stable dependency
+  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
+  const pendingTransactions = useMemo(() => {
+    return queries
+      .flatMap((q) => q.data || [])
+      .sort((a, b) => b.feeRate - a.feeRate); // Sort by fee rate (higher first)
+  }, [queryDataKey]);
 
   return {
     data: pendingTransactions,
@@ -304,6 +312,9 @@ export function useBalanceHistory(
 
   const isLoading = queries.some((q) => q.isLoading);
   const isError = queries.some((q) => q.isError);
+
+  // Use dataUpdatedAt timestamps as stable dependency for memoization
+  const queryDataKey = queries.map((q) => q.dataUpdatedAt).join(',');
 
   // Build chart data based on timeframe (matches Dashboard.getChartData)
   const chartData = React.useMemo(() => {
@@ -389,7 +400,7 @@ export function useBalanceHistory(
     }
 
     return data;
-  }, [queries, totalBalance, timeframe]);
+  }, [queryDataKey, totalBalance, timeframe]);
 
   return {
     data: chartData,

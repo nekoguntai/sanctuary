@@ -295,6 +295,9 @@ export const WalletDetail: React.FC = () => {
   const [addressLimit, setAddressLimit] = useState(20);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
 
+  // Memoize wallet addresses to prevent infinite re-renders in TransactionList
+  const walletAddressStrings = useMemo(() => addresses.map(a => a.address), [addresses]);
+
   // Loading states
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -1228,7 +1231,7 @@ export const WalletDetail: React.FC = () => {
                transactions={transactions}
                highlightedTxId={highlightTxId}
                onLabelsChange={handleLabelsChange}
-               walletAddresses={addresses.map(a => a.address)}
+               walletAddresses={walletAddressStrings}
                canEdit={wallet?.canEdit !== false}
                confirmationThreshold={bitcoinStatus?.confirmationThreshold}
                deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}

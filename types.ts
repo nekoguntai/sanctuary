@@ -143,6 +143,7 @@ export interface UserPreferences {
   showFiat: boolean;
   theme: ThemeOption;
   background: BackgroundOption;
+  contrastLevel?: number; // -2 to +2, adjusts background contrast (0 = default)
   priceProvider?: string;
   telegram?: TelegramConfig;
   notificationSounds?: NotificationSounds;

@@ -63,7 +63,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Initialize theme based on user preferences whenever user changes
   useEffect(() => {
     if (user && user.preferences) {
-      const { darkMode, theme, background } = user.preferences;
+      const { darkMode, theme, background, contrastLevel } = user.preferences;
 
       // Toggle Dark Mode
       if (darkMode) {
@@ -72,9 +72,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         document.documentElement.classList.remove('dark');
       }
 
-      // Apply theme using the theme registry
+      // Apply theme using the theme registry (with contrast adjustment)
       const mode = darkMode ? 'dark' : 'light';
-      themeRegistry.applyTheme(theme, mode);
+      themeRegistry.applyTheme(theme, mode, contrastLevel ?? 0);
 
       // Apply background pattern using the theme registry
       themeRegistry.applyPattern(background, theme);
@@ -84,7 +84,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       // Default fallback (Login / Public)
       document.documentElement.classList.add('dark'); // Default to Dark
-      themeRegistry.applyTheme('sanctuary', 'dark');
+      themeRegistry.applyTheme('sanctuary', 'dark', 0);
       themeRegistry.applyPattern('sanctuary-hero', 'sanctuary');
 
       // Add smooth transition

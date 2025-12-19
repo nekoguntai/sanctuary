@@ -18,6 +18,7 @@ const log = createLogger('BLOCKCHAIN');
 /**
  * Recalculate balanceAfter for all transactions in a wallet
  * Called after new transactions are inserted to ensure running balances are accurate
+ * OPTIMIZED: Uses batched updates instead of N+1 individual queries
  */
 export async function recalculateWalletBalances(walletId: string): Promise<void> {
   // Get all transactions sorted by block time (oldest first)
@@ -30,14 +31,31 @@ export async function recalculateWalletBalances(walletId: string): Promise<void>
     select: { id: true, amount: true },
   });
 
-  // Calculate running balance and update each transaction
+  if (transactions.length === 0) {
+    return;
+  }
+
+  // Calculate all running balances first
   let runningBalance = BigInt(0);
+  const updates: { id: string; balanceAfter: bigint }[] = [];
+
   for (const tx of transactions) {
     runningBalance += tx.amount;
-    await prisma.transaction.update({
-      where: { id: tx.id },
-      data: { balanceAfter: runningBalance },
-    });
+    updates.push({ id: tx.id, balanceAfter: runningBalance });
+  }
+
+  // Batch update in chunks of 500 to avoid overwhelming the database
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+    const batch = updates.slice(i, i + BATCH_SIZE);
+    await prisma.$transaction(
+      batch.map(u =>
+        prisma.transaction.update({
+          where: { id: u.id },
+          data: { balanceAfter: u.balanceAfter },
+        })
+      )
+    );
   }
 
   log.debug(`[BLOCKCHAIN] Recalculated balances for ${transactions.length} transactions in wallet ${walletId}`);

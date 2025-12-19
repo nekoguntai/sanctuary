@@ -1,4 +1,60 @@
 #!/bin/sh
 
-# Run fast tests on changed files only
-cd server && npm run test:fast
+# =============================================
+# Pre-commit Hook - Run Tests Before Commit
+# =============================================
+# This hook runs fast tests on changed files to catch issues early.
+# For full test suite, run: npm run test:all
+# =============================================
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "${YELLOW}Running pre-commit checks...${NC}"
+
+# Get the repository root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check for staged files in different areas
+BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)
+FRONTEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src/|components/|hooks/|tests/)' || true)
+
+# Run backend tests if backend files changed
+if [ -n "$BACKEND_CHANGED" ]; then
+    echo "${YELLOW}Backend files changed - running server tests...${NC}"
+    cd "$REPO_ROOT/server"
+
+    if npm run test:fast 2>/dev/null; then
+        echo "${GREEN}Backend tests passed${NC}"
+    else
+        echo "${RED}Backend tests failed. Commit aborted.${NC}"
+        echo "Run 'cd server && npm test' for full output."
+        exit 1
+    fi
+fi
+
+# Run frontend tests if frontend files changed
+if [ -n "$FRONTEND_CHANGED" ]; then
+    echo "${YELLOW}Frontend files changed - running frontend tests...${NC}"
+    cd "$REPO_ROOT"
+
+    if npm run test:run 2>/dev/null; then
+        echo "${GREEN}Frontend tests passed${NC}"
+    else
+        echo "${RED}Frontend tests failed. Commit aborted.${NC}"
+        echo "Run 'npm run test:run' for full output."
+        exit 1
+    fi
+fi
+
+# If no relevant files changed, skip tests
+if [ -z "$BACKEND_CHANGED" ] && [ -z "$FRONTEND_CHANGED" ]; then
+    echo "${GREEN}No test-relevant files changed, skipping tests.${NC}"
+fi
+
+echo "${GREEN}Pre-commit checks passed!${NC}"

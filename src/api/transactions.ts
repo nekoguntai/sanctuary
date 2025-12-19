@@ -292,3 +292,41 @@ export async function createBatchTransaction(
     data
   );
 }
+
+/**
+ * Recent transaction with wallet info (from aggregate endpoint)
+ */
+export interface RecentTransaction extends Transaction {
+  walletName?: string;
+}
+
+/**
+ * Get recent transactions across all wallets the user has access to
+ * This is an optimized aggregate endpoint that replaces N separate API calls
+ */
+export async function getRecentTransactions(limit: number = 10): Promise<RecentTransaction[]> {
+  return apiClient.get<RecentTransaction[]>('/transactions/recent', { limit });
+}
+
+/**
+ * Aggregated pending transaction with wallet info
+ */
+export interface AggregatedPendingTransaction {
+  txid: string;
+  walletId: string;
+  walletName?: string;
+  type: string;
+  amount: number;
+  fee: number;
+  size: number;
+  feeRate: number;
+  createdAt: string;
+}
+
+/**
+ * Get pending transactions across all wallets the user has access to
+ * Used for mempool visualization showing user's transactions in the block queue
+ */
+export async function getAllPendingTransactions(): Promise<AggregatedPendingTransaction[]> {
+  return apiClient.get<AggregatedPendingTransaction[]>('/transactions/pending');
+}

@@ -1380,4 +1380,163 @@ router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('vie
   }
 });
 
+/**
+ * GET /api/v1/transactions/recent
+ * Get recent transactions across all wallets the user has access to
+ * This is an optimized aggregate endpoint that replaces N separate API calls
+ *
+ * Query params:
+ * - limit: max transactions to return (default: 10, max: 50)
+ */
+router.get('/transactions/recent', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+    // Get all wallet IDs the user has access to
+    const accessibleWallets = await prisma.wallet.findMany({
+      where: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+
+    if (accessibleWallets.length === 0) {
+      return res.json([]);
+    }
+
+    const walletIds = accessibleWallets.map(w => w.id);
+    const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
+
+    // Get current block height for confirmation calculation
+    const currentBlockHeight = await getBlockHeight();
+
+    // Fetch recent transactions from all accessible wallets in a single query
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        walletId: { in: walletIds },
+      },
+      include: {
+        address: {
+          select: {
+            address: true,
+            derivationPath: true,
+          },
+        },
+        transactionLabels: {
+          include: {
+            label: true,
+          },
+        },
+      },
+      orderBy: { blockTime: 'desc' },
+      take: limit,
+    });
+
+    // Serialize transactions with wallet name included
+    const serializedTransactions = transactions.map(tx => {
+      const blockHeight = bigIntToNumber(tx.blockHeight);
+      const rawAmount = bigIntToNumberOrZero(tx.amount);
+
+      return {
+        ...tx,
+        amount: rawAmount,
+        fee: bigIntToNumber(tx.fee),
+        balanceAfter: bigIntToNumber(tx.balanceAfter),
+        blockHeight,
+        confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
+        labels: tx.transactionLabels.map(tl => tl.label),
+        transactionLabels: undefined,
+        walletName: walletNameMap.get(tx.walletId),
+      };
+    });
+
+    res.json(serializedTransactions);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get recent transactions');
+  }
+});
+
+/**
+ * GET /api/v1/transactions/pending
+ * Get pending (unconfirmed) transactions across all wallets the user has access to
+ * Used for mempool visualization showing user's transactions in the block queue
+ *
+ * Query params: none
+ */
+router.get('/transactions/pending', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    // Get all wallet IDs the user has access to
+    const accessibleWallets = await prisma.wallet.findMany({
+      where: {
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+
+    if (accessibleWallets.length === 0) {
+      return res.json([]);
+    }
+
+    const walletIds = accessibleWallets.map(w => w.id);
+    const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
+
+    // Fetch pending (unconfirmed) transactions - those with blockHeight of 0 or null
+    const pendingTransactions = await prisma.transaction.findMany({
+      where: {
+        walletId: { in: walletIds },
+        OR: [
+          { blockHeight: 0 },
+          { blockHeight: null },
+        ],
+      },
+      select: {
+        txid: true,
+        walletId: true,
+        type: true,
+        amount: true,
+        fee: true,
+        rawTx: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Serialize and include fee rate (needed for mempool visualization)
+    const serializedPending = pendingTransactions.map(tx => {
+      const fee = bigIntToNumber(tx.fee) || 0;
+      // Calculate size from rawTx hex (2 hex chars = 1 byte), or estimate ~200 bytes
+      const size = tx.rawTx ? Math.ceil(tx.rawTx.length / 2) : 200;
+      const feeRate = size > 0 ? fee / size : 0;
+
+      return {
+        txid: tx.txid,
+        walletId: tx.walletId,
+        walletName: walletNameMap.get(tx.walletId),
+        type: tx.type,
+        amount: bigIntToNumberOrZero(tx.amount),
+        fee,
+        size,
+        feeRate: Math.round(feeRate * 100) / 100, // 2 decimal places
+        createdAt: tx.createdAt,
+      };
+    });
+
+    // Sort by fee rate descending (higher fee rate first)
+    serializedPending.sort((a, b) => b.feeRate - a.feeRate);
+
+    res.json(serializedPending);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get pending transactions');
+  }
+});
+
 export default router;

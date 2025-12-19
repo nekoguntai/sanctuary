@@ -365,6 +365,12 @@ model NodeConfig {
   explorerUrl      String?
   feeEstimatorUrl  String?  // URL for mempool.space-compatible API (defaults to mempool.space)
   mempoolEstimator String   @default("mempool_space") // simple, mempool_space
+
+  // Connection pooling settings (Electrum only)
+  poolEnabled        Boolean @default(true)  // false = single connection mode
+  poolMinConnections Int     @default(1)
+  poolMaxConnections Int     @default(5)
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

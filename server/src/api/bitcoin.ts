@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import * as blockchain from '../services/bitcoin/blockchain';
 import * as utils from '../services/bitcoin/utils';
 import { getElectrumClient } from '../services/bitcoin/electrum';
+import { getElectrumPool, getPoolConfig, isPoolEnabled } from '../services/bitcoin/electrumPool';
 import * as mempool from '../services/bitcoin/mempool';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
@@ -51,6 +52,19 @@ router.get('/status', async (req: Request, res: Response) => {
       ? JSON.parse(deepThresholdSetting.value)
       : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
 
+    // Get pool stats if Electrum and pool is initialized
+    let poolStats = null;
+    if (nodeConfig?.type === 'electrum') {
+      try {
+        const pool = getElectrumPool();
+        if (pool.isPoolInitialized()) {
+          poolStats = pool.getPoolStats();
+        }
+      } catch {
+        // Pool not initialized yet
+      }
+    }
+
     res.json({
       connected: true,
       server: version.server,
@@ -62,6 +76,13 @@ router.get('/status', async (req: Request, res: Response) => {
       explorerUrl: nodeConfig?.explorerUrl || 'https://mempool.space',
       confirmationThreshold,
       deepConfirmationThreshold,
+      // Pool settings (Electrum only)
+      pool: nodeConfig?.type === 'electrum' ? {
+        enabled: nodeConfig.poolEnabled,
+        minConnections: nodeConfig.poolMinConnections,
+        maxConnections: nodeConfig.poolMaxConnections,
+        stats: poolStats,
+      } : null,
     });
   } catch (error: any) {
     res.json({

@@ -17,6 +17,8 @@
     "test:integration": "jest tests/integration",
     "test:ci": "jest --ci --coverage",
     "test:bitcoin": "jest tests/unit/services/bitcoin",
+    "test:pool": "jest tests/unit/services/bitcoin/electrumPool.test.ts tests/unit/services/bitcoin/nodeClient.test.ts",
+    "test:api": "jest tests/unit/api",
     "test:security": "jest --testNamePattern='Authentication|Encryption|Two-Factor|Password'",
     "test:fast": "jest --onlyChanged",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",

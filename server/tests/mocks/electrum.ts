@@ -186,4 +186,60 @@ export function setupElectrumMockReturns(config: {
   }
 }
 
+// Mock Electrum Pool
+export const mockElectrumPool = {
+  initialize: jest.fn().mockResolvedValue(undefined),
+  shutdown: jest.fn().mockResolvedValue(undefined),
+  acquire: jest.fn().mockImplementation(() =>
+    Promise.resolve({
+      client: mockElectrumClient,
+      release: jest.fn(),
+      withClient: jest.fn().mockImplementation((fn: (client: typeof mockElectrumClient) => Promise<unknown>) =>
+        fn(mockElectrumClient)
+      ),
+    })
+  ),
+  getSubscriptionConnection: jest.fn().mockResolvedValue(mockElectrumClient),
+  getPoolStats: jest.fn().mockReturnValue({
+    totalConnections: 2,
+    activeConnections: 1,
+    idleConnections: 1,
+    waitingRequests: 0,
+    totalAcquisitions: 100,
+    averageAcquisitionTimeMs: 5,
+    healthCheckFailures: 0,
+    serverCount: 1,
+    servers: [
+      {
+        serverId: 'server-1',
+        label: 'Test Server',
+        host: 'electrum.example.com',
+        port: 50002,
+        connectionCount: 2,
+        healthyConnections: 2,
+        totalRequests: 100,
+        failedRequests: 0,
+        isHealthy: true,
+        lastHealthCheck: new Date().toISOString(),
+      },
+    ],
+  }),
+  isPoolInitialized: jest.fn().mockReturnValue(true),
+  isHealthy: jest.fn().mockReturnValue(true),
+  getEffectiveMinConnections: jest.fn().mockReturnValue(1),
+  getEffectiveMaxConnections: jest.fn().mockReturnValue(5),
+  setServers: jest.fn(),
+  getServers: jest.fn().mockReturnValue([]),
+  reloadServers: jest.fn().mockResolvedValue(undefined),
+};
+
+// Reset all Electrum Pool mocks
+export function resetElectrumPoolMocks(): void {
+  Object.values(mockElectrumPool).forEach((method) => {
+    if (typeof method === 'function' && 'mockClear' in method) {
+      (method as jest.Mock).mockClear();
+    }
+  });
+}
+
 export default mockElectrumClient;

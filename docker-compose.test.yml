@@ -1,0 +1,176 @@
+# =============================================
+# Sanctuary - Docker Compose for Testing
+# =============================================
+#
+# Run tests in Docker for environment consistency.
+# This ensures tests run the same way locally as in CI.
+#
+# Usage:
+#   # Run all tests
+#   docker compose -f docker-compose.test.yml run --rm test-all
+#
+#   # Run backend tests only
+#   docker compose -f docker-compose.test.yml run --rm backend-test
+#
+#   # Run frontend tests only
+#   docker compose -f docker-compose.test.yml run --rm frontend-test
+#
+#   # Run with coverage
+#   docker compose -f docker-compose.test.yml run --rm backend-coverage
+#   docker compose -f docker-compose.test.yml run --rm frontend-coverage
+#
+#   # Clean up
+#   docker compose -f docker-compose.test.yml down -v
+#
+# =============================================
+
+services:
+  # ============================================
+  # Test Database
+  # ============================================
+  test-db:
+    image: postgres:16-alpine
+    container_name: sanctuary-test-db
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: sanctuary_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d sanctuary_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - test-network
+    # tmpfs for faster tests (data doesn't persist)
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  # ============================================
+  # Backend Tests
+  # ============================================
+  backend-test:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: deps
+    container_name: sanctuary-backend-test
+    working_dir: /app
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://test:test@test-db:5432/sanctuary_test?schema=public
+      JWT_SECRET: test-jwt-secret-for-docker-testing
+      ENCRYPTION_KEY: test-encryption-key-32-chars-long!
+      NODE_ENV: test
+    volumes:
+      - ./server/src:/app/src:ro
+      - ./server/tests:/app/tests:ro
+      - ./server/jest.config.js:/app/jest.config.js:ro
+      - ./server/tsconfig.json:/app/tsconfig.json:ro
+      - ./server/prisma:/app/prisma:ro
+    command: >
+      sh -c "
+        npx prisma generate &&
+        npx prisma migrate deploy &&
+        npm run test:unit -- --ci
+      "
+    networks:
+      - test-network
+
+  # ============================================
+  # Backend Tests with Coverage
+  # ============================================
+  backend-coverage:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: deps
+    container_name: sanctuary-backend-coverage
+    working_dir: /app
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://test:test@test-db:5432/sanctuary_test?schema=public
+      JWT_SECRET: test-jwt-secret-for-docker-testing
+      ENCRYPTION_KEY: test-encryption-key-32-chars-long!
+      NODE_ENV: test
+    volumes:
+      - ./server/src:/app/src:ro
+      - ./server/tests:/app/tests:ro
+      - ./server/jest.config.js:/app/jest.config.js:ro
+      - ./server/tsconfig.json:/app/tsconfig.json:ro
+      - ./server/prisma:/app/prisma:ro
+      - ./server/coverage:/app/coverage
+    command: >
+      sh -c "
+        npx prisma generate &&
+        npx prisma migrate deploy &&
+        npm run test:coverage -- --ci
+      "
+    networks:
+      - test-network
+
+  # ============================================
+  # Frontend Tests
+  # ============================================
+  frontend-test:
+    image: node:20-alpine
+    container_name: sanctuary-frontend-test
+    working_dir: /app
+    volumes:
+      - ./src:/app/src:ro
+      - ./components:/app/components:ro
+      - ./hooks:/app/hooks:ro
+      - ./tests:/app/tests:ro
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+      - ./vitest.config.ts:/app/vitest.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./node_modules:/app/node_modules:ro
+    command: npm run test:run
+    networks:
+      - test-network
+
+  # ============================================
+  # Frontend Tests with Coverage
+  # ============================================
+  frontend-coverage:
+    image: node:20-alpine
+    container_name: sanctuary-frontend-coverage
+    working_dir: /app
+    volumes:
+      - ./src:/app/src:ro
+      - ./components:/app/components:ro
+      - ./hooks:/app/hooks:ro
+      - ./tests:/app/tests:ro
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+      - ./vitest.config.ts:/app/vitest.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./node_modules:/app/node_modules:ro
+      - ./coverage:/app/coverage
+    command: npm run test:coverage
+    networks:
+      - test-network
+
+  # ============================================
+  # Run All Tests
+  # ============================================
+  test-all:
+    image: alpine:latest
+    container_name: sanctuary-test-all
+    depends_on:
+      backend-test:
+        condition: service_completed_successfully
+      frontend-test:
+        condition: service_completed_successfully
+    command: echo "All tests passed!"
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

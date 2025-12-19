@@ -198,6 +198,83 @@ router.get('/:id/stats', requireWalletAccess('view'), async (req: Request, res: 
 });
 
 /**
+ * GET /api/v1/wallets/:id/balance-history
+ * Get balance history data points for charts
+ * OPTIMIZED: Returns only relevant data points instead of all transactions
+ */
+router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const timeframe = (req.query.timeframe as string) || '1M';
+
+    // Calculate date range
+    const now = Date.now();
+    const day = 86400000;
+    const rangeMs: Record<string, number> = {
+      '1D': day,
+      '1W': 7 * day,
+      '1M': 30 * day,
+      '1Y': 365 * day,
+      'ALL': 5 * 365 * day,
+    };
+
+    const startDate = new Date(now - (rangeMs[timeframe] || rangeMs['1M']));
+
+    // Fetch only relevant transactions with balanceAfter
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        walletId,
+        blockTime: { gte: startDate },
+        type: { not: 'consolidation' },
+      },
+      select: {
+        blockTime: true,
+        balanceAfter: true,
+      },
+      orderBy: { blockTime: 'asc' },
+    });
+
+    // Get current balance for end point
+    const currentBalance = await prisma.uTXO.aggregate({
+      where: { walletId, spent: false },
+      _sum: { amount: true },
+    });
+    const balance = Number(currentBalance._sum.amount || 0);
+
+    // Sample to max 100 data points for efficiency
+    const maxPoints = 100;
+    const step = Math.max(1, Math.floor(transactions.length / maxPoints));
+    const sampled = transactions.filter((_, i) => i % step === 0 || i === transactions.length - 1);
+
+    // Build response
+    const data = sampled.map(tx => ({
+      timestamp: tx.blockTime?.toISOString(),
+      balance: Number(tx.balanceAfter || 0),
+    }));
+
+    // Add current balance as final point if data exists
+    if (data.length > 0) {
+      data.push({
+        timestamp: new Date().toISOString(),
+        balance,
+      });
+    }
+
+    res.json({
+      timeframe,
+      currentBalance: balance,
+      dataPoints: data,
+    });
+  } catch (error: any) {
+    log.error('Get balance history error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch balance history',
+    });
+  }
+});
+
+/**
  * GET /api/v1/wallets/:id/export/labels
  * Export wallet labels in BIP 329 format (JSON Lines)
  * https://github.com/bitcoin/bips/blob/master/bip-0329.mediawiki

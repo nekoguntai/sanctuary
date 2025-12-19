@@ -6,7 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:all": "npm run test:run && npm run test:backend",
+    "test:backend": "cd server && npm test",
+    "test:backend:watch": "cd server && npm run test:watch",
+    "test:backend:coverage": "cd server && npm run test:coverage",
+    "test:docker": "docker compose -f docker-compose.test.yml run --rm test-all",
+    "test:docker:backend": "docker compose -f docker-compose.test.yml run --rm backend-test",
+    "test:docker:frontend": "docker compose -f docker-compose.test.yml run --rm frontend-test",
+    "test:docker:coverage": "docker compose -f docker-compose.test.yml run --rm backend-coverage && docker compose -f docker-compose.test.yml run --rm frontend-coverage",
+    "test:docker:clean": "docker compose -f docker-compose.test.yml down -v --remove-orphans"
   },
   "dependencies": {
     "@keystonehq/bc-ur-registry": "^0.6.4",
@@ -28,11 +40,18 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-code": "^2.0.69",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@types/w3c-web-usb": "^1.0.13",
     "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^27.3.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "vite-plugin-node-polyfills": "^0.24.0",
+    "vitest": "^4.0.16"
   }
 }

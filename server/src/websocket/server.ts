@@ -14,6 +14,7 @@ import { IncomingMessage } from 'http';
 import { verifyToken } from '../utils/jwt';
 import { Server } from 'http';
 import { createLogger } from '../utils/logger';
+import { checkWalletAccess } from '../services/wallet';
 
 const log = createLogger('WS');
 
@@ -226,8 +227,9 @@ export class SanctauryWebSocketServer {
 
   /**
    * Handle subscription request
+   * SECURITY: Validates that user has access to wallet-specific channels
    */
-  private handleSubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+  private async handleSubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
     if (!data?.channel || typeof data.channel !== 'string') {
       log.warn('Subscribe request missing channel');
       return;
@@ -242,6 +244,23 @@ export class SanctauryWebSocketServer {
         data: { message: 'Authentication required for wallet subscriptions' },
       });
       return;
+    }
+
+    // Validate wallet access for wallet-specific channels
+    if (channel.startsWith('wallet:') && client.userId) {
+      const walletIdMatch = channel.match(/^wallet:([a-f0-9-]+)/);
+      if (walletIdMatch) {
+        const walletId = walletIdMatch[1];
+        const hasAccess = await checkWalletAccess(walletId, client.userId);
+        if (!hasAccess) {
+          log.warn(`User ${client.userId} denied access to wallet ${walletId}`);
+          this.sendToClient(client, {
+            type: 'error',
+            data: { message: 'Access denied to this wallet' },
+          });
+          return;
+        }
+      }
     }
 
     // Add to subscriptions

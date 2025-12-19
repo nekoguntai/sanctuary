@@ -329,8 +329,10 @@ export async function createWallet(
 
 /**
  * Get all wallets for a user
+ * OPTIMIZED: Uses aggregate queries for balance instead of loading all UTXOs
  */
 export async function getUserWallets(userId: string): Promise<WalletWithBalance[]> {
+  // First, get wallet IDs and basic info
   const wallets = await prisma.wallet.findMany({
     where: {
       OR: [
@@ -339,16 +341,8 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
       ],
     },
     include: {
-      devices: true,
-      addresses: true,
-      transactions: {
-        where: { type: 'received' },
-        select: { amount: true },
-      },
-      utxos: {
-        where: { spent: false },
-        select: { amount: true },
-      },
+      devices: { select: { id: true } },
+      addresses: { select: { id: true } },
       // Include sharing info
       group: {
         select: { name: true },
@@ -360,12 +354,29 @@ export async function getUserWallets(userId: string): Promise<WalletWithBalance[
     orderBy: { createdAt: 'desc' },
   });
 
+  if (wallets.length === 0) {
+    return [];
+  }
+
+  // Fetch balances using aggregate query (single query for all wallets)
+  const walletIds = wallets.map(w => w.id);
+  const balances = await prisma.uTXO.groupBy({
+    by: ['walletId'],
+    where: {
+      walletId: { in: walletIds },
+      spent: false,
+    },
+    _sum: { amount: true },
+  });
+
+  // Create balance lookup map
+  const balanceMap = new Map(
+    balances.map(b => [b.walletId, Number(b._sum.amount || 0)])
+  );
+
   return wallets.map((wallet) => {
-    // Calculate balance from unspent UTXOs
-    const balance = wallet.utxos.reduce(
-      (sum, utxo) => sum + Number(utxo.amount),
-      0
-    );
+    // Get balance from aggregate query
+    const balance = balanceMap.get(wallet.id) || 0;
 
     // Determine if wallet is shared (has group or multiple users)
     const userCount = wallet.users.length;
@@ -598,6 +609,11 @@ export async function deleteWallet(walletId: string, userId: string): Promise<vo
   if (!walletUser) {
     throw new Error('Only wallet owners can delete wallet');
   }
+
+  // Unsubscribe from address notifications to prevent memory leak
+  const { getSyncService } = await import('./syncService');
+  const syncService = getSyncService();
+  await syncService.unsubscribeWalletAddresses(walletId);
 
   await prisma.wallet.delete({
     where: { id: walletId },

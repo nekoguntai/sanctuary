@@ -30,3 +30,8 @@ Thumbs.db
 
 # Database
 postgres_data/
+
+# Test outputs
+coverage/
+junit.xml
+*.lcov

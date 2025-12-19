@@ -181,6 +181,50 @@ class SyncService {
   }
 
   /**
+   * Unsubscribe all addresses for a wallet (call when wallet is deleted)
+   * Prevents memory leak by cleaning up the addressToWalletMap
+   */
+  async unsubscribeWalletAddresses(walletId: string): Promise<void> {
+    const electrumClient = getElectrumClientIfActive();
+
+    let unsubscribed = 0;
+    for (const [address, wId] of this.addressToWalletMap.entries()) {
+      if (wId === walletId) {
+        this.addressToWalletMap.delete(address);
+        if (electrumClient) {
+          try {
+            await electrumClient.unsubscribeAddress(address);
+            unsubscribed++;
+          } catch (error) {
+            // Silently ignore unsubscribe errors
+          }
+        }
+      }
+    }
+
+    if (unsubscribed > 0) {
+      log.debug(`[SYNC] Unsubscribed ${unsubscribed} addresses for wallet ${walletId}`);
+    }
+  }
+
+  /**
+   * Get health metrics for monitoring
+   */
+  getHealthMetrics(): {
+    isRunning: boolean;
+    queueLength: number;
+    activeSyncs: number;
+    subscribedAddresses: number;
+  } {
+    return {
+      isRunning: this.isRunning,
+      queueLength: this.syncQueue.length,
+      activeSyncs: this.activeSyncs.size,
+      subscribedAddresses: this.addressToWalletMap.size,
+    };
+  }
+
+  /**
    * Handle new block notification - immediately update confirmations
    */
   private async handleNewBlock(block: { height: number; hex: string }): Promise<void> {

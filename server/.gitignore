@@ -31,3 +31,8 @@ Thumbs.db
 
 # Prisma
 .env.test
+
+# Test outputs
+coverage/
+junit.xml
+*.lcov

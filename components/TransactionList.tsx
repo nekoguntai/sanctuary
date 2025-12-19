@@ -148,14 +148,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     );
   };
 
-  if (transactions.length === 0) {
-    return (
-      <div className="text-center py-10">
-        <p className="text-sanctuary-400 dark:text-sanctuary-500">No transactions found.</p>
-      </div>
-    );
-  }
-
   // Helper to get transaction type info
   const getTxTypeInfo = (tx: Transaction) => {
     const isReceive = tx.amount > 0;
@@ -167,14 +159,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return { isReceive, isConsolidation };
   };
 
-  // balanceAfter is now stored directly on each transaction from the API
-  // No need to calculate running balance on the frontend
-
   // Calculate transaction statistics
-  // Use transactionStats prop if provided (from API for all transactions)
-  // Otherwise calculate locally from displayed transactions
+  // IMPORTANT: This useMemo must be called BEFORE any early returns to follow React's rules of hooks
   const txStats = useMemo(() => {
-    // If we have pre-computed stats from API, use those for summary
     if (transactionStats) {
       return {
         total: transactionStats.totalCount,
@@ -187,7 +174,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       };
     }
 
-    // Fallback: calculate from displayed transactions
     let received = 0;
     let sent = 0;
     let consolidations = 0;
@@ -196,7 +182,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     let totalFees = 0;
 
     for (const tx of transactions) {
-      // Inline consolidation detection logic
       const isReceive = tx.amount > 0;
       const isConsolidation = (
         tx.type === 'consolidation' ||
@@ -206,14 +191,13 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
       if (isConsolidation) {
         consolidations++;
-        totalFees += Math.abs(tx.amount); // Consolidation amount IS the fee
+        totalFees += Math.abs(tx.amount);
       } else if (isReceive) {
         received++;
         totalReceived += tx.amount;
       } else {
         sent++;
-        totalSent += Math.abs(tx.amount); // Make positive for display
-        // Add explicit fee for sent txs (fee is separate from amount)
+        totalSent += Math.abs(tx.amount);
         if (tx.fee) {
           totalFees += tx.fee;
         }
@@ -230,6 +214,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       totalFees,
     };
   }, [transactions, walletAddresses, transactionStats]);
+
+  // Early return AFTER all hooks have been called
+  if (transactions.length === 0) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-sanctuary-400 dark:text-sanctuary-500">No transactions found.</p>
+      </div>
+    );
+  }
 
   return (
     <>

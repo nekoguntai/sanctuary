@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2 } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast } from 'lucide-react';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
@@ -592,6 +592,40 @@ export const Settings: React.FC = () => {
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
+           </div>
+
+           {/* Background Contrast Slider */}
+           <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+              <div className="flex items-center justify-between mb-3">
+                 <div className="flex items-center space-x-2">
+                    <Contrast className="w-4 h-4 text-sanctuary-500" />
+                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Contrast</span>
+                 </div>
+                 <span className="text-xs text-sanctuary-500 font-mono">
+                    {(user?.preferences?.contrastLevel ?? 0) === 0
+                      ? 'Default'
+                      : (user?.preferences?.contrastLevel ?? 0) > 0
+                      ? `+${user?.preferences?.contrastLevel}`
+                      : user?.preferences?.contrastLevel}
+                 </span>
+              </div>
+              <div className="flex items-center space-x-3">
+                 <span className="text-xs text-sanctuary-400 w-14 text-right">Lower</span>
+                 <input
+                    type="range"
+                    min="-2"
+                    max="2"
+                    step="1"
+                    value={user?.preferences?.contrastLevel ?? 0}
+                    onChange={(e) => updatePreferences({ contrastLevel: parseInt(e.target.value, 10) })}
+                    className="flex-1 h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                 />
+                 <span className="text-xs text-sanctuary-400 w-14">Higher</span>
+              </div>
+              <p className="text-xs text-sanctuary-500 mt-2">
+                 Adjusts background brightness for better readability.
+                 {isDark ? ' Higher values create a deeper, darker background.' : ' Higher values create a brighter, lighter background.'}
+              </p>
            </div>
         </div>
       </div>

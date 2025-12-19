@@ -10,6 +10,93 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('ThemeRegistry');
 
+/**
+ * Contrast adjustment utilities
+ * These functions modify background colors to increase/decrease contrast
+ */
+
+/**
+ * Parse a hex color to RGB components
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
+}
+
+/**
+ * Convert RGB to hex
+ */
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => {
+    const clamped = Math.max(0, Math.min(255, Math.round(n)));
+    return clamped.toString(16).padStart(2, '0');
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * Adjust color lightness for contrast
+ * For dark mode: negative adjustment = darker backgrounds (more contrast)
+ * For light mode: positive adjustment = lighter backgrounds (more contrast)
+ *
+ * @param hex - The hex color to adjust
+ * @param level - Contrast level (-2 to +2)
+ * @param isDark - Whether we're in dark mode
+ * @param shade - The shade level (50-950) to determine adjustment direction
+ */
+function adjustColorContrast(
+  hex: string,
+  level: number,
+  isDark: boolean,
+  shade: number
+): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb || level === 0) return hex;
+
+  // Calculate adjustment factor (each level = 8% adjustment)
+  const factor = level * 0.08;
+
+  // Determine if this shade should get lighter or darker based on mode and shade
+  // In dark mode: lower shades (50-400) are text colors, higher (500-950) are backgrounds
+  // In light mode: lower shades (50-400) are backgrounds, higher (500-950) are text colors
+
+  let adjustment: number;
+
+  if (isDark) {
+    // Dark mode: make high shades (backgrounds) darker for higher contrast
+    // shade 950 is main background, make it darker with positive contrast
+    if (shade >= 800) {
+      adjustment = -factor * 255; // Darker backgrounds
+    } else if (shade >= 600) {
+      adjustment = -factor * 200; // Medium adjustment for mid-tones
+    } else {
+      adjustment = factor * 100; // Lighter text colors (subtle)
+    }
+  } else {
+    // Light mode: make low shades (backgrounds) lighter for higher contrast
+    // shade 50 is main background, make it lighter with positive contrast
+    if (shade <= 200) {
+      adjustment = factor * 255; // Lighter backgrounds
+    } else if (shade <= 400) {
+      adjustment = factor * 150; // Medium adjustment for mid-tones
+    } else {
+      adjustment = -factor * 80; // Darker text colors (subtle)
+    }
+  }
+
+  return rgbToHex(
+    rgb.r + adjustment,
+    rgb.g + adjustment,
+    rgb.b + adjustment
+  );
+}
+
 class ThemeRegistry {
   private themes: Map<string, ThemeDefinition> = new Map();
   private globalPatterns: Map<string, BackgroundPattern> = new Map();
@@ -118,8 +205,11 @@ class ThemeRegistry {
 
   /**
    * Apply a theme to the document
+   * @param themeId - The theme ID to apply
+   * @param mode - 'light' or 'dark' mode
+   * @param contrastLevel - Optional contrast adjustment (-2 to +2, default 0)
    */
-  applyTheme(themeId: string, mode: 'light' | 'dark'): void {
+  applyTheme(themeId: string, mode: 'light' | 'dark', contrastLevel: number = 0): void {
     const theme = this.get(themeId);
     if (!theme) {
       log.error(`Theme "${themeId}" not found`);
@@ -128,17 +218,29 @@ class ThemeRegistry {
 
     const colors = theme.colors[mode];
     const root = document.documentElement;
+    const isDark = mode === 'dark';
+
+    // Clamp contrast level to valid range
+    const clampedContrast = Math.max(-2, Math.min(2, contrastLevel));
 
     // Apply color scale variables (bg, primary, success, warning)
     Object.entries(colors).forEach(([colorType, scale]) => {
       if (typeof scale === 'object' && scale !== null) {
         Object.entries(scale as Record<string, string>).forEach(([shade, value]) => {
           if (value) {
-            root.style.setProperty(`--color-${colorType}-${shade}`, value);
+            // Only apply contrast adjustment to background colors
+            const adjustedValue =
+              colorType === 'bg' && clampedContrast !== 0
+                ? adjustColorContrast(value, clampedContrast, isDark, parseInt(shade, 10))
+                : value;
+            root.style.setProperty(`--color-${colorType}-${shade}`, adjustedValue);
           }
         });
       }
     });
+
+    // Store current contrast level as a CSS variable for reference
+    root.style.setProperty('--contrast-level', String(clampedContrast));
 
     // Apply theme class to body
     document.body.className = document.body.className
@@ -146,6 +248,20 @@ class ThemeRegistry {
       .filter(cls => !cls.startsWith('theme-'))
       .join(' ');
     document.body.classList.add(`theme-${themeId}`);
+  }
+
+  /**
+   * Apply contrast adjustment to current theme
+   * This re-applies the current theme with the new contrast level
+   * @param contrastLevel - Contrast level (-2 to +2)
+   */
+  applyContrast(contrastLevel: number): void {
+    // Get current theme from body class
+    const themeClass = Array.from(document.body.classList).find(cls => cls.startsWith('theme-'));
+    const themeId = themeClass ? themeClass.replace('theme-', '') : 'sanctuary';
+    const isDark = document.documentElement.classList.contains('dark');
+
+    this.applyTheme(themeId, isDark ? 'dark' : 'light', contrastLevel);
   }
 
   /**

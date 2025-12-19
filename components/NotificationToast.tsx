@@ -38,13 +38,13 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getIcon = () => {
-    // Use theme colors: success (green) for receives/confirmations, warning (gold) for sends
+    // Use theme colors: success for receives (green on sanctuary, gold on sunrise), neutral gray for sends
     switch (notification.type) {
       case 'transaction':
         return notification.data?.type === 'received' ? (
           <ArrowDownLeft className="w-5 h-5 text-success-600 dark:text-success-400" />
         ) : (
-          <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />
+          <ArrowUpRight className="w-5 h-5 text-sanctuary-500 dark:text-sanctuary-400" />
         );
       case 'balance':
         return <TrendingUp className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
@@ -62,13 +62,12 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getColors = () => {
-    // Use theme colors for notifications - success (green) for receives, warning (gold) for sends
-    // Use surface templates for neutral notifications to ensure proper dark mode handling
+    // Use theme colors: success for receives (theme-aware), neutral gray for sends
     switch (notification.type) {
       case 'transaction':
         return notification.data?.type === 'received'
           ? 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700'
-          : 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
+          : 'bg-sanctuary-100 dark:bg-sanctuary-800/50 border-sanctuary-300 dark:border-sanctuary-600';
       case 'balance':
         return 'surface-secondary border-primary-200 dark:border-primary-700';
       case 'confirmation':

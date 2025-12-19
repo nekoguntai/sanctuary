@@ -1,9 +1,13 @@
-import React, { useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
 import * as bitcoinApi from '../../src/api/bitcoin';
 import * as devicesApi from '../../src/api/devices';
+
+// Stable empty arrays to prevent re-renders when data is loading
+const EMPTY_TRANSACTIONS: Awaited<ReturnType<typeof transactionsApi.getTransactions>> = [];
+const EMPTY_PENDING: Awaited<ReturnType<typeof transactionsApi.getPendingTransactions>> = [];
 
 // Query key factory for wallet-related queries
 // Note: Params are spread into the key array to ensure stable references
@@ -142,17 +146,18 @@ export function useGenerateAddresses() {
 
 /**
  * Helper to invalidate all wallet data (useful after WebSocket updates)
+ * Returns a stable function reference to prevent re-renders
  */
 export function useInvalidateWallet() {
   const queryClient = useQueryClient();
 
-  return (walletId: string) => {
+  return useCallback((walletId: string) => {
     queryClient.invalidateQueries({ queryKey: walletKeys.detail(walletId) });
     queryClient.invalidateQueries({ queryKey: walletKeys.utxos(walletId) });
     queryClient.invalidateQueries({ queryKey: walletKeys.transactions(walletId) });
     queryClient.invalidateQueries({ queryKey: walletKeys.addresses(walletId) });
     queryClient.invalidateQueries({ queryKey: walletKeys.balance(walletId) });
-  };
+  }, [queryClient]);
 }
 
 /**
@@ -172,54 +177,39 @@ export function useWalletTransactions(
 /**
  * Hook to fetch recent transactions across all wallets
  * Aggregates transactions from multiple wallets and sorts by timestamp
+ *
+ * Uses single useQuery with Promise.all to avoid render loop from useQueries
  */
 export function useRecentTransactions(walletIds: string[], limit: number = 10) {
-  // Memoize query configs to prevent useQueries from recreating queries
-  const queryConfigs = useMemo(
-    () =>
-      walletIds.map((walletId) => ({
-        queryKey: walletKeys.transactions(walletId, { limit: 5 }),
-        queryFn: () => transactionsApi.getTransactions(walletId, { limit: 5 }),
-        enabled: walletIds.length > 0,
-      })),
-    [walletIds]
-  );
+  // Create stable key from wallet IDs
+  const walletIdsKey = walletIds.join(',');
 
-  const queries = useQueries({ queries: queryConfigs });
-
-  const isLoading = queries.some((q) => q.isLoading);
-  const isError = queries.some((q) => q.isError);
-
-  // Collect all query data - stable array that only changes when data changes
-  const allQueryData = useMemo(
-    () => queries.map((q) => q.data),
-    [queries.map((q) => q.dataUpdatedAt).join(',')]
-  );
-
-  // Memoize the aggregated transactions
-  const transactions = useMemo(() => {
-    return allQueryData
-      .filter((data): data is NonNullable<typeof data> => data != null)
-      .flat()
-      .sort((a, b) => {
-        const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
-        const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
-        return timeB - timeA;
-      })
-      .slice(0, limit);
-  }, [allQueryData, limit]);
-
-  // Memoize refetch function
-  const refetch = useMemo(
-    () => () => queries.forEach((q) => q.refetch()),
-    [queries]
-  );
+  const query = useQuery({
+    queryKey: ['recentTransactions', walletIdsKey, limit],
+    queryFn: async () => {
+      if (walletIds.length === 0) return [];
+      // Fetch all wallets in parallel, single state update when all complete
+      const results = await Promise.all(
+        walletIds.map((walletId) => transactionsApi.getTransactions(walletId, { limit: 5 }))
+      );
+      // Aggregate and sort
+      return results
+        .flat()
+        .sort((a, b) => {
+          const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
+          const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
+          return timeB - timeA;
+        })
+        .slice(0, limit);
+    },
+    enabled: walletIds.length > 0,
+  });
 
   return {
-    data: transactions,
-    isLoading,
-    isError,
-    refetch,
+    data: query.data ?? EMPTY_TRANSACTIONS,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
   };
 }
 
@@ -227,63 +217,47 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
  * Hook to fetch pending (unconfirmed) transactions across all wallets
  * Used for block queue visualization showing user's transactions in mempool
  * Refreshes every 30 seconds to match mempool data updates
+ *
+ * Uses single useQuery with Promise.all to avoid render loop from useQueries
  */
 export function usePendingTransactions(walletIds: string[]) {
-  // Memoize query configs
-  const queryConfigs = useMemo(
-    () =>
-      walletIds.map((walletId) => ({
-        queryKey: [...walletKeys.transactions(walletId), 'pending'] as const,
-        queryFn: () => transactionsApi.getPendingTransactions(walletId),
-        enabled: walletIds.length > 0,
-        refetchInterval: 30000, // 30 seconds
-        staleTime: 15000, // Consider data stale after 15 seconds
-      })),
-    [walletIds]
-  );
+  // Create stable key from wallet IDs
+  const walletIdsKey = walletIds.join(',');
 
-  const queries = useQueries({ queries: queryConfigs });
-
-  const isLoading = queries.some((q) => q.isLoading);
-  const isError = queries.some((q) => q.isError);
-
-  // Collect all query data
-  const allQueryData = useMemo(
-    () => queries.map((q) => q.data),
-    [queries.map((q) => q.dataUpdatedAt).join(',')]
-  );
-
-  // Memoize the aggregated pending transactions
-  const pendingTransactions = useMemo(() => {
-    return allQueryData
-      .filter((data): data is NonNullable<typeof data> => data != null)
-      .flat()
-      .sort((a, b) => b.feeRate - a.feeRate); // Sort by fee rate (higher first)
-  }, [allQueryData]);
-
-  // Memoize refetch function
-  const refetch = useMemo(
-    () => () => queries.forEach((q) => q.refetch()),
-    [queries]
-  );
+  const query = useQuery({
+    queryKey: ['pendingTransactions', walletIdsKey],
+    queryFn: async () => {
+      if (walletIds.length === 0) return [];
+      // Fetch all wallets in parallel, single state update when all complete
+      const results = await Promise.all(
+        walletIds.map((walletId) => transactionsApi.getPendingTransactions(walletId))
+      );
+      // Aggregate and sort by fee rate (higher first)
+      return results.flat().sort((a, b) => b.feeRate - a.feeRate);
+    },
+    enabled: walletIds.length > 0,
+    refetchInterval: 30000, // 30 seconds
+    staleTime: 15000, // Consider data stale after 15 seconds
+  });
 
   return {
-    data: pendingTransactions,
-    isLoading,
-    isError,
-    refetch,
+    data: query.data ?? EMPTY_PENDING,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
   };
 }
 
 /**
  * Helper to invalidate all wallets data
+ * Returns a stable function reference to prevent re-renders
  */
 export function useInvalidateAllWallets() {
   const queryClient = useQueryClient();
 
-  return () => {
+  return useCallback(() => {
     queryClient.invalidateQueries({ queryKey: walletKeys.all });
-  };
+  }, [queryClient]);
 }
 
 /**
@@ -325,128 +299,111 @@ export function useWalletShareInfo(walletId: string | undefined) {
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
+// Helper to get timeframe start date
+function getTimeframeStartDate(timeframe: Timeframe): Date {
+  const now = new Date();
+  switch (timeframe) {
+    case '1D':
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    case '1W':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '1M':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case '1Y':
+      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    case 'ALL':
+    default:
+      return new Date(0); // Beginning of time
+  }
+}
+
 /**
  * Hook to fetch all transactions from all wallets for balance history chart
  * Matches the Dashboard chart behavior with timeframe filtering
+ *
+ * Uses single useQuery with Promise.all to avoid render loop from useQueries
  */
 export function useBalanceHistory(
   walletIds: string[],
   totalBalance: number,
   timeframe: Timeframe
 ) {
-  // Memoize query configs
-  const queryConfigs = useMemo(
-    () =>
-      walletIds.map((walletId) => ({
-        queryKey: walletKeys.transactions(walletId, { limit: 500 }),
-        queryFn: () => transactionsApi.getTransactions(walletId, { limit: 500 }),
-        enabled: walletIds.length > 0,
-      })),
-    [walletIds]
-  );
+  // Create stable key from wallet IDs
+  const walletIdsKey = walletIds.join(',');
 
-  const queries = useQueries({ queries: queryConfigs });
+  const query = useQuery({
+    queryKey: ['balanceHistory', walletIdsKey, timeframe],
+    queryFn: async () => {
+      if (walletIds.length === 0) return [];
 
-  const isLoading = queries.some((q) => q.isLoading);
-  const isError = queries.some((q) => q.isError);
+      // Fetch all transactions from all wallets
+      const results = await Promise.all(
+        walletIds.map((walletId) => transactionsApi.getTransactions(walletId, { limit: 1000 }))
+      );
 
-  // Collect all query data with stable dependency
-  const allQueryData = useMemo(
-    () => queries.map((q) => q.data),
-    [queries.map((q) => q.dataUpdatedAt).join(',')]
-  );
+      // Aggregate all transactions
+      const allTransactions = results.flat();
 
-  // Build chart data based on timeframe (matches Dashboard.getChartData)
-  const chartData = React.useMemo(() => {
-    const now = Date.now();
-    const day = 86400000;
+      // Get timeframe start date
+      const startDate = getTimeframeStartDate(timeframe);
 
-    // Get timeframe range in ms and date format
-    let rangeMs: number;
-    let dateFormat: (d: Date) => string;
+      // Filter transactions within timeframe (exclude consolidations for chart)
+      const filteredTransactions = allTransactions
+        .filter((tx) => {
+          if (!tx.blockTime) return false;
+          const txDate = new Date(tx.blockTime);
+          return txDate >= startDate;
+        })
+        .sort((a, b) => {
+          const timeA = a.blockTime ? new Date(a.blockTime).getTime() : 0;
+          const timeB = b.blockTime ? new Date(b.blockTime).getTime() : 0;
+          return timeA - timeB; // Oldest first for building history
+        });
 
-    switch (timeframe) {
-      case '1D':
-        rangeMs = day;
-        dateFormat = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        break;
-      case '1W':
-        rangeMs = 7 * day;
-        dateFormat = (d) => d.toLocaleDateString([], { weekday: 'short' });
-        break;
-      case '1M':
-        rangeMs = 30 * day;
-        dateFormat = (d) => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-        break;
-      case '1Y':
-        rangeMs = 365 * day;
-        dateFormat = (d) => d.toLocaleDateString([], { month: 'short' });
-        break;
-      case 'ALL':
-      default:
-        rangeMs = 5 * 365 * day;
-        dateFormat = (d) => d.getFullYear().toString();
-        break;
-    }
+      // Build chart data points
+      if (filteredTransactions.length === 0) {
+        // No transactions in range - return flat line
+        return [
+          { name: 'Start', value: totalBalance },
+          { name: 'Now', value: totalBalance },
+        ];
+      }
 
-    const startTime = now - rangeMs;
+      // Calculate running balance backwards from current total
+      let runningBalance = totalBalance;
+      const chartData: { name: string; value: number }[] = [];
 
-    // Collect all transactions with timestamps and balanceAfter
-    const allTxs = allQueryData
-      .filter((data): data is NonNullable<typeof data> => data != null)
-      .flat()
-      .filter((tx) => {
-        const timestamp = tx.blockTime ? new Date(tx.blockTime).getTime() : null;
-        return timestamp && timestamp >= startTime && tx.type !== 'consolidation';
-      })
-      .map((tx) => ({
-        timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
-        balanceAfter: typeof tx.balanceAfter === 'string' ? parseInt(tx.balanceAfter, 10) : (tx.balanceAfter ?? 0),
-      }))
-      .sort((a, b) => a.timestamp - b.timestamp);
+      // Start with current balance
+      chartData.push({ name: 'Now', value: totalBalance });
 
-    // If no transactions in range, show flat line at current balance
-    if (allTxs.length === 0) {
-      return [
-        { name: dateFormat(new Date(startTime)), value: totalBalance },
-        { name: dateFormat(new Date()), value: totalBalance },
-      ];
-    }
+      // Work backwards through transactions to reconstruct history
+      for (let i = filteredTransactions.length - 1; i >= 0; i--) {
+        const tx = filteredTransactions[i];
+        // Subtract the transaction amount to get balance before
+        runningBalance -= tx.amount;
+        const txDate = new Date(tx.blockTime!);
+        chartData.unshift({
+          name: txDate.toLocaleDateString(),
+          value: runningBalance,
+        });
+      }
 
-    // Build chart data using pre-calculated balanceAfter
-    const data: { name: string; value: number }[] = [];
+      return chartData;
+    },
+    enabled: walletIds.length > 0,
+    staleTime: 60000, // Consider stale after 1 minute
+  });
 
-    // Add starting point (balance before first transaction in range)
-    const firstTx = allTxs[0];
-    data.push({
-      name: dateFormat(new Date(Math.min(startTime, firstTx.timestamp))),
-      value: 0, // Start from 0 or could derive from first tx
-    });
-
-    // Add point for each transaction using balanceAfter directly
-    allTxs.forEach((tx) => {
-      data.push({
-        name: dateFormat(new Date(tx.timestamp)),
-        value: Math.max(0, tx.balanceAfter),
-      });
-    });
-
-    // Add current point if last transaction wasn't recent
-    const lastTx = allTxs[allTxs.length - 1];
-    if (now - lastTx.timestamp > day) {
-      data.push({
-        name: dateFormat(new Date()),
-        value: totalBalance,
-      });
-    }
-
-    return data;
-  }, [allQueryData, totalBalance, timeframe]);
+  // Memoize default data to prevent re-renders when query.data is undefined
+  const defaultData = useMemo(() => [
+    { name: 'Start', value: totalBalance },
+    { name: 'Now', value: totalBalance },
+  ], [totalBalance]);
 
   return {
-    data: chartData,
-    isLoading,
-    isError,
+    data: query.data ?? defaultData,
+    isLoading: query.isLoading,
+    isError: query.isError,
   };
 }
 

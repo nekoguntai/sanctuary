@@ -128,13 +128,11 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
     // Reverse to get chronological order (oldest first)
     dataPoints.reverse();
 
-    // Remove duplicate dates, keeping the FIRST occurrence for each date
-    // This preserves the 0 starting point when it shares a date with the first transaction
+    // Remove duplicate dates, keeping the LAST (final) balance for each date
+    // This ensures we show the end-of-day balance, not intermediate states
     const dateBalances = new Map<string, typeof dataPoints[0]>();
     for (const point of dataPoints) {
-      if (!dateBalances.has(point.name)) {
-        dateBalances.set(point.name, point);  // First occurrence wins
-      }
+      dateBalances.set(point.name, point);  // Last occurrence wins
     }
     const uniquePoints = Array.from(dateBalances.values());
 

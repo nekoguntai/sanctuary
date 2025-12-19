@@ -153,11 +153,13 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
       }
     }
 
-    // Calculate wallet balance (sum of all amounts)
-    const walletBalance = transactions.reduce(
-      (sum, tx) => sum + (tx.amount || BigInt(0)),
-      BigInt(0)
-    );
+    // Get wallet balance from most recent transaction's balanceAfter
+    const lastTx = await prisma.transaction.findFirst({
+      where: { walletId },
+      orderBy: [{ blockTime: 'desc' }, { createdAt: 'desc' }],
+      select: { balanceAfter: true },
+    });
+    const walletBalance = lastTx?.balanceAfter ?? BigInt(0);
 
     res.json({
       totalCount,

@@ -51,15 +51,20 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
 
   const ageDisplay = formatAge(avgUtxoAgeDays);
 
-  // Build accumulation history from actual transactions
-  // Uses FORWARDS calculation starting from 0 balance
+  // Build accumulation history using pre-calculated balanceAfter from transactions
   const buildAccumulationHistory = () => {
     if (transactions.length === 0) {
       return [{ name: 'Now', amount: balance }];
     }
 
-    // Sort transactions oldest to newest
-    const sortedTxs = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
+    // Sort transactions oldest to newest, filter to those with balanceAfter
+    const sortedTxs = [...transactions]
+      .filter(tx => tx.balanceAfter != null)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (sortedTxs.length === 0) {
+      return [{ name: 'Now', amount: balance }];
+    }
 
     const oldestTx = sortedTxs[0];
     const nowDate = new Date();
@@ -82,9 +87,6 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
 
     const dataPoints: { name: string; amount: number; date: Date }[] = [];
 
-    // Start with 0 balance before first transaction
-    let runningBalance = 0;
-
     // Add starting point (0 balance before first transaction)
     const startDate = new Date(oldestTx.timestamp);
     startDate.setDate(startDate.getDate() - 1);
@@ -94,24 +96,22 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       date: startDate
     });
 
-    // Go through transactions oldest to newest, applying each to get new balance
+    // Use pre-calculated balanceAfter directly from each transaction
     for (const tx of sortedTxs) {
       const txDate = new Date(tx.timestamp);
 
-      // tx.amount is already signed: positive for received, negative for sent
-      runningBalance += tx.amount;
-
       dataPoints.push({
         name: dateFormat(txDate),
-        amount: runningBalance,
+        amount: tx.balanceAfter!,
         date: txDate
       });
     }
 
-    // Add current point (should match calculated running balance)
+    // Add current point
+    const lastBalance = sortedTxs[sortedTxs.length - 1].balanceAfter!;
     dataPoints.push({
       name: dateFormat(nowDate),
-      amount: runningBalance,
+      amount: lastBalance,
       date: nowDate
     });
 

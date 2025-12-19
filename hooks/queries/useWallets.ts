@@ -340,7 +340,7 @@ export function useBalanceHistory(
 
     const startTime = now - rangeMs;
 
-    // Collect all transactions with timestamps
+    // Collect all transactions with timestamps and balanceAfter
     const allTxs = queries
       .flatMap((q) => q.data || [])
       .filter((tx) => {
@@ -348,13 +348,8 @@ export function useBalanceHistory(
         return timestamp && timestamp >= startTime && tx.type !== 'consolidation';
       })
       .map((tx) => ({
-        ...tx,
         timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
-        // Ensure amount is signed correctly
-        amount:
-          tx.type === 'sent'
-            ? -Math.abs(typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount)
-            : Math.abs(typeof tx.amount === 'string' ? parseInt(tx.amount, 10) : tx.amount),
+        balanceAfter: typeof tx.balanceAfter === 'string' ? parseInt(tx.balanceAfter, 10) : (tx.balanceAfter ?? 0),
       }))
       .sort((a, b) => a.timestamp - b.timestamp);
 
@@ -366,28 +361,21 @@ export function useBalanceHistory(
       ];
     }
 
-    // Calculate starting balance by working backwards from current balance
-    let startBalance = totalBalance;
-    allTxs.forEach((tx) => {
-      startBalance -= tx.amount; // Reverse the effect
-    });
-
-    // Build chart data points
+    // Build chart data using pre-calculated balanceAfter
     const data: { name: string; value: number }[] = [];
-    let runningBalance = Math.max(0, startBalance);
 
-    // Add starting point
+    // Add starting point (balance before first transaction in range)
+    const firstTx = allTxs[0];
     data.push({
-      name: dateFormat(new Date(Math.min(startTime, allTxs[0].timestamp))),
-      value: runningBalance,
+      name: dateFormat(new Date(Math.min(startTime, firstTx.timestamp))),
+      value: 0, // Start from 0 or could derive from first tx
     });
 
-    // Add point for each transaction
+    // Add point for each transaction using balanceAfter directly
     allTxs.forEach((tx) => {
-      runningBalance += tx.amount;
       data.push({
         name: dateFormat(new Date(tx.timestamp)),
-        value: Math.max(0, runningBalance),
+        value: Math.max(0, tx.balanceAfter),
       });
     });
 

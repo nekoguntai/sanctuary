@@ -570,8 +570,8 @@ export const WalletDetail: React.FC = () => {
             id: tx.id,
             txid: tx.txid,
             type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-            // Consolidations show as negative (fees spent only), receives positive, sends negative
-            amount: tx.type === 'consolidation' ? -(tx.fee ? Number(tx.fee) : 0) : (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
+            // Amount is already signed by the API: positive for received, negative for sent/consolidation
+            amount: Number(tx.amount),
             timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
             confirmations: tx.confirmations,
             confirmed: tx.confirmations >= 1,
@@ -675,8 +675,8 @@ export const WalletDetail: React.FC = () => {
         id: tx.id,
         txid: tx.txid,
         type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-        // Consolidations show as negative (fees spent only), receives positive, sends negative
-        amount: tx.type === 'consolidation' ? -(tx.fee ? Number(tx.fee) : 0) : (tx.type === 'received' || tx.type === 'receive') ? Number(tx.amount) : -Number(tx.amount),
+        // Amount is already signed by the API: positive for received, negative for sent/consolidation
+        amount: Number(tx.amount),
         timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
         confirmations: tx.confirmations,
         confirmed: tx.confirmations >= 1,
@@ -1221,6 +1221,7 @@ export const WalletDetail: React.FC = () => {
                canEdit={wallet?.canEdit !== false}
                confirmationThreshold={bitcoinStatus?.confirmationThreshold}
                deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
+               walletBalance={wallet?.balance}
              />
              {hasMoreTx && transactions.length > 0 && (
                <div className="mt-4 text-center">

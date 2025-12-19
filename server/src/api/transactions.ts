@@ -72,11 +72,30 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
     });
 
     // Convert BigInt amounts to numbers and calculate confirmations dynamically
+    // Sign amounts based on transaction type:
+    // - sent: negative (what you sent away)
+    // - consolidation: negative fee only (you only lose the fee, not the amount which is reorganized UTXOs)
+    // - received: positive (what you received)
     const serializedTransactions = transactions.map(tx => {
       const blockHeight = bigIntToNumber(tx.blockHeight);
+      const rawAmount = bigIntToNumberOrZero(tx.amount);
+      const fee = bigIntToNumberOrZero(tx.fee);
+
+      let signedAmount: number;
+      if (tx.type === 'consolidation') {
+        // Consolidation: only the fee is lost (inputs - outputs = fee)
+        signedAmount = -Math.abs(fee);
+      } else if (tx.type === 'sent') {
+        // Sent: both amount AND fee are deducted from balance
+        signedAmount = -(Math.abs(rawAmount) + Math.abs(fee));
+      } else {
+        // Received: add to balance
+        signedAmount = Math.abs(rawAmount);
+      }
+
       return {
         ...tx,
-        amount: bigIntToNumberOrZero(tx.amount),
+        amount: signedAmount,
         fee: bigIntToNumber(tx.fee),
         blockHeight,
         confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
@@ -157,12 +176,16 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
         const displayType: 'sent' | 'received' =
           tx.type === 'received' || tx.type === 'receive' ? 'received' : 'sent';
 
+        // Sign amount based on type: negative for sent, positive for received
+        const rawAmount = Math.abs(Number(tx.amount));
+        const signedAmount = displayType === 'sent' ? -rawAmount : rawAmount;
+
         return {
           txid: tx.txid,
           walletId: tx.walletId,
           walletName: wallet?.name,
           type: displayType,
-          amount: Number(tx.amount),
+          amount: signedAmount,
           fee,
           feeRate,
           vsize,
@@ -227,19 +250,38 @@ router.get('/wallets/:walletId/transactions/export', requireWalletAccess('view')
     });
 
     // Convert to export format
-    const exportData = transactions.map(tx => ({
-      date: tx.blockTime?.toISOString() || tx.createdAt.toISOString(),
-      txid: tx.txid,
-      type: tx.type,
-      amountBtc: Number(tx.amount) / 100000000,
-      amountSats: Number(tx.amount),
-      feeSats: tx.fee ? Number(tx.fee) : null,
-      confirmations: tx.confirmations,
-      label: tx.label || '',
-      memo: tx.memo || '',
-      counterpartyAddress: tx.counterpartyAddress || '',
-      blockHeight: tx.blockHeight ? Number(tx.blockHeight) : null,
-    }));
+    // Sign amounts based on type:
+    // - sent: negative (what you sent away)
+    // - consolidation: negative fee only (you only lose the fee)
+    // - received: positive (what you received)
+    const exportData = transactions.map(tx => {
+      const rawAmount = Math.abs(Number(tx.amount));
+      const fee = tx.fee ? Math.abs(Number(tx.fee)) : 0;
+
+      let signedAmount: number;
+      if (tx.type === 'consolidation') {
+        signedAmount = -fee;
+      } else if (tx.type === 'sent') {
+        // Sent: both amount AND fee are deducted from balance
+        signedAmount = -(rawAmount + fee);
+      } else {
+        signedAmount = rawAmount;
+      }
+
+      return {
+        date: tx.blockTime?.toISOString() || tx.createdAt.toISOString(),
+        txid: tx.txid,
+        type: tx.type,
+        amountBtc: signedAmount / 100000000,
+        amountSats: signedAmount,
+        feeSats: tx.fee ? Number(tx.fee) : null,
+        confirmations: tx.confirmations,
+        label: tx.label || '',
+        memo: tx.memo || '',
+        counterpartyAddress: tx.counterpartyAddress || '',
+        blockHeight: tx.blockHeight ? Number(tx.blockHeight) : null,
+      };
+    });
 
     const walletName = wallet?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'wallet';
     const timestamp = new Date().toISOString().slice(0, 10);

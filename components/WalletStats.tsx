@@ -93,34 +93,48 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       date: nowDate
     });
 
-    // Go through transactions newest to oldest, reversing their effect
+    // Go through transactions newest to oldest, recording balance AFTER each transaction
     for (const tx of sortedTxs) {
-      // tx.amount is already signed: positive for received, negative for sent
-      // To find balance BEFORE this transaction, we reverse the effect:
-      // - If received (positive amount): subtract to get previous balance
-      // - If sent (negative amount): add back (subtracting negative = adding)
-      runningBalance -= tx.amount;
-
       const txDate = new Date(tx.timestamp);
+
+      // Push balance AFTER this transaction (current runningBalance before we reverse)
       dataPoints.push({
         name: dateFormat(txDate),
         amount: runningBalance,
         date: txDate
+      });
+
+      // tx.amount is already signed: positive for received, negative for sent
+      // Reverse the effect to get balance BEFORE this transaction:
+      // - If received (positive amount): subtract to get previous balance
+      // - If sent (negative amount): add back (subtracting negative = adding)
+      runningBalance -= tx.amount;
+    }
+
+    // After processing all transactions, runningBalance is the starting balance (should be 0)
+    // Add this as the first data point
+    if (sortedTxs.length > 0) {
+      const oldestTx = sortedTxs[sortedTxs.length - 1];
+      const startDate = new Date(oldestTx.timestamp);
+      // Use a date slightly before the first transaction for the starting point
+      startDate.setDate(startDate.getDate() - 1);
+      dataPoints.push({
+        name: dateFormat(startDate),
+        amount: runningBalance, // Starting balance (typically 0)
+        date: startDate
       });
     }
 
     // Reverse to get chronological order (oldest first)
     dataPoints.reverse();
 
-    // Remove duplicate dates, keeping the FIRST (oldest) balance for each date
-    const uniquePoints: typeof dataPoints = [];
-    const seenDates = new Set<string>();
+    // Remove duplicate dates, keeping the LAST (final) balance for each date
+    // This ensures we show the end-of-day balance, not intermediate states
+    const dateBalances = new Map<string, typeof dataPoints[0]>();
     for (const point of dataPoints) {
-      if (!seenDates.has(point.name)) {
-        seenDates.add(point.name);
-        uniquePoints.push(point);
-      }
+      dateBalances.set(point.name, point);  // Last occurrence wins
     }
+    const uniquePoints = Array.from(dateBalances.values());
 
     return uniquePoints.map(p => ({ name: p.name, amount: p.amount }));
   };

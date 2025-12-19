@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Transaction, Wallet, WalletType, Label } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -23,6 +23,7 @@ interface TransactionListProps {
   canEdit?: boolean; // Whether user can edit labels (default: true for backwards compat)
   confirmationThreshold?: number; // Number of confirmations required (from system settings)
   deepConfirmationThreshold?: number; // Number of confirmations for "deeply confirmed" status
+  walletBalance?: number; // Current wallet balance in sats for showing running balance column
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -36,7 +37,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onLabelsChange,
   canEdit = true,
   confirmationThreshold = 1,
-  deepConfirmationThreshold = 3
+  deepConfirmationThreshold = 3,
+  walletBalance
 }) => {
   const { format } = useCurrency();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -158,6 +160,24 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return { isReceive, isConsolidation };
   };
 
+  // Calculate running balance for each transaction (transactions are ordered newest first)
+  // Balance after each tx = running total working backwards from current balance
+  const runningBalances = useMemo(() => {
+    if (walletBalance === undefined) return new Map<string, number>();
+
+    const balanceMap = new Map<string, number>();
+    let balance = walletBalance;
+
+    // Transactions are newest first, so the first tx shows current balance after it
+    for (const tx of transactions) {
+      balanceMap.set(tx.id, balance);
+      // Go backwards: reverse the transaction to get previous balance
+      balance -= tx.amount;
+    }
+
+    return balanceMap;
+  }, [transactions, walletBalance]);
+
   return (
     <>
       <div className="overflow-x-auto mt-6">
@@ -167,6 +187,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Date</th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Type</th>
               <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Amount</th>
+              {walletBalance !== undefined && (
+                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
+              )}
               <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Confs</th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Labels</th>
               {showWalletBadge && (
@@ -239,6 +262,19 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       />
                     </span>
                   </td>
+
+                  {/* Balance (after this transaction) */}
+                  {walletBalance !== undefined && (
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+                        <Amount
+                          sats={runningBalances.get(tx.id) ?? 0}
+                          size="sm"
+                          className="justify-end"
+                        />
+                      </span>
+                    </td>
+                  )}
 
                   {/* Confirmations */}
                   <td className="px-4 py-3 whitespace-nowrap text-center">

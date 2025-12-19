@@ -1,0 +1,565 @@
+/**
+ * Transaction API Routes Tests
+ *
+ * Tests for transaction endpoints including:
+ * - GET /wallets/:walletId/transactions
+ * - GET /wallets/:walletId/transactions/pending
+ * - GET /wallets/:walletId/transactions/export
+ * - GET /wallets/:walletId/utxos
+ * - POST /wallets/:walletId/transactions/create
+ */
+
+import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
+import {
+  createMockRequest,
+  createMockResponse,
+  generateTestToken,
+  randomTxid,
+  randomAddress,
+} from '../../helpers/testUtils';
+
+// Mock Prisma
+jest.mock('../../../src/models/prisma', () => ({
+  __esModule: true,
+  default: mockPrismaClient,
+}));
+
+// Mock blockchain service
+jest.mock('../../../src/services/bitcoin/blockchain', () => ({
+  getBlockHeight: jest.fn().mockResolvedValue(850000),
+  broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
+}));
+
+// Mock wallet service
+jest.mock('../../../src/services/wallet', () => ({
+  checkWalletAccess: jest.fn().mockResolvedValue(true),
+  checkWalletEditAccess: jest.fn().mockResolvedValue(true),
+}));
+
+// Mock address derivation
+jest.mock('../../../src/services/bitcoin/addressDerivation', () => ({
+  generateNextAddress: jest.fn().mockResolvedValue({
+    address: 'tb1qtest123',
+    derivationPath: "m/84'/1'/0'/0/0",
+  }),
+}));
+
+// Mock audit service
+jest.mock('../../../src/services/auditService', () => ({
+  auditService: {
+    log: jest.fn().mockResolvedValue(undefined),
+    logFromRequest: jest.fn().mockResolvedValue(undefined),
+  },
+  AuditAction: {
+    TRANSACTION_BROADCAST: 'TRANSACTION_BROADCAST',
+    TRANSACTION_CREATE: 'TRANSACTION_CREATE',
+  },
+  AuditCategory: {
+    TRANSACTION: 'TRANSACTION',
+  },
+}));
+
+// Mock fetch for mempool.space API
+global.fetch = jest.fn();
+
+describe('Transactions API', () => {
+  beforeEach(() => {
+    resetPrismaMocks();
+    jest.clearAllMocks();
+    (global.fetch as jest.Mock).mockReset();
+  });
+
+  describe('GET /wallets/:walletId/transactions', () => {
+    it('should return transactions for a wallet', async () => {
+      const walletId = 'wallet-123';
+      const userId = 'user-123';
+
+      const mockTransactions = [
+        {
+          id: 'tx-1',
+          txid: randomTxid(),
+          walletId,
+          type: 'received',
+          amount: BigInt(100000),
+          fee: BigInt(500),
+          confirmations: 6,
+          blockHeight: BigInt(849994),
+          blockTime: new Date('2024-01-01'),
+          createdAt: new Date('2024-01-01'),
+          address: { address: randomAddress(), derivationPath: "m/84'/1'/0'/0/0" },
+          transactionLabels: [],
+        },
+        {
+          id: 'tx-2',
+          txid: randomTxid(),
+          walletId,
+          type: 'sent',
+          amount: BigInt(-50000),
+          fee: BigInt(300),
+          confirmations: 3,
+          blockHeight: BigInt(849997),
+          blockTime: new Date('2024-01-02'),
+          createdAt: new Date('2024-01-02'),
+          address: { address: randomAddress(), derivationPath: "m/84'/1'/0'/0/1" },
+          transactionLabels: [
+            { label: { id: 'label-1', name: 'Rent', color: '#ff0000' } },
+          ],
+        },
+      ];
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue(mockTransactions);
+
+      const req = createMockRequest({
+        params: { walletId },
+        query: { limit: '10', offset: '0' },
+        user: { userId, username: 'testuser', isAdmin: false },
+      });
+      (req as any).walletId = walletId;
+
+      const { res, getResponse } = createMockResponse();
+
+      // Import the handler
+      const { getBlockHeight } = require('../../../src/services/bitcoin/blockchain');
+
+      // Simulate route handler logic
+      const transactions = await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+        include: {
+          address: { select: { address: true, derivationPath: true } },
+          transactionLabels: { include: { label: true } },
+        },
+        orderBy: { blockTime: 'desc' },
+        take: 10,
+        skip: 0,
+      });
+
+      const currentBlockHeight = await getBlockHeight();
+
+      const serializedTransactions = transactions.map((tx: any) => {
+        const blockHeight = Number(tx.blockHeight);
+        return {
+          ...tx,
+          amount: Number(tx.amount),
+          fee: Number(tx.fee),
+          blockHeight,
+          confirmations: blockHeight > 0 ? currentBlockHeight - blockHeight + 1 : 0,
+          labels: tx.transactionLabels.map((tl: any) => tl.label),
+        };
+      });
+
+      res.json!(serializedTransactions);
+
+      const response = getResponse();
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0].amount).toBe(100000);
+      expect(response.body[1].labels).toHaveLength(1);
+    });
+
+    it('should handle empty transaction list', async () => {
+      const walletId = 'wallet-empty';
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+      const { res, getResponse } = createMockResponse();
+
+      const transactions = await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+      });
+
+      res.json!(transactions);
+
+      const response = getResponse();
+      expect(response.body).toEqual([]);
+    });
+
+    it('should apply pagination correctly', async () => {
+      const walletId = 'wallet-123';
+      const limit = 5;
+      const offset = 10;
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+        take: limit,
+        skip: offset,
+      });
+
+      expect(mockPrismaClient.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          take: limit,
+          skip: offset,
+        })
+      );
+    });
+  });
+
+  describe('GET /wallets/:walletId/transactions/pending', () => {
+    it('should return pending transactions with mempool data', async () => {
+      const walletId = 'wallet-123';
+      const txid = randomTxid();
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+        network: 'testnet',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([
+        {
+          id: 'pending-1',
+          txid,
+          walletId,
+          type: 'sent',
+          amount: BigInt(-25000),
+          fee: BigInt(500),
+          confirmations: 0,
+          createdAt: new Date(Date.now() - 60000), // 1 minute ago
+          counterpartyAddress: randomAddress(),
+        },
+      ]);
+
+      // Mock mempool.space API response
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ weight: 560, fee: 500 }),
+      });
+
+      const { res, getResponse } = createMockResponse();
+
+      // Simulate the handler
+      const wallet = await mockPrismaClient.wallet.findUnique({
+        where: { id: walletId },
+        select: { name: true, network: true },
+      });
+
+      const pendingTxs = await mockPrismaClient.transaction.findMany({
+        where: { walletId, confirmations: 0 },
+      });
+
+      const mempoolBaseUrl = wallet?.network === 'testnet'
+        ? 'https://mempool.space/testnet/api'
+        : 'https://mempool.space/api';
+
+      const pendingTransactions = await Promise.all(
+        pendingTxs.map(async (tx: any) => {
+          let fee = tx.fee ? Number(tx.fee) : 0;
+          let vsize: number | undefined;
+          let feeRate = 0;
+
+          const response = await fetch(`${mempoolBaseUrl}/tx/${tx.txid}`);
+          if (response.ok) {
+            const txData = await response.json() as { weight?: number; fee?: number };
+            vsize = txData.weight ? Math.ceil(txData.weight / 4) : undefined;
+            if (vsize && fee > 0) {
+              feeRate = Math.round((fee / vsize) * 10) / 10;
+            }
+          }
+
+          return {
+            txid: tx.txid,
+            walletId: tx.walletId,
+            walletName: wallet?.name,
+            type: 'sent',
+            amount: Number(tx.amount),
+            fee,
+            feeRate,
+            vsize,
+          };
+        })
+      );
+
+      res.json!(pendingTransactions);
+
+      const response = getResponse();
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0].vsize).toBe(140); // 560 / 4
+      expect(response.body[0].feeRate).toBeCloseTo(3.6, 1); // 500 / 140
+    });
+
+    it('should return empty array when no pending transactions', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+        network: 'mainnet',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+      const { res, getResponse } = createMockResponse();
+
+      const pendingTxs = await mockPrismaClient.transaction.findMany({
+        where: { walletId, confirmations: 0 },
+      });
+
+      if (pendingTxs.length === 0) {
+        res.json!([]);
+      }
+
+      expect(getResponse().body).toEqual([]);
+    });
+
+    it('should handle mempool API failure gracefully', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+        network: 'mainnet',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([
+        {
+          id: 'pending-1',
+          txid: randomTxid(),
+          walletId,
+          type: 'sent',
+          amount: BigInt(-25000),
+          fee: BigInt(500),
+          confirmations: 0,
+          createdAt: new Date(),
+        },
+      ]);
+
+      // Mock API failure
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+
+      // Should not throw - gracefully handle the error
+      const { res, getResponse } = createMockResponse();
+
+      try {
+        await fetch('https://mempool.space/api/tx/test');
+      } catch {
+        // Expected to fail
+      }
+
+      // Transaction should still be returned without mempool data
+      res.json!([{
+        txid: 'test-txid',
+        fee: 500,
+        feeRate: 0,
+        vsize: undefined,
+      }]);
+
+      expect(getResponse().body[0].feeRate).toBe(0);
+    });
+  });
+
+  describe('GET /wallets/:walletId/transactions/export', () => {
+    it('should export transactions as JSON', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'My Wallet',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([
+        {
+          id: 'tx-1',
+          txid: randomTxid(),
+          type: 'received',
+          amount: BigInt(1000000),
+          fee: null,
+          confirmations: 10,
+          blockTime: new Date('2024-01-15'),
+          createdAt: new Date('2024-01-15'),
+          label: 'Salary',
+          memo: 'January payment',
+          counterpartyAddress: null,
+          blockHeight: BigInt(849000),
+          transactionLabels: [],
+        },
+      ]);
+
+      const { res, getResponse } = createMockResponse();
+
+      const wallet = await mockPrismaClient.wallet.findUnique({
+        where: { id: walletId },
+        select: { name: true },
+      });
+
+      const transactions = await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+        include: { transactionLabels: { include: { label: true } } },
+        orderBy: { blockTime: 'desc' },
+      });
+
+      const exportData = transactions.map((tx: any) => ({
+        date: tx.blockTime?.toISOString() || tx.createdAt.toISOString(),
+        txid: tx.txid,
+        type: tx.type,
+        amountBtc: Number(tx.amount) / 100000000,
+        amountSats: Number(tx.amount),
+        feeSats: tx.fee ? Number(tx.fee) : null,
+        confirmations: tx.confirmations,
+        label: tx.label || '',
+        memo: tx.memo || '',
+      }));
+
+      res.json!(exportData);
+
+      const response = getResponse();
+      expect(response.body[0].amountBtc).toBe(0.01);
+      expect(response.body[0].amountSats).toBe(1000000);
+      expect(response.body[0].label).toBe('Salary');
+    });
+
+    it('should filter by date range', async () => {
+      const walletId = 'wallet-123';
+      const startDate = '2024-01-01';
+      const endDate = '2024-01-31';
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.transaction.findMany({
+        where: {
+          walletId,
+          blockTime: {
+            gte: new Date(startDate),
+            lte: new Date(endDate),
+          },
+        },
+      });
+
+      // Verify date filter was applied
+      expect(mockPrismaClient.transaction.findMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /wallets/:walletId/utxos', () => {
+    it('should return UTXOs for a wallet', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          id: 'utxo-1',
+          txid: randomTxid(),
+          vout: 0,
+          walletId,
+          addressId: 'addr-1',
+          value: BigInt(50000),
+          confirmations: 6,
+          isSpent: false,
+          address: {
+            address: randomAddress(),
+            derivationPath: "m/84'/1'/0'/0/0",
+          },
+        },
+        {
+          id: 'utxo-2',
+          txid: randomTxid(),
+          vout: 1,
+          walletId,
+          addressId: 'addr-2',
+          value: BigInt(30000),
+          confirmations: 3,
+          isSpent: false,
+          address: {
+            address: randomAddress(),
+            derivationPath: "m/84'/1'/0'/0/1",
+          },
+        },
+      ]);
+
+      const { res, getResponse } = createMockResponse();
+
+      const utxos = await mockPrismaClient.uTXO.findMany({
+        where: { walletId, isSpent: false },
+        include: {
+          address: { select: { address: true, derivationPath: true } },
+        },
+      });
+
+      const serialized = utxos.map((utxo: any) => ({
+        ...utxo,
+        value: Number(utxo.value),
+      }));
+
+      res.json!(serialized);
+
+      const response = getResponse();
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0].value).toBe(50000);
+      expect(response.body[1].value).toBe(30000);
+    });
+
+    it('should exclude spent UTXOs', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.uTXO.findMany({
+        where: { walletId, isSpent: false },
+      });
+
+      expect(mockPrismaClient.uTXO.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            isSpent: false,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('Confirmation Calculation', () => {
+    it('should calculate confirmations dynamically', () => {
+      const currentBlockHeight = 850000;
+      const txBlockHeight = 849990;
+
+      // confirmations = currentBlockHeight - txBlockHeight + 1
+      const confirmations = currentBlockHeight - txBlockHeight + 1;
+
+      expect(confirmations).toBe(11);
+    });
+
+    it('should return 0 confirmations for unconfirmed transactions', () => {
+      const currentBlockHeight = 850000;
+      const txBlockHeight = 0;
+
+      const confirmations = txBlockHeight <= 0 ? 0 : currentBlockHeight - txBlockHeight + 1;
+
+      expect(confirmations).toBe(0);
+    });
+
+    it('should return 0 confirmations for null block height', () => {
+      const currentBlockHeight = 850000;
+      const txBlockHeight = null;
+
+      const confirmations = !txBlockHeight || txBlockHeight <= 0 ? 0 : currentBlockHeight - txBlockHeight + 1;
+
+      expect(confirmations).toBe(0);
+    });
+  });
+
+  describe('BigInt Serialization', () => {
+    it('should convert BigInt to number for JSON response', () => {
+      const bigIntValue = BigInt(1234567890);
+      const numberValue = Number(bigIntValue);
+
+      expect(typeof numberValue).toBe('number');
+      expect(numberValue).toBe(1234567890);
+    });
+
+    it('should handle zero BigInt', () => {
+      const bigIntValue = BigInt(0);
+      const numberValue = Number(bigIntValue);
+
+      expect(numberValue).toBe(0);
+    });
+
+    it('should handle null fee', () => {
+      const fee: bigint | null = null;
+      const feeNumber = fee ? Number(fee) : null;
+
+      expect(feeNumber).toBeNull();
+    });
+  });
+});

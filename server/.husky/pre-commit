@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Run fast tests on changed files only
+cd server && npm run test:fast

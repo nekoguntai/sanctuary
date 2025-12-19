@@ -508,14 +508,32 @@ check_admin_user_exists() {
     # Retry multiple times since seeding might still be completing
     # Total wait time: up to 45 seconds (15 attempts × 3 seconds)
     while [ $attempt -le $max_attempts ]; do
-        local result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
-            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>/dev/null | tr -d ' \n\r\t')
+        # Capture both stdout and stderr for debugging
+        local result
+        local error
+        result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
+            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>&1)
+        local exit_code=$?
 
-        log_debug "Attempt $attempt: admin user count = '$result'"
+        # Clean up whitespace from result
+        result=$(echo "$result" | tr -d ' \n\r\t')
 
-        if [ "$result" = "1" ]; then
+        log_debug "Attempt $attempt: psql exit=$exit_code, result='$result'"
+
+        # Check for successful query with count of 1
+        if [ "$exit_code" = "0" ] && [ "$result" = "1" ]; then
             log_debug "Admin user found on attempt $attempt"
             return 0
+        fi
+
+        # If we got a number but it's 0, the table exists but user doesn't
+        if [ "$exit_code" = "0" ] && [ "$result" = "0" ]; then
+            log_debug "Table exists but admin user not found yet"
+        fi
+
+        # If result contains error text, log it
+        if echo "$result" | grep -qi "error\|does not exist"; then
+            log_debug "Query error: $result"
         fi
 
         if [ $attempt -lt $max_attempts ]; then

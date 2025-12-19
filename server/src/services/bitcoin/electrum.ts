@@ -523,6 +523,37 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Batch: Subscribe to multiple addresses in a single RPC batch
+   * Much more efficient than subscribing to each address individually
+   * Returns a Map of address -> status (hash of history, or null if no history)
+   */
+  async subscribeAddressBatch(addresses: string[]): Promise<Map<string, string | null>> {
+    if (addresses.length === 0) return new Map();
+
+    // Prepare batch requests and track mappings
+    const requests = addresses.map(address => {
+      const scriptHash = this.addressToScriptHash(address);
+      // Track the mapping so we can resolve address from notifications
+      this.scriptHashToAddress.set(scriptHash, address);
+      return {
+        method: 'blockchain.scripthash.subscribe',
+        params: [scriptHash],
+      };
+    });
+
+    // Execute batch
+    const results = await this.batchRequest(requests);
+
+    // Map results back to addresses
+    const resultMap = new Map<string, string | null>();
+    for (let i = 0; i < addresses.length; i++) {
+      resultMap.set(addresses[i], results[i] || null);
+    }
+
+    return resultMap;
+  }
+
+  /**
    * Subscribe to new block headers
    * Also returns current tip height
    */

@@ -143,7 +143,7 @@ describeWithDb('Authentication Integration', () => {
       const newPassword = 'NewSecurePassword456!';
 
       await request(app)
-        .post('/api/v1/auth/change-password')
+        .post('/api/v1/auth/me/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({
           currentPassword: testUser.password,
@@ -168,7 +168,7 @@ describeWithDb('Authentication Integration', () => {
       const token = await loginTestUser(app, testUser);
 
       await request(app)
-        .post('/api/v1/auth/change-password')
+        .post('/api/v1/auth/me/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({
           currentPassword: 'WrongCurrentPassword!',

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
 import * as bitcoinApi from '../../src/api/bitcoin';
@@ -29,6 +29,7 @@ export function useWallets() {
   return useQuery({
     queryKey: walletKeys.lists(),
     queryFn: walletsApi.getWallets,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -40,6 +41,7 @@ export function useWallet(id: string | undefined) {
     queryKey: walletKeys.detail(id!),
     queryFn: () => walletsApi.getWallet(id!),
     enabled: !!id,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -51,6 +53,7 @@ export function useWalletUtxos(walletId: string | undefined) {
     queryKey: walletKeys.utxos(walletId!),
     queryFn: () => transactionsApi.getUTXOs(walletId!),
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -62,6 +65,7 @@ export function useWalletAddresses(walletId: string | undefined) {
     queryKey: walletKeys.addresses(walletId!),
     queryFn: () => transactionsApi.getAddresses(walletId!),
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -171,6 +175,7 @@ export function useWalletTransactions(
     queryKey: walletKeys.transactions(walletId!, params),
     queryFn: () => transactionsApi.getTransactions(walletId!, params),
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -203,6 +208,7 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
         .slice(0, limit);
     },
     enabled: walletIds.length > 0,
+    placeholderData: keepPreviousData,
   });
 
   return {
@@ -238,6 +244,7 @@ export function usePendingTransactions(walletIds: string[]) {
     enabled: walletIds.length > 0,
     refetchInterval: 30000, // 30 seconds
     staleTime: 15000, // Consider data stale after 15 seconds
+    placeholderData: keepPreviousData,
   });
 
   return {
@@ -272,6 +279,7 @@ export function useWalletDevices(walletId: string | undefined) {
       return allDevices.filter((d) => d.wallets?.some((w) => w.wallet.id === walletId));
     },
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -283,6 +291,7 @@ export function useWalletStats(walletId: string | undefined) {
     queryKey: [...walletKeys.detail(walletId!), 'stats'] as const,
     queryFn: () => walletsApi.getWalletStats(walletId!),
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -294,6 +303,7 @@ export function useWalletShareInfo(walletId: string | undefined) {
     queryKey: [...walletKeys.detail(walletId!), 'share'] as const,
     queryFn: () => walletsApi.getWalletShareInfo(walletId!),
     enabled: !!walletId,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -392,6 +402,7 @@ export function useBalanceHistory(
     },
     enabled: walletIds.length > 0,
     staleTime: 60000, // Consider stale after 1 minute
+    placeholderData: keepPreviousData,
   });
 
   // Memoize default data to prevent re-renders when query.data is undefined

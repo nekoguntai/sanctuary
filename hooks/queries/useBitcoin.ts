@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
 import * as bitcoinApi from '../../src/api/bitcoin';
 
 // Query key factory for bitcoin-related queries
@@ -19,6 +19,7 @@ export function useBitcoinStatus() {
     queryFn: bitcoinApi.getStatus,
     // Refetch status every 60 seconds
     refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -33,6 +34,7 @@ export function useFeeEstimates() {
     refetchInterval: 30_000,
     // Keep stale time short for fees
     staleTime: 15_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -44,6 +46,7 @@ export function useAddressInfo(address: string | undefined, network?: string) {
     queryKey: bitcoinKeys.addressInfo(address!),
     queryFn: () => bitcoinApi.getAddressInfo(address!, network),
     enabled: !!address,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -57,6 +60,7 @@ export function useTransactionDetails(txid: string | undefined) {
     enabled: !!txid,
     // Transaction details rarely change once confirmed
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -88,5 +92,6 @@ export function useMempoolData() {
     // Mempool changes frequently, refetch every 30 seconds
     refetchInterval: 30_000,
     staleTime: 15_000,
+    placeholderData: keepPreviousData,
   });
 }

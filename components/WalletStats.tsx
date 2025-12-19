@@ -52,15 +52,16 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   const ageDisplay = formatAge(avgUtxoAgeDays);
 
   // Build accumulation history from actual transactions
-  // Uses BACKWARDS calculation from current balance to ensure accuracy
+  // Uses FORWARDS calculation starting from 0 balance
   const buildAccumulationHistory = () => {
     if (transactions.length === 0) {
       return [{ name: 'Now', amount: balance }];
     }
 
-    const sortedTxs = [...transactions].sort((a, b) => b.timestamp - a.timestamp);
+    // Sort transactions oldest to newest
+    const sortedTxs = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
 
-    const oldestTx = sortedTxs[sortedTxs.length - 1];
+    const oldestTx = sortedTxs[0];
     const nowDate = new Date();
 
     // Calculate time span in days
@@ -79,54 +80,40 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       dateFormat = (d) => d.getFullYear().toString();
     }
 
-    // Work BACKWARDS from current balance to calculate historical balances
-    // This ensures the endpoint always matches the actual current balance
     const dataPoints: { name: string; amount: number; date: Date }[] = [];
 
-    // Start with current balance
-    let runningBalance = balance;
+    // Start with 0 balance before first transaction
+    let runningBalance = 0;
 
-    // Add current point
+    // Add starting point (0 balance before first transaction)
+    const startDate = new Date(oldestTx.timestamp);
+    startDate.setDate(startDate.getDate() - 1);
     dataPoints.push({
-      name: dateFormat(nowDate),
-      amount: balance,
-      date: nowDate
+      name: dateFormat(startDate),
+      amount: 0,
+      date: startDate
     });
 
-    // Go through transactions newest to oldest, recording balance AFTER each transaction
+    // Go through transactions oldest to newest, applying each to get new balance
     for (const tx of sortedTxs) {
       const txDate = new Date(tx.timestamp);
 
-      // Push balance AFTER this transaction (current runningBalance before we reverse)
+      // tx.amount is already signed: positive for received, negative for sent
+      runningBalance += tx.amount;
+
       dataPoints.push({
         name: dateFormat(txDate),
         amount: runningBalance,
         date: txDate
       });
-
-      // tx.amount is already signed: positive for received, negative for sent
-      // Reverse the effect to get balance BEFORE this transaction:
-      // - If received (positive amount): subtract to get previous balance
-      // - If sent (negative amount): add back (subtracting negative = adding)
-      runningBalance -= tx.amount;
     }
 
-    // After processing all transactions, runningBalance is the starting balance (should be 0)
-    // Add this as the first data point
-    if (sortedTxs.length > 0) {
-      const oldestTx = sortedTxs[sortedTxs.length - 1];
-      const startDate = new Date(oldestTx.timestamp);
-      // Use a date slightly before the first transaction for the starting point
-      startDate.setDate(startDate.getDate() - 1);
-      dataPoints.push({
-        name: dateFormat(startDate),
-        amount: runningBalance, // Starting balance (typically 0)
-        date: startDate
-      });
-    }
-
-    // Reverse to get chronological order (oldest first)
-    dataPoints.reverse();
+    // Add current point (should match calculated running balance)
+    dataPoints.push({
+      name: dateFormat(nowDate),
+      amount: runningBalance,
+      date: nowDate
+    });
 
     // Remove duplicate dates, keeping the LAST (final) balance for each date
     // This ensures we show the end-of-day balance, not intermediate states
@@ -226,7 +213,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                  <YAxis hide domain={[0, 'dataMax']} />
                  <Tooltip
                   contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => [format(value).split(' (')[0], 'Balance']}
+                  formatter={(value: number) => [format(value), 'Balance']}
                 />
                  <Area type="monotone" dataKey="amount" stroke="#d4b483" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
                </AreaChart>
@@ -244,7 +231,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                  <Tooltip
                     cursor={{fill: 'transparent'}}
                     contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    formatter={(value: number) => [format(value).split(' (')[0], 'Amount']}
+                    formatter={(value: number) => [format(value), 'Amount']}
                  />
                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                     {ageData.map((entry, index) => (

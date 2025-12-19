@@ -299,6 +299,7 @@ export interface Transaction {
   walletId: string;
   amount: number; // in sats, negative for send, positive for receive
   fee?: number;
+  balanceAfter?: number; // Wallet balance after this transaction (running balance)
   timestamp?: number; // Unix timestamp (legacy field)
   blockTime?: string; // ISO timestamp (preferred)
   label?: string;

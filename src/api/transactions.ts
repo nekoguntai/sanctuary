@@ -104,6 +104,28 @@ export async function getPendingTransactions(walletId: string): Promise<PendingT
   return apiClient.get<PendingTransaction[]>(`/wallets/${walletId}/transactions/pending`);
 }
 
+/**
+ * Transaction summary statistics
+ */
+export interface TransactionStats {
+  totalCount: number;
+  receivedCount: number;
+  sentCount: number;
+  consolidationCount: number;
+  totalReceived: number;
+  totalSent: number;
+  totalFees: number;
+  walletBalance: number;
+}
+
+/**
+ * Get transaction summary statistics for a wallet
+ * Returns counts and totals independent of pagination
+ */
+export async function getTransactionStats(walletId: string): Promise<TransactionStats> {
+  return apiClient.get<TransactionStats>(`/wallets/${walletId}/transactions/stats`);
+}
+
 export interface ExportTransactionsOptions {
   format: 'csv' | 'json';
   startDate?: string;

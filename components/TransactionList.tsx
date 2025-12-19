@@ -8,6 +8,7 @@ import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, Shiel
 import { TransactionActions } from './TransactionActions';
 import { LabelBadges } from './LabelSelector';
 import { createLogger } from '../utils/logger';
+import type { TransactionStats } from '../src/api/transactions';
 
 const log = createLogger('TransactionList');
 
@@ -24,6 +25,7 @@ interface TransactionListProps {
   confirmationThreshold?: number; // Number of confirmations required (from system settings)
   deepConfirmationThreshold?: number; // Number of confirmations for "deeply confirmed" status
   walletBalance?: number; // Current wallet balance in sats for showing running balance column
+  transactionStats?: TransactionStats; // Pre-computed stats from API (for all transactions, not just displayed)
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
@@ -38,7 +40,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   canEdit = true,
   confirmationThreshold = 1,
   deepConfirmationThreshold = 3,
-  walletBalance
+  walletBalance,
+  transactionStats,
 }) => {
   const { format } = useCurrency();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
@@ -160,27 +163,120 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     return { isReceive, isConsolidation };
   };
 
-  // Calculate running balance for each transaction (transactions are ordered newest first)
-  // Balance after each tx = running total working backwards from current balance
-  const runningBalances = useMemo(() => {
-    if (walletBalance === undefined) return new Map<string, number>();
+  // balanceAfter is now stored directly on each transaction from the API
+  // No need to calculate running balance on the frontend
 
-    const balanceMap = new Map<string, number>();
-    let balance = walletBalance;
-
-    // Transactions are newest first, so the first tx shows current balance after it
-    for (const tx of transactions) {
-      balanceMap.set(tx.id, balance);
-      // Go backwards: reverse the transaction to get previous balance
-      balance -= tx.amount;
+  // Calculate transaction statistics
+  // Use transactionStats prop if provided (from API for all transactions)
+  // Otherwise calculate locally from displayed transactions
+  const txStats = useMemo(() => {
+    // If we have pre-computed stats from API, use those for summary
+    if (transactionStats) {
+      return {
+        total: transactionStats.totalCount,
+        received: transactionStats.receivedCount,
+        sent: transactionStats.sentCount,
+        consolidations: transactionStats.consolidationCount,
+        totalReceived: transactionStats.totalReceived,
+        totalSent: transactionStats.totalSent,
+        totalFees: transactionStats.totalFees,
+      };
     }
 
-    return balanceMap;
-  }, [transactions, walletBalance]);
+    // Fallback: calculate from displayed transactions
+    let received = 0;
+    let sent = 0;
+    let consolidations = 0;
+    let totalReceived = 0;
+    let totalSent = 0;
+    let totalFees = 0;
+
+    for (const tx of transactions) {
+      // Inline consolidation detection logic
+      const isReceive = tx.amount > 0;
+      const isConsolidation = (
+        tx.type === 'consolidation' ||
+        (tx.amount < 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress)) ||
+        (tx.amount > 0 && tx.counterpartyAddress && walletAddresses.includes(tx.counterpartyAddress))
+      );
+
+      if (isConsolidation) {
+        consolidations++;
+        totalFees += Math.abs(tx.amount); // Consolidation amount IS the fee
+      } else if (isReceive) {
+        received++;
+        totalReceived += tx.amount;
+      } else {
+        sent++;
+        totalSent += Math.abs(tx.amount); // Make positive for display
+        // Add explicit fee for sent txs (fee is separate from amount)
+        if (tx.fee) {
+          totalFees += tx.fee;
+        }
+      }
+    }
+
+    return {
+      total: transactions.length,
+      received,
+      sent,
+      consolidations,
+      totalReceived,
+      totalSent,
+      totalFees,
+    };
+  }, [transactions, walletAddresses, transactionStats]);
 
   return (
     <>
-      <div className="overflow-x-auto mt-6">
+      {/* Transaction Statistics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="text-xs text-sanctuary-500 uppercase">Total</div>
+          <div className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-100">{txStats.total}</div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="flex items-center gap-1 text-xs text-sanctuary-500 uppercase">
+            <ArrowDownLeft className="w-3 h-3 text-success-500" />
+            Received
+          </div>
+          <div className="text-lg font-semibold text-success-600 dark:text-success-400">{txStats.received}</div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="flex items-center gap-1 text-xs text-sanctuary-500 uppercase">
+            <ArrowUpRight className="w-3 h-3 text-sanctuary-500" />
+            Sent
+          </div>
+          <div className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-100">{txStats.sent}</div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="flex items-center gap-1 text-xs text-sanctuary-500 uppercase">
+            <RefreshCw className="w-3 h-3 text-primary-500" />
+            Consolidations
+          </div>
+          <div className="text-lg font-semibold text-primary-600 dark:text-primary-400">{txStats.consolidations}</div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="text-xs text-success-500 uppercase">Total In</div>
+          <div className="text-sm font-semibold text-success-600 dark:text-success-400">
+            <Amount sats={txStats.totalReceived} size="sm" />
+          </div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="text-xs text-sanctuary-500 uppercase">Total Out</div>
+          <div className="text-sm font-semibold text-sanctuary-900 dark:text-sanctuary-100">
+            <Amount sats={txStats.totalSent} size="sm" />
+          </div>
+        </div>
+        <div className="surface-elevated px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+          <div className="text-xs text-warning-500 uppercase">Fees Paid</div>
+          <div className="text-sm font-semibold text-warning-600 dark:text-warning-400">
+            <Amount sats={txStats.totalFees} size="sm" />
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
           <thead className="surface-muted">
             <tr>
@@ -268,7 +364,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     <td className="px-4 py-3 whitespace-nowrap text-right">
                       <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
                         <Amount
-                          sats={runningBalances.get(tx.id) ?? 0}
+                          sats={tx.balanceAfter ?? 0}
                           size="sm"
                           className="justify-end"
                         />

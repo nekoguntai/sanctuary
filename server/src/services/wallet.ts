@@ -265,14 +265,30 @@ export async function createWallet(
   if (descriptor) {
     try {
       const addressesToCreate = [];
+      const network = (input.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
+
+      // Generate receive addresses (change = false)
       for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
         const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
           descriptor,
           i,
-          {
-            network: (input.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest',
-            change: false, // External/receive addresses
-          }
+          { network, change: false }
+        );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      // Generate change addresses (change = true)
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          descriptor,
+          i,
+          { network, change: true }
         );
         addressesToCreate.push({
           walletId: wallet.id,

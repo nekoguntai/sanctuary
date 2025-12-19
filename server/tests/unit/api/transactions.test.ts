@@ -82,6 +82,7 @@ describe('Transactions API', () => {
           type: 'received',
           amount: BigInt(100000),
           fee: BigInt(500),
+          balanceAfter: BigInt(100000), // Running balance after first transaction
           confirmations: 6,
           blockHeight: BigInt(849994),
           blockTime: new Date('2024-01-01'),
@@ -96,6 +97,7 @@ describe('Transactions API', () => {
           type: 'sent',
           amount: BigInt(-50000),
           fee: BigInt(300),
+          balanceAfter: BigInt(50000), // Running balance after second transaction (100000 - 50000)
           confirmations: 3,
           blockHeight: BigInt(849997),
           blockTime: new Date('2024-01-02'),
@@ -141,6 +143,7 @@ describe('Transactions API', () => {
           ...tx,
           amount: Number(tx.amount),
           fee: Number(tx.fee),
+          balanceAfter: tx.balanceAfter ? Number(tx.balanceAfter) : null,
           blockHeight,
           confirmations: blockHeight > 0 ? currentBlockHeight - blockHeight + 1 : 0,
           labels: tx.transactionLabels.map((tl: any) => tl.label),
@@ -560,6 +563,147 @@ describe('Transactions API', () => {
       const feeNumber = fee ? Number(fee) : null;
 
       expect(feeNumber).toBeNull();
+    });
+
+    it('should convert balanceAfter BigInt to number', () => {
+      const balanceAfter = BigInt(150000);
+      const balanceAfterNumber = Number(balanceAfter);
+
+      expect(typeof balanceAfterNumber).toBe('number');
+      expect(balanceAfterNumber).toBe(150000);
+    });
+
+    it('should handle null balanceAfter', () => {
+      const balanceAfter: bigint | null = null;
+      const balanceAfterNumber = balanceAfter ? Number(balanceAfter) : null;
+
+      expect(balanceAfterNumber).toBeNull();
+    });
+  });
+
+  describe('Running Balance (balanceAfter)', () => {
+    it('should include balanceAfter in transaction response', async () => {
+      const walletId = 'wallet-with-balance';
+
+      const mockTransactions = [
+        {
+          id: 'tx-balance-1',
+          txid: randomTxid(),
+          walletId,
+          type: 'received',
+          amount: BigInt(200000),
+          fee: null,
+          balanceAfter: BigInt(200000),
+          confirmations: 10,
+          blockHeight: BigInt(850000),
+          blockTime: new Date('2024-02-01'),
+          createdAt: new Date('2024-02-01'),
+          address: null,
+          transactionLabels: [],
+        },
+        {
+          id: 'tx-balance-2',
+          txid: randomTxid(),
+          walletId,
+          type: 'sent',
+          amount: BigInt(-75000),
+          fee: BigInt(1000),
+          balanceAfter: BigInt(125000), // 200000 - 75000
+          confirmations: 8,
+          blockHeight: BigInt(850002),
+          blockTime: new Date('2024-02-02'),
+          createdAt: new Date('2024-02-02'),
+          address: null,
+          transactionLabels: [],
+        },
+        {
+          id: 'tx-balance-3',
+          txid: randomTxid(),
+          walletId,
+          type: 'received',
+          amount: BigInt(50000),
+          fee: null,
+          balanceAfter: BigInt(175000), // 125000 + 50000
+          confirmations: 5,
+          blockHeight: BigInt(850005),
+          blockTime: new Date('2024-02-03'),
+          createdAt: new Date('2024-02-03'),
+          address: null,
+          transactionLabels: [],
+        },
+      ];
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue(mockTransactions);
+
+      const { res, getResponse } = createMockResponse();
+
+      const transactions = await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+      });
+
+      const serializedTransactions = transactions.map((tx: any) => ({
+        ...tx,
+        amount: Number(tx.amount),
+        fee: tx.fee ? Number(tx.fee) : null,
+        balanceAfter: tx.balanceAfter ? Number(tx.balanceAfter) : null,
+        blockHeight: Number(tx.blockHeight),
+      }));
+
+      res.json!(serializedTransactions);
+
+      const response = getResponse();
+      expect(response.body).toHaveLength(3);
+
+      // Verify balanceAfter values
+      expect(response.body[0].balanceAfter).toBe(200000);
+      expect(response.body[1].balanceAfter).toBe(125000);
+      expect(response.body[2].balanceAfter).toBe(175000);
+
+      // Verify types
+      expect(typeof response.body[0].balanceAfter).toBe('number');
+      expect(typeof response.body[1].balanceAfter).toBe('number');
+      expect(typeof response.body[2].balanceAfter).toBe('number');
+    });
+
+    it('should handle transactions with null balanceAfter (legacy data)', async () => {
+      const walletId = 'wallet-legacy';
+
+      const mockTransactions = [
+        {
+          id: 'tx-legacy-1',
+          txid: randomTxid(),
+          walletId,
+          type: 'received',
+          amount: BigInt(100000),
+          fee: null,
+          balanceAfter: null, // Legacy transaction without balanceAfter
+          confirmations: 100,
+          blockHeight: BigInt(800000),
+          blockTime: new Date('2023-01-01'),
+          createdAt: new Date('2023-01-01'),
+          address: null,
+          transactionLabels: [],
+        },
+      ];
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue(mockTransactions);
+
+      const { res, getResponse } = createMockResponse();
+
+      const transactions = await mockPrismaClient.transaction.findMany({
+        where: { walletId },
+      });
+
+      const serializedTransactions = transactions.map((tx: any) => ({
+        ...tx,
+        amount: Number(tx.amount),
+        balanceAfter: tx.balanceAfter ? Number(tx.balanceAfter) : null,
+      }));
+
+      res.json!(serializedTransactions);
+
+      const response = getResponse();
+      expect(response.body[0].balanceAfter).toBeNull();
     });
   });
 });

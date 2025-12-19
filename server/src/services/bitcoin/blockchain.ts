@@ -14,6 +14,34 @@ import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';
 
 const log = createLogger('BLOCKCHAIN');
 
+/**
+ * Recalculate balanceAfter for all transactions in a wallet
+ * Called after new transactions are inserted to ensure running balances are accurate
+ */
+export async function recalculateWalletBalances(walletId: string): Promise<void> {
+  // Get all transactions sorted by block time (oldest first)
+  const transactions = await prisma.transaction.findMany({
+    where: { walletId },
+    orderBy: [
+      { blockTime: 'asc' },
+      { createdAt: 'asc' },
+    ],
+    select: { id: true, amount: true },
+  });
+
+  // Calculate running balance and update each transaction
+  let runningBalance = BigInt(0);
+  for (const tx of transactions) {
+    runningBalance += tx.amount;
+    await prisma.transaction.update({
+      where: { id: tx.id },
+      data: { balanceAfter: runningBalance },
+    });
+  }
+
+  log.debug(`[BLOCKCHAIN] Recalculated balances for ${transactions.length} transactions in wallet ${walletId}`);
+}
+
 // Cache for block timestamps to avoid repeated lookups
 const blockTimestampCache = new Map<number, Date>();
 
@@ -195,31 +223,64 @@ export async function syncAddress(addressId: string): Promise<{
       // Record sent transaction if our wallet addresses were in inputs
       // This detects when we're spending from this wallet (even if we also receive change)
       if (isSent) {
-        // Calculate how much was sent to external addresses (non-wallet addresses)
+        // Calculate outputs to external addresses and back to wallet (change)
         let totalToExternal = 0;
+        let totalToWallet = 0;
         for (const out of outputs) {
           const outAddr = out.scriptPubKey?.address ||
             (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
-          // Count output as "sent" if it goes to an address outside our wallet
+          const outValue = Math.round(out.value * 100000000);
           if (outAddr && !walletAddressSet.has(outAddr)) {
-            totalToExternal += Math.round(out.value * 100000000);
+            totalToExternal += outValue;
+          } else if (outAddr) {
+            totalToWallet += outValue;
           }
         }
 
+        // Calculate fee: inputs - all outputs
+        const fee = totalSentFromWallet - totalToExternal - totalToWallet;
+
         if (totalToExternal > 0) {
-          // Check if we already recorded this as a sent tx (could be from another address sync)
+          // Regular send to external address
           const existingSentTx = await prisma.transaction.findFirst({
             where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'sent' },
           });
 
           if (!existingSentTx) {
+            // Amount is negative (funds leaving wallet = amount sent + fee)
+            const sentAmount = -(totalToExternal + fee);
             await prisma.transaction.create({
               data: {
                 txid: item.tx_hash,
                 walletId: addressRecord.walletId,
                 addressId: addressRecord.id,
                 type: 'sent',
-                amount: BigInt(totalToExternal),
+                amount: BigInt(sentAmount),
+                fee: BigInt(fee),
+                confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+                blockHeight: item.height > 0 ? item.height : null,
+                blockTime,
+              },
+            });
+
+            transactionCount++;
+          }
+        } else if (totalToWallet > 0) {
+          // Consolidation - all outputs go back to wallet
+          const existingConsolidationTx = await prisma.transaction.findFirst({
+            where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'consolidation' },
+          });
+
+          if (!existingConsolidationTx) {
+            // Amount is negative fee (only fee is lost in consolidation)
+            await prisma.transaction.create({
+              data: {
+                txid: item.tx_hash,
+                walletId: addressRecord.walletId,
+                addressId: addressRecord.id,
+                type: 'consolidation',
+                amount: BigInt(-fee),
+                fee: BigInt(fee),
                 confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
                 blockHeight: item.height > 0 ? item.height : null,
                 blockTime,
@@ -543,13 +604,15 @@ export async function syncWallet(walletId: string): Promise<{
       const isConsolidation = isSent && totalToExternal === 0 && totalToWallet > 0;
 
       if (isConsolidation && !existingTxMap.has(`${item.tx_hash}:consolidation`)) {
-        // Consolidation - funds moved within wallet
+        // Consolidation - funds moved within wallet, only fee is lost
+        // Amount is negative (fee paid)
+        const consolidationAmount = fee !== null ? -fee : 0;
         transactionsToCreate.push({
           txid: item.tx_hash,
           walletId,
           addressId: addressRecord.id,
           type: 'consolidation',
-          amount: BigInt(totalToWallet),
+          amount: BigInt(consolidationAmount),
           fee: fee !== null ? BigInt(fee) : null,
           confirmations,
           blockHeight: item.height > 0 ? item.height : null,
@@ -558,12 +621,14 @@ export async function syncWallet(walletId: string): Promise<{
         existingTxMap.set(`${item.tx_hash}:consolidation`, true);
       } else if (isSent && totalToExternal > 0 && !existingTxMap.has(`${item.tx_hash}:sent`)) {
         // Regular send to external address
+        // Amount is negative (funds leaving wallet = amount sent + fee)
+        const sentAmount = -(totalToExternal + (fee ?? 0));
         transactionsToCreate.push({
           txid: item.tx_hash,
           walletId,
           addressId: addressRecord.id,
           type: 'sent',
-          amount: BigInt(totalToExternal),
+          amount: BigInt(sentAmount),
           fee: fee !== null ? BigInt(fee) : null,
           confirmations,
           blockHeight: item.height > 0 ? item.height : null,
@@ -626,6 +691,11 @@ export async function syncWallet(walletId: string): Promise<{
       skipDuplicates: true,
     });
     totalTransactions = newTransactions.length;
+
+    // Recalculate running balances for all transactions in this wallet
+    if (newTransactions.length > 0) {
+      await recalculateWalletBalances(walletId);
+    }
 
     // Log transaction type breakdown (only new ones)
     const received = newTransactions.filter(t => t.type === 'received').length;

@@ -354,15 +354,34 @@ export async function importFromDescriptor(
       })),
     });
 
-    // Generate initial addresses
+    // Generate initial addresses (both receive and change)
     try {
       const addressesToCreate = [];
+
+      // Generate receive addresses (change = false)
       for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
         const { address, derivationPath } =
           addressDerivation.deriveAddressFromDescriptor(
             descriptorResult.descriptor,
             i,
             { network, change: false }
+          );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      // Generate change addresses (change = true)
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } =
+          addressDerivation.deriveAddressFromDescriptor(
+            descriptorResult.descriptor,
+            i,
+            { network, change: true }
           );
         addressesToCreate.push({
           walletId: wallet.id,
@@ -508,15 +527,34 @@ export async function importFromJson(
       })),
     });
 
-    // Generate initial addresses
+    // Generate initial addresses (both receive and change)
     try {
       const addressesToCreate = [];
+
+      // Generate receive addresses (change = false)
       for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
         const { address, derivationPath } =
           addressDerivation.deriveAddressFromDescriptor(
             descriptorResult.descriptor,
             i,
             { network, change: false }
+          );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      // Generate change addresses (change = true)
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } =
+          addressDerivation.deriveAddressFromDescriptor(
+            descriptorResult.descriptor,
+            i,
+            { network, change: true }
           );
         addressesToCreate.push({
           walletId: wallet.id,
@@ -691,15 +729,34 @@ export async function importFromParsedData(
       })),
     });
 
-    // Generate initial addresses
+    // Generate initial addresses (both receive and change)
     try {
       const addressesToCreate = [];
+
+      // Generate receive addresses (change = false)
       for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
         const { address, derivationPath } =
           addressDerivation.deriveAddressFromDescriptor(
             descriptorResult.descriptor,
             i,
             { network, change: false }
+          );
+        addressesToCreate.push({
+          walletId: wallet.id,
+          address,
+          derivationPath,
+          index: i,
+          used: false,
+        });
+      }
+
+      // Generate change addresses (change = true)
+      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+        const { address, derivationPath } =
+          addressDerivation.deriveAddressFromDescriptor(
+            descriptorResult.descriptor,
+            i,
+            { network, change: true }
           );
         addressesToCreate.push({
           walletId: wallet.id,

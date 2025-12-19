@@ -241,12 +241,13 @@ model Address {
 
 model Transaction {
   id            String   @id @default(uuid())
-  txid          String   @unique
+  txid          String
   walletId      String
   userId        String?
   type          String   // sent, received
   amount        BigInt   // Amount in satoshis
   fee           BigInt?  // Fee in satoshis
+  balanceAfter  BigInt?  // Wallet balance after this transaction (running balance)
   confirmations Int      @default(0)
   blockHeight   Int?
   blockTime     DateTime?
@@ -263,6 +264,7 @@ model Transaction {
   addressId String?
   transactionLabels TransactionLabel[]
 
+  @@unique([txid, walletId])  // Same blockchain tx can exist for multiple wallets
   @@index([walletId])
   @@index([txid])
   @@index([walletId, blockHeight(sort: Desc)])

@@ -72,31 +72,22 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
     });
 
     // Convert BigInt amounts to numbers and calculate confirmations dynamically
-    // Sign amounts based on transaction type:
-    // - sent: negative (what you sent away)
-    // - consolidation: negative fee only (you only lose the fee, not the amount which is reorganized UTXOs)
+    // The amounts in the database are already correctly signed:
+    // - sent: negative (amount + fee already deducted during sync)
+    // - consolidation: negative fee only (only fee lost)
     // - received: positive (what you received)
     const serializedTransactions = transactions.map(tx => {
       const blockHeight = bigIntToNumber(tx.blockHeight);
       const rawAmount = bigIntToNumberOrZero(tx.amount);
-      const fee = bigIntToNumberOrZero(tx.fee);
 
-      let signedAmount: number;
-      if (tx.type === 'consolidation') {
-        // Consolidation: only the fee is lost (inputs - outputs = fee)
-        signedAmount = -Math.abs(fee);
-      } else if (tx.type === 'sent') {
-        // Sent: both amount AND fee are deducted from balance
-        signedAmount = -(Math.abs(rawAmount) + Math.abs(fee));
-      } else {
-        // Received: add to balance
-        signedAmount = Math.abs(rawAmount);
-      }
+      // The amount is already correctly signed in the database
+      // Don't re-apply signing logic to avoid double-counting fees
 
       return {
         ...tx,
-        amount: signedAmount,
+        amount: rawAmount,
         fee: bigIntToNumber(tx.fee),
+        balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
         confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
         labels: tx.transactionLabels.map(tl => tl.label),
@@ -107,6 +98,79 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
     res.json(serializedTransactions);
   } catch (error: unknown) {
     handleApiError(error, res, 'Get transactions');
+  }
+});
+
+/**
+ * GET /api/v1/wallets/:walletId/transactions/stats
+ * Get transaction summary statistics for a wallet
+ * Returns counts and totals independent of pagination
+ */
+router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    // Get all transactions for this wallet
+    const transactions = await prisma.transaction.findMany({
+      where: { walletId },
+      select: {
+        type: true,
+        amount: true,
+        fee: true,
+      },
+    });
+
+    // Calculate stats
+    let totalCount = 0;
+    let receivedCount = 0;
+    let sentCount = 0;
+    let consolidationCount = 0;
+    let totalReceived = BigInt(0);
+    let totalSent = BigInt(0);
+    let totalFees = BigInt(0);
+
+    for (const tx of transactions) {
+      totalCount++;
+      const amount = tx.amount || BigInt(0);
+      const fee = tx.fee || BigInt(0);
+
+      if (tx.type === 'received') {
+        receivedCount++;
+        totalReceived += amount > 0 ? amount : -amount;
+      } else if (tx.type === 'sent') {
+        sentCount++;
+        // Amount is already negative in DB, so negate to get positive value
+        totalSent += amount < 0 ? -amount : amount;
+      } else if (tx.type === 'consolidation') {
+        consolidationCount++;
+        // Consolidation fee is the cost
+        totalFees += fee;
+      }
+
+      // Add fees from sent transactions
+      if (tx.type === 'sent' && fee > 0) {
+        totalFees += fee;
+      }
+    }
+
+    // Calculate wallet balance (sum of all amounts)
+    const walletBalance = transactions.reduce(
+      (sum, tx) => sum + (tx.amount || BigInt(0)),
+      BigInt(0)
+    );
+
+    res.json({
+      totalCount,
+      receivedCount,
+      sentCount,
+      consolidationCount,
+      totalReceived: Number(totalReceived),
+      totalSent: Number(totalSent),
+      totalFees: Number(totalFees),
+      walletBalance: Number(walletBalance),
+    });
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get transaction stats');
   }
 });
 

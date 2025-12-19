@@ -45,6 +45,18 @@ jest.mock('../../../../src/services/notifications/notificationService', () => ({
   notifyNewTransactions: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock address derivation
+jest.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
+  deriveAddressFromDescriptor: jest.fn().mockImplementation((descriptor, index, options) => {
+    const change = options?.change ? 1 : 0;
+    return {
+      address: `tb1q_test_${change}_${index}`,
+      derivationPath: `m/84'/0'/0'/${change}/${index}`,
+      publicKey: Buffer.from('02' + '00'.repeat(32), 'hex'),
+    };
+  }),
+}));
+
 // Import after mocks
 import {
   syncAddress,
@@ -58,6 +70,7 @@ import {
   monitorAddress,
   populateMissingTransactionFields,
   recalculateWalletBalances,
+  ensureGapLimit,
 } from '../../../../src/services/bitcoin/blockchain';
 
 describe('Blockchain Service', () => {
@@ -1187,6 +1200,171 @@ describe('Blockchain Service', () => {
       mockPrismaClient.transaction.update.mockRejectedValue(new Error('Update failed'));
 
       await expect(recalculateWalletBalances(walletId)).rejects.toThrow('Update failed');
+    });
+  });
+
+  describe('ensureGapLimit', () => {
+    const walletId = 'test-wallet-id';
+    const mockDescriptor = "wpkh([12345678/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XYuvg9WP3SaFPe5FPnoo1Zv2aq5S5vLLwNVxNP6YnNJvKLzDhPLzfE3e/<0;1>/*)";
+
+    beforeEach(() => {
+      mockPrismaClient.wallet.findUnique.mockReset();
+      mockPrismaClient.address.findMany.mockReset();
+      mockPrismaClient.address.createMany.mockReset();
+    });
+
+    it('should not generate addresses when gap limit is already satisfied', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: mockDescriptor,
+        network: 'mainnet',
+      });
+
+      // Create 25 receive addresses with the last 20 unused (gap limit = 20)
+      const receiveAddresses = Array.from({ length: 25 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/0/${i}`,
+        index: i,
+        used: i < 5, // First 5 are used, last 20 are unused
+      }));
+
+      // Create 25 change addresses with the last 20 unused (gap limit = 20)
+      const changeAddresses = Array.from({ length: 25 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/1/${i}`,
+        index: i,
+        used: i < 5, // First 5 are used, last 20 are unused
+      }));
+
+      mockPrismaClient.address.findMany.mockResolvedValue([...receiveAddresses, ...changeAddresses]);
+
+      const result = await ensureGapLimit(walletId);
+
+      expect(result).toHaveLength(0);
+      expect(mockPrismaClient.address.createMany).not.toHaveBeenCalled();
+    });
+
+    it('should generate addresses when gap limit is not satisfied', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: mockDescriptor,
+        network: 'mainnet',
+      });
+
+      // Create receive addresses with gap of 10 (need 10 more)
+      const receiveAddresses = Array.from({ length: 15 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/0/${i}`,
+        index: i,
+        used: i < 5, // First 5 used, last 10 unused = gap of 10
+      }));
+
+      // Create change addresses with gap of 20 (satisfied)
+      const changeAddresses = Array.from({ length: 25 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/1/${i}`,
+        index: i,
+        used: i < 5, // First 5 used, last 20 unused = gap of 20
+      }));
+
+      mockPrismaClient.address.findMany.mockResolvedValue([...receiveAddresses, ...changeAddresses]);
+      mockPrismaClient.address.createMany.mockResolvedValue({ count: 10 });
+
+      const result = await ensureGapLimit(walletId);
+
+      // Should generate 10 more receive addresses to reach gap limit of 20
+      // Change addresses already have gap of 20, so none generated for change
+      expect(result.length).toBe(10);
+      expect(mockPrismaClient.address.createMany).toHaveBeenCalled();
+    });
+
+    it('should handle both receive and change addresses separately', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: mockDescriptor,
+        network: 'mainnet',
+      });
+
+      // Receive addresses with gap of 20 (satisfied)
+      const receiveAddresses = Array.from({ length: 25 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/0/${i}`,
+        index: i,
+        used: i < 5,
+      }));
+
+      // Change addresses with gap of only 5 (not satisfied)
+      const changeAddresses = Array.from({ length: 10 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/1/${i}`,
+        index: i,
+        used: i < 5, // 5 used, 5 unused
+      }));
+
+      mockPrismaClient.address.findMany.mockResolvedValue([...receiveAddresses, ...changeAddresses]);
+      mockPrismaClient.address.createMany.mockResolvedValue({ count: 15 });
+
+      const result = await ensureGapLimit(walletId);
+
+      // Should only generate change addresses (15 more to reach gap of 20)
+      expect(result.length).toBe(15);
+      // All new addresses should be change addresses (/1/)
+      const newChangeAddresses = result.filter(a => a.derivationPath.includes('/1/'));
+      expect(newChangeAddresses.length).toBe(15);
+    });
+
+    it('should skip wallets without a descriptor', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: null,
+        network: 'mainnet',
+      });
+
+      const result = await ensureGapLimit(walletId);
+
+      expect(result).toHaveLength(0);
+      expect(mockPrismaClient.address.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should handle wallet with no addresses', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: mockDescriptor,
+        network: 'mainnet',
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+      mockPrismaClient.address.createMany.mockResolvedValue({ count: 40 });
+
+      const result = await ensureGapLimit(walletId);
+
+      // No addresses means gap is 0 for both receive and change
+      // Should generate 20 receive + 20 change = 40 addresses
+      expect(result).toHaveLength(40);
+    });
+
+    it('should handle all addresses being used', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        descriptor: mockDescriptor,
+        network: 'mainnet',
+      });
+
+      // All 10 receive addresses are used
+      const receiveAddresses = Array.from({ length: 10 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/0/${i}`,
+        index: i,
+        used: true,
+      }));
+
+      // All 10 change addresses are used
+      const changeAddresses = Array.from({ length: 10 }, (_, i) => ({
+        derivationPath: `m/84'/0'/0'/1/${i}`,
+        index: i,
+        used: true,
+      }));
+
+      mockPrismaClient.address.findMany.mockResolvedValue([...receiveAddresses, ...changeAddresses]);
+      mockPrismaClient.address.createMany.mockResolvedValue({ count: 40 });
+
+      const result = await ensureGapLimit(walletId);
+
+      // Should generate 20 receive + 20 change = 40 new addresses
+      expect(result.length).toBe(40);
     });
   });
 });

@@ -10,7 +10,8 @@ import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 import { createLogger } from '../../utils/logger';
 import { walletLog } from '../../websocket/notifications';
-import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';
+import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD, ADDRESS_GAP_LIMIT } from '../../constants';
+import * as addressDerivation from './addressDerivation';
 
 const log = createLogger('BLOCKCHAIN');
 
@@ -40,6 +41,132 @@ export async function recalculateWalletBalances(walletId: string): Promise<void>
   }
 
   log.debug(`[BLOCKCHAIN] Recalculated balances for ${transactions.length} transactions in wallet ${walletId}`);
+}
+
+/**
+ * Check and expand addresses to maintain gap limit
+ *
+ * BIP-44 specifies a "gap limit" of 20 - the wallet should stop looking for
+ * addresses after finding 20 consecutive unused addresses. Conversely, we need
+ * to ensure there are always at least 20 unused addresses at the end of both
+ * the receive and change chains.
+ *
+ * @returns Array of newly generated addresses that should be scanned
+ */
+export async function ensureGapLimit(walletId: string): Promise<Array<{ address: string; derivationPath: string }>> {
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { id: true, descriptor: true, network: true },
+  });
+
+  if (!wallet?.descriptor) {
+    log.debug(`[BLOCKCHAIN] Wallet ${walletId} has no descriptor, skipping gap limit check`);
+    return [];
+  }
+
+  // Get all addresses with their used status
+  const addresses = await prisma.address.findMany({
+    where: { walletId },
+    select: { derivationPath: true, index: true, used: true },
+    orderBy: { index: 'asc' },
+  });
+
+  // Separate into receive (/0/) and change (/1/) addresses
+  const receiveAddrs = addresses.filter(a => a.derivationPath?.includes('/0/'));
+  const changeAddrs = addresses.filter(a => a.derivationPath?.includes('/1/'));
+
+  const newAddresses: Array<{ address: string; derivationPath: string }> = [];
+
+  // Check receive addresses gap limit
+  const receiveGap = countUnusedGap(receiveAddrs);
+  if (receiveGap < ADDRESS_GAP_LIMIT) {
+    const maxReceiveIndex = Math.max(-1, ...receiveAddrs.map(a => a.index));
+    const toGenerate = ADDRESS_GAP_LIMIT - receiveGap;
+
+    walletLog(walletId, 'info', 'ADDRESS', `Expanding receive addresses (gap: ${receiveGap}/${ADDRESS_GAP_LIMIT})`, {
+      currentMax: maxReceiveIndex,
+      generating: toGenerate,
+    });
+
+    for (let i = maxReceiveIndex + 1; i <= maxReceiveIndex + toGenerate; i++) {
+      try {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          wallet.descriptor,
+          i,
+          { network: wallet.network as 'mainnet' | 'testnet' | 'regtest', change: false }
+        );
+        newAddresses.push({ address, derivationPath });
+      } catch (err) {
+        log.error(`Failed to derive receive address ${i}`, { error: err });
+      }
+    }
+  }
+
+  // Check change addresses gap limit
+  const changeGap = countUnusedGap(changeAddrs);
+  if (changeGap < ADDRESS_GAP_LIMIT) {
+    const maxChangeIndex = Math.max(-1, ...changeAddrs.map(a => a.index));
+    const toGenerate = ADDRESS_GAP_LIMIT - changeGap;
+
+    walletLog(walletId, 'info', 'ADDRESS', `Expanding change addresses (gap: ${changeGap}/${ADDRESS_GAP_LIMIT})`, {
+      currentMax: maxChangeIndex,
+      generating: toGenerate,
+    });
+
+    for (let i = maxChangeIndex + 1; i <= maxChangeIndex + toGenerate; i++) {
+      try {
+        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+          wallet.descriptor,
+          i,
+          { network: wallet.network as 'mainnet' | 'testnet' | 'regtest', change: true }
+        );
+        newAddresses.push({ address, derivationPath });
+      } catch (err) {
+        log.error(`Failed to derive change address ${i}`, { error: err });
+      }
+    }
+  }
+
+  // Bulk insert new addresses
+  if (newAddresses.length > 0) {
+    const addressesToCreate = newAddresses.map(a => ({
+      walletId,
+      address: a.address,
+      derivationPath: a.derivationPath,
+      index: parseInt(a.derivationPath.split('/').pop() || '0', 10),
+      used: false,
+    }));
+
+    await prisma.address.createMany({
+      data: addressesToCreate,
+      skipDuplicates: true,
+    });
+
+    walletLog(walletId, 'info', 'ADDRESS', `Generated ${newAddresses.length} new addresses to maintain gap limit`);
+  }
+
+  return newAddresses;
+}
+
+/**
+ * Count consecutive unused addresses at the end of an address list
+ */
+function countUnusedGap(addresses: Array<{ index: number; used: boolean }>): number {
+  if (addresses.length === 0) return 0;
+
+  // Sort by index descending to count from the end
+  const sorted = [...addresses].sort((a, b) => b.index - a.index);
+
+  let gap = 0;
+  for (const addr of sorted) {
+    if (!addr.used) {
+      gap++;
+    } else {
+      break; // Stop counting when we hit a used address
+    }
+  }
+
+  return gap;
 }
 
 // Cache for block timestamps to avoid repeated lookups
@@ -968,13 +1095,56 @@ export async function syncWallet(walletId: string): Promise<{
     });
   }
 
+  // PHASE 11: Gap limit expansion
+  // After marking addresses as used, check if we need to generate more addresses
+  // to maintain the BIP-44 gap limit (20 consecutive unused addresses)
+  const newAddresses = await ensureGapLimit(walletId);
+
+  // If new addresses were generated, scan them for transactions
+  // This handles the case where external software used addresses beyond our current range
+  let additionalTxCount = 0;
+  let additionalUtxoCount = 0;
+
+  if (newAddresses.length > 0) {
+    walletLog(walletId, 'info', 'BLOCKCHAIN', `Scanning ${newAddresses.length} newly generated addresses`);
+
+    // Fetch history for new addresses
+    const newAddressStrings = newAddresses.map(a => a.address);
+
+    try {
+      const newHistoryResults = await client.getAddressHistoryBatch(newAddressStrings);
+
+      // Check if any new addresses have transactions
+      let foundTransactions = false;
+      for (const [, history] of newHistoryResults) {
+        if (history.length > 0) {
+          foundTransactions = true;
+          break;
+        }
+      }
+
+      if (foundTransactions) {
+        // Recursively sync the wallet to process new transactions
+        // This will also trigger another gap limit check if needed
+        walletLog(walletId, 'info', 'BLOCKCHAIN', 'Found transactions on new addresses, re-syncing...');
+        const recursiveResult = await syncWallet(walletId);
+        additionalTxCount = recursiveResult.transactions;
+        additionalUtxoCount = recursiveResult.utxos;
+      }
+    } catch (error) {
+      log.warn(`[BLOCKCHAIN] Failed to scan new addresses: ${error}`);
+    }
+  }
+
   const elapsed = Date.now() - startTime;
-  log.debug(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${totalTransactions} tx, ${totalUtxos} utxos`);
+  const finalTxCount = totalTransactions + additionalTxCount;
+  const finalUtxoCount = totalUtxos + additionalUtxoCount;
+  log.debug(`[BLOCKCHAIN] Wallet sync completed in ${elapsed}ms: ${finalTxCount} tx, ${finalUtxoCount} utxos`);
 
   return {
-    addresses: addresses.length,
-    transactions: totalTransactions,
-    utxos: totalUtxos,
+    addresses: addresses.length + newAddresses.length,
+    transactions: finalTxCount,
+    utxos: finalUtxoCount,
   };
 }
 

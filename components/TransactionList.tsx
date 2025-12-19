@@ -12,6 +12,10 @@ import type { TransactionStats } from '../src/api/transactions';
 
 const log = createLogger('TransactionList');
 
+// Stable empty arrays to prevent re-renders when props aren't provided
+const EMPTY_WALLETS: Wallet[] = [];
+const EMPTY_ADDRESSES: string[] = [];
+
 interface TransactionListProps {
   transactions: Transaction[];
   showWalletBadge?: boolean;
@@ -31,8 +35,8 @@ interface TransactionListProps {
 export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
   showWalletBadge = false,
-  wallets = [],
-  walletAddresses = [],
+  wallets = EMPTY_WALLETS,
+  walletAddresses = EMPTY_ADDRESSES,
   onWalletClick,
   onTransactionClick,
   highlightedTxId,

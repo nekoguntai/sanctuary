@@ -4,7 +4,7 @@
  * This script calculates the running balance for each transaction in each wallet
  * and updates the balanceAfter field.
  *
- * Run with: npx ts-node scripts/backfill-balance-after.ts
+ * Run with: npx tsx scripts/backfill-balance-after.ts
  */
 
 import { PrismaClient } from '@prisma/client';

@@ -211,7 +211,7 @@ ELECTRUM_PROTOCOL=ssl
 
 ### Hot Reload
 
-The development server uses `ts-node-dev` for automatic restart on file changes.
+The development server uses `tsx watch` for automatic restart on file changes.
 
 ### Database Management
 

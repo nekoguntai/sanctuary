@@ -393,6 +393,24 @@ export interface Quorum {
   n: number;
 }
 
+/**
+ * Helper to get the 'm' value from a Quorum (required signatures)
+ * Handles both Quorum object and plain number
+ */
+export function getQuorumM(quorum: Quorum | number | undefined, fallback = 1): number {
+  if (quorum === undefined) return fallback;
+  return typeof quorum === 'number' ? quorum : quorum.m;
+}
+
+/**
+ * Helper to get the 'n' value from a Quorum (total signers)
+ * Handles both Quorum object and plain number (needs totalSigners)
+ */
+export function getQuorumN(quorum: Quorum | number | undefined, totalSigners?: number, fallback = 1): number {
+  if (quorum === undefined) return totalSigners ?? fallback;
+  return typeof quorum === 'number' ? (totalSigners ?? fallback) : quorum.n;
+}
+
 export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 
 export interface Wallet {

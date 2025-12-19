@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, HardwareDevice, HardwareDeviceModel } from '../types';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel } from '../types';
 import { getDevice, updateDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
 import { Edit2, Save, X, ArrowLeft, ChevronDown } from 'lucide-react';
@@ -25,7 +25,7 @@ interface DeviceWithWallets extends ApiDevice {
 interface WalletInfo {
   id: string;
   name: string;
-  type: WalletType;
+  type: WalletType | ApiWalletType;
 }
 
 export const DeviceDetail: React.FC = () => {

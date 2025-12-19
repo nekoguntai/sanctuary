@@ -54,11 +54,16 @@ router.get('/status', async (req: Request, res: Response) => {
 
     // Get pool stats if Electrum and pool is initialized
     let poolStats = null;
+    let effectiveMin = nodeConfig?.poolMinConnections;
+    let effectiveMax = nodeConfig?.poolMaxConnections;
     if (nodeConfig?.type === 'electrum') {
       try {
         const pool = getElectrumPool();
         if (pool.isPoolInitialized()) {
           poolStats = pool.getPoolStats();
+          // Get effective values (adjusted for server count)
+          effectiveMin = pool.getEffectiveMinConnections();
+          effectiveMax = pool.getEffectiveMaxConnections();
         }
       } catch {
         // Pool not initialized yet
@@ -79,8 +84,10 @@ router.get('/status', async (req: Request, res: Response) => {
       // Pool settings (Electrum only)
       pool: nodeConfig?.type === 'electrum' ? {
         enabled: nodeConfig.poolEnabled,
-        minConnections: nodeConfig.poolMinConnections,
-        maxConnections: nodeConfig.poolMaxConnections,
+        minConnections: effectiveMin,
+        maxConnections: effectiveMax,
+        configuredMin: nodeConfig.poolMinConnections,
+        configuredMax: nodeConfig.poolMaxConnections,
         stats: poolStats,
       } : null,
     });

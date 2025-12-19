@@ -9,6 +9,30 @@
  * - Per-server health tracking and failover
  * - Dedicated subscription connection for real-time events
  * - Acquisition queue when pool is exhausted
+ *
+ * ## Connection Scaling
+ *
+ * The pool automatically adjusts connection limits based on server count:
+ *
+ * - **Effective Min** = max(configured_min, server_count)
+ *   Ensures at least 1 connection per server at startup for even distribution.
+ *
+ * - **Effective Max** = max(configured_max, server_count)
+ *   Ensures the pool can maintain at least 1 connection per server.
+ *
+ * Example with 3 servers:
+ * - Configured: min=1, max=5
+ * - Effective:  min=3, max=5 (min raised to match server count)
+ *
+ * Example with 10 servers:
+ * - Configured: min=1, max=5
+ * - Effective:  min=10, max=10 (both raised to match server count)
+ *
+ * ## Load Balancing Strategies
+ *
+ * - **round_robin**: Distributes connections evenly across all healthy servers
+ * - **least_connections**: Prefers servers with fewer active connections
+ * - **failover_only**: Uses primary server, fails over to others only when unhealthy
  */
 
 import { EventEmitter } from 'events';
@@ -214,7 +238,32 @@ export class ElectrumPool extends EventEmitter {
         });
       }
     }
-    log.info(`Pool configured with ${this.servers.length} servers`);
+    log.info(`Pool configured with ${this.servers.length} servers`, {
+      effectiveMin: this.getEffectiveMinConnections(),
+      effectiveMax: this.getEffectiveMaxConnections(),
+      configuredMin: this.config.minConnections,
+      configuredMax: this.config.maxConnections,
+    });
+  }
+
+  /**
+   * Get effective minimum connections (at least 1 per server)
+   * This ensures even distribution across all configured servers at startup.
+   */
+  getEffectiveMinConnections(): number {
+    const serverCount = this.servers.length;
+    if (serverCount === 0) return this.config.minConnections;
+    return Math.max(this.config.minConnections, serverCount);
+  }
+
+  /**
+   * Get effective maximum connections (at least 1 per server)
+   * This ensures the pool can maintain at least 1 connection per server.
+   */
+  getEffectiveMaxConnections(): number {
+    const serverCount = this.servers.length;
+    if (serverCount === 0) return this.config.maxConnections;
+    return Math.max(this.config.maxConnections, serverCount);
   }
 
   /**
@@ -308,13 +357,21 @@ export class ElectrumPool extends EventEmitter {
       return;
     }
 
+    const effectiveMin = this.getEffectiveMinConnections();
+    const effectiveMax = this.getEffectiveMaxConnections();
+
     log.info(
-      `Initializing Electrum pool (min: ${this.config.minConnections}, max: ${this.config.maxConnections})`
+      `Initializing Electrum pool (min: ${effectiveMin}, max: ${effectiveMax})`,
+      {
+        serverCount: this.servers.length,
+        configuredMin: this.config.minConnections,
+        configuredMax: this.config.maxConnections,
+      }
     );
 
-    // Create minimum connections
+    // Create minimum connections (at least 1 per server)
     const initPromises: Promise<void>[] = [];
-    for (let i = 0; i < this.config.minConnections; i++) {
+    for (let i = 0; i < effectiveMin; i++) {
       initPromises.push(
         this.createConnection().then(() => {}).catch((err) => {
           log.error(`Failed to create initial connection ${i + 1}`, { error: String(err) });
@@ -418,7 +475,7 @@ export class ElectrumPool extends EventEmitter {
     }
 
     // Try to create a new connection if under limit
-    if (this.connections.size < this.config.maxConnections) {
+    if (this.connections.size < this.getEffectiveMaxConnections()) {
       try {
         const newConn = await this.createConnection();
         return this.activateConnection(newConn, options.purpose, startTime);
@@ -513,7 +570,7 @@ export class ElectrumPool extends EventEmitter {
 
     // Create or designate a subscription connection
     let conn = this.findIdleConnection();
-    if (!conn && this.connections.size < this.config.maxConnections) {
+    if (!conn && this.connections.size < this.getEffectiveMaxConnections()) {
       conn = await this.createConnection();
     }
 
@@ -581,7 +638,7 @@ export class ElectrumPool extends EventEmitter {
   isHealthy(): boolean {
     if (!this.isInitialized) return false;
     const stats = this.getPoolStats();
-    return stats.idleConnections > 0 || stats.totalConnections < this.config.maxConnections;
+    return stats.idleConnections > 0 || stats.totalConnections < this.getEffectiveMaxConnections();
   }
 
   /**
@@ -834,8 +891,8 @@ export class ElectrumPool extends EventEmitter {
       } catch {}
       this.connections.delete(conn.id);
 
-      // Ensure minimum connections
-      if (this.connections.size < this.config.minConnections && !this.isShuttingDown) {
+      // Ensure minimum connections (at least 1 per server)
+      if (this.connections.size < this.getEffectiveMinConnections() && !this.isShuttingDown) {
         this.createConnection().catch((err) => {
           log.error('Failed to create replacement connection', { error: String(err) });
         });
@@ -910,8 +967,8 @@ export class ElectrumPool extends EventEmitter {
       // Don't cleanup dedicated or active connections
       if (conn.isDedicated || conn.state !== 'idle') continue;
 
-      // Don't go below minimum
-      if (this.connections.size <= this.config.minConnections) break;
+      // Don't go below minimum (at least 1 per server)
+      if (this.connections.size <= this.getEffectiveMinConnections()) break;
 
       const idleTime = now - conn.lastUsedAt.getTime();
       if (idleTime > this.config.idleTimeoutMs) {

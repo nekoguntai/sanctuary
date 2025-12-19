@@ -1779,17 +1779,17 @@ export const SendTransaction: React.FC = () => {
                     Multisig Signing
                   </h3>
                   <p className="text-xs text-blue-700 dark:text-blue-300">
-                    {wallet.quorum?.m} of {wallet.quorum?.n} signatures required
+                    {typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m} of {typeof wallet.quorum === 'number' ? wallet.totalSigners : wallet.quorum?.n} signatures required
                   </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <span className={`text-sm font-medium ${
-                  signedDevices.size >= (wallet.quorum?.m || 1)
+                  signedDevices.size >= (typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m || 1)
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-sanctuary-500'
                 }`}>
-                  {signedDevices.size} / {wallet.quorum?.m} collected
+                  {signedDevices.size} / {typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m} collected
                 </span>
               </div>
             </div>
@@ -2032,16 +2032,16 @@ export const SendTransaction: React.FC = () => {
             <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-500/20">
               <div className="flex items-center justify-between text-xs text-blue-700 dark:text-blue-300 mb-2">
                 <span>Signature Progress</span>
-                <span>{Math.round((signedDevices.size / (wallet.quorum?.m || 1)) * 100)}%</span>
+                <span>{Math.round((signedDevices.size / ((typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m) || 1)) * 100)}%</span>
               </div>
               <div className="h-2 bg-blue-200 dark:bg-blue-800/50 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-300 ${
-                    signedDevices.size >= (wallet.quorum?.m || 1)
+                    signedDevices.size >= ((typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m) || 1)
                       ? 'bg-green-500'
                       : 'bg-blue-500'
                   }`}
-                  style={{ width: `${Math.min(100, (signedDevices.size / (wallet.quorum?.m || 1)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (signedDevices.size / ((typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m) || 1)) * 100)}%` }}
                 />
               </div>
             </div>
@@ -2339,7 +2339,7 @@ export const SendTransaction: React.FC = () => {
                        <>
                          <Button
                            size="lg"
-                           variant={supportsUsb ? "outline" : "default"}
+                           variant={supportsUsb ? "secondary" : "primary"}
                            className="w-full"
                            disabled={!allOutputsHaveAddress || hasInvalidAddress}
                            onClick={async () => {
@@ -2449,12 +2449,12 @@ export const SendTransaction: React.FC = () => {
                      hardwareWallet.isConnected ? (
                        <>
                          <Shield className="w-5 h-5 mr-2" />
-                         Sign with {hardwareWallet.device?.name} ({signedDevices.size + 1}/{wallet.quorum?.m})
+                         Sign with {hardwareWallet.device?.name} ({signedDevices.size + 1}/{typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m})
                        </>
                      ) : (
                        <>
                          <Users className="w-5 h-5 mr-2" />
-                         Collect Signatures ({signedDevices.size}/{wallet.quorum?.m} of {wallet.quorum?.n})
+                         Collect Signatures ({signedDevices.size}/{typeof wallet.quorum === 'number' ? wallet.quorum : wallet.quorum?.m} of {typeof wallet.quorum === 'number' ? wallet.totalSigners : wallet.quorum?.n})
                        </>
                      )
                    ) : signedDevices.has('psbt-signed') ? (

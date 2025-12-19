@@ -10,18 +10,29 @@ import type { BitcoinTransactionDetails, BlockHeader } from '../types';
 // Re-export types for convenience
 export type { BitcoinTransactionDetails, BlockHeader } from '../types';
 
+export interface ServerStats {
+  serverId: string;
+  label: string;
+  host: string;
+  port: number;
+  connectionCount: number;
+  healthyConnections: number;
+  totalRequests: number;
+  failedRequests: number;
+  isHealthy: boolean;
+  lastHealthCheck: string | null;
+}
+
 export interface PoolStats {
   totalConnections: number;
-  availableConnections: number;
-  inUseConnections: number;
+  activeConnections: number;
+  idleConnections: number;
   waitingRequests: number;
-  healthyConnections: number;
-  unhealthyConnections: number;
-  reconnecting: number;
   totalAcquisitions: number;
-  totalReleases: number;
-  averageAcquisitionTime: number;
-  peakConnections: number;
+  averageAcquisitionTimeMs: number;
+  healthCheckFailures: number;
+  serverCount: number;
+  servers: ServerStats[];
 }
 
 export interface BitcoinStatus {
@@ -40,6 +51,8 @@ export interface BitcoinStatus {
     enabled: boolean;
     minConnections: number;
     maxConnections: number;
+    configuredMin?: number;
+    configuredMax?: number;
     stats: PoolStats | null;
   } | null;
 }

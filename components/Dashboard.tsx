@@ -38,7 +38,7 @@ const AnimatedPrice: React.FC<{ value: number | null; symbol: string }> = ({ val
   const [displayValue, setDisplayValue] = useState<number | null>(value);
   const [isAnimating, setIsAnimating] = useState(false);
   const prevValueRef = useRef<number | null>(value);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     // Handle null -> number transition (initial load)

@@ -18,7 +18,12 @@
 import request from 'supertest';
 import { setupTestDatabase, cleanupTestData, teardownTestDatabase, canRunIntegrationTests } from '../setup/testDatabase';
 import { createTestApp, resetTestApp } from '../setup/testServer';
-import { TEST_USER, createTestUser, loginTestUser, createAndLoginUser, authHeader } from '../setup/helpers';
+import { getTestUser, createTestUser, loginTestUser, createAndLoginUser, authHeader } from '../setup/helpers';
+
+// Helper to generate unique usernames for multi-user tests
+function uniqueUsername(role: string): string {
+  return `${role}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
 import { PrismaClient } from '@prisma/client';
 import { Express } from 'express';
 
@@ -277,7 +282,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
       // Create another user and their wallet
       const otherUser = await createTestUser(prisma, {
-        username: 'otheruser',
+        username: uniqueUsername('otheruser'),
         password: 'OtherPassword123!',
       });
 
@@ -365,12 +370,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny update for non-owner (viewer)', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 
@@ -397,12 +402,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny update for non-owner (signer)', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: signerId, token: signerToken } = await createAndLoginUser(app, prisma, {
-        username: 'signer',
+        username: uniqueUsername('signer'),
         password: 'SignerPass123!',
       });
 
@@ -460,12 +465,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny delete for non-owner (viewer)', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 
@@ -497,12 +502,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny delete for non-owner (signer)', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: signerId, token: signerToken } = await createAndLoginUser(app, prisma, {
-        username: 'signer',
+        username: uniqueUsername('signer'),
         password: 'SignerPass123!',
       });
 
@@ -628,12 +633,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should allow signer to add device', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: signerId, token: signerToken } = await createAndLoginUser(app, prisma, {
-        username: 'signer',
+        username: uniqueUsername('signer'),
         password: 'SignerPass123!',
       });
 
@@ -670,12 +675,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny viewer from adding device', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 
@@ -739,12 +744,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
     describe('Share with User', () => {
       it('should share wallet with another user as viewer', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -786,12 +791,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
       it('should share wallet with another user as signer', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -830,12 +835,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
       it('should update existing user access when sharing again', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -875,17 +880,17 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
       it('should deny non-owner from sharing wallet', async () => {
         const owner = await createTestUser(prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-          username: 'viewer',
+          username: uniqueUsername('viewer'),
           password: 'ViewerPass123!',
         });
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -944,7 +949,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
         const { userId, token } = await createAndLoginUser(app, prisma);
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -976,12 +981,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
     describe('Remove User Access', () => {
       it('should remove user access from wallet', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const targetUser = await createTestUser(prisma, {
-          username: 'targetuser',
+          username: uniqueUsername('targetuser'),
           password: 'TargetPass123!',
         });
 
@@ -1016,7 +1021,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
       it('should prevent removing the owner', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
@@ -1076,17 +1081,17 @@ describeWithDb('Wallet Lifecycle Integration', () => {
     describe('Get Sharing Info', () => {
       it('should get wallet sharing information', async () => {
         const { userId: ownerId, token: ownerToken } = await createAndLoginUser(app, prisma, {
-          username: 'owner',
+          username: uniqueUsername('owner'),
           password: 'OwnerPass123!',
         });
 
         const viewer = await createTestUser(prisma, {
-          username: 'viewer',
+          username: uniqueUsername('viewer'),
           password: 'ViewerPass123!',
         });
 
         const signer = await createTestUser(prisma, {
-          username: 'signer',
+          username: uniqueUsername('signer'),
           password: 'SignerPass123!',
         });
 
@@ -1126,12 +1131,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
   describe('Wallet Access Permissions', () => {
     it('should allow viewer to view wallet', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 
@@ -1159,12 +1164,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should deny viewer from generating addresses', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 
@@ -1191,12 +1196,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should allow signer to generate addresses', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: signerId, token: signerToken } = await createAndLoginUser(app, prisma, {
-        username: 'signer',
+        username: uniqueUsername('signer'),
         password: 'SignerPass123!',
       });
 
@@ -1279,12 +1284,12 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     it('should allow viewer to access wallet stats', async () => {
       const owner = await createTestUser(prisma, {
-        username: 'owner',
+        username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
       });
 
       const { userId: viewerId, token: viewerToken } = await createAndLoginUser(app, prisma, {
-        username: 'viewer',
+        username: uniqueUsername('viewer'),
         password: 'ViewerPass123!',
       });
 

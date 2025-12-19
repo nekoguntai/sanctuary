@@ -187,8 +187,58 @@ function countUnusedGap(addresses: Array<{ index: number; used: boolean }>): num
   return gap;
 }
 
-// Cache for block timestamps to avoid repeated lookups
-const blockTimestampCache = new Map<number, Date>();
+/**
+ * Simple LRU cache using Map's insertion order
+ * When max size reached, evicts oldest entries
+ */
+class LRUCache<K, V> {
+  private cache: Map<K, V>;
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.cache = new Map();
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+
+  set(key: K, value: V): void {
+    // If key exists, delete first to update position
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Evict oldest (first) entry
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+}
+
+// Cache for block timestamps to avoid repeated lookups (max 1000 blocks)
+const blockTimestampCache = new LRUCache<number, Date>(1000);
 
 /**
  * Get block timestamp from block height
@@ -198,8 +248,9 @@ async function getBlockTimestamp(height: number): Promise<Date | null> {
   if (height <= 0) return null;
 
   // Check cache first
-  if (blockTimestampCache.has(height)) {
-    return blockTimestampCache.get(height)!;
+  const cached = blockTimestampCache.get(height);
+  if (cached !== undefined) {
+    return cached;
   }
 
   try {

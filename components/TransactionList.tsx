@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, forwardRef } from 'react';
+import { TableVirtuoso } from 'react-virtuoso';
 import { Transaction, Wallet, WalletType, Label } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -51,7 +52,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [explorerUrl, setExplorerUrl] = useState('https://mempool.space');
   const [copied, setCopied] = useState(false);
-  const itemRefs = useRef<Map<string, HTMLLIElement>>(new Map());
 
   // Label editing state
   const [editingLabels, setEditingLabels] = useState(false);
@@ -68,14 +68,21 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     });
   }, []);
 
+  // Virtuoso ref for scroll control
+  const virtuosoRef = useRef<any>(null);
+
   useEffect(() => {
-    if (highlightedTxId && transactions.length > 0) {
-       const el = itemRefs.current.get(highlightedTxId);
-       if (el) {
-          setTimeout(() => {
-             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 100);
-       }
+    if (highlightedTxId && transactions.length > 0 && virtuosoRef.current) {
+      const index = transactions.findIndex(tx => tx.id === highlightedTxId);
+      if (index !== -1) {
+        setTimeout(() => {
+          virtuosoRef.current?.scrollToIndex({
+            index,
+            align: 'center',
+            behavior: 'smooth',
+          });
+        }, 100);
+      }
     }
   }, [highlightedTxId, transactions]);
 
@@ -273,174 +280,215 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-          <thead className="surface-muted">
-            <tr>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Date</th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Type</th>
-              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Amount</th>
+      {/* Virtualized Transaction Table */}
+      <TableVirtuoso
+        ref={virtuosoRef}
+        style={{ height: Math.min(transactions.length * 52 + 48, 600) }}
+        data={transactions}
+        fixedHeaderContent={() => (
+          <tr className="surface-muted">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Date</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Type</th>
+            <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Amount</th>
+            {walletBalance !== undefined && (
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
+            )}
+            <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Confs</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Labels</th>
+            {showWalletBadge && (
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Wallet</th>
+            )}
+          </tr>
+        )}
+        components={{
+          Table: ({ style, ...props }) => (
+            <table {...props} style={style} className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800" />
+          ),
+          TableBody: forwardRef(({ style, ...props }, ref) => (
+            <tbody {...props} ref={ref} style={style} className="divide-y divide-sanctuary-200 dark:divide-sanctuary-800" />
+          )),
+        }}
+        itemContent={(index, tx) => {
+          const { isReceive, isConsolidation } = getTxTypeInfo(tx);
+          const isHighlighted = highlightedTxId === tx.id;
+          const txWallet = getWallet(tx.walletId);
+          const isMultisig = txWallet?.type === WalletType.MULTI_SIG || txWallet?.type === 'multi_sig';
+
+          const badgeClass = isMultisig
+            ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+            : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
+
+          return (
+            <>
+              {/* Date */}
+              <td
+                className={`px-4 py-3 whitespace-nowrap text-sm text-sanctuary-700 dark:text-sanctuary-300 font-medium cursor-pointer transition-colors ${
+                  isHighlighted
+                    ? 'bg-warning-50 dark:bg-warning-950/20'
+                    : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                }`}
+                onClick={() => handleTxClick(tx)}
+              >
+                {new Date(tx.timestamp).toLocaleDateString()}
+              </td>
+
+              {/* Type */}
+              <td
+                className={`px-4 py-3 whitespace-nowrap cursor-pointer transition-colors ${
+                  isHighlighted
+                    ? 'bg-warning-50 dark:bg-warning-950/20'
+                    : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                }`}
+                onClick={() => handleTxClick(tx)}
+              >
+                <div className="flex items-center space-x-2">
+                  <span className={`inline-flex items-center justify-center h-7 w-7 rounded-full ${
+                    isConsolidation
+                      ? 'bg-primary-100 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400'
+                      : isReceive
+                      ? 'bg-success-100 text-success-600 dark:bg-success-500/10 dark:text-success-400'
+                      : 'bg-sanctuary-200 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
+                  }`}>
+                    {isConsolidation ? <RefreshCw className="h-3.5 w-3.5" /> : isReceive ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    {isConsolidation ? 'Consolidation' : isReceive ? 'Received' : 'Sent'}
+                  </span>
+                </div>
+              </td>
+
+              {/* Amount */}
+              <td
+                className={`px-4 py-3 whitespace-nowrap text-right cursor-pointer transition-colors ${
+                  isHighlighted
+                    ? 'bg-warning-50 dark:bg-warning-950/20'
+                    : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                }`}
+                onClick={() => handleTxClick(tx)}
+              >
+                <span className={`text-sm font-semibold ${
+                  isConsolidation
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : isReceive
+                    ? 'text-success-600 dark:text-success-400'
+                    : 'text-sanctuary-900 dark:text-sanctuary-100'
+                }`}>
+                  <Amount
+                    sats={tx.amount}
+                    showSign={isReceive}
+                    size="sm"
+                    className="justify-end"
+                  />
+                </span>
+              </td>
+
+              {/* Balance (after this transaction) */}
               {walletBalance !== undefined && (
-                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Balance</th>
-              )}
-              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Confs</th>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Labels</th>
-              {showWalletBadge && (
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Wallet</th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-            {transactions.map((tx) => {
-              const { isReceive, isConsolidation } = getTxTypeInfo(tx);
-              const isHighlighted = highlightedTxId === tx.id;
-              const txWallet = getWallet(tx.walletId);
-              const isMultisig = txWallet?.type === WalletType.MULTI_SIG || txWallet?.type === 'multi_sig';
-
-              const badgeClass = isMultisig
-                  ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-                  : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-              return (
-                <tr
-                  key={tx.id}
-                  ref={(el) => {
-                    if (el) itemRefs.current.set(tx.id, el as unknown as HTMLLIElement);
-                    else itemRefs.current.delete(tx.id);
-                  }}
-                  className={`cursor-pointer transition-colors ${
+                <td
+                  className={`px-4 py-3 whitespace-nowrap text-right cursor-pointer transition-colors ${
                     isHighlighted
                       ? 'bg-warning-50 dark:bg-warning-950/20'
                       : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
                   }`}
                   onClick={() => handleTxClick(tx)}
                 >
-                  {/* Date */}
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-sanctuary-700 dark:text-sanctuary-300 font-medium">
-                    {new Date(tx.timestamp).toLocaleDateString()}
-                  </td>
+                  <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+                    <Amount
+                      sats={tx.balanceAfter ?? 0}
+                      size="sm"
+                      className="justify-end"
+                    />
+                  </span>
+                </td>
+              )}
 
-                  {/* Type */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center space-x-2">
-                      <span className={`inline-flex items-center justify-center h-7 w-7 rounded-full ${
-                        isConsolidation
-                          ? 'bg-primary-100 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400'
-                          : isReceive
-                          ? 'bg-success-100 text-success-600 dark:bg-success-500/10 dark:text-success-400'
-                          : 'bg-sanctuary-200 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
-                      }`}>
-                        {isConsolidation ? <RefreshCw className="h-3.5 w-3.5" /> : isReceive ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                      </span>
-                      <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                        {isConsolidation ? 'Consolidation' : isReceive ? 'Received' : 'Sent'}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Amount */}
-                  <td className="px-4 py-3 whitespace-nowrap text-right">
-                    <span className={`text-sm font-semibold ${
-                      isConsolidation
-                        ? 'text-primary-600 dark:text-primary-400'
-                        : isReceive
-                        ? 'text-success-600 dark:text-success-400'
-                        : 'text-sanctuary-900 dark:text-sanctuary-100'
-                    }`}>
-                      <Amount
-                        sats={tx.amount}
-                        showSign={isReceive}
-                        size="sm"
-                        className="justify-end"
-                      />
+              {/* Confirmations */}
+              <td
+                className={`px-4 py-3 whitespace-nowrap text-center cursor-pointer transition-colors ${
+                  isHighlighted
+                    ? 'bg-warning-50 dark:bg-warning-950/20'
+                    : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                }`}
+                onClick={() => handleTxClick(tx)}
+              >
+                <span
+                  className="inline-flex items-center text-sm font-medium"
+                  title={tx.confirmations > 0 ? `${tx.confirmations.toLocaleString()} confirmation${tx.confirmations !== 1 ? 's' : ''}` : 'Pending confirmation'}
+                >
+                  {tx.confirmations >= deepConfirmationThreshold ? (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5 mr-1 text-indigo-500" />
+                      <span className="text-indigo-600 dark:text-indigo-400">{tx.confirmations?.toLocaleString() || ''}</span>
+                    </>
+                  ) : tx.confirmations >= confirmationThreshold ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-success-500" />
+                      <span className="text-sanctuary-700 dark:text-sanctuary-300">{tx.confirmations}/{deepConfirmationThreshold}</span>
+                    </>
+                  ) : tx.confirmations > 0 ? (
+                    <span className="inline-flex items-center text-primary-600 dark:text-primary-400">
+                      <Clock className="w-3.5 h-3.5 mr-1" />
+                      {tx.confirmations}/{deepConfirmationThreshold}
                     </span>
-                  </td>
-
-                  {/* Balance (after this transaction) */}
-                  {walletBalance !== undefined && (
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
-                        <Amount
-                          sats={tx.balanceAfter ?? 0}
-                          size="sm"
-                          className="justify-end"
-                        />
-                      </span>
-                    </td>
+                  ) : (
+                    <span className="inline-flex items-center text-warning-600 dark:text-warning-400">
+                      <Clock className="w-3.5 h-3.5 mr-1" />
+                      Pending
+                    </span>
                   )}
+                </span>
+              </td>
 
-                  {/* Confirmations */}
-                  <td className="px-4 py-3 whitespace-nowrap text-center">
+              {/* Labels */}
+              <td
+                className={`px-4 py-3 cursor-pointer transition-colors ${
+                  isHighlighted
+                    ? 'bg-warning-50 dark:bg-warning-950/20'
+                    : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                }`}
+                onClick={() => handleTxClick(tx)}
+              >
+                {(tx.labels && tx.labels.length > 0) ? (
+                  <LabelBadges labels={tx.labels} maxDisplay={2} size="sm" />
+                ) : tx.label ? (
+                  <span className="inline-flex items-center surface-secondary px-1.5 py-0.5 rounded text-xs text-sanctuary-600 dark:text-sanctuary-300">
+                    <Tag className="w-2.5 h-2.5 mr-1" />
+                    {tx.label}
+                  </span>
+                ) : (
+                  <span className="text-sanctuary-300 dark:text-sanctuary-600">-</span>
+                )}
+              </td>
+
+              {/* Wallet Badge (optional) */}
+              {showWalletBadge && (
+                <td
+                  className={`px-4 py-3 whitespace-nowrap cursor-pointer transition-colors ${
+                    isHighlighted
+                      ? 'bg-warning-50 dark:bg-warning-950/20'
+                      : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50'
+                  }`}
+                  onClick={() => handleTxClick(tx)}
+                >
+                  {txWallet && (
                     <span
-                      className="inline-flex items-center text-sm font-medium"
-                      title={tx.confirmations > 0 ? `${tx.confirmations.toLocaleString()} confirmation${tx.confirmations !== 1 ? 's' : ''}` : 'Pending confirmation'}
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${badgeClass} ${onWalletClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={(e) => {
+                        if (onWalletClick) {
+                          e.stopPropagation();
+                          onWalletClick(tx.walletId);
+                        }
+                      }}
                     >
-                      {tx.confirmations >= deepConfirmationThreshold ? (
-                        // Deeply confirmed
-                        <>
-                          <ShieldCheck className="w-3.5 h-3.5 mr-1 text-indigo-500" />
-                          <span className="text-indigo-600 dark:text-indigo-400">{tx.confirmations?.toLocaleString() || ''}</span>
-                        </>
-                      ) : tx.confirmations >= confirmationThreshold ? (
-                        // Confirmed (spendable)
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-success-500" />
-                          <span className="text-sanctuary-700 dark:text-sanctuary-300">{tx.confirmations}/{deepConfirmationThreshold}</span>
-                        </>
-                      ) : tx.confirmations > 0 ? (
-                        // Confirming (1 to threshold-1)
-                        <span className="inline-flex items-center text-primary-600 dark:text-primary-400">
-                          <Clock className="w-3.5 h-3.5 mr-1" />
-                          {tx.confirmations}/{deepConfirmationThreshold}
-                        </span>
-                      ) : (
-                        // Pending (0 confirmations)
-                        <span className="inline-flex items-center text-warning-600 dark:text-warning-400">
-                          <Clock className="w-3.5 h-3.5 mr-1" />
-                          Pending
-                        </span>
-                      )}
+                      {txWallet.name}
                     </span>
-                  </td>
-
-                  {/* Labels */}
-                  <td className="px-4 py-3">
-                    {(tx.labels && tx.labels.length > 0) ? (
-                      <LabelBadges labels={tx.labels} maxDisplay={2} size="sm" />
-                    ) : tx.label ? (
-                      <span className="inline-flex items-center surface-secondary px-1.5 py-0.5 rounded text-xs text-sanctuary-600 dark:text-sanctuary-300">
-                        <Tag className="w-2.5 h-2.5 mr-1" />
-                        {tx.label}
-                      </span>
-                    ) : (
-                      <span className="text-sanctuary-300 dark:text-sanctuary-600">-</span>
-                    )}
-                  </td>
-
-                  {/* Wallet Badge (optional) */}
-                  {showWalletBadge && (
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {txWallet && (
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-medium ${badgeClass} ${onWalletClick ? 'cursor-pointer hover:opacity-80' : ''}`}
-                          onClick={(e) => {
-                            if (onWalletClick) {
-                              e.stopPropagation();
-                              onWalletClick(tx.walletId);
-                            }
-                          }}
-                        >
-                          {txWallet.name}
-                        </span>
-                      )}
-                    </td>
                   )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                </td>
+              )}
+            </>
+          );
+        }}
+      />
 
       {/* Transaction Details Modal */}
       {selectedTx && (

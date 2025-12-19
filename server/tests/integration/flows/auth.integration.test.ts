@@ -16,7 +16,7 @@
 import request from 'supertest';
 import { setupTestDatabase, cleanupTestData, teardownTestDatabase, canRunIntegrationTests } from '../setup/testDatabase';
 import { createTestApp, resetTestApp } from '../setup/testServer';
-import { TEST_USER, TEST_ADMIN, createTestUser, loginTestUser } from '../setup/helpers';
+import { getTestUser, getTestAdmin, createTestUser, loginTestUser } from '../setup/helpers';
 import { PrismaClient } from '@prisma/client';
 import { Express } from 'express';
 
@@ -58,32 +58,32 @@ describeWithDb('Authentication Integration', () => {
 
   describe('Login Flow', () => {
     it('should login with valid credentials', async () => {
-      // Create a test user first
-      await createTestUser(prisma, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
 
-      // Login
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: TEST_USER.username,
-          password: TEST_USER.password,
+          username: testUser.username,
+          password: testUser.password,
         })
         .expect(200);
 
       expect(response.body.token).toBeDefined();
       expect(typeof response.body.token).toBe('string');
       expect(response.body.user).toBeDefined();
-      expect(response.body.user.username).toBe(TEST_USER.username);
-      expect(response.body.user.password).toBeUndefined(); // Should not expose password
+      expect(response.body.user.username).toBe(testUser.username);
+      expect(response.body.user.password).toBeUndefined();
     });
 
     it('should reject invalid password', async () => {
-      await createTestUser(prisma, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
 
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: TEST_USER.username,
+          username: testUser.username,
           password: 'WrongPassword123!',
         })
         .expect(401);
@@ -95,7 +95,7 @@ describeWithDb('Authentication Integration', () => {
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: 'nonexistent',
+          username: 'nonexistent_user_12345',
           password: 'SomePassword123!',
         })
         .expect(401);
@@ -106,15 +106,16 @@ describeWithDb('Authentication Integration', () => {
 
   describe('Token Verification', () => {
     it('should access protected endpoint with valid token', async () => {
-      await createTestUser(prisma, TEST_USER);
-      const token = await loginTestUser(app, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
 
       const response = await request(app)
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
-      expect(response.body.username).toBe(TEST_USER.username);
+      expect(response.body.username).toBe(testUser.username);
     });
 
     it('should reject expired or invalid token', async () => {
@@ -135,26 +136,25 @@ describeWithDb('Authentication Integration', () => {
 
   describe('Password Change', () => {
     it('should change password with correct current password', async () => {
-      await createTestUser(prisma, TEST_USER);
-      const token = await loginTestUser(app, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
 
       const newPassword = 'NewSecurePassword456!';
 
-      // Change password
       await request(app)
         .post('/api/v1/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          currentPassword: TEST_USER.password,
+          currentPassword: testUser.password,
           newPassword,
         })
         .expect(200);
 
-      // Should be able to login with new password
       const loginResponse = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: TEST_USER.username,
+          username: testUser.username,
           password: newPassword,
         })
         .expect(200);
@@ -163,8 +163,9 @@ describeWithDb('Authentication Integration', () => {
     });
 
     it('should reject password change with wrong current password', async () => {
-      await createTestUser(prisma, TEST_USER);
-      const token = await loginTestUser(app, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
 
       await request(app)
         .post('/api/v1/auth/change-password')
@@ -179,28 +180,27 @@ describeWithDb('Authentication Integration', () => {
 
   describe('Admin User Management', () => {
     it('should allow admin to create new user', async () => {
-      // Create admin user
-      await createTestUser(prisma, { ...TEST_ADMIN, isAdmin: true });
-      const adminToken = await loginTestUser(app, TEST_ADMIN);
+      const testAdmin = getTestAdmin();
+      await createTestUser(prisma, { ...testAdmin, isAdmin: true });
+      const adminToken = await loginTestUser(app, testAdmin);
 
-      // Create new user via admin
+      const newUsername = `newuser_${Date.now()}`;
       const response = await request(app)
         .post('/api/v1/admin/users')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          username: 'newuser',
+          username: newUsername,
           password: 'NewUserPassword123!',
         })
         .expect(201);
 
       expect(response.body.id).toBeDefined();
-      expect(response.body.username).toBe('newuser');
+      expect(response.body.username).toBe(newUsername);
 
-      // New user should be able to login
       const loginResponse = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: 'newuser',
+          username: newUsername,
           password: 'NewUserPassword123!',
         })
         .expect(200);
@@ -209,14 +209,15 @@ describeWithDb('Authentication Integration', () => {
     });
 
     it('should not allow non-admin to create user', async () => {
-      await createTestUser(prisma, TEST_USER);
-      const userToken = await loginTestUser(app, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const userToken = await loginTestUser(app, testUser);
 
       await request(app)
         .post('/api/v1/admin/users')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
-          username: 'anotheruser',
+          username: `anotheruser_${Date.now()}`,
           password: 'Password123!',
         })
         .expect(403);
@@ -225,19 +226,19 @@ describeWithDb('Authentication Integration', () => {
 
   describe('Token Refresh', () => {
     it('should return valid token on login', async () => {
-      await createTestUser(prisma, TEST_USER);
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
 
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
-          username: TEST_USER.username,
-          password: TEST_USER.password,
+          username: testUser.username,
+          password: testUser.password,
         })
         .expect(200);
 
-      // Token should be valid JWT format
       expect(response.body.token).toBeDefined();
-      expect(response.body.token.split('.').length).toBe(3); // JWT has 3 parts
+      expect(response.body.token.split('.').length).toBe(3);
     });
   });
 });

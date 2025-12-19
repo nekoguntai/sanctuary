@@ -10,8 +10,32 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 /**
- * Test user credentials
+ * Generate unique test user credentials
+ * Uses timestamp + random suffix to avoid conflicts in parallel tests
  */
+function generateUniqueId(): string {
+  return `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
+export function getTestUser() {
+  const id = generateUniqueId();
+  return {
+    username: `testuser_${id}`,
+    password: 'TestPassword123!',
+    email: `test_${id}@example.com`,
+  };
+}
+
+export function getTestAdmin() {
+  const id = generateUniqueId();
+  return {
+    username: `admin_${id}`,
+    password: 'AdminPassword123!',
+    email: `admin_${id}@example.com`,
+  };
+}
+
+// Legacy exports for backward compatibility (use getTestUser/getTestAdmin instead)
 export const TEST_USER = {
   username: 'testuser',
   password: 'TestPassword123!',
@@ -63,13 +87,14 @@ export async function loginTestUser(
 
 /**
  * Create a test user and login
+ * Uses unique user credentials to avoid conflicts in parallel tests
  */
 export async function createAndLoginUser(
   app: Express,
   prisma: PrismaClient,
   user?: { username: string; password: string; isAdmin?: boolean }
 ): Promise<{ userId: string; token: string }> {
-  const testUser = user ?? TEST_USER;
+  const testUser = user ?? getTestUser();
   const { id } = await createTestUser(prisma, testUser);
   const token = await loginTestUser(app, testUser);
   return { userId: id, token };

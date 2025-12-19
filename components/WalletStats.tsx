@@ -128,11 +128,13 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
     // Reverse to get chronological order (oldest first)
     dataPoints.reverse();
 
-    // Remove duplicate dates, keeping the LAST (final) balance for each date
-    // This ensures we show the end-of-day balance, not intermediate states
+    // Remove duplicate dates, keeping the FIRST occurrence for each date
+    // This preserves the 0 starting point when it shares a date with the first transaction
     const dateBalances = new Map<string, typeof dataPoints[0]>();
     for (const point of dataPoints) {
-      dateBalances.set(point.name, point);  // Last occurrence wins
+      if (!dateBalances.has(point.name)) {
+        dateBalances.set(point.name, point);  // First occurrence wins
+      }
     }
     const uniquePoints = Array.from(dateBalances.values());
 
@@ -224,7 +226,10 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                  </defs>
                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
                  <YAxis hide domain={[0, 'dataMax']} />
-                 <Tooltip contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                 <Tooltip
+                  contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
+                  formatter={(value: number) => [format(value).split(' (')[0], 'Balance']}
+                />
                  <Area type="monotone" dataKey="amount" stroke="#d4b483" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
                </AreaChart>
              </ResponsiveContainer>
@@ -238,9 +243,10 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
                <BarChart data={ageData}>
                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
                  <YAxis hide />
-                 <Tooltip 
+                 <Tooltip
                     cursor={{fill: 'transparent'}}
                     contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value: number) => [format(value).split(' (')[0], 'Amount']}
                  />
                  <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                     {ageData.map((entry, index) => (

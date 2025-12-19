@@ -405,7 +405,7 @@ export const WalletDetail: React.FC = () => {
       });
 
       // Refresh transaction list
-      fetchData();
+      fetchData(true);
     },
     onBalance: (data) => {
       log.debug('Real-time balance update', { balance: data?.confirmed });
@@ -468,7 +468,7 @@ export const WalletDetail: React.FC = () => {
 
       // If sync completed successfully, refresh data
       if (!data.inProgress && data.status === 'success') {
-        fetchData();
+        fetchData(true);
       }
     },
   });
@@ -477,10 +477,13 @@ export const WalletDetail: React.FC = () => {
     fetchData();
   }, [id, user]);
 
-  const fetchData = async () => {
+  const fetchData = async (isRefresh = false) => {
     if (!id || !user) return;
 
-    setLoading(true);
+    // Only show loading state on initial load, not on refresh
+    if (!isRefresh) {
+      setLoading(true);
+    }
     setError(null);
 
     // Fetch wallet data - this is critical, fail if it doesn't work
@@ -750,7 +753,7 @@ export const WalletDetail: React.FC = () => {
         log.error('Sync error', { error: result.error });
       }
       // Reload wallet data after sync
-      await fetchData();
+      await fetchData(true);
     } catch (err) {
       log.error('Failed to sync wallet', { error: err });
       handleError(err, 'Sync Failed');
@@ -772,7 +775,7 @@ export const WalletDetail: React.FC = () => {
       const result = await syncApi.resyncWallet(id);
       showSuccess(result.message, 'Resync Queued');
       // Reload wallet data after resync is queued
-      await fetchData();
+      await fetchData(true);
     } catch (err) {
       log.error('Failed to resync wallet', { error: err });
       handleError(err, 'Resync Failed');
@@ -857,7 +860,7 @@ export const WalletDetail: React.FC = () => {
   // Refresh data callback for when labels are changed
   const handleLabelsChange = () => {
     if (id) {
-      fetchData();
+      fetchData(true);
     }
   };
 

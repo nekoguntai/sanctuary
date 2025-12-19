@@ -769,8 +769,12 @@ export async function syncWallet(walletId: string): Promise<{
         existingTxMap.set(`${item.tx_hash}:sent`, true);
       } else if (!isSent && isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
         // Received from external - only if NOT sent from wallet (not consolidation)
+        // Sum ALL outputs to ANY wallet address (handles batched payouts with multiple outputs to same wallet)
         const amount = outputs
-          .filter((out: any) => outputMatchesAddress(out, addressStr))
+          .filter((out: any) => {
+            const outAddr = out.scriptPubKey?.address || out.scriptPubKey?.addresses?.[0];
+            return outAddr && walletAddressSet.has(outAddr);
+          })
           .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
 
         transactionsToCreate.push({

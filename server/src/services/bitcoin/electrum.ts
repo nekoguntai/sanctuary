@@ -46,6 +46,7 @@ class ElectrumClient extends EventEmitter {
   private pendingRequests = new Map<number, {
     resolve: (value: any) => void;
     reject: (error: Error) => void;
+    timeoutId: NodeJS.Timeout;
   }>();
   private buffer = '';
   private connected = false;
@@ -140,17 +141,23 @@ class ElectrumClient extends EventEmitter {
         this.socket.on('error', (error) => {
           log.error('Socket error', { error });
           this.connected = false;
+          // Reject all pending requests on socket error
+          this.rejectPendingRequests(new Error(`Socket error: ${error.message}`));
           reject(error);
         });
 
         this.socket.on('close', () => {
           log.debug('Connection closed');
           this.connected = false;
+          // Reject all pending requests on connection close
+          this.rejectPendingRequests(new Error('Connection closed unexpectedly'));
         });
 
         this.socket.on('end', () => {
           log.debug('Connection ended');
           this.connected = false;
+          // Reject all pending requests on connection end
+          this.rejectPendingRequests(new Error('Connection ended'));
         });
       } catch (error) {
         log.error('Connection error', { error });
@@ -160,9 +167,23 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Reject all pending requests with an error
+   * Used when connection is lost or disconnected
+   */
+  private rejectPendingRequests(error: Error): void {
+    for (const [id, { reject, timeoutId }] of this.pendingRequests) {
+      clearTimeout(timeoutId);
+      reject(error);
+    }
+    this.pendingRequests.clear();
+  }
+
+  /**
    * Disconnect from Electrum server
    */
   disconnect(): void {
+    this.rejectPendingRequests(new Error('Connection closed'));
+
     if (this.socket) {
       this.socket.destroy();
       this.socket = null;
@@ -205,6 +226,8 @@ class ElectrumClient extends EventEmitter {
           const request = this.pendingRequests.get(response.id);
 
           if (request) {
+            // Clear timeout since we got a response
+            clearTimeout(request.timeoutId);
             this.pendingRequests.delete(response.id);
 
             if (response.error) {
@@ -275,18 +298,18 @@ class ElectrumClient extends EventEmitter {
         id,
       };
 
-      this.pendingRequests.set(id, { resolve, reject });
-
-      const message = JSON.stringify(request) + '\n';
-      this.socket!.write(message);
-
       // Timeout after 30 seconds
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           reject(new Error('Request timeout'));
         }
       }, 30000);
+
+      this.pendingRequests.set(id, { resolve, reject, timeoutId });
+
+      const message = JSON.stringify(request) + '\n';
+      this.socket!.write(message);
     });
   }
 
@@ -317,15 +340,15 @@ class ElectrumClient extends EventEmitter {
       };
 
       const promise = new Promise((resolve, reject) => {
-        this.pendingRequests.set(id, { resolve, reject });
-
         // Timeout after 60 seconds for batch requests (longer than single requests)
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           if (this.pendingRequests.has(id)) {
             this.pendingRequests.delete(id);
             reject(new Error(`Batch request timeout for id ${id}`));
           }
         }, 60000);
+
+        this.pendingRequests.set(id, { resolve, reject, timeoutId });
       });
 
       requestPromises.push(promise);

@@ -97,10 +97,15 @@ async function getAIConfig(): Promise<AIConfig> {
     };
 
     for (const setting of settings) {
+      const key = setting.key;
       try {
-        config[setting.key as keyof AIConfig] = JSON.parse(setting.value);
+        const value = JSON.parse(setting.value);
+        if (key === 'aiEnabled') config.enabled = value;
+        else if (key === 'aiEndpoint') config.endpoint = value;
+        else if (key === 'aiModel') config.model = value;
       } catch {
-        config[setting.key as keyof AIConfig] = setting.value as any;
+        if (key === 'aiEndpoint') config.endpoint = setting.value;
+        else if (key === 'aiModel') config.model = setting.value;
       }
     }
 
@@ -296,7 +301,7 @@ export async function executeNaturalQuery(
     },
   });
 
-  const recentLabels = wallet?.labels.map((l) => l.label).join(', ') || 'None';
+  const recentLabels = wallet?.labels.map((l) => l.name).join(', ') || 'None';
 
   const prompt = `You are a Bitcoin wallet assistant. Convert the user's question into a structured query.
 

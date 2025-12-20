@@ -1,11 +1,28 @@
 /**
  * JWT Utilities
  *
- * Helper functions for creating and verifying JWT tokens
+ * Helper functions for creating and verifying JWT tokens.
+ *
+ * ## Security Features (SEC-003, SEC-005, SEC-006)
+ *
+ * - jti claims for token revocation
+ * - aud (audience) claims to differentiate token types
+ * - Shorter access tokens (1h) with refresh tokens (7d)
  */
 
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import config from '../config';
+import { isTokenRevoked } from '../services/tokenRevocation';
+
+/**
+ * Token audiences for different token types (SEC-006)
+ */
+export enum TokenAudience {
+  ACCESS = 'sanctuary:access',       // Full access token
+  REFRESH = 'sanctuary:refresh',     // Refresh token
+  TWO_FACTOR = 'sanctuary:2fa',      // Temporary 2FA verification token
+}
 
 export interface JWTPayload {
   userId: string;
@@ -13,28 +30,164 @@ export interface JWTPayload {
   isAdmin: boolean;
   pending2FA?: boolean; // True when awaiting 2FA verification
   usingDefaultPassword?: boolean; // True when using default 'sanctuary' password
+  jti?: string; // JWT ID for revocation (SEC-003)
+  aud?: string | string[]; // Audience claim (SEC-006)
+}
+
+export interface RefreshTokenPayload {
+  userId: string;
+  jti: string;
+  aud: string;
+  type: 'refresh';
 }
 
 /**
- * Generate a JWT token for a user
+ * Generate a unique JWT ID (jti)
+ */
+function generateJti(): string {
+  return randomUUID();
+}
+
+/**
+ * Generate a JWT access token for a user (SEC-005: 1h expiry)
  * @param payload - User payload data
- * @param expiresIn - Optional custom expiry (e.g., '5m', '1h', '7d')
+ * @param expiresIn - Optional custom expiry (e.g., '5m', '1h')
  */
 export function generateToken(payload: JWTPayload, expiresIn?: string): string {
-  return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: expiresIn || (config.jwtExpiresIn as string | number),
-  } as jwt.SignOptions);
+  const jti = generateJti();
+  return jwt.sign(
+    {
+      ...payload,
+      jti,
+      aud: TokenAudience.ACCESS,
+    },
+    config.jwtSecret,
+    {
+      expiresIn: expiresIn || config.jwtExpiresIn,
+    } as jwt.SignOptions
+  );
 }
 
 /**
- * Verify and decode a JWT token
+ * Generate a temporary 2FA verification token (SEC-006)
+ * @param payload - User payload data
  */
-export function verifyToken(token: string): JWTPayload {
+export function generate2FAToken(payload: JWTPayload): string {
+  const jti = generateJti();
+  return jwt.sign(
+    {
+      ...payload,
+      pending2FA: true,
+      jti,
+      aud: TokenAudience.TWO_FACTOR, // SEC-006: Distinct audience for 2FA tokens
+    },
+    config.jwtSecret,
+    {
+      expiresIn: '5m', // 5 minute expiry for 2FA verification
+    } as jwt.SignOptions
+  );
+}
+
+/**
+ * Generate a refresh token (SEC-005)
+ * @param userId - User ID
+ */
+export function generateRefreshToken(userId: string): string {
+  const jti = generateJti();
+  return jwt.sign(
+    {
+      userId,
+      jti,
+      aud: TokenAudience.REFRESH,
+      type: 'refresh',
+    },
+    config.jwtSecret,
+    {
+      expiresIn: config.jwtRefreshExpiresIn,
+    } as jwt.SignOptions
+  );
+}
+
+/**
+ * Verify and decode a JWT token with revocation check (SEC-003)
+ * @param token - JWT token
+ * @param expectedAudience - Optional expected audience to verify
+ */
+export function verifyToken(token: string, expectedAudience?: TokenAudience): JWTPayload {
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
+    const options: jwt.VerifyOptions = {};
+    if (expectedAudience) {
+      options.audience = expectedAudience;
+    }
+
+    const decoded = jwt.verify(token, config.jwtSecret, options) as JWTPayload;
+
+    // SEC-003: Check if token is revoked
+    if (decoded.jti && isTokenRevoked(decoded.jti)) {
+      throw new Error('Token has been revoked');
+    }
+
     return decoded;
   } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new Error('Token expired');
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new Error('Invalid token');
+    }
     throw new Error('Invalid or expired token');
+  }
+}
+
+/**
+ * Verify a 2FA temporary token (SEC-006)
+ */
+export function verify2FAToken(token: string): JWTPayload {
+  const decoded = verifyToken(token, TokenAudience.TWO_FACTOR);
+
+  if (!decoded.pending2FA) {
+    throw new Error('Invalid 2FA token');
+  }
+
+  return decoded;
+}
+
+/**
+ * Verify a refresh token (SEC-005)
+ */
+export function verifyRefreshToken(token: string): RefreshTokenPayload {
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret, {
+      audience: TokenAudience.REFRESH,
+    }) as RefreshTokenPayload;
+
+    // Check if token is revoked
+    if (decoded.jti && isTokenRevoked(decoded.jti)) {
+      throw new Error('Refresh token has been revoked');
+    }
+
+    if (decoded.type !== 'refresh') {
+      throw new Error('Invalid refresh token type');
+    }
+
+    return decoded;
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new Error('Refresh token expired');
+    }
+    throw new Error('Invalid refresh token');
+  }
+}
+
+/**
+ * Decode a token without verification (for getting claims like jti, exp)
+ * Use only when you need to access claims from an already-verified token
+ */
+export function decodeToken(token: string): JWTPayload & { exp?: number } | null {
+  try {
+    return jwt.decode(token) as JWTPayload & { exp?: number };
+  } catch {
+    return null;
   }
 }
 
@@ -50,4 +203,15 @@ export function extractTokenFromHeader(authHeader: string | undefined): string |
   }
 
   return parts[1];
+}
+
+/**
+ * Get token expiration date from decoded token
+ */
+export function getTokenExpiration(token: string): Date | null {
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.exp) {
+    return null;
+  }
+  return new Date(decoded.exp * 1000);
 }

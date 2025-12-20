@@ -24,6 +24,13 @@ interface Config {
   // JWT
   jwtSecret: string;
   jwtExpiresIn: string;
+  jwtRefreshExpiresIn: string;
+
+  // Gateway authentication
+  gatewaySecret: string;
+
+  // CORS
+  corsAllowedOrigins: string[];
 
   // Bitcoin
   bitcoin: {
@@ -84,6 +91,40 @@ function getJwtSecret(): string {
   return secret;
 }
 
+/**
+ * Get gateway secret for internal communication
+ * Required for HMAC-based authentication between gateway and backend
+ */
+function getGatewaySecret(): string {
+  const secret = process.env.GATEWAY_SECRET;
+  if (!secret) {
+    console.warn('');
+    console.warn('SECURITY WARNING: GATEWAY_SECRET is not set.');
+    console.warn('Internal gateway communication will not be authenticated.');
+    console.warn('Generate one with: openssl rand -base64 32');
+    console.warn('');
+    return '';
+  }
+  if (secret.length < 32) {
+    console.warn('');
+    console.warn('SECURITY WARNING: GATEWAY_SECRET is shorter than 32 characters.');
+    console.warn('A longer secret provides better security.');
+    console.warn('');
+  }
+  return secret;
+}
+
+/**
+ * Parse CORS allowed origins from environment
+ */
+function getCorsAllowedOrigins(): string[] {
+  const origins = process.env.CORS_ALLOWED_ORIGINS;
+  if (!origins) {
+    return []; // Empty array means allow all (for mobile apps)
+  }
+  return origins.split(',').map(o => o.trim()).filter(o => o.length > 0);
+}
+
 const config: Config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3001', 10),
@@ -93,7 +134,11 @@ const config: Config = {
   databaseUrl: process.env.DATABASE_URL || '',
 
   jwtSecret: getJwtSecret(),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h', // SEC-005: Reduced from 7d to 1h
+  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+
+  gatewaySecret: getGatewaySecret(),
+  corsAllowedOrigins: getCorsAllowedOrigins(),
 
   bitcoin: {
     network: (process.env.BITCOIN_NETWORK as any) || 'mainnet',

@@ -7,14 +7,19 @@
  * - Transaction confirmations
  * - New blocks
  * - Mempool updates
+ *
+ * Also provides a separate /gateway endpoint for push notification gateway
+ * with HMAC challenge-response authentication (SEC-001).
  */
 
 import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { verifyToken } from '../utils/jwt';
 import { Server } from 'http';
 import { createLogger } from '../utils/logger';
 import { checkWalletAccess } from '../services/wallet';
+import config from '../config';
 
 const log = createLogger('WS');
 
@@ -450,4 +455,236 @@ export const getWebSocketServer = (): SanctauryWebSocketServer => {
     throw new Error('WebSocket server not initialized');
   }
   return wsServer;
+};
+
+// ============================================================================
+// GATEWAY WEBSOCKET SERVER (SEC-001)
+// ============================================================================
+
+/**
+ * Gateway WebSocket with HMAC challenge-response authentication
+ *
+ * SEC-001: Replaces JWT secret sharing with proper HMAC challenge-response.
+ *
+ * ## Authentication Flow
+ *
+ * 1. Gateway connects to /gateway WebSocket endpoint
+ * 2. Server sends challenge: { type: 'auth_challenge', challenge: <random-hex> }
+ * 3. Gateway responds: { type: 'auth_response', response: HMAC-SHA256(challenge, GATEWAY_SECRET) }
+ * 4. Server verifies HMAC and sends: { type: 'auth_success' } or closes connection
+ */
+
+const GATEWAY_AUTH_TIMEOUT_MS = 10000; // 10 seconds to complete auth
+
+interface GatewayWebSocket extends WebSocket {
+  isAuthenticated: boolean;
+  authTimeout?: NodeJS.Timeout;
+  challenge?: string;
+}
+
+/**
+ * Gateway WebSocket Server
+ *
+ * Handles push notification gateway connections with secure authentication.
+ */
+export class GatewayWebSocketServer {
+  private wss: WebSocketServer;
+  private gateway: GatewayWebSocket | null = null;
+
+  constructor(server: Server) {
+    this.wss = new WebSocketServer({
+      server,
+      path: '/gateway',
+    });
+
+    this.wss.on('connection', this.handleConnection.bind(this));
+
+    log.debug('Gateway WebSocket server initialized on /gateway');
+  }
+
+  /**
+   * Handle new gateway connection
+   */
+  private handleConnection(ws: WebSocket, _request: IncomingMessage) {
+    const client = ws as GatewayWebSocket;
+    client.isAuthenticated = false;
+
+    // If gateway secret is not configured, reject all connections
+    if (!config.gatewaySecret) {
+      log.error('Gateway connection rejected: GATEWAY_SECRET not configured');
+      client.close(4003, 'Gateway authentication not configured');
+      return;
+    }
+
+    // Generate challenge
+    const challenge = randomBytes(32).toString('hex');
+    client.challenge = challenge;
+
+    // Set authentication timeout
+    client.authTimeout = setTimeout(() => {
+      if (!client.isAuthenticated) {
+        log.warn('Gateway authentication timeout');
+        client.close(4001, 'Authentication timeout');
+      }
+    }, GATEWAY_AUTH_TIMEOUT_MS);
+
+    // Send challenge
+    this.sendToClient(client, {
+      type: 'auth_challenge',
+      challenge,
+    });
+
+    log.debug('Gateway connected, challenge sent');
+
+    // Handle messages
+    client.on('message', (data: Buffer) => {
+      this.handleMessage(client, data);
+    });
+
+    // Handle close
+    client.on('close', () => {
+      if (client.authTimeout) {
+        clearTimeout(client.authTimeout);
+      }
+      if (this.gateway === client) {
+        this.gateway = null;
+        log.warn('Gateway disconnected');
+      }
+    });
+
+    // Handle errors
+    client.on('error', (error) => {
+      log.error('Gateway WebSocket error:', error);
+    });
+  }
+
+  /**
+   * Handle message from gateway
+   */
+  private handleMessage(client: GatewayWebSocket, data: Buffer) {
+    try {
+      const message = JSON.parse(data.toString());
+
+      if (message.type === 'auth_response') {
+        this.handleAuthResponse(client, message.response);
+      } else if (client.isAuthenticated) {
+        // Handle other message types only if authenticated
+        log.debug('Gateway message received', { type: message.type });
+      } else {
+        log.warn('Unauthenticated gateway message rejected');
+        client.close(4002, 'Authentication required');
+      }
+    } catch (err) {
+      log.error('Failed to parse gateway message', { error: String(err) });
+    }
+  }
+
+  /**
+   * Verify HMAC challenge response
+   */
+  private handleAuthResponse(client: GatewayWebSocket, response: string) {
+    if (!client.challenge) {
+      log.warn('Auth response without challenge');
+      client.close(4002, 'Invalid authentication state');
+      return;
+    }
+
+    // Calculate expected response
+    const expectedResponse = createHmac('sha256', config.gatewaySecret)
+      .update(client.challenge)
+      .digest('hex');
+
+    // Time-safe comparison
+    let isValid = false;
+    try {
+      const responseBuf = Buffer.from(response, 'hex');
+      const expectedBuf = Buffer.from(expectedResponse, 'hex');
+      if (responseBuf.length === expectedBuf.length) {
+        isValid = timingSafeEqual(responseBuf, expectedBuf);
+      }
+    } catch {
+      isValid = false;
+    }
+
+    if (!isValid) {
+      log.warn('Gateway authentication failed: invalid response');
+      client.close(4003, 'Authentication failed');
+      return;
+    }
+
+    // Authentication successful
+    client.isAuthenticated = true;
+    if (client.authTimeout) {
+      clearTimeout(client.authTimeout);
+      client.authTimeout = undefined;
+    }
+    client.challenge = undefined;
+
+    // Replace existing gateway connection
+    if (this.gateway && this.gateway !== client) {
+      log.info('Replacing existing gateway connection');
+      this.gateway.close(1000, 'Replaced by new connection');
+    }
+    this.gateway = client;
+
+    this.sendToClient(client, { type: 'auth_success' });
+    log.info('Gateway authenticated successfully');
+  }
+
+  /**
+   * Send message to gateway client
+   */
+  private sendToClient(client: GatewayWebSocket, message: unknown) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(message));
+    }
+  }
+
+  /**
+   * Send event to connected gateway
+   */
+  public sendEvent(event: WebSocketEvent) {
+    if (!this.gateway || !this.gateway.isAuthenticated) {
+      log.debug('No authenticated gateway to send event');
+      return;
+    }
+
+    this.sendToClient(this.gateway, {
+      type: 'event',
+      event,
+    });
+  }
+
+  /**
+   * Check if gateway is connected and authenticated
+   */
+  public isGatewayConnected(): boolean {
+    return this.gateway !== null && this.gateway.isAuthenticated;
+  }
+
+  /**
+   * Close server
+   */
+  public close() {
+    if (this.gateway) {
+      this.gateway.close(1000, 'Server closing');
+      this.gateway = null;
+    }
+    this.wss.close();
+  }
+}
+
+// Gateway WebSocket server singleton
+let gatewayWsServer: GatewayWebSocketServer | null = null;
+
+export const initializeGatewayWebSocketServer = (httpServer: Server): GatewayWebSocketServer => {
+  if (gatewayWsServer) {
+    throw new Error('Gateway WebSocket server already initialized');
+  }
+  gatewayWsServer = new GatewayWebSocketServer(httpServer);
+  return gatewayWsServer;
+};
+
+export const getGatewayWebSocketServer = (): GatewayWebSocketServer | null => {
+  return gatewayWsServer;
 };

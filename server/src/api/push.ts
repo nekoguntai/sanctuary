@@ -35,10 +35,53 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../models/prisma';
 import { authenticate } from '../middleware/auth';
+import { verifyGatewayRequest } from '../middleware/gatewayAuth';
 import { createLogger } from '../utils/logger';
 
 const router = Router();
 const log = createLogger('PUSH-API');
+
+/**
+ * Device token format validation (SEC-008)
+ *
+ * FCM tokens: ~150+ character alphanumeric strings with colons and hyphens
+ * APNs tokens: 64 character hex strings (device token) or longer for provider tokens
+ */
+function validateDeviceToken(token: string, platform: 'ios' | 'android'): { valid: boolean; error?: string } {
+  if (!token || typeof token !== 'string') {
+    return { valid: false, error: 'Token must be a non-empty string' };
+  }
+
+  if (platform === 'android') {
+    // FCM tokens are typically 150+ characters, contain letters, numbers, colons, hyphens, underscores
+    // Format: project-id:token or just a long alphanumeric string
+    if (token.length < 100) {
+      return { valid: false, error: 'FCM token appears too short' };
+    }
+    if (token.length > 500) {
+      return { valid: false, error: 'FCM token appears too long' };
+    }
+    // FCM tokens contain alphanumeric, colons, hyphens, underscores
+    if (!/^[a-zA-Z0-9:_-]+$/.test(token)) {
+      return { valid: false, error: 'FCM token contains invalid characters' };
+    }
+  } else if (platform === 'ios') {
+    // APNs device tokens are 64 hex characters
+    // Provider authentication tokens are longer JWT-like strings
+    if (token.length < 64) {
+      return { valid: false, error: 'APNs token appears too short' };
+    }
+    if (token.length > 500) {
+      return { valid: false, error: 'APNs token appears too long' };
+    }
+    // APNs tokens are hex or alphanumeric (for provider tokens)
+    if (!/^[a-fA-F0-9]+$/.test(token) && !/^[a-zA-Z0-9._-]+$/.test(token)) {
+      return { valid: false, error: 'APNs token contains invalid characters' };
+    }
+  }
+
+  return { valid: true };
+}
 
 /**
  * POST /api/v1/push/register
@@ -61,6 +104,16 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Bad Request',
         message: 'Platform must be "ios" or "android"',
+      });
+    }
+
+    // SEC-008: Validate device token format
+    const tokenValidation = validateDeviceToken(token, platform);
+    if (!tokenValidation.valid) {
+      log.warn('Invalid device token format', { platform, error: tokenValidation.error });
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: tokenValidation.error || 'Invalid device token format',
       });
     }
 
@@ -269,18 +322,10 @@ router.delete('/devices/:id', authenticate, async (req: Request, res: Response) 
  * The gateway uses this when it receives a transaction event from the backend WebSocket
  * and needs to know which devices to send push notifications to.
  *
- * Security: Requires X-Gateway-Request header (set by gateway)
+ * Security: SEC-002 - Requires HMAC-signed gateway authentication
  */
-router.get('/by-user/:userId', async (req: Request, res: Response) => {
+router.get('/by-user/:userId', verifyGatewayRequest, async (req: Request, res: Response) => {
   try {
-    // Only allow internal gateway requests
-    if (req.headers['x-gateway-request'] !== 'true') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'This endpoint is for internal gateway use only',
-      });
-    }
-
     const { userId } = req.params;
 
     const devices = await prisma.pushDevice.findMany({
@@ -318,7 +363,7 @@ router.get('/by-user/:userId', async (req: Request, res: Response) => {
  * This allows the gateway to store audit logs in the backend database
  * for centralized monitoring and admin visibility.
  *
- * Security: Requires X-Gateway-Request header (set by gateway)
+ * Security: SEC-002 - Requires HMAC-signed gateway authentication
  *
  * Request body:
  *   - event: string - Event type (e.g., AUTH_INVALID_TOKEN, RATE_LIMIT_EXCEEDED)
@@ -330,16 +375,8 @@ router.get('/by-user/:userId', async (req: Request, res: Response) => {
  *   - userId: string (optional) - User ID if authenticated
  *   - username: string (optional) - Username if known
  */
-router.post('/gateway-audit', async (req: Request, res: Response) => {
+router.post('/gateway-audit', verifyGatewayRequest, async (req: Request, res: Response) => {
   try {
-    // Only allow internal gateway requests
-    if (req.headers['x-gateway-request'] !== 'true') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'This endpoint is for internal gateway use only',
-      });
-    }
-
     const {
       event,
       category,

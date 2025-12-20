@@ -7,6 +7,7 @@
  * ## Required Environment Variables
  *
  * - `JWT_SECRET` - Must match the backend's JWT secret for token validation
+ * - `GATEWAY_SECRET` - Shared secret for HMAC-based gateway authentication
  *
  * ## Optional Environment Variables
  *
@@ -22,9 +23,23 @@
  * - `RATE_LIMIT_WINDOW_MS` - Time window in ms (default: 60000)
  * - `RATE_LIMIT_MAX` - Max requests per window (default: 60)
  *
+ * ### CORS
+ * - `CORS_ALLOWED_ORIGINS` - Comma-separated list of allowed origins (default: all)
+ *
  * ### Push Notifications
  * See FCM and APNs sections below for service-specific config.
  */
+
+/**
+ * Parse CORS allowed origins from environment
+ */
+function getCorsAllowedOrigins(): string[] {
+  const origins = process.env.CORS_ALLOWED_ORIGINS;
+  if (!origins) {
+    return []; // Empty array means allow all (for mobile apps)
+  }
+  return origins.split(',').map(o => o.trim()).filter(o => o.length > 0);
+}
 
 export const config = {
   // Server
@@ -37,6 +52,12 @@ export const config = {
 
   // JWT (must match backend)
   jwtSecret: process.env.JWT_SECRET || '',
+
+  // Gateway secret for HMAC-based authentication with backend
+  gatewaySecret: process.env.GATEWAY_SECRET || '',
+
+  // CORS configuration (SEC-004)
+  corsAllowedOrigins: getCorsAllowedOrigins(),
 
   // Rate limiting
   rateLimit: {
@@ -71,9 +92,21 @@ export const config = {
 // Validate required config
 export function validateConfig(): void {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (!config.jwtSecret) {
     errors.push('JWT_SECRET is required');
+  }
+
+  if (!config.gatewaySecret) {
+    warnings.push('GATEWAY_SECRET is not set - internal gateway authentication disabled');
+  } else if (config.gatewaySecret.length < 32) {
+    warnings.push('GATEWAY_SECRET is shorter than 32 characters');
+  }
+
+  if (warnings.length > 0) {
+    console.warn('Configuration warnings:');
+    warnings.forEach((warn) => console.warn(`  - ${warn}`));
   }
 
   if (errors.length > 0) {

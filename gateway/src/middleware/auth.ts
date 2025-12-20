@@ -47,6 +47,9 @@ export interface JwtPayload {
   isAdmin: boolean;
   iat: number;
   exp: number;
+  jti?: string; // JWT ID for revocation (SEC-003)
+  aud?: string | string[]; // Audience claim (SEC-006)
+  pending2FA?: boolean; // True when awaiting 2FA verification
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -88,7 +91,23 @@ export function authenticate(
   }
 
   try {
-    const payload = jwt.verify(token, config.jwtSecret) as JwtPayload;
+    // SEC-006: Verify token with expected audience for access tokens
+    const payload = jwt.verify(token, config.jwtSecret, {
+      audience: 'sanctuary:access',
+    }) as JwtPayload;
+
+    // SEC-006: Reject 2FA pending tokens
+    if (payload.pending2FA) {
+      logSecurityEvent('AUTH_2FA_TOKEN_MISUSE', {
+        ip: req.ip,
+        path: req.path,
+        userAgent: req.headers['user-agent'],
+        severity: 'medium',
+      });
+      res.status(401).json({ error: 'Unauthorized', message: '2FA verification required' });
+      return;
+    }
+
     req.user = payload;
 
     // Extract device ID from header if present (for push notifications)
@@ -136,8 +155,15 @@ export function optionalAuth(
 
   if (token) {
     try {
-      const payload = jwt.verify(token, config.jwtSecret) as JwtPayload;
-      req.user = payload;
+      // SEC-006: Verify with expected audience
+      const payload = jwt.verify(token, config.jwtSecret, {
+        audience: 'sanctuary:access',
+      }) as JwtPayload;
+
+      // Don't set user for 2FA pending tokens
+      if (!payload.pending2FA) {
+        req.user = payload;
+      }
     } catch {
       // Token invalid, but that's ok for optional auth
     }

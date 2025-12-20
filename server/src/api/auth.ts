@@ -7,11 +7,22 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import prisma from '../models/prisma';
-import { hashPassword, verifyPassword } from '../utils/password';
-import { generateToken, verifyToken } from '../utils/jwt';
+import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils/password';
+import {
+  generateToken,
+  generate2FAToken,
+  generateRefreshToken,
+  verifyToken,
+  verify2FAToken,
+  verifyRefreshToken,
+  decodeToken,
+  getTokenExpiration,
+  TokenAudience,
+} from '../utils/jwt';
 import { authenticate } from '../middleware/auth';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 import * as twoFactorService from '../services/twoFactorService';
+import { revokeToken } from '../services/tokenRevocation';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('AUTH');
@@ -137,6 +148,16 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
       });
     }
 
+    // SEC-009: Enforce password strength at registration
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Password does not meet strength requirements',
+        details: passwordValidation.errors,
+      });
+    }
+
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { username },
@@ -177,15 +198,18 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
       },
     });
 
-    // Generate token
+    // SEC-005: Generate access token (1h) and refresh token (7d)
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
+    const refreshToken = generateRefreshToken(user.id);
 
     res.status(201).json({
       token,
+      refreshToken,
+      expiresIn: 3600, // 1 hour in seconds
       user: {
         id: user.id,
         username: user.username,
@@ -318,17 +342,13 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       // Check if using initial password before creating temp token
       const usingDefaultPassword = await isUsingInitialPassword(user.id, password);
 
-      // Generate a temporary token for 2FA verification (short-lived, 5 minutes)
-      const tempToken = generateToken(
-        {
-          userId: user.id,
-          username: user.username,
-          isAdmin: user.isAdmin,
-          pending2FA: true, // Mark as pending 2FA verification
-          usingDefaultPassword, // Pass through for after 2FA verification
-        },
-        '5m' // 5 minute expiry
-      );
+      // SEC-006: Generate a 2FA temp token with distinct audience claim
+      const tempToken = generate2FAToken({
+        userId: user.id,
+        username: user.username,
+        isAdmin: user.isAdmin,
+        usingDefaultPassword, // Pass through for after 2FA verification
+      });
 
       return res.json({
         requires2FA: true,
@@ -336,12 +356,13 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       });
     }
 
-    // Generate token (no 2FA required)
+    // SEC-005: Generate access token (1h) and refresh token (7d)
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
+    const refreshToken = generateRefreshToken(user.id);
 
     // Audit successful login
     const { ipAddress, userAgent } = getClientInfo(req);
@@ -360,6 +381,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     res.json({
       token,
+      refreshToken,
+      expiresIn: 3600, // 1 hour in seconds
       user: {
         id: user.id,
         username: user.username,
@@ -881,22 +904,15 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
       });
     }
 
-    // Verify temp token
+    // SEC-006: Verify temp token with audience claim
     let decoded;
     try {
-      decoded = verifyToken(tempToken);
-    } catch {
+      decoded = verify2FAToken(tempToken);
+    } catch (err) {
+      log.debug('2FA token verification failed', { error: (err as Error).message });
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid or expired temporary token',
-      });
-    }
-
-    // Ensure this is a pending 2FA token
-    if (!decoded.pending2FA) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid token type',
       });
     }
 
@@ -954,12 +970,13 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
       });
     }
 
-    // Generate full auth token
+    // SEC-005: Generate full auth token and refresh token
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
+    const refreshToken = generateRefreshToken(user.id);
 
     // Audit successful login with 2FA
     const { ipAddress, userAgent } = getClientInfo(req);
@@ -987,6 +1004,8 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
 
     res.json({
       token,
+      refreshToken,
+      expiresIn: 3600, // 1 hour in seconds
       user: {
         id: user.id,
         username: user.username,
@@ -1220,6 +1239,168 @@ router.post('/telegram/test', authenticate, async (req: Request, res: Response) 
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test Telegram configuration',
+    });
+  }
+});
+
+// ============================================================================
+// TOKEN MANAGEMENT (SEC-003, SEC-005)
+// ============================================================================
+
+/**
+ * POST /api/v1/auth/refresh
+ * Exchange a refresh token for a new access token (SEC-005)
+ */
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken: refreshTokenStr } = req.body;
+
+    if (!refreshTokenStr) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Refresh token is required',
+      });
+    }
+
+    // Verify refresh token
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshTokenStr);
+    } catch (err) {
+      log.debug('Refresh token verification failed', { error: (err as Error).message });
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid or expired refresh token',
+      });
+    }
+
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not found',
+      });
+    }
+
+    // Generate new access token
+    const newToken = generateToken({
+      userId: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
+    });
+
+    // Optionally rotate refresh token (more secure but requires client update)
+    // For now, we keep the same refresh token until it expires
+
+    log.debug('Token refreshed', { userId: user.id });
+
+    res.json({
+      token: newToken,
+      expiresIn: 3600, // 1 hour in seconds
+    });
+  } catch (error) {
+    log.error('Token refresh error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to refresh token',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/auth/logout
+ * Revoke current access token (SEC-003)
+ */
+router.post('/logout', authenticate, async (req: Request, res: Response) => {
+  try {
+    // Extract the token to revoke it
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const decoded = decodeToken(token);
+
+      if (decoded?.jti && decoded?.exp) {
+        // Revoke the token
+        const expiresAt = new Date(decoded.exp * 1000);
+        revokeToken(decoded.jti, expiresAt, 'user_logout');
+        log.debug('Token revoked on logout', { userId: req.user?.userId });
+      }
+    }
+
+    // Audit logout
+    const { ipAddress, userAgent } = getClientInfo(req);
+    await auditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'unknown',
+      action: AuditAction.LOGOUT,
+      category: AuditCategory.AUTH,
+      ipAddress,
+      userAgent,
+      success: true,
+    });
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    log.error('Logout error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to logout',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/auth/revoke
+ * Revoke a specific refresh token (for "sign out of all devices" feature)
+ */
+router.post('/revoke', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { refreshToken: refreshTokenStr } = req.body;
+
+    if (!refreshTokenStr) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Refresh token is required',
+      });
+    }
+
+    // Decode the refresh token to get its jti
+    try {
+      const decoded = verifyRefreshToken(refreshTokenStr);
+
+      // Verify the token belongs to this user
+      if (decoded.userId !== req.user?.userId) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Cannot revoke tokens for other users',
+        });
+      }
+
+      // Calculate expiration from refresh token (7 days from issue)
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      revokeToken(decoded.jti, expiresAt, 'user_revoked');
+
+      log.debug('Refresh token revoked', { userId: req.user?.userId });
+    } catch {
+      // Token already invalid/expired, that's fine
+    }
+
+    res.json({
+      success: true,
+      message: 'Token revoked successfully',
+    });
+  } catch (error) {
+    log.error('Token revoke error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to revoke token',
     });
   }
 });

@@ -88,6 +88,7 @@ export function createMockNext(): NextFunction {
 
 /**
  * Generate a valid JWT token for testing
+ * SEC-006: Includes audience claim for proper token type identification
  */
 export function generateTestToken(payload: {
   userId: string;
@@ -95,7 +96,11 @@ export function generateTestToken(payload: {
   isAdmin: boolean;
   pending2FA?: boolean;
 }): string {
-  return jwt.sign(payload, TEST_JWT_SECRET, { expiresIn: '1h' });
+  return jwt.sign(
+    { ...payload, aud: 'sanctuary:access' },
+    TEST_JWT_SECRET,
+    { expiresIn: '1h' }
+  );
 }
 
 /**
@@ -106,7 +111,11 @@ export function generateExpiredToken(payload: {
   username: string;
   isAdmin: boolean;
 }): string {
-  return jwt.sign(payload, TEST_JWT_SECRET, { expiresIn: '-1h' });
+  return jwt.sign(
+    { ...payload, aud: 'sanctuary:access' },
+    TEST_JWT_SECRET,
+    { expiresIn: '-1h' }
+  );
 }
 
 /**
@@ -117,7 +126,37 @@ export function generateInvalidSignatureToken(payload: {
   username: string;
   isAdmin: boolean;
 }): string {
-  return jwt.sign(payload, 'wrong-secret', { expiresIn: '1h' });
+  return jwt.sign(
+    { ...payload, aud: 'sanctuary:access' },
+    'wrong-secret',
+    { expiresIn: '1h' }
+  );
+}
+
+/**
+ * Generate a 2FA temporary token for testing
+ */
+export function generate2FATestToken(payload: {
+  userId: string;
+  username: string;
+  isAdmin: boolean;
+}): string {
+  return jwt.sign(
+    { ...payload, pending2FA: true, aud: 'sanctuary:2fa' },
+    TEST_JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+}
+
+/**
+ * Generate a refresh token for testing
+ */
+export function generateRefreshTestToken(userId: string): string {
+  return jwt.sign(
+    { userId, type: 'refresh', aud: 'sanctuary:refresh' },
+    TEST_JWT_SECRET,
+    { expiresIn: '7d' }
+  );
 }
 
 /**
@@ -234,6 +273,8 @@ export default {
   generateTestToken,
   generateExpiredToken,
   generateInvalidSignatureToken,
+  generate2FATestToken,
+  generateRefreshTestToken,
   wait,
   flushPromises,
   expectAsyncError,

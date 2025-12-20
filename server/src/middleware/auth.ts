@@ -1,11 +1,17 @@
 /**
  * Authentication Middleware
  *
- * Middleware to protect routes and verify JWT tokens
+ * Middleware to protect routes and verify JWT tokens.
+ *
+ * ## Security Features (SEC-003, SEC-006)
+ *
+ * - Verifies JWT audience claim to prevent token misuse
+ * - Checks token revocation status via jti claim
+ * - Rejects 2FA pending tokens for regular endpoints
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, extractTokenFromHeader, JWTPayload } from '../utils/jwt';
+import { verifyToken, extractTokenFromHeader, JWTPayload, TokenAudience } from '../utils/jwt';
 import { requestContext } from '../utils/requestContext';
 
 // Extend Express Request type to include user
@@ -19,6 +25,9 @@ declare global {
 
 /**
  * Middleware to verify JWT token and attach user to request
+ *
+ * SEC-003: Verifies token is not revoked via jti claim
+ * SEC-006: Verifies token audience is 'sanctuary:access'
  */
 export function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
@@ -32,8 +41,16 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
       });
     }
 
-    // Verify token
-    const payload = verifyToken(token);
+    // SEC-006: Verify token with expected audience
+    const payload = verifyToken(token, TokenAudience.ACCESS);
+
+    // SEC-006: Reject 2FA pending tokens for regular endpoints
+    if (payload.pending2FA) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: '2FA verification required',
+      });
+    }
 
     // Attach user to request
     req.user = payload;
@@ -73,16 +90,23 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 /**
  * Optional authentication - attaches user if token is present but doesn't require it
+ *
+ * SEC-006: Verifies token audience if present
  */
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const token = extractTokenFromHeader(req.headers.authorization);
 
     if (token) {
-      const payload = verifyToken(token);
-      req.user = payload;
-      // Set user in request context for logging correlation
-      requestContext.setUser(payload.userId, payload.username);
+      // SEC-006: Verify with expected audience
+      const payload = verifyToken(token, TokenAudience.ACCESS);
+
+      // Don't set user for 2FA pending tokens
+      if (!payload.pending2FA) {
+        req.user = payload;
+        // Set user in request context for logging correlation
+        requestContext.setUser(payload.userId, payload.username);
+      }
     }
 
     next();

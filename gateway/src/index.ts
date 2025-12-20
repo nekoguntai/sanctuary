@@ -25,12 +25,29 @@ const app = express();
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: true, // Allow mobile apps from any origin
+
+// SEC-004: CORS configuration with configurable allowlist
+const corsOptions: cors.CorsOptions = {
+  origin: config.corsAllowedOrigins.length > 0
+    ? (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+        // Check if origin is in allowlist
+        if (config.corsAllowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    : true, // Allow all origins if no allowlist configured (for mobile apps)
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id'],
-}));
+};
+app.use(cors(corsOptions));
 
 // Body parsing
 app.use(express.json({ limit: '1mb' }));
@@ -52,8 +69,9 @@ app.get('/info', (_req, res) => {
   });
 });
 
-// Auth routes with stricter rate limiting
-app.post('/api/v1/auth/login', authRateLimiter);
+// SEC-007: Auth routes with stricter rate limiting for ALL auth endpoints
+// Apply rate limiter to the entire /api/v1/auth path, not just login POST
+app.use('/api/v1/auth', authRateLimiter);
 
 // Proxy routes to backend (includes push notification endpoints)
 app.use('/', proxyRoutes);

@@ -28,6 +28,9 @@ jest.mock('../../../src/config', () => ({
   default: {
     jwtSecret: 'test-jwt-secret-key-for-testing-only',
     jwtExpiresIn: '1h',
+    jwtRefreshExpiresIn: '7d',
+    gatewaySecret: '',
+    corsAllowedOrigins: [],
     nodeEnv: 'test',
   },
 }));
@@ -119,7 +122,7 @@ describe('Authentication', () => {
           isAdmin: false,
         });
 
-        expect(() => verifyToken(expiredToken)).toThrow('Invalid or expired token');
+        expect(() => verifyToken(expiredToken)).toThrow('Token expired');
       });
 
       it('should throw error for invalid signature', () => {
@@ -129,7 +132,7 @@ describe('Authentication', () => {
           isAdmin: false,
         });
 
-        expect(() => verifyToken(invalidToken)).toThrow('Invalid or expired token');
+        expect(() => verifyToken(invalidToken)).toThrow('Invalid token');
       });
 
       it('should throw error for malformed token', () => {

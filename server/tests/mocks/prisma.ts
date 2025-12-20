@@ -50,6 +50,7 @@ export const mockPrismaClient = {
   priceData: createModelMock(),
   hardwareDeviceModel: createModelMock(),
   electrumServer: createModelMock(),
+  draftUtxoLock: createModelMock(),
 
   // Transaction method
   $transaction: jest.fn().mockImplementation(async (callback) => {
@@ -70,17 +71,59 @@ export const mockPrismaClient = {
 // Type assertion for compatibility
 export const prismaMock = mockPrismaClient as unknown as PrismaClient;
 
+// Default implementations for model methods
+const defaultModelImplementations = {
+  findMany: () => Promise.resolve([]),
+  findFirst: () => Promise.resolve(null),
+  findUnique: () => Promise.resolve(null),
+  create: (data: any) => Promise.resolve({ id: 'mock-id', ...data.data }),
+  createMany: () => Promise.resolve({ count: 0 }),
+  update: (data: any) => Promise.resolve({ id: data.where.id, ...data.data }),
+  updateMany: () => Promise.resolve({ count: 0 }),
+  delete: () => Promise.resolve(null),
+  deleteMany: () => Promise.resolve({ count: 0 }),
+  upsert: (data: any) => Promise.resolve({ id: 'mock-id', ...data.create }),
+  count: () => Promise.resolve(0),
+  aggregate: () => Promise.resolve({}),
+  groupBy: () => Promise.resolve([]),
+};
+
 // Helper to reset all mocks between tests
 export function resetPrismaMocks(): void {
-  Object.values(mockPrismaClient).forEach((model) => {
-    if (typeof model === 'object' && model !== null) {
-      Object.values(model).forEach((method) => {
-        if (typeof method === 'function' && 'mockClear' in method) {
-          (method as jest.Mock).mockClear();
+  Object.entries(mockPrismaClient).forEach(([key, model]) => {
+    if (typeof model === 'object' && model !== null && !key.startsWith('$')) {
+      Object.entries(model).forEach(([method, fn]) => {
+        if (typeof fn === 'function' && 'mockReset' in fn) {
+          (fn as jest.Mock).mockReset();
+          // Restore default implementation
+          const defaultImpl = (defaultModelImplementations as any)[method];
+          if (defaultImpl) {
+            (fn as jest.Mock).mockImplementation(defaultImpl);
+          }
         }
       });
     }
   });
+
+  // Reset $transaction to its default implementation
+  (mockPrismaClient.$transaction as jest.Mock).mockReset();
+  (mockPrismaClient.$transaction as jest.Mock).mockImplementation(async (callback) => {
+    if (typeof callback === 'function') {
+      return callback(mockPrismaClient);
+    }
+    // Array of operations
+    return Promise.all(callback);
+  });
+
+  // Reset other $ methods
+  (mockPrismaClient.$connect as jest.Mock).mockReset();
+  (mockPrismaClient.$connect as jest.Mock).mockResolvedValue(undefined);
+  (mockPrismaClient.$disconnect as jest.Mock).mockReset();
+  (mockPrismaClient.$disconnect as jest.Mock).mockResolvedValue(undefined);
+  (mockPrismaClient.$executeRaw as jest.Mock).mockReset();
+  (mockPrismaClient.$executeRaw as jest.Mock).mockResolvedValue(0);
+  (mockPrismaClient.$queryRaw as jest.Mock).mockReset();
+  (mockPrismaClient.$queryRaw as jest.Mock).mockResolvedValue([]);
 }
 
 // Helper to set up common mock returns

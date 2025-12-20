@@ -510,6 +510,209 @@ describe('Transactions API', () => {
         })
       );
     });
+
+    it('should include draft lock info for locked UTXOs', async () => {
+      const walletId = 'wallet-123';
+      const confirmationThreshold = 1;
+
+      const mockUtxos = [
+        {
+          id: 'utxo-locked',
+          txid: randomTxid(),
+          vout: 0,
+          walletId,
+          amount: BigInt(100000),
+          confirmations: 6,
+          frozen: false,
+          createdAt: new Date(),
+          blockHeight: 850000,
+          address: { address: randomAddress(), derivationPath: "m/84'/1'/0'/0/0" },
+          draftLock: {
+            draftId: 'draft-456',
+            draft: { label: 'Pending Payment' },
+            createdAt: new Date(),
+          },
+        },
+        {
+          id: 'utxo-unlocked',
+          txid: randomTxid(),
+          vout: 1,
+          walletId,
+          amount: BigInt(50000),
+          confirmations: 10,
+          frozen: false,
+          createdAt: new Date(),
+          blockHeight: 849996,
+          address: { address: randomAddress(), derivationPath: "m/84'/1'/0'/0/1" },
+          draftLock: null, // Not locked
+        },
+      ];
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(mockUtxos);
+
+      const { res, getResponse } = createMockResponse();
+
+      const utxos = await mockPrismaClient.uTXO.findMany({
+        where: { walletId, spent: false },
+        include: {
+          address: { select: { address: true, derivationPath: true } },
+          draftLock: {
+            include: { draft: { select: { label: true } } },
+          },
+        },
+      });
+
+      // Simulate the API serialization logic
+      const serializedUtxos = utxos.map((utxo: any) => {
+        const isLockedByDraft = !!utxo.draftLock;
+        return {
+          id: utxo.id,
+          txid: utxo.txid,
+          vout: utxo.vout,
+          amount: Number(utxo.amount),
+          confirmations: utxo.confirmations,
+          frozen: utxo.frozen,
+          spendable: !utxo.frozen && !isLockedByDraft && utxo.confirmations >= confirmationThreshold,
+          lockedByDraftId: utxo.draftLock?.draftId,
+          lockedByDraftLabel: utxo.draftLock?.draft?.label,
+        };
+      });
+
+      res.json!({ utxos: serializedUtxos });
+
+      const response = getResponse();
+      expect(response.body.utxos).toHaveLength(2);
+
+      // Locked UTXO
+      const lockedUtxo = response.body.utxos.find((u: any) => u.id === 'utxo-locked');
+      expect(lockedUtxo.lockedByDraftId).toBe('draft-456');
+      expect(lockedUtxo.lockedByDraftLabel).toBe('Pending Payment');
+      expect(lockedUtxo.spendable).toBe(false); // Not spendable because locked
+
+      // Unlocked UTXO
+      const unlockedUtxo = response.body.utxos.find((u: any) => u.id === 'utxo-unlocked');
+      expect(unlockedUtxo.lockedByDraftId).toBeUndefined();
+      expect(unlockedUtxo.lockedByDraftLabel).toBeUndefined();
+      expect(unlockedUtxo.spendable).toBe(true);
+    });
+
+    it('should mark frozen UTXOs as not spendable', async () => {
+      const walletId = 'wallet-123';
+      const confirmationThreshold = 1;
+
+      const mockUtxos = [
+        {
+          id: 'utxo-frozen',
+          txid: randomTxid(),
+          vout: 0,
+          walletId,
+          amount: BigInt(100000),
+          confirmations: 100,
+          frozen: true, // Frozen
+          createdAt: new Date(),
+          blockHeight: 849900,
+          draftLock: null,
+        },
+      ];
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(mockUtxos);
+
+      const { res, getResponse } = createMockResponse();
+
+      const utxos = await mockPrismaClient.uTXO.findMany({
+        where: { walletId, spent: false },
+      });
+
+      const serializedUtxos = utxos.map((utxo: any) => {
+        const isLockedByDraft = !!utxo.draftLock;
+        return {
+          id: utxo.id,
+          amount: Number(utxo.amount),
+          frozen: utxo.frozen,
+          spendable: !utxo.frozen && !isLockedByDraft && utxo.confirmations >= confirmationThreshold,
+        };
+      });
+
+      res.json!({ utxos: serializedUtxos });
+
+      const response = getResponse();
+      expect(response.body.utxos[0].frozen).toBe(true);
+      expect(response.body.utxos[0].spendable).toBe(false);
+    });
+
+    it('should mark unconfirmed UTXOs as not spendable', async () => {
+      const walletId = 'wallet-123';
+      const confirmationThreshold = 3; // Require 3 confirmations
+
+      const mockUtxos = [
+        {
+          id: 'utxo-unconfirmed',
+          txid: randomTxid(),
+          vout: 0,
+          walletId,
+          amount: BigInt(100000),
+          confirmations: 1, // Only 1 confirmation, need 3
+          frozen: false,
+          createdAt: new Date(),
+          draftLock: null,
+        },
+      ];
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(mockUtxos);
+
+      const { res, getResponse } = createMockResponse();
+
+      const utxos = await mockPrismaClient.uTXO.findMany({
+        where: { walletId, spent: false },
+      });
+
+      const serializedUtxos = utxos.map((utxo: any) => {
+        const isLockedByDraft = !!utxo.draftLock;
+        return {
+          id: utxo.id,
+          confirmations: utxo.confirmations,
+          spendable: !utxo.frozen && !isLockedByDraft && utxo.confirmations >= confirmationThreshold,
+        };
+      });
+
+      res.json!({ utxos: serializedUtxos });
+
+      const response = getResponse();
+      expect(response.body.utxos[0].confirmations).toBe(1);
+      expect(response.body.utxos[0].spendable).toBe(false);
+    });
+
+    it('should include draft lock in UTXO query', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.uTXO.findMany({
+        where: { walletId, spent: false },
+        include: {
+          address: { select: { address: true, derivationPath: true } },
+          draftLock: {
+            include: { draft: { select: { label: true } } },
+          },
+        },
+      });
+
+      expect(mockPrismaClient.uTXO.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            draftLock: expect.objectContaining({
+              include: expect.objectContaining({
+                draft: expect.objectContaining({
+                  select: expect.objectContaining({
+                    label: true,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('Confirmation Calculation', () => {

@@ -68,12 +68,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     });
   }, []);
 
+  // Filter out replaced transactions (rbfStatus === 'replaced')
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => tx.rbfStatus !== 'replaced');
+  }, [transactions]);
+
   // Virtuoso ref for scroll control
   const virtuosoRef = useRef<any>(null);
 
   useEffect(() => {
-    if (highlightedTxId && transactions.length > 0 && virtuosoRef.current) {
-      const index = transactions.findIndex(tx => tx.id === highlightedTxId);
+    if (highlightedTxId && filteredTransactions.length > 0 && virtuosoRef.current) {
+      const index = filteredTransactions.findIndex(tx => tx.id === highlightedTxId);
       if (index !== -1) {
         setTimeout(() => {
           virtuosoRef.current?.scrollToIndex({
@@ -84,7 +89,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         }, 100);
       }
     }
-  }, [highlightedTxId, transactions]);
+  }, [highlightedTxId, filteredTransactions]);
 
   const getWallet = (id: string) => {
     return wallets.find(w => w.id === id);
@@ -188,7 +193,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     let totalSent = 0;
     let totalFees = 0;
 
-    for (const tx of transactions) {
+    for (const tx of filteredTransactions) {
       const isReceive = tx.amount > 0;
       const isConsolidation = (
         tx.type === 'consolidation' ||
@@ -212,7 +217,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     }
 
     return {
-      total: transactions.length,
+      total: filteredTransactions.length,
       received,
       sent,
       consolidations,
@@ -220,10 +225,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       totalSent,
       totalFees,
     };
-  }, [transactions, walletAddresses, transactionStats]);
+  }, [filteredTransactions, walletAddresses, transactionStats]);
 
   // Early return AFTER all hooks have been called
-  if (transactions.length === 0) {
+  if (filteredTransactions.length === 0) {
     return (
       <div className="text-center py-10">
         <p className="text-sanctuary-400 dark:text-sanctuary-500">No transactions found.</p>
@@ -283,8 +288,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {/* Virtualized Transaction Table */}
       <TableVirtuoso
         ref={virtuosoRef}
-        style={{ height: Math.min(transactions.length * 52 + 48, 600) }}
-        data={transactions}
+        style={{ height: Math.min(filteredTransactions.length * 52 + 48, 600) }}
+        data={filteredTransactions}
         fixedHeaderContent={() => (
           <tr className="surface-muted">
             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider">Date</th>

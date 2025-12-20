@@ -257,6 +257,34 @@ describe('Encryption Utilities', () => {
       const { validateEncryptionKey } = getEncryptionModule();
       expect(() => validateEncryptionKey()).not.toThrow();
     });
+
+    it('should throw error when ENCRYPTION_KEY is not set', () => {
+      const originalKey = process.env.ENCRYPTION_KEY;
+      delete process.env.ENCRYPTION_KEY;
+
+      try {
+        const { validateEncryptionKey } = getEncryptionModule();
+        expect(() => validateEncryptionKey()).toThrow(
+          'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
+        );
+      } finally {
+        process.env.ENCRYPTION_KEY = originalKey;
+      }
+    });
+
+    it('should throw error when ENCRYPTION_KEY is too short (< 32 chars)', () => {
+      const originalKey = process.env.ENCRYPTION_KEY;
+      process.env.ENCRYPTION_KEY = 'short-key-only-20-chars';
+
+      try {
+        const { validateEncryptionKey } = getEncryptionModule();
+        expect(() => validateEncryptionKey()).toThrow(
+          'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
+        );
+      } finally {
+        process.env.ENCRYPTION_KEY = originalKey;
+      }
+    });
   });
 
   describe('encryption key validation', () => {
@@ -268,6 +296,92 @@ describe('Encryption Utilities', () => {
         const encrypted = encrypt(plaintext);
         const decrypted = decrypt(encrypted);
         expect(decrypted).toBe(plaintext);
+      }
+    });
+  });
+
+  describe('encryption salt configuration', () => {
+    it('should use custom ENCRYPTION_SALT when set', () => {
+      const originalSalt = process.env.ENCRYPTION_SALT;
+      process.env.ENCRYPTION_SALT = 'custom-test-salt-value';
+
+      try {
+        // Get fresh module with custom salt
+        const { encrypt, decrypt } = getEncryptionModule();
+        const plaintext = 'test with custom salt';
+        const encrypted = encrypt(plaintext);
+        const decrypted = decrypt(encrypted);
+
+        expect(decrypted).toBe(plaintext);
+      } finally {
+        if (originalSalt) {
+          process.env.ENCRYPTION_SALT = originalSalt;
+        } else {
+          delete process.env.ENCRYPTION_SALT;
+        }
+      }
+    });
+
+    it('should invalidate key cache when salt changes', () => {
+      const originalSalt = process.env.ENCRYPTION_SALT;
+
+      try {
+        // Set initial salt and encrypt
+        process.env.ENCRYPTION_SALT = 'initial-salt-value';
+        const module1 = getEncryptionModule();
+        const plaintext = 'test cache invalidation';
+        const encrypted = module1.encrypt(plaintext);
+
+        // Verify decryption works with same salt
+        expect(module1.decrypt(encrypted)).toBe(plaintext);
+
+        // Change salt - this should invalidate the cache and use new key derivation
+        process.env.ENCRYPTION_SALT = 'different-salt-value';
+
+        // Get fresh module with new salt - decryption should fail because
+        // the data was encrypted with a different derived key
+        const module2 = getEncryptionModule();
+        expect(() => module2.decrypt(encrypted)).toThrow();
+      } finally {
+        if (originalSalt) {
+          process.env.ENCRYPTION_SALT = originalSalt;
+        } else {
+          delete process.env.ENCRYPTION_SALT;
+        }
+      }
+    });
+
+    it('should invalidate key cache within same module when salt changes', () => {
+      const originalSalt = process.env.ENCRYPTION_SALT;
+
+      try {
+        // Set initial salt
+        process.env.ENCRYPTION_SALT = 'first-salt-for-cache-test';
+        const encryptionModule = getEncryptionModule();
+
+        // Encrypt with first salt - this caches the key
+        const plaintext = 'test cache invalidation within module';
+        const encrypted = encryptionModule.encrypt(plaintext);
+
+        // Verify decryption works with same salt (key is cached)
+        expect(encryptionModule.decrypt(encrypted)).toBe(plaintext);
+
+        // Change salt while keeping the same module instance
+        // This triggers line 36: encryptionKeyCache = null
+        process.env.ENCRYPTION_SALT = 'second-salt-for-cache-test';
+
+        // Calling encrypt/decrypt again with changed salt should:
+        // 1. Detect salt mismatch (line 35)
+        // 2. Invalidate the cache (line 36)
+        // 3. Re-derive key with new salt (line 51)
+        // Decryption should fail because data was encrypted with different derived key
+        expect(() => encryptionModule.decrypt(encrypted)).toThrow();
+      } finally {
+        if (originalSalt) {
+          process.env.ENCRYPTION_SALT = originalSalt;
+        } else {
+          delete process.env.ENCRYPTION_SALT;
+        }
       }
     });
   });

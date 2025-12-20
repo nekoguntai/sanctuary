@@ -25,6 +25,7 @@ export interface DraftTransaction {
   enableRBF: boolean;
   subtractFees: boolean;
   sendMax: boolean;
+  isRBF: boolean; // True if this is an RBF replacement transaction
 
   // Multiple outputs support
   outputs?: DraftOutput[];
@@ -62,6 +63,7 @@ export interface CreateDraftRequest {
   enableRBF?: boolean;
   subtractFees?: boolean;
   sendMax?: boolean;
+  isRBF?: boolean; // Skip UTXO locking for RBF replacement transactions
   outputs?: DraftOutput[]; // Multiple outputs support
   label?: string;
   memo?: string;

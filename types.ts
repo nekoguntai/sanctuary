@@ -366,6 +366,10 @@ export interface Transaction {
   inputs?: TransactionInput[];
   outputs?: TransactionOutput[];
   type?: 'sent' | 'received' | 'consolidation' | 'receive'; // Transaction type from sync
+  // RBF tracking
+  replacedByTxid?: string; // If this tx was replaced, points to replacement
+  replacementForTxid?: string; // If this is a replacement, points to original
+  rbfStatus?: 'active' | 'replaced' | 'confirmed'; // Transaction RBF status
 }
 
 /**

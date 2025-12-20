@@ -265,6 +265,11 @@ model Transaction {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // RBF tracking
+  replacedByTxid     String?  // If this tx was replaced, points to replacement
+  replacementForTxid String?  // If this is a replacement, points to original
+  rbfStatus          String   @default("active")  // active, replaced, confirmed
+
   wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   user    User?    @relation(fields: [userId], references: [id])
   address Address? @relation(fields: [addressId], references: [id])
@@ -281,6 +286,9 @@ model Transaction {
   @@index([walletId, blockTime, createdAt]) // For running balance calculation
   @@index([userId])                    // For user-filtered transaction queries
   @@index([addressId])                 // For transaction by address lookups
+  @@index([walletId, rbfStatus])       // For filtering replaced transactions
+  @@index([replacedByTxid])            // For finding replacement chains
+  @@index([replacementForTxid])        // For finding original transactions
   @@map("transactions")
 }
 
@@ -301,6 +309,7 @@ model UTXO {
   updatedAt     DateTime @updatedAt
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  draftLock DraftUtxoLock?  // If locked by a draft, points to the lock record
 
   @@unique([txid, vout])
   @@index([walletId])                  // For balance calculations
@@ -328,6 +337,9 @@ model DraftTransaction {
   sendMax         Boolean  @default(false)
   outputs         Json?    // Multiple outputs: [{ address, amount, sendMax? }]
 
+  // RBF flag - skip UTXO locking for RBF transactions (they reuse same UTXOs)
+  isRBF           Boolean  @default(false)
+
   // Labels
   label           String?
   memo            String?
@@ -354,11 +366,29 @@ model DraftTransaction {
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id])
+  utxoLocks DraftUtxoLock[]
 
   @@index([walletId, status])
   @@index([userId])
   @@index([expiresAt])                 // For hourly maintenance cleanup
   @@map("draft_transactions")
+}
+
+// Junction table for locking UTXOs to drafts (prevents double-spend in drafts)
+model DraftUtxoLock {
+  id        String   @id @default(uuid())
+  draftId   String
+  utxoId    String
+  createdAt DateTime @default(now())
+
+  draft DraftTransaction @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  utxo  UTXO             @relation(fields: [utxoId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, utxoId])  // Same UTXO can only be in same draft once
+  @@unique([utxoId])           // CRITICAL: Each UTXO can only be in ONE draft
+  @@index([draftId])
+  @@index([utxoId])
+  @@map("draft_utxo_locks")
 }
 
 // ========================================

@@ -11,6 +11,7 @@ import { createLogger } from '../utils/logger';
 import * as walletService from '../services/wallet';
 import { notifyNewDraft } from '../services/notifications/notificationService';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
+import { lockUtxosForDraft, resolveUtxoIds } from '../services/draftLockService';
 
 const router = Router();
 const log = createLogger('DRAFTS');
@@ -146,6 +147,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       subtractFees,
       sendMax,
       outputs, // Multiple outputs support
+      isRBF, // RBF replacement transactions skip UTXO locking
       label,
       memo,
       psbtBase64,
@@ -200,6 +202,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
         subtractFees: subtractFees ?? false,
         sendMax: sendMax ?? false,
         outputs: outputs || null,
+        isRBF: isRBF ?? false,
         label,
         memo,
         psbtBase64,
@@ -216,7 +219,37 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       },
     });
 
-    log.info('[DRAFTS] Created draft', { draftId: draft.id, walletId, userId });
+    // Lock UTXOs for this draft (unless it's an RBF transaction)
+    if (selectedUtxoIds && selectedUtxoIds.length > 0 && !isRBF) {
+      const { found: utxoIds, notFound } = await resolveUtxoIds(walletId, selectedUtxoIds);
+
+      if (notFound.length > 0) {
+        log.warn('[DRAFTS] Some UTXOs not found for locking', { notFound, draftId: draft.id });
+      }
+
+      if (utxoIds.length > 0) {
+        const lockResult = await lockUtxosForDraft(draft.id, utxoIds, { isRBF: false });
+
+        if (!lockResult.success) {
+          // UTXOs are already locked by another draft - delete the draft and return error
+          await prisma.draftTransaction.delete({ where: { id: draft.id } });
+
+          return res.status(409).json({
+            error: 'Conflict',
+            message: 'One or more UTXOs are already locked by another draft transaction',
+            lockedByDraftIds: lockResult.lockedByDraftIds,
+            failedUtxoIds: lockResult.failedUtxoIds,
+          });
+        }
+
+        log.debug('[DRAFTS] Locked UTXOs for draft', {
+          draftId: draft.id,
+          lockedCount: lockResult.lockedCount
+        });
+      }
+    }
+
+    log.info('[DRAFTS] Created draft', { draftId: draft.id, walletId, userId, isRBF: isRBF ?? false });
 
     // Send notifications to other wallet users (async, don't block response)
     notifyNewDraft(walletId, {

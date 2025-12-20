@@ -15,6 +15,11 @@ import { getElectrumClient } from './electrum';
 import { parseDescriptor } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
+import { unlockUtxosForDraft } from '../draftLockService';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('TRANSACTION');
+
 
 /**
  * Get dust threshold from system settings
@@ -89,13 +94,17 @@ export async function selectUTXOs(
     ? JSON.parse(thresholdSetting.value)
     : DEFAULT_CONFIRMATION_THRESHOLD;
 
-  // Get available UTXOs (exclude frozen and unconfirmed UTXOs)
+  // Get available UTXOs (exclude frozen, unconfirmed, and locked-by-draft UTXOs)
   let utxos = await prisma.uTXO.findMany({
     where: {
       walletId,
       spent: false,
       frozen: false, // Frozen UTXOs cannot be spent
       confirmations: { gte: confirmationThreshold }, // Must have enough confirmations
+      // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
+      ...(selectedUtxoIds && selectedUtxoIds.length > 0
+        ? {} // Don't filter locks if user selected specific UTXOs
+        : { draftLock: null }), // Auto-selection: exclude locked UTXOs
     },
     orderBy:
       strategy === UTXOSelectionStrategy.LARGEST_FIRST
@@ -565,6 +574,7 @@ export async function broadcastAndSave(
     memo?: string;
     utxos: Array<{ txid: string; vout: number }>;
     rawTxHex?: string; // For Trezor: fully signed raw transaction hex
+    draftId?: string; // If broadcasting from a draft, release UTXO locks
   }
 ): Promise<{
   txid: string;
@@ -621,6 +631,14 @@ export async function broadcastAndSave(
     });
   }
 
+  // Release UTXO locks if broadcasting from a draft
+  if (metadata.draftId) {
+    const unlockedCount = await unlockUtxosForDraft(metadata.draftId);
+    if (unlockedCount > 0) {
+      log.debug(`Released ${unlockedCount} UTXO locks for draft ${metadata.draftId}`);
+    }
+  }
+
   // Check if recipient is a wallet address (consolidation) or external (sent)
   const isConsolidation = await prisma.address.findFirst({
     where: {
@@ -628,6 +646,40 @@ export async function broadcastAndSave(
       address: metadata.recipient,
     },
   });
+
+  // Check if this is an RBF transaction (memo starts with "Replacing transaction ")
+  let replacementForTxid: string | undefined;
+  let labelToUse = metadata.label;
+  let memoToUse = metadata.memo;
+
+  if (metadata.memo && metadata.memo.startsWith('Replacing transaction ')) {
+    // Extract original txid from memo
+    replacementForTxid = metadata.memo.replace('Replacing transaction ', '').trim();
+
+    // Find the original transaction
+    const originalTx = await prisma.transaction.findFirst({
+      where: {
+        txid: replacementForTxid,
+        walletId,
+      },
+    });
+
+    if (originalTx) {
+      // Mark original transaction as replaced
+      await prisma.transaction.update({
+        where: { id: originalTx.id },
+        data: {
+          rbfStatus: 'replaced',
+          replacedByTxid: txid,
+        },
+      });
+
+      // Copy label from original if not already set
+      if (!labelToUse && originalTx.label) {
+        labelToUse = originalTx.label;
+      }
+    }
+  }
 
   // Save transaction to database
   const txType = isConsolidation ? 'consolidation' : 'sent';
@@ -639,10 +691,12 @@ export async function broadcastAndSave(
       amount: BigInt(metadata.amount),
       fee: BigInt(metadata.fee),
       confirmations: 0,
-      label: metadata.label,
-      memo: metadata.memo,
+      label: labelToUse,
+      memo: memoToUse,
       blockHeight: null,
       blockTime: null,
+      replacementForTxid,
+      rbfStatus: 'active',
     },
   });
 

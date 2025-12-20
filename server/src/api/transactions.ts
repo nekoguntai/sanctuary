@@ -523,6 +523,15 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
         spent: false,
       },
       orderBy: { amount: 'desc' },
+      include: {
+        draftLock: {
+          include: {
+            draft: {
+              select: { id: true, label: true },
+            },
+          },
+        },
+      },
     });
 
     // Get associated transactions to find blockTime for each UTXO
@@ -543,14 +552,19 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
     // Use transaction blockTime for the UTXO date (when it was created on blockchain)
     const serializedUtxos = utxos.map(utxo => {
       const blockTime = txBlockTimes.get(utxo.txid);
+      const isLockedByDraft = !!utxo.draftLock;
       return {
         ...utxo,
         amount: Number(utxo.amount),
         blockHeight: utxo.blockHeight ? Number(utxo.blockHeight) : null,
-        // Spendable if not frozen and has enough confirmations
-        spendable: !utxo.frozen && utxo.confirmations >= confirmationThreshold,
+        // Spendable if not frozen, not locked by draft, and has enough confirmations
+        spendable: !utxo.frozen && !isLockedByDraft && utxo.confirmations >= confirmationThreshold,
         // Use blockTime from transaction if available, otherwise fall back to createdAt
         createdAt: blockTime ? blockTime.toISOString() : utxo.createdAt.toISOString(),
+        // Draft lock info (if locked)
+        lockedByDraftId: utxo.draftLock?.draftId,
+        lockedByDraftLabel: utxo.draftLock?.draft?.label,
+        draftLock: undefined, // Remove the raw relation data
       };
     });
 

@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { AlertTriangle, TrendingUp, Zap, Users, ArrowUpCircle, Loader2, CheckCircle } from 'lucide-react';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as draftsApi from '../src/api/drafts';
+import * as transactionsApi from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('TransactionActions');
@@ -66,6 +67,9 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       setProcessing(true);
       setError(null);
 
+      // Fetch the original transaction to preserve its label
+      const originalTx = await transactionsApi.getTransaction(txid);
+
       // Create the RBF transaction (returns unsigned PSBT)
       const result = await bitcoinApi.createRBFTransaction(txid, {
         newFeeRate,
@@ -80,7 +84,11 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       const totalInput = result.inputs.reduce((sum, inp) => sum + inp.value, 0);
       const totalOutput = result.outputs.reduce((sum, out) => sum + out.value, 0);
 
+      // Preserve the original transaction's label (if it exists)
+      const labelToUse = originalTx.label || `RBF: Fee bump from ${rbfStatus.currentFeeRate} to ${result.feeRate} sat/vB`;
+
       // Create a draft transaction for signing
+      // isRBF: true skips UTXO locking since RBF reuses the same UTXOs
       const draft = await draftsApi.createDraft(walletId, {
         recipient: primaryOutput.address,
         amount: primaryOutput.value,
@@ -89,8 +97,9 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
         enableRBF: true,
         subtractFees: false,
         sendMax: false,
+        isRBF: true, // Skip UTXO locking - RBF uses same UTXOs as original tx
         outputs: result.outputs.map(out => ({ address: out.address, amount: out.value })),
-        label: `RBF: Fee bump from ${rbfStatus.currentFeeRate} to ${result.feeRate} sat/vB`,
+        label: labelToUse,
         memo: `Replacing transaction ${txid}`,
         psbtBase64: result.psbtBase64,
         fee: result.fee,

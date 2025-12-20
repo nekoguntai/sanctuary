@@ -29,6 +29,7 @@ import { createLogger } from './utils/logger';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { migrationService } from './services/migrationService';
+import { maintenanceService } from './services/maintenanceService';
 
 const log = createLogger('SERVER');
 
@@ -158,6 +159,9 @@ syncService.start().catch((err) => {
   log.error('Failed to start sync service', { error: err });
 });
 
+// Start maintenance service (cleanup jobs)
+maintenanceService.start();
+
 // Run database migrations before starting server
 (async () => {
   log.info('Checking database migrations...');
@@ -181,6 +185,7 @@ syncService.start().catch((err) => {
     log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
     log.info('Notification Service running');
     log.info('Background Sync Service running');
+    log.info('Maintenance Service running (cleanup jobs)');
 
     // Log final migration status
     await migrationService.logMigrationStatus();
@@ -193,6 +198,7 @@ process.on('SIGTERM', () => {
   wsServer.close();
   notificationService.stop();
   syncService.stop();
+  maintenanceService.stop();
   httpServer.close(() => {
     log.info('Server closed');
     process.exit(0);

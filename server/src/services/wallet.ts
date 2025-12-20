@@ -615,6 +615,10 @@ export async function deleteWallet(walletId: string, userId: string): Promise<vo
   const syncService = getSyncService();
   await syncService.unsubscribeWalletAddresses(walletId);
 
+  // Also clean up notification service subscriptions
+  const { notificationService } = await import('../websocket/notifications');
+  await notificationService.unsubscribeWalletAddresses(walletId);
+
   await prisma.wallet.delete({
     where: { id: walletId },
   });

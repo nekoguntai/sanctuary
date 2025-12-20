@@ -10,9 +10,27 @@ import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import * as walletService from '../services/wallet';
 import { notifyNewDraft } from '../services/notifications/notificationService';
+import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 
 const router = Router();
 const log = createLogger('DRAFTS');
+
+/**
+ * Get draft expiration days from system settings
+ */
+async function getDraftExpirationDays(): Promise<number> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'draftExpirationDays' },
+    });
+    if (setting) {
+      return JSON.parse(setting.value);
+    }
+  } catch (error) {
+    log.warn('[DRAFTS] Failed to get draftExpirationDays from settings', { error: String(error) });
+  }
+  return DEFAULT_DRAFT_EXPIRATION_DAYS;
+}
 
 // All routes require authentication
 router.use(authenticate);
@@ -165,6 +183,11 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       });
     }
 
+    // Get expiration from system settings
+    const expirationDays = await getDraftExpirationDays();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
     const draft = await prisma.draftTransaction.create({
       data: {
         walletId,
@@ -189,6 +212,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
         inputPaths: inputPaths || [],
         status: 'unsigned',
         signedDeviceIds: [],
+        expiresAt,
       },
     });
 

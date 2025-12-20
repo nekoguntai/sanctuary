@@ -73,6 +73,13 @@ export const SATOSHIS_PER_BTC = 100_000_000;
 export const DEFAULT_DUST_THRESHOLD = 546;
 
 /**
+ * Default draft transaction expiration in days
+ * Draft transactions are automatically deleted after this period.
+ * This is the default value - actual value is stored in system settings.
+ */
+export const DEFAULT_DRAFT_EXPIRATION_DAYS = 7;
+
+/**
  * Minimum fee rate in sat/vB
  * Can be as low as 0.1 for low-fee environments
  */

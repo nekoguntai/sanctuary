@@ -271,6 +271,7 @@ model Transaction {
   @@index([walletId, type])           // For filtering by transaction type
   @@index([blockTime])                 // For date-range exports
   @@index([walletId, confirmations])   // For pending transaction queries
+  @@index([walletId, blockTime, createdAt]) // For running balance calculation
   @@map("transactions")
 }
 

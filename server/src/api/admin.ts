@@ -12,7 +12,7 @@ import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
 import { validatePasswordStrength } from '../utils/password';
-import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../constants';
+import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 
 const router = Router();
 const log = createLogger('ADMIN');
@@ -1015,6 +1015,7 @@ router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
       dustThreshold: DEFAULT_DUST_THRESHOLD,
+      draftExpirationDays: DEFAULT_DRAFT_EXPIRATION_DAYS,
       ...settingsObj,
     });
   } catch (error) {
@@ -1086,6 +1087,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
       dustThreshold: DEFAULT_DUST_THRESHOLD,
+      draftExpirationDays: DEFAULT_DRAFT_EXPIRATION_DAYS,
     };
     for (const setting of settings) {
       try {

@@ -5,6 +5,7 @@
  * and fallback mechanisms for reliability.
  */
 
+import { LRUCache } from 'lru-cache';
 import { providers, PriceData, supportedCurrencies } from './providers';
 import { createLogger } from '../../utils/logger';
 
@@ -33,7 +34,9 @@ interface AggregatedPrice {
 }
 
 class PriceService {
-  private cache = new Map<string, CachedPrice>();
+  // LRU cache with max 500 entries to prevent unbounded memory growth
+  // Entries include current prices (~10) and historical prices
+  private cache = new LRUCache<string, CachedPrice>({ max: 500 });
   private cacheDuration = 60 * 1000; // 1 minute default
   private cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours for historical data
 

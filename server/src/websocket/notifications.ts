@@ -88,6 +88,34 @@ export class NotificationService {
   }
 
   /**
+   * Unsubscribe all addresses for a wallet (call when wallet is deleted)
+   * Prevents memory leak by cleaning up the subscribedAddresses set
+   */
+  async unsubscribeWalletAddresses(walletId: string): Promise<void> {
+    try {
+      // Get all addresses for this wallet from the database
+      const addresses = await prisma.address.findMany({
+        where: { walletId },
+        select: { address: true },
+      });
+
+      let unsubscribed = 0;
+      for (const { address } of addresses) {
+        if (this.subscribedAddresses.has(address)) {
+          this.subscribedAddresses.delete(address);
+          unsubscribed++;
+        }
+      }
+
+      if (unsubscribed > 0) {
+        log.debug(`[NOTIFY] Unsubscribed ${unsubscribed} addresses for wallet ${walletId}`);
+      }
+    } catch (error) {
+      log.warn('[NOTIFY] Failed to unsubscribe wallet addresses', { walletId, error: String(error) });
+    }
+  }
+
+  /**
    * Subscribe to new blocks
    */
   private async subscribeToBlocks() {

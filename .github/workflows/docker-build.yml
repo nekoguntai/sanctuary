@@ -1,11 +1,16 @@
-name: Build and Push Docker Images
+name: Build Dev Images
+
+# Builds bleeding-edge images from main branch.
+# For versioned release images, see release.yml
+#
+# Images built:
+#   - ghcr.io/n-narusegawa/sanctuary-frontend:main
+#   - ghcr.io/n-narusegawa/sanctuary-backend:main
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
     paths:
       - 'components/**'
       - 'src/**'
@@ -66,9 +71,6 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{version}}
 
       - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v5
@@ -84,14 +86,15 @@ jobs:
   summary:
     runs-on: ubuntu-latest
     needs: build
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     steps:
       - name: Summary
         run: |
-          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Dev Images Built" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Frontend Image" >> $GITHUB_STEP_SUMMARY
-          echo "\`${{ env.REGISTRY }}/${{ github.repository }}-frontend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "Bleeding-edge images from \`main\` branch:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Backend Image" >> $GITHUB_STEP_SUMMARY
-          echo "\`${{ env.REGISTRY }}/${{ github.repository }}-backend:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ github.repository }}-frontend:main\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ github.repository }}-backend:main\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> For stable releases, use versioned tags (e.g., \`v0.6.0\`) or \`latest\`" >> $GITHUB_STEP_SUMMARY

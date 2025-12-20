@@ -88,6 +88,96 @@ router.post('/:addressId', async (req: Request, res: Response) => {
 router.use(authenticate);
 
 /**
+ * GET /api/v1/payjoin/eligibility/:walletId
+ * Check if wallet is eligible for Payjoin receives
+ */
+router.get('/eligibility/:walletId', async (req: Request, res: Response) => {
+  try {
+    const { walletId } = req.params;
+    const userId = req.user?.userId;
+
+    // Verify wallet access
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'Wallet not found or access denied' });
+    }
+
+    // Count UTXOs by eligibility status
+    const [eligibleCount, totalCount, frozenCount, unconfirmedCount, lockedCount] = await Promise.all([
+      // Eligible: confirmed, not frozen, not locked
+      prisma.uTXO.count({
+        where: {
+          walletId,
+          spent: false,
+          frozen: false,
+          confirmations: { gt: 0 },
+          draftLock: null,
+        },
+      }),
+      // Total unspent
+      prisma.uTXO.count({
+        where: { walletId, spent: false },
+      }),
+      // Frozen
+      prisma.uTXO.count({
+        where: { walletId, spent: false, frozen: true },
+      }),
+      // Unconfirmed
+      prisma.uTXO.count({
+        where: { walletId, spent: false, confirmations: 0 },
+      }),
+      // Locked by draft
+      prisma.uTXO.count({
+        where: { walletId, spent: false, draftLock: { isNot: null } },
+      }),
+    ]);
+
+    // Determine status and reason
+    let status: string;
+    let reason: string | null = null;
+
+    if (eligibleCount > 0) {
+      status = 'ready';
+    } else if (totalCount === 0) {
+      status = 'no-utxos';
+      reason = 'You need bitcoin in this wallet to enable Payjoin.';
+    } else if (frozenCount === totalCount) {
+      status = 'all-frozen';
+      reason = 'All coins are frozen. Unfreeze at least one to enable Payjoin.';
+    } else if (unconfirmedCount > 0 && unconfirmedCount + frozenCount + lockedCount >= totalCount) {
+      status = 'pending-confirmations';
+      reason = 'Waiting for confirmations. Your coins need at least 1 confirmation.';
+    } else if (lockedCount > 0 && lockedCount + frozenCount >= totalCount) {
+      status = 'all-locked';
+      reason = 'All coins are locked by draft transactions.';
+    } else {
+      status = 'unavailable';
+      reason = 'No eligible coins available.';
+    }
+
+    res.json({
+      eligible: eligibleCount > 0,
+      status,
+      eligibleUtxoCount: eligibleCount,
+      totalUtxoCount: totalCount,
+      reason,
+    });
+  } catch (error) {
+    log.error('Error checking Payjoin eligibility', { error: String(error) });
+    res.status(500).json({ error: 'Failed to check eligibility' });
+  }
+});
+
+/**
  * GET /api/v1/payjoin/address/:addressId/uri
  * Generate a BIP21 URI with Payjoin endpoint for an address
  */

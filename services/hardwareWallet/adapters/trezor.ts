@@ -1,8 +1,9 @@
 /**
  * Trezor Hardware Wallet Adapter
  *
- * Implements DeviceAdapter interface for Trezor devices using Trezor Suite bridge.
+ * Implements DeviceAdapter interface for Trezor devices via Trezor Connect.
  * Supports Model One, Model T, Safe 3, Safe 5, and Safe 7.
+ * Requires Trezor Suite desktop app to be running.
  */
 
 import TrezorConnect from '@trezor/connect-web';
@@ -111,7 +112,6 @@ const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
  */
 export class TrezorAdapter implements DeviceAdapter {
   readonly type: DeviceType = 'trezor';
-  readonly requiresBridge = true;
   readonly displayName = 'Trezor';
 
   private connection: TrezorConnection = {
@@ -121,10 +121,11 @@ export class TrezorAdapter implements DeviceAdapter {
   private connectedDevice: HardwareWalletDevice | null = null;
 
   /**
-   * Trezor uses bridge mode - always supported if Trezor Suite is running
+   * Check if Trezor is supported in current environment.
+   * Requires HTTPS for secure context (WebUSB requirement).
    */
   isSupported(): boolean {
-    return true;
+    return typeof window !== 'undefined' && window.isSecureContext;
   }
 
   /**

@@ -304,24 +304,23 @@ The gateway container provides a secure API for iOS and Android mobile apps:
 
 The gateway runs on port 4000 by default and starts automatically with `docker compose up`.
 
-## HTTP and HTTPS Ports
+## Network Ports
 
-Sanctuary runs on both HTTP and HTTPS to support different hardware wallet types:
+Sanctuary uses HTTPS by default for hardware wallet compatibility:
 
 **Default ports:**
 - `HTTPS_PORT=8443` — Main application (https://localhost:8443)
-- `HTTP_PORT=8080` — Alternative port (http://localhost:8080)
+- `HTTP_PORT=8080` — Redirect to HTTPS
 
-**Why two ports?**
+**Port requirements:**
 
-| Device Type | Required Port | Reason |
-|-------------|---------------|--------|
-| **Ledger** | HTTPS (8443) | WebUSB requires a secure context |
-| **Trezor** | Any | Works on both HTTP and HTTPS |
+| Feature | Required Port | Reason |
+|---------|---------------|--------|
+| **USB wallets** (Ledger, Trezor, etc.) | HTTPS (8443) | WebUSB requires a secure context |
 | **QR Camera** | HTTPS (8443) | Camera access requires a secure context |
-| **File import** | Any | No special browser API required |
+| **File import / SD card** | Any | No special browser API required |
 
-**Recommendation:** Use HTTPS (8443) as your default. Only switch to HTTP if you encounter issues.
+**Note:** Always use HTTPS (port 8443) for full hardware wallet support. HTTP access is limited to file-based workflows only.
 
 ## Requirements
 

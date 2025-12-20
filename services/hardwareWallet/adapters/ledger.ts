@@ -110,7 +110,6 @@ const extractAccountPath = (fullPath: string): string => {
  */
 export class LedgerAdapter implements DeviceAdapter {
   readonly type: DeviceType = 'ledger';
-  readonly requiresBridge = false;
   readonly displayName = 'Ledger';
 
   private connection: LedgerConnection | null = null;

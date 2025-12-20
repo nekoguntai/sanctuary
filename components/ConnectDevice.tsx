@@ -148,15 +148,15 @@ export const ConnectDevice: React.FC = () => {
     if (!selectedModel) return [];
     const methods: ConnectionMethod[] = [];
 
-    // Check if this is a Trezor device (uses bridge mode, doesn't require HTTPS)
-    const isTrezor = getDeviceTypeFromModel(selectedModel) === 'trezor';
-
     // Add methods based on device connectivity, plus always allow manual
     selectedModel.connectivity.forEach(conn => {
       if (conn in connectivityConfig) {
         // Filter out USB if not in secure context (HTTPS required for WebUSB)
-        // Exception: Trezor uses bridge mode which works without HTTPS
-        if (conn === 'usb' && !isSecureContext() && !isTrezor) {
+        if (conn === 'usb' && !isSecureContext()) {
+          return;
+        }
+        // Filter out QR code camera scanning if not in secure context (camera requires HTTPS)
+        if (conn === 'qr_code' && !isSecureContext()) {
           return;
         }
         methods.push(conn as ConnectionMethod);
@@ -185,7 +185,6 @@ export const ConnectDevice: React.FC = () => {
       });
 
       // Connect to the hardware wallet
-      // Trezor uses Suite bridge, others use WebUSB
       const device = await hardwareWalletService.connect(deviceType);
 
       if (!device || !device.connected) {

@@ -57,8 +57,7 @@ export const isSecureContext = (): boolean => {
 
 /**
  * Check if hardware wallet integration is supported
- * For WebUSB devices (Ledger), requires HTTPS
- * For bridge devices (Trezor), always supported
+ * All USB devices require HTTPS (secure context)
  */
 export const isHardwareWalletSupported = (): boolean => {
   return isWebUSBSupported() && isSecureContext();
@@ -77,7 +76,9 @@ export const getConnectedDevices = async (): Promise<import('./types').HardwareW
  *
  * Supported devices:
  * - Ledger (Nano S, Nano X, Nano S Plus, Stax, Flex) via WebUSB
- * - Trezor (Model One, Model T, Safe 3/5/7) via Trezor Suite bridge
+ * - Trezor (Model One, Model T, Safe 3/5/7) via Trezor Connect (requires Trezor Suite)
+ *
+ * All devices require HTTPS (secure context) for USB connectivity.
  *
  * Adding new devices:
  * 1. Create an adapter class implementing DeviceAdapter interface

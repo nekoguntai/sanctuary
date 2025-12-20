@@ -57,9 +57,6 @@ export interface DeviceAdapter {
   /** Device type identifier */
   readonly type: DeviceType;
 
-  /** Whether this device requires external software (e.g., Trezor Suite) */
-  readonly requiresBridge: boolean;
-
   /** Human-readable name for the device */
   readonly displayName: string;
 

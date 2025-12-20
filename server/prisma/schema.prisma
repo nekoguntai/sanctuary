@@ -40,6 +40,7 @@ model User {
   pushDevices PushDevice[]
   draftTransactions DraftTransaction[]
 
+  @@index([isAdmin])                      // For admin user lookups
   @@map("users")
 }
 
@@ -117,6 +118,8 @@ model Wallet {
   draftTransactions DraftTransaction[]
 
   @@index([groupId])
+  @@index([syncInProgress])               // For sync service startup & scheduling
+  @@index([lastSyncedAt])                 // For stale wallet detection
   @@map("wallets")
 }
 
@@ -179,6 +182,8 @@ model HardwareDeviceModel {
   // Relationship to user's registered devices
   devices         Device[]
 
+  @@index([manufacturer])                 // For device catalog filtering
+  @@index([discontinued])                 // For active device filtering
   @@map("hardware_device_models")
 }
 
@@ -200,6 +205,7 @@ model Device {
   wallets WalletDevice[]
 
   @@index([userId])
+  @@index([modelId])                      // For device by model lookups
   @@map("devices")
 }
 
@@ -235,6 +241,7 @@ model Address {
   transactions Transaction[]
   addressLabels AddressLabel[]
 
+  @@index([walletId])                     // For address listing queries
   @@index([walletId, used])
   @@map("addresses")
 }
@@ -272,6 +279,8 @@ model Transaction {
   @@index([blockTime])                 // For date-range exports
   @@index([walletId, confirmations])   // For pending transaction queries
   @@index([walletId, blockTime, createdAt]) // For running balance calculation
+  @@index([userId])                    // For user-filtered transaction queries
+  @@index([addressId])                 // For transaction by address lookups
   @@map("transactions")
 }
 
@@ -294,6 +303,7 @@ model UTXO {
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@unique([txid, vout])
+  @@index([walletId])                  // For balance calculations
   @@index([walletId, spent])
   @@index([walletId, frozen])          // For UTXO selection excluding frozen
   @@map("utxos")
@@ -347,6 +357,7 @@ model DraftTransaction {
 
   @@index([walletId, status])
   @@index([userId])
+  @@index([expiresAt])                 // For hourly maintenance cleanup
   @@map("draft_transactions")
 }
 
@@ -422,6 +433,7 @@ model FeeEstimate {
   hour        Float    // sat/vB
   createdAt   DateTime @default(now())
 
+  @@index([createdAt])                 // For daily maintenance cleanup
   @@map("fee_estimates")
 }
 
@@ -443,6 +455,7 @@ model PriceData {
   createdAt DateTime @default(now())
 
   @@index([currency, createdAt])
+  @@index([createdAt])                 // For daily maintenance cleanup
   @@map("price_data")
 }
 
@@ -520,6 +533,7 @@ model AuditLog {
   @@index([category])
   @@index([createdAt])
   @@index([userId, createdAt])         // For user activity timeline
+  @@index([success, createdAt])        // For security monitoring queries
   @@map("audit_logs")
 }
 
@@ -540,5 +554,6 @@ model PushDevice {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([platform])                  // For notification routing by platform
   @@map("push_devices")
 }

@@ -506,7 +506,7 @@ export const BackupRestore: React.FC = () => {
 
       {/* Confirmation Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-md mx-4 overflow-hidden">
             <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
               <div className="flex items-center space-x-3">

@@ -358,7 +358,7 @@ export const UsersGroups: React.FC = () => {
 
       {/* Create User Modal */}
       {showCreateUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateUser(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowCreateUser(false)}>
           <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Create New User</h3>
@@ -441,7 +441,7 @@ export const UsersGroups: React.FC = () => {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingUser(null)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setEditingUser(null)}>
           <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Edit User: {editingUser.username}</h3>
@@ -522,7 +522,7 @@ export const UsersGroups: React.FC = () => {
 
       {/* Edit Group Modal */}
       {editingGroup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingGroup(null)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setEditingGroup(null)}>
           <div className="surface-elevated rounded-2xl p-6 w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Edit Group</h3>

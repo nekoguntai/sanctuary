@@ -295,25 +295,28 @@ export function PrivacyDetailPanel({ utxo, privacyInfo, onClose }: PrivacyDetail
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-end justify-center transition-colors duration-200 ${
+      className={`fixed inset-0 z-50 flex items-end md:items-center justify-center transition-colors duration-200 ${
         isVisible ? 'bg-black/50 backdrop-blur-sm' : 'bg-transparent'
       }`}
       onClick={handleBackdropClick}
     >
-      {/* Panel */}
+      {/* Panel - bottom sheet on mobile, centered modal on desktop */}
       <div
-        className={`w-full max-w-lg surface-elevated rounded-t-2xl shadow-2xl border-t border-x border-sanctuary-200 dark:border-sanctuary-700 transform transition-transform duration-200 ease-out ${
-          isVisible ? 'translate-y-0' : 'translate-y-full'
-        }`}
+        className={`w-full max-w-lg surface-elevated shadow-2xl border-sanctuary-200 dark:border-sanctuary-700 transform transition-all duration-200 ease-out
+          rounded-t-2xl border-t border-x md:rounded-2xl md:border md:mx-4
+          ${isVisible
+            ? 'translate-y-0 md:translate-y-0 md:scale-100 md:opacity-100'
+            : 'translate-y-full md:translate-y-0 md:scale-95 md:opacity-0'
+          }`}
         style={{ maxHeight: '85vh' }}
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        {/* Drag handle - mobile only */}
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
           <div className="w-10 h-1 rounded-full bg-sanctuary-300 dark:bg-sanctuary-600" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
+        <div className="flex items-center justify-between px-6 py-4 md:pt-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg ${config.bg}`}>
               <Shield className={`w-5 h-5 ${config.color}`} />

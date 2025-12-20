@@ -9,9 +9,9 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ChevronDown, ChevronUp, Sliders, Check, Lock, FileText, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sliders, Check, Lock, FileText, AlertTriangle, Loader2 } from 'lucide-react';
 import type { UTXO, WalletScriptType } from '../types';
-import type { SpendPrivacyAnalysis, WalletPrivacyResponse } from '../src/api/transactions';
+import type { SpendPrivacyAnalysis, WalletPrivacyResponse, SelectionStrategy } from '../src/api/transactions';
 import { StrategySelector, UIStrategy } from './StrategySelector';
 import { SpendPrivacyCard } from './SpendPrivacyCard';
 import { DustWarningBadge } from './DustWarningBadge';
@@ -19,6 +19,14 @@ import { PrivacyBadge } from './PrivacyBadge';
 import { useCurrency } from '../contexts/CurrencyContext';
 import * as transactionsApi from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
+
+// Map UI strategy to backend API strategy
+const strategyToApiStrategy: Record<UIStrategy, SelectionStrategy | null> = {
+  auto: 'efficiency',      // Auto uses efficiency (minimize fees)
+  privacy: 'privacy',      // Privacy maximizes privacy score
+  manual: null,            // Manual = no API call, user selects
+  consolidate: 'smallest_first', // Consolidate picks small UTXOs first
+};
 
 const log = createLogger('CoinControl');
 
@@ -61,10 +69,11 @@ interface CoinControlPanelProps {
   utxos: UTXO[];
   selectedUtxos: Set<string>;
   onToggleSelect: (utxoId: string) => void;
+  onSetSelectedUtxos: (utxoIds: Set<string>) => void;
   feeRate: number;
+  targetAmount: number; // Amount user wants to send (for UTXO selection)
   strategy?: UIStrategy;
   onStrategyChange?: (strategy: UIStrategy) => void;
-  onAutoSelect?: (utxoIds: string[]) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -74,10 +83,11 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
   utxos,
   selectedUtxos,
   onToggleSelect,
+  onSetSelectedUtxos,
   feeRate,
+  targetAmount,
   strategy = 'auto',
   onStrategyChange,
-  onAutoSelect,
   disabled = false,
   className = '',
 }) => {
@@ -87,6 +97,8 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
   const [spendAnalysis, setSpendAnalysis] = useState<SpendPrivacyAnalysis | null>(null);
   const [loadingPrivacy, setLoadingPrivacy] = useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [loadingStrategy, setLoadingStrategy] = useState(false);
+  const [strategyError, setStrategyError] = useState<string | null>(null);
 
   // Calculate selected total
   const selectedTotal = useMemo(() => {
@@ -143,9 +155,9 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
     return () => clearTimeout(timeoutId);
   }, [isExpanded, selectedUtxos, walletId]);
 
-  // Handle strategy change
-  const handleStrategyChange = useCallback((newStrategy: UIStrategy) => {
-    if (disabled) return;
+  // Handle strategy change - calls API for non-manual strategies
+  const handleStrategyChange = useCallback(async (newStrategy: UIStrategy) => {
+    if (disabled || loadingStrategy) return;
 
     // Expand panel when switching away from auto
     if (newStrategy !== 'auto' && !isExpanded) {
@@ -153,14 +165,61 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
     }
 
     onStrategyChange?.(newStrategy);
+    setStrategyError(null);
 
-    // Auto-select UTXOs for non-manual strategies
-    if (newStrategy !== 'manual' && onAutoSelect) {
-      // Here you would call the selectUtxos API with the appropriate strategy
-      // For now, we'll just call the callback without auto-selecting
-      // The parent component can handle the actual API call
+    // Manual strategy = clear selection and let user pick
+    if (newStrategy === 'manual') {
+      // Don't clear - user is taking over manual control
+      return;
     }
-  }, [disabled, isExpanded, onStrategyChange, onAutoSelect]);
+
+    // For auto strategies, call the API to select UTXOs
+    const apiStrategy = strategyToApiStrategy[newStrategy];
+    if (!apiStrategy) return;
+
+    // Need a target amount to select UTXOs
+    if (targetAmount <= 0) {
+      // If no amount entered yet, just switch strategy without selecting
+      // Selection will happen when user enters an amount
+      return;
+    }
+
+    setLoadingStrategy(true);
+    try {
+      const result = await transactionsApi.selectUtxos(walletId, {
+        amount: targetAmount,
+        feeRate: feeRate || 1,
+        strategy: apiStrategy,
+      });
+
+      // Convert selected UTXOs to Set of IDs
+      const selectedIds = new Set(
+        result.selected.map(u => `${u.txid}:${u.vout}`)
+      );
+      onSetSelectedUtxos(selectedIds);
+
+      log.info('Strategy auto-selected UTXOs', {
+        strategy: newStrategy,
+        apiStrategy,
+        count: result.selected.length,
+        total: result.totalAmount,
+      });
+    } catch (err) {
+      log.error('Failed to auto-select UTXOs', { error: err });
+      setStrategyError(err instanceof Error ? err.message : 'Selection failed');
+    } finally {
+      setLoadingStrategy(false);
+    }
+  }, [disabled, loadingStrategy, isExpanded, onStrategyChange, walletId, targetAmount, feeRate, onSetSelectedUtxos]);
+
+  // Handle manual UTXO toggle - switches to manual mode
+  const handleManualToggle = useCallback((utxoId: string) => {
+    // Switch to manual mode when user manually selects a UTXO
+    if (strategy !== 'manual') {
+      onStrategyChange?.('manual');
+    }
+    onToggleSelect(utxoId);
+  }, [strategy, onStrategyChange, onToggleSelect]);
 
   // Summary text for collapsed state
   const summaryText = useMemo(() => {
@@ -197,8 +256,24 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
           <StrategySelector
             strategy={strategy}
             onStrategyChange={handleStrategyChange}
-            disabled={disabled}
+            disabled={disabled || loadingStrategy}
           />
+
+          {/* Loading indicator for strategy selection */}
+          {loadingStrategy && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-sanctuary-50 dark:bg-sanctuary-800/50 text-sanctuary-600 dark:text-sanctuary-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Selecting optimal UTXOs...</span>
+            </div>
+          )}
+
+          {/* Strategy error */}
+          {strategyError && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm">{strategyError}</span>
+            </div>
+          )}
 
           {/* Spend Privacy Card (when UTXOs selected) */}
           {spendAnalysis && selectedUtxos.size > 0 && (
@@ -251,7 +326,7 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
                 return (
                   <div
                     key={id}
-                    onClick={() => !isDisabled && onToggleSelect(id)}
+                    onClick={() => !isDisabled && handleManualToggle(id)}
                     style={{...frozenStyle, ...lockedStyle}}
                     className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${
                       isSelected

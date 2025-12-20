@@ -1486,7 +1486,9 @@ export const SendTransaction: React.FC = () => {
               utxos={utxos}
               selectedUtxos={selectedUTXOs}
               onToggleSelect={toggleUTXO}
+              onSetSelectedUtxos={setSelectedUTXOs}
               feeRate={feeRate}
+              targetAmount={outputs.reduce((sum, o) => sum + (parseInt(o.amount) || 0), 0)}
               strategy={coinControlStrategy}
               onStrategyChange={setCoinControlStrategy}
               disabled={isResumingDraft}

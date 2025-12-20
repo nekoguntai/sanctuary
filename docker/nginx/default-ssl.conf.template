@@ -1,15 +1,15 @@
 # =============================================
-# Sanctuary Frontend + API Reverse Proxy (HTTP + HTTPS)
+# Sanctuary Frontend + API Reverse Proxy (HTTPS)
 # =============================================
 #
-# Both HTTP and HTTPS are available:
-# - HTTPS (port 443): Required for Ledger (WebUSB needs secure context)
-# - HTTP (port 80): Required for Trezor (PNA blocks localhost from HTTPS)
+# HTTPS only - HTTP redirects to HTTPS
+# - HTTPS (port 443): Full app with WebUSB support for hardware wallets
+# - HTTP (port 80): Redirects to HTTPS
 #
 # Environment variables (substituted at container startup):
 # - ${BACKEND_HOST}: Backend API hostname (default: backend)
 # - ${BACKEND_PORT}: Backend API port (default: 3001)
-# - ${HTTPS_REDIRECT_PORT}: External HTTPS port (for display purposes)
+# - ${HTTPS_REDIRECT_PORT}: External HTTPS port for redirects
 # =============================================
 
 upstream backend {
@@ -17,96 +17,22 @@ upstream backend {
     keepalive 32;
 }
 
-# HTTP server - serves full app (needed for Trezor due to PNA restrictions)
+# HTTP server - redirects all traffic to HTTPS
 server {
     listen 80;
     listen [::]:80;
     server_name _;
 
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Security headers (less strict than HTTPS)
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    # Health check endpoint
+    # Health check endpoint (keep on HTTP for container health checks)
     location /health {
         access_log off;
         return 200 'healthy';
         add_header Content-Type text/plain;
     }
 
-    # API proxy - all requests to /api go to backend
-    location /api/ {
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-
-        # Headers for proxy
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket support
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-
-        # Buffering
-        proxy_buffering on;
-        proxy_buffer_size 4k;
-        proxy_buffers 8 4k;
-    }
-
-    # WebSocket endpoint for real-time updates
-    location /ws {
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-
-        # Required for WebSocket
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket specific timeouts
-        proxy_connect_timeout 7d;
-        proxy_send_timeout 7d;
-        proxy_read_timeout 7d;
-    }
-
-    # Static assets with caching
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-        try_files $uri =404;
-    }
-
-    # Main app - SPA routing (all other routes go to index.html)
+    # Redirect all other traffic to HTTPS
     location / {
-        try_files $uri $uri/ /index.html;
-
-        # Don't cache index.html
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header Pragma "no-cache";
-        add_header Expires "0";
-    }
-
-    # Deny access to hidden files
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
+        return 301 https://$host:${HTTPS_REDIRECT_PORT}$request_uri;
     }
 }
 

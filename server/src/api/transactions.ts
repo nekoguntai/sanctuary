@@ -1657,4 +1657,252 @@ router.get('/transactions/balance-history', async (req: Request, res: Response) 
   }
 });
 
+// ========================================
+// PRIVACY SCORING ENDPOINTS
+// ========================================
+
+/**
+ * GET /api/v1/wallets/:walletId/privacy
+ * Get privacy analysis for all UTXOs in a wallet
+ */
+router.get('/wallets/:walletId/privacy', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    const privacyService = await import('../services/privacyService');
+    const result = await privacyService.calculateWalletPrivacy(walletId);
+
+    // Convert BigInt to number for JSON serialization
+    const utxos = result.utxos.map(u => ({
+      ...u,
+      amount: Number(u.amount),
+    }));
+
+    res.json({
+      utxos,
+      summary: result.summary,
+    });
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get wallet privacy analysis');
+  }
+});
+
+/**
+ * GET /api/v1/utxos/:utxoId/privacy
+ * Get privacy score for a single UTXO
+ */
+router.get('/utxos/:utxoId/privacy', async (req: Request, res: Response) => {
+  try {
+    const { utxoId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Get UTXO and check wallet access
+    const utxo = await prisma.uTXO.findUnique({
+      where: { id: utxoId },
+      select: { walletId: true },
+    });
+
+    if (!utxo) {
+      return res.status(404).json({ error: 'UTXO not found' });
+    }
+
+    const hasAccess = await checkWalletAccess(utxo.walletId, userId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const privacyService = await import('../services/privacyService');
+    const score = await privacyService.calculateUtxoPrivacy(utxoId);
+
+    res.json(score);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get UTXO privacy score');
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:walletId/privacy/spend-analysis
+ * Analyze privacy impact of spending selected UTXOs together
+ */
+router.post('/wallets/:walletId/privacy/spend-analysis', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const { utxoIds } = req.body;
+
+    if (!Array.isArray(utxoIds)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'utxoIds must be an array',
+      });
+    }
+
+    // Verify all UTXOs belong to this wallet
+    const utxos = await prisma.uTXO.findMany({
+      where: {
+        id: { in: utxoIds },
+        walletId,
+      },
+      select: { id: true },
+    });
+
+    if (utxos.length !== utxoIds.length) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Some UTXOs not found or do not belong to this wallet',
+      });
+    }
+
+    const privacyService = await import('../services/privacyService');
+    const analysis = await privacyService.calculateSpendPrivacy(utxoIds);
+
+    res.json(analysis);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Analyze spend privacy');
+  }
+});
+
+// ========================================
+// UTXO SELECTION ENDPOINTS
+// ========================================
+
+/**
+ * POST /api/v1/wallets/:walletId/utxos/select
+ * Select UTXOs for a transaction using specified strategy
+ */
+router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const { amount, feeRate, strategy = 'efficiency', scriptType } = req.body;
+
+    if (!amount || !feeRate) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'amount and feeRate are required',
+      });
+    }
+
+    const validStrategies = ['privacy', 'efficiency', 'oldest_first', 'largest_first', 'smallest_first'];
+    if (!validStrategies.includes(strategy)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid strategy. Valid options: ${validStrategies.join(', ')}`,
+      });
+    }
+
+    const selectionService = await import('../services/utxoSelectionService');
+    const result = await selectionService.selectUtxos({
+      walletId,
+      targetAmount: BigInt(amount),
+      feeRate: parseFloat(feeRate),
+      strategy,
+      scriptType,
+    });
+
+    // Convert BigInt to number for JSON serialization
+    res.json({
+      selected: result.selected.map(u => ({
+        ...u,
+        amount: Number(u.amount),
+      })),
+      totalAmount: Number(result.totalAmount),
+      estimatedFee: Number(result.estimatedFee),
+      changeAmount: Number(result.changeAmount),
+      inputCount: result.inputCount,
+      strategy: result.strategy,
+      warnings: result.warnings,
+      privacyImpact: result.privacyImpact,
+    });
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Select UTXOs');
+  }
+});
+
+/**
+ * POST /api/v1/wallets/:walletId/utxos/compare-strategies
+ * Compare different UTXO selection strategies for a given amount
+ */
+router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const { amount, feeRate, scriptType } = req.body;
+
+    if (!amount || !feeRate) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'amount and feeRate are required',
+      });
+    }
+
+    const selectionService = await import('../services/utxoSelectionService');
+    const results = await selectionService.compareStrategies(
+      walletId,
+      BigInt(amount),
+      parseFloat(feeRate),
+      scriptType
+    );
+
+    // Convert BigInt to number for JSON serialization
+    const serialized: Record<string, unknown> = {};
+    for (const [strategy, result] of Object.entries(results)) {
+      serialized[strategy] = {
+        selected: result.selected.map(u => ({
+          ...u,
+          amount: Number(u.amount),
+        })),
+        totalAmount: Number(result.totalAmount),
+        estimatedFee: Number(result.estimatedFee),
+        changeAmount: Number(result.changeAmount),
+        inputCount: result.inputCount,
+        strategy: result.strategy,
+        warnings: result.warnings,
+        privacyImpact: result.privacyImpact,
+      };
+    }
+
+    res.json(serialized);
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Compare selection strategies');
+  }
+});
+
+/**
+ * GET /api/v1/wallets/:walletId/utxos/recommended-strategy
+ * Get recommended UTXO selection strategy based on wallet and fee context
+ */
+router.get('/wallets/:walletId/utxos/recommended-strategy', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+    const feeRate = parseFloat(req.query.feeRate as string) || 10;
+    const prioritizePrivacy = req.query.prioritizePrivacy === 'true';
+
+    // Get UTXO count
+    const utxoCount = await prisma.uTXO.count({
+      where: {
+        walletId,
+        spent: false,
+        frozen: false,
+      },
+    });
+
+    const selectionService = await import('../services/utxoSelectionService');
+    const recommendation = selectionService.getRecommendedStrategy(
+      utxoCount,
+      feeRate,
+      prioritizePrivacy
+    );
+
+    res.json({
+      ...recommendation,
+      utxoCount,
+      feeRate,
+    });
+  } catch (error: unknown) {
+    handleApiError(error, res, 'Get recommended strategy');
+  }
+});
+
 export default router;

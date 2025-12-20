@@ -12,6 +12,17 @@ name: Release Candidate Validation
 # Total runtime: ~25-35 minutes
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to test'
+        required: false
+        default: 'main'
+        type: string
+      version:
+        description: 'Version being validated'
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       ref:

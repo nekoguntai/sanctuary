@@ -10,6 +10,7 @@ import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
 import * as draftsApi from '../src/api/drafts';
 import * as payjoinApi from '../src/api/payjoin';
+import * as privacyApi from '../src/api/transactions';
 import {
   useWallet,
   useWalletUtxos,
@@ -283,6 +284,11 @@ export const WalletDetail: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [utxos, setUTXOs] = useState<UTXO[]>([]);
+
+  // Privacy scoring state
+  const [privacyData, setPrivacyData] = useState<privacyApi.UtxoPrivacyInfo[]>([]);
+  const [privacySummary, setPrivacySummary] = useState<privacyApi.WalletPrivacySummary | null>(null);
+  const [showPrivacy, setShowPrivacy] = useState(true);
 
   // Transaction Pagination State
   const TX_PAGE_SIZE = 50;
@@ -673,6 +679,16 @@ export const WalletDetail: React.FC = () => {
           setUTXOs(formattedUTXOs);
         })
         .catch(err => log.error('Failed to fetch UTXOs', { error: err }))
+    );
+
+    // Fetch privacy scores for UTXOs
+    fetchPromises.push(
+      privacyApi.getWalletPrivacy(id)
+        .then(privacyResponse => {
+          setPrivacyData(privacyResponse.utxos);
+          setPrivacySummary(privacyResponse.summary);
+        })
+        .catch(err => log.error('Failed to fetch privacy data', { error: err }))
     );
 
     // Fetch addresses
@@ -1313,13 +1329,16 @@ export const WalletDetail: React.FC = () => {
         )}
         
         {activeTab === 'utxo' && (
-          <UTXOList 
-            utxos={utxos} 
+          <UTXOList
+            utxos={utxos}
             onToggleFreeze={handleToggleFreeze}
             selectable={true}
             selectedUtxos={selectedUtxos}
             onToggleSelect={handleToggleSelect}
             onSendSelected={handleSendSelected}
+            privacyData={privacyData}
+            privacySummary={privacySummary}
+            showPrivacy={showPrivacy}
           />
         )}
 

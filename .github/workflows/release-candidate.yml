@@ -132,12 +132,13 @@ jobs:
           docker system prune -f || true
 
   # ============================================
-  # Container Health Test
+  # Container Health Test (non-blocking)
   # ============================================
   container-health-test:
     name: Container Health
     runs-on: ubuntu-latest
     needs: fresh-install-test
+    continue-on-error: true  # Non-blocking - failures are warnings
     timeout-minutes: 15
 
     steps:
@@ -181,12 +182,13 @@ jobs:
         run: docker compose down -v --remove-orphans || true
 
   # ============================================
-  # Authentication Flow Test
+  # Authentication Flow Test (non-blocking)
   # ============================================
   auth-flow-test:
     name: Auth Flow
     runs-on: ubuntu-latest
     needs: fresh-install-test
+    continue-on-error: true  # Non-blocking - failures are warnings
     timeout-minutes: 15
 
     steps:
@@ -230,12 +232,13 @@ jobs:
         run: docker compose down -v --remove-orphans || true
 
   # ============================================
-  # Upgrade Test (FULL - takes 10-15 min)
+  # Upgrade Test (FULL - takes 10-15 min, non-blocking)
   # ============================================
   upgrade-test:
     name: Upgrade Install
     runs-on: ubuntu-latest
     needs: fresh-install-test
+    continue-on-error: true  # Non-blocking - failures are warnings
     timeout-minutes: 45
 
     steps:

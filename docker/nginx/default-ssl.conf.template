@@ -116,6 +116,9 @@ server {
     listen [::]:443 ssl http2;
     server_name _;
 
+    # Redirect HTTP requests sent to HTTPS port (error 497)
+    error_page 497 =301 https://$host:$server_port$request_uri;
+
     # SSL certificates
     ssl_certificate /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;

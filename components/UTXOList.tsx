@@ -7,6 +7,7 @@ import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { useFeeEstimates } from '../hooks/queries/useBitcoin';
 import { PrivacyBadge } from './PrivacyBadge';
+import { PrivacyDetailPanel } from './PrivacyDetailPanel';
 import type { UtxoPrivacyInfo, WalletPrivacySummary } from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
 
@@ -77,6 +78,9 @@ export const UTXOList: React.FC<UTXOListProps> = ({
   const { format } = useCurrency();
   const [explorerUrl, setExplorerUrl] = useState('https://mempool.space');
   const { data: feeEstimates } = useFeeEstimates();
+
+  // State for privacy detail panel
+  const [selectedUtxoForPrivacy, setSelectedUtxoForPrivacy] = useState<string | null>(null);
 
   // Create a map of privacy scores by UTXO ID for quick lookup
   const privacyMap = useMemo(() => {
@@ -330,11 +334,14 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                         </span>
                       )}
                       {showPrivacy && privacyInfo && (
-                        <PrivacyBadge
-                          score={privacyInfo.score.score}
-                          grade={privacyInfo.score.grade}
-                          size="sm"
-                        />
+                        <span onClick={(e) => e.stopPropagation()}>
+                          <PrivacyBadge
+                            score={privacyInfo.score.score}
+                            grade={privacyInfo.score.grade}
+                            size="sm"
+                            onClick={() => setSelectedUtxoForPrivacy(id)}
+                          />
+                        </span>
                       )}
                     </div>
                     <a
@@ -399,6 +406,27 @@ export const UTXOList: React.FC<UTXOListProps> = ({
         );
         })}
       </div>
+
+      {/* Privacy Detail Panel */}
+      {selectedUtxoForPrivacy && (() => {
+        const privacyInfo = privacyMap.get(selectedUtxoForPrivacy);
+        const utxo = utxos.find(u => `${u.txid}:${u.vout}` === selectedUtxoForPrivacy);
+
+        if (!privacyInfo || !utxo) return null;
+
+        return (
+          <PrivacyDetailPanel
+            utxo={{
+              txid: utxo.txid,
+              vout: utxo.vout,
+              amount: utxo.amount,
+              address: utxo.address,
+            }}
+            privacyInfo={privacyInfo}
+            onClose={() => setSelectedUtxoForPrivacy(null)}
+          />
+        );
+      })()}
     </div>
   );
 };

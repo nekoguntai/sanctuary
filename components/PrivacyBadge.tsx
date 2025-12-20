@@ -14,6 +14,7 @@ interface PrivacyBadgeProps {
   size?: 'sm' | 'md' | 'lg';
   showScore?: boolean;
   className?: string;
+  onClick?: () => void;
 }
 
 export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({
@@ -22,6 +23,7 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({
   size = 'sm',
   showScore = false,
   className = '',
+  onClick,
 }) => {
   const sizeClasses = {
     sm: 'w-3.5 h-3.5',
@@ -59,12 +61,29 @@ export const PrivacyBadge: React.FC<PrivacyBadgeProps> = ({
   const config = gradeConfig[grade];
   const Icon = config.Icon;
 
+  const isClickable = !!onClick;
+
   return (
     <div
-      className={`inline-flex items-center gap-1 ${className}`}
-      title={`${config.label} (Score: ${score})`}
+      className={`inline-flex items-center gap-1 ${className} ${
+        isClickable
+          ? 'cursor-pointer transition-transform hover:scale-110 active:scale-95'
+          : ''
+      }`}
+      title={`${config.label} (Score: ${score})${isClickable ? ' - Click for details' : ''}`}
+      onClick={onClick}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={isClickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      } : undefined}
     >
-      <span className={`${config.bg} ${config.color} p-0.5 rounded`}>
+      <span className={`${config.bg} ${config.color} p-0.5 rounded ${
+        isClickable ? 'hover:ring-2 hover:ring-current/30 transition-all' : ''
+      }`}>
         <Icon className={sizeClasses[size]} />
       </span>
       {showScore && (

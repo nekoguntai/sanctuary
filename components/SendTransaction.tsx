@@ -127,6 +127,8 @@ const getConnectionIcon = (method: ConnectionMethod) => {
 import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import jsQR from 'jsqr';
+import { CoinControlPanel } from './CoinControlPanel';
+import type { UIStrategy } from './StrategySelector';
 
 export const SendTransaction: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -181,6 +183,7 @@ export const SendTransaction: React.FC = () => {
   const [feeRate, setFeeRate] = useState<number>(0);
   const [selectedUTXOs, setSelectedUTXOs] = useState<Set<string>>(new Set());
   const [showCoinControl, setShowCoinControl] = useState(false);
+  const [coinControlStrategy, setCoinControlStrategy] = useState<UIStrategy>('auto');
   const [showScanner, setShowScanner] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [enableRBF, setEnableRBF] = useState(true);
@@ -1477,98 +1480,17 @@ export const SendTransaction: React.FC = () => {
               </div>
             )}
 
-            {/* Coin Control Toggle */}
-            <div className="flex items-center justify-between">
-               <button
-                 onClick={() => !isResumingDraft && setShowCoinControl(!showCoinControl)}
-                 disabled={isResumingDraft}
-                 className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-               >
-                  <Sliders className="w-4 h-4 mr-2" />
-                  {showCoinControl ? 'Hide Coin Control' : 'Coin Control (Auto)'}
-                  {isResumingDraft && showCoinControl && <span className="ml-2 text-xs text-sanctuary-400">(locked)</span>}
-               </button>
-            </div>
-
-            {/* UTXO Selection Table */}
-            {showCoinControl && (
-                <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden animate-fade-in ${isResumingDraft ? 'opacity-60' : ''}`}>
-                    <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
-                        <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                          {isResumingDraft ? 'Selected Inputs (locked)' : 'Select Inputs'}
-                        </span>
-                        <span className="text-xs text-sanctuary-500">{selectedUTXOs.size} selected</span>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                        {utxos.map(utxo => {
-                            const id = `${utxo.txid}:${utxo.vout}`;
-                            const isSelected = selectedUTXOs.has(id);
-                            const isLocked = !!utxo.lockedByDraftId;
-                            const isDisabled = utxo.frozen || isLocked || isResumingDraft;
-                            // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
-                            const frozenStyle = utxo.frozen ? {
-                              backgroundImage: `repeating-linear-gradient(
-                                45deg,
-                                transparent,
-                                transparent 4px,
-                                rgba(190,18,60,0.08) 4px,
-                                rgba(190,18,60,0.08) 8px
-                              )`
-                            } : {};
-                            // Striped pattern for locked UTXOs (cyan)
-                            const lockedStyle = isLocked && !utxo.frozen ? {
-                              backgroundImage: `repeating-linear-gradient(
-                                45deg,
-                                transparent,
-                                transparent 4px,
-                                rgba(6,182,212,0.08) 4px,
-                                rgba(6,182,212,0.08) 8px
-                              )`
-                            } : {};
-                            return (
-                                <div
-                                    key={id}
-                                    onClick={() => !isDisabled && toggleUTXO(id)}
-                                    style={{...frozenStyle, ...lockedStyle}}
-                                    className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isLocked ? 'opacity-70 bg-cyan-50 dark:bg-cyan-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                                >
-                                    <div className="flex items-center space-x-3">
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
-                                            {isSelected && <Check className="w-3 h-3" />}
-                                        </div>
-                                        <div>
-                                            <div className="font-mono text-sm font-medium">{format(utxo.amount)}</div>
-                                            <div className="text-xs text-sanctuary-400 truncate w-48">{utxo.address}</div>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        {utxo.frozen && (
-                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 mb-1 mr-1">
-                                            Frozen
-                                          </span>
-                                        )}
-                                        {isLocked && (
-                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 mb-1 mr-1" title={`Reserved for: ${utxo.lockedByDraftLabel || 'Draft'}`}>
-                                            Locked
-                                          </span>
-                                        )}
-                                        {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
-                                        <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Warning if insufficient funds selected via coin control (not shown for sendMax or resumed drafts) */}
-            {showCoinControl && !isSendMax && !isResumingDraft && selectedTotal < (parseInt(amount || '0') + calculateTotalFee()) && parseInt(amount || '0') > 0 && (
-                 <div className="flex items-center p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-xl">
-                     <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
-                     <span className="text-sm">Selected inputs are insufficient to cover amount + estimated fees.</span>
-                 </div>
-            )}
+            {/* Coin Control Panel */}
+            <CoinControlPanel
+              walletId={id!}
+              utxos={utxos}
+              selectedUtxos={selectedUTXOs}
+              onToggleSelect={toggleUTXO}
+              feeRate={feeRate}
+              strategy={coinControlStrategy}
+              onStrategyChange={setCoinControlStrategy}
+              disabled={isResumingDraft}
+            />
 
             {/* Outputs Section */}
             <div className="space-y-4">

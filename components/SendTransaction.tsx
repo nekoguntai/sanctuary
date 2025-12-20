@@ -321,7 +321,7 @@ export const SendTransaction: React.FC = () => {
           transactionsApi.getAddresses(id).catch(() => []) // Fetch addresses for consolidation
         ]);
 
-        // Format UTXOs (include frozen status for coin control)
+        // Format UTXOs (include frozen status and draft lock for coin control)
         const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
           id: utxo.id,
           txid: utxo.txid,
@@ -329,9 +329,11 @@ export const SendTransaction: React.FC = () => {
           amount: Number(utxo.amount),
           address: utxo.address,
           confirmations: utxo.confirmations,
-          spendable: !utxo.spent,
+          spendable: utxo.spendable,
           scriptType: formattedWallet.scriptType,
           frozen: utxo.frozen ?? false,
+          lockedByDraftId: utxo.lockedByDraftId,
+          lockedByDraftLabel: utxo.lockedByDraftLabel,
         }));
         setUTXOs(formattedUTXOs);
 

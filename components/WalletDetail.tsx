@@ -618,7 +618,10 @@ export const WalletDetail: React.FC = () => {
             address: utxo.address,
             confirmations: utxo.confirmations,
             frozen: utxo.frozen ?? false,
+            spendable: utxo.spendable,
             date: new Date(utxo.createdAt).getTime(),
+            lockedByDraftId: utxo.lockedByDraftId,
+            lockedByDraftLabel: utxo.lockedByDraftLabel,
           }));
           setUTXOs(formattedUTXOs);
         })

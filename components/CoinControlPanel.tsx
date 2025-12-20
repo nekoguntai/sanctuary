@@ -179,8 +179,8 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
 
     // Need a target amount to select UTXOs
     if (targetAmount <= 0) {
-      // If no amount entered yet, just switch strategy without selecting
-      // Selection will happen when user enters an amount
+      // Clear any existing selection - strategy will select when amount is entered
+      onSetSelectedUtxos(new Set());
       return;
     }
 
@@ -214,7 +214,7 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
 
   // Handle manual UTXO toggle - switches to manual mode
   const handleManualToggle = useCallback((utxoId: string) => {
-    // Switch to manual mode when user manually selects a UTXO
+    // Switch to manual mode when user manually selects/deselects a UTXO
     if (strategy !== 'manual') {
       onStrategyChange?.('manual');
     }

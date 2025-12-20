@@ -30,6 +30,7 @@ import { WalletStats } from './WalletStats';
 import { DraftList } from './DraftList';
 import { LabelManager } from './LabelManager';
 import { LabelBadges } from './LabelSelector';
+import { PayjoinSection } from './PayjoinSection';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -2347,34 +2348,13 @@ export const WalletDetail: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Payjoin Toggle */}
-                  <div className="w-full mb-4 p-3 surface-muted rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Shield className="w-4 h-4 text-zen-indigo" />
-                        <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
-                          Payjoin (BIP78)
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setPayjoinEnabled(!payjoinEnabled)}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${
-                          payjoinEnabled ? 'bg-zen-indigo' : 'bg-sanctuary-300 dark:bg-sanctuary-600'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                            payjoinEnabled ? 'translate-x-5' : ''
-                          }`}
-                        />
-                      </button>
-                    </div>
-                    {payjoinEnabled && (
-                      <p className="text-xs text-sanctuary-500 mt-2">
-                        Enhanced privacy: the sender will mix their inputs with yours.
-                      </p>
-                    )}
-                  </div>
+                  {/* Payjoin Section */}
+                  <PayjoinSection
+                    walletId={wallet?.id || ''}
+                    enabled={payjoinEnabled}
+                    onToggle={setPayjoinEnabled}
+                    className="w-full mb-4"
+                  />
 
                   {/* Amount Input (optional, for BIP21) */}
                   {payjoinEnabled && (

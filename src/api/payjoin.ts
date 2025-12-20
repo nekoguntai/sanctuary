@@ -28,6 +28,22 @@ export interface PayjoinAttemptResult {
   error?: string;
 }
 
+export type PayjoinEligibilityStatus =
+  | 'ready'
+  | 'no-utxos'
+  | 'pending-confirmations'
+  | 'all-frozen'
+  | 'all-locked'
+  | 'unavailable';
+
+export interface PayjoinEligibility {
+  eligible: boolean;
+  status: PayjoinEligibilityStatus;
+  eligibleUtxoCount: number;
+  totalUtxoCount: number;
+  reason: string | null;
+}
+
 /**
  * Generate a BIP21 URI with Payjoin endpoint for an address
  */
@@ -66,4 +82,13 @@ export async function attemptPayjoin(
     psbt,
     payjoinUrl,
   });
+}
+
+/**
+ * Check if a wallet is eligible for Payjoin receives
+ */
+export async function checkPayjoinEligibility(
+  walletId: string
+): Promise<PayjoinEligibility> {
+  return apiClient.get<PayjoinEligibility>(`/payjoin/eligibility/${walletId}`);
 }

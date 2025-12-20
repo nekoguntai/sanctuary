@@ -97,6 +97,10 @@ services:
       MEMPOOL_API: ${MEMPOOL_API:-https://mempool.space/api/v1}
       COINGECKO_API: ${COINGECKO_API:-https://api.coingecko.com/api/v3}
       KRAKEN_API: ${KRAKEN_API:-https://api.kraken.com/0/public}
+
+      # AI Container URL (isolated AI service)
+      # Backend forwards all AI requests to this container
+      AI_CONTAINER_URL: ${AI_CONTAINER_URL:-http://ai:3100}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
@@ -222,12 +226,64 @@ services:
     networks:
       - sanctuary-network
 
+  # ============================================
+  # AI Container (Optional - Isolated AI Service)
+  # ============================================
+  # Security-isolated container for AI operations.
+  #
+  # ISOLATION GUARANTEES:
+  # - Cannot access database directly
+  # - Cannot access private keys or signing
+  # - Only receives sanitized transaction metadata
+  # - Backend NEVER makes external AI calls
+  #
+  # Start with: docker compose --profile ai up -d
+  #
+  # NETWORK MODES:
+  # - AI_INTERNET_ACCESS=false: Container on internal network (local AI only)
+  # - AI_INTERNET_ACCESS=true: Container can reach internet (cloud AI)
+  # ============================================
+  ai:
+    build:
+      context: ./ai-proxy
+      dockerfile: Dockerfile
+    image: sanctuary-ai:local
+    container_name: sanctuary-ai
+    restart: unless-stopped
+    profiles: ["ai"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3100
+      # Backend URL for fetching sanitized data
+      BACKEND_URL: http://backend:3001
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sanctuary-network
+      # Add ai-internal for local-only mode (no internet)
+      # Remove this line to allow internet access for cloud AI
+      - ai-internal
+
 # ============================================
 # Networks
 # ============================================
 networks:
   sanctuary-network:
     driver: bridge
+
+  # Internal network for AI - no internet access
+  # AI container joins this network by default for security
+  # To allow cloud AI, remove ai-internal from AI container's networks
+  ai-internal:
+    driver: bridge
+    internal: true
 
 # ============================================
 # Volumes

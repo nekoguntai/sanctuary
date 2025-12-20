@@ -1,0 +1,171 @@
+# Sanctuary AI Container
+
+Security-isolated container for AI operations. This container handles all AI calls in a separate security domain, ensuring sensitive wallet data is never exposed to external AI services.
+
+## Security Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Docker Network                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────┐      ┌──────────────────────────────────┐ │
+│  │  sanctuary-ai    │      │  sanctuary-backend               │ │
+│  │  (THIS CONTAINER)│      │  (existing)                      │ │
+│  │                  │      │                                  │ │
+│  │  - Label suggest │ ───► │  - Wallets, keys, signing        │ │
+│  │  - NL queries    │ READ │  - Transactions                  │ │
+│  │                  │ ONLY │  - All critical operations       │ │
+│  │                  │      │                                  │ │
+│  │  NO ACCESS TO:   │      │  Internal AI endpoints:          │ │
+│  │  - Private keys  │      │  GET /internal/ai/tx/:id         │ │
+│  │  - Signing ops   │      │  GET /internal/ai/wallet/:id/*   │ │
+│  │  - DB directly   │      │                                  │ │
+│  └────────┬─────────┘      └──────────────────────────────────┘ │
+│           │                                                      │
+│           │ Outbound only (configurable)                         │
+│           ▼                                                      │
+│  ┌──────────────────┐                                           │
+│  │  External AI     │  Ollama / llama.cpp / OpenAI-compatible   │
+│  │  (user-provided) │                                           │
+│  └──────────────────┘                                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Security Guarantees
+
+| Component | Can Access | Cannot Access |
+|-----------|-----------|---------------|
+| AI Container | Transaction metadata (amount, date, direction) | Private keys, signing, DB, secrets, addresses, txids |
+| Backend Internal Endpoints | Sanitized tx data for AI | Full transaction objects |
+| External AI Calls | Only from AI container | Never from backend directly |
+
+## Data Sanitization
+
+The AI container only receives:
+- ✓ Transaction amount (in satoshis)
+- ✓ Transaction direction (send/receive)
+- ✓ Transaction date
+- ✓ Existing label names
+- ✓ Confirmation count
+
+The AI container NEVER receives:
+- ✗ Bitcoin addresses
+- ✗ Transaction IDs (txids)
+- ✗ Private keys or xpubs
+- ✗ Wallet passwords
+- ✗ Any identifiable blockchain data
+
+## Network Isolation
+
+### Local AI Only (Default - Most Secure)
+
+```yaml
+# docker-compose.yml
+ai:
+  networks:
+    - sanctuary-network  # Can reach backend
+    - ai-internal        # internal: true = NO internet
+```
+
+The `ai-internal` network has no gateway, so the container cannot reach the internet. Use this with local AI (Ollama, llama.cpp).
+
+### Cloud AI (Less Secure)
+
+To use cloud AI providers (OpenAI, Anthropic, etc.), remove the ai-internal network:
+
+```yaml
+# docker-compose.yml
+ai:
+  networks:
+    - sanctuary-network  # Has internet access
+    # - ai-internal      # REMOVED - allows internet
+```
+
+**Warning**: With cloud AI, sanitized transaction metadata will be sent to external servers.
+
+## Usage
+
+### Start with AI Container
+
+```bash
+# Start all services including AI
+docker compose --profile ai up -d
+
+# Or start AI container separately
+docker compose --profile ai up -d ai
+```
+
+### Configure AI Endpoint
+
+In Sanctuary Admin → System Settings:
+
+1. Enable AI Features
+2. Set AI Endpoint URL:
+   - Local: `http://host.docker.internal:11434` (Ollama on host)
+   - Cloud: `https://api.openai.com` (requires internet access)
+3. Set Model Name: e.g., `llama3.2:3b` or `gpt-4`
+
+### Running Local AI (Ollama)
+
+```bash
+# On Docker host (not in container)
+ollama serve
+ollama pull llama3.2:3b
+
+# Endpoint: http://host.docker.internal:11434
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/config` | POST | Update AI configuration |
+| `/config` | GET | Get current configuration |
+| `/suggest-label` | POST | Get label suggestion for transaction |
+| `/query` | POST | Execute natural language query |
+| `/test` | POST | Test AI connection |
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| AI container compromised | No DB access, no keys - worst case: reads tx metadata |
+| Malicious AI response | Responses are suggestions only, user must confirm |
+| AI endpoint data leak | Only sends: amounts, dates, labels - NO addresses/txids |
+| DoS via AI | Rate limiting (10 req/min), timeout (35s), backend circuit breaker |
+| AI container down | Main app fully functional, AI features show "unavailable" |
+
+## Troubleshooting
+
+### AI Container Not Starting
+
+```bash
+docker compose --profile ai logs ai
+docker compose --profile ai ps
+```
+
+### Cannot Reach Local Ollama
+
+- Ensure Ollama is running: `ollama serve`
+- Use `host.docker.internal` not `localhost`
+- Check port: default is 11434
+
+### Network Issues
+
+```bash
+# Check if AI container can reach backend
+docker exec sanctuary-ai wget -qO- http://backend:3001/health
+
+# Check if AI container has internet (should fail in local-only mode)
+docker exec sanctuary-ai wget -qO- --timeout=5 https://google.com
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3100` | AI container port |
+| `BACKEND_URL` | `http://backend:3001` | Backend URL for sanitized data |
+| `NODE_ENV` | `production` | Environment mode |

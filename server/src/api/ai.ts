@@ -4,12 +4,15 @@
  * Endpoints for AI-powered features (transaction labeling, natural language queries).
  * All routes require authentication. AI must be enabled in admin settings.
  *
+ * SECURITY: Backend forwards requests to isolated AI container.
+ * The backend NEVER makes external AI calls directly.
+ *
  * Rate limited to prevent abuse of AI endpoints.
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { aiService, TransactionContext } from '../services/aiService';
+import { aiService } from '../services/aiService';
 import { createLogger } from '../utils/logger';
 import rateLimit from 'express-rate-limit';
 
@@ -46,6 +49,7 @@ router.get('/status', authenticate, aiRateLimiter, async (req: Request, res: Res
       available: health.available,
       model: health.model,
       endpoint: health.endpoint,
+      containerAvailable: health.containerAvailable,
       error: health.error,
     });
   } catch (error) {
@@ -62,28 +66,20 @@ router.get('/status', authenticate, aiRateLimiter, async (req: Request, res: Res
  * Get label suggestion for a transaction
  *
  * Request body:
- *   - amount: number (satoshis)
- *   - direction: 'send' | 'receive'
- *   - address?: string
- *   - date: string (ISO date)
- *   - existingLabels?: string[]
+ *   - transactionId: string - Transaction ID to suggest label for
+ *
+ * The AI container fetches sanitized transaction data internally.
+ * This ensures no sensitive data (addresses, txids) is exposed.
  */
 router.post('/suggest-label', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
   try {
-    const { amount, direction, address, date, existingLabels } = req.body;
+    const { transactionId } = req.body;
 
     // Validation
-    if (!amount || !direction || !date) {
+    if (!transactionId) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Amount, direction, and date are required',
-      });
-    }
-
-    if (direction !== 'send' && direction !== 'receive') {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Direction must be "send" or "receive"',
+        message: 'transactionId is required',
       });
     }
 
@@ -95,16 +91,10 @@ router.post('/suggest-label', authenticate, aiRateLimiter, async (req: Request, 
       });
     }
 
-    // Build transaction context
-    const context: TransactionContext = {
-      amount: Number(amount),
-      direction,
-      address: address || undefined,
-      date: new Date(date),
-      existingLabels: existingLabels || [],
-    };
+    // Get auth token to pass to AI container
+    const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
 
-    const suggestion = await aiService.suggestTransactionLabel(context);
+    const suggestion = await aiService.suggestTransactionLabel(transactionId, authToken);
 
     if (!suggestion) {
       return res.status(503).json({
@@ -132,6 +122,8 @@ router.post('/suggest-label', authenticate, aiRateLimiter, async (req: Request, 
  * Request body:
  *   - query: string - Natural language query
  *   - walletId: string - Wallet ID for context
+ *
+ * Returns a structured query that the frontend can execute.
  */
 router.post('/query', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
   try {
@@ -153,7 +145,10 @@ router.post('/query', authenticate, aiRateLimiter, async (req: Request, res: Res
       });
     }
 
-    const result = await aiService.executeNaturalQuery(query, walletId);
+    // Get auth token to pass to AI container
+    const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
+
+    const result = await aiService.executeNaturalQuery(query, walletId, authToken);
 
     if (!result) {
       return res.status(503).json({

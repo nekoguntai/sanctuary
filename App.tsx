@@ -19,6 +19,7 @@ import { SystemSettings } from './components/SystemSettings';
 import { Variables } from './components/Variables';
 import { BackupRestore } from './components/BackupRestore';
 import { AuditLogs } from './components/AuditLogs';
+import AISettings from './components/AISettings';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
@@ -88,6 +89,7 @@ const AppRoutes: React.FC = () => {
           <Route path="/admin/variables" element={<Variables />} />
           <Route path="/admin/backup" element={<BackupRestore />} />
           <Route path="/admin/audit-logs" element={<AuditLogs />} />
+          <Route path="/admin/ai" element={<AISettings />} />
           <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -178,11 +178,13 @@ EOF
     # Build images first (migrate container depends on backend image)
     JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        LOGIN_RATE_LIMIT=100 \
         docker compose build 2>&1
 
     # Then start containers
     JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        LOGIN_RATE_LIMIT=100 \
         docker compose up -d 2>&1
 
     # Wait for containers
@@ -191,8 +193,14 @@ EOF
         return 1
     fi
 
-    # Wait for migration
-    wait_for_migration_complete 120 || true
+    # Wait for migration to complete
+    if ! wait_for_migration_complete 180; then
+        log_error "Migration failed during initial installation"
+        return 1
+    fi
+
+    # Extra wait for backend to fully initialize
+    sleep 5
 
     log_success "Initial installation created"
     return 0
@@ -339,6 +347,7 @@ test_restart_containers_after_upgrade() {
     # Restart with existing secrets
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        LOGIN_RATE_LIMIT=100 \
         docker compose up -d 2>&1
 
     # Wait for containers to be healthy
@@ -346,6 +355,15 @@ test_restart_containers_after_upgrade() {
         log_error "Containers failed to restart after upgrade"
         return 1
     fi
+
+    # Wait for migration to complete before proceeding
+    if ! wait_for_migration_complete 120; then
+        log_warning "Migration may not have completed cleanly"
+        # Don't fail here - migration might have already been done
+    fi
+
+    # Extra wait for backend to fully initialize after migration
+    sleep 5
 
     log_success "Containers restarted successfully"
     return 0
@@ -488,6 +506,7 @@ test_force_rebuild_upgrade() {
     # Force rebuild all containers
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        LOGIN_RATE_LIMIT=100 \
         docker compose up -d --build --force-recreate 2>&1
 
     # Wait for all containers
@@ -495,6 +514,15 @@ test_force_rebuild_upgrade() {
         log_error "Force rebuild failed"
         return 1
     fi
+
+    # Wait for migration to complete
+    if ! wait_for_migration_complete 180; then
+        log_warning "Migration may not have completed cleanly after rebuild"
+        # Don't fail - migration might be idempotent
+    fi
+
+    # Extra wait for backend to fully initialize
+    sleep 5
 
     # Verify login still works
     local login_response=$(curl -k -s -X POST \

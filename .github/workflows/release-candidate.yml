@@ -168,9 +168,36 @@ jobs:
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
             docker compose up -d
-          # Wait for migration to complete
-          timeout 120 bash -c 'until docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null | grep -q exited; do sleep 5; done' || true
-          sleep 10
+
+      - name: Wait for migration to complete
+        run: |
+          echo "Waiting for migration container to finish..."
+          for i in {1..60}; do
+            STATUS=$(docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null || echo "not_found")
+            if [ "$STATUS" = "exited" ]; then
+              EXIT_CODE=$(docker inspect sanctuary-migrate --format="{{.State.ExitCode}}" 2>/dev/null)
+              if [ "$EXIT_CODE" = "0" ]; then
+                echo "Migration completed successfully"
+                break
+              else
+                echo "Migration failed with exit code: $EXIT_CODE"
+                docker logs sanctuary-migrate --tail 50
+                exit 1
+              fi
+            fi
+            echo "Waiting for migration... (attempt $i/60, status: $STATUS)"
+            sleep 5
+          done
+          # Wait for backend to be healthy after migration
+          echo "Waiting for backend to be healthy..."
+          for i in {1..30}; do
+            if docker exec sanctuary-backend wget -q -O - http://localhost:3001/health >/dev/null 2>&1; then
+              echo "Backend is healthy"
+              break
+            fi
+            echo "Waiting for backend... (attempt $i/30)"
+            sleep 2
+          done
 
       - name: Run container health tests
         env:
@@ -212,15 +239,45 @@ jobs:
           ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
           # Build first, then start (migrate container needs backend image)
+          # Set LOGIN_RATE_LIMIT=100 for testing to avoid rate limit issues
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
+            LOGIN_RATE_LIMIT=100 \
             docker compose build
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
+            LOGIN_RATE_LIMIT=100 \
             docker compose up -d
-          # Wait for migration to complete
-          timeout 120 bash -c 'until docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null | grep -q exited; do sleep 5; done' || true
-          sleep 10
+
+      - name: Wait for migration to complete
+        run: |
+          echo "Waiting for migration container to finish..."
+          for i in {1..60}; do
+            STATUS=$(docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null || echo "not_found")
+            if [ "$STATUS" = "exited" ]; then
+              EXIT_CODE=$(docker inspect sanctuary-migrate --format="{{.State.ExitCode}}" 2>/dev/null)
+              if [ "$EXIT_CODE" = "0" ]; then
+                echo "Migration completed successfully"
+                break
+              else
+                echo "Migration failed with exit code: $EXIT_CODE"
+                docker logs sanctuary-migrate --tail 50
+                exit 1
+              fi
+            fi
+            echo "Waiting for migration... (attempt $i/60, status: $STATUS)"
+            sleep 5
+          done
+          # Wait for backend to be healthy after migration
+          echo "Waiting for backend to be healthy..."
+          for i in {1..30}; do
+            if docker exec sanctuary-backend wget -q -O - http://localhost:3001/health >/dev/null 2>&1; then
+              echo "Backend is healthy"
+              break
+            fi
+            echo "Waiting for backend... (attempt $i/30)"
+            sleep 2
+          done
 
       - name: Run auth flow tests
         env:

@@ -23,10 +23,15 @@ const router = Router();
 // This suppresses the IPv6 warnings when running behind nginx
 const rateLimitValidations = false;
 
-// Strict limiter for login attempts (5 attempts per 15 minutes)
+// Rate limit can be configured via environment variable for testing
+// Default: 5 attempts per 15 minutes (production)
+// Set LOGIN_RATE_LIMIT=100 for testing environments
+const loginRateLimit = parseInt(process.env.LOGIN_RATE_LIMIT || '5', 10);
+
+// Strict limiter for login attempts
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  max: loginRateLimit,
   message: {
     error: 'Too Many Requests',
     message: 'Too many login attempts. Please try again in 15 minutes.',

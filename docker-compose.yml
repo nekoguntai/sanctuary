@@ -79,6 +79,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
 
+      # Rate limiting (set LOGIN_RATE_LIMIT=100 for testing)
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
+
       # Encryption (for sensitive data like node passwords)
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
 

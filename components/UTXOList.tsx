@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UTXO } from '../types';
-import { Lock, Unlock, Check, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { Lock, Unlock, Check, ArrowUpRight, ExternalLink, FileText } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -89,9 +89,11 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 const id = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selectedUtxos.has(id);
                 const utxoTimestamp = typeof utxo.date === 'string' ? new Date(utxo.date).getTime() : (utxo.date ?? now);
-                const colorClass = utxo.frozen ? '' : getAgeColor(utxoTimestamp);
+                const isLocked = !!utxo.lockedByDraftId;
+                const isDisabled = utxo.frozen || isLocked;
+                const colorClass = utxo.frozen || isLocked ? '' : getAgeColor(utxoTimestamp);
 
-                // Red striped pattern for frozen UTXOs - matches the row list styling
+                // Red striped pattern for frozen UTXOs
                 // Using zen-vermilion color (#e05a47)
                 const frozenStyle = utxo.frozen ? {
                   background: `repeating-linear-gradient(
@@ -103,23 +105,36 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                   )`
                 } : {};
 
+                // Cyan striped pattern for locked UTXOs (reserved for draft)
+                const lockedStyle = isLocked && !utxo.frozen ? {
+                  background: `repeating-linear-gradient(
+                    45deg,
+                    #06b6d4,
+                    #06b6d4 4px,
+                    #0891b2 4px,
+                    #0891b2 8px
+                  )`
+                } : {};
+
                 const size = getSize(utxo.amount);
+                const statusLabel = utxo.frozen ? '(Frozen)' : isLocked ? `(Locked: ${utxo.lockedByDraftLabel || 'Draft'})` : '';
                 return (
                     <div
                         key={id}
-                        onClick={() => !utxo.frozen && onToggleSelect && onToggleSelect(id)}
+                        onClick={() => !isDisabled && onToggleSelect && onToggleSelect(id)}
                         style={{
                             width: size,
                             height: size,
-                            ...frozenStyle
+                            ...frozenStyle,
+                            ...lockedStyle
                         }}
                         className={`
                             relative rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-125 hover:z-10
-                            ${utxo.frozen ? 'cursor-not-allowed' : ''}
+                            ${isDisabled ? 'cursor-not-allowed' : ''}
                             ${isSelected ? 'ring-2 ring-offset-1 ring-sanctuary-400 dark:ring-offset-sanctuary-900' : ''}
                             ${colorClass} text-white shadow-md
                         `}
-                        title={`${format(utxo.amount)} - ${utxo.label || 'No Label'} ${utxo.frozen ? '(Frozen)' : ''}`}
+                        title={`${format(utxo.amount)} - ${utxo.label || 'No Label'} ${statusLabel}`}
                     >
                        <span className="text-[9px] font-bold opacity-0 hover:opacity-100 transition-opacity absolute bg-black/80 text-white px-1.5 py-0.5 rounded whitespace-nowrap -top-6 z-20 pointer-events-none">
                           {format(utxo.amount)}
@@ -133,6 +148,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-indigo mr-1"></span>&lt;1mo</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-gold mr-1"></span>&lt;1yr</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-sanctuary-700 mr-1"></span>Ancient</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #06b6d4, #06b6d4 2px, #0891b2 2px, #0891b2 4px)'}}></span>Locked</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #e05a47, #e05a47 2px, #c44a3a 2px, #c44a3a 4px)'}}></span>Frozen</div>
         </div>
       </div>
@@ -143,31 +159,35 @@ export const UTXOList: React.FC<UTXOListProps> = ({
         const id = `${utxo.txid}:${utxo.vout}`;
         const isSelected = selectedUtxos.has(id);
         const isFrozen = utxo.frozen;
+        const isLocked = !!utxo.lockedByDraftId;
+        const isDisabled = isFrozen || isLocked;
 
         return (
-            <div 
-            key={id} 
-            className={`group relative p-4 rounded-xl border transition-all duration-200 
-                ${isFrozen 
-                ? 'bg-zen-vermilion/5 border-zen-vermilion/20 dark:bg-zen-vermilion/10' 
-                : isSelected
-                    ? 'bg-zen-gold/10 border-zen-gold/50 shadow-sm'
-                    : 'bg-white border-sanctuary-200 dark:bg-sanctuary-900 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-700 shadow-sm'
+            <div
+            key={id}
+            className={`group relative p-4 rounded-xl border transition-all duration-200
+                ${isFrozen
+                ? 'bg-zen-vermilion/5 border-zen-vermilion/20 dark:bg-zen-vermilion/10'
+                : isLocked
+                    ? 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/10 dark:border-cyan-800/50'
+                    : isSelected
+                        ? 'bg-zen-gold/10 border-zen-gold/50 shadow-sm'
+                        : 'bg-white border-sanctuary-200 dark:bg-sanctuary-900 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-700 shadow-sm'
                 }`}
             >
             <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-4">
-                {selectable && !isFrozen && (
-                    <div 
+                {selectable && !isDisabled && (
+                    <div
                     onClick={() => onToggleSelect && onToggleSelect(id)}
                     className={`mt-1 flex-shrink-0 w-5 h-5 rounded border cursor-pointer flex items-center justify-center transition-colors ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600 hover:border-sanctuary-400'}`}
                     >
                     {isSelected && <Check className="w-3 h-3" />}
                     </div>
                 )}
-                
+
                 <div className="space-y-1">
-                    <div className={`font-mono font-medium ${isFrozen ? 'text-zen-vermilion' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
+                    <div className={`font-mono font-medium ${isFrozen ? 'text-zen-vermilion' : isLocked ? 'text-cyan-600 dark:text-cyan-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
                       <Amount sats={utxo.amount} size="lg" />
                     </div>
                     <a
@@ -181,11 +201,19 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                     {utxo.address}
                     <ExternalLink className="w-2.5 h-2.5 ml-1 flex-shrink-0" />
                     </a>
+                    <div className="flex flex-wrap gap-1">
                     {utxo.label && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-sanctuary-100 text-sanctuary-800 dark:bg-sanctuary-800 dark:text-sanctuary-300">
                         {utxo.label}
                     </span>
                     )}
+                    {isLocked && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300" title={`Reserved for draft: ${utxo.lockedByDraftLabel || 'Unnamed draft'}`}>
+                        <FileText className="w-3 h-3 mr-1" />
+                        {utxo.lockedByDraftLabel || 'Pending Draft'}
+                    </span>
+                    )}
+                    </div>
                 </div>
                 </div>
 

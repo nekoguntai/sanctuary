@@ -315,6 +315,9 @@ export interface UTXO {
   scriptPubKey?: string;
   blockHeight?: number;
   createdAt?: string;
+  // Draft lock info (UTXO is reserved for a pending draft transaction)
+  lockedByDraftId?: string;
+  lockedByDraftLabel?: string;
 }
 
 // ============================================================================

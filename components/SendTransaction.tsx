@@ -444,20 +444,29 @@ export const SendTransaction: React.FC = () => {
 
           // Filter out frozen/spent/unavailable UTXOs from selected set when resuming
           if (draftData.selectedUtxoIds && draftData.selectedUtxoIds.length > 0) {
-            // Create a set of available (not spent, not frozen) UTXO IDs
-            const availableUtxoIds = new Set(
-              formattedUTXOs
-                .filter(u => u.spendable && !u.frozen)
-                .map(u => `${u.txid}:${u.vout}`)
-            );
+            let validUtxoIds: string[];
 
-            // Filter to only UTXOs that are still available
-            const validUtxoIds = draftData.selectedUtxoIds.filter(utxoId => availableUtxoIds.has(utxoId));
+            if (draftData.isRBF) {
+              // For RBF drafts, trust the saved UTXOs without checking spendability
+              // These UTXOs are from the pending transaction being replaced, so they
+              // appear as "in use" but are valid for RBF replacement
+              validUtxoIds = draftData.selectedUtxoIds;
+            } else {
+              // Create a set of available (not spent, not frozen) UTXO IDs
+              const availableUtxoIds = new Set(
+                formattedUTXOs
+                  .filter(u => u.spendable && !u.frozen)
+                  .map(u => `${u.txid}:${u.vout}`)
+              );
 
-            // Warn if some UTXOs were removed
-            const removedCount = draftData.selectedUtxoIds.length - validUtxoIds.length;
-            if (removedCount > 0) {
-              showInfo(`${removedCount} UTXO${removedCount > 1 ? 's' : ''} no longer available (spent or frozen)`);
+              // Filter to only UTXOs that are still available
+              validUtxoIds = draftData.selectedUtxoIds.filter(utxoId => availableUtxoIds.has(utxoId));
+
+              // Warn if some UTXOs were removed
+              const removedCount = draftData.selectedUtxoIds.length - validUtxoIds.length;
+              if (removedCount > 0) {
+                showInfo(`${removedCount} UTXO${removedCount > 1 ? 's' : ''} no longer available (spent or frozen)`);
+              }
             }
 
             if (validUtxoIds.length > 0) {
@@ -1390,7 +1399,8 @@ export const SendTransaction: React.FC = () => {
                         {utxos.map(utxo => {
                             const id = `${utxo.txid}:${utxo.vout}`;
                             const isSelected = selectedUTXOs.has(id);
-                            const isDisabled = utxo.frozen || isResumingDraft;
+                            const isLocked = !!utxo.lockedByDraftId;
+                            const isDisabled = utxo.frozen || isLocked || isResumingDraft;
                             // Striped pattern for frozen UTXOs (matching UTXO page styling with muted red)
                             const frozenStyle = utxo.frozen ? {
                               backgroundImage: `repeating-linear-gradient(
@@ -1401,12 +1411,22 @@ export const SendTransaction: React.FC = () => {
                                 rgba(190,18,60,0.08) 8px
                               )`
                             } : {};
+                            // Striped pattern for locked UTXOs (cyan)
+                            const lockedStyle = isLocked && !utxo.frozen ? {
+                              backgroundImage: `repeating-linear-gradient(
+                                45deg,
+                                transparent,
+                                transparent 4px,
+                                rgba(6,182,212,0.08) 4px,
+                                rgba(6,182,212,0.08) 8px
+                              )`
+                            } : {};
                             return (
                                 <div
                                     key={id}
                                     onClick={() => !isDisabled && toggleUTXO(id)}
-                                    style={frozenStyle}
-                                    className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                    style={{...frozenStyle, ...lockedStyle}}
+                                    className={`p-4 flex items-center justify-between border-b border-sanctuary-50 dark:border-sanctuary-800 last:border-0 transition-colors ${isSelected ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800'} ${utxo.frozen ? 'opacity-70 bg-rose-50 dark:bg-rose-900/10' : ''} ${isLocked ? 'opacity-70 bg-cyan-50 dark:bg-cyan-900/10' : ''} ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <div className="flex items-center space-x-3">
                                         <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-sanctuary-800 border-sanctuary-800 text-white dark:bg-sanctuary-200 dark:text-sanctuary-900' : 'border-sanctuary-300 dark:border-sanctuary-600'}`}>
@@ -1423,6 +1443,11 @@ export const SendTransaction: React.FC = () => {
                                             Frozen
                                           </span>
                                         )}
+                                        {isLocked && (
+                                          <span className="inline-block px-2 py-0.5 rounded text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 mb-1 mr-1" title={`Reserved for: ${utxo.lockedByDraftLabel || 'Draft'}`}>
+                                            Locked
+                                          </span>
+                                        )}
                                         {utxo.label && <span className="inline-block px-2 py-0.5 rounded text-[10px] surface-secondary text-sanctuary-600 dark:text-sanctuary-400 mb-1">{utxo.label}</span>}
                                         <div className="text-xs text-sanctuary-400">{utxo.confirmations} confs</div>
                                     </div>
@@ -1433,8 +1458,8 @@ export const SendTransaction: React.FC = () => {
                 </div>
             )}
 
-            {/* Warning if insufficient funds selected via coin control (not shown for sendMax) */}
-            {showCoinControl && !isSendMax && selectedTotal < (parseInt(amount || '0') + calculateTotalFee()) && parseInt(amount || '0') > 0 && (
+            {/* Warning if insufficient funds selected via coin control (not shown for sendMax or resumed drafts) */}
+            {showCoinControl && !isSendMax && !isResumingDraft && selectedTotal < (parseInt(amount || '0') + calculateTotalFee()) && parseInt(amount || '0') > 0 && (
                  <div className="flex items-center p-4 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-xl">
                      <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
                      <span className="text-sm">Selected inputs are insufficient to cover amount + estimated fees.</span>

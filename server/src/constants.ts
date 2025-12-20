@@ -117,3 +117,25 @@ export const PRICE_CACHE_TTL_MS = 60000; // 1 minute
  * Fee estimate cache TTL in milliseconds
  */
 export const FEE_CACHE_TTL_MS = 30000; // 30 seconds
+
+// ============================================================================
+// AI CONSTANTS
+// ============================================================================
+
+/**
+ * Default AI enabled status
+ * AI features are disabled by default for security and privacy
+ */
+export const DEFAULT_AI_ENABLED = false;
+
+/**
+ * Default AI endpoint
+ * User must configure their own inference endpoint (Ollama, llama.cpp, etc.)
+ */
+export const DEFAULT_AI_ENDPOINT = '';
+
+/**
+ * Default AI model name
+ * User must specify which model to use
+ */
+export const DEFAULT_AI_MODEL = '';

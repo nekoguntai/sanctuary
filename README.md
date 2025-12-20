@@ -20,7 +20,26 @@
 
 ---
 
-> **Disclaimer:** Sanctuary is provided free of charge, "as is", without warranty of any kind, express or implied. The authors and contributors accept no liability for any damages, loss of funds, or other issues arising from the use of this software. You are solely responsible for the security of your Bitcoin and the verification of all transactions. Always verify addresses and amounts on your hardware wallet before signing.
+> ⚠️ **IMPORTANT LEGAL DISCLAIMER**
+>
+> **NO WARRANTY.** Sanctuary is provided "AS IS" and "AS AVAILABLE" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, title, and non-infringement.
+>
+> **LIMITATION OF LIABILITY.** In no event shall the authors, contributors, or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software, including but not limited to any direct, indirect, incidental, special, exemplary, or consequential damages, including loss of Bitcoin, other cryptocurrencies, profits, data, or other intangible losses.
+>
+> **ASSUMPTION OF RISK.** You acknowledge that:
+> - Bitcoin and cryptocurrency involve significant risks including total loss of funds
+> - You are solely responsible for securing your private keys, seed phrases, and backups
+> - You must verify all transaction details on your hardware wallet before signing
+> - Software bugs, security vulnerabilities, or user error may result in permanent loss
+> - No software can guarantee protection against all threats
+>
+> **INDEMNIFICATION.** You agree to indemnify and hold harmless the authors, contributors, and affiliates from any claims, damages, or expenses arising from your use of this software.
+>
+> **NOT FINANCIAL ADVICE.** This software does not constitute financial, legal, or tax advice. Consult qualified professionals for guidance on your specific situation.
+>
+> **REGULATORY COMPLIANCE.** You are solely responsible for compliance with all applicable laws and regulations in your jurisdiction regarding cryptocurrency.
+>
+> **BY USING THIS SOFTWARE, YOU ACCEPT THESE TERMS.**
 
 ## Table of Contents
 

@@ -12,7 +12,7 @@ import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
 import { validatePasswordStrength } from '../utils/password';
-import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
+import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
 
 const router = Router();
 const log = createLogger('ADMIN');
@@ -1016,6 +1016,9 @@ router.get('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
       dustThreshold: DEFAULT_DUST_THRESHOLD,
       draftExpirationDays: DEFAULT_DRAFT_EXPIRATION_DAYS,
+      aiEnabled: DEFAULT_AI_ENABLED,
+      aiEndpoint: DEFAULT_AI_ENDPOINT,
+      aiModel: DEFAULT_AI_MODEL,
       ...settingsObj,
     });
   } catch (error) {
@@ -1088,6 +1091,9 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
       dustThreshold: DEFAULT_DUST_THRESHOLD,
       draftExpirationDays: DEFAULT_DRAFT_EXPIRATION_DAYS,
+      aiEnabled: DEFAULT_AI_ENABLED,
+      aiEndpoint: DEFAULT_AI_ENDPOINT,
+      aiModel: DEFAULT_AI_MODEL,
     };
     for (const setting of settings) {
       try {

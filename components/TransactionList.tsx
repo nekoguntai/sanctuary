@@ -8,6 +8,7 @@ import * as labelsApi from '../src/api/labels';
 import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2, TrendingUp } from 'lucide-react';
 import { TransactionActions } from './TransactionActions';
 import { LabelBadges } from './LabelSelector';
+import { AILabelSuggestion } from './AILabelSuggestion';
 import { createLogger } from '../utils/logger';
 import type { TransactionStats } from '../src/api/transactions';
 
@@ -158,6 +159,38 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         ? prev.filter(id => id !== labelId)
         : [...prev, labelId]
     );
+  };
+
+  // Handle AI label suggestion
+  const handleAISuggestion = async (suggestion: string) => {
+    if (!selectedTx) return;
+
+    try {
+      // Check if a label with this name already exists
+      let existingLabel = availableLabels.find(
+        l => l.name.toLowerCase() === suggestion.toLowerCase()
+      );
+
+      // If it doesn't exist, create it
+      if (!existingLabel) {
+        const newLabel = await labelsApi.createLabel(selectedTx.walletId, {
+          name: suggestion,
+          color: '#6366f1', // Default indigo color
+        });
+        existingLabel = newLabel;
+
+        // Reload available labels to include the new one
+        const labels = await labelsApi.getLabels(selectedTx.walletId);
+        setAvailableLabels(labels);
+      }
+
+      // Toggle the label on
+      if (!selectedLabelIds.includes(existingLabel.id)) {
+        setSelectedLabelIds(prev => [...prev, existingLabel!.id]);
+      }
+    } catch (err) {
+      log.error('Failed to apply AI suggestion', { error: err });
+    }
   };
 
   // Helper to get transaction type info
@@ -734,7 +767,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         </div>
 
                         {editingLabels ? (
-                          <div className="space-y-2">
+                          <div className="space-y-3">
+                            {/* AI Label Suggestion */}
+                            <AILabelSuggestion
+                              transaction={selectedTx}
+                              existingLabels={availableLabels.map(l => l.name)}
+                              onSuggestionAccepted={handleAISuggestion}
+                            />
+
                             {availableLabels.length === 0 ? (
                               <p className="text-sm text-sanctuary-500">No labels available. Create labels in wallet settings.</p>
                             ) : (

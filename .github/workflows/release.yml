@@ -260,55 +260,56 @@ jobs:
             exit 0
           fi
 
-          # Create install instructions file to avoid heredoc issues
-          cat > /tmp/install_instructions.md << 'INSTRUCTIONS'
-## Quick Install
+          # Create install instructions file
+          cat > /tmp/install_instructions.md << 'EOF'
+          ## Quick Install
 
-**Prerequisites:** Docker and Docker Compose
+          **Prerequisites:** Docker and Docker Compose
 
-```bash
-git clone https://github.com/n-narusegawa/sanctuary.git
-cd sanctuary
-./install.sh
-```
+          ```bash
+          git clone https://github.com/n-narusegawa/sanctuary.git
+          cd sanctuary
+          ./install.sh
+          ```
 
-Open **https://localhost:8443** and log in with:
-- **Username:** `admin`
-- **Password:** `sanctuary`
+          Open **https://localhost:8443** and log in with:
+          - **Username:** `admin`
+          - **Password:** `sanctuary`
 
-> ⚠️ Change these credentials immediately after first login.
+          > Change these credentials immediately after first login.
 
----
+          ---
 
-## Upgrading
+          ## Upgrading
 
-Your data and configuration will be preserved automatically.
+          Your data and configuration will be preserved automatically.
 
-```bash
-cd sanctuary
-git pull
-./install.sh
-```
+          ```bash
+          cd sanctuary
+          git pull
+          ./install.sh
+          ```
 
-The install script handles database migrations and restarts services.
+          The install script handles database migrations and restarts services.
 
----
+          ---
 
-<details>
-<summary><strong>Umbrel Installation</strong> (alternative method)</summary>
+          <details>
+          <summary><strong>Umbrel Installation</strong> (alternative method)</summary>
 
-> **Note:** Umbrel serves apps over HTTP, so WebUSB hardware wallet connections will not work. Use the Quick Install method above for full hardware wallet support.
+          > **Note:** Umbrel serves apps over HTTP, so WebUSB hardware wallet connections will not work. Use the Quick Install method above for full hardware wallet support.
 
-1. Open the App Store in your Umbrel
-2. Click the **...** menu and select **Community App Stores**
-3. Paste: `https://github.com/n-narusegawa/sanctuary`
-4. Click **Add**, then find Sanctuary and install
+          1. Open the App Store in your Umbrel
+          2. Click the **...** menu and select **Community App Stores**
+          3. Paste: `https://github.com/n-narusegawa/sanctuary`
+          4. Click **Add**, then find Sanctuary and install
 
-</details>
+          </details>
 
----
-
-INSTRUCTIONS
+          ---
+          EOF
+          # Remove leading spaces from heredoc content
+          sed -i 's/^          //' /tmp/install_instructions.md
 
           # Build final release body
           if [ -n "$EXISTING_BODY" ]; then

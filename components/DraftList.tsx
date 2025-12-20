@@ -22,6 +22,48 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('DraftList');
 
+// Expiration urgency levels
+type ExpirationUrgency = 'normal' | 'warning' | 'critical' | 'expired';
+
+interface ExpirationInfo {
+  text: string;
+  urgency: ExpirationUrgency;
+  diffMs: number;
+}
+
+/**
+ * Calculate expiration info for a draft
+ */
+const getExpirationInfo = (expiresAt: string | undefined): ExpirationInfo | null => {
+  if (!expiresAt) return null;
+
+  const expDate = new Date(expiresAt);
+  const now = new Date();
+  const diffMs = expDate.getTime() - now.getTime();
+
+  if (diffMs <= 0) {
+    return { text: 'Expired', urgency: 'expired', diffMs };
+  }
+
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHour = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 60) {
+    return { text: `Expires in ${diffMin}m`, urgency: 'critical', diffMs };
+  }
+  if (diffHour < 24) {
+    return { text: `Expires in ${diffHour}h`, urgency: 'critical', diffMs };
+  }
+  if (diffHour < 48) {
+    return { text: 'Expires tomorrow', urgency: 'warning', diffMs };
+  }
+  if (diffDay <= 2) {
+    return { text: `Expires in ${diffDay} days`, urgency: 'warning', diffMs };
+  }
+  return { text: `Expires in ${diffDay} days`, urgency: 'normal', diffMs };
+};
+
 interface DraftListProps {
   walletId: string;
   walletType: WalletType;
@@ -137,6 +179,40 @@ export const DraftList: React.FC<DraftListProps> = ({
     }
   };
 
+  // Sort drafts: expired first (for visibility), then by expiration (soonest first), then by creation date
+  const sortedDrafts = React.useMemo(() => {
+    return [...drafts].sort((a, b) => {
+      const aExp = getExpirationInfo(a.expiresAt);
+      const bExp = getExpirationInfo(b.expiresAt);
+
+      // If one has expiration and the other doesn't, prioritize the one with expiration
+      if (aExp && !bExp) return -1;
+      if (!aExp && bExp) return 1;
+      if (!aExp && !bExp) {
+        // Both without expiration - sort by creation date (newest first)
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+
+      // Both have expiration - sort by urgency then by time remaining
+      const urgencyOrder: Record<ExpirationUrgency, number> = {
+        expired: 0,
+        critical: 1,
+        warning: 2,
+        normal: 3,
+      };
+
+      const aUrgency = urgencyOrder[aExp!.urgency];
+      const bUrgency = urgencyOrder[bExp!.urgency];
+
+      if (aUrgency !== bUrgency) {
+        return aUrgency - bUrgency;
+      }
+
+      // Same urgency - sort by time remaining (soonest first)
+      return aExp!.diffMs - bExp!.diffMs;
+    });
+  }, [drafts]);
+
   const handleResume = (draft: DraftTransaction) => {
     if (onResume) {
       onResume(draft);
@@ -231,6 +307,48 @@ export const DraftList: React.FC<DraftListProps> = ({
     }
   };
 
+  const getExpirationBadge = (draft: DraftTransaction) => {
+    const expInfo = getExpirationInfo(draft.expiresAt);
+    if (!expInfo) return null;
+
+    switch (expInfo.urgency) {
+      case 'expired':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+            <AlertCircle className="w-3 h-3" />
+            {expInfo.text}
+          </span>
+        );
+      case 'critical':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+            <AlertCircle className="w-3 h-3" />
+            {expInfo.text}
+          </span>
+        );
+      case 'warning':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="w-3 h-3" />
+            {expInfo.text}
+          </span>
+        );
+      case 'normal':
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-sanctuary-400 dark:text-sanctuary-500">
+            <Clock className="w-3 h-3" />
+            {expInfo.text}
+          </span>
+        );
+    }
+  };
+
+  const isExpired = (draft: DraftTransaction): boolean => {
+    const expInfo = getExpirationInfo(draft.expiresAt);
+    return expInfo?.urgency === 'expired';
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(undefined, {
@@ -298,18 +416,23 @@ export const DraftList: React.FC<DraftListProps> = ({
       </div>
 
       <div className="space-y-3">
-        {drafts.map((draft) => (
+        {sortedDrafts.map((draft) => (
           <div
             key={draft.id}
-            className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700"
+            className={`surface-elevated rounded-xl p-4 border ${
+              isExpired(draft)
+                ? 'border-rose-300 dark:border-rose-800 opacity-75'
+                : 'border-sanctuary-200 dark:border-sanctuary-700'
+            }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
                   <span className="text-xs text-sanctuary-400">
                     {formatDate(draft.createdAt)}
                   </span>
                   {getStatusBadge(draft)}
+                  {getExpirationBadge(draft)}
                 </div>
 
                 <div className="mb-2">
@@ -396,13 +519,20 @@ export const DraftList: React.FC<DraftListProps> = ({
               </div>
 
               <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => handleResume(draft)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-                >
-                  <Play className="w-4 h-4" />
-                  Resume
-                </button>
+                {isExpired(draft) ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-sanctuary-300 dark:bg-sanctuary-700 text-sanctuary-500 dark:text-sanctuary-400 cursor-not-allowed">
+                    <AlertCircle className="w-4 h-4" />
+                    Expired
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleResume(draft)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                  >
+                    <Play className="w-4 h-4" />
+                    Resume
+                  </button>
+                )}
 
                 <div className="flex gap-1">
                   <button

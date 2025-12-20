@@ -65,12 +65,20 @@ describeWithDb('Security Integration Tests', () => {
       const hashedDefaultPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
       const username = `defaultpwd_${Date.now()}`;
 
-      await prisma.user.create({
+      const user = await prisma.user.create({
         data: {
           username,
           password: hashedDefaultPassword,
           isAdmin: false,
           preferences: {},
+        },
+      });
+
+      // Create the initialPassword system setting that the detection relies on
+      await prisma.systemSetting.create({
+        data: {
+          key: `initialPassword_${user.id}`,
+          value: hashedDefaultPassword,
         },
       });
 
@@ -109,12 +117,20 @@ describeWithDb('Security Integration Tests', () => {
       const hashedDefaultPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
       const username = `defaultpwd_me_${Date.now()}`;
 
-      await prisma.user.create({
+      const user = await prisma.user.create({
         data: {
           username,
           password: hashedDefaultPassword,
           isAdmin: false,
           preferences: {},
+        },
+      });
+
+      // Create the initialPassword system setting that the detection relies on
+      await prisma.systemSetting.create({
+        data: {
+          key: `initialPassword_${user.id}`,
+          value: hashedDefaultPassword,
         },
       });
 
@@ -141,7 +157,7 @@ describeWithDb('Security Integration Tests', () => {
   // ==========================================================================
   describe('HIGH: Password Policy Enforcement', () => {
     describe('Admin user creation password requirements', () => {
-      it('should reject passwords shorter than 6 characters for admin-created users', async () => {
+      it('should reject passwords shorter than 8 characters for admin-created users', async () => {
         const testAdmin = getTestAdmin();
         await createTestUser(prisma, { ...testAdmin, isAdmin: true });
         const adminToken = await loginTestUser(app, testAdmin);
@@ -151,26 +167,26 @@ describeWithDb('Security Integration Tests', () => {
           .set('Authorization', `Bearer ${adminToken}`)
           .send({
             username: `shortpwd_${Date.now()}`,
-            password: 'abc12', // 5 characters - should fail
+            password: 'Abc123!', // 7 characters - should fail
           })
           .expect(400);
 
         expect(response.body.error).toBe('Bad Request');
-        expect(response.body.message).toContain('6 characters');
+        expect(response.body.message).toContain('does not meet security requirements');
       });
 
-      it('should accept passwords with exactly 6 characters (current weak policy)', async () => {
+      it('should accept passwords meeting security requirements (8+ chars with complexity)', async () => {
         const testAdmin = getTestAdmin();
         await createTestUser(prisma, { ...testAdmin, isAdmin: true });
         const adminToken = await loginTestUser(app, testAdmin);
 
-        // This documents the current weak policy - 6 chars accepted
+        // Strong password: 8+ chars with uppercase, lowercase, and number
         const response = await request(app)
           .post('/api/v1/admin/users')
           .set('Authorization', `Bearer ${adminToken}`)
           .send({
-            username: `sixchar_${Date.now()}`,
-            password: 'Abc123', // 6 characters - currently accepted
+            username: `strongpwd_${Date.now()}`,
+            password: 'Abcd1234', // 8 characters with complexity - accepted
           })
           .expect(201);
 

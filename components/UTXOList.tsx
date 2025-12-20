@@ -1,13 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { UTXO } from '../types';
-import { Lock, Unlock, Check, ArrowUpRight, ExternalLink, FileText } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { UTXO, WalletScriptType } from '../types';
+import { Lock, Unlock, Check, ArrowUpRight, ExternalLink, FileText, AlertTriangle, Shield } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
+import { useFeeEstimates } from '../hooks/queries/useBitcoin';
+import { PrivacyBadge } from './PrivacyBadge';
+import type { UtxoPrivacyInfo, WalletPrivacySummary } from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('UTXOList');
+
+// Input virtual bytes by script type (for dust calculation)
+const INPUT_VBYTES: Record<WalletScriptType, number> = {
+  legacy: 148,
+  nested_segwit: 91,
+  native_segwit: 68,
+  taproot: 57.5,
+};
+
+/**
+ * Calculate the dust threshold for a UTXO
+ * A UTXO is considered dust if the fee to spend it exceeds its value
+ * @param feeRate - Current fee rate in sat/vB
+ * @param scriptType - Script type of the UTXO
+ * @returns Dust threshold in satoshis
+ */
+function calculateDustThreshold(feeRate: number, scriptType: WalletScriptType = 'native_segwit'): number {
+  const inputVBytes = INPUT_VBYTES[scriptType] || INPUT_VBYTES.native_segwit;
+  return Math.ceil(inputVBytes * feeRate);
+}
+
+/**
+ * Check if a UTXO is dust at the current fee rate
+ */
+function isDustUtxo(utxo: UTXO, feeRate: number): boolean {
+  const scriptType = utxo.scriptType || 'native_segwit';
+  const threshold = calculateDustThreshold(feeRate, scriptType);
+  return utxo.amount < threshold;
+}
+
+/**
+ * Calculate the cost to spend a UTXO
+ */
+function getSpendCost(utxo: UTXO, feeRate: number): number {
+  const scriptType = utxo.scriptType || 'native_segwit';
+  const inputVBytes = INPUT_VBYTES[scriptType] || INPUT_VBYTES.native_segwit;
+  return Math.ceil(inputVBytes * feeRate);
+}
 
 interface UTXOListProps {
   utxos: UTXO[];
@@ -16,6 +57,10 @@ interface UTXOListProps {
   selectedUtxos?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onSendSelected?: () => void;
+  // Optional privacy data
+  privacyData?: UtxoPrivacyInfo[];
+  privacySummary?: WalletPrivacySummary;
+  showPrivacy?: boolean;
 }
 
 export const UTXOList: React.FC<UTXOListProps> = ({
@@ -24,10 +69,33 @@ export const UTXOList: React.FC<UTXOListProps> = ({
   selectable = false,
   selectedUtxos = new Set(),
   onToggleSelect,
-  onSendSelected
+  onSendSelected,
+  privacyData,
+  privacySummary,
+  showPrivacy = false,
 }) => {
   const { format } = useCurrency();
   const [explorerUrl, setExplorerUrl] = useState('https://mempool.space');
+  const { data: feeEstimates } = useFeeEstimates();
+
+  // Create a map of privacy scores by UTXO ID for quick lookup
+  const privacyMap = useMemo(() => {
+    if (!privacyData) return new Map<string, UtxoPrivacyInfo>();
+    return new Map(privacyData.map(p => [`${p.txid}:${p.vout}`, p]));
+  }, [privacyData]);
+
+  // Use the hour fee rate for dust calculation (reasonable baseline)
+  const currentFeeRate = feeEstimates?.hour || 1;
+
+  // Calculate dust statistics
+  const dustStats = useMemo(() => {
+    const dustUtxos = utxos.filter(u => !u.frozen && !u.lockedByDraftId && isDustUtxo(u, currentFeeRate));
+    const dustTotal = dustUtxos.reduce((sum, u) => sum + u.amount, 0);
+    return {
+      count: dustUtxos.length,
+      total: dustTotal,
+    };
+  }, [utxos, currentFeeRate]);
 
   // Load explorer URL from server config
   useEffect(() => {
@@ -91,7 +159,9 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 const utxoTimestamp = typeof utxo.date === 'string' ? new Date(utxo.date).getTime() : (utxo.date ?? now);
                 const isLocked = !!utxo.lockedByDraftId;
                 const isDisabled = utxo.frozen || isLocked;
-                const colorClass = utxo.frozen || isLocked ? '' : getAgeColor(utxoTimestamp);
+                const isDust = !utxo.frozen && !isLocked && isDustUtxo(utxo, currentFeeRate);
+                const spendCost = isDust ? getSpendCost(utxo, currentFeeRate) : 0;
+                const colorClass = utxo.frozen || isLocked || isDust ? '' : getAgeColor(utxoTimestamp);
 
                 // Red striped pattern for frozen UTXOs
                 // Using zen-vermilion color (#e05a47)
@@ -116,8 +186,18 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                   )`
                 } : {};
 
+                // Amber/orange dotted pattern for dust UTXOs (uneconomical to spend)
+                const dustStyle = isDust ? {
+                  background: `radial-gradient(circle at 25% 25%, #f59e0b 2px, transparent 2px),
+                               radial-gradient(circle at 75% 75%, #f59e0b 2px, transparent 2px),
+                               #d97706`
+                } : {};
+
                 const size = getSize(utxo.amount);
-                const statusLabel = utxo.frozen ? '(Frozen)' : isLocked ? `(Locked: ${utxo.lockedByDraftLabel || 'Draft'})` : '';
+                const statusLabel = utxo.frozen ? '(Frozen)'
+                  : isLocked ? `(Locked: ${utxo.lockedByDraftLabel || 'Draft'})`
+                  : isDust ? `(Dust - costs ${format(spendCost)} to spend)`
+                  : '';
                 return (
                     <div
                         key={id}
@@ -126,7 +206,8 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                             width: size,
                             height: size,
                             ...frozenStyle,
-                            ...lockedStyle
+                            ...lockedStyle,
+                            ...dustStyle
                         }}
                         className={`
                             relative rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-125 hover:z-10
@@ -148,10 +229,58 @@ export const UTXOList: React.FC<UTXOListProps> = ({
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-indigo mr-1"></span>&lt;1mo</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-zen-gold mr-1"></span>&lt;1yr</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-sanctuary-700 mr-1"></span>Ancient</div>
+            <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'radial-gradient(circle at 25% 25%, #f59e0b 1px, transparent 1px), radial-gradient(circle at 75% 75%, #f59e0b 1px, transparent 1px), #d97706'}}></span>Dust</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #06b6d4, #06b6d4 2px, #0891b2 2px, #0891b2 4px)'}}></span>Locked</div>
             <div className="flex items-center"><span className="w-2 h-2 rounded-full mr-1" style={{background: 'repeating-linear-gradient(45deg, #e05a47, #e05a47 2px, #c44a3a 2px, #c44a3a 4px)'}}></span>Frozen</div>
+            {showPrivacy && (
+              <div className="flex items-center"><Shield className="w-2 h-2 mr-1 text-zen-indigo" />Privacy</div>
+            )}
         </div>
       </div>
+
+      {/* Privacy Summary */}
+      {showPrivacy && privacySummary && (
+        <div className="flex items-center gap-3 p-3 rounded-lg surface-secondary border border-sanctuary-200 dark:border-sanctuary-700">
+          <Shield className="w-5 h-5 text-sanctuary-500 flex-shrink-0" />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-sanctuary-800 dark:text-sanctuary-200">
+                Wallet Privacy Score: {privacySummary.averageScore}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded capitalize ${
+                privacySummary.grade === 'excellent' ? 'bg-zen-matcha/10 text-zen-matcha' :
+                privacySummary.grade === 'good' ? 'bg-zen-indigo/10 text-zen-indigo' :
+                privacySummary.grade === 'fair' ? 'bg-zen-gold/10 text-zen-gold' :
+                'bg-zen-vermilion/10 text-zen-vermilion'
+              }`}>
+                {privacySummary.grade}
+              </span>
+            </div>
+            {privacySummary.recommendations.length > 0 && (
+              <p className="text-xs text-sanctuary-500 mt-0.5">
+                {privacySummary.recommendations[0]}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Dust Warning Banner */}
+      {dustStats.count > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              <span className="font-medium">{dustStats.count} dust UTXO{dustStats.count > 1 ? 's' : ''}</span>
+              {' '}totaling <span className="font-mono">{format(dustStats.total)}</span>
+            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+              These outputs cost more to spend than they're worth at current fee rates ({currentFeeRate.toFixed(1)} sat/vB).
+              Consider consolidating when fees are lower.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabular List Section */}
       <div className="grid gap-3">
@@ -161,6 +290,9 @@ export const UTXOList: React.FC<UTXOListProps> = ({
         const isFrozen = utxo.frozen;
         const isLocked = !!utxo.lockedByDraftId;
         const isDisabled = isFrozen || isLocked;
+        const isDust = !isFrozen && !isLocked && isDustUtxo(utxo, currentFeeRate);
+        const spendCost = isDust ? getSpendCost(utxo, currentFeeRate) : 0;
+        const privacyInfo = privacyMap.get(id);
 
         return (
             <div
@@ -170,9 +302,11 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 ? 'bg-zen-vermilion/5 border-zen-vermilion/20 dark:bg-zen-vermilion/10'
                 : isLocked
                     ? 'bg-cyan-50 border-cyan-200 dark:bg-cyan-900/10 dark:border-cyan-800/50'
-                    : isSelected
-                        ? 'bg-zen-gold/10 border-zen-gold/50 shadow-sm'
-                        : 'bg-white border-sanctuary-200 dark:bg-sanctuary-900 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-700 shadow-sm'
+                    : isDust
+                        ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800/50'
+                        : isSelected
+                            ? 'bg-zen-gold/10 border-zen-gold/50 shadow-sm'
+                            : 'bg-white border-sanctuary-200 dark:bg-sanctuary-900 dark:border-sanctuary-800 hover:border-sanctuary-300 dark:hover:border-sanctuary-700 shadow-sm'
                 }`}
             >
             <div className="flex items-start justify-between">
@@ -187,8 +321,21 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 )}
 
                 <div className="space-y-1">
-                    <div className={`font-mono font-medium ${isFrozen ? 'text-zen-vermilion' : isLocked ? 'text-cyan-600 dark:text-cyan-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
+                    <div className={`font-mono font-medium flex items-center gap-2 ${isFrozen ? 'text-zen-vermilion' : isLocked ? 'text-cyan-600 dark:text-cyan-400' : isDust ? 'text-amber-600 dark:text-amber-400' : 'text-sanctuary-900 dark:text-sanctuary-100'}`}>
                       <Amount sats={utxo.amount} size="lg" />
+                      {isDust && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title={`Costs ${format(spendCost)} to spend at current fees`}>
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+                          DUST
+                        </span>
+                      )}
+                      {showPrivacy && privacyInfo && (
+                        <PrivacyBadge
+                          score={privacyInfo.score.score}
+                          grade={privacyInfo.score.grade}
+                          size="sm"
+                        />
+                      )}
                     </div>
                     <a
                       href={`${explorerUrl}/address/${utxo.address}`}

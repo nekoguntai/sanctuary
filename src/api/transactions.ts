@@ -357,3 +357,169 @@ export async function getBalanceHistory(
     totalBalance,
   });
 }
+
+// ========================================
+// PRIVACY SCORING API
+// ========================================
+
+export interface PrivacyFactor {
+  factor: string;
+  impact: number;
+  description: string;
+}
+
+export interface PrivacyScore {
+  score: number;
+  grade: 'excellent' | 'good' | 'fair' | 'poor';
+  factors: PrivacyFactor[];
+  warnings: string[];
+}
+
+export interface UtxoPrivacyInfo {
+  utxoId: string;
+  txid: string;
+  vout: number;
+  amount: number;
+  address: string;
+  score: PrivacyScore;
+}
+
+export interface WalletPrivacySummary {
+  averageScore: number;
+  grade: 'excellent' | 'good' | 'fair' | 'poor';
+  utxoCount: number;
+  addressReuseCount: number;
+  roundAmountCount: number;
+  clusterCount: number;
+  recommendations: string[];
+}
+
+export interface WalletPrivacyResponse {
+  utxos: UtxoPrivacyInfo[];
+  summary: WalletPrivacySummary;
+}
+
+export interface SpendPrivacyAnalysis {
+  score: number;
+  grade: 'excellent' | 'good' | 'fair' | 'poor';
+  linkedAddresses: number;
+  warnings: string[];
+}
+
+/**
+ * Get privacy analysis for all UTXOs in a wallet
+ */
+export async function getWalletPrivacy(walletId: string): Promise<WalletPrivacyResponse> {
+  return apiClient.get<WalletPrivacyResponse>(`/wallets/${walletId}/privacy`);
+}
+
+/**
+ * Get privacy score for a single UTXO
+ */
+export async function getUtxoPrivacy(utxoId: string): Promise<PrivacyScore> {
+  return apiClient.get<PrivacyScore>(`/utxos/${utxoId}/privacy`);
+}
+
+/**
+ * Analyze privacy impact of spending selected UTXOs together
+ */
+export async function analyzeSpendPrivacy(
+  walletId: string,
+  utxoIds: string[]
+): Promise<SpendPrivacyAnalysis> {
+  return apiClient.post<SpendPrivacyAnalysis>(`/wallets/${walletId}/privacy/spend-analysis`, {
+    utxoIds,
+  });
+}
+
+// ========================================
+// UTXO SELECTION API
+// ========================================
+
+export type SelectionStrategy =
+  | 'privacy'
+  | 'efficiency'
+  | 'oldest_first'
+  | 'largest_first'
+  | 'smallest_first';
+
+export interface SelectedUtxo {
+  id: string;
+  txid: string;
+  vout: number;
+  address: string;
+  amount: number;
+  confirmations: number;
+  blockHeight?: number;
+}
+
+export interface SelectionResult {
+  selected: SelectedUtxo[];
+  totalAmount: number;
+  estimatedFee: number;
+  changeAmount: number;
+  inputCount: number;
+  strategy: SelectionStrategy;
+  warnings: string[];
+  privacyImpact?: {
+    linkedAddresses: number;
+    score: number;
+  };
+}
+
+export interface SelectUtxosRequest {
+  amount: number;
+  feeRate: number;
+  strategy?: SelectionStrategy;
+  scriptType?: string;
+}
+
+export interface RecommendedStrategyResponse {
+  strategy: SelectionStrategy;
+  reason: string;
+  utxoCount: number;
+  feeRate: number;
+}
+
+/**
+ * Select UTXOs for a transaction using specified strategy
+ */
+export async function selectUtxos(
+  walletId: string,
+  request: SelectUtxosRequest
+): Promise<SelectionResult> {
+  return apiClient.post<SelectionResult>(`/wallets/${walletId}/utxos/select`, request);
+}
+
+/**
+ * Compare different UTXO selection strategies for a given amount
+ */
+export async function compareStrategies(
+  walletId: string,
+  amount: number,
+  feeRate: number,
+  scriptType?: string
+): Promise<Record<SelectionStrategy, SelectionResult>> {
+  return apiClient.post<Record<SelectionStrategy, SelectionResult>>(
+    `/wallets/${walletId}/utxos/compare-strategies`,
+    { amount, feeRate, scriptType }
+  );
+}
+
+/**
+ * Get recommended UTXO selection strategy based on context
+ */
+export async function getRecommendedStrategy(
+  walletId: string,
+  feeRate: number,
+  prioritizePrivacy?: boolean
+): Promise<RecommendedStrategyResponse> {
+  const params: Record<string, string> = { feeRate: String(feeRate) };
+  if (prioritizePrivacy) {
+    params.prioritizePrivacy = 'true';
+  }
+  return apiClient.get<RecommendedStrategyResponse>(
+    `/wallets/${walletId}/utxos/recommended-strategy`,
+    params
+  );
+}

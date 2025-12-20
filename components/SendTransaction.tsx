@@ -6,6 +6,7 @@ import * as transactionsApi from '../src/api/transactions';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as devicesApi from '../src/api/devices';
 import * as draftsApi from '../src/api/drafts';
+import * as payjoinApi from '../src/api/payjoin';
 import type { DraftTransaction } from '../src/api/drafts';
 import { ApiError } from '../src/api/client';
 import { Button } from './ui/Button';
@@ -185,6 +186,11 @@ export const SendTransaction: React.FC = () => {
   const [enableRBF, setEnableRBF] = useState(true);
   const [subtractFeesFromAmount, setSubtractFeesFromAmount] = useState(false);
 
+  // Payjoin state
+  const [payjoinUrl, setPayjoinUrl] = useState<string | null>(null);
+  const [payjoinAttempted, setPayjoinAttempted] = useState(false);
+  const [payjoinStatus, setPayjoinStatus] = useState<'idle' | 'attempting' | 'success' | 'failed'>('idle');
+
   // Backwards compatibility helpers
   const recipient = outputs[0]?.address || '';
   const amount = outputs[0]?.amount || '';
@@ -221,6 +227,69 @@ export const SendTransaction: React.FC = () => {
   const toggleSendMax = (index: number) => {
     updateOutput(index, 'sendMax', !outputs[index].sendMax);
   };
+
+  // Parse BIP21 URI and extract address, amount, and payjoin URL
+  const parseBip21Uri = useCallback((uri: string): { address: string; amount?: number; payjoinUrl?: string } | null => {
+    // Check if it looks like a BIP21 URI
+    if (!uri.toLowerCase().startsWith('bitcoin:')) {
+      return null;
+    }
+
+    try {
+      let cleanUri = uri.substring(8); // Remove 'bitcoin:'
+      const [addressPart, paramsPart] = cleanUri.split('?');
+      const result: { address: string; amount?: number; payjoinUrl?: string } = {
+        address: addressPart,
+      };
+
+      if (paramsPart) {
+        const params = new URLSearchParams(paramsPart);
+
+        if (params.has('amount')) {
+          // BIP21 amount is in BTC, convert to satoshis
+          result.amount = Math.round(parseFloat(params.get('amount')!) * 100000000);
+        }
+
+        if (params.has('pj')) {
+          result.payjoinUrl = decodeURIComponent(params.get('pj')!);
+        }
+      }
+
+      return result;
+    } catch (e) {
+      log.warn('Failed to parse BIP21 URI', { uri, error: e });
+      return null;
+    }
+  }, []);
+
+  // Handle address input that might be a BIP21 URI
+  const handleAddressInput = useCallback((index: number, value: string) => {
+    const parsed = parseBip21Uri(value);
+
+    if (parsed) {
+      // It's a BIP21 URI - extract values
+      updateOutput(index, 'address', parsed.address);
+
+      if (parsed.amount && index === 0) {
+        updateOutput(index, 'amount', String(parsed.amount));
+      }
+
+      if (parsed.payjoinUrl && index === 0) {
+        setPayjoinUrl(parsed.payjoinUrl);
+        setPayjoinStatus('idle');
+        setPayjoinAttempted(false);
+        log.info('Detected Payjoin URI', { payjoinUrl: parsed.payjoinUrl });
+      } else if (index === 0) {
+        setPayjoinUrl(null);
+      }
+    } else {
+      // Regular address
+      updateOutput(index, 'address', value);
+      if (index === 0) {
+        setPayjoinUrl(null);
+      }
+    }
+  }, [parseBip21Uri, updateOutput]);
 
   // PSBT file handling
   const [showPsbtOptions, setShowPsbtOptions] = useState(false);
@@ -575,8 +644,11 @@ export const SendTransaction: React.FC = () => {
             inversionAttempts: "dontInvert",
           });
           if (code) {
-             setRecipient(code.data);
+             // Use handleAddressInput to parse BIP21 URIs (including Payjoin)
+             const outputIndex = scanningOutputIndex ?? 0;
+             handleAddressInput(outputIndex, code.data);
              setShowScanner(false);
+             setScanningOutputIndex(null);
              stopCamera();
              return;
           }
@@ -1004,6 +1076,36 @@ export const SendTransaction: React.FC = () => {
       const effectiveAmount = txData.effectiveAmount || (txData.outputs
         ? txData.outputs.reduce((sum: number, o: any) => sum + o.amount, 0)
         : totalAmount);
+
+      // Step 1.5: Attempt Payjoin if detected (single output only)
+      let psbtToSign = txData.psbtBase64;
+      if (payjoinUrl && outputs.length === 1 && !payjoinAttempted) {
+        setPayjoinStatus('attempting');
+        setPayjoinAttempted(true);
+        log.info('Attempting Payjoin', { payjoinUrl });
+
+        try {
+          const payjoinResult = await payjoinApi.attemptPayjoin(txData.psbtBase64, payjoinUrl);
+
+          if (payjoinResult.success && payjoinResult.proposalPsbt) {
+            // Payjoin succeeded - use the proposal PSBT
+            psbtToSign = payjoinResult.proposalPsbt;
+            setPayjoinStatus('success');
+            log.info('Payjoin successful, using proposal PSBT');
+          } else {
+            // Payjoin failed - fall back to regular transaction
+            setPayjoinStatus('failed');
+            log.warn('Payjoin failed, falling back to regular transaction', { error: payjoinResult.error });
+          }
+        } catch (pjError) {
+          // Payjoin error - fall back to regular transaction
+          setPayjoinStatus('failed');
+          log.warn('Payjoin error, falling back to regular transaction', { error: pjError });
+        }
+      }
+
+      // Update txData with the PSBT to sign (either original or Payjoin proposal)
+      txData.psbtBase64 = psbtToSign;
 
       // Step 2: Sign and broadcast
       let signedPsbt: string | undefined;
@@ -1530,23 +1632,26 @@ export const SendTransaction: React.FC = () => {
                         <input
                           type="text"
                           value={output.address}
-                          onChange={(e) => updateOutput(index, 'address', e.target.value)}
+                          onChange={(e) => handleAddressInput(index, e.target.value)}
                           disabled={isResumingDraft}
-                          placeholder="bc1q..."
+                          placeholder="bc1q... or bitcoin:..."
                           className={`block w-full px-4 py-2.5 rounded-xl border ${
                             outputsValid[index] === true
                               ? 'border-green-500 dark:border-green-400'
                               : outputsValid[index] === false
                               ? 'border-rose-500 dark:border-rose-400'
+                              : payjoinUrl && index === 0
+                              ? 'border-zen-indigo dark:border-zen-indigo'
                               : 'border-sanctuary-300 dark:border-sanctuary-700'
                           } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
-                        {outputsValid[index] === true && (
+                        {payjoinUrl && index === 0 ? (
+                          <Shield className="absolute right-4 top-3 w-4 h-4 text-zen-indigo" title="Payjoin available" />
+                        ) : outputsValid[index] === true ? (
                           <Check className="absolute right-4 top-3 w-4 h-4 text-green-500" />
-                        )}
-                        {outputsValid[index] === false && (
+                        ) : outputsValid[index] === false ? (
                           <X className="absolute right-4 top-3 w-4 h-4 text-rose-500" />
-                        )}
+                        ) : null}
                       </div>
                       {!isResumingDraft && (
                         <Button
@@ -1570,6 +1675,17 @@ export const SendTransaction: React.FC = () => {
                   )}
                   {!isConsolidation && outputsValid[index] === false && (
                     <p className="text-xs text-rose-500">Invalid Bitcoin address</p>
+                  )}
+                  {payjoinUrl && index === 0 && (
+                    <div className="flex items-center space-x-1.5 mt-1">
+                      <Shield className="w-3 h-3 text-zen-indigo" />
+                      <p className="text-xs text-zen-indigo">
+                        Payjoin enabled - enhanced privacy for this transaction
+                        {payjoinStatus === 'attempting' && ' (attempting...)'}
+                        {payjoinStatus === 'success' && ' ✓'}
+                        {payjoinStatus === 'failed' && ' (fell back to regular send)'}
+                      </p>
+                    </div>
                   )}
 
                   {/* QR Scanner for this output */}

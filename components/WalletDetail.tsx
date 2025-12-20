@@ -9,6 +9,7 @@ import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
 import * as draftsApi from '../src/api/drafts';
+import * as payjoinApi from '../src/api/payjoin';
 import {
   useWallet,
   useWalletUtxos,
@@ -366,6 +367,52 @@ export const WalletDetail: React.FC = () => {
 
   // Receive Modal State
   const [showReceive, setShowReceive] = useState(false);
+  const [payjoinEnabled, setPayjoinEnabled] = useState(false);
+  const [payjoinUri, setPayjoinUri] = useState<string | null>(null);
+  const [payjoinLoading, setPayjoinLoading] = useState(false);
+  const [receiveAmount, setReceiveAmount] = useState<string>('');
+
+  // Get first unused address for Payjoin
+  const receiveAddressForPayjoin = useMemo(() => {
+    return addresses.find(a => !a.used) || addresses[0] || null;
+  }, [addresses]);
+
+  // Fetch Payjoin URI when enabled
+  useEffect(() => {
+    if (!payjoinEnabled || !receiveAddressForPayjoin?.id) {
+      setPayjoinUri(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchUri = async () => {
+      setPayjoinLoading(true);
+      try {
+        const result = await payjoinApi.getPayjoinUri(receiveAddressForPayjoin.id, {
+          amount: receiveAmount ? Math.round(parseFloat(receiveAmount) * 100000000) : undefined,
+        });
+        if (!cancelled) {
+          setPayjoinUri(result.uri);
+        }
+      } catch (err) {
+        log.error('Failed to generate Payjoin URI', err);
+        if (!cancelled) {
+          setPayjoinUri(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setPayjoinLoading(false);
+        }
+      }
+    };
+
+    // Debounce amount changes
+    const timeoutId = setTimeout(fetchUri, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [payjoinEnabled, receiveAmount, receiveAddressForPayjoin?.id]);
 
   // Clipboard functionality
   const { copy, isCopied } = useCopyToClipboard();
@@ -2246,14 +2293,24 @@ export const WalletDetail: React.FC = () => {
 
       {/* Receive Modal */}
       {showReceive && (() => {
-        const receiveAddress = addresses.find(a => !a.used)?.address || addresses[0]?.address || '';
+        const receiveAddress = receiveAddressForPayjoin?.address || '';
+        // Generate display value based on Payjoin state
+        const displayValue = payjoinUri || receiveAddress;
+
+        const closeReceiveModal = () => {
+          setShowReceive(false);
+          setPayjoinEnabled(false);
+          setPayjoinUri(null);
+          setReceiveAmount('');
+        };
+
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowReceive(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closeReceiveModal}>
             <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">Receive Bitcoin</h3>
                 <button
-                  onClick={() => setShowReceive(false)}
+                  onClick={closeReceiveModal}
                   className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
                 >
                   <X className="w-5 h-5" />
@@ -2262,25 +2319,84 @@ export const WalletDetail: React.FC = () => {
               {receiveAddress ? (
                 <div className="flex flex-col items-center">
                   <div className="bg-white p-4 rounded-xl mb-4 shadow-sm">
-                    <QRCodeSVG value={receiveAddress} size={200} level="M" />
+                    {payjoinLoading ? (
+                      <div className="w-[200px] h-[200px] flex items-center justify-center">
+                        <RefreshCw className="w-8 h-8 animate-spin text-sanctuary-400" />
+                      </div>
+                    ) : (
+                      <QRCodeSVG value={displayValue} size={200} level="M" />
+                    )}
                   </div>
+
+                  {/* Payjoin Toggle */}
+                  <div className="w-full mb-4 p-3 surface-muted rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Shield className="w-4 h-4 text-zen-indigo" />
+                        <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+                          Payjoin (BIP78)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setPayjoinEnabled(!payjoinEnabled)}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${
+                          payjoinEnabled ? 'bg-zen-indigo' : 'bg-sanctuary-300 dark:bg-sanctuary-600'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                            payjoinEnabled ? 'translate-x-5' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {payjoinEnabled && (
+                      <p className="text-xs text-sanctuary-500 mt-2">
+                        Enhanced privacy: the sender will mix their inputs with yours.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Amount Input (optional, for BIP21) */}
+                  {payjoinEnabled && (
+                    <div className="w-full mb-4">
+                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">Amount (optional)</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          step="0.00000001"
+                          min="0"
+                          value={receiveAmount}
+                          onChange={(e) => setReceiveAmount(e.target.value)}
+                          placeholder="0.00000000"
+                          className="flex-1 px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono"
+                        />
+                        <span className="text-sm text-sanctuary-500">BTC</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="w-full">
-                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Receive Address</label>
+                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">
+                      {payjoinEnabled ? 'BIP21 URI (with Payjoin)' : 'Receive Address'}
+                    </label>
                     <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
                       <code className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
-                        {receiveAddress}
+                        {displayValue}
                       </code>
                       <button
-                        onClick={() => copy(receiveAddress)}
-                        className={`flex-shrink-0 p-2 rounded transition-colors ${isCopied(receiveAddress) ? 'bg-success-100 dark:bg-success-500/20 text-success-600 dark:text-success-400' : 'hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-400'}`}
-                        title={isCopied(receiveAddress) ? 'Copied!' : 'Copy address'}
+                        onClick={() => copy(displayValue)}
+                        className={`flex-shrink-0 p-2 rounded transition-colors ${isCopied(displayValue) ? 'bg-success-100 dark:bg-success-500/20 text-success-600 dark:text-success-400' : 'hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-400'}`}
+                        title={isCopied(displayValue) ? 'Copied!' : 'Copy'}
                       >
-                        {isCopied(receiveAddress) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        {isCopied(displayValue) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
                   <p className="text-xs text-sanctuary-500 mt-4 text-center">
-                    Send only Bitcoin (BTC) to this address.
+                    {payjoinEnabled
+                      ? 'Share this URI with a Payjoin-capable wallet for enhanced privacy.'
+                      : 'Send only Bitcoin (BTC) to this address.'}
                   </p>
                 </div>
               ) : (

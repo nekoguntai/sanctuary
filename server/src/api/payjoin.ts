@@ -1,0 +1,194 @@
+/**
+ * Payjoin API Routes (BIP78)
+ *
+ * Implements the Payjoin receiver endpoint for enhanced transaction privacy.
+ * The endpoint accepts an original PSBT from the sender and returns a
+ * modified PSBT with the receiver's input added.
+ */
+
+import { Router, Request, Response } from 'express';
+import { authenticate } from '../middleware/auth';
+import prisma from '../models/prisma';
+import { createLogger } from '../utils/logger';
+import {
+  processPayjoinRequest,
+  PayjoinErrors,
+  parseBip21Uri,
+  generateBip21Uri,
+} from '../services/payjoinService';
+
+const log = createLogger('PAYJOIN-API');
+
+const router = Router();
+
+/**
+ * POST /api/v1/payjoin/:addressId
+ * BIP78 Payjoin endpoint (receiver)
+ *
+ * This endpoint is called by Payjoin-capable senders.
+ * It processes the original PSBT and returns a proposal with the receiver's input added.
+ *
+ * Query params:
+ *   v=1 (required) - Protocol version
+ *   minfeerate (optional) - Minimum fee rate in sat/vB
+ *   maxadditionalfeecontribution (optional) - Max additional fee receiver will pay
+ *
+ * Body: Original PSBT (text/plain, base64)
+ * Returns: Proposal PSBT (text/plain, base64)
+ */
+router.post('/:addressId', async (req: Request, res: Response) => {
+  const { addressId } = req.params;
+  const { v, minfeerate } = req.query;
+
+  // BIP78 requires v=1
+  if (v !== '1') {
+    log.warn('Unsupported Payjoin protocol version', { version: v });
+    return res.status(400).type('text/plain').send(PayjoinErrors.VERSION_UNSUPPORTED);
+  }
+
+  // Get the PSBT from body (raw text)
+  const originalPsbt = typeof req.body === 'string'
+    ? req.body
+    : req.body?.toString?.();
+
+  if (!originalPsbt || originalPsbt.length === 0) {
+    log.warn('Empty PSBT in Payjoin request');
+    return res.status(400).type('text/plain').send(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
+  }
+
+  try {
+    const result = await processPayjoinRequest(
+      addressId,
+      originalPsbt,
+      parseFloat(minfeerate as string) || 1
+    );
+
+    if (!result.success) {
+      log.info('Payjoin request rejected', {
+        addressId,
+        error: result.error,
+        message: result.errorMessage,
+      });
+      return res.status(400).type('text/plain').send(result.error || PayjoinErrors.RECEIVER_ERROR);
+    }
+
+    log.info('Payjoin proposal sent', { addressId });
+    res.type('text/plain').send(result.proposalPsbt);
+  } catch (err) {
+    log.error('Payjoin endpoint error', { error: String(err) });
+    res.status(500).type('text/plain').send(PayjoinErrors.RECEIVER_ERROR);
+  }
+});
+
+// ========================================
+// Authenticated endpoints for wallet management
+// ========================================
+
+// Apply authentication to the following routes
+router.use(authenticate);
+
+/**
+ * GET /api/v1/payjoin/address/:addressId/uri
+ * Generate a BIP21 URI with Payjoin endpoint for an address
+ */
+router.get('/address/:addressId/uri', async (req: Request, res: Response) => {
+  try {
+    const { addressId } = req.params;
+    const { amount, label, message } = req.query;
+    const userId = req.user?.userId;
+
+    // Get address and verify access
+    const address = await prisma.address.findFirst({
+      where: {
+        id: addressId,
+        wallet: {
+          OR: [
+            { users: { some: { userId } } },
+            { group: { members: { some: { userId } } } },
+          ],
+        },
+      },
+    });
+
+    if (!address) {
+      return res.status(404).json({ error: 'Address not found or access denied' });
+    }
+
+    // Generate Payjoin URL
+    // In production, this should be the public URL of the server
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const payjoinUrl = `${baseUrl}/api/v1/payjoin/${addressId}`;
+
+    const uri = generateBip21Uri(address.address, {
+      amount: amount ? parseInt(amount as string, 10) : undefined,
+      label: label as string,
+      message: message as string,
+      payjoinUrl,
+    });
+
+    res.json({
+      uri,
+      address: address.address,
+      payjoinUrl,
+    });
+  } catch (error) {
+    log.error('Error generating Payjoin URI', { error: String(error) });
+    res.status(500).json({ error: 'Failed to generate Payjoin URI' });
+  }
+});
+
+/**
+ * POST /api/v1/payjoin/parse-uri
+ * Parse a BIP21 URI to extract address and Payjoin URL
+ */
+router.post('/parse-uri', async (req: Request, res: Response) => {
+  try {
+    const { uri } = req.body;
+
+    if (!uri || typeof uri !== 'string') {
+      return res.status(400).json({ error: 'URI is required' });
+    }
+
+    const parsed = parseBip21Uri(uri);
+
+    res.json({
+      address: parsed.address,
+      amount: parsed.amount,
+      label: parsed.label,
+      message: parsed.message,
+      payjoinUrl: parsed.payjoinUrl,
+      hasPayjoin: !!parsed.payjoinUrl,
+    });
+  } catch (error) {
+    log.error('Error parsing BIP21 URI', { error: String(error) });
+    res.status(400).json({ error: 'Invalid URI format' });
+  }
+});
+
+/**
+ * POST /api/v1/payjoin/attempt
+ * Attempt to perform a Payjoin send (for testing)
+ */
+router.post('/attempt', async (req: Request, res: Response) => {
+  try {
+    const { psbt, payjoinUrl } = req.body;
+
+    if (!psbt || !payjoinUrl) {
+      return res.status(400).json({ error: 'psbt and payjoinUrl are required' });
+    }
+
+    const payjoinService = await import('../services/payjoinService');
+    const result = await payjoinService.attemptPayjoinSend(
+      psbt,
+      payjoinUrl,
+      [0] // Assume first input is sender's
+    );
+
+    res.json(result);
+  } catch (error) {
+    log.error('Error attempting Payjoin', { error: String(error) });
+    res.status(500).json({ error: 'Payjoin attempt failed' });
+  }
+});
+
+export default router;

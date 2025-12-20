@@ -22,6 +22,7 @@ import adminRoutes from './api/admin';
 import syncRoutes from './api/sync';
 import pushRoutes from './api/push';
 import draftRoutes from './api/drafts';
+import payjoinRoutes from './api/payjoin';
 import { initializeWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
@@ -120,6 +121,7 @@ app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
 app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
 app.use('/api/v1', draftRoutes);  // Draft routes include wallet prefix
+app.use('/api/v1/payjoin', payjoinRoutes);  // Payjoin (BIP78) routes
 
 // 404 handler
 app.use((req: Request, res: Response) => {

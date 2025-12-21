@@ -168,3 +168,38 @@ export async function startOllamaContainer(): Promise<ContainerActionResponse> {
 export async function stopOllamaContainer(): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>('/ai/ollama-container/stop', {});
 }
+
+// ========================================
+// SYSTEM RESOURCES CHECK
+// ========================================
+
+export interface SystemResources {
+  ram: {
+    total: number;      // Total RAM in MB
+    available: number;  // Available RAM in MB
+    required: number;   // Minimum required RAM in MB
+    sufficient: boolean;
+  };
+  disk: {
+    total: number;      // Total disk space in MB
+    available: number;  // Available disk space in MB
+    required: number;   // Minimum required disk in MB
+    sufficient: boolean;
+  };
+  gpu: {
+    available: boolean; // GPU detected
+    name: string | null;
+  };
+  overall: {
+    sufficient: boolean;
+    warnings: string[];
+  };
+}
+
+/**
+ * Check system resources before enabling AI
+ * Returns RAM, disk space, and GPU availability with sufficiency indicators.
+ */
+export async function getSystemResources(): Promise<SystemResources> {
+  return apiClient.get<SystemResources>('/ai/system-resources');
+}

@@ -172,14 +172,14 @@ export const AIQueryInput: React.FC<AIQueryInputProps> = ({
 
       {/* Result Display */}
       {result && (
-        <div className="p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
+        <div className="p-3 bg-primary-50 dark:bg-sanctuary-800 border border-primary-200 dark:border-sanctuary-600 rounded-lg">
           <div className="flex items-start gap-3">
             <Brain className="w-4 h-4 text-primary-600 dark:text-primary-400 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-primary-900 dark:text-primary-100 mb-1">
+              <p className="text-xs font-medium text-primary-900 dark:text-sanctuary-100 mb-1">
                 AI interpreted your query as:
               </p>
-              <p className="text-xs text-primary-700 dark:text-primary-300 font-mono break-all">
+              <p className="text-sm text-primary-800 dark:text-sanctuary-200 font-mono break-all">
                 {formatResult(result)}
               </p>
             </div>

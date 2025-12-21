@@ -27,6 +27,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { notificationService } from '../websocket/notifications';
 
 const log = createLogger('AI-INTERNAL');
 
@@ -82,10 +83,48 @@ const restrictToInternalNetwork = (req: Request, res: Response, next: NextFuncti
   next();
 };
 
-// All internal AI endpoints require:
-// 1. Request from internal network (Docker containers only)
-// 2. Valid JWT authentication
+// Apply internal network restriction to all routes
 router.use(restrictToInternalNetwork);
+
+/**
+ * POST /internal/ai/pull-progress
+ *
+ * Receives progress updates from AI container during model pulls.
+ * Broadcasts progress to connected WebSocket clients.
+ *
+ * Note: This endpoint only requires internal network access (no JWT auth)
+ * since it's called by the AI container, not a user.
+ */
+router.post('/pull-progress', (req: Request, res: Response) => {
+  try {
+    const { model, status, completed, total, digest, error } = req.body;
+
+    if (!model || !status) {
+      return res.status(400).json({ error: 'model and status required' });
+    }
+
+    // Calculate percent
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    // Broadcast to connected clients
+    notificationService.broadcastModelDownloadProgress({
+      model,
+      status,
+      completed: completed || 0,
+      total: total || 0,
+      percent,
+      digest,
+      error,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    log.error('Error processing pull progress', { error: String(err) });
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// Other internal AI endpoints also require JWT authentication
 router.use(authenticate);
 
 /**

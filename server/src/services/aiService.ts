@@ -192,6 +192,9 @@ async function getAIConfig(): Promise<AIConfig> {
   }
 }
 
+// Re-sync config periodically to handle container restarts
+const CONFIG_RESYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Sync configuration to AI container
  * SECURITY: Only syncs when config actually changes (hash-based detection)
@@ -199,9 +202,11 @@ async function getAIConfig(): Promise<AIConfig> {
  */
 async function syncConfigToContainer(config: AIConfig, force = false): Promise<boolean> {
   const currentHash = hashConfig(config);
+  const timeSinceLastSync = Date.now() - configSyncState.lastSyncTime;
 
-  // Skip sync if config hasn't changed and last sync was successful
-  if (!force && configSyncState.lastHash === currentHash && configSyncState.syncSuccess) {
+  // Skip sync if config hasn't changed, last sync was successful, and within resync interval
+  // This ensures we re-sync periodically to handle AI container restarts
+  if (!force && configSyncState.lastHash === currentHash && configSyncState.syncSuccess && timeSinceLastSync < CONFIG_RESYNC_INTERVAL_MS) {
     return true;
   }
 
@@ -602,6 +607,45 @@ export async function pullModel(model: string): Promise<{
 }
 
 /**
+ * Delete a model from Ollama
+ */
+export async function deleteModel(model: string): Promise<{
+  success: boolean;
+  model?: string;
+  error?: string;
+}> {
+  const config = await getAIConfig();
+
+  if (!config.endpoint) {
+    return { success: false, error: 'No AI endpoint configured' };
+  }
+
+  // Sync config first
+  await syncConfigToContainer(config);
+
+  try {
+    const response = await fetch(`${AI_CONTAINER_URL}/delete-model`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json().catch(() => ({}));
+      const error = validateResponse<{ error?: string }>(errorJson, []);
+      return { success: false, error: error?.error || 'Delete failed' };
+    }
+
+    const json = await response.json() as { model?: string };
+    return { success: true, model: json.model };
+  } catch (error) {
+    log.error('Delete model error', { error: String(error) });
+    return { success: false, error: 'Delete operation failed' };
+  }
+}
+
+/**
  * AI Service - exported for use in API routes
  */
 export const aiService = {
@@ -613,5 +657,6 @@ export const aiService = {
   detectOllama,
   listModels,
   pullModel,
+  deleteModel,
   forceSyncConfig,
 };

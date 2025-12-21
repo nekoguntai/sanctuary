@@ -9,6 +9,7 @@ import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, Shiel
 import { TransactionActions } from './TransactionActions';
 import { LabelBadges } from './LabelSelector';
 import { AILabelSuggestion } from './AILabelSuggestion';
+import { useAIStatus } from '../hooks/useAIStatus';
 import { createLogger } from '../utils/logger';
 import type { TransactionStats } from '../src/api/transactions';
 
@@ -50,6 +51,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   transactionStats,
 }) => {
   const { format } = useCurrency();
+  const { enabled: aiEnabled } = useAIStatus();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [explorerUrl, setExplorerUrl] = useState('https://mempool.space');
   const [copied, setCopied] = useState(false);
@@ -772,12 +774,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                         {editingLabels ? (
                           <div className="space-y-3">
-                            {/* AI Label Suggestion */}
-                            <AILabelSuggestion
-                              transaction={selectedTx}
-                              existingLabels={availableLabels.map(l => l.name)}
-                              onSuggestionAccepted={handleAISuggestion}
-                            />
+                            {/* AI Label Suggestion - only show when AI is enabled */}
+                            {aiEnabled && (
+                              <AILabelSuggestion
+                                transaction={selectedTx}
+                                existingLabels={availableLabels.map(l => l.name)}
+                                onSuggestionAccepted={handleAISuggestion}
+                              />
+                            )}
 
                             {availableLabels.length === 0 ? (
                               <p className="text-sm text-sanctuary-500">No labels available. Create labels in wallet settings.</p>

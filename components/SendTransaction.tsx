@@ -1570,7 +1570,7 @@ export const SendTransaction: React.FC = () => {
                           } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
                         />
                         {payjoinUrl && index === 0 ? (
-                          <Shield className="absolute right-4 top-3 w-4 h-4 text-zen-indigo" title="Payjoin available" />
+                          <Shield className="absolute right-4 top-3 w-4 h-4 text-zen-indigo" />
                         ) : outputsValid[index] === true ? (
                           <Check className="absolute right-4 top-3 w-4 h-4 text-green-500" />
                         ) : outputsValid[index] === false ? (

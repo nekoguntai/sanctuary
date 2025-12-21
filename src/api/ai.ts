@@ -117,3 +117,54 @@ export async function listModels(): Promise<ListModelsResponse> {
 export async function pullModel(model: string): Promise<PullModelResponse> {
   return apiClient.post<PullModelResponse>('/ai/pull-model', { model });
 }
+
+export interface DeleteModelResponse {
+  success: boolean;
+  model?: string;
+  error?: string;
+}
+
+/**
+ * Delete a model from Ollama
+ */
+export async function deleteModel(model: string): Promise<DeleteModelResponse> {
+  return apiClient.delete<DeleteModelResponse>('/ai/delete-model', { model });
+}
+
+// ========================================
+// OLLAMA CONTAINER MANAGEMENT
+// ========================================
+
+export interface OllamaContainerStatus {
+  available: boolean;  // Docker proxy available
+  exists: boolean;     // Container exists
+  running: boolean;    // Container is running
+  status: string;      // Container state (running, exited, etc.)
+  message?: string;
+}
+
+export interface ContainerActionResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Get the status of the bundled Ollama container
+ */
+export async function getOllamaContainerStatus(): Promise<OllamaContainerStatus> {
+  return apiClient.get<OllamaContainerStatus>('/ai/ollama-container/status');
+}
+
+/**
+ * Start the bundled Ollama container
+ */
+export async function startOllamaContainer(): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>('/ai/ollama-container/start', {});
+}
+
+/**
+ * Stop the bundled Ollama container
+ */
+export async function stopOllamaContainer(): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>('/ai/ollama-container/stop', {});
+}

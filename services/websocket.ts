@@ -22,6 +22,7 @@ export type WebSocketEventType =
   | 'mempool'
   | 'sync'
   | 'log'
+  | 'modelDownload'
   | 'connected'
   | 'disconnected'
   | 'error';

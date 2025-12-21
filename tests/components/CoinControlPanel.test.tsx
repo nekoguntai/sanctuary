@@ -6,6 +6,8 @@ import React from 'react';
 import { CoinControlPanel } from '../../components/CoinControlPanel';
 import type { UTXO } from '../../types';
 
+type UIStrategy = 'auto' | 'privacy' | 'manual' | 'consolidate';
+
 // Mock the transactions API
 vi.mock('../../src/api/transactions', () => ({
   getWalletPrivacy: vi.fn().mockResolvedValue({
@@ -58,9 +60,9 @@ vi.mock('../../utils/logger', () => ({
 }));
 
 describe('CoinControlPanel', () => {
-  let mockOnToggleSelect: ReturnType<typeof vi.fn>;
-  let mockOnStrategyChange: ReturnType<typeof vi.fn>;
-  let mockOnSetSelectedUtxos: ReturnType<typeof vi.fn>;
+  let mockOnToggleSelect: (utxoId: string) => void;
+  let mockOnStrategyChange: (strategy: UIStrategy) => void;
+  let mockOnSetSelectedUtxos: (utxoIds: Set<string>) => void;
 
   const mockUtxos: UTXO[] = [
     {

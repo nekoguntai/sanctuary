@@ -5,11 +5,13 @@
  * This page configures the separate AI container that handles all AI operations.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Brain, Check, AlertCircle, Loader2, Shield, Server, ExternalLink, Search, Download, ChevronDown, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Brain, Check, AlertCircle, Loader2, Shield, Server, ExternalLink, Search, Download, ChevronDown, RefreshCw, Play, Square, Trash2 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import * as aiApi from '../src/api/ai';
 import { createLogger } from '../utils/logger';
+import { useModelDownloadProgress, ModelDownloadProgress } from '../hooks/useWebSocket';
+import { invalidateAIStatusCache } from '../hooks/useAIStatus';
 
 const log = createLogger('AISettings');
 
@@ -55,15 +57,57 @@ export default function AISettings() {
   const [pullProgress, setPullProgress] = useState('');
   const [pullModelName, setPullModelName] = useState('');
   const [customModelName, setCustomModelName] = useState('');
+  const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgress | null>(null);
 
-  // Load settings on mount
+  // Subscribe to model download progress via WebSocket
+  const handleDownloadProgress = useCallback((progress: ModelDownloadProgress) => {
+    if (progress.model === pullModelName) {
+      setDownloadProgress(progress);
+
+      // Update status message
+      if (progress.status === 'complete') {
+        setPullProgress(`Successfully pulled ${progress.model}`);
+        setIsPulling(false);
+        loadModels();
+        setAiModel(progress.model);
+        setTimeout(() => {
+          setPullProgress('');
+          setPullModelName('');
+          setDownloadProgress(null);
+        }, 3000);
+      } else if (progress.status === 'error') {
+        setPullProgress(`Failed: ${progress.error || 'Unknown error'}`);
+        setIsPulling(false);
+        setTimeout(() => {
+          setPullProgress('');
+          setPullModelName('');
+          setDownloadProgress(null);
+        }, 5000);
+      }
+    }
+  }, [pullModelName]);
+
+  useModelDownloadProgress(handleDownloadProgress);
+
+  // Container state
+  const [containerStatus, setContainerStatus] = useState<aiApi.OllamaContainerStatus | null>(null);
+  const [isStartingContainer, setIsStartingContainer] = useState(false);
+  const [containerMessage, setContainerMessage] = useState('');
+
+  // Load settings and container status on mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const settings = await adminApi.getSystemSettings();
+        const [settings, containerResult] = await Promise.all([
+          adminApi.getSystemSettings(),
+          aiApi.getOllamaContainerStatus().catch(() => null),
+        ]);
         setAiEnabled(settings.aiEnabled || false);
         setAiEndpoint(settings.aiEndpoint || '');
         setAiModel(settings.aiModel || '');
+        if (containerResult) {
+          setContainerStatus(containerResult);
+        }
       } catch (error) {
         log.error('Failed to load AI settings', { error });
       } finally {
@@ -98,19 +142,91 @@ export default function AISettings() {
     setIsSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
+    setContainerMessage('');
 
     const newValue = !aiEnabled;
 
     try {
+      // If enabling AI and bundled container exists but not running, start it
+      if (newValue && containerStatus?.available && containerStatus?.exists && !containerStatus?.running) {
+        setIsStartingContainer(true);
+        setContainerMessage('Starting AI container...');
+
+        const startResult = await aiApi.startOllamaContainer();
+        if (!startResult.success) {
+          setSaveError(`Failed to start AI container: ${startResult.message}`);
+          setIsStartingContainer(false);
+          setIsSaving(false);
+          return;
+        }
+
+        // Update container status
+        setContainerStatus(prev => prev ? { ...prev, running: true, status: 'running' } : prev);
+        setContainerMessage('Container started! Waiting for Ollama to be ready...');
+
+        // Wait a bit for Ollama to initialize
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        setIsStartingContainer(false);
+      }
+
+      // Enable the AI setting
       await adminApi.updateSystemSettings({ aiEnabled: newValue });
       setAiEnabled(newValue);
+      invalidateAIStatusCache(); // Refresh AI status across the app
+
+      // If enabling and container is running, auto-detect and configure
+      if (newValue && containerStatus?.available && (containerStatus?.running || containerStatus?.exists)) {
+        setContainerMessage('Detecting Ollama endpoint...');
+
+        // Small delay then detect
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        try {
+          const detectResult = await aiApi.detectOllama();
+          if (detectResult.found && detectResult.endpoint) {
+            setAiEndpoint(detectResult.endpoint);
+            setContainerMessage(`Found Ollama at ${detectResult.endpoint}`);
+
+            // If models are available, select first one
+            if (detectResult.models && detectResult.models.length > 0) {
+              const firstModel = detectResult.models[0];
+              setAiModel(firstModel);
+
+              // Save the configuration automatically
+              await adminApi.updateSystemSettings({
+                aiEndpoint: detectResult.endpoint,
+                aiModel: firstModel,
+              });
+
+              setContainerMessage(`Configured with ${firstModel}`);
+
+              // Load models list
+              setTimeout(loadModels, 500);
+            } else {
+              // Endpoint found but no models - save endpoint
+              await adminApi.updateSystemSettings({
+                aiEndpoint: detectResult.endpoint,
+              });
+              setContainerMessage('Ollama connected! Pull a model below to get started.');
+            }
+          }
+        } catch (detectError) {
+          log.error('Auto-detect failed', { error: detectError });
+          // Non-fatal - user can configure manually
+        }
+      }
+
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setContainerMessage('');
+      }, 5000);
     } catch (error) {
       log.error('Failed to toggle AI', { error });
       setSaveError('Failed to update AI settings');
     } finally {
       setIsSaving(false);
+      setIsStartingContainer(false);
     }
   };
 
@@ -164,14 +280,20 @@ export default function AISettings() {
       const result = await aiApi.detectOllama();
       if (result.found && result.endpoint) {
         setAiEndpoint(result.endpoint);
-        setDetectMessage(`Found Ollama at ${result.endpoint}`);
-        // If models were detected, show them
+
+        // Auto-save the endpoint to database
+        await adminApi.updateSystemSettings({ aiEndpoint: result.endpoint });
+
+        // If models were detected, show them and auto-select first
         if (result.models && result.models.length > 0) {
-          setDetectMessage(`Found Ollama with ${result.models.length} model(s)`);
-          // Auto-select first model if none selected
+          setDetectMessage(`Found Ollama with ${result.models.length} model(s) - saved!`);
           if (!aiModel && result.models.length > 0) {
-            setAiModel(result.models[0]);
+            const firstModel = result.models[0];
+            setAiModel(firstModel);
+            await adminApi.updateSystemSettings({ aiModel: firstModel });
           }
+        } else {
+          setDetectMessage(`Found Ollama at ${result.endpoint} - saved!`);
         }
         // Reload models list
         setTimeout(loadModels, 500);
@@ -196,22 +318,24 @@ export default function AISettings() {
     setIsPulling(true);
     setPullModelName(model);
     setPullProgress('Starting download...');
+    setDownloadProgress(null);
 
     try {
       const result = await aiApi.pullModel(model);
-      if (result.success) {
-        setPullProgress(`Successfully pulled ${model}`);
-        // Reload models list
-        await loadModels();
-        // Auto-select the pulled model
-        setAiModel(model);
-      } else {
+      if (!result.success) {
+        // Immediate failure (before streaming started)
         setPullProgress(`Failed: ${result.error}`);
+        setIsPulling(false);
+        setTimeout(() => {
+          setPullProgress('');
+          setPullModelName('');
+        }, 5000);
       }
+      // If success, progress will come via WebSocket
+      // The handleDownloadProgress callback will handle completion
     } catch (error: any) {
       log.error('Pull model failed', { error });
       setPullProgress(`Error: ${error.message || 'Pull failed'}`);
-    } finally {
       setIsPulling(false);
       setTimeout(() => {
         setPullProgress('');
@@ -220,9 +344,117 @@ export default function AISettings() {
     }
   };
 
+  // Delete model state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteModelName, setDeleteModelName] = useState('');
+
+  const handleDeleteModel = async (model: string) => {
+    if (!confirm(`Delete ${model}? This will free up disk space but you'll need to pull it again to use it.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteModelName(model);
+
+    try {
+      const result = await aiApi.deleteModel(model);
+      if (result.success) {
+        // If we just deleted the currently selected model, clear selection
+        if (aiModel === model) {
+          setAiModel('');
+        }
+        // Reload models list
+        await loadModels();
+      } else {
+        alert(`Failed to delete: ${result.error}`);
+      }
+    } catch (error: any) {
+      log.error('Delete model failed', { error });
+      alert(`Error: ${error.message || 'Delete failed'}`);
+    } finally {
+      setIsDeleting(false);
+      setDeleteModelName('');
+    }
+  };
+
+  // Format bytes to human readable
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
   const formatModelSize = (bytes: number): string => {
     const gb = bytes / (1024 * 1024 * 1024);
     return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  };
+
+  const refreshContainerStatus = async () => {
+    try {
+      const status = await aiApi.getOllamaContainerStatus();
+      setContainerStatus(status);
+    } catch (error) {
+      log.error('Failed to refresh container status', { error });
+    }
+  };
+
+  const handleStartContainer = async () => {
+    setIsStartingContainer(true);
+    setContainerMessage('Starting AI container...');
+
+    try {
+      const result = await aiApi.startOllamaContainer();
+      if (result.success) {
+        setContainerMessage('Container started! Waiting for Ollama to be ready...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await refreshContainerStatus();
+
+        // Auto-detect after starting
+        setContainerMessage('Detecting Ollama endpoint...');
+        const detectResult = await aiApi.detectOllama();
+        if (detectResult.found && detectResult.endpoint) {
+          setAiEndpoint(detectResult.endpoint);
+          if (detectResult.models && detectResult.models.length > 0) {
+            setAiModel(detectResult.models[0]);
+            setContainerMessage(`Connected with ${detectResult.models[0]}`);
+          } else {
+            setContainerMessage('Connected! Pull a model to get started.');
+          }
+          setTimeout(loadModels, 500);
+        } else {
+          setContainerMessage('Container running. Click Detect to configure.');
+        }
+      } else {
+        setContainerMessage(`Failed: ${result.message}`);
+      }
+    } catch (error: any) {
+      log.error('Failed to start container', { error });
+      setContainerMessage(`Error: ${error.message || 'Failed to start'}`);
+    } finally {
+      setIsStartingContainer(false);
+      setTimeout(() => setContainerMessage(''), 8000);
+    }
+  };
+
+  const handleStopContainer = async () => {
+    setContainerMessage('Stopping AI container...');
+
+    try {
+      const result = await aiApi.stopOllamaContainer();
+      if (result.success) {
+        setContainerMessage('Container stopped');
+        await refreshContainerStatus();
+      } else {
+        setContainerMessage(`Failed: ${result.message}`);
+      }
+    } catch (error: any) {
+      log.error('Failed to stop container', { error });
+      setContainerMessage(`Error: ${error.message || 'Failed to stop'}`);
+    } finally {
+      setTimeout(() => setContainerMessage(''), 5000);
+    }
   };
 
   if (loading) {
@@ -305,16 +537,18 @@ export default function AISettings() {
                 </label>
                 <p className="text-sm text-sanctuary-500 max-w-md">
                   Enable AI-powered transaction labeling and natural language queries.
-                  Requires Ollama or another AI backend running on your host.
+                  {containerStatus?.available && containerStatus?.exists
+                    ? ' The bundled AI container will start automatically.'
+                    : ' Requires Ollama or another AI backend.'}
                 </p>
               </div>
             </div>
             <button
               onClick={handleToggleAI}
-              disabled={isSaving}
+              disabled={isSaving || isStartingContainer}
               className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
                 aiEnabled ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
-              } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${(isSaving || isStartingContainer) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span
                 className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
@@ -323,8 +557,89 @@ export default function AISettings() {
               />
             </button>
           </div>
+
+          {/* Container status message */}
+          {(containerMessage || isStartingContainer) && (
+            <div className="mt-4 flex items-center space-x-2 text-sm text-primary-600 dark:text-primary-400">
+              {isStartingContainer && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{containerMessage}</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Bundled Container Status */}
+      {containerStatus?.available && containerStatus?.exists && (
+        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+          <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
+                <Server className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                Bundled AI Container
+              </h2>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${containerStatus.running ? 'bg-emerald-500' : 'bg-sanctuary-400'}`} />
+                <div>
+                  <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    {containerStatus.running ? 'Running' : 'Stopped'}
+                  </p>
+                  <p className="text-xs text-sanctuary-500">
+                    sanctuary-ollama container
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {containerStatus.running ? (
+                  <button
+                    onClick={handleStopContainer}
+                    disabled={isStartingContainer}
+                    className="px-3 py-1.5 text-sm bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                  >
+                    <Square className="w-3 h-3" />
+                    <span>Stop</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStartContainer}
+                    disabled={isStartingContainer}
+                    className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                  >
+                    {isStartingContainer ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    <span>Start</span>
+                  </button>
+                )}
+                <button
+                  onClick={refreshContainerStatus}
+                  className="p-1.5 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                  title="Refresh status"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {containerMessage && !isStartingContainer && (
+              <p className="mt-3 text-sm text-primary-600 dark:text-primary-400">{containerMessage}</p>
+            )}
+
+            <p className="mt-3 text-xs text-sanctuary-500">
+              This is the bundled Ollama container. It will auto-start when you enable AI features.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* AI Configuration */}
       {aiEnabled && (
@@ -367,8 +682,43 @@ export default function AISettings() {
                   <span>Detect</span>
                 </button>
               </div>
+
+              {/* Use Bundled Container button */}
+              {containerStatus?.available && containerStatus?.running && aiEndpoint !== 'http://ollama:11434' && (
+                <button
+                  onClick={async () => {
+                    setDetectMessage('Connecting to bundled container...');
+                    try {
+                      const detectResult = await aiApi.detectOllama();
+                      if (detectResult.found && detectResult.endpoint) {
+                        setAiEndpoint(detectResult.endpoint);
+                        await adminApi.updateSystemSettings({ aiEndpoint: detectResult.endpoint });
+                        if (detectResult.models && detectResult.models.length > 0) {
+                          const firstModel = detectResult.models[0];
+                          setAiModel(firstModel);
+                          await adminApi.updateSystemSettings({ aiModel: firstModel });
+                          setDetectMessage(`Connected with ${firstModel} - saved!`);
+                        } else {
+                          setDetectMessage('Connected! Pull a model to get started.');
+                        }
+                        setTimeout(loadModels, 500);
+                      } else {
+                        setDetectMessage('Could not connect to bundled container.');
+                      }
+                    } catch (error) {
+                      setDetectMessage('Failed to connect.');
+                    }
+                    setTimeout(() => setDetectMessage(''), 5000);
+                  }}
+                  className="mt-2 text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center space-x-1"
+                >
+                  <Server className="w-3 h-3" />
+                  <span>Use Bundled Container</span>
+                </button>
+              )}
+
               {detectMessage && (
-                <p className={`text-xs mt-1 ${detectMessage.includes('Found') ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-500'}`}>
+                <p className={`text-xs mt-1 ${detectMessage.includes('Found') || detectMessage.includes('Connected') || detectMessage.includes('saved') ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-500'}`}>
                   {detectMessage}
                 </p>
               )}
@@ -405,16 +755,35 @@ export default function AISettings() {
                           Installed Models
                         </div>
                         {availableModels.map((model) => (
-                          <button
+                          <div
                             key={model.name}
-                            onClick={() => handleSelectModel(model.name)}
-                            className={`w-full px-3 py-2 text-left hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors flex items-center justify-between ${
+                            className={`flex items-center justify-between px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors ${
                               aiModel === model.name ? 'bg-primary-50 dark:bg-primary-900/20' : ''
                             }`}
                           >
-                            <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
-                            <span className="text-xs text-sanctuary-400">{formatModelSize(model.size)}</span>
-                          </button>
+                            <button
+                              onClick={() => handleSelectModel(model.name)}
+                              className="flex-1 text-left"
+                            >
+                              <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
+                              <span className="text-xs text-sanctuary-400 ml-2">{formatModelSize(model.size)}</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteModel(model.name);
+                              }}
+                              disabled={isDeleting}
+                              className="p-1 text-sanctuary-400 hover:text-rose-500 dark:hover:text-rose-400 disabled:opacity-50"
+                              title="Delete model"
+                            >
+                              {isDeleting && deleteModelName === model.name ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
                         ))}
                       </>
                     )}
@@ -522,7 +891,7 @@ export default function AISettings() {
             </p>
 
             {/* Pull progress */}
-            {pullProgress && (
+            {(pullProgress || downloadProgress) && (
               <div className={`mb-4 p-3 rounded-lg ${
                 pullProgress.includes('Successfully')
                   ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
@@ -530,10 +899,36 @@ export default function AISettings() {
                     ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
                     : 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
               }`}>
-                <div className="flex items-center space-x-2">
-                  {isPulling && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span className="text-sm">{pullProgress}</span>
-                </div>
+                {/* Show progress bar when downloading */}
+                {downloadProgress && downloadProgress.status === 'downloading' && downloadProgress.total > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center space-x-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Downloading {pullModelName}</span>
+                      </span>
+                      <span>{downloadProgress.percent}%</span>
+                    </div>
+                    <div className="w-full bg-primary-200 dark:bg-primary-800 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-primary-600 dark:bg-primary-400 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${downloadProgress.percent}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-sanctuary-500 dark:text-sanctuary-400">
+                      {formatBytes(downloadProgress.completed)} / {formatBytes(downloadProgress.total)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    {isPulling && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span className="text-sm">
+                      {downloadProgress?.status === 'pulling' ? 'Pulling manifest...' :
+                       downloadProgress?.status === 'verifying' ? 'Verifying...' :
+                       pullProgress}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -566,10 +961,19 @@ export default function AISettings() {
                         <p className="text-xs text-sanctuary-500 mt-0.5">{model.description}</p>
                       </div>
                       {isInstalled ? (
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center">
-                          <Check className="w-3 h-3 mr-1" />
-                          Installed
-                        </span>
+                        <button
+                          onClick={() => handleDeleteModel(model.name)}
+                          disabled={isDeleting}
+                          className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                          title="Delete model to free up space"
+                        >
+                          {isDeleting && deleteModelName === model.name ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3 h-3" />
+                          )}
+                          <span>Delete</span>
+                        </button>
                       ) : (
                         <button
                           onClick={() => handlePullModel(model.name)}
@@ -653,15 +1057,35 @@ export default function AISettings() {
                 Easiest
               </span>
             </div>
-            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
-              <div className="text-sanctuary-400"># Stop Sanctuary, restart with AI enabled:</div>
-              <div>./start.sh --stop</div>
-              <div>./start.sh --with-ai</div>
-            </div>
-            <p className="text-xs text-sanctuary-500">
-              This starts a bundled Ollama container. No external setup required.
-              Click "Detect" above after restarting to auto-configure.
-            </p>
+
+            {containerStatus?.available && containerStatus?.exists ? (
+              <>
+                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center space-x-2">
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-sm text-emerald-800 dark:text-emerald-200">
+                      Bundled AI container is available
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-sanctuary-500">
+                  The container will start automatically when you enable AI above.
+                  Models and endpoint will be configured for you.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
+                  <div className="text-sanctuary-400"># Start Sanctuary with bundled AI:</div>
+                  <div>./start.sh --stop</div>
+                  <div>./start.sh --with-ai</div>
+                </div>
+                <p className="text-xs text-sanctuary-500">
+                  Run this command once to create the bundled Ollama container.
+                  After that, it will auto-start when you enable AI above.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 my-4" />

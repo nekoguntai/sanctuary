@@ -172,6 +172,10 @@ export interface SystemSettings {
   confirmationThreshold?: number;
   deepConfirmationThreshold?: number;
   dustThreshold?: number;
+  // AI settings
+  aiEnabled?: boolean;
+  aiEndpoint?: string;
+  aiModel?: string;
 }
 
 /**

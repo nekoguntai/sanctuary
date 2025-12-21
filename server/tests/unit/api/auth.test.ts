@@ -35,6 +35,14 @@ jest.mock('../../../src/config', () => ({
   },
 }));
 
+// Mock token revocation service to prevent database initialization
+jest.mock('../../../src/services/tokenRevocation', () => ({
+  isTokenRevoked: jest.fn().mockResolvedValue(false),
+  revokeToken: jest.fn().mockResolvedValue(undefined),
+  initializeRevocationService: jest.fn(),
+  shutdownRevocationService: jest.fn(),
+}));
+
 // Mock audit service
 jest.mock('../../../src/services/auditService', () => ({
   auditService: {
@@ -84,7 +92,7 @@ describe('Authentication', () => {
         expect(token.split('.').length).toBe(3); // JWT has 3 parts
       });
 
-      it('should generate token with custom expiry', () => {
+      it('should generate token with custom expiry', async () => {
         const payload = {
           userId: 'user-123',
           username: 'testuser',
@@ -94,13 +102,13 @@ describe('Authentication', () => {
         const token = generateToken(payload, '5m');
 
         expect(token).toBeDefined();
-        const decoded = verifyToken(token);
+        const decoded = await verifyToken(token);
         expect(decoded.userId).toBe(payload.userId);
       });
     });
 
     describe('verifyToken', () => {
-      it('should verify and decode a valid token', () => {
+      it('should verify and decode a valid token', async () => {
         const payload = {
           userId: 'user-123',
           username: 'testuser',
@@ -108,36 +116,36 @@ describe('Authentication', () => {
         };
 
         const token = generateToken(payload);
-        const decoded = verifyToken(token);
+        const decoded = await verifyToken(token);
 
         expect(decoded.userId).toBe(payload.userId);
         expect(decoded.username).toBe(payload.username);
         expect(decoded.isAdmin).toBe(payload.isAdmin);
       });
 
-      it('should throw error for expired token', () => {
+      it('should throw error for expired token', async () => {
         const expiredToken = generateExpiredToken({
           userId: 'user-123',
           username: 'testuser',
           isAdmin: false,
         });
 
-        expect(() => verifyToken(expiredToken)).toThrow('Token expired');
+        await expect(verifyToken(expiredToken)).rejects.toThrow('Token expired');
       });
 
-      it('should throw error for invalid signature', () => {
+      it('should throw error for invalid signature', async () => {
         const invalidToken = generateInvalidSignatureToken({
           userId: 'user-123',
           username: 'testuser',
           isAdmin: false,
         });
 
-        expect(() => verifyToken(invalidToken)).toThrow('Invalid token');
+        await expect(verifyToken(invalidToken)).rejects.toThrow('Invalid token');
       });
 
-      it('should throw error for malformed token', () => {
-        expect(() => verifyToken('not-a-valid-token')).toThrow();
-        expect(() => verifyToken('')).toThrow();
+      it('should throw error for malformed token', async () => {
+        await expect(verifyToken('not-a-valid-token')).rejects.toThrow();
+        await expect(verifyToken('')).rejects.toThrow();
       });
     });
 
@@ -227,7 +235,7 @@ describe('Authentication', () => {
     });
 
     describe('authenticate', () => {
-      it('should authenticate valid token and attach user to request', () => {
+      it('should authenticate valid token and attach user to request', async () => {
         const payload = {
           userId: 'user-123',
           username: 'testuser',
@@ -241,19 +249,19 @@ describe('Authentication', () => {
         const { res, getResponse } = createMockResponse();
         const next = createMockNext();
 
-        authenticate(req as any, res as any, next);
+        await authenticate(req as any, res as any, next);
 
         expect(next).toHaveBeenCalled();
         expect((req as any).user).toBeDefined();
         expect((req as any).user.userId).toBe(payload.userId);
       });
 
-      it('should reject request with no token', () => {
+      it('should reject request with no token', async () => {
         const req = createMockRequest({});
         const { res, getResponse } = createMockResponse();
         const next = createMockNext();
 
-        authenticate(req as any, res as any, next);
+        await authenticate(req as any, res as any, next);
 
         const response = getResponse();
         expect(response.statusCode).toBe(401);
@@ -261,7 +269,7 @@ describe('Authentication', () => {
         expect(next).not.toHaveBeenCalled();
       });
 
-      it('should reject request with expired token', () => {
+      it('should reject request with expired token', async () => {
         const expiredToken = generateExpiredToken({
           userId: 'user-123',
           username: 'testuser',
@@ -274,7 +282,7 @@ describe('Authentication', () => {
         const { res, getResponse } = createMockResponse();
         const next = createMockNext();
 
-        authenticate(req as any, res as any, next);
+        await authenticate(req as any, res as any, next);
 
         const response = getResponse();
         expect(response.statusCode).toBe(401);
@@ -325,7 +333,7 @@ describe('Authentication', () => {
     });
 
     describe('optionalAuth', () => {
-      it('should attach user when valid token provided', () => {
+      it('should attach user when valid token provided', async () => {
         const payload = {
           userId: 'user-123',
           username: 'testuser',
@@ -339,32 +347,32 @@ describe('Authentication', () => {
         const { res } = createMockResponse();
         const next = createMockNext();
 
-        optionalAuth(req as any, res as any, next);
+        await optionalAuth(req as any, res as any, next);
 
         expect(next).toHaveBeenCalled();
         expect((req as any).user).toBeDefined();
         expect((req as any).user.userId).toBe(payload.userId);
       });
 
-      it('should proceed without user when no token', () => {
+      it('should proceed without user when no token', async () => {
         const req = createMockRequest({});
         const { res } = createMockResponse();
         const next = createMockNext();
 
-        optionalAuth(req as any, res as any, next);
+        await optionalAuth(req as any, res as any, next);
 
         expect(next).toHaveBeenCalled();
         expect((req as any).user).toBeUndefined();
       });
 
-      it('should proceed without user when invalid token', () => {
+      it('should proceed without user when invalid token', async () => {
         const req = createMockRequest({
           headers: { authorization: 'Bearer invalid-token' },
         });
         const { res } = createMockResponse();
         const next = createMockNext();
 
-        optionalAuth(req as any, res as any, next);
+        await optionalAuth(req as any, res as any, next);
 
         expect(next).toHaveBeenCalled();
         expect((req as any).user).toBeUndefined();
@@ -393,7 +401,7 @@ describe('Authentication', () => {
       });
 
       expect(token).toBeDefined();
-      const decoded = verifyToken(token);
+      const decoded = await verifyToken(token);
       expect(decoded.userId).toBe(sampleUsers.regularUser.id);
     });
 
@@ -440,7 +448,7 @@ describe('Authentication', () => {
         '5m'
       );
 
-      const decoded = verifyToken(tempToken);
+      const decoded = await verifyToken(tempToken);
       expect(decoded.pending2FA).toBe(true);
       expect(decoded.userId).toBe(user.id);
     });

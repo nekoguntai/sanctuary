@@ -188,6 +188,9 @@ export function initializeRevocationService(): void {
     });
   }, CLEANUP_INTERVAL_MS);
 
+  // Prevent interval from keeping process alive (important for tests)
+  cleanupInterval.unref();
+
   log.info('Token revocation service initialized (PostgreSQL-backed)');
 }
 

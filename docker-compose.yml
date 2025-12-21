@@ -48,6 +48,11 @@ services:
       start_period: 10s
     networks:
       - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Backend API Server
@@ -115,6 +120,11 @@ services:
       start_period: 30s
     networks:
       - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Database Migrations & Seeding (one-time run)
@@ -134,6 +144,11 @@ services:
     networks:
       - sanctuary-network
     restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Frontend (Nginx + React) - HTTPS ONLY
@@ -173,6 +188,11 @@ services:
       start_period: 10s
     networks:
       - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Mobile API Gateway
@@ -231,6 +251,11 @@ services:
       start_period: 10s
     networks:
       - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # AI Container (Isolated AI Service)
@@ -275,6 +300,11 @@ services:
       # Add ai-internal for local-only mode (no internet)
       # Remove this line to allow internet access for cloud AI
       - ai-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Docker Socket Proxy (Security Layer)
@@ -323,6 +353,11 @@ services:
     tmpfs:
       - /run
       - /tmp
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # Ollama LLM Server (Optional - for bundled AI)
@@ -369,6 +404,11 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 # ============================================
 # Networks

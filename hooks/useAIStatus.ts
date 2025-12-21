@@ -19,9 +19,9 @@ async function fetchAIStatus(): Promise<AIStatusState> {
   try {
     const status = await aiApi.getAIStatus();
     return {
-      enabled: status.available,
+      enabled: !!status.available,
       loading: false,
-      available: status.available && !!status.containerAvailable,
+      available: !!status.available && !!status.containerAvailable,
     };
   } catch {
     return {

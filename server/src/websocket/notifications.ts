@@ -394,6 +394,10 @@ export class NotificationService {
       data: progress,
     };
 
+    // Log stats for debugging
+    const stats = wsServer.getStats();
+    log.info(`Broadcasting modelDownload: ${progress.model} ${progress.status} ${progress.percent}% to ${stats.clients} clients, channels: ${stats.channels.join(', ')}`);
+
     wsServer.broadcast(event);
 
     // Only log on status changes, not every progress update

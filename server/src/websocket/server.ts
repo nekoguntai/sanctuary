@@ -26,6 +26,10 @@ const log = createLogger('WS');
 // Timeout for unauthenticated connections (30 seconds)
 const AUTH_TIMEOUT_MS = 30000;
 
+// Connection limits to prevent resource exhaustion
+const MAX_WEBSOCKET_CONNECTIONS = parseInt(process.env.MAX_WEBSOCKET_CONNECTIONS || '10000', 10);
+const MAX_WEBSOCKET_PER_USER = parseInt(process.env.MAX_WEBSOCKET_PER_USER || '10', 10);
+
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
@@ -49,6 +53,7 @@ export class SanctauryWebSocketServer {
   private wss: WebSocketServer;
   private clients: Set<AuthenticatedWebSocket> = new Set();
   private subscriptions: Map<string, Set<AuthenticatedWebSocket>> = new Map();
+  private connectionsPerUser: Map<string, Set<AuthenticatedWebSocket>> = new Map();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({
@@ -70,14 +75,32 @@ export class SanctauryWebSocketServer {
     client.subscriptions = new Set();
     client.isAlive = true;
 
+    // Check total connection limit
+    if (this.clients.size >= MAX_WEBSOCKET_CONNECTIONS) {
+      log.warn(`Connection rejected: total limit of ${MAX_WEBSOCKET_CONNECTIONS} reached`);
+      client.close(1008, 'Server connection limit reached');
+      return;
+    }
+
     // Extract and verify JWT token from query or header
     const token = this.extractToken(request);
+
+    log.info(`WebSocket connection attempt from ${request.socket.remoteAddress}`);
 
     if (token) {
       try {
         const decoded = verifyToken(token);
         client.userId = decoded.userId;
-        log.debug(`WebSocket client authenticated: ${client.userId}`);
+
+        // Check per-user connection limit
+        const userConnections = this.connectionsPerUser.get(client.userId);
+        if (userConnections && userConnections.size >= MAX_WEBSOCKET_PER_USER) {
+          log.warn(`Connection rejected for user ${client.userId}: per-user limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+          client.close(1008, `User connection limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+          return;
+        }
+
+        log.info(`WebSocket client authenticated: ${client.userId}`);
       } catch (err) {
         log.error('WebSocket authentication failed', { error: String(err) });
         client.close(1008, 'Authentication failed');
@@ -96,6 +119,14 @@ export class SanctauryWebSocketServer {
     }
 
     this.clients.add(client);
+
+    // Track per-user connections
+    if (client.userId) {
+      if (!this.connectionsPerUser.has(client.userId)) {
+        this.connectionsPerUser.set(client.userId, new Set());
+      }
+      this.connectionsPerUser.get(client.userId)!.add(client);
+    }
 
     // Setup message handler
     client.on('message', (data: Buffer) => {
@@ -208,8 +239,28 @@ export class SanctauryWebSocketServer {
 
     try {
       const decoded = verifyToken(data.token);
-      client.userId = decoded.userId;
+      const userId = decoded.userId;
+
+      // Check per-user connection limit
+      const userConnections = this.connectionsPerUser.get(userId);
+      if (userConnections && userConnections.size >= MAX_WEBSOCKET_PER_USER) {
+        log.warn(`Authentication rejected for user ${userId}: per-user limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+        this.sendToClient(client, {
+          type: 'error',
+          data: { message: `User connection limit of ${MAX_WEBSOCKET_PER_USER} reached` },
+        });
+        client.close(1008, `User connection limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+        return;
+      }
+
+      client.userId = userId;
       log.debug(`WebSocket client authenticated via message: ${client.userId}`);
+
+      // Track per-user connection
+      if (!this.connectionsPerUser.has(userId)) {
+        this.connectionsPerUser.set(userId, new Set());
+      }
+      this.connectionsPerUser.get(userId)!.add(client);
 
       // Clear authentication timeout
       if (client.authTimeout) {
@@ -276,7 +327,7 @@ export class SanctauryWebSocketServer {
     }
     this.subscriptions.get(channel)!.add(client);
 
-    log.debug(`Client subscribed to ${channel}`);
+    log.info(`Client subscribed to ${channel} (total subscribers: ${this.subscriptions.get(channel)!.size})`);
 
     this.sendToClient(client, {
       type: 'subscribed',
@@ -320,6 +371,18 @@ export class SanctauryWebSocketServer {
     }
 
     this.clients.delete(client);
+
+    // Remove from per-user connection tracking
+    if (client.userId) {
+      const userConnections = this.connectionsPerUser.get(client.userId);
+      if (userConnections) {
+        userConnections.delete(client);
+        // Clean up empty sets to prevent memory leaks
+        if (userConnections.size === 0) {
+          this.connectionsPerUser.delete(client.userId);
+        }
+      }
+    }
 
     // Remove from all subscriptions
     for (const [channel, subscribers] of this.subscriptions.entries()) {
@@ -380,6 +443,11 @@ export class SanctauryWebSocketServer {
       channels.push('mempool');
     }
 
+    // Model download is a system-wide event - broadcast to all authenticated clients
+    if (event.type === 'modelDownload') {
+      channels.push('system');
+    }
+
     // Wallet-specific channels
     if (event.walletId) {
       channels.push(`wallet:${event.walletId}`);
@@ -423,8 +491,11 @@ export class SanctauryWebSocketServer {
   public getStats() {
     return {
       clients: this.clients.size,
+      maxClients: MAX_WEBSOCKET_CONNECTIONS,
       subscriptions: this.subscriptions.size,
       channels: Array.from(this.subscriptions.keys()),
+      uniqueUsers: this.connectionsPerUser.size,
+      maxPerUser: MAX_WEBSOCKET_PER_USER,
     };
   }
 

@@ -36,21 +36,10 @@ export const AILabelSuggestion: React.FC<AILabelSuggestionProps> = ({
     setSuggestion(null);
 
     try {
-      // Determine direction
-      const direction = transaction.type === 'received' ? 'receive' : 'send';
-
-      // Get first address (simplified - could be improved to show all addresses)
-      const address = transaction.addresses && transaction.addresses.length > 0
-        ? transaction.addresses[0]
-        : undefined;
-
-      // Request suggestion from AI
+      // Request suggestion from AI using transaction ID
+      // The AI container fetches sanitized data internally for security
       const result = await aiApi.suggestLabel({
-        amount: Math.abs(transaction.amount),
-        direction,
-        address,
-        date: transaction.date,
-        existingLabels,
+        transactionId: transaction.id,
       });
 
       setSuggestion(result.suggestion);
@@ -59,7 +48,7 @@ export const AILabelSuggestion: React.FC<AILabelSuggestionProps> = ({
 
       // Check if AI is not enabled/configured
       if (err.message?.includes('503') || err.message?.includes('not enabled')) {
-        setError('AI is not enabled or configured. Please configure it in System Settings.');
+        setError('AI is not enabled. Configure it in Admin → AI Assistant.');
       } else if (err.message?.includes('429')) {
         setError('Too many requests. Please try again in a moment.');
       } else {

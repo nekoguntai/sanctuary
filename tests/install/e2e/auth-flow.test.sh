@@ -99,8 +99,9 @@ make_login_request() {
     local username="$1"
     local password="$2"
 
-    # Small delay to avoid rate limiting during rapid test execution
-    sleep 0.5
+    # Delay to avoid rate limiting during rapid test execution
+    # Rate limit is 5 attempts per 15 minutes, so we need to be careful
+    sleep 1
 
     curl -k -s -X POST \
         -H "Content-Type: application/json" \

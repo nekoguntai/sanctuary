@@ -11,18 +11,18 @@ import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils
 import {
   generateToken,
   generate2FAToken,
-  generateRefreshToken,
   verifyToken,
   verify2FAToken,
   verifyRefreshToken,
   decodeToken,
-  getTokenExpiration,
   TokenAudience,
 } from '../utils/jwt';
 import { authenticate } from '../middleware/auth';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 import * as twoFactorService from '../services/twoFactorService';
-import { revokeToken } from '../services/tokenRevocation';
+import { revokeToken, revokeAllUserTokens } from '../services/tokenRevocation';
+import * as refreshTokenService from '../services/refreshTokenService';
+import { hashToken } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('AUTH');
@@ -198,13 +198,20 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
       },
     });
 
+    // Get device info from request
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = {
+      userAgent,
+      ipAddress,
+    };
+
     // SEC-005: Generate access token (1h) and refresh token (7d)
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
-    const refreshToken = generateRefreshToken(user.id);
+    const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
 
     res.status(201).json({
       token,
@@ -356,16 +363,22 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       });
     }
 
-    // SEC-005: Generate access token (1h) and refresh token (7d)
+    // Get device info from request
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = {
+      userAgent,
+      ipAddress,
+    };
+
+    // SEC-005: Generate access token (1h) and refresh token (7d) with DB persistence
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
-    const refreshToken = generateRefreshToken(user.id);
+    const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
 
     // Audit successful login
-    const { ipAddress, userAgent } = getClientInfo(req);
     await auditService.log({
       userId: user.id,
       username: user.username,
@@ -907,7 +920,7 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
     // SEC-006: Verify temp token with audience claim
     let decoded;
     try {
-      decoded = verify2FAToken(tempToken);
+      decoded = await verify2FAToken(tempToken);
     } catch (err) {
       log.debug('2FA token verification failed', { error: (err as Error).message });
       return res.status(401).json({
@@ -970,16 +983,22 @@ router.post('/2fa/verify', twoFactorLimiter, async (req: Request, res: Response)
       });
     }
 
-    // SEC-005: Generate full auth token and refresh token
+    // Get device info from request
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = {
+      userAgent,
+      ipAddress,
+    };
+
+    // SEC-005: Generate full auth token and refresh token with DB persistence
     const token = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
-    const refreshToken = generateRefreshToken(user.id);
+    const refreshToken = await refreshTokenService.createRefreshToken(user.id, deviceInfo);
 
     // Audit successful login with 2FA
-    const { ipAddress, userAgent } = getClientInfo(req);
     await auditService.log({
       userId: user.id,
       username: user.username,
@@ -1250,10 +1269,11 @@ router.post('/telegram/test', authenticate, async (req: Request, res: Response) 
 /**
  * POST /api/v1/auth/refresh
  * Exchange a refresh token for a new access token (SEC-005)
+ * Supports optional token rotation for enhanced security
  */
 router.post('/refresh', async (req: Request, res: Response) => {
   try {
-    const { refreshToken: refreshTokenStr } = req.body;
+    const { refreshToken: refreshTokenStr, rotate } = req.body;
 
     if (!refreshTokenStr) {
       return res.status(400).json({
@@ -1262,15 +1282,25 @@ router.post('/refresh', async (req: Request, res: Response) => {
       });
     }
 
-    // Verify refresh token
+    // Verify refresh token JWT signature and expiration
     let decoded;
     try {
-      decoded = verifyRefreshToken(refreshTokenStr);
+      decoded = await verifyRefreshToken(refreshTokenStr);
     } catch (err) {
       log.debug('Refresh token verification failed', { error: (err as Error).message });
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid or expired refresh token',
+      });
+    }
+
+    // Verify token exists in database (not already revoked)
+    const tokenExists = await refreshTokenService.verifyRefreshTokenExists(refreshTokenStr);
+    if (!tokenExists) {
+      log.warn('Refresh token not found in database', { userId: decoded.userId });
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Refresh token has been revoked',
       });
     }
 
@@ -1287,21 +1317,37 @@ router.post('/refresh', async (req: Request, res: Response) => {
     }
 
     // Generate new access token
-    const newToken = generateToken({
+    const newAccessToken = generateToken({
       userId: user.id,
       username: user.username,
       isAdmin: user.isAdmin,
     });
 
-    // Optionally rotate refresh token (more secure but requires client update)
-    // For now, we keep the same refresh token until it expires
+    // Get device info for potential rotation
+    const { ipAddress, userAgent } = getClientInfo(req);
+    const deviceInfo = { userAgent, ipAddress };
 
-    log.debug('Token refreshed', { userId: user.id });
+    // Token rotation if requested (more secure - invalidates old token)
+    let newRefreshToken: string | undefined;
+    if (rotate) {
+      const rotatedToken = await refreshTokenService.rotateRefreshToken(refreshTokenStr, deviceInfo);
+      if (rotatedToken) {
+        newRefreshToken = rotatedToken;
+      }
+    }
 
-    res.json({
-      token: newToken,
+    log.debug('Token refreshed', { userId: user.id, rotated: !!newRefreshToken });
+
+    const response: Record<string, unknown> = {
+      token: newAccessToken,
       expiresIn: 3600, // 1 hour in seconds
-    });
+    };
+
+    if (newRefreshToken) {
+      response.refreshToken = newRefreshToken;
+    }
+
+    res.json(response);
   } catch (error) {
     log.error('Token refresh error', { error });
     res.status(500).json({
@@ -1313,22 +1359,29 @@ router.post('/refresh', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/auth/logout
- * Revoke current access token (SEC-003)
+ * Revoke current access token and optionally the refresh token (SEC-003)
  */
 router.post('/logout', authenticate, async (req: Request, res: Response) => {
   try {
-    // Extract the token to revoke it
+    const { refreshToken: refreshTokenStr } = req.body;
+
+    // Revoke access token
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       const decoded = decodeToken(token);
 
       if (decoded?.jti && decoded?.exp) {
-        // Revoke the token
         const expiresAt = new Date(decoded.exp * 1000);
-        revokeToken(decoded.jti, expiresAt, 'user_logout');
-        log.debug('Token revoked on logout', { userId: req.user?.userId });
+        await revokeToken(decoded.jti, expiresAt, req.user?.userId, 'user_logout');
+        log.debug('Access token revoked on logout', { userId: req.user?.userId });
       }
+    }
+
+    // Revoke refresh token if provided
+    if (refreshTokenStr) {
+      await refreshTokenService.revokeRefreshToken(refreshTokenStr);
+      log.debug('Refresh token revoked on logout', { userId: req.user?.userId });
     }
 
     // Audit logout
@@ -1357,50 +1410,131 @@ router.post('/logout', authenticate, async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/v1/auth/revoke
- * Revoke a specific refresh token (for "sign out of all devices" feature)
+ * POST /api/v1/auth/logout-all
+ * Revoke all sessions for the current user (logout from all devices)
  */
-router.post('/revoke', authenticate, async (req: Request, res: Response) => {
+router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
   try {
-    const { refreshToken: refreshTokenStr } = req.body;
+    const userId = req.user!.userId;
 
-    if (!refreshTokenStr) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Refresh token is required',
-      });
-    }
+    // Revoke all refresh tokens for this user
+    const revokedCount = await refreshTokenService.revokeAllUserRefreshTokens(userId);
 
-    // Decode the refresh token to get its jti
-    try {
-      const decoded = verifyRefreshToken(refreshTokenStr);
+    // Also revoke all access tokens (via the token revocation list)
+    await revokeAllUserTokens(userId, 'logout_all_devices');
 
-      // Verify the token belongs to this user
-      if (decoded.userId !== req.user?.userId) {
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'Cannot revoke tokens for other users',
-        });
-      }
+    // Audit the action
+    const { ipAddress, userAgent } = getClientInfo(req);
+    await auditService.log({
+      userId,
+      username: req.user?.username || 'unknown',
+      action: AuditAction.LOGOUT,
+      category: AuditCategory.AUTH,
+      ipAddress,
+      userAgent,
+      success: true,
+      details: { action: 'logout_all', sessionsRevoked: revokedCount },
+    });
 
-      // Calculate expiration from refresh token (7 days from issue)
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      revokeToken(decoded.jti, expiresAt, 'user_revoked');
-
-      log.debug('Refresh token revoked', { userId: req.user?.userId });
-    } catch {
-      // Token already invalid/expired, that's fine
-    }
+    log.info('User logged out from all devices', { userId, sessionsRevoked: revokedCount });
 
     res.json({
       success: true,
-      message: 'Token revoked successfully',
+      message: 'Logged out from all devices',
+      sessionsRevoked: revokedCount,
     });
   } catch (error) {
-    log.error('Token revoke error', { error });
+    log.error('Logout all error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to revoke token',
+      message: 'Failed to logout from all devices',
+    });
+  }
+});
+
+// ============================================================================
+// SESSION MANAGEMENT
+// ============================================================================
+
+/**
+ * GET /api/v1/auth/sessions
+ * List all active sessions for the current user
+ */
+router.get('/sessions', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    // Get current token hash to mark the current session
+    const authHeader = req.headers.authorization;
+    let currentTokenHash: string | undefined;
+    if (authHeader?.startsWith('Bearer ')) {
+      // We can't directly get the refresh token hash from the access token
+      // The client should send the refresh token if they want to identify current session
+    }
+
+    const sessions = await refreshTokenService.getUserSessions(userId);
+
+    res.json({
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        deviceName: s.deviceName || 'Unknown Device',
+        userAgent: s.userAgent,
+        ipAddress: s.ipAddress,
+        createdAt: s.createdAt.toISOString(),
+        lastUsedAt: s.lastUsedAt.toISOString(),
+        isCurrent: s.isCurrent,
+      })),
+      count: sessions.length,
+    });
+  } catch (error) {
+    log.error('Get sessions error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get sessions',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/auth/sessions/:id
+ * Revoke a specific session
+ */
+router.delete('/sessions/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const sessionId = req.params.id;
+
+    const revoked = await refreshTokenService.revokeSession(sessionId, userId);
+
+    if (!revoked) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Session not found',
+      });
+    }
+
+    // Audit the action
+    const { ipAddress, userAgent } = getClientInfo(req);
+    await auditService.log({
+      userId,
+      username: req.user?.username || 'unknown',
+      action: AuditAction.LOGOUT,
+      category: AuditCategory.AUTH,
+      ipAddress,
+      userAgent,
+      success: true,
+      details: { action: 'revoke_session', sessionId },
+    });
+
+    res.json({
+      success: true,
+      message: 'Session revoked successfully',
+    });
+  } catch (error) {
+    log.error('Revoke session error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to revoke session',
     });
   }
 });

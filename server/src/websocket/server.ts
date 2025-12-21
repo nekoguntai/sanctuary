@@ -88,24 +88,34 @@ export class SanctauryWebSocketServer {
     log.info(`WebSocket connection attempt from ${request.socket.remoteAddress}`);
 
     if (token) {
-      try {
-        const decoded = verifyToken(token);
-        client.userId = decoded.userId;
+      verifyToken(token)
+        .then((decoded) => {
+          client.userId = decoded.userId;
 
-        // Check per-user connection limit
-        const userConnections = this.connectionsPerUser.get(client.userId);
-        if (userConnections && userConnections.size >= MAX_WEBSOCKET_PER_USER) {
-          log.warn(`Connection rejected for user ${client.userId}: per-user limit of ${MAX_WEBSOCKET_PER_USER} reached`);
-          client.close(1008, `User connection limit of ${MAX_WEBSOCKET_PER_USER} reached`);
-          return;
-        }
+          // Check per-user connection limit
+          const userConnections = this.connectionsPerUser.get(client.userId);
+          if (userConnections && userConnections.size >= MAX_WEBSOCKET_PER_USER) {
+            log.warn(`Connection rejected for user ${client.userId}: per-user limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+            client.close(1008, `User connection limit of ${MAX_WEBSOCKET_PER_USER} reached`);
+            return;
+          }
 
-        log.info(`WebSocket client authenticated: ${client.userId}`);
-      } catch (err) {
-        log.error('WebSocket authentication failed', { error: String(err) });
-        client.close(1008, 'Authentication failed');
-        return;
-      }
+          log.info(`WebSocket client authenticated: ${client.userId}`);
+
+          // Track per-user connection
+          if (!this.connectionsPerUser.has(client.userId)) {
+            this.connectionsPerUser.set(client.userId, new Set());
+          }
+          this.connectionsPerUser.get(client.userId)!.add(client);
+
+          // Complete client registration
+          this.completeClientRegistration(client);
+        })
+        .catch((err) => {
+          log.error('WebSocket authentication failed', { error: String(err) });
+          client.close(1008, 'Authentication failed');
+        });
+      return; // Return early, client registration happens in promise
     } else {
       log.debug('WebSocket client connected without authentication');
       // Allow unauthenticated connections but limit functionality
@@ -118,14 +128,27 @@ export class SanctauryWebSocketServer {
       }, AUTH_TIMEOUT_MS);
     }
 
+    // Complete registration (adds to clients set, sets up handlers)
+    this.completeClientRegistration(client);
+  }
+
+  /**
+   * Complete client registration - adds to clients set, sets up handlers, sends welcome
+   * Extracted to be callable from both sync and async auth paths
+   */
+  private completeClientRegistration(client: AuthenticatedWebSocket) {
     this.clients.add(client);
 
-    // Track per-user connections
+    // Track per-user connections (only if not already tracked from async auth)
     if (client.userId) {
       if (!this.connectionsPerUser.has(client.userId)) {
         this.connectionsPerUser.set(client.userId, new Set());
       }
-      this.connectionsPerUser.get(client.userId)!.add(client);
+      // Only add if not already in the set (async auth may have already added)
+      const userConns = this.connectionsPerUser.get(client.userId)!;
+      if (!userConns.has(client)) {
+        userConns.add(client);
+      }
     }
 
     // Setup message handler
@@ -219,7 +242,7 @@ export class SanctauryWebSocketServer {
   /**
    * Handle authentication via message (more secure than URL token)
    */
-  private handleAuth(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+  private async handleAuth(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
     if (!data?.token || typeof data.token !== 'string') {
       this.sendToClient(client, {
         type: 'error',
@@ -238,7 +261,7 @@ export class SanctauryWebSocketServer {
     }
 
     try {
-      const decoded = verifyToken(data.token);
+      const decoded = await verifyToken(data.token);
       const userId = decoded.userId;
 
       // Check per-user connection limit

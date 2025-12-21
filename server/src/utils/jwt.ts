@@ -11,7 +11,7 @@
  */
 
 import jwt from 'jsonwebtoken';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import config from '../config';
 import { isTokenRevoked } from '../services/tokenRevocation';
 
@@ -46,6 +46,13 @@ export interface RefreshTokenPayload {
  */
 function generateJti(): string {
   return randomUUID();
+}
+
+/**
+ * Generate a SHA256 hash of a token for storage
+ */
+export function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 /**
@@ -113,7 +120,7 @@ export function generateRefreshToken(userId: string): string {
  * @param token - JWT token
  * @param expectedAudience - Optional expected audience to verify
  */
-export function verifyToken(token: string, expectedAudience?: TokenAudience): JWTPayload {
+export async function verifyToken(token: string, expectedAudience?: TokenAudience): Promise<JWTPayload> {
   try {
     const options: jwt.VerifyOptions = {};
     if (expectedAudience) {
@@ -123,7 +130,7 @@ export function verifyToken(token: string, expectedAudience?: TokenAudience): JW
     const decoded = jwt.verify(token, config.jwtSecret, options) as JWTPayload;
 
     // SEC-003: Check if token is revoked
-    if (decoded.jti && isTokenRevoked(decoded.jti)) {
+    if (decoded.jti && await isTokenRevoked(decoded.jti)) {
       throw new Error('Token has been revoked');
     }
 
@@ -142,8 +149,8 @@ export function verifyToken(token: string, expectedAudience?: TokenAudience): JW
 /**
  * Verify a 2FA temporary token (SEC-006)
  */
-export function verify2FAToken(token: string): JWTPayload {
-  const decoded = verifyToken(token, TokenAudience.TWO_FACTOR);
+export async function verify2FAToken(token: string): Promise<JWTPayload> {
+  const decoded = await verifyToken(token, TokenAudience.TWO_FACTOR);
 
   if (!decoded.pending2FA) {
     throw new Error('Invalid 2FA token');
@@ -155,14 +162,14 @@ export function verify2FAToken(token: string): JWTPayload {
 /**
  * Verify a refresh token (SEC-005)
  */
-export function verifyRefreshToken(token: string): RefreshTokenPayload {
+export async function verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
   try {
     const decoded = jwt.verify(token, config.jwtSecret, {
       audience: TokenAudience.REFRESH,
     }) as RefreshTokenPayload;
 
     // Check if token is revoked
-    if (decoded.jti && isTokenRevoked(decoded.jti)) {
+    if (decoded.jti && await isTokenRevoked(decoded.jti)) {
       throw new Error('Refresh token has been revoked');
     }
 

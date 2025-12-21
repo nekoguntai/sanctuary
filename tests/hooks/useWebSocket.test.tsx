@@ -420,14 +420,14 @@ describe('useWebSocketEvent', () => {
   it('should re-register when event type changes', () => {
     const callback = vi.fn();
 
-    const { rerender } = renderHook(
+    const { rerender } = renderHook<void, { eventType: 'transaction' | 'balance' | 'sync' }>(
       ({ eventType }) => useWebSocketEvent(eventType, callback),
-      { initialProps: { eventType: 'transaction' as const } }
+      { initialProps: { eventType: 'transaction' } }
     );
 
     expect(mockOn).toHaveBeenCalledWith('transaction', callback);
 
-    rerender({ eventType: 'balance' as const });
+    rerender({ eventType: 'balance' });
 
     expect(mockOff).toHaveBeenCalledWith('transaction', callback);
     expect(mockOn).toHaveBeenCalledWith('balance', callback);

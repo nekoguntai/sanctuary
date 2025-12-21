@@ -60,7 +60,7 @@ vi.mock('../../utils/logger', () => ({
 describe('CoinControlPanel', () => {
   let mockOnToggleSelect: ReturnType<typeof vi.fn>;
   let mockOnStrategyChange: ReturnType<typeof vi.fn>;
-  let mockOnAutoSelect: ReturnType<typeof vi.fn>;
+  let mockOnSetSelectedUtxos: ReturnType<typeof vi.fn>;
 
   const mockUtxos: UTXO[] = [
     {
@@ -112,7 +112,7 @@ describe('CoinControlPanel', () => {
     vi.clearAllMocks();
     mockOnToggleSelect = vi.fn();
     mockOnStrategyChange = vi.fn();
-    mockOnAutoSelect = vi.fn();
+    mockOnSetSelectedUtxos = vi.fn();
   });
 
   const renderPanel = (props: Partial<React.ComponentProps<typeof CoinControlPanel>> = {}) => {
@@ -127,10 +127,11 @@ describe('CoinControlPanel', () => {
           utxos={mockUtxos}
           selectedUtxos={new Set()}
           onToggleSelect={mockOnToggleSelect}
+          onSetSelectedUtxos={mockOnSetSelectedUtxos}
           feeRate={10}
+          targetAmount={0}
           strategy="auto"
           onStrategyChange={mockOnStrategyChange}
-          onAutoSelect={mockOnAutoSelect}
           {...props}
         />
       </QueryClientProvider>
@@ -604,6 +605,96 @@ describe('CoinControlPanel', () => {
       });
 
       expect(screen.queryByText('Privacy Impact')).not.toBeInTheDocument();
+    });
+
+    it('handles rapid selection changes without race conditions', async () => {
+      const analyzeSpendPrivacy = vi.fn();
+      let resolvers: Array<(value: any) => void> = [];
+
+      // Mock API to delay responses and let us control resolution order
+      analyzeSpendPrivacy.mockImplementation(() => {
+        return new Promise((resolve) => {
+          resolvers.push(resolve);
+        });
+      });
+
+      const mockModule = await import('../../src/api/transactions');
+      vi.spyOn(mockModule, 'analyzeSpendPrivacy').mockImplementation(analyzeSpendPrivacy);
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <CoinControlPanel
+            walletId="test-wallet"
+            utxos={mockUtxos}
+            selectedUtxos={new Set(['abc123:0'])}
+            onToggleSelect={mockOnToggleSelect}
+            onSetSelectedUtxos={vi.fn()}
+            feeRate={10}
+            targetAmount={50000}
+            strategy="manual"
+          />
+        </QueryClientProvider>
+      );
+
+      fireEvent.click(screen.getByText(/Coin Control/));
+
+      // Wait for panel to expand and first request to start
+      await waitFor(() => {
+        expect(screen.getByText('Selection Strategy')).toBeInTheDocument();
+      });
+
+      // Wait for debounce and first API call
+      await new Promise(resolve => setTimeout(resolve, 350));
+      expect(analyzeSpendPrivacy).toHaveBeenCalledTimes(1);
+
+      // Rapid second selection - should invalidate request 1 and start request 2
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <CoinControlPanel
+            walletId="test-wallet"
+            utxos={mockUtxos}
+            selectedUtxos={new Set(['abc123:0', 'def456:1'])}
+            onToggleSelect={mockOnToggleSelect}
+            onSetSelectedUtxos={vi.fn()}
+            feeRate={10}
+            targetAmount={50000}
+            strategy="manual"
+          />
+        </QueryClientProvider>
+      );
+
+      // Wait for debounce and second API call
+      await new Promise(resolve => setTimeout(resolve, 350));
+      expect(analyzeSpendPrivacy).toHaveBeenCalledTimes(2);
+
+      // Resolve request 1 (old, stale) - should be ignored
+      resolvers[0]({
+        score: 50,
+        grade: 'poor',
+        linkedAddresses: 10,
+        warnings: ['STALE DATA - Should not appear'],
+      });
+
+      // Resolve request 2 (new, fresh) - should be used
+      resolvers[1]({
+        score: 80,
+        grade: 'good',
+        linkedAddresses: 2,
+        warnings: ['Fresh data'],
+      });
+
+      // Wait for state updates
+      await waitFor(() => {
+        expect(screen.getByText('Privacy Impact')).toBeInTheDocument();
+      });
+
+      // Should show data from request 2 (latest), not request 1 (stale)
+      expect(screen.queryByText('STALE DATA - Should not appear')).not.toBeInTheDocument();
+      expect(screen.getByText('Fresh data')).toBeInTheDocument();
     });
   });
 });

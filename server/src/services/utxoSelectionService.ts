@@ -25,6 +25,7 @@ const INPUT_VBYTES: Record<string, number> = {
 // Default to native_segwit for unknown script types
 const DEFAULT_INPUT_VBYTES = 68;
 
+// UTXO selection strategy type (duplicated from frontend types for Docker build isolation)
 export type SelectionStrategy =
   | 'privacy'
   | 'efficiency'
@@ -413,6 +414,11 @@ export async function selectUtxos(options: SelectionOptions): Promise<SelectionR
     excludeUtxoIds = [],
     scriptType = 'native_segwit',
   } = options;
+
+  // Validate that targetAmount is positive
+  if (targetAmount <= BigInt(0)) {
+    throw new Error('targetAmount must be a positive BigInt');
+  }
 
   log.debug(`Selecting UTXOs for wallet ${walletId}`, {
     targetAmount: targetAmount.toString(),

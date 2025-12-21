@@ -12,6 +12,12 @@ export * as devices from './devices';
 export * as bitcoin from './bitcoin';
 export * as price from './price';
 export * as drafts from './drafts';
+export * as admin from './admin';
+export * as node from './node';
+export * as sync from './sync';
+export * as twoFactor from './twoFactor';
+export * as payjoin from './payjoin';
+export * as ai from './ai';
 
 export { default as apiClient, ApiError } from './client';
 export type { ApiResponse } from './client';
@@ -30,6 +36,7 @@ export type {
   FeeEstimates,
   BitcoinTransactionDetails,
   BlockHeader,
+  SelectionStrategy,
 } from '../types';
 
 // Re-export auth types
@@ -41,3 +48,6 @@ export type { CreateLabelRequest, UpdateLabelRequest } from './labels';
 export type { BitcoinStatus } from './bitcoin';
 export type { AggregatedPrice, PriceSource } from './price';
 export type { DraftTransaction, CreateDraftRequest, UpdateDraftRequest } from './drafts';
+export type { AdminUser, CreateUserRequest, UpdateUserRequest, GroupMember } from './admin';
+export type { NodeTestRequest, NodeTestResponse } from './node';
+export type { SyncStatus, SyncResult, QueueResult } from './sync';

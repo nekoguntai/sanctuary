@@ -1,6 +1,9 @@
 import { useCallback, useRef } from 'react';
 import { useUser } from '../contexts/UserContext';
 import type { SoundType, EventSoundConfig } from '../types';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('NotificationSound');
 
 /**
  * Sound preset definitions
@@ -905,7 +908,7 @@ export function useNotificationSound() {
         preset.play(ctx, volume);
       }
     } catch (error) {
-      console.warn('Failed to play notification sound:', error);
+      log.warn('Failed to play notification sound', { error });
     }
   }, [getAudioContext]);
 

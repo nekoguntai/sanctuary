@@ -8,6 +8,7 @@ import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
 import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { createLogger } from '../utils/logger';
+import { logError } from '../utils/errorHandler';
 import { useCreateWallet } from '../hooks/queries/useWallets';
 
 const log = createLogger('CreateWallet');
@@ -43,8 +44,9 @@ export const CreateWallet: React.FC = () => {
         }));
         setAvailableDevices(formatted);
       } catch (error) {
-        log.error('Failed to load devices', { error });
+        logError(log, error, 'Failed to load devices');
         setAvailableDevices([]);
+        // Non-critical - user can still create wallet without devices shown
       }
     };
 

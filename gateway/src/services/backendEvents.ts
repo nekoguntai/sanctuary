@@ -133,6 +133,54 @@ async function getDevicesForUser(userId: string): Promise<DeviceInfo[]> {
 }
 
 /**
+ * Remove an invalid push token from the backend database
+ *
+ * Called when FCM/APNs reports that a device token is invalid (uninstalled app,
+ * expired token, etc.). This cleans up the database to avoid repeatedly trying
+ * to send to dead tokens.
+ *
+ * SEC-002: Uses HMAC signature for authentication.
+ */
+async function removeInvalidDevice(deviceId: string, token: string): Promise<void> {
+  try {
+    const path = `/api/v1/push/device/${deviceId}`;
+    const headers: Record<string, string> = {};
+
+    // SEC-002: Add HMAC signature if gateway secret is configured
+    if (config.gatewaySecret) {
+      const { signature, timestamp } = generateRequestSignature('DELETE', path, null);
+      headers['X-Gateway-Signature'] = signature;
+      headers['X-Gateway-Timestamp'] = timestamp;
+    } else {
+      // Fallback to legacy header for backwards compatibility
+      headers['X-Gateway-Request'] = 'true';
+    }
+
+    const response = await fetch(`${config.backendUrl}${path}`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    if (response.ok) {
+      log.info('Removed invalid push token', {
+        deviceId,
+        token: token.slice(0, 10) + '...',
+      });
+    } else {
+      log.warn('Failed to remove invalid token', {
+        deviceId,
+        status: response.status,
+      });
+    }
+  } catch (err) {
+    log.error('Error removing invalid token', {
+      deviceId,
+      error: (err as Error).message,
+    });
+  }
+}
+
+/**
  * Handle incoming event from backend
  */
 async function handleEvent(event: BackendEvent): Promise<void> {
@@ -193,10 +241,14 @@ async function handleEvent(event: BackendEvent): Promise<void> {
     failed: result.failed,
   });
 
-  // TODO: Remove invalid tokens from database
+  // Remove invalid tokens from database
   if (result.invalidTokens.length > 0) {
     log.warn('Invalid push tokens found', { count: result.invalidTokens.length });
-    // Could make API call to backend to remove these devices
+
+    // Remove each invalid token from the backend database
+    for (const invalidToken of result.invalidTokens) {
+      await removeInvalidDevice(invalidToken.id, invalidToken.token);
+    }
   }
 }
 

@@ -15,14 +15,15 @@ import { authenticate } from '../middleware/auth';
 import { aiService } from '../services/aiService';
 import { createLogger } from '../utils/logger';
 import rateLimit from 'express-rate-limit';
+import { AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX_REQUESTS } from '../constants';
 
 const router = Router();
 const log = createLogger('AI-API');
 
-// Rate limiting: 10 requests per minute per IP
+// Rate limiting: prevent abuse of AI endpoints
 const aiRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  windowMs: AI_RATE_LIMIT_WINDOW_MS,
+  max: AI_RATE_LIMIT_MAX_REQUESTS,
   message: 'Too many AI requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

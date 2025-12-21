@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 
-import { SpendPrivacyCard } from '../../components/SpendPrivacyCard';
+import SpendPrivacyCard from '../../components/SpendPrivacyCard';
 import type { SpendPrivacyAnalysis } from '../../src/api/transactions';
 
 describe('SpendPrivacyCard', () => {

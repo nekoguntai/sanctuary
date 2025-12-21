@@ -68,25 +68,25 @@ const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
 
   // Wallets (read-only + sync)
   { method: 'GET', pattern: /^\/api\/v1\/wallets$/ },
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+$/ },
-  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/sync$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/sync$/ },
 
   // Transactions (read-only)
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/transactions$/ },
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/transactions\/[a-f0-9-]+$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
 
   // Addresses (read-only + generate)
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/addresses$/ },
-  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/addresses\/generate$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/addresses$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/addresses\/generate$/ },
 
   // UTXOs (read-only)
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/utxos$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/utxos$/ },
 
   // Labels (read + write)
-  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/labels$/ },
-  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9-]+\/labels$/ },
-  { method: 'PATCH', pattern: /^\/api\/v1\/labels\/[a-f0-9-]+$/ },
-  { method: 'DELETE', pattern: /^\/api\/v1\/labels\/[a-f0-9-]+$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/labels$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/labels$/ },
+  { method: 'PATCH', pattern: /^\/api\/v1\/labels\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/labels\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
 
   // Bitcoin status
   { method: 'GET', pattern: /^\/api\/v1\/bitcoin\/status$/ },
@@ -102,7 +102,7 @@ const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^\/api\/v1\/push\/register$/ },
   { method: 'DELETE', pattern: /^\/api\/v1\/push\/unregister$/ },
   { method: 'GET', pattern: /^\/api\/v1\/push\/devices$/ },
-  { method: 'DELETE', pattern: /^\/api\/v1\/push\/devices\/[a-f0-9-]+$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/push\/devices\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
 ];
 
 /**

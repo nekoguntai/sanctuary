@@ -503,20 +503,20 @@ export const ConnectDevice: React.FC = () => {
       // Handle ur:bytes format (Foundation Passport Sparrow export, etc.)
       // The bytes may contain text/JSON wallet descriptor data
       if (registryType && registryType.bytes instanceof Uint8Array) {
-        console.log('[Sanctuary QR] Detected ur:bytes format, attempting to decode...');
+        log.debug('Detected ur:bytes format, attempting to decode...');
         const bytes = registryType.bytes;
 
         // Try to decode as UTF-8 text (could be JSON or text descriptor)
         try {
           const textDecoder = new TextDecoder('utf-8');
           const textContent = textDecoder.decode(bytes);
-          console.log('[Sanctuary QR] Decoded bytes as text:', textContent.substring(0, 200));
+          log.debug('Decoded bytes as text', { preview: textContent.substring(0, 200) });
 
           // Try to parse as JSON
           let data: any;
           try {
             data = JSON.parse(textContent);
-            console.log('[Sanctuary QR] Parsed as JSON:', Object.keys(data));
+            log.debug('Parsed as JSON', { keys: Object.keys(data) });
           } catch {
             // Not JSON, try to extract from text directly
             data = null;
@@ -584,11 +584,11 @@ export const ConnectDevice: React.FC = () => {
           }
 
           if (foundXpub) {
-            console.log('[Sanctuary QR] Extracted from ur:bytes:', { xpub: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
+            log.debug('Extracted from ur:bytes', { xpubPreview: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
             return { xpub: foundXpub, fingerprint: foundFingerprint, path: foundDerivation };
           }
         } catch (decodeErr) {
-          console.error('[Sanctuary QR] Failed to decode ur:bytes as text:', decodeErr);
+          log.error('Failed to decode ur:bytes as text', { error: decodeErr });
         }
       }
 
@@ -613,7 +613,7 @@ export const ConnectDevice: React.FC = () => {
       let data: any;
       try {
         data = JSON.parse(textContent);
-        console.log('[Sanctuary QR] ur:bytes parsed as JSON:', Object.keys(data));
+        log.debug('ur:bytes parsed as JSON', { keys: Object.keys(data) });
       } catch {
         data = null;
       }
@@ -679,7 +679,7 @@ export const ConnectDevice: React.FC = () => {
       }
 
       if (foundXpub) {
-        console.log('[Sanctuary QR] Extracted from ur:bytes text:', { xpub: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
+        log.debug('Extracted from ur:bytes text', { xpubPreview: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
         return { xpub: foundXpub, fingerprint: foundFingerprint, path: foundDerivation };
       }
 
@@ -700,10 +700,6 @@ export const ConnectDevice: React.FC = () => {
     const content = result[0].rawValue;
     const contentLower = content.toLowerCase();
 
-    // Debug logging - visible in browser console
-    console.log('[Sanctuary QR] Scanned:', content.substring(0, 80) + (content.length > 80 ? '...' : ''));
-    console.log('[Sanctuary QR] Length:', content.length, 'Starts with ur:', contentLower.startsWith('ur:'));
-
     log.info('QR code scanned', { length: content.length, prefix: content.substring(0, 50) });
 
     // Check if this is UR format (Foundation Passport, Keystone, etc.)
@@ -711,7 +707,7 @@ export const ConnectDevice: React.FC = () => {
       // Extract UR type for debugging
       const urTypeMatch = contentLower.match(/^ur:([a-z0-9-]+)/);
       const urType = urTypeMatch ? urTypeMatch[1] : 'unknown';
-      console.log('[Sanctuary QR] UR type:', urType);
+      log.debug('UR type detected', { urType });
 
       try {
         // Use BytesURDecoder for ur:bytes (Foundation Passport format)
@@ -719,14 +715,14 @@ export const ConnectDevice: React.FC = () => {
         if (urType === 'bytes') {
           // Initialize bytes decoder if needed
           if (!bytesDecoderRef.current) {
-            console.log('[Sanctuary QR] Creating new BytesURDecoder for ur:bytes');
+            log.debug('Creating new BytesURDecoder for ur:bytes');
             bytesDecoderRef.current = new BytesURDecoder();
           }
 
           // Feed the part to the decoder
-          console.log('[Sanctuary QR] Feeding part to bytes decoder...');
+          log.debug('Feeding part to bytes decoder...');
           const partReceived = bytesDecoderRef.current.receivePart(content);
-          console.log('[Sanctuary QR] Part received:', partReceived);
+          log.debug('Part received', { partReceived });
 
           // Check progress for multi-part QR codes
           const progress = bytesDecoderRef.current.estimatedPercentComplete();
@@ -739,14 +735,16 @@ export const ConnectDevice: React.FC = () => {
           const isComplete = bytesDecoderRef.current.isComplete() === true;
           const isError = bytesDecoderRef.current.isError();
 
-          console.log('[Sanctuary QR] Progress:', progressPercent + '%',
-            'Expected parts:', expectedCount,
-            'Received:', receivedIndexes.length, '/', expectedCount,
-            'Complete:', isComplete,
-            'Error:', isError);
+          log.debug('UR bytes decoder state', {
+            progress: progressPercent,
+            expectedCount,
+            receivedCount: receivedIndexes.length,
+            isComplete,
+            isError
+          });
 
           if (isError) {
-            console.error('[Sanctuary QR] Decoder error:', bytesDecoderRef.current.resultError());
+            log.error('Decoder error', { error: bytesDecoderRef.current.resultError() });
           }
 
           log.info('UR bytes progress', { progress: progressPercent, received: receivedIndexes.length, expected: expectedCount });
@@ -754,40 +752,39 @@ export const ConnectDevice: React.FC = () => {
           // Check if complete (explicit boolean check since isComplete() can return undefined)
           if (!isComplete) {
             if (receivedIndexes.length > 0 && receivedIndexes.length < expectedCount) {
-              console.log('[Sanctuary QR] Waiting for more parts...',
-                `${receivedIndexes.length}/${expectedCount} unique parts received`);
+              log.debug('Waiting for more parts', { received: receivedIndexes.length, expected: expectedCount });
             }
             return;
           }
 
           // Decode is complete
-          console.log('[Sanctuary QR] UR bytes decode complete!');
+          log.info('UR bytes decode complete');
           setCameraActive(false);
           setScanning(true);
           setError(null);
 
           if (!bytesDecoderRef.current.isSuccess()) {
             const errResult = bytesDecoderRef.current.resultError();
-            console.error('[Sanctuary QR] UR bytes decode failed:', errResult);
+            log.error('UR bytes decode failed', { error: errResult });
             throw new Error(`UR bytes decode failed: ${errResult || 'unknown error'}`);
           }
 
           // Get the decoded UR and extract bytes
           const decodedUR = bytesDecoderRef.current.resultUR();
-          console.log('[Sanctuary QR] Decoded UR type:', decodedUR.type);
+          log.debug('Decoded UR type', { type: decodedUR.type });
 
           // Decode CBOR to get raw bytes
           const rawBytes = decodedUR.decodeCBOR();
-          console.log('[Sanctuary QR] Raw bytes length:', rawBytes.length);
+          log.debug('Raw bytes decoded', { length: rawBytes.length });
 
           // Try to decode as UTF-8 text (Foundation Passport exports JSON)
           const textDecoder = new TextDecoder('utf-8');
           const textContent = textDecoder.decode(rawBytes);
-          console.log('[Sanctuary QR] Decoded text:', textContent.substring(0, 200));
+          log.debug('Decoded text from bytes', { preview: textContent.substring(0, 200) });
 
           // Parse as JSON and extract wallet data
           const extracted = extractFromUrBytesContent(textContent);
-          console.log('[Sanctuary QR] Extracted from ur:bytes:', extracted);
+          log.debug('Extracted from ur:bytes', { hasXpub: !!extracted?.xpub, hasFingerprint: !!extracted?.fingerprint });
 
           if (extracted && extracted.xpub) {
             setXpub(extracted.xpub);
@@ -811,48 +808,45 @@ export const ConnectDevice: React.FC = () => {
 
         // For other UR types (crypto-hdkey, crypto-output, etc.), use URRegistryDecoder
         if (!urDecoderRef.current) {
-          console.log('[Sanctuary QR] Creating new URRegistryDecoder');
+          log.debug('Creating new URRegistryDecoder');
           urDecoderRef.current = new URRegistryDecoder();
         }
 
         // Feed the part to the decoder
-        console.log('[Sanctuary QR] Feeding part to decoder...');
+        log.debug('Feeding part to decoder');
         urDecoderRef.current.receivePart(content);
 
         // Check progress for multi-part QR codes
         const progress = urDecoderRef.current.estimatedPercentComplete();
         const progressPercent = Math.round(progress * 100);
         setUrProgress(progressPercent);
-        console.log('[Sanctuary QR] Progress:', progressPercent + '%', 'Complete:', urDecoderRef.current.isComplete());
-        log.info('UR progress', { progress: progressPercent });
+        log.info('UR progress', { progress: progressPercent, isComplete: urDecoderRef.current.isComplete() });
 
         // Check if complete
         if (!urDecoderRef.current.isComplete()) {
           // Not complete yet - keep scanning for more parts
-          console.log('[Sanctuary QR] Waiting for more parts... Keep camera pointed at animated QR');
+          log.debug('Waiting for more UR parts');
           return;
         }
 
         // Decode is complete
-        console.log('[Sanctuary QR] UR decode complete!');
+        log.info('UR decode complete');
         setCameraActive(false);
         setScanning(true);
         setError(null);
 
         if (!urDecoderRef.current.isSuccess()) {
           const errResult = urDecoderRef.current.resultError();
-          console.error('[Sanctuary QR] UR decode failed:', errResult);
+          log.error('UR decode failed', { error: errResult });
           throw new Error(`UR decode failed: ${errResult || 'unknown error'}`);
         }
 
         // Get the decoded registry type
         const registryType = urDecoderRef.current.resultRegistryType();
-        console.log('[Sanctuary QR] Registry type:', registryType?.constructor?.name);
-        console.log('[Sanctuary QR] Registry object:', registryType);
         log.info('UR decoded', { type: registryType?.constructor?.name });
 
         const extracted = extractFromUrResult(registryType);
-        console.log('[Sanctuary QR] Extracted:', extracted);
+        log.debug('Extracted from UR', { hasXpub: !!extracted?.xpub, hasFingerprint: !!extracted?.fingerprint });
 
         if (extracted && extracted.xpub) {
           setXpub(extracted.xpub);
@@ -872,11 +866,10 @@ export const ConnectDevice: React.FC = () => {
         }
 
         // Could not extract xpub from UR
-        console.error('[Sanctuary QR] Could not extract xpub from registry type:', registryType?.constructor?.name);
+        log.error('Could not extract xpub from registry type', { type: registryType?.constructor?.name });
         throw new Error(`Could not extract xpub from UR type: ${registryType?.constructor?.name || urType}`);
 
       } catch (err) {
-        console.error('[Sanctuary QR] Error:', err);
         log.error('Failed to decode UR QR code', { error: err });
         const errMsg = err instanceof Error ? err.message : 'Unknown error';
         setError(`UR error: ${errMsg}. Open browser console (F12) for details.`);
@@ -973,8 +966,7 @@ export const ConnectDevice: React.FC = () => {
 
       // Validate we found something
       if (!foundXpub) {
-        console.log('[Sanctuary QR] No xpub found in non-UR content');
-        console.log('[Sanctuary QR] Content preview:', content.substring(0, 200));
+        log.debug('No xpub found in non-UR content', { preview: content.substring(0, 200) });
         setError(`Could not find xpub in QR code. Content starts with: "${content.substring(0, 30)}...". Check browser console (F12) for details.`);
         setScanning(false);
         return;

@@ -127,13 +127,13 @@ export const DeviceDetail: React.FC = () => {
                                             onChange={e => setEditLabel(e.target.value)}
                                             className="px-2 py-1 border border-sanctuary-300 dark:border-sanctuary-700 rounded surface-muted text-xl font-light focus:outline-none"
                                         />
-                                        <button onClick={handleSave} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors"><Save className="w-5 h-5" /></button>
-                                        <button onClick={cancelEdit} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"><X className="w-5 h-5" /></button>
+                                        <button onClick={handleSave} className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors" aria-label="Save label"><Save className="w-5 h-5" /></button>
+                                        <button onClick={cancelEdit} className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors" aria-label="Cancel editing"><X className="w-5 h-5" /></button>
                                     </div>
                                 ) : (
                                     <>
                                         <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">{device.label}</h1>
-                                        <button onClick={() => setIsEditing(true)} className="text-sanctuary-400 hover:text-sanctuary-600 p-1"><Edit2 className="w-4 h-4" /></button>
+                                        <button onClick={() => setIsEditing(true)} className="text-sanctuary-400 hover:text-sanctuary-600 p-1" aria-label="Edit label"><Edit2 className="w-4 h-4" /></button>
                                     </>
                                 )}
                             </div>

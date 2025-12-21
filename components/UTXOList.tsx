@@ -103,11 +103,15 @@ export const UTXOList: React.FC<UTXOListProps> = ({
 
   // Load explorer URL from server config
   useEffect(() => {
-    bitcoinApi.getStatus().then(status => {
-      if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
-    }).catch(err => {
-      log.error('Failed to fetch explorer URL', { error: err });
-    });
+    const fetchExplorerUrl = async () => {
+      try {
+        const status = await bitcoinApi.getStatus();
+        if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
+      } catch (err) {
+        log.error('Failed to fetch explorer URL', { error: err });
+      }
+    };
+    fetchExplorerUrl();
   }, []);
 
   const selectedCount = selectedUtxos.size;

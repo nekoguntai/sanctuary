@@ -755,21 +755,32 @@ describe('UTXO Selection Service', () => {
     });
 
     describe('Zero Target Amount', () => {
-      it('should handle zero target amount', async () => {
+      it('should reject zero target amount', async () => {
         const utxos = [
           createTestUtxo({ amount: BigInt(100000) }),
         ];
         mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
 
-        const result = await selectUtxos({
+        await expect(selectUtxos({
           walletId: WALLET_ID,
           targetAmount: BigInt(0),
           feeRate: 10,
           strategy: 'efficiency',
-        });
+        })).rejects.toThrow('targetAmount must be a positive BigInt');
+      });
 
-        // Should still select enough for fee
-        expect(result.totalAmount).toBeGreaterThanOrEqual(result.estimatedFee);
+      it('should reject negative target amount', async () => {
+        const utxos = [
+          createTestUtxo({ amount: BigInt(100000) }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        await expect(selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(-1000),
+          feeRate: 10,
+          strategy: 'efficiency',
+        })).rejects.toThrow('targetAmount must be a positive BigInt');
       });
     });
 

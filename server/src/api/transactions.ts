@@ -76,6 +76,12 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
     // - sent: negative (amount + fee already deducted during sync)
     // - consolidation: negative fee only (only fee lost)
     // - received: positive (what you received)
+    //
+    // PRECISION NOTE: BigInt to Number conversion is safe for Bitcoin amounts
+    // up to ~90 million BTC (Number.MAX_SAFE_INTEGER = 2^53 - 1 = 9,007,199,254,740,991 sats).
+    // This exceeds Bitcoin's 21 million coin cap by 4x, so precision loss is not a concern
+    // for transaction amounts. For amounts exceeding this threshold in other contexts,
+    // consider converting to string instead.
     const serializedTransactions = transactions.map(tx => {
       const blockHeight = bigIntToNumber(tx.blockHeight);
       const rawAmount = bigIntToNumberOrZero(tx.amount);

@@ -16,6 +16,7 @@ export interface AIStatus {
   endpoint?: string;
   error?: string;
   message?: string;
+  containerAvailable?: boolean;
 }
 
 export interface SuggestLabelRequest {

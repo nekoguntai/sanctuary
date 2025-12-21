@@ -357,6 +357,55 @@ router.get('/by-user/:userId', verifyGatewayRequest, async (req: Request, res: R
 });
 
 /**
+ * DELETE /api/v1/push/device/:deviceId
+ *
+ * INTERNAL ENDPOINT - Called by gateway to remove invalid push tokens.
+ * When FCM/APNs report a token as invalid (uninstalled app, expired token),
+ * the gateway calls this to clean up the database.
+ *
+ * Security: SEC-002 - Requires HMAC-signed gateway authentication
+ */
+router.delete('/device/:deviceId', verifyGatewayRequest, async (req: Request, res: Response) => {
+  try {
+    const { deviceId } = req.params;
+
+    // Check if device exists
+    const device = await prisma.pushDevice.findUnique({
+      where: { id: deviceId },
+    });
+
+    if (!device) {
+      // Return success even if not found (idempotent behavior)
+      return res.json({
+        success: true,
+        message: 'Device not found or already removed',
+      });
+    }
+
+    // Delete the device
+    await prisma.pushDevice.delete({
+      where: { id: deviceId },
+    });
+
+    log.info(`Gateway removed invalid ${device.platform} token`, {
+      deviceId,
+      userId: device.userId
+    });
+
+    res.json({
+      success: true,
+      message: 'Device removed',
+    });
+  } catch (error) {
+    log.error('Gateway device removal error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to remove device',
+    });
+  }
+});
+
+/**
  * POST /api/v1/push/gateway-audit
  *
  * INTERNAL ENDPOINT - Called by gateway to log security/audit events.

@@ -8,12 +8,12 @@
  * Key UX Principle: Hidden for base users, powerful for advanced users
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronUp, Sliders, Check, Lock, FileText, AlertTriangle, Loader2 } from 'lucide-react';
 import type { UTXO, WalletScriptType } from '../types';
 import type { SpendPrivacyAnalysis, WalletPrivacyResponse, SelectionStrategy } from '../src/api/transactions';
 import { StrategySelector, UIStrategy } from './StrategySelector';
-import { SpendPrivacyCard } from './SpendPrivacyCard';
+import SpendPrivacyCard from './SpendPrivacyCard';
 import { DustWarningBadge } from './DustWarningBadge';
 import { PrivacyBadge } from './PrivacyBadge';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -100,6 +100,10 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
   const [loadingStrategy, setLoadingStrategy] = useState(false);
   const [strategyError, setStrategyError] = useState<string | null>(null);
 
+  // Refs for debounce and request tracking
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const requestIdRef = useRef<number>(0);
+
   // Calculate selected total
   const selectedTotal = useMemo(() => {
     return utxos
@@ -115,19 +119,20 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
 
   // Fetch wallet privacy data when panel expands
   useEffect(() => {
-    if (isExpanded && !privacyData && !loadingPrivacy) {
-      setLoadingPrivacy(true);
-      transactionsApi.getWalletPrivacy(walletId)
-        .then(data => {
+    const fetchPrivacyData = async () => {
+      if (isExpanded && !privacyData && !loadingPrivacy) {
+        setLoadingPrivacy(true);
+        try {
+          const data = await transactionsApi.getWalletPrivacy(walletId);
           setPrivacyData(data);
-        })
-        .catch(err => {
+        } catch (err) {
           log.error('Failed to fetch wallet privacy', { error: err });
-        })
-        .finally(() => {
+        } finally {
           setLoadingPrivacy(false);
-        });
-    }
+        }
+      }
+    };
+    fetchPrivacyData();
   }, [isExpanded, walletId, privacyData, loadingPrivacy]);
 
   // Debounced spend analysis when selection changes
@@ -137,22 +142,47 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
       return;
     }
 
+    // Clear any existing timeout
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
     setLoadingAnalysis(true);
-    const timeoutId = setTimeout(() => {
+
+    // Increment request ID to track the latest request
+    requestIdRef.current += 1;
+    const currentRequestId = requestIdRef.current;
+
+    debounceRef.current = setTimeout(async () => {
       const utxoIds = Array.from(selectedUtxos);
-      transactionsApi.analyzeSpendPrivacy(walletId, utxoIds)
-        .then(analysis => {
+
+      try {
+        const analysis = await transactionsApi.analyzeSpendPrivacy(walletId, utxoIds);
+        // Only update state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
           setSpendAnalysis(analysis);
-        })
-        .catch(err => {
+        }
+      } catch (err) {
+        // Only log/handle error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
           log.error('Failed to analyze spend privacy', { error: err });
-        })
-        .finally(() => {
+        }
+      } finally {
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
           setLoadingAnalysis(false);
-        });
+        }
+      }
     }, 300); // Debounce 300ms
 
-    return () => clearTimeout(timeoutId);
+    // Cleanup function - clear timeout and increment request ID to invalidate in-flight requests
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      // Increment request ID to mark any in-flight requests as stale
+      requestIdRef.current += 1;
+    };
   }, [isExpanded, selectedUtxos, walletId]);
 
   // Handle strategy change - calls API for non-manual strategies

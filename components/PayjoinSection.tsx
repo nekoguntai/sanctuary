@@ -72,13 +72,20 @@ export function PayjoinSection({ walletId, enabled, onToggle, className = '' }: 
 
   // Fetch eligibility on mount
   useEffect(() => {
-    if (walletId) {
-      setLoading(true);
-      checkPayjoinEligibility(walletId)
-        .then(setEligibility)
-        .catch(() => setEligibility(null))
-        .finally(() => setLoading(false));
-    }
+    const fetchEligibility = async () => {
+      if (walletId) {
+        setLoading(true);
+        try {
+          const result = await checkPayjoinEligibility(walletId);
+          setEligibility(result);
+        } catch {
+          setEligibility(null);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchEligibility();
   }, [walletId]);
 
   // Close tooltip on outside click

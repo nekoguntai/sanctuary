@@ -139,3 +139,13 @@ export const DEFAULT_AI_ENDPOINT = '';
  * User must specify which model to use
  */
 export const DEFAULT_AI_MODEL = '';
+
+/**
+ * AI API rate limiting window in milliseconds
+ */
+export const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+/**
+ * AI API maximum requests per window
+ */
+export const AI_RATE_LIMIT_MAX_REQUESTS = 10;

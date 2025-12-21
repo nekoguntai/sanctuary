@@ -18,6 +18,7 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import { RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, AI_REQUEST_TIMEOUT_MS } from './constants';
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -25,8 +26,17 @@ const PORT = process.env.PORT || 3100;
 // Backend URL for fetching sanitized data
 const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:3001';
 
+// Generate cryptographically secure random secret if not provided
+function generateSecureSecret(): string {
+  const crypto = require('crypto');
+  return crypto.randomBytes(32).toString('hex');
+}
+
 // Shared secret for config endpoint (only backend should configure AI)
-const CONFIG_SECRET = process.env.AI_CONFIG_SECRET || '';
+// SECURITY: Always require a secret - generate one if not provided
+const ENV_CONFIG_SECRET = process.env.AI_CONFIG_SECRET;
+const CONFIG_SECRET = ENV_CONFIG_SECRET || generateSecureSecret();
+const IS_AUTO_GENERATED_SECRET = !ENV_CONFIG_SECRET;
 
 // AI endpoint configuration (set via API, not env for flexibility)
 let aiConfig = {
@@ -45,24 +55,29 @@ interface RateLimitEntry {
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
-const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 10; // 10 requests per minute
+const CLEANUP_INTERVAL_MS = 300000; // 5 minutes
+
+// Periodic cleanup to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  let cleaned = 0;
+  for (const [ip, e] of rateLimitStore.entries()) {
+    if (e.windowStart < cutoff) {
+      rateLimitStore.delete(ip);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[AI] Rate limit cleanup: removed ${cleaned} expired entries`);
+  }
+}, CLEANUP_INTERVAL_MS);
 
 const rateLimit = (req: Request, res: Response, next: NextFunction) => {
   const clientIp = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
 
   let entry = rateLimitStore.get(clientIp);
-
-  // Clean up old entries periodically
-  if (rateLimitStore.size > 1000) {
-    const cutoff = now - RATE_LIMIT_WINDOW_MS;
-    for (const [ip, e] of rateLimitStore.entries()) {
-      if (e.windowStart < cutoff) {
-        rateLimitStore.delete(ip);
-      }
-    }
-  }
 
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     // New window
@@ -110,13 +125,11 @@ app.get('/health', (_req: Request, res: Response) => {
  * Protected by shared secret to prevent unauthorized configuration
  */
 app.post('/config', (req: Request, res: Response) => {
-  // Verify shared secret if configured
-  if (CONFIG_SECRET) {
-    const providedSecret = req.headers['x-ai-config-secret'];
-    if (providedSecret !== CONFIG_SECRET) {
-      console.warn('[AI] Unauthorized config attempt');
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+  // SECURITY: Always verify shared secret - no bypass allowed
+  const providedSecret = req.headers['x-ai-config-secret'];
+  if (!providedSecret || providedSecret !== CONFIG_SECRET) {
+    console.warn('[AI] Unauthorized config attempt - invalid or missing secret');
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const { enabled, endpoint, model } = req.body;
@@ -146,7 +159,7 @@ app.get('/config', (_req: Request, res: Response) => {
 /**
  * Call external AI endpoint
  */
-async function callExternalAI(prompt: string, timeout = 30000): Promise<string | null> {
+async function callExternalAI(prompt: string, timeout = AI_REQUEST_TIMEOUT_MS): Promise<string | null> {
   if (!aiConfig.enabled || !aiConfig.endpoint || !aiConfig.model) {
     return null;
   }
@@ -200,58 +213,110 @@ async function callExternalAI(prompt: string, timeout = 30000): Promise<string |
 }
 
 /**
+ * Backend fetch result with explicit error handling
+ * SECURITY: Distinguishes between auth failures and other errors
+ */
+interface BackendFetchResult<T> {
+  success: boolean;
+  data?: T;
+  error?: 'auth_failed' | 'not_found' | 'server_error' | 'network_error';
+  status?: number;
+}
+
+/**
  * Fetch sanitized transaction data from backend
  * This is the ONLY data we can access - no keys, no signing, no secrets
+ * SECURITY: Explicitly validates backend response before proceeding
  */
-async function fetchTransactionContext(txId: string, authToken: string): Promise<any | null> {
+async function fetchTransactionContext(txId: string, authToken: string): Promise<BackendFetchResult<any>> {
   try {
     const response = await fetch(`${BACKEND_URL}/internal/ai/tx/${txId}`, {
       headers: { 'Authorization': `Bearer ${authToken}` },
     });
 
-    if (!response.ok) {
-      console.error(`[AI] Failed to fetch tx context: ${response.status}`);
-      return null;
+    // SECURITY: Explicit status code validation
+    if (response.status === 401 || response.status === 403) {
+      console.warn(`[AI] Auth failed for tx context: ${response.status}`);
+      return { success: false, error: 'auth_failed', status: response.status };
     }
 
-    return await response.json();
+    if (response.status === 404) {
+      console.warn(`[AI] Transaction not found: ${txId}`);
+      return { success: false, error: 'not_found', status: response.status };
+    }
+
+    if (!response.ok) {
+      console.error(`[AI] Failed to fetch tx context: ${response.status}`);
+      return { success: false, error: 'server_error', status: response.status };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
   } catch (error: any) {
     console.error(`[AI] Failed to fetch tx context: ${error.message}`);
-    return null;
+    return { success: false, error: 'network_error' };
   }
 }
 
 /**
  * Fetch wallet labels from backend
+ * SECURITY: Validates backend response before returning data
  */
-async function fetchWalletLabels(walletId: string, authToken: string): Promise<string[]> {
+async function fetchWalletLabels(walletId: string, authToken: string): Promise<BackendFetchResult<string[]>> {
   try {
     const response = await fetch(`${BACKEND_URL}/internal/ai/wallet/${walletId}/labels`, {
       headers: { 'Authorization': `Bearer ${authToken}` },
     });
 
-    if (!response.ok) return [];
+    // SECURITY: Explicit status code validation
+    if (response.status === 401 || response.status === 403) {
+      console.warn(`[AI] Auth failed for wallet labels: ${response.status}`);
+      return { success: false, error: 'auth_failed', status: response.status };
+    }
+
+    if (response.status === 404) {
+      return { success: false, error: 'not_found', status: response.status };
+    }
+
+    if (!response.ok) {
+      return { success: false, error: 'server_error', status: response.status };
+    }
 
     const data = await response.json() as { labels?: string[] };
-    return data.labels || [];
+    return { success: true, data: data.labels || [] };
   } catch {
-    return [];
+    return { success: false, error: 'network_error' };
   }
 }
 
 /**
  * Fetch wallet context for NL queries
+ * SECURITY: Validates backend response before returning data
  */
-async function fetchWalletContext(walletId: string, authToken: string): Promise<any | null> {
+async function fetchWalletContext(walletId: string, authToken: string): Promise<BackendFetchResult<any>> {
   try {
     const response = await fetch(`${BACKEND_URL}/internal/ai/wallet/${walletId}/context`, {
       headers: { 'Authorization': `Bearer ${authToken}` },
     });
 
-    if (!response.ok) return null;
-    return await response.json();
+    // SECURITY: Explicit status code validation
+    if (response.status === 401 || response.status === 403) {
+      console.warn(`[AI] Auth failed for wallet context: ${response.status}`);
+      return { success: false, error: 'auth_failed', status: response.status };
+    }
+
+    if (response.status === 404) {
+      return { success: false, error: 'not_found', status: response.status };
+    }
+
+    if (!response.ok) {
+      return { success: false, error: 'server_error', status: response.status };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
   } catch {
-    return null;
+    return { success: false, error: 'network_error' };
   }
 }
 
@@ -278,14 +343,33 @@ app.post('/suggest-label', rateLimit, async (req: Request, res: Response) => {
     return res.status(503).json({ error: 'AI is not enabled' });
   }
 
-  // Fetch sanitized transaction context from backend
-  const txContext = await fetchTransactionContext(transactionId, authToken);
-  if (!txContext) {
-    return res.status(404).json({ error: 'Transaction not found or access denied' });
+  // SECURITY: Fetch and validate transaction context from backend
+  const txResult = await fetchTransactionContext(transactionId, authToken);
+
+  // SECURITY: Return early with appropriate error if backend validation fails
+  if (!txResult.success) {
+    if (txResult.error === 'auth_failed') {
+      console.warn(`[AI] Auth validation failed for suggest-label: ${txResult.status}`);
+      return res.status(txResult.status || 401).json({ error: 'Authentication failed' });
+    }
+    if (txResult.error === 'not_found') {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    return res.status(502).json({ error: 'Failed to fetch transaction data' });
   }
 
-  // Fetch existing labels for context
-  const existingLabels = await fetchWalletLabels(txContext.walletId, authToken);
+  const txContext = txResult.data;
+
+  // Fetch existing labels for context (non-critical, continue even if fails)
+  const labelsResult = await fetchWalletLabels(txContext.walletId, authToken);
+
+  // SECURITY: Check for auth failure on labels fetch too
+  if (!labelsResult.success && labelsResult.error === 'auth_failed') {
+    console.warn(`[AI] Auth validation failed for wallet labels: ${labelsResult.status}`);
+    return res.status(labelsResult.status || 401).json({ error: 'Authentication failed' });
+  }
+
+  const existingLabels = labelsResult.success ? labelsResult.data || [] : [];
 
   // Build prompt with ONLY sanitized data
   // Note: We intentionally do NOT include addresses or txids in the prompt
@@ -332,9 +416,22 @@ app.post('/query', rateLimit, async (req: Request, res: Response) => {
     return res.status(503).json({ error: 'AI is not enabled' });
   }
 
-  // Fetch wallet context (just labels, no sensitive data)
-  const context = await fetchWalletContext(walletId, authToken);
-  const recentLabels = context?.labels?.join(', ') || 'None';
+  // SECURITY: Fetch and validate wallet context from backend
+  const contextResult = await fetchWalletContext(walletId, authToken);
+
+  // SECURITY: Return early with appropriate error if backend validation fails
+  if (!contextResult.success) {
+    if (contextResult.error === 'auth_failed') {
+      console.warn(`[AI] Auth validation failed for query: ${contextResult.status}`);
+      return res.status(contextResult.status || 401).json({ error: 'Authentication failed' });
+    }
+    if (contextResult.error === 'not_found') {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+    return res.status(502).json({ error: 'Failed to fetch wallet data' });
+  }
+
+  const recentLabels = contextResult.data?.labels?.join(', ') || 'None';
 
   const prompt = `You are a Bitcoin wallet assistant. Convert the user's question into a structured query.
 
@@ -539,4 +636,13 @@ app.listen(PORT, () => {
   console.log(`[AI] Sanctuary AI Container started on port ${PORT}`);
   console.log(`[AI] Backend URL: ${BACKEND_URL}`);
   console.log('[AI] Security: Isolated container - no DB access, no keys, read-only metadata');
+
+  // SECURITY: Warn if using auto-generated secret
+  if (IS_AUTO_GENERATED_SECRET) {
+    console.warn('[AI] WARNING: AI_CONFIG_SECRET not set - using auto-generated secret');
+    console.warn('[AI] WARNING: Backend must be configured with the same secret to sync config');
+    console.warn(`[AI] Auto-generated secret: ${CONFIG_SECRET}`);
+  } else {
+    console.log('[AI] Config secret: configured via environment');
+  }
 });

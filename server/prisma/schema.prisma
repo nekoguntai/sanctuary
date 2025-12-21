@@ -444,9 +444,10 @@ model ElectrumServer {
   enabled      Boolean  @default(true)
 
   // Health tracking
-  lastHealthCheck   DateTime?
-  healthCheckFails  Int       @default(0)  // Consecutive failures
-  isHealthy         Boolean   @default(true)
+  lastHealthCheck      DateTime?
+  healthCheckFails     Int       @default(0)  // Consecutive failures
+  isHealthy            Boolean   @default(true)
+  lastHealthCheckError String?   // Last error message (e.g., "Certificate mismatch: expected x, got y")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -176,6 +176,8 @@ export const NodeConfig: React.FC = () => {
     try {
       const result = await adminApi.testElectrumServer(id);
       setServerTestStatus(prev => ({ ...prev, [id]: result.success ? 'success' : 'error' }));
+      // Reload servers to get updated health check error
+      await loadServers();
       setTimeout(() => setServerTestStatus(prev => ({ ...prev, [id]: 'idle' })), 5000);
     } catch (error) {
       log.error('Failed to test server', { error });
@@ -725,7 +727,10 @@ export const NodeConfig: React.FC = () => {
                                 <div className="flex items-center space-x-2">
                                   <span className="font-medium text-sm truncate">{server.label}</span>
                                   {server.isHealthy === false && (
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded">
+                                    <span
+                                      className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded cursor-help"
+                                      title={server.lastHealthCheckError || 'Connection failed'}
+                                    >
                                       unhealthy
                                     </span>
                                   )}
@@ -764,7 +769,10 @@ export const NodeConfig: React.FC = () => {
                                 <CheckCircle className="w-4 h-4 text-emerald-500" />
                               )}
                               {serverTestStatus[server.id] === 'error' && (
-                                <XCircle className="w-4 h-4 text-rose-500" />
+                                <XCircle
+                                  className="w-4 h-4 text-rose-500 cursor-help"
+                                  title={server.lastHealthCheckError || 'Connection test failed'}
+                                />
                               )}
 
                               <button

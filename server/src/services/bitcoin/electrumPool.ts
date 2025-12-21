@@ -316,13 +316,14 @@ export class ElectrumPool extends EventEmitter {
   /**
    * Mark a server as healthy or unhealthy in the database
    */
-  private async updateServerHealthInDb(serverId: string, isHealthy: boolean, failCount?: number): Promise<void> {
+  private async updateServerHealthInDb(serverId: string, isHealthy: boolean, failCount?: number, errorMessage?: string): Promise<void> {
     try {
       await prisma.electrumServer.update({
         where: { id: serverId },
         data: {
           isHealthy,
           lastHealthCheck: new Date(),
+          lastHealthCheckError: isHealthy ? null : (errorMessage || null),
           ...(failCount !== undefined ? { healthCheckFails: failCount } : {}),
         },
       });

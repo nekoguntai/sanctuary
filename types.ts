@@ -205,6 +205,7 @@ export interface ElectrumServer {
   lastHealthCheck?: string | null;
   healthCheckFails?: number;
   isHealthy?: boolean;
+  lastHealthCheckError?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

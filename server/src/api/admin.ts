@@ -1707,12 +1707,14 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
         lastHealthCheck: new Date(),
         isHealthy: result.success,
         healthCheckFails: result.success ? 0 : server.healthCheckFails + 1,
+        lastHealthCheckError: result.success ? null : result.message,
       },
     });
 
     res.json({
       success: result.success,
       message: result.message,
+      error: result.success ? undefined : result.message,
       info: result.info,
     });
   } catch (error) {

@@ -29,7 +29,7 @@ declare global {
  * SEC-003: Verifies token is not revoked via jti claim
  * SEC-006: Verifies token audience is 'sanctuary:access'
  */
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
     // Extract token from Authorization header
     const token = extractTokenFromHeader(req.headers.authorization);
@@ -42,7 +42,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     }
 
     // SEC-006: Verify token with expected audience
-    const payload = verifyToken(token, TokenAudience.ACCESS);
+    const payload = await verifyToken(token, TokenAudience.ACCESS);
 
     // SEC-006: Reject 2FA pending tokens for regular endpoints
     if (payload.pending2FA) {
@@ -93,13 +93,13 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
  *
  * SEC-006: Verifies token audience if present
  */
-export function optionalAuth(req: Request, res: Response, next: NextFunction) {
+export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
     const token = extractTokenFromHeader(req.headers.authorization);
 
     if (token) {
       // SEC-006: Verify with expected audience
-      const payload = verifyToken(token, TokenAudience.ACCESS);
+      const payload = await verifyToken(token, TokenAudience.ACCESS);
 
       // Don't set user for 2FA pending tokens
       if (!payload.pending2FA) {

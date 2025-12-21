@@ -39,6 +39,8 @@ model User {
   groupMemberships GroupMember[]
   pushDevices PushDevice[]
   draftTransactions DraftTransaction[]
+  refreshTokens RefreshToken[]
+  revokedTokens RevokedToken[]
 
   @@index([isAdmin])                      // For admin user lookups
   @@map("users")
@@ -586,4 +588,45 @@ model PushDevice {
   @@index([userId])
   @@index([platform])                  // For notification routing by platform
   @@map("push_devices")
+}
+
+// ========================================
+// TOKEN MANAGEMENT
+// ========================================
+
+// Refresh tokens for mobile app session management
+// Tokens are stored as SHA256 hashes for security
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   @unique  // SHA256 hash of the refresh token
+  deviceId    String?           // Optional device identifier
+  deviceName  String?           // User-friendly device name (e.g., "iPhone 15")
+  userAgent   String?           // Browser/app user agent
+  ipAddress   String?           // IP address at token creation
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])                 // For cleanup of expired tokens
+  @@map("refresh_tokens")
+}
+
+// Revoked access tokens (for logout before expiry)
+// Tokens are tracked by their JWT ID (jti) until natural expiration
+model RevokedToken {
+  jti       String   @id        // JWT ID from the token
+  userId    String?             // User who owned the token (optional for cleanup)
+  reason    String?             // Reason for revocation (logout, security, admin)
+  revokedAt DateTime @default(now())
+  expiresAt DateTime            // When the token would have expired (for cleanup)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])                 // For cleanup of expired revocations
+  @@index([userId])                    // For user-specific revocation queries
+  @@map("revoked_tokens")
 }

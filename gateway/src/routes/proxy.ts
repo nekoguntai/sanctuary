@@ -46,6 +46,7 @@ import { createProxyMiddleware, Options } from 'http-proxy-middleware';
 import { config } from '../config';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { defaultRateLimiter } from '../middleware/rateLimit';
+import { validateRequest } from '../middleware/validateRequest';
 import { createLogger } from '../utils/logger';
 import { logSecurityEvent } from '../middleware/requestLogger';
 
@@ -61,10 +62,17 @@ const router = Router();
  * Admin routes and sensitive operations should NOT be exposed.
  */
 const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
-  // Authentication (limited)
+  // Authentication
   { method: 'POST', pattern: /^\/api\/v1\/auth\/login$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/refresh$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/logout$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/logout-all$/ },
   { method: 'GET', pattern: /^\/api\/v1\/auth\/me$/ },
   { method: 'PATCH', pattern: /^\/api\/v1\/auth\/me\/preferences$/ },
+
+  // Session management
+  { method: 'GET', pattern: /^\/api\/v1\/auth\/sessions$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/auth\/sessions\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
 
   // Wallets (read-only + sync)
   { method: 'GET', pattern: /^\/api\/v1\/wallets$/ },
@@ -189,8 +197,9 @@ const proxyOptions: Options = {
 // Create proxy middleware
 const proxy = createProxyMiddleware(proxyOptions);
 
-// Public route (no auth) - login only
-router.post('/api/v1/auth/login', checkWhitelist, proxy);
+// Public routes (no auth required)
+router.post('/api/v1/auth/login', checkWhitelist, validateRequest, proxy);
+router.post('/api/v1/auth/refresh', checkWhitelist, validateRequest, proxy);
 
 // Protected routes (require auth)
 router.use(
@@ -198,6 +207,7 @@ router.use(
   authenticate,
   defaultRateLimiter,
   checkWhitelist,
+  validateRequest,
   proxy
 );
 

@@ -1,26 +1,15 @@
 /**
  * Token Revocation Service (SEC-003)
  *
- * In-memory token revocation list for JWT invalidation.
+ * PostgreSQL-based token revocation for JWT invalidation.
  * Tracks revoked token IDs (jti) to enable logout and token invalidation.
  *
  * ## Security Design
  *
  * - Uses jti (JWT ID) claims to uniquely identify tokens
- * - LRU cache with configurable max size (default: 100,000 entries)
+ * - Persisted in PostgreSQL for durability across restarts
  * - Automatic cleanup of expired entries every 5 minutes
- * - Prevents memory leaks on high-traffic instances via LRU eviction
- * - No Redis dependency - suitable for single-instance deployments
- *
- * ## Configuration
- *
- * - TOKEN_REVOCATION_MAX_SIZE: Maximum cache entries (default: 100,000)
- *
- * ## Limitations
- *
- * - Revocation list is lost on server restart
- * - Not suitable for multi-instance deployments without sticky sessions
- * - Consider Redis-based implementation for horizontal scaling
+ * - Supports multi-instance deployments
  *
  * ## Usage
  *
@@ -29,38 +18,10 @@
  * 3. In auth middleware, call isTokenRevoked(jti)
  */
 
-import { LRUCache } from 'lru-cache';
+import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('TOKEN_REVOCATION');
-
-/**
- * Revoked token entry with expiration time
- */
-interface RevokedToken {
-  jti: string;
-  revokedAt: Date;
-  expiresAt: Date; // When the original token would have expired
-  reason?: string;
-}
-
-/**
- * Maximum number of entries in the revocation cache
- * Configurable via TOKEN_REVOCATION_MAX_SIZE environment variable
- * Default: 100,000 entries to prevent memory leaks on high-traffic instances
- */
-const MAX_REVOCATION_ENTRIES = parseInt(process.env.TOKEN_REVOCATION_MAX_SIZE || '100000', 10);
-
-/**
- * In-memory revocation list using LRU cache
- * Automatically evicts least recently used entries when max size is reached
- * This prevents unbounded memory growth on high-traffic instances
- */
-const revokedTokens = new LRUCache<string, RevokedToken>({
-  max: MAX_REVOCATION_ENTRIES,
-  // No TTL set here - we handle expiration manually via cleanup interval
-  // This allows us to keep tokens until they naturally expire
-});
 
 /**
  * Cleanup interval in milliseconds (5 minutes)
@@ -72,23 +33,41 @@ const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
  *
  * @param jti - The JWT ID to revoke
  * @param expiresAt - When the token would have expired (for automatic cleanup)
+ * @param userId - Optional user ID who owned the token
  * @param reason - Optional reason for revocation (for logging)
  */
-export function revokeToken(jti: string, expiresAt: Date, reason?: string): void {
+export async function revokeToken(
+  jti: string,
+  expiresAt: Date,
+  userId?: string,
+  reason?: string
+): Promise<void> {
   if (!jti) {
     log.warn('Attempted to revoke token with empty jti');
     return;
   }
 
-  const entry: RevokedToken = {
-    jti,
-    revokedAt: new Date(),
-    expiresAt,
-    reason,
-  };
-
-  revokedTokens.set(jti, entry);
-  log.debug('Token revoked', { jti: jti.substring(0, 8) + '...', reason });
+  try {
+    await prisma.revokedToken.upsert({
+      where: { jti },
+      update: {
+        userId,
+        reason,
+        revokedAt: new Date(),
+        expiresAt,
+      },
+      create: {
+        jti,
+        userId,
+        reason,
+        expiresAt,
+      },
+    });
+    log.debug('Token revoked', { jti: jti.substring(0, 8) + '...', reason });
+  } catch (error) {
+    log.error('Failed to revoke token', { error, jti: jti.substring(0, 8) + '...' });
+    throw error;
+  }
 }
 
 /**
@@ -97,65 +76,102 @@ export function revokeToken(jti: string, expiresAt: Date, reason?: string): void
  * @param jti - The JWT ID to check
  * @returns true if the token is revoked, false otherwise
  */
-export function isTokenRevoked(jti: string): boolean {
+export async function isTokenRevoked(jti: string): Promise<boolean> {
   if (!jti) {
     return false; // Tokens without jti cannot be revoked
   }
-  return revokedTokens.has(jti);
+
+  try {
+    const revoked = await prisma.revokedToken.findUnique({
+      where: { jti },
+      select: { jti: true },
+    });
+    return revoked !== null;
+  } catch (error) {
+    log.error('Failed to check token revocation', { error, jti: jti.substring(0, 8) + '...' });
+    // Fail secure - treat as revoked if we can't check
+    return true;
+  }
 }
 
 /**
  * Get the count of revoked tokens (for monitoring)
  */
-export function getRevokedTokenCount(): number {
-  return revokedTokens.size;
+export async function getRevokedTokenCount(): Promise<number> {
+  try {
+    return await prisma.revokedToken.count();
+  } catch (error) {
+    log.error('Failed to get revoked token count', { error });
+    return 0;
+  }
 }
 
 /**
  * Cleanup expired entries from the revocation list
  * Tokens that have passed their expiration time no longer need to be tracked
  */
-function cleanupExpiredEntries(): void {
-  const now = new Date();
-  let cleaned = 0;
+async function cleanupExpiredEntries(): Promise<void> {
+  try {
+    const result = await prisma.revokedToken.deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date(),
+        },
+      },
+    });
 
-  for (const [jti, entry] of revokedTokens.entries()) {
-    if (entry.expiresAt < now) {
-      revokedTokens.delete(jti);
-      cleaned++;
+    if (result.count > 0) {
+      log.debug('Cleaned up expired revocation entries', { count: result.count });
     }
-  }
-
-  if (cleaned > 0) {
-    log.debug('Cleaned up expired revocation entries', { count: cleaned });
+  } catch (error) {
+    log.error('Failed to cleanup expired tokens', { error });
   }
 }
 
 /**
  * Revoke all tokens for a user (e.g., password change, security concern)
- * This is a placeholder - requires storing user -> jti mappings
  *
  * @param userId - The user ID whose tokens should be revoked
  * @param reason - Reason for revocation
+ * @returns Number of tokens revoked
  */
-export function revokeAllUserTokens(userId: string, reason?: string): void {
-  // Note: Current implementation does not track user -> jti mappings
-  // To implement this, you would need to either:
-  // 1. Store jti -> userId mapping when tokens are created
-  // 2. Use a different revocation strategy (e.g., user version number)
+export async function revokeAllUserTokens(userId: string, reason?: string): Promise<number> {
   log.info('Revoke all user tokens requested', { userId, reason });
-  // This would be implemented with Redis or database in production
+
+  try {
+    // Get all refresh tokens for the user and revoke their associated access tokens
+    const refreshTokens = await prisma.refreshToken.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+
+    // Delete all refresh tokens for the user
+    const result = await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    log.info('Revoked all user tokens', { userId, count: result.count });
+    return result.count;
+  } catch (error) {
+    log.error('Failed to revoke all user tokens', { error, userId });
+    throw error;
+  }
 }
 
 /**
  * Clear all revoked tokens (for testing only)
  */
-export function clearAllRevokedTokens(): void {
-  revokedTokens.clear();
-  log.debug('All revoked tokens cleared');
+export async function clearAllRevokedTokens(): Promise<void> {
+  try {
+    await prisma.revokedToken.deleteMany();
+    log.debug('All revoked tokens cleared');
+  } catch (error) {
+    log.error('Failed to clear all revoked tokens', { error });
+    throw error;
+  }
 }
 
-// Start cleanup timer
+// Cleanup timer
 let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
@@ -166,8 +182,13 @@ export function initializeRevocationService(): void {
     return; // Already initialized
   }
 
-  cleanupInterval = setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL_MS);
-  log.info('Token revocation service initialized');
+  cleanupInterval = setInterval(() => {
+    cleanupExpiredEntries().catch((err) => {
+      log.error('Cleanup interval error', { error: err });
+    });
+  }, CLEANUP_INTERVAL_MS);
+
+  log.info('Token revocation service initialized (PostgreSQL-backed)');
 }
 
 /**

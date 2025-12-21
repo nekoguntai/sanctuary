@@ -154,16 +154,17 @@ test_database_connection() {
 test_database_tables_exist() {
     log_info "Checking if database tables exist..."
 
-    # Check for User table (created by migration)
-    # Use LOWER() for case-insensitive comparison since Prisma uses PascalCase
+    # Check for users table (created by Prisma migration - see @@map("users") in schema.prisma)
     local table_check=$(docker exec sanctuary-db psql -U sanctuary -d sanctuary -t -c \
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE LOWER(table_name) = 'user' AND table_schema = 'public');" 2>/dev/null | tr -d ' ')
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users' AND table_schema = 'public');" 2>/dev/null | tr -d ' ')
 
     if [ "$table_check" = "t" ]; then
         log_success "Database tables exist"
         return 0
     else
         log_error "Database tables not found - migration may not have run"
+        # Debug: show what tables actually exist
+        docker exec sanctuary-db psql -U sanctuary -d sanctuary -c "\dt public.*" 2>/dev/null | head -20
         return 1
     fi
 }

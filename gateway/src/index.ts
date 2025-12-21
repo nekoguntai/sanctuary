@@ -47,6 +47,12 @@ const corsOptions: cors.CorsOptions = {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-Id'],
 };
+
+// Warn if CORS is wide open
+if (config.corsAllowedOrigins.length === 0) {
+  log.warn('CORS is configured to allow all origins. Set CORS_ALLOWED_ORIGINS to restrict access.');
+}
+
 app.use(cors(corsOptions));
 
 // Body parsing

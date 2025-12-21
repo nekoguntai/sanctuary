@@ -11,17 +11,65 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { getPrivacyGrade } from '../utils/privacy';
 
 const log = createLogger('PRIVACY');
 
-// Privacy scoring weights (negative values reduce privacy)
+/**
+ * Privacy scoring weights (negative values reduce privacy score)
+ *
+ * Each weight represents a privacy risk factor that reduces the overall privacy score.
+ * These values are calibrated based on the severity of privacy leakage:
+ */
 const WEIGHTS = {
-  ADDRESS_REUSE: -20,       // Address used multiple times
-  CLUSTER_LINKAGE: -5,      // Per additional UTXO in same cluster
-  ROUND_AMOUNT: -10,        // Amount is a round number
-  TIMING_CORRELATION: -10,  // Same-block with another receive
-  SMALL_UTXO: -5,           // Very small relative to total
-  LARGE_UTXO: -5,           // Very large relative to total
+  /**
+   * ADDRESS_REUSE (-20): Heavy penalty for using the same address multiple times.
+   * Rationale: Address reuse is one of the most significant privacy risks in Bitcoin.
+   * It allows observers to definitively link multiple transactions to the same entity,
+   * revealing spending patterns, total holdings, and transaction history.
+   */
+  ADDRESS_REUSE: -20,
+
+  /**
+   * CLUSTER_LINKAGE (-5): Moderate penalty per additional UTXO from the same transaction.
+   * Rationale: UTXOs created in the same transaction are known to belong to the same wallet.
+   * This creates a cluster of linked coins that can be tracked together. The penalty scales
+   * with the cluster size to discourage large clustered holdings.
+   */
+  CLUSTER_LINKAGE: -5,
+
+  /**
+   * ROUND_AMOUNT (-10): Penalty for UTXOs with round amounts (e.g., 1.0 BTC, 0.5 BTC).
+   * Rationale: Round amounts are statistically rare in organic Bitcoin usage but common
+   * for exchange withdrawals and automated services. They serve as fingerprints that can
+   * help identify the source and potentially link identities.
+   */
+  ROUND_AMOUNT: -10,
+
+  /**
+   * TIMING_CORRELATION (-10): Penalty for receiving multiple UTXOs in the same block.
+   * Rationale: Simultaneous receives suggest coordinated activity (batch processing,
+   * exchange withdrawals, or related transactions). This timing pattern can help
+   * observers link addresses and identify common ownership.
+   */
+  TIMING_CORRELATION: -10,
+
+  /**
+   * SMALL_UTXO (-5): Small penalty for UTXOs that are very small relative to wallet total.
+   * Rationale: Dust and very small UTXOs are often change outputs or test transactions.
+   * They're expensive to spend (high fee-to-value ratio) and can reveal wallet structure.
+   * However, the penalty is light as small UTXOs are sometimes unavoidable.
+   */
+  SMALL_UTXO: -5,
+
+  /**
+   * LARGE_UTXO (-5): Small penalty for UTXOs that are very large relative to wallet total.
+   * Rationale: Disproportionately large UTXOs stand out and can be tracked more easily.
+   * They may indicate consolidation, large deposits, or significant holdings, making
+   * them notable to blockchain analysts. Breaking large amounts into smaller UTXOs
+   * improves fungibility and privacy.
+   */
+  LARGE_UTXO: -5,
 };
 
 export interface PrivacyFactor {
@@ -71,16 +119,6 @@ function isRoundAmount(satoshis: bigint): boolean {
   const str = amount.toString();
   const trailingZeros = str.length - str.replace(/0+$/, '').length;
   return trailingZeros >= 4; // 10000+ sats with trailing zeros
-}
-
-/**
- * Get a grade from a numeric score
- */
-function getGrade(score: number): 'excellent' | 'good' | 'fair' | 'poor' {
-  if (score >= 80) return 'excellent';
-  if (score >= 60) return 'good';
-  if (score >= 40) return 'fair';
-  return 'poor';
 }
 
 /**
@@ -218,7 +256,7 @@ export async function calculateUtxoPrivacy(
 
   return {
     score,
-    grade: getGrade(score),
+    grade: getPrivacyGrade(score),
     factors,
     warnings,
   };
@@ -329,7 +367,7 @@ export async function calculateWalletPrivacy(
     utxos: utxoInfos,
     summary: {
       averageScore: Math.round(averageScore),
-      grade: getGrade(averageScore),
+      grade: getPrivacyGrade(averageScore),
       utxoCount: utxos.length,
       addressReuseCount,
       roundAmountCount,
@@ -405,7 +443,7 @@ export async function calculateSpendPrivacy(
 
   return {
     score,
-    grade: getGrade(score),
+    grade: getPrivacyGrade(score),
     linkedAddresses,
     warnings,
   };

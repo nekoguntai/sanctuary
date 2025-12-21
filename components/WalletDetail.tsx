@@ -74,6 +74,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { createLogger } from '../utils/logger';
+import { logError } from '../utils/errorHandler';
 
 const log = createLogger('WalletDetail');
 
@@ -393,6 +394,8 @@ export const WalletDetail: React.FC = () => {
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
+
     const fetchUri = async () => {
       setPayjoinLoading(true);
       try {
@@ -403,6 +406,10 @@ export const WalletDetail: React.FC = () => {
           setPayjoinUri(result.uri);
         }
       } catch (err) {
+        // Ignore aborted requests
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         log.error('Failed to generate Payjoin URI', err);
         if (!cancelled) {
           setPayjoinUri(null);
@@ -418,6 +425,7 @@ export const WalletDetail: React.FC = () => {
     const timeoutId = setTimeout(fetchUri, 300);
     return () => {
       cancelled = true;
+      abortController.abort();
       clearTimeout(timeoutId);
     };
   }, [payjoinEnabled, receiveAmount, receiveAddressForPayjoin?.id]);
@@ -735,14 +743,16 @@ export const WalletDetail: React.FC = () => {
       const userGroups = await authApi.getUserGroups();
       setGroups(userGroups);
     } catch (err) {
-      log.error('Failed to fetch user groups', { error: err });
+      logError(log, err, 'Failed to fetch user groups');
+      // Non-critical - user can still view wallet without groups
     }
 
     try {
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
     } catch (err) {
-      log.error('Failed to fetch wallet share info', { error: err });
+      logError(log, err, 'Failed to fetch wallet share info');
+      // Non-critical - user can still view wallet without share info
     }
 
     setLoading(false);
@@ -778,7 +788,8 @@ export const WalletDetail: React.FC = () => {
       setTxOffset(prev => prev + TX_PAGE_SIZE);
       setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
     } catch (err) {
-      log.error('Failed to load more transactions', { error: err });
+      logError(log, err, 'Failed to load more transactions');
+      handleError(err, 'Failed to Load More Transactions');
     } finally {
       setLoadingMoreTx(false);
     }
@@ -803,7 +814,8 @@ export const WalletDetail: React.FC = () => {
 
       setAddresses(prev => reset ? formattedAddrs : [...prev, ...formattedAddrs]);
     } catch (err) {
-      log.error('Failed to load addresses', { error: err });
+      logError(log, err, 'Failed to load addresses');
+      // Non-critical - addresses tab may be empty but wallet is still usable
     } finally {
       setLoadingAddresses(false);
     }
@@ -872,7 +884,8 @@ export const WalletDetail: React.FC = () => {
         // Reload all addresses
         await loadAddresses(id, 20, 0, true);
       } catch (err) {
-        log.error('Failed to generate more addresses', { error: err });
+        logError(log, err, 'Failed to generate more addresses');
+        handleError(err, 'Failed to Generate Addresses');
       } finally {
         setLoadingAddresses(false);
       }
@@ -893,7 +906,8 @@ export const WalletDetail: React.FC = () => {
       const labels = await labelsApi.getLabels(id);
       setAvailableLabels(labels);
     } catch (err) {
-      log.error('Failed to load labels', { error: err });
+      logError(log, err, 'Failed to load labels');
+      handleError(err, 'Failed to Load Labels');
     }
   };
 
@@ -911,7 +925,8 @@ export const WalletDetail: React.FC = () => {
       );
       setEditingAddressId(null);
     } catch (err) {
-      log.error('Failed to save address labels', { error: err });
+      logError(log, err, 'Failed to save address labels');
+      handleError(err, 'Failed to Save Labels');
     } finally {
       setSavingAddressLabels(false);
     }
@@ -952,7 +967,8 @@ export const WalletDetail: React.FC = () => {
     try {
       await transactionsApi.freezeUTXO(utxo.id, newFrozenState);
     } catch (err) {
-      log.error('Failed to freeze UTXO', { error: err });
+      logError(log, err, 'Failed to freeze UTXO');
+      handleError(err, 'Failed to Freeze UTXO');
       // Revert optimistic update on error
       setUTXOs(current =>
         current.map(u =>
@@ -1091,7 +1107,8 @@ export const WalletDetail: React.FC = () => {
       const existingUserIds = walletShareInfo?.users.map(u => u.id) || [];
       setUserSearchResults(results.filter(u => !existingUserIds.includes(u.id)));
     } catch (err) {
-      log.error('Failed to search users', { error: err });
+      logError(log, err, 'Failed to search users');
+      handleError(err, 'Failed to Search Users');
     } finally {
       setSearchingUsers(false);
     }

@@ -62,11 +62,15 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
   // Load explorer URL from server config
   useEffect(() => {
-    bitcoinApi.getStatus().then(status => {
-      if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
-    }).catch(err => {
-      log.error('Failed to fetch explorer URL', { error: err });
-    });
+    const fetchExplorerUrl = async () => {
+      try {
+        const status = await bitcoinApi.getStatus();
+        if (status.explorerUrl) setExplorerUrl(status.explorerUrl);
+      } catch (err) {
+        log.error('Failed to fetch explorer URL', { error: err });
+      }
+    };
+    fetchExplorerUrl();
   }, []);
 
   // Filter out replaced transactions (rbfStatus === 'replaced')

@@ -40,6 +40,7 @@ import { createLogger } from '../utils/logger';
 import * as adminApi from '../src/api/admin';
 import { ExternalLink, Github, Heart, Zap, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { logError } from '../utils/errorHandler';
 
 const log = createLogger('Layout');
 
@@ -177,7 +178,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
         const info = await adminApi.checkVersion();
         setVersionInfo(info);
       } catch (error) {
-        log.error('Failed to check version', { error });
+        logError(log, error, 'Failed to check version');
+        // Non-critical - version check failure doesn't affect functionality
       } finally {
         setVersionLoading(false);
       }
@@ -191,7 +193,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
       setCopiedAddress(type);
       setTimeout(() => setCopiedAddress(null), 2000);
     } catch (error) {
-      log.error('Failed to copy to clipboard', { error });
+      logError(log, error, 'Failed to copy to clipboard');
+      // User will notice the copy feedback didn't appear
     }
   };
 
@@ -221,6 +224,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
             removeNotificationsByType('pending_drafts', wallet.id);
           }
         } catch (err) {
+          logError(log, err, 'Failed to fetch drafts for wallet', {
+            context: { walletId: wallet.id },
+          });
           // Non-critical - continue with other wallets
         }
       }

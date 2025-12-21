@@ -15,7 +15,7 @@ interface SpendPrivacyCardProps {
   className?: string;
 }
 
-export const SpendPrivacyCard: React.FC<SpendPrivacyCardProps> = ({
+const SpendPrivacyCard: React.FC<SpendPrivacyCardProps> = ({
   analysis,
   className = '',
 }) => {
@@ -152,3 +152,5 @@ export const SpendPrivacyCard: React.FC<SpendPrivacyCardProps> = ({
     </div>
   );
 };
+
+export default SpendPrivacyCard;

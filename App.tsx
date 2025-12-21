@@ -30,6 +30,9 @@ import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
 import { QueryProvider } from './providers/QueryProvider';
 import * as authApi from './src/api/auth';
+import { createLogger } from './utils/logger';
+
+const log = createLogger('App');
 
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
@@ -52,7 +55,7 @@ const AppRoutes: React.FC = () => {
       // Force a page reload to ensure all user data is fresh
       window.location.reload();
     } catch (error) {
-      console.error('Failed to refresh user data:', error);
+      log.error('Failed to refresh user data', { error });
       // Still close the modal on success
       setShowPasswordModal(false);
       window.location.reload();

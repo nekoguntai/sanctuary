@@ -597,6 +597,25 @@ export interface WebSocketCallbacks {
 }
 
 // ============================================================================
+// UTXO SELECTION STRATEGIES
+// ============================================================================
+
+/**
+ * UTXO selection strategy for transaction building
+ * - privacy: Minimize address linking and metadata leakage
+ * - efficiency: Minimize fees and optimize transaction size
+ * - oldest_first: Select oldest UTXOs first (useful for coin age)
+ * - largest_first: Select largest UTXOs first (consolidation)
+ * - smallest_first: Select smallest UTXOs first (dust cleanup)
+ */
+export type SelectionStrategy =
+  | 'privacy'
+  | 'efficiency'
+  | 'oldest_first'
+  | 'largest_first'
+  | 'smallest_first';
+
+// ============================================================================
 // APP STATE
 // ============================================================================
 

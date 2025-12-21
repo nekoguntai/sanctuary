@@ -436,12 +436,8 @@ export async function analyzeSpendPrivacy(
 // UTXO SELECTION API
 // ========================================
 
-export type SelectionStrategy =
-  | 'privacy'
-  | 'efficiency'
-  | 'oldest_first'
-  | 'largest_first'
-  | 'smallest_first';
+// Re-export from central types
+export type { SelectionStrategy } from '../../types';
 
 export interface SelectedUtxo {
   id: string;

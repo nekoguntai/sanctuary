@@ -10,6 +10,7 @@ import { themeRegistry } from '../themes';
 import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
 import { createLogger } from '../utils/logger';
+import { logError } from '../utils/errorHandler';
 
 const log = createLogger('Settings');
 
@@ -47,7 +48,9 @@ const TelegramSettings: React.FC = () => {
         setTestResult({ success: false, message: result.error || 'Failed to send test message' });
       }
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to test connection';
+      const message = logError(log, err, 'Failed to test Telegram connection', {
+        fallbackMessage: 'Failed to test connection',
+      });
       setTestResult({ success: false, message });
     } finally {
       setIsTesting(false);
@@ -74,7 +77,9 @@ const TelegramSettings: React.FC = () => {
         setTestResult({ success: false, message: result.error || 'Failed to fetch chat ID' });
       }
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to fetch chat ID';
+      const message = logError(log, err, 'Failed to fetch Telegram chat ID', {
+        fallbackMessage: 'Failed to fetch chat ID',
+      });
       setTestResult({ success: false, message });
     } finally {
       setIsFetchingChatId(false);
@@ -98,7 +103,9 @@ const TelegramSettings: React.FC = () => {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to save settings';
+      const message = logError(log, err, 'Failed to save Telegram settings', {
+        fallbackMessage: 'Failed to save settings',
+      });
       setError(message);
     } finally {
       setIsSaving(false);
@@ -122,7 +129,9 @@ const TelegramSettings: React.FC = () => {
     } catch (err) {
       // Revert on error
       setEnabled(!newEnabled);
-      const message = err instanceof ApiError ? err.message : 'Failed to update';
+      const message = logError(log, err, 'Failed to toggle Telegram notifications', {
+        fallbackMessage: 'Failed to update settings',
+      });
       setError(message);
     }
   };

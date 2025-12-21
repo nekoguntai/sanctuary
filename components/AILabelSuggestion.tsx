@@ -46,11 +46,15 @@ export const AILabelSuggestion: React.FC<AILabelSuggestionProps> = ({
     } catch (err: any) {
       log.error('Failed to get AI label suggestion', { error: err });
 
-      // Check if AI is not enabled/configured
+      // Check error type and provide user-friendly messages
       if (err.message?.includes('503') || err.message?.includes('not enabled')) {
         setError('AI is not enabled. Configure it in Admin → AI Assistant.');
-      } else if (err.message?.includes('429')) {
+      } else if (err.message?.includes('429') || err.message?.includes('rate limit')) {
         setError('Too many requests. Please try again in a moment.');
+      } else if (err.message?.includes('timeout') || err.message?.includes('timed out')) {
+        setError('Request timed out. The AI is taking too long to respond. Please try again.');
+      } else if (err.message?.includes('network') || err.message?.includes('fetch failed')) {
+        setError('Network error. Please check your connection and try again.');
       } else {
         setError('Failed to get suggestion. AI may be unavailable.');
       }

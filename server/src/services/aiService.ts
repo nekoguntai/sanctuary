@@ -20,11 +20,43 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { createHash } from 'crypto';
 
 const log = createLogger('AI');
 
 // AI container URL
 const AI_CONTAINER_URL = process.env.AI_CONTAINER_URL || 'http://ai:3100';
+
+// AI config secret for authenticating with container
+const AI_CONFIG_SECRET = process.env.AI_CONFIG_SECRET || '';
+
+/**
+ * Config sync state tracking
+ * SECURITY: Only sync config when it actually changes to avoid redundant requests
+ */
+interface ConfigSyncState {
+  lastHash: string;
+  lastSyncTime: number;
+  syncSuccess: boolean;
+}
+
+let configSyncState: ConfigSyncState = {
+  lastHash: '',
+  lastSyncTime: 0,
+  syncSuccess: false,
+};
+
+/**
+ * Generate a hash of the config for change detection
+ */
+function hashConfig(config: AIConfig): string {
+  const data = JSON.stringify({
+    enabled: config.enabled,
+    endpoint: config.endpoint,
+    model: config.model,
+  });
+  return createHash('sha256').update(data).digest('hex');
+}
 
 /**
  * Transaction context for label suggestions
@@ -58,6 +90,63 @@ interface AIConfig {
   enabled: boolean;
   endpoint: string;
   model: string;
+}
+
+/**
+ * AI Container Response Interfaces
+ */
+interface AIHealthResponse {
+  available: boolean;
+  error?: string;
+}
+
+interface AISuggestLabelResponse {
+  suggestion: string | null;
+}
+
+interface AIQueryResponse {
+  query: QueryResult | null;
+}
+
+interface AIDetectOllamaResponse {
+  found: boolean;
+  endpoint?: string;
+  models?: string[];
+  message?: string;
+}
+
+interface AIListModelsResponse {
+  models: Array<{ name: string; size: number; modifiedAt: string }>;
+  error?: string;
+}
+
+interface AIPullModelResponse {
+  success: boolean;
+  model?: string;
+  status?: string;
+  error?: string;
+}
+
+/**
+ * Validate AI container response
+ * @param response The response to validate
+ * @param requiredFields Fields that must be present in the response
+ * @returns The validated response or null if validation fails
+ */
+function validateResponse<T>(response: unknown, requiredFields: string[]): T | null {
+  if (!response || typeof response !== 'object') {
+    log.warn('Response validation failed: not an object', { response });
+    return null;
+  }
+
+  for (const field of requiredFields) {
+    if (!(field in response)) {
+      log.warn('Response validation failed: missing field', { field, response });
+      return null;
+    }
+  }
+
+  return response as T;
 }
 
 /**
@@ -105,12 +194,29 @@ async function getAIConfig(): Promise<AIConfig> {
 
 /**
  * Sync configuration to AI container
+ * SECURITY: Only syncs when config actually changes (hash-based detection)
+ * SECURITY: Requires AI_CONFIG_SECRET for authentication
  */
-async function syncConfigToContainer(config: AIConfig): Promise<boolean> {
+async function syncConfigToContainer(config: AIConfig, force = false): Promise<boolean> {
+  const currentHash = hashConfig(config);
+
+  // Skip sync if config hasn't changed and last sync was successful
+  if (!force && configSyncState.lastHash === currentHash && configSyncState.syncSuccess) {
+    return true;
+  }
+
+  // Warn if no secret is configured
+  if (!AI_CONFIG_SECRET) {
+    log.warn('AI_CONFIG_SECRET not set - config sync will be rejected by container');
+  }
+
   try {
     const response = await fetch(`${AI_CONTAINER_URL}/config`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-AI-Config-Secret': AI_CONFIG_SECRET,
+      },
       body: JSON.stringify({
         enabled: config.enabled,
         endpoint: config.endpoint,
@@ -119,11 +225,36 @@ async function syncConfigToContainer(config: AIConfig): Promise<boolean> {
       signal: AbortSignal.timeout(5000),
     });
 
-    return response.ok;
+    const success = response.ok;
+
+    // Update sync state
+    configSyncState = {
+      lastHash: currentHash,
+      lastSyncTime: Date.now(),
+      syncSuccess: success,
+    };
+
+    if (!success) {
+      log.error('Failed to sync config to AI container', { status: response.status });
+    } else {
+      log.info('AI config synced to container');
+    }
+
+    return success;
   } catch (error) {
     log.error('Failed to sync config to AI container', { error: String(error) });
+    configSyncState.syncSuccess = false;
     return false;
   }
+}
+
+/**
+ * Force sync configuration to AI container
+ * Called when admin updates AI settings
+ */
+export async function forceSyncConfig(): Promise<boolean> {
+  const config = await getAIConfig();
+  return syncConfigToContainer(config, true);
 }
 
 /**
@@ -207,7 +338,18 @@ export async function checkHealth(): Promise<{
       };
     }
 
-    const result = await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AIHealthResponse>(json, ['available']);
+
+    if (!result) {
+      return {
+        available: false,
+        model: config.model,
+        endpoint: config.endpoint,
+        containerAvailable: true,
+        error: 'Invalid response from AI container',
+      };
+    }
 
     return {
       available: result.available,
@@ -260,12 +402,20 @@ export async function suggestTransactionLabel(
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({})) as any;
-      log.error('AI label suggestion failed', { status: response.status, error: error.error });
+      const errorJson = await response.json().catch(() => ({}));
+      const error = validateResponse<{ error?: string }>(errorJson, []);
+      log.error('AI label suggestion failed', { status: response.status, error: error?.error });
       return null;
     }
 
-    const result = await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AISuggestLabelResponse>(json, ['suggestion']);
+
+    if (!result) {
+      log.error('Invalid response from AI container for label suggestion');
+      return null;
+    }
+
     return result.suggestion || null;
   } catch (error) {
     log.error('AI label suggestion error', { error: String(error) });
@@ -305,12 +455,20 @@ export async function executeNaturalQuery(
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({})) as any;
-      log.error('AI query failed', { status: response.status, error: error.error });
+      const errorJson = await response.json().catch(() => ({}));
+      const error = validateResponse<{ error?: string }>(errorJson, []);
+      log.error('AI query failed', { status: response.status, error: error?.error });
       return null;
     }
 
-    const result = await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AIQueryResponse>(json, ['query']);
+
+    if (!result) {
+      log.error('Invalid response from AI container for query');
+      return null;
+    }
+
     return result.query || null;
   } catch (error) {
     log.error('AI query error', { error: String(error) });
@@ -338,7 +496,15 @@ export async function detectOllama(): Promise<{
       return { found: false, message: 'Detection failed' };
     }
 
-    return await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AIDetectOllamaResponse>(json, ['found']);
+
+    if (!result) {
+      log.error('Invalid response from AI container for Ollama detection');
+      return { found: false, message: 'Invalid response format' };
+    }
+
+    return result;
   } catch (error) {
     log.error('Ollama detection error', { error: String(error) });
     return { found: false, message: 'AI container not available' };
@@ -368,11 +534,20 @@ export async function listModels(): Promise<{
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({})) as any;
-      return { models: [], error: error.error || 'Failed to list models' };
+      const errorJson = await response.json().catch(() => ({}));
+      const error = validateResponse<{ error?: string }>(errorJson, []);
+      return { models: [], error: error?.error || 'Failed to list models' };
     }
 
-    return await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AIListModelsResponse>(json, ['models']);
+
+    if (!result) {
+      log.error('Invalid response from AI container for list models');
+      return { models: [], error: 'Invalid response format' };
+    }
+
+    return result;
   } catch (error) {
     log.error('List models error', { error: String(error) });
     return { models: [], error: 'Cannot connect to AI container' };
@@ -406,11 +581,20 @@ export async function pullModel(model: string): Promise<{
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({})) as any;
-      return { success: false, error: error.error || 'Pull failed' };
+      const errorJson = await response.json().catch(() => ({}));
+      const error = validateResponse<{ error?: string }>(errorJson, []);
+      return { success: false, error: error?.error || 'Pull failed' };
     }
 
-    return await response.json() as any;
+    const json = await response.json();
+    const result = validateResponse<AIPullModelResponse>(json, ['success']);
+
+    if (!result) {
+      log.error('Invalid response from AI container for pull model');
+      return { success: false, error: 'Invalid response format' };
+    }
+
+    return result;
   } catch (error) {
     log.error('Pull model error', { error: String(error) });
     return { success: false, error: 'Pull operation failed' };
@@ -429,4 +613,5 @@ export const aiService = {
   detectOllama,
   listModels,
   pullModel,
+  forceSyncConfig,
 };

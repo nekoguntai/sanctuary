@@ -24,13 +24,19 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)
 FRONTEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src/|components/|hooks/|tests/)' || true)
 
+# Timeout for test runs (2 minutes)
+TEST_TIMEOUT=120
+
 # Run backend tests if backend files changed
 if [ -n "$BACKEND_CHANGED" ]; then
     echo "${YELLOW}Backend files changed - running server tests...${NC}"
     cd "$REPO_ROOT/server"
 
-    if npm run test:fast 2>/dev/null; then
+    if timeout $TEST_TIMEOUT npm run test:fast 2>/dev/null; then
         echo "${GREEN}Backend tests passed${NC}"
+    elif [ $? -eq 124 ]; then
+        echo "${RED}Backend tests timed out after ${TEST_TIMEOUT}s. Commit aborted.${NC}"
+        exit 1
     else
         echo "${RED}Backend tests failed. Commit aborted.${NC}"
         echo "Run 'cd server && npm test' for full output."
@@ -43,8 +49,11 @@ if [ -n "$FRONTEND_CHANGED" ]; then
     echo "${YELLOW}Frontend files changed - running frontend tests...${NC}"
     cd "$REPO_ROOT"
 
-    if npm run test:run 2>/dev/null; then
+    if timeout $TEST_TIMEOUT npm run test:run 2>/dev/null; then
         echo "${GREEN}Frontend tests passed${NC}"
+    elif [ $? -eq 124 ]; then
+        echo "${RED}Frontend tests timed out after ${TEST_TIMEOUT}s. Commit aborted.${NC}"
+        exit 1
     else
         echo "${RED}Frontend tests failed. Commit aborted.${NC}"
         echo "Run 'npm run test:run' for full output."

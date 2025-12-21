@@ -302,16 +302,7 @@ export default function AISettings() {
         <div className="p-6 space-y-4">
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              1. Start the AI Container
-            </h3>
-            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
-              docker compose --profile ai up -d
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              2. Run a Local AI (Recommended: Ollama)
+              1. Run a Local AI (Recommended: Ollama)
             </h3>
             <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto space-y-1">
               <div># Install Ollama from ollama.ai</div>
@@ -325,7 +316,7 @@ export default function AISettings() {
 
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              3. Network Isolation (Default: Local Only)
+              2. Network Isolation (Default: Local Only)
             </h3>
             <p className="text-sm text-sanctuary-600 dark:text-sanctuary-400">
               By default, the AI container cannot access the internet. This ensures your transaction data

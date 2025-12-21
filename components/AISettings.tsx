@@ -266,6 +266,23 @@ export default function AISettings() {
         </div>
       </div>
 
+      {/* Resource Notice */}
+      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <div className="flex items-start space-x-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              Resource Requirements
+            </h3>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              AI models require significant resources. A typical model uses <strong>2-8 GB disk space</strong> and{' '}
+              <strong>4-16 GB RAM</strong> during inference. Model downloads can take several minutes depending on your
+              connection speed. Smaller models (1-3B parameters) work well on most systems.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Enable/Disable Toggle */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
@@ -626,23 +643,43 @@ export default function AISettings() {
         </div>
 
         <div className="p-6 space-y-4">
+          {/* Option A: Bundled (Recommended) */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              1. Install Ollama
-            </h3>
-            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
-              <div># Visit ollama.ai to download, then run:</div>
-              <div>ollama serve</div>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                Option A: Bundled AI (Recommended)
+              </h3>
+              <span className="px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
+                Easiest
+              </span>
             </div>
+            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
+              <div className="text-sanctuary-400"># Stop Sanctuary, restart with AI enabled:</div>
+              <div>./start.sh --stop</div>
+              <div>./start.sh --with-ai</div>
+            </div>
+            <p className="text-xs text-sanctuary-500">
+              This starts a bundled Ollama container. No external setup required.
+              Click "Detect" above after restarting to auto-configure.
+            </p>
           </div>
 
+          <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 my-4" />
+
+          {/* Option B: External Ollama */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              2. Enable AI & Detect
+              Option B: External Ollama (Advanced)
             </h3>
-            <p className="text-sm text-sanctuary-600 dark:text-sanctuary-400">
-              Enable AI Features above, then click "Detect" to auto-configure the endpoint.
-              Download a model using the "Pull" button.
+            <p className="text-xs text-sanctuary-500">
+              For GPU acceleration or if you already have Ollama running on your host:
+            </p>
+            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
+              <div className="text-sanctuary-400"># Install from ollama.ai, then:</div>
+              <div>OLLAMA_HOST=0.0.0.0 ollama serve</div>
+            </div>
+            <p className="text-xs text-sanctuary-500">
+              Click "Detect" to find it automatically, or enter the endpoint manually.
             </p>
           </div>
 

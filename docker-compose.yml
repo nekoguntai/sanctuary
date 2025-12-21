@@ -268,6 +268,52 @@ services:
       # Remove this line to allow internet access for cloud AI
       - ai-internal
 
+  # ============================================
+  # Ollama LLM Server (Optional - for bundled AI)
+  # ============================================
+  # Local LLM server bundled with Sanctuary.
+  # Only starts when ENABLE_OLLAMA=true (set via ./start.sh --with-ai)
+  #
+  # This eliminates the need to:
+  # - Install Ollama on your host machine
+  # - Configure network addresses
+  # - Manually connect Sanctuary to Ollama
+  #
+  # GPU Support (optional):
+  #   For NVIDIA GPUs, uncomment the deploy section below.
+  #   Requires: nvidia-container-toolkit installed on host.
+  #
+  # Models are persisted in the ollama_data volume.
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sanctuary-ollama
+    restart: unless-stopped
+    profiles:
+      - ai
+    environment:
+      # Listen on all interfaces so ai-proxy can connect
+      OLLAMA_HOST: 0.0.0.0
+    volumes:
+      # Persist downloaded models
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - sanctuary-network
+    # Uncomment for NVIDIA GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 # ============================================
 # Networks
 # ============================================
@@ -287,4 +333,6 @@ networks:
 # ============================================
 volumes:
   postgres_data:
+    driver: local
+  ollama_data:
     driver: local

@@ -6,6 +6,7 @@
 #
 # Usage:
 #   ./start.sh              # Start with defaults
+#   ./start.sh --with-ai    # Start with bundled AI (Ollama)
 #   ./start.sh --rebuild    # Rebuild containers (after updates)
 #   ./start.sh --stop       # Stop all services
 #   ./start.sh --logs       # View logs
@@ -39,16 +40,39 @@ fi
 case "${1:-}" in
     --stop)
         echo "Stopping Sanctuary..."
-        docker compose down
+        docker compose --profile ai down
         echo "Sanctuary stopped."
         ;;
     --logs)
         docker compose logs -f
         ;;
+    --with-ai)
+        echo "Starting Sanctuary with bundled AI (Ollama)..."
+        echo ""
+        echo "Note: First-time AI setup will download the Ollama image (~1GB)."
+        echo "      Models are downloaded separately when you pull them in settings."
+        echo ""
+        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+            docker compose --profile ai up -d
+        echo ""
+        echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
+        echo ""
+        echo "AI Setup:"
+        echo "  1. Go to Admin → AI Assistant"
+        echo "  2. Enable AI Features"
+        echo "  3. Click 'Detect' - it will find the bundled Ollama automatically"
+        echo "  4. Pull a model (llama3.2:3b recommended for most systems)"
+        ;;
     --rebuild)
         echo "Rebuilding and starting Sanctuary..."
-        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-            docker compose up -d --build
+        # Include ai profile in rebuild if ollama container exists
+        if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
+            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+                docker compose --profile ai up -d --build
+        else
+            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+                docker compose up -d --build
+        fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         ;;
@@ -57,6 +81,7 @@ case "${1:-}" in
         echo ""
         echo "Options:"
         echo "  (none)      Start Sanctuary"
+        echo "  --with-ai   Start with bundled AI (Ollama container)"
         echo "  --rebuild   Rebuild containers (use after updates)"
         echo "  --stop      Stop all services"
         echo "  --logs      View container logs"
@@ -65,11 +90,21 @@ case "${1:-}" in
         echo "Environment variables:"
         echo "  HTTPS_PORT  HTTPS port (default: 8443)"
         echo "  HTTP_PORT   HTTP redirect port (default: 8080)"
+        echo ""
+        echo "AI Setup:"
+        echo "  Run './start.sh --with-ai' to enable bundled AI features."
+        echo "  This starts an Ollama container - no external setup needed."
         ;;
     *)
         echo "Starting Sanctuary..."
-        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-            docker compose up -d
+        # Include ai profile if ollama container exists (user previously used --with-ai)
+        if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
+            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+                docker compose --profile ai up -d
+        else
+            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
+                docker compose up -d
+        fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         ;;

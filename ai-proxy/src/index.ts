@@ -498,12 +498,12 @@ app.post('/test', rateLimit, async (_req: Request, res: Response) => {
  * Returns the first working endpoint found
  */
 app.post('/detect-ollama', rateLimit, async (_req: Request, res: Response) => {
-  // Common Ollama endpoints to check
+  // Common Ollama endpoints to check (bundled container first)
   const endpoints = [
-    'http://host.docker.internal:11434',  // Docker for Mac/Windows
-    'http://172.17.0.1:11434',             // Docker Linux bridge
+    'http://ollama:11434',                 // Bundled Ollama container (./start.sh --with-ai)
+    'http://host.docker.internal:11434',   // Docker for Mac/Windows (host Ollama)
+    'http://172.17.0.1:11434',             // Docker Linux bridge (host Ollama)
     'http://localhost:11434',              // Direct localhost (unlikely from container)
-    'http://ollama:11434',                 // If user has ollama container named 'ollama'
   ];
 
   for (const endpoint of endpoints) {
@@ -535,7 +535,7 @@ app.post('/detect-ollama', rateLimit, async (_req: Request, res: Response) => {
 
   res.json({
     found: false,
-    message: 'Ollama not detected. Make sure Ollama is running on your host machine.',
+    message: 'Ollama not detected. Run "./start.sh --with-ai" to enable bundled AI, or start Ollama on your host.',
   });
 });
 

@@ -1465,14 +1465,14 @@ router.get('/sessions', authenticate, async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     // Get current token hash to mark the current session
-    const authHeader = req.headers.authorization;
+    // Client can send refresh token via X-Refresh-Token header to identify current session
     let currentTokenHash: string | undefined;
-    if (authHeader?.startsWith('Bearer ')) {
-      // We can't directly get the refresh token hash from the access token
-      // The client should send the refresh token if they want to identify current session
+    const refreshTokenHeader = req.headers['x-refresh-token'];
+    if (typeof refreshTokenHeader === 'string' && refreshTokenHeader) {
+      currentTokenHash = hashToken(refreshTokenHeader);
     }
 
-    const sessions = await refreshTokenService.getUserSessions(userId);
+    const sessions = await refreshTokenService.getUserSessions(userId, currentTokenHash);
 
     res.json({
       sessions: sessions.map((s) => ({

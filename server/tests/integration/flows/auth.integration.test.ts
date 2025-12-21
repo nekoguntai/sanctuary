@@ -273,7 +273,7 @@ describeWithDb('Authentication Integration', () => {
 
       const refreshResponse = await request(app)
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken })
+        .send({ refreshToken, rotate: true })
         .expect(200);
 
       expect(refreshResponse.body.token).toBeDefined();
@@ -369,7 +369,7 @@ describeWithDb('Authentication Integration', () => {
         .set('Authorization', `Bearer ${login1.body.token}`)
         .expect(200);
 
-      expect(logoutResponse.body.revokedCount).toBeGreaterThanOrEqual(2);
+      expect(logoutResponse.body.sessionsRevoked).toBeGreaterThanOrEqual(2);
 
       // Both refresh tokens should now be invalid
       await request(app)

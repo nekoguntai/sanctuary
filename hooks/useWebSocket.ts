@@ -249,3 +249,42 @@ export const useWalletLogs = (
     togglePause,
   };
 };
+
+// Model download progress type
+export interface ModelDownloadProgress {
+  model: string;
+  status: 'pulling' | 'downloading' | 'verifying' | 'complete' | 'error';
+  completed: number;
+  total: number;
+  percent: number;
+  digest?: string;
+  error?: string;
+}
+
+/**
+ * Hook for subscribing to model download progress events
+ * Used in AISettings to show real-time progress during model pulls
+ */
+export const useModelDownloadProgress = (
+  onProgress?: (progress: ModelDownloadProgress) => void
+): { progress: ModelDownloadProgress | null } => {
+  const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
+
+  useEffect(() => {
+    const handleProgress = (event: WebSocketEvent) => {
+      if (event.type !== 'modelDownload') return;
+
+      const data = event.data as ModelDownloadProgress;
+      setProgress(data);
+      onProgress?.(data);
+    };
+
+    websocketClient.on('modelDownload', handleProgress);
+
+    return () => {
+      websocketClient.off('modelDownload', handleProgress);
+    };
+  }, [onProgress]);
+
+  return { progress };
+};

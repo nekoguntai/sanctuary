@@ -49,16 +49,20 @@ describe('useWallets hooks memoization', () => {
         {
           id: 'tx1',
           txid: 'txid1',
+          walletId: 'wallet1',
           blockTime: '2024-01-01T00:00:00Z',
-          type: 'receive',
+          type: 'receive' as const,
           amount: 100000,
+          confirmations: 6,
         },
         {
           id: 'tx2',
           txid: 'txid2',
+          walletId: 'wallet1',
           blockTime: '2024-01-02T00:00:00Z',
-          type: 'send',
+          type: 'sent' as const,
           amount: -50000,
+          confirmations: 3,
         },
       ];
 
@@ -90,23 +94,29 @@ describe('useWallets hooks memoization', () => {
         {
           id: 'tx1',
           txid: 'txid1',
+          walletId: 'wallet1',
           blockTime: '2024-01-01T00:00:00Z',
-          type: 'receive',
+          type: 'receive' as const,
           amount: 100000,
+          confirmations: 6,
         },
         {
           id: 'tx2',
           txid: 'txid2',
+          walletId: 'wallet1',
           blockTime: '2024-01-03T00:00:00Z',
-          type: 'send',
+          type: 'sent' as const,
           amount: -50000,
+          confirmations: 3,
         },
         {
           id: 'tx3',
           txid: 'txid3',
+          walletId: 'wallet1',
           blockTime: '2024-01-02T00:00:00Z',
-          type: 'receive',
+          type: 'receive' as const,
           amount: 75000,
+          confirmations: 6,
         },
       ];
 
@@ -131,9 +141,11 @@ describe('useWallets hooks memoization', () => {
       const mockTransactions = Array.from({ length: 20 }, (_, i) => ({
         id: `tx${i}`,
         txid: `txid${i}`,
+        walletId: 'wallet1',
         blockTime: new Date(2024, 0, i + 1).toISOString(),
-        type: 'receive',
+        type: 'receive' as const,
         amount: 10000 * (i + 1),
+        confirmations: 6,
       }));
 
       vi.mocked(transactionsApi.getTransactions).mockResolvedValue(mockTransactions);
@@ -165,8 +177,8 @@ describe('useWallets hooks memoization', () => {
   describe('usePendingTransactions', () => {
     it('should return stable array reference when data has not changed', async () => {
       const mockPendingTx = [
-        { txid: 'pending1', feeRate: 10, size: 200 },
-        { txid: 'pending2', feeRate: 5, size: 150 },
+        { txid: 'pending1', walletId: 'wallet1', type: 'sent' as const, amount: 50000, fee: 2000, feeRate: 10, timeInQueue: 30, createdAt: '2024-01-01T00:00:00Z' },
+        { txid: 'pending2', walletId: 'wallet1', type: 'sent' as const, amount: 30000, fee: 750, feeRate: 5, timeInQueue: 60, createdAt: '2024-01-01T00:00:00Z' },
       ];
 
       vi.mocked(transactionsApi.getPendingTransactions).mockResolvedValue(mockPendingTx);
@@ -193,9 +205,9 @@ describe('useWallets hooks memoization', () => {
 
     it('should sort by fee rate descending (higher first)', async () => {
       const mockPendingTx = [
-        { txid: 'pending1', feeRate: 5, size: 200 },
-        { txid: 'pending2', feeRate: 20, size: 150 },
-        { txid: 'pending3', feeRate: 10, size: 100 },
+        { txid: 'pending1', walletId: 'wallet1', type: 'sent' as const, amount: 50000, fee: 1000, feeRate: 5, timeInQueue: 30, createdAt: '2024-01-01T00:00:00Z' },
+        { txid: 'pending2', walletId: 'wallet1', type: 'sent' as const, amount: 60000, fee: 3000, feeRate: 20, timeInQueue: 60, createdAt: '2024-01-01T00:00:00Z' },
+        { txid: 'pending3', walletId: 'wallet1', type: 'sent' as const, amount: 40000, fee: 1000, feeRate: 10, timeInQueue: 90, createdAt: '2024-01-01T00:00:00Z' },
       ];
 
       vi.mocked(transactionsApi.getPendingTransactions).mockResolvedValue(mockPendingTx);
@@ -222,10 +234,12 @@ describe('useWallets hooks memoization', () => {
         {
           id: 'tx1',
           txid: 'txid1',
+          walletId: 'wallet1',
           blockTime: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-          type: 'receive',
+          type: 'receive' as const,
           amount: 100000,
           balanceAfter: 100000,
+          confirmations: 6,
         },
       ];
 
@@ -254,18 +268,22 @@ describe('useWallets hooks memoization', () => {
         {
           id: 'tx1',
           txid: 'txid1',
+          walletId: 'wallet1',
           blockTime: new Date(Date.now() - 86400000).toISOString(),
-          type: 'receive',
+          type: 'receive' as const,
           amount: 100000,
           balanceAfter: 100000,
+          confirmations: 6,
         },
         {
           id: 'tx2',
           txid: 'txid2',
+          walletId: 'wallet1',
           blockTime: new Date(Date.now() - 43200000).toISOString(),
-          type: 'consolidation',
+          type: 'consolidation' as const,
           amount: -1000,
           balanceAfter: 99000,
+          confirmations: 3,
         },
       ];
 

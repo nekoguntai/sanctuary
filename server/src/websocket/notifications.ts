@@ -45,6 +45,16 @@ export interface MempoolNotification {
   feeRate: number; // sat/vB
 }
 
+export interface ModelDownloadProgress {
+  model: string;
+  status: 'pulling' | 'downloading' | 'verifying' | 'complete' | 'error';
+  completed: number;
+  total: number;
+  percent: number;
+  digest?: string;
+  error?: string;
+}
+
 // Wallet Log Types for real-time sync logging
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -370,6 +380,26 @@ export class NotificationService {
     };
 
     wsServer.broadcast(event);
+  }
+
+  /**
+   * Broadcast model download progress
+   * Used for real-time UI updates during Ollama model pulls
+   */
+  public broadcastModelDownloadProgress(progress: ModelDownloadProgress) {
+    const wsServer = getWebSocketServer();
+
+    const event: WebSocketEvent = {
+      type: 'modelDownload',
+      data: progress,
+    };
+
+    wsServer.broadcast(event);
+
+    // Only log on status changes, not every progress update
+    if (progress.status === 'complete' || progress.status === 'error') {
+      log.debug(`Model download ${progress.status}: ${progress.model}`);
+    }
   }
 
   /**

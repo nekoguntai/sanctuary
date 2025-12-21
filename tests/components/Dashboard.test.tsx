@@ -151,14 +151,16 @@ describe('Dashboard stable array constants', () => {
 
     // Component using stable constant
     function StableComponent() {
-      const data = undefined ?? STABLE_EMPTY;
+      const nullableValue: undefined | unknown[] = undefined;
+      const data = nullableValue ?? STABLE_EMPTY;
       stableRenders++;
       return React.useMemo(() => <div>{data.length}</div>, [data]);
     }
 
     // Component using inline array (BAD pattern)
     function InlineComponent() {
-      const data = undefined ?? []; // Creates new array each render
+      const nullableValue: undefined | unknown[] = undefined;
+      const data = nullableValue ?? []; // Creates new array each render
       inlineRenders++;
       return React.useMemo(() => <div>{data.length}</div>, [data]);
     }
@@ -200,7 +202,7 @@ describe('Dashboard renders without infinite loops', () => {
 
     // If the Dashboard has infinite re-render issues, this will timeout or throw
     const renderPromise = import('../../components/Dashboard').then(
-      ({ default: Dashboard }) => {
+      ({ Dashboard }) => {
         // Wrap in try-catch to handle render errors gracefully
         try {
           render(
@@ -311,7 +313,8 @@ describe('Infinite re-render prevention patterns', () => {
 
       function BadComponent() {
         // Anti-pattern: creates new array each render
-        const data = undefined ?? [];
+        const nullableValue: undefined | unknown[] = undefined;
+        const data = nullableValue ?? [];
         refs.push(data);
         return <div>{data.length}</div>;
       }

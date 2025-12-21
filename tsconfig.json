@@ -13,7 +13,8 @@
     "types": [
       "node",
       "vite/client",
-      "w3c-web-usb"
+      "w3c-web-usb",
+      "vitest/globals"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -27,5 +28,11 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "server",
+    "gateway",
+    "ai-proxy"
+  ]
 }

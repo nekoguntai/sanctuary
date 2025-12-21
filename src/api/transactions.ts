@@ -5,10 +5,10 @@
  */
 
 import apiClient, { API_BASE_URL } from './client';
-import type { Label, Transaction, UTXO, Address, PendingTransaction } from '../types';
+import type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
 
 // Re-export types for backward compatibility
-export type { Label, Transaction, UTXO, Address, PendingTransaction } from '../types';
+export type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
 
 export interface GetTransactionsParams {
   limit?: number;
@@ -435,9 +435,6 @@ export async function analyzeSpendPrivacy(
 // ========================================
 // UTXO SELECTION API
 // ========================================
-
-// Re-export from central types
-export type { SelectionStrategy } from '../../types';
 
 export interface SelectedUtxo {
   id: string;

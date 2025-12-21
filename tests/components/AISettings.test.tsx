@@ -24,12 +24,18 @@ const mockGetAIStatus = vi.fn();
 const mockDetectOllama = vi.fn();
 const mockListModels = vi.fn();
 const mockPullModel = vi.fn();
+const mockGetOllamaContainerStatus = vi.fn();
+const mockStartOllamaContainer = vi.fn();
+const mockStopOllamaContainer = vi.fn();
 
 vi.mock('../../src/api/ai', () => ({
   getAIStatus: () => mockGetAIStatus(),
   detectOllama: () => mockDetectOllama(),
   listModels: () => mockListModels(),
   pullModel: (model: string) => mockPullModel(model),
+  getOllamaContainerStatus: () => mockGetOllamaContainerStatus(),
+  startOllamaContainer: () => mockStartOllamaContainer(),
+  stopOllamaContainer: () => mockStopOllamaContainer(),
 }));
 
 // Mock logger
@@ -40,6 +46,16 @@ vi.mock('../../utils/logger', () => ({
     error: vi.fn(),
     debug: vi.fn(),
   }),
+}));
+
+// Mock useModelDownloadProgress hook
+vi.mock('../../hooks/useWebSocket', () => ({
+  useModelDownloadProgress: () => ({ progress: null }),
+}));
+
+// Mock useAIStatus hook
+vi.mock('../../hooks/useAIStatus', () => ({
+  invalidateAIStatusCache: vi.fn(),
 }));
 
 // Import component after mocks
@@ -74,6 +90,9 @@ describe('AISettings', () => {
     mockDetectOllama.mockResolvedValue({ found: true, endpoint: 'http://host.docker.internal:11434', models: ['llama3.2:3b'] });
     mockListModels.mockResolvedValue(mockModels);
     mockPullModel.mockResolvedValue({ success: true, model: 'llama3.2:3b' });
+    mockGetOllamaContainerStatus.mockResolvedValue({ available: false, exists: false, running: false, status: 'not-available' });
+    mockStartOllamaContainer.mockResolvedValue({ success: true, message: 'Container started' });
+    mockStopOllamaContainer.mockResolvedValue({ success: true, message: 'Container stopped' });
   });
 
   afterEach(() => {
@@ -603,11 +622,12 @@ describe('AISettings', () => {
       });
     });
 
-    it('should show installed badge for installed models', async () => {
+    it('should show delete button for installed models', async () => {
       render(<AISettings />);
 
       await waitFor(() => {
-        expect(screen.getAllByText('Installed').length).toBeGreaterThan(0);
+        // Installed models show Delete button instead of Pull
+        expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
       });
     });
 
@@ -668,9 +688,11 @@ describe('AISettings', () => {
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
 
+      // Pull now starts async - check that it was initiated
       await waitFor(() => {
-        expect(screen.getByText(/Successfully pulled/)).toBeInTheDocument();
+        expect(mockPullModel).toHaveBeenCalled();
       });
+      // Success message now comes via WebSocket progress (not tested here)
     });
 
     it('should show error on pull failure', async () => {
@@ -700,14 +722,14 @@ describe('AISettings', () => {
         expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
       });
 
-      const initialCalls = mockListModels.mock.calls.length;
-
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
 
+      // Pull is now async - just verify the pull was initiated
       await waitFor(() => {
-        expect(mockListModels.mock.calls.length).toBeGreaterThan(initialCalls);
+        expect(mockPullModel).toHaveBeenCalled();
       });
+      // Models list refresh now happens via WebSocket completion callback
     });
   });
 

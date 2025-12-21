@@ -433,25 +433,24 @@ app.post('/query', rateLimit, async (req: Request, res: Response) => {
 
   const recentLabels = contextResult.data?.labels?.join(', ') || 'None';
 
-  const prompt = `You are a Bitcoin wallet assistant. Convert the user's question into a structured query.
+  const prompt = `Convert this Bitcoin wallet question to a JSON query. Output ONLY the JSON object, nothing else.
 
-Available data:
-- transactions (amount, date, type, label, confirmations)
-- addresses (address, label, used, balance)
-- utxos (amount, confirmations, frozen)
+STRUCTURE (filter and sort are SEPARATE top-level fields):
+{"type":"transactions","filter":{"type":"receive"},"sort":{"field":"amount","order":"desc"},"limit":10,"aggregation":null}
 
-Recent labels used: ${recentLabels}
+FILTER OPTIONS for transactions:
+- type: "receive" or "send"
+- confirmations: number (0 = unconfirmed)
+- amount: number or {">"/"<": number}
+- label: string
 
-User question: "${query}"
+EXAMPLES:
+Q: "show my largest receives" → {"type":"transactions","filter":{"type":"receive"},"sort":{"field":"amount","order":"desc"},"limit":null,"aggregation":null}
+Q: "total received" → {"type":"transactions","filter":{"type":"receive"},"sort":null,"limit":null,"aggregation":"sum"}
+Q: "unconfirmed transactions" → {"type":"transactions","filter":{"confirmations":0},"sort":null,"limit":null,"aggregation":null}
 
-Respond with ONLY valid JSON, no other text:
-{
-  "type": "transactions" | "addresses" | "utxos" | "summary",
-  "filter": { ... },
-  "sort": { "field": "...", "order": "asc" | "desc" },
-  "limit": number,
-  "aggregation": "sum" | "count" | "max" | "min" | null
-}`;
+User's question: "${query}"
+JSON:`;
 
   const result = await callExternalAI(prompt);
 
@@ -460,15 +459,33 @@ Respond with ONLY valid JSON, no other text:
   }
 
   try {
-    // Extract JSON from response
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    // Extract JSON from response - handle markdown code blocks
+    let jsonStr = result;
+
+    // Try to extract from markdown code block first
+    const codeBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      jsonStr = codeBlockMatch[1].trim();
+    }
+
+    // Extract JSON object
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('[AI] No JSON found in response:', result.substring(0, 200));
       return res.status(500).json({ error: 'AI did not return valid JSON' });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Clean up the JSON - remove comments and trailing commas
+    let cleanJson = jsonMatch[0]
+      .replace(/\/\/[^\n]*/g, '')  // Remove single-line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '')  // Remove multi-line comments
+      .replace(/,(\s*[}\]])/g, '$1')  // Remove trailing commas
+      .replace(/\n\s*\n/g, '\n');  // Remove empty lines
+
+    const parsed = JSON.parse(cleanJson);
     res.json({ query: parsed });
-  } catch {
+  } catch (err: any) {
+    console.error('[AI] Failed to parse JSON:', err.message, 'Response:', result.substring(0, 200));
     res.status(500).json({ error: 'Failed to parse AI response' });
   }
 });
@@ -577,9 +594,140 @@ app.get('/list-models', rateLimit, async (_req: Request, res: Response) => {
 
 /**
  * Pull (download) a model from Ollama
- * This is a long-running operation - returns immediately with status
+ * Streams progress to backend via callback URL for real-time updates
  */
 app.post('/pull-model', rateLimit, async (req: Request, res: Response) => {
+  const { model } = req.body;
+
+  if (!model) {
+    return res.status(400).json({ error: 'Model name required' });
+  }
+
+  if (!aiConfig.endpoint) {
+    return res.status(400).json({ error: 'No AI endpoint configured' });
+  }
+
+  let endpoint = aiConfig.endpoint.trim();
+  endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+
+  console.log(`[AI] Starting pull for model: ${model}`);
+
+  // Return immediately - progress will be streamed via callback
+  res.json({ success: true, status: 'started', model });
+
+  // Stream progress in background
+  streamModelPull(model, endpoint).catch(err => {
+    console.error(`[AI] Pull stream error: ${err.message}`);
+  });
+});
+
+/**
+ * Stream model pull progress to backend
+ */
+async function streamModelPull(model: string, ollamaEndpoint: string): Promise<void> {
+  const callbackUrl = `${BACKEND_URL}/internal/ai/pull-progress`;
+
+  // Helper to send progress to backend
+  const sendProgress = async (data: {
+    model: string;
+    status: string;
+    completed?: number;
+    total?: number;
+    digest?: string;
+    error?: string;
+  }) => {
+    try {
+      await fetch(callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err: any) {
+      console.warn(`[AI] Failed to send progress: ${err.message}`);
+    }
+  };
+
+  try {
+    // Start with 'pulling' status
+    await sendProgress({ model, status: 'pulling' });
+
+    const response = await fetch(`${ollamaEndpoint}/api/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: model, stream: true }),
+      signal: AbortSignal.timeout(600000), // 10 minute timeout
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[AI] Pull failed: ${error}`);
+      await sendProgress({ model, status: 'error', error });
+      return;
+    }
+
+    if (!response.body) {
+      await sendProgress({ model, status: 'error', error: 'No response body' });
+      return;
+    }
+
+    // Read NDJSON stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        try {
+          const data = JSON.parse(line) as {
+            status?: string;
+            digest?: string;
+            total?: number;
+            completed?: number;
+          };
+
+          // Map Ollama status to our status
+          let status = 'downloading';
+          if (data.status === 'pulling manifest') status = 'pulling';
+          else if (data.status?.includes('verifying')) status = 'verifying';
+          else if (data.status === 'success') status = 'complete';
+
+          await sendProgress({
+            model,
+            status,
+            completed: data.completed || 0,
+            total: data.total || 0,
+            digest: data.digest,
+          });
+        } catch {
+          // Ignore malformed JSON lines
+        }
+      }
+    }
+
+    // Send completion
+    console.log(`[AI] Pull completed for ${model}`);
+    await sendProgress({ model, status: 'complete' });
+
+  } catch (error: any) {
+    console.error(`[AI] Pull error: ${error.message}`);
+    await sendProgress({ model, status: 'error', error: error.message });
+  }
+}
+
+/**
+ * Delete a model from Ollama
+ */
+app.delete('/delete-model', rateLimit, async (req: Request, res: Response) => {
   const { model } = req.body;
 
   if (!model) {
@@ -594,33 +742,26 @@ app.post('/pull-model', rateLimit, async (req: Request, res: Response) => {
     let endpoint = aiConfig.endpoint.trim();
     endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
 
-    console.log(`[AI] Starting pull for model: ${model}`);
+    console.log(`[AI] Deleting model: ${model}`);
 
-    // Ollama's pull endpoint streams progress - we'll just start it and return
-    const response = await fetch(`${endpoint}/api/pull`, {
-      method: 'POST',
+    const response = await fetch(`${endpoint}/api/delete`, {
+      method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: model, stream: false }),
-      signal: AbortSignal.timeout(300000), // 5 minute timeout for pull
+      body: JSON.stringify({ name: model }),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      console.error(`[AI] Pull failed: ${error}`);
-      return res.status(502).json({ error: `Failed to pull model: ${error}` });
+      console.error(`[AI] Delete failed: ${error}`);
+      return res.status(502).json({ error: `Failed to delete model: ${error}` });
     }
 
-    const result = await response.json() as { status?: string };
-    console.log(`[AI] Pull completed for ${model}: ${result.status}`);
-
-    res.json({
-      success: true,
-      model,
-      status: result.status || 'completed',
-    });
+    console.log(`[AI] Successfully deleted ${model}`);
+    res.json({ success: true, model });
   } catch (error: any) {
-    console.error(`[AI] Pull error: ${error.message}`);
-    res.status(502).json({ error: `Pull failed: ${error.message}` });
+    console.error(`[AI] Delete error: ${error.message}`);
+    res.status(502).json({ error: `Delete failed: ${error.message}` });
   }
 });
 

@@ -101,6 +101,12 @@ services:
       # AI Container URL (isolated AI service)
       # Backend forwards all AI requests to this container
       AI_CONTAINER_URL: ${AI_CONTAINER_URL:-http://ai:3100}
+
+      # Docker proxy for secure Ollama container management
+      DOCKER_PROXY_URL: http://docker-proxy:2375
+
+      # AI config sync secret (must match ai container)
+      AI_CONFIG_SECRET: ${AI_CONFIG_SECRET:-sanctuary-ai-config-secret}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
@@ -256,6 +262,8 @@ services:
       PORT: 3100
       # Backend URL for fetching sanitized data
       BACKEND_URL: http://backend:3001
+      # AI config sync secret (must match backend)
+      AI_CONFIG_SECRET: ${AI_CONFIG_SECRET:-sanctuary-ai-config-secret}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
       interval: 30s
@@ -267,6 +275,54 @@ services:
       # Add ai-internal for local-only mode (no internet)
       # Remove this line to allow internet access for cloud AI
       - ai-internal
+
+  # ============================================
+  # Docker Socket Proxy (Security Layer)
+  # ============================================
+  # Secure proxy for Docker socket access.
+  # Only allows specific operations needed for Ollama management:
+  # - List containers (to check if Ollama is running)
+  # - Start/stop containers (to manage Ollama)
+  # Blocks all other Docker API calls (no creating containers, volumes, etc.)
+  # ============================================
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: sanctuary-docker-proxy
+    restart: unless-stopped
+    environment:
+      # Only allow container inspection and start/stop
+      CONTAINERS: 1
+      POST: 1
+      # Block everything else
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+      SWARM: 0
+      NODES: 0
+      SERVICES: 0
+      TASKS: 0
+      SECRETS: 0
+      CONFIGS: 0
+      PLUGINS: 0
+      SYSTEM: 0
+      DISTRIBUTION: 0
+      AUTH: 0
+      BUILD: 0
+      COMMIT: 0
+      EVENTS: 0
+      INFO: 0
+      VERSION: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - sanctuary-network
+    # Run with minimal privileges
+    privileged: false
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
 
   # ============================================
   # Ollama LLM Server (Optional - for bundled AI)

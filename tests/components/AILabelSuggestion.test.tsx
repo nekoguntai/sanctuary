@@ -38,12 +38,10 @@ const mockTransaction: Transaction = {
   amount: 50000,
   type: 'receive',
   confirmations: 6,
-  blockTime: new Date('2024-01-15T10:30:00Z'),
-  createdAt: new Date('2024-01-15T10:00:00Z'),
+  blockTime: '2024-01-15T10:30:00Z',
   walletId: 'wallet-123',
   address: 'bc1q...',
   fee: 0,
-  status: 'confirmed',
 };
 
 describe('AILabelSuggestion', () => {

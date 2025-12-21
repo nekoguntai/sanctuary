@@ -32,6 +32,8 @@ import { LabelManager } from './LabelManager';
 import { LabelBadges } from './LabelSelector';
 import { PayjoinSection } from './PayjoinSection';
 import { AIQueryInput } from './AIQueryInput';
+import { NaturalQueryResult } from '../src/api/ai';
+import { useAIStatus } from '../hooks/useAIStatus';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -282,11 +284,15 @@ export const WalletDetail: React.FC = () => {
   const { addNotification: addAppNotification, removeNotificationsByType } = useAppNotifications();
   const highlightTxId = (location.state as any)?.highlightTxId;
   const { data: bitcoinStatus } = useBitcoinStatus();
+  const { enabled: aiEnabled } = useAIStatus();
 
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [utxos, setUTXOs] = useState<UTXO[]>([]);
+
+  // AI Query filter state
+  const [aiQueryFilter, setAiQueryFilter] = useState<NaturalQueryResult | null>(null);
 
   // Privacy scoring state
   const [privacyData, setPrivacyData] = useState<privacyApi.UtxoPrivacyInfo[]>([]);
@@ -307,6 +313,93 @@ export const WalletDetail: React.FC = () => {
 
   // Memoize wallet addresses to prevent infinite re-renders in TransactionList
   const walletAddressStrings = useMemo(() => addresses.map(a => a.address), [addresses]);
+
+  // Apply AI query filter to transactions
+  const filteredTransactions = useMemo(() => {
+    if (!aiQueryFilter || aiQueryFilter.type !== 'transactions') {
+      return transactions;
+    }
+
+    let result = [...transactions];
+
+    // Apply filters
+    if (aiQueryFilter.filter) {
+      const filter = aiQueryFilter.filter;
+      result = result.filter(tx => {
+        // Type filter (receive/send)
+        if (filter.type) {
+          const txType = tx.type === 'received' ? 'receive' : tx.type === 'sent' ? 'send' : tx.type;
+          if (txType !== filter.type) return false;
+        }
+        // Label filter
+        if (filter.label) {
+          const hasLabel = tx.labels?.some(l => l.name.toLowerCase().includes(filter.label.toLowerCase()));
+          if (!hasLabel) return false;
+        }
+        // Amount filter
+        if (filter.amount) {
+          const absAmount = Math.abs(tx.amount);
+          if (typeof filter.amount === 'object') {
+            if (filter.amount['>'] && absAmount <= filter.amount['>']) return false;
+            if (filter.amount['<'] && absAmount >= filter.amount['<']) return false;
+            if (filter.amount['>='] && absAmount < filter.amount['>=']) return false;
+            if (filter.amount['<='] && absAmount > filter.amount['<=']) return false;
+          }
+        }
+        // Confirmations filter
+        if (filter.confirmations !== undefined) {
+          if (tx.confirmations !== filter.confirmations) return false;
+        }
+        return true;
+      });
+    }
+
+    // Apply sort
+    if (aiQueryFilter.sort) {
+      const { field, order } = aiQueryFilter.sort;
+      result.sort((a, b) => {
+        let aVal: number | string = 0;
+        let bVal: number | string = 0;
+        if (field === 'amount') {
+          aVal = Math.abs(a.amount);
+          bVal = Math.abs(b.amount);
+        } else if (field === 'date' || field === 'timestamp') {
+          aVal = a.timestamp || 0;
+          bVal = b.timestamp || 0;
+        } else if (field === 'confirmations') {
+          aVal = a.confirmations || 0;
+          bVal = b.confirmations || 0;
+        }
+        return order === 'desc' ? (bVal > aVal ? 1 : -1) : (aVal > bVal ? 1 : -1);
+      });
+    }
+
+    // Apply limit
+    if (aiQueryFilter.limit && aiQueryFilter.limit > 0) {
+      result = result.slice(0, aiQueryFilter.limit);
+    }
+
+    return result;
+  }, [transactions, aiQueryFilter]);
+
+  // Compute aggregation result if requested
+  const aiAggregationResult = useMemo(() => {
+    if (!aiQueryFilter?.aggregation || filteredTransactions.length === 0) return null;
+
+    const amounts = filteredTransactions.map(tx => Math.abs(tx.amount));
+    switch (aiQueryFilter.aggregation) {
+      case 'sum':
+        return amounts.reduce((a, b) => a + b, 0);
+      case 'count':
+        return filteredTransactions.length;
+      case 'max':
+        return Math.max(...amounts);
+      case 'min':
+        return Math.min(...amounts);
+      default:
+        return null;
+    }
+  }, [filteredTransactions, aiQueryFilter?.aggregation]);
 
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -1305,10 +1398,15 @@ export const WalletDetail: React.FC = () => {
           <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
              {/* Header with Export Button and AI Query */}
              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-               {/* AI Natural Language Query */}
-               <div className="flex-1 max-w-xl">
-                 <AIQueryInput walletId={wallet?.id || ''} />
-               </div>
+               {/* AI Natural Language Query - only show when AI is enabled */}
+               {aiEnabled && (
+                 <div className="flex-1 max-w-xl">
+                   <AIQueryInput
+                     walletId={wallet?.id || ''}
+                     onQueryResult={(result) => setAiQueryFilter(result)}
+                   />
+                 </div>
+               )}
                {/* Export Button */}
                {transactions.length > 0 && (
                  <button
@@ -1320,8 +1418,36 @@ export const WalletDetail: React.FC = () => {
                  </button>
                )}
              </div>
+
+             {/* AI Filter Results Summary */}
+             {aiQueryFilter && (
+               <div className="mb-4 p-3 bg-primary-50 dark:bg-sanctuary-800 border border-primary-200 dark:border-sanctuary-600 rounded-lg">
+                 <div className="flex items-center justify-between">
+                   <div className="flex-1">
+                     <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                       {aiAggregationResult !== null ? (
+                         <>
+                           Result: <span className="font-bold">{aiQueryFilter.aggregation === 'count' ? aiAggregationResult : `${aiAggregationResult.toLocaleString()} sats`}</span>
+                           {aiQueryFilter.aggregation && <span className="text-sanctuary-500 ml-1">({aiQueryFilter.aggregation})</span>}
+                         </>
+                       ) : (
+                         <>Showing {filteredTransactions.length} of {transactions.length} transactions</>
+                       )}
+                     </span>
+                   </div>
+                   <button
+                     onClick={() => setAiQueryFilter(null)}
+                     className="ml-3 p-1.5 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 rounded transition-colors"
+                     title="Clear filter"
+                   >
+                     <X className="w-4 h-4" />
+                   </button>
+                 </div>
+               </div>
+             )}
+
              <TransactionList
-               transactions={transactions}
+               transactions={filteredTransactions}
                highlightedTxId={highlightTxId}
                onLabelsChange={handleLabelsChange}
                walletAddresses={walletAddressStrings}
@@ -1329,7 +1455,7 @@ export const WalletDetail: React.FC = () => {
                confirmationThreshold={bitcoinStatus?.confirmationThreshold}
                deepConfirmationThreshold={bitcoinStatus?.deepConfirmationThreshold}
                walletBalance={wallet?.balance}
-               transactionStats={transactionStats || undefined}
+               transactionStats={aiQueryFilter ? undefined : (transactionStats || undefined)}
              />
              {hasMoreTx && transactions.length > 0 && (
                <div className="mt-4 text-center">

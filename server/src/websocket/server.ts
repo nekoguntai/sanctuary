@@ -39,7 +39,7 @@ export interface WebSocketMessage {
 }
 
 export interface WebSocketEvent {
-  type: 'transaction' | 'balance' | 'confirmation' | 'block' | 'newBlock' | 'mempool' | 'sync' | 'log';
+  type: 'transaction' | 'balance' | 'confirmation' | 'block' | 'newBlock' | 'mempool' | 'sync' | 'log' | 'modelDownload';
   data: any;
   walletId?: string;
   addressId?: string;

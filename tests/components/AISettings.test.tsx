@@ -27,6 +27,7 @@ const mockPullModel = vi.fn();
 const mockGetOllamaContainerStatus = vi.fn();
 const mockStartOllamaContainer = vi.fn();
 const mockStopOllamaContainer = vi.fn();
+const mockGetSystemResources = vi.fn();
 
 vi.mock('../../src/api/ai', () => ({
   getAIStatus: () => mockGetAIStatus(),
@@ -36,6 +37,7 @@ vi.mock('../../src/api/ai', () => ({
   getOllamaContainerStatus: () => mockGetOllamaContainerStatus(),
   startOllamaContainer: () => mockStartOllamaContainer(),
   stopOllamaContainer: () => mockStopOllamaContainer(),
+  getSystemResources: () => mockGetSystemResources(),
 }));
 
 // Mock logger
@@ -81,6 +83,13 @@ const mockModels = {
   ],
 };
 
+const mockSystemResources = {
+  ram: { total: 16384, available: 8192, required: 4096, sufficient: true },
+  disk: { total: 512000, available: 100000, required: 8192, sufficient: true },
+  gpu: { available: false, name: null },
+  overall: { sufficient: true, warnings: [] },
+};
+
 describe('AISettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,6 +102,7 @@ describe('AISettings', () => {
     mockGetOllamaContainerStatus.mockResolvedValue({ available: false, exists: false, running: false, status: 'not-available' });
     mockStartOllamaContainer.mockResolvedValue({ success: true, message: 'Container started' });
     mockStopOllamaContainer.mockResolvedValue({ success: true, message: 'Container stopped' });
+    mockGetSystemResources.mockResolvedValue(mockSystemResources);
   });
 
   afterEach(() => {
@@ -156,6 +166,19 @@ describe('AISettings', () => {
       if (toggle) {
         await user.click(toggle);
 
+        // Modal should appear
+        await waitFor(() => {
+          expect(screen.getByText('Enable AI Assistant')).toBeInTheDocument();
+        });
+
+        // Wait for resources to load and click Enable button
+        await waitFor(() => {
+          expect(screen.getByText('Enable AI')).toBeInTheDocument();
+        });
+
+        const enableButton = screen.getByRole('button', { name: 'Enable AI' });
+        await user.click(enableButton);
+
         await waitFor(() => {
           expect(mockUpdateSystemSettings).toHaveBeenCalledWith({ aiEnabled: true });
         });
@@ -197,7 +220,20 @@ describe('AISettings', () => {
       if (toggle) {
         await user.click(toggle);
 
-        // Success message appears briefly
+        // Modal should appear
+        await waitFor(() => {
+          expect(screen.getByText('Enable AI Assistant')).toBeInTheDocument();
+        });
+
+        // Wait for resources to load and click Enable button
+        await waitFor(() => {
+          expect(screen.getByText('Enable AI')).toBeInTheDocument();
+        });
+
+        const enableButton = screen.getByRole('button', { name: 'Enable AI' });
+        await user.click(enableButton);
+
+        // Success message appears after enabling
         await waitFor(() => {
           expect(mockUpdateSystemSettings).toHaveBeenCalled();
         });

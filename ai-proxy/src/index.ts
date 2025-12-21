@@ -397,6 +397,137 @@ app.post('/test', rateLimit, async (_req: Request, res: Response) => {
 });
 
 /**
+ * Detect Ollama at common endpoints
+ * Returns the first working endpoint found
+ */
+app.post('/detect-ollama', rateLimit, async (_req: Request, res: Response) => {
+  // Common Ollama endpoints to check
+  const endpoints = [
+    'http://host.docker.internal:11434',  // Docker for Mac/Windows
+    'http://172.17.0.1:11434',             // Docker Linux bridge
+    'http://localhost:11434',              // Direct localhost (unlikely from container)
+    'http://ollama:11434',                 // If user has ollama container named 'ollama'
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`[AI] Checking Ollama at ${endpoint}...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(`${endpoint}/api/tags`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json() as { models?: Array<{ name: string }> };
+        console.log(`[AI] Found Ollama at ${endpoint}`);
+        return res.json({
+          found: true,
+          endpoint,
+          models: data.models?.map(m => m.name) || [],
+        });
+      }
+    } catch (error: any) {
+      // Continue to next endpoint
+      console.log(`[AI] No Ollama at ${endpoint}: ${error.message}`);
+    }
+  }
+
+  res.json({
+    found: false,
+    message: 'Ollama not detected. Make sure Ollama is running on your host machine.',
+  });
+});
+
+/**
+ * List available models from configured endpoint
+ */
+app.get('/list-models', rateLimit, async (_req: Request, res: Response) => {
+  if (!aiConfig.endpoint) {
+    return res.status(400).json({ error: 'No AI endpoint configured' });
+  }
+
+  try {
+    let endpoint = aiConfig.endpoint.trim();
+    // Ensure we're hitting the Ollama API, not OpenAI-compatible endpoint
+    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+
+    const response = await fetch(`${endpoint}/api/tags`, {
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: 'Failed to fetch models from AI endpoint' });
+    }
+
+    const data = await response.json() as { models?: Array<{ name: string; size: number; modified_at: string }> };
+
+    res.json({
+      models: data.models?.map(m => ({
+        name: m.name,
+        size: m.size,
+        modifiedAt: m.modified_at,
+      })) || [],
+    });
+  } catch (error: any) {
+    console.error(`[AI] Failed to list models: ${error.message}`);
+    res.status(502).json({ error: 'Cannot connect to AI endpoint' });
+  }
+});
+
+/**
+ * Pull (download) a model from Ollama
+ * This is a long-running operation - returns immediately with status
+ */
+app.post('/pull-model', rateLimit, async (req: Request, res: Response) => {
+  const { model } = req.body;
+
+  if (!model) {
+    return res.status(400).json({ error: 'Model name required' });
+  }
+
+  if (!aiConfig.endpoint) {
+    return res.status(400).json({ error: 'No AI endpoint configured' });
+  }
+
+  try {
+    let endpoint = aiConfig.endpoint.trim();
+    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+
+    console.log(`[AI] Starting pull for model: ${model}`);
+
+    // Ollama's pull endpoint streams progress - we'll just start it and return
+    const response = await fetch(`${endpoint}/api/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: model, stream: false }),
+      signal: AbortSignal.timeout(300000), // 5 minute timeout for pull
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[AI] Pull failed: ${error}`);
+      return res.status(502).json({ error: `Failed to pull model: ${error}` });
+    }
+
+    const result = await response.json() as { status?: string };
+    console.log(`[AI] Pull completed for ${model}: ${result.status}`);
+
+    res.json({
+      success: true,
+      model,
+      status: result.status || 'completed',
+    });
+  } catch (error: any) {
+    console.error(`[AI] Pull error: ${error.message}`);
+    res.status(502).json({ error: `Pull failed: ${error.message}` });
+  }
+});
+
+/**
  * Error handler
  */
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

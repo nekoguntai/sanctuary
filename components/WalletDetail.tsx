@@ -31,6 +31,7 @@ import { DraftList } from './DraftList';
 import { LabelManager } from './LabelManager';
 import { LabelBadges } from './LabelSelector';
 import { PayjoinSection } from './PayjoinSection';
+import { AIQueryInput } from './AIQueryInput';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
@@ -1285,18 +1286,23 @@ export const WalletDetail: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'tx' && (
           <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
-             {/* Header with Export Button */}
-             {transactions.length > 0 && (
-               <div className="flex justify-end mb-4">
+             {/* Header with Export Button and AI Query */}
+             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+               {/* AI Natural Language Query */}
+               <div className="flex-1 max-w-xl">
+                 <AIQueryInput walletId={wallet?.id || ''} />
+               </div>
+               {/* Export Button */}
+               {transactions.length > 0 && (
                  <button
                    onClick={() => setShowTransactionExport(true)}
-                   className="flex items-center px-3 py-1.5 text-sm text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded-lg transition-colors"
+                   className="flex items-center px-3 py-1.5 text-sm text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 rounded-lg transition-colors self-end sm:self-auto"
                  >
                    <Download className="w-4 h-4 mr-1.5" />
                    Export
                  </button>
-               </div>
-             )}
+               )}
+             </div>
              <TransactionList
                transactions={transactions}
                highlightedTxId={highlightTxId}

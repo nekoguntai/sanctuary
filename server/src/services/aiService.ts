@@ -319,6 +319,105 @@ export async function executeNaturalQuery(
 }
 
 /**
+ * Detect Ollama at common endpoints
+ */
+export async function detectOllama(): Promise<{
+  found: boolean;
+  endpoint?: string;
+  models?: string[];
+  message?: string;
+}> {
+  try {
+    const response = await fetch(`${AI_CONTAINER_URL}/detect-ollama`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      return { found: false, message: 'Detection failed' };
+    }
+
+    return await response.json() as any;
+  } catch (error) {
+    log.error('Ollama detection error', { error: String(error) });
+    return { found: false, message: 'AI container not available' };
+  }
+}
+
+/**
+ * List available models from configured endpoint
+ */
+export async function listModels(): Promise<{
+  models: Array<{ name: string; size: number; modifiedAt: string }>;
+  error?: string;
+}> {
+  const config = await getAIConfig();
+
+  if (!config.endpoint) {
+    return { models: [], error: 'No AI endpoint configured' };
+  }
+
+  // Sync config first so container knows the endpoint
+  await syncConfigToContainer(config);
+
+  try {
+    const response = await fetch(`${AI_CONTAINER_URL}/list-models`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as any;
+      return { models: [], error: error.error || 'Failed to list models' };
+    }
+
+    return await response.json() as any;
+  } catch (error) {
+    log.error('List models error', { error: String(error) });
+    return { models: [], error: 'Cannot connect to AI container' };
+  }
+}
+
+/**
+ * Pull (download) a model
+ */
+export async function pullModel(model: string): Promise<{
+  success: boolean;
+  model?: string;
+  status?: string;
+  error?: string;
+}> {
+  const config = await getAIConfig();
+
+  if (!config.endpoint) {
+    return { success: false, error: 'No AI endpoint configured' };
+  }
+
+  // Sync config first
+  await syncConfigToContainer(config);
+
+  try {
+    const response = await fetch(`${AI_CONTAINER_URL}/pull-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+      signal: AbortSignal.timeout(600000), // 10 minute timeout for large models
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({})) as any;
+      return { success: false, error: error.error || 'Pull failed' };
+    }
+
+    return await response.json() as any;
+  } catch (error) {
+    log.error('Pull model error', { error: String(error) });
+    return { success: false, error: 'Pull operation failed' };
+  }
+}
+
+/**
  * AI Service - exported for use in API routes
  */
 export const aiService = {
@@ -327,4 +426,7 @@ export const aiService = {
   checkHealth,
   suggestTransactionLabel,
   executeNaturalQuery,
+  detectOllama,
+  listModels,
+  pullModel,
 };

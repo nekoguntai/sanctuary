@@ -1711,6 +1711,13 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
       },
     });
 
+    log.info('[ADMIN] Electrum server test result', {
+      serverId: id,
+      success: result.success,
+      message: result.message,
+      info: result.info
+    });
+
     res.json({
       success: result.success,
       message: result.message,

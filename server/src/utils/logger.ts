@@ -118,6 +118,30 @@ const getTimestamp = (): string => {
 };
 
 /**
+ * Safely stringify objects, handling circular references
+ */
+const safeStringify = (obj: any): string => {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+    }
+    // Handle Error objects specially
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+        code: (value as any).code,
+      };
+    }
+    return value;
+  });
+};
+
+/**
  * Format context object as key=value pairs
  * Objects are JSON stringified, primitives are converted to strings
  */
@@ -130,7 +154,11 @@ const formatContext = (context?: Record<string, any>): string => {
         return `${key}=null`;
       }
       if (typeof value === 'object') {
-        return `${key}=${JSON.stringify(value)}`;
+        try {
+          return `${key}=${safeStringify(value)}`;
+        } catch {
+          return `${key}=[Object]`;
+        }
       }
       return `${key}=${value}`;
     })

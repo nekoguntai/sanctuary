@@ -15,11 +15,14 @@ const log = createLogger('AISettings');
 
 // Popular models for quick pull
 const POPULAR_MODELS = [
-  { name: 'llama3.2:3b', description: 'Fast, lightweight (2GB)', recommended: true },
-  { name: 'llama3.2:1b', description: 'Ultra-fast, minimal (1GB)' },
-  { name: 'mistral:7b', description: 'Balanced performance (4GB)' },
+  { name: 'llama3.2:3b', description: 'Meta, fast & lightweight (2GB)', recommended: true },
+  { name: 'deepseek-r1:7b', description: 'DeepSeek, reasoning model (4.7GB)' },
+  { name: 'deepseek-r1:1.5b', description: 'DeepSeek, compact (1GB)' },
+  { name: 'mistral:7b', description: 'Mistral AI, balanced (4GB)' },
+  { name: 'qwen2.5:7b', description: 'Alibaba, multilingual (4.7GB)' },
   { name: 'gemma2:2b', description: 'Google, compact (1.6GB)' },
   { name: 'phi3:mini', description: 'Microsoft, small (2.3GB)' },
+  { name: 'llama3.2:1b', description: 'Meta, ultra-fast (1GB)' },
 ];
 
 export default function AISettings() {
@@ -51,6 +54,7 @@ export default function AISettings() {
   const [isPulling, setIsPulling] = useState(false);
   const [pullProgress, setPullProgress] = useState('');
   const [pullModelName, setPullModelName] = useState('');
+  const [customModelName, setCustomModelName] = useState('');
 
   // Load settings on mount
   useEffect(() => {
@@ -567,6 +571,43 @@ export default function AISettings() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Custom Model Input */}
+            <div className="mt-4 pt-4 border-t border-sanctuary-200 dark:border-sanctuary-700">
+              <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
+                Pull Any Model
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={customModelName}
+                  onChange={(e) => setCustomModelName(e.target.value)}
+                  placeholder="e.g., codellama:13b, mixtral:8x7b, deepseek-coder:6.7b"
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 placeholder:text-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={isPulling}
+                />
+                <button
+                  onClick={() => {
+                    if (customModelName.trim()) {
+                      handlePullModel(customModelName.trim());
+                      setCustomModelName('');
+                    }
+                  }}
+                  disabled={isPulling || !customModelName.trim()}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                >
+                  {isPulling && pullModelName === customModelName.trim() ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  <span>Pull</span>
+                </button>
+              </div>
+              <p className="text-xs text-sanctuary-500 mt-1">
+                Browse all models at <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">ollama.com/library</a>
+              </p>
             </div>
 
             <p className="text-xs text-sanctuary-400 mt-4">

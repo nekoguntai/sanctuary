@@ -133,9 +133,11 @@ ollama pull llama3.2:3b
 
 ### AI Container Not Starting
 
+> **Note:** The AI container starts automatically with Sanctuary - no profile flag is needed.
+
 ```bash
-docker compose --profile ai logs ai
-docker compose --profile ai ps
+docker compose logs ai
+docker compose ps
 ```
 
 ### Cannot Reach Local Ollama

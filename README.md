@@ -238,7 +238,44 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Update notifications** — Dashboard alerts when new versions are available
 - **Audit logging** — Track security-relevant events and user actions (including gateway/mobile API events)
 - **Mobile API gateway** — Secure API for iOS/Android apps with push notifications
+- **AI Assistant** — Optional AI-powered transaction labeling and natural language queries
 - **Backup & restore** — Export/import all data via the web UI
+
+## AI Assistant (Optional)
+
+Sanctuary includes an optional AI assistant that can help with:
+- **Transaction labeling** — AI suggests labels based on amount, direction, and your existing patterns
+- **Natural language queries** — Ask questions like "Show my largest receives this month"
+
+### Setting Up AI
+
+1. **Enable AI Features**
+   - Go to **Administration → AI Assistant**
+   - Toggle "Enable AI Features"
+
+2. **Configure AI Provider**
+
+   **Option A: Local AI with Ollama (Recommended - Most Private)**
+   ```bash
+   # Install Ollama from https://ollama.ai, then:
+   ollama serve
+   ```
+   - In Sanctuary, click **"Detect"** to auto-configure the endpoint
+   - Download a model like `llama3.2:3b` using the **"Pull"** button in settings
+
+   **Option B: Cloud AI (Less Private)**
+   - Enter an OpenAI-compatible endpoint URL
+   - Note: Sanitized transaction metadata will be sent to external servers
+
+### Security
+
+The AI runs in a **security-isolated container**:
+- Cannot access private keys or signing operations
+- Only receives sanitized metadata (amounts, dates — **no addresses or txids**)
+- Runs in a separate network by default (no internet access for local AI)
+- All AI suggestions require user confirmation before applying
+
+See [ai-proxy/README.md](ai-proxy/README.md) for technical details.
 
 ## Architecture
 

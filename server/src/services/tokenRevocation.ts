@@ -7,8 +7,14 @@
  * ## Security Design
  *
  * - Uses jti (JWT ID) claims to uniquely identify tokens
- * - In-memory storage with automatic cleanup of expired entries
+ * - LRU cache with configurable max size (default: 100,000 entries)
+ * - Automatic cleanup of expired entries every 5 minutes
+ * - Prevents memory leaks on high-traffic instances via LRU eviction
  * - No Redis dependency - suitable for single-instance deployments
+ *
+ * ## Configuration
+ *
+ * - TOKEN_REVOCATION_MAX_SIZE: Maximum cache entries (default: 100,000)
  *
  * ## Limitations
  *
@@ -23,6 +29,7 @@
  * 3. In auth middleware, call isTokenRevoked(jti)
  */
 
+import { LRUCache } from 'lru-cache';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('TOKEN_REVOCATION');
@@ -38,10 +45,22 @@ interface RevokedToken {
 }
 
 /**
- * In-memory revocation list
- * Map from jti to revocation entry
+ * Maximum number of entries in the revocation cache
+ * Configurable via TOKEN_REVOCATION_MAX_SIZE environment variable
+ * Default: 100,000 entries to prevent memory leaks on high-traffic instances
  */
-const revokedTokens = new Map<string, RevokedToken>();
+const MAX_REVOCATION_ENTRIES = parseInt(process.env.TOKEN_REVOCATION_MAX_SIZE || '100000', 10);
+
+/**
+ * In-memory revocation list using LRU cache
+ * Automatically evicts least recently used entries when max size is reached
+ * This prevents unbounded memory growth on high-traffic instances
+ */
+const revokedTokens = new LRUCache<string, RevokedToken>({
+  max: MAX_REVOCATION_ENTRIES,
+  // No TTL set here - we handle expiration manually via cleanup interval
+  // This allows us to keep tokens until they naturally expire
+});
 
 /**
  * Cleanup interval in milliseconds (5 minutes)

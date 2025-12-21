@@ -161,7 +161,7 @@ export const Variables: React.FC = () => {
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className={`px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors ${
+              className={`px-4 py-2 bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded-lg font-medium transition-colors ${
                 isSaving ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >

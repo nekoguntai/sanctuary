@@ -610,7 +610,7 @@ export default function AISettings() {
                   <button
                     onClick={handleStartContainer}
                     disabled={isStartingContainer}
-                    className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                    className="px-3 py-1.5 text-sm bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                   >
                     {isStartingContainer ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -824,7 +824,7 @@ export default function AISettings() {
               <button
                 onClick={handleSaveConfig}
                 disabled={isSaving || !aiEndpoint || !aiModel}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSaving ? 'Saving...' : 'Save Configuration'}
               </button>
@@ -902,20 +902,20 @@ export default function AISettings() {
                 {/* Show progress bar when downloading */}
                 {downloadProgress && downloadProgress.status === 'downloading' && downloadProgress.total > 0 ? (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center justify-between text-sm font-medium">
                       <span className="flex items-center space-x-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Downloading {pullModelName}</span>
                       </span>
-                      <span>{downloadProgress.percent}%</span>
+                      <span className="tabular-nums">{downloadProgress.percent}%</span>
                     </div>
-                    <div className="w-full bg-primary-200 dark:bg-primary-800 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-primary-200/60 dark:bg-sanctuary-800 rounded-full h-2.5 overflow-hidden ring-1 ring-primary-300/50 dark:ring-primary-700/50">
                       <div
-                        className="bg-primary-600 dark:bg-primary-400 h-2 rounded-full transition-all duration-300"
+                        className="bg-gradient-to-r from-primary-500 to-primary-600 dark:from-primary-400 dark:to-primary-500 h-2.5 rounded-full transition-all duration-300"
                         style={{ width: `${downloadProgress.percent}%` }}
                       />
                     </div>
-                    <div className="text-xs text-sanctuary-500 dark:text-sanctuary-400">
+                    <div className="text-xs text-primary-600/80 dark:text-primary-300/80 tabular-nums">
                       {formatBytes(downloadProgress.completed)} / {formatBytes(downloadProgress.total)}
                     </div>
                   </div>
@@ -978,7 +978,7 @@ export default function AISettings() {
                         <button
                           onClick={() => handlePullModel(model.name)}
                           disabled={isPulling}
-                          className="px-3 py-1 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                          className="px-3 py-1 text-xs bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
                         >
                           {isPullingThis ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
@@ -1016,7 +1016,7 @@ export default function AISettings() {
                     }
                   }}
                   disabled={isPulling || !customModelName.trim()}
-                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                  className="px-4 py-2 bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
                 >
                   {isPulling && pullModelName === customModelName.trim() ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

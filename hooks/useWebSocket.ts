@@ -270,9 +270,21 @@ export const useModelDownloadProgress = (
 ): { progress: ModelDownloadProgress | null } => {
   const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
 
+  // Use the main useWebSocket hook to ensure connection is established
+  const { connected } = useWebSocket();
+
   useEffect(() => {
+    // Only subscribe when connected
+    if (!connected) {
+      return;
+    }
+
+    // Subscribe to system channel to receive model download events
+    websocketClient.subscribe('system');
+
     const handleProgress = (event: WebSocketEvent) => {
-      if (event.type !== 'modelDownload') return;
+      // Events come with type='event' and event='modelDownload'
+      if (event.event !== 'modelDownload') return;
 
       const data = event.data as ModelDownloadProgress;
       setProgress(data);
@@ -283,8 +295,9 @@ export const useModelDownloadProgress = (
 
     return () => {
       websocketClient.off('modelDownload', handleProgress);
+      websocketClient.unsubscribe('system');
     };
-  }, [onProgress]);
+  }, [connected, onProgress]);
 
   return { progress };
 };

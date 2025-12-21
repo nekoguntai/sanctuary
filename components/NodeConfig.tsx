@@ -34,6 +34,7 @@ export const NodeConfig: React.FC = () => {
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [newServer, setNewServer] = useState({ label: '', host: '', port: 50002, useSsl: true });
   const [serverTestStatus, setServerTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
+  const [serverTestErrors, setServerTestErrors] = useState<Record<string, string>>({});
   const [serverActionLoading, setServerActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -173,16 +174,22 @@ export const NodeConfig: React.FC = () => {
 
   const handleTestServer = async (id: string) => {
     setServerTestStatus(prev => ({ ...prev, [id]: 'testing' }));
+    setServerTestErrors(prev => ({ ...prev, [id]: '' }));
     try {
       const result = await adminApi.testElectrumServer(id);
       setServerTestStatus(prev => ({ ...prev, [id]: result.success ? 'success' : 'error' }));
+      if (!result.success && result.message) {
+        setServerTestErrors(prev => ({ ...prev, [id]: result.message }));
+      }
       // Reload servers to get updated health check error
-      await loadServers();
-      setTimeout(() => setServerTestStatus(prev => ({ ...prev, [id]: 'idle' })), 5000);
+      const updatedServers = await adminApi.getElectrumServers();
+      setServers(updatedServers);
+      setTimeout(() => setServerTestStatus(prev => ({ ...prev, [id]: 'idle' })), 15000);
     } catch (error) {
       log.error('Failed to test server', { error });
       setServerTestStatus(prev => ({ ...prev, [id]: 'error' }));
-      setTimeout(() => setServerTestStatus(prev => ({ ...prev, [id]: 'idle' })), 5000);
+      setServerTestErrors(prev => ({ ...prev, [id]: error instanceof Error ? error.message : 'Connection failed' }));
+      setTimeout(() => setServerTestStatus(prev => ({ ...prev, [id]: 'idle' })), 15000);
     }
   };
 
@@ -769,10 +776,9 @@ export const NodeConfig: React.FC = () => {
                                 <CheckCircle className="w-4 h-4 text-emerald-500" />
                               )}
                               {serverTestStatus[server.id] === 'error' && (
-                                <XCircle
-                                  className="w-4 h-4 text-rose-500 cursor-help"
-                                  title={server.lastHealthCheckError || 'Connection test failed'}
-                                />
+                                <span title={serverTestErrors[server.id] || server.lastHealthCheckError || 'Connection test failed'}>
+                                  <XCircle className="w-4 h-4 text-rose-500 cursor-help" />
+                                </span>
                               )}
 
                               <button

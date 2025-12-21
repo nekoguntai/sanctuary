@@ -86,19 +86,11 @@ ai:
 
 ## Usage
 
-### Start with AI Container
-
-```bash
-# Start all services including AI
-docker compose --profile ai up -d
-
-# Or start AI container separately
-docker compose --profile ai up -d ai
-```
+The AI container starts automatically with Sanctuary. It idles until AI features are enabled.
 
 ### Configure AI Endpoint
 
-In Sanctuary Admin → System Settings:
+In Sanctuary Admin → AI Assistant:
 
 1. Enable AI Features
 2. Set AI Endpoint URL:

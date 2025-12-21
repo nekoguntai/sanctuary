@@ -227,9 +227,10 @@ services:
       - sanctuary-network
 
   # ============================================
-  # AI Container (Optional - Isolated AI Service)
+  # AI Container (Isolated AI Service)
   # ============================================
   # Security-isolated container for AI operations.
+  # Lightweight - idles until AI is enabled in Admin → AI Assistant.
   #
   # ISOLATION GUARANTEES:
   # - Cannot access database directly
@@ -237,11 +238,8 @@ services:
   # - Only receives sanitized transaction metadata
   # - Backend NEVER makes external AI calls
   #
-  # Start with: docker compose --profile ai up -d
-  #
-  # NETWORK MODES:
-  # - AI_INTERNET_ACCESS=false: Container on internal network (local AI only)
-  # - AI_INTERNET_ACCESS=true: Container can reach internet (cloud AI)
+  # NETWORK MODES (default: local AI only):
+  # - Remove ai-internal network below to allow internet access for cloud AI
   # ============================================
   ai:
     build:
@@ -250,7 +248,6 @@ services:
     image: sanctuary-ai:local
     container_name: sanctuary-ai
     restart: unless-stopped
-    profiles: ["ai"]
     depends_on:
       backend:
         condition: service_healthy

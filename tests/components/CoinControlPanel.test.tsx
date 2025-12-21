@@ -184,7 +184,8 @@ describe('CoinControlPanel', () => {
       fireEvent.click(screen.getByText(/Coin Control/));
 
       await waitFor(() => {
-        expect(screen.getByText('Select Inputs')).toBeInTheDocument();
+        // In auto mode, shows "Inputs (auto-selected)" instead of "Select Inputs"
+        expect(screen.getByText('Inputs (auto-selected)')).toBeInTheDocument();
       });
     });
 
@@ -208,13 +209,13 @@ describe('CoinControlPanel', () => {
       // Expand
       fireEvent.click(screen.getByText(/Coin Control/));
       await waitFor(() => {
-        expect(screen.getByText('Select Inputs')).toBeInTheDocument();
+        expect(screen.getByText('Inputs (auto-selected)')).toBeInTheDocument();
       });
 
       // Collapse
       fireEvent.click(screen.getByText(/Coin Control/));
       await waitFor(() => {
-        expect(screen.queryByText('Select Inputs')).not.toBeInTheDocument();
+        expect(screen.queryByText('Inputs (auto-selected)')).not.toBeInTheDocument();
       });
     });
 
@@ -267,8 +268,9 @@ describe('CoinControlPanel', () => {
   });
 
   describe('UTXO selection', () => {
-    it('toggles UTXO selection on click', async () => {
-      renderPanel();
+    it('toggles UTXO selection on click in manual mode', async () => {
+      // UTXO selection is only allowed in manual mode
+      renderPanel({ strategy: 'manual' });
 
       fireEvent.click(screen.getByText(/Coin Control/));
 
@@ -280,6 +282,21 @@ describe('CoinControlPanel', () => {
       fireEvent.click(screen.getByText('50,000 sats').closest('div[class*="p-4"]')!);
 
       expect(mockOnToggleSelect).toHaveBeenCalledWith('abc123:0');
+    });
+
+    it('does not allow UTXO selection in non-manual mode', async () => {
+      renderPanel({ strategy: 'privacy' });
+
+      fireEvent.click(screen.getByText(/Coin Control/));
+
+      await waitFor(() => {
+        expect(screen.getByText('50,000 sats')).toBeInTheDocument();
+      });
+
+      // Click on the first UTXO row - should not toggle
+      fireEvent.click(screen.getByText('50,000 sats').closest('div[class*="p-4"]')!);
+
+      expect(mockOnToggleSelect).not.toHaveBeenCalled();
     });
 
     it('shows checkmark for selected UTXOs', async () => {
@@ -507,6 +524,7 @@ describe('CoinControlPanel', () => {
 
     it('does not show footer when no UTXOs selected', async () => {
       renderPanel({
+        strategy: 'manual',
         selectedUtxos: new Set(),
       });
 
@@ -575,6 +593,7 @@ describe('CoinControlPanel', () => {
 
     it('does not show privacy card when no UTXOs selected', async () => {
       renderPanel({
+        strategy: 'manual',
         selectedUtxos: new Set(),
       });
 

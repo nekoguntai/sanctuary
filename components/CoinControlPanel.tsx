@@ -212,14 +212,10 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
     }
   }, [disabled, loadingStrategy, isExpanded, onStrategyChange, walletId, targetAmount, feeRate, onSetSelectedUtxos]);
 
-  // Handle manual UTXO toggle - switches to manual mode
+  // Handle manual UTXO toggle (only callable in manual mode)
   const handleManualToggle = useCallback((utxoId: string) => {
-    // Switch to manual mode when user manually selects/deselects a UTXO
-    if (strategy !== 'manual') {
-      onStrategyChange?.('manual');
-    }
     onToggleSelect(utxoId);
-  }, [strategy, onStrategyChange, onToggleSelect]);
+  }, [onToggleSelect]);
 
   // Summary text for collapsed state
   const summaryText = useMemo(() => {
@@ -284,7 +280,7 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
           <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden ${disabled ? 'opacity-60' : ''}`}>
             <div className="p-4 surface-muted border-b border-sanctuary-100 dark:border-sanctuary-800 flex justify-between items-center">
               <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                {disabled ? 'Selected Inputs (locked)' : 'Select Inputs'}
+                {disabled ? 'Selected Inputs (locked)' : strategy === 'manual' ? 'Select Inputs' : 'Inputs (auto-selected)'}
               </span>
               <span className="text-xs text-sanctuary-500">
                 {selectedUtxos.size} selected
@@ -296,7 +292,8 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
                 const id = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selectedUtxos.has(id);
                 const isLocked = !!utxo.lockedByDraftId;
-                const isDisabled = utxo.frozen || isLocked || disabled;
+                // Disable selection when not in manual mode (strategy controls selection)
+                const isDisabled = utxo.frozen || isLocked || disabled || strategy !== 'manual';
                 const isDust = !utxo.frozen && !isLocked && isDustUtxo(utxo, feeRate);
                 const spendCost = isDust ? getSpendCost(utxo, feeRate) : 0;
                 const privacyInfo = privacyMap.get(id);

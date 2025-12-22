@@ -58,31 +58,46 @@ get_container_name() {
     local service="$1"
     local project="${COMPOSE_PROJECT_NAME:-sanctuary}"
 
-    # First try to find by docker compose ps (most accurate)
-    local container=$(docker compose ps -q "$service" 2>/dev/null | head -1)
+    # Search by pattern (doesn't require env vars like docker compose ps does)
+    # First try running containers, then all containers
+    local container=$(docker ps --format '{{.Names}}' | grep -E "^${project}-${service}-[0-9]+$" | head -1)
     if [ -n "$container" ]; then
-        docker inspect -f '{{.Name}}' "$container" 2>/dev/null | sed 's/^\///'
+        echo "$container"
         return 0
     fi
 
-    # Fallback: search by pattern
+    # Fallback: check all containers (including stopped)
     docker ps -a --format '{{.Names}}' | grep -E "^${project}-${service}-[0-9]+$" | head -1
 }
 
 # Execute command in a service container (handles dynamic names)
+# Uses docker exec directly to avoid requiring env vars for docker compose
 # Usage: compose_exec "backend" "wget -q -O - http://localhost:3001/health"
 compose_exec() {
     local service="$1"
     shift
-    docker compose exec -T "$service" "$@"
+    local container=$(get_container_name "$service")
+    if [ -n "$container" ]; then
+        docker exec "$container" "$@"
+    else
+        log_error "Container for service '$service' not found"
+        return 1
+    fi
 }
 
 # Get logs from a service (handles dynamic names)
+# Uses docker logs directly to avoid requiring env vars for docker compose
 # Usage: compose_logs "backend" 50
 compose_logs() {
     local service="$1"
     local lines="${2:-50}"
-    docker compose logs --tail "$lines" "$service" 2>&1
+    local container=$(get_container_name "$service")
+    if [ -n "$container" ]; then
+        docker logs --tail "$lines" "$container" 2>&1
+    else
+        log_error "Container for service '$service' not found"
+        return 1
+    fi
 }
 
 # Service name mappings (old hardcoded -> service name)

@@ -463,6 +463,24 @@ test_install_script_generates_encryption_key() {
     fi
 }
 
+test_install_script_generates_gateway_secret() {
+    if grep -q "GATEWAY_SECRET" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should generate GATEWAY_SECRET"
+        return 1
+    fi
+}
+
+test_install_script_generates_postgres_password() {
+    if grep -q "POSTGRES_PASSWORD" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should generate POSTGRES_PASSWORD"
+        return 1
+    fi
+}
+
 test_install_script_uses_docker_compose() {
     if grep -q "docker compose" "$INSTALL_SCRIPT"; then
         return 0
@@ -477,6 +495,79 @@ test_install_script_creates_env_local() {
         return 0
     else
         echo -e "${RED}ASSERTION FAILED:${NC} install.sh should create .env.local file"
+        return 1
+    fi
+}
+
+# ============================================
+# Unit Tests: start.sh file structure
+# ============================================
+
+START_SCRIPT="$PROJECT_ROOT/start.sh"
+
+test_start_script_exists() {
+    assert_file_exists "$START_SCRIPT" "start.sh should exist in project root"
+}
+
+test_start_script_is_executable() {
+    if [ -x "$START_SCRIPT" ]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should be executable"
+        return 1
+    fi
+}
+
+test_start_script_checks_jwt_secret() {
+    if grep -q "JWT_SECRET" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should check JWT_SECRET"
+        return 1
+    fi
+}
+
+test_start_script_checks_encryption_key() {
+    if grep -q "ENCRYPTION_KEY" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should check ENCRYPTION_KEY"
+        return 1
+    fi
+}
+
+test_start_script_checks_gateway_secret() {
+    if grep -q "GATEWAY_SECRET" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should check GATEWAY_SECRET"
+        return 1
+    fi
+}
+
+test_start_script_checks_postgres_password() {
+    if grep -q "POSTGRES_PASSWORD" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should check POSTGRES_PASSWORD"
+        return 1
+    fi
+}
+
+test_start_script_exports_secrets() {
+    if grep -q "export.*JWT_SECRET.*ENCRYPTION_KEY.*GATEWAY_SECRET.*POSTGRES_PASSWORD" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should export all required secrets"
+        return 1
+    fi
+}
+
+test_start_script_sources_env_local() {
+    if grep -q "source.*\.env\.local\|\..*\.env\.local" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should source .env.local"
         return 1
     fi
 }
@@ -566,8 +657,21 @@ main() {
     run_test "install script has openssl check" test_install_script_has_openssl_check
     run_test "install script generates JWT_SECRET" test_install_script_generates_jwt_secret
     run_test "install script generates ENCRYPTION_KEY" test_install_script_generates_encryption_key
+    run_test "install script generates GATEWAY_SECRET" test_install_script_generates_gateway_secret
+    run_test "install script generates POSTGRES_PASSWORD" test_install_script_generates_postgres_password
     run_test "install script uses docker compose" test_install_script_uses_docker_compose
     run_test "install script creates env.local" test_install_script_creates_env_local
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: start.sh File Structure${NC}"
+    run_test "start script exists" test_start_script_exists
+    run_test "start script is executable" test_start_script_is_executable
+    run_test "start script checks JWT_SECRET" test_start_script_checks_jwt_secret
+    run_test "start script checks ENCRYPTION_KEY" test_start_script_checks_encryption_key
+    run_test "start script checks GATEWAY_SECRET" test_start_script_checks_gateway_secret
+    run_test "start script checks POSTGRES_PASSWORD" test_start_script_checks_postgres_password
+    run_test "start script exports secrets" test_start_script_exports_secrets
+    run_test "start script sources env.local" test_start_script_sources_env_local
     echo ""
 
     echo -e "${YELLOW}Test Suite: SSL Certificate Generation${NC}"

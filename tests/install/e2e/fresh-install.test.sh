@@ -316,13 +316,16 @@ test_docker_compose_build() {
 
     cd "$PROJECT_ROOT"
 
-    # Generate secrets for build
+    # Generate all 4 required secrets for build
     local jwt_secret=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
     local encryption_key=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    local gateway_secret=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    local postgres_password=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
     # Build containers
     log_info "Building Docker images (this may take a few minutes)..."
     if ! JWT_SECRET="$jwt_secret" ENCRYPTION_KEY="$encryption_key" \
+         GATEWAY_SECRET="$gateway_secret" POSTGRES_PASSWORD="$postgres_password" \
          HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
          docker compose build 2>&1; then
         log_error "Docker Compose build failed"
@@ -342,13 +345,16 @@ test_docker_compose_up() {
 
     cd "$PROJECT_ROOT"
 
-    # Generate secrets
+    # Generate all 4 required secrets
     local jwt_secret=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
     local encryption_key=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    local gateway_secret=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    local postgres_password=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
     # Start containers
     log_info "Starting containers..."
     if ! JWT_SECRET="$jwt_secret" ENCRYPTION_KEY="$encryption_key" \
+         GATEWAY_SECRET="$gateway_secret" POSTGRES_PASSWORD="$postgres_password" \
          HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
          docker compose up -d 2>&1; then
         log_error "Docker Compose up failed"

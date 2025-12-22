@@ -7,9 +7,12 @@
     "seed": "node --experimental-specifier-resolution=node dist/prisma/seed.js"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "prisma generate",
     "build": "tsc",
     "start": "node dist/index.js",
+    "pretest": "prisma generate",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

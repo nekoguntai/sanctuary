@@ -202,16 +202,32 @@ main() {
         source "$INSTALL_DIR/.env.local"
         echo -e "${GREEN}✓${NC} Using existing secrets from .env.local"
 
-        # Generate ENCRYPTION_KEY if missing (upgrading from older version)
+        # Generate missing secrets (upgrading from older version)
+        UPDATED_ENV=false
         if [ -z "$ENCRYPTION_KEY" ]; then
             ENCRYPTION_KEY=$(generate_secret)
             echo "ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$INSTALL_DIR/.env.local"
             echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_KEY"
+            UPDATED_ENV=true
+        fi
+        if [ -z "$GATEWAY_SECRET" ]; then
+            GATEWAY_SECRET=$(generate_secret)
+            echo "GATEWAY_SECRET=$GATEWAY_SECRET" >> "$INSTALL_DIR/.env.local"
+            echo -e "${GREEN}✓${NC} Generated missing GATEWAY_SECRET"
+            UPDATED_ENV=true
+        fi
+        if [ -z "$POSTGRES_PASSWORD" ]; then
+            POSTGRES_PASSWORD=$(generate_secret | head -c 24)
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> "$INSTALL_DIR/.env.local"
+            echo -e "${GREEN}✓${NC} Generated missing POSTGRES_PASSWORD"
+            UPDATED_ENV=true
         fi
     else
         JWT_SECRET=$(generate_secret)
         ENCRYPTION_KEY=$(generate_secret)
-        echo -e "${GREEN}✓${NC} Generated JWT_SECRET and ENCRYPTION_KEY"
+        GATEWAY_SECRET=$(generate_secret)
+        POSTGRES_PASSWORD=$(generate_secret | head -c 24)
+        echo -e "${GREEN}✓${NC} Generated secure secrets"
     fi
 
     # Check for port conflicts
@@ -229,7 +245,11 @@ main() {
 
     # Start the services
     cd "$INSTALL_DIR"
-    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        JWT_SECRET="$JWT_SECRET" \
+        ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$GATEWAY_SECRET" \
+        POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         docker compose up -d --build
 
     # Wait for services to be healthy
@@ -285,6 +305,8 @@ main() {
     cat > "$INSTALL_DIR/.env.local" << ENVEOF
 JWT_SECRET=$JWT_SECRET
 ENCRYPTION_KEY=$ENCRYPTION_KEY
+GATEWAY_SECRET=$GATEWAY_SECRET
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 ENVEOF
     echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env.local"
     echo ""

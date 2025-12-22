@@ -170,7 +170,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"sanctuary-.*\"} | json | level != \"\" [$__interval]))",
+          "expr": "sum by (level) (count_over_time({container=~\"sanctuary-.*\"} | regexp \"(?P<level>INFO|WARN|ERROR|DEBUG)\" [$__interval]))",
           "legendFormat": "{{level}}",
           "refId": "A"
         }

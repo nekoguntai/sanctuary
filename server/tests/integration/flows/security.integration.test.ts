@@ -195,7 +195,7 @@ describeWithDb('Security Integration Tests', () => {
     });
 
     describe('Password change requirements', () => {
-      it('should reject new password shorter than 6 characters', async () => {
+      it('should reject weak password that does not meet strength requirements', async () => {
         const testUser = getTestUser();
         await createTestUser(prisma, testUser);
         const token = await loginTestUser(app, testUser);
@@ -205,11 +205,14 @@ describeWithDb('Security Integration Tests', () => {
           .set('Authorization', `Bearer ${token}`)
           .send({
             currentPassword: testUser.password,
-            newPassword: 'Ab1!', // Too short
+            newPassword: 'Ab1!', // Too short and doesn't meet requirements
           })
           .expect(400);
 
-        expect(response.body.message).toContain('6 characters');
+        // Password change now uses same validation as registration
+        expect(response.body.message).toBe('Password does not meet requirements');
+        expect(response.body.details).toBeDefined();
+        expect(Array.isArray(response.body.details)).toBe(true);
       });
 
       it('should allow password change with 6+ character password', async () => {

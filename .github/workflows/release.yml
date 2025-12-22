@@ -28,10 +28,28 @@ jobs:
         run: echo "Release workflow skipped for push events"
 
   # ============================================
+  # Wait for Install Tests to Pass
+  # ============================================
+  wait-for-install-tests:
+    name: Wait for Install Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Wait for Install Tests workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'Install Test Summary'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success
+
+  # ============================================
   # Run Release Candidate Validation
   # ============================================
   release-candidate:
     name: Release Candidate
+    needs: wait-for-install-tests
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/release-candidate.yml
     with:

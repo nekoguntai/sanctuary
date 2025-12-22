@@ -61,6 +61,8 @@ API_BASE_URL="https://localhost:${HTTPS_PORT}"
 # State variables for testing
 ORIGINAL_JWT_SECRET=""
 ORIGINAL_ENCRYPTION_KEY=""
+ORIGINAL_GATEWAY_SECRET=""
+ORIGINAL_POSTGRES_PASSWORD=""
 ORIGINAL_USER_PASSWORD=""
 TEST_WALLET_ID=""
 
@@ -148,6 +150,8 @@ test_ensure_existing_installation() {
             source "$PROJECT_ROOT/.env.local"
             ORIGINAL_JWT_SECRET="$JWT_SECRET"
             ORIGINAL_ENCRYPTION_KEY="$ENCRYPTION_KEY"
+            ORIGINAL_GATEWAY_SECRET="$GATEWAY_SECRET"
+            ORIGINAL_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
             log_info "Loaded existing secrets from .env.local"
         fi
 
@@ -157,14 +161,18 @@ test_ensure_existing_installation() {
     # No existing installation - create one
     log_info "No existing installation found. Creating initial installation..."
 
-    # Generate initial secrets
+    # Generate all 4 required secrets
     ORIGINAL_JWT_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
     ORIGINAL_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    ORIGINAL_GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
+    ORIGINAL_POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
     # Save to .env.local
     cat > "$PROJECT_ROOT/.env.local" << EOF
 JWT_SECRET=$ORIGINAL_JWT_SECRET
 ENCRYPTION_KEY=$ORIGINAL_ENCRYPTION_KEY
+GATEWAY_SECRET=$ORIGINAL_GATEWAY_SECRET
+POSTGRES_PASSWORD=$ORIGINAL_POSTGRES_PASSWORD
 EOF
 
     # Generate SSL certs if needed
@@ -177,12 +185,14 @@ EOF
 
     # Build images first (migrate container depends on backend image)
     JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$ORIGINAL_GATEWAY_SECRET" POSTGRES_PASSWORD="$ORIGINAL_POSTGRES_PASSWORD" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         LOGIN_RATE_LIMIT=100 \
         docker compose build 2>&1
 
     # Then start containers
     JWT_SECRET="$ORIGINAL_JWT_SECRET" ENCRYPTION_KEY="$ORIGINAL_ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$ORIGINAL_GATEWAY_SECRET" POSTGRES_PASSWORD="$ORIGINAL_POSTGRES_PASSWORD" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         LOGIN_RATE_LIMIT=100 \
         docker compose up -d 2>&1
@@ -267,8 +277,12 @@ test_capture_pre_upgrade_state() {
         source "$PROJECT_ROOT/.env.local"
         ORIGINAL_JWT_SECRET="$JWT_SECRET"
         ORIGINAL_ENCRYPTION_KEY="$ENCRYPTION_KEY"
+        ORIGINAL_GATEWAY_SECRET="$GATEWAY_SECRET"
+        ORIGINAL_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
         log_info "Captured JWT_SECRET: ${ORIGINAL_JWT_SECRET:0:8}..."
         log_info "Captured ENCRYPTION_KEY: ${ORIGINAL_ENCRYPTION_KEY:0:8}..."
+        log_info "Captured GATEWAY_SECRET: ${ORIGINAL_GATEWAY_SECRET:0:8}..."
+        log_info "Captured POSTGRES_PASSWORD: ${ORIGINAL_POSTGRES_PASSWORD:0:8}..."
     else
         log_error ".env.local not found"
         return 1
@@ -344,8 +358,9 @@ test_restart_containers_after_upgrade() {
     # Load secrets from .env.local
     source "$PROJECT_ROOT/.env.local"
 
-    # Restart with existing secrets
+    # Restart with existing secrets (all 4 required)
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         LOGIN_RATE_LIMIT=100 \
         docker compose up -d 2>&1
@@ -388,10 +403,26 @@ test_verify_secrets_preserved() {
 
     if [ "$ENCRYPTION_KEY" != "$ORIGINAL_ENCRYPTION_KEY" ]; then
         log_error "ENCRYPTION_KEY changed after upgrade"
+        log_error "  Original: ${ORIGINAL_ENCRYPTION_KEY:0:8}..."
+        log_error "  Current:  ${ENCRYPTION_KEY:0:8}..."
         return 1
     fi
 
-    log_success "Secrets preserved correctly"
+    if [ "$GATEWAY_SECRET" != "$ORIGINAL_GATEWAY_SECRET" ]; then
+        log_error "GATEWAY_SECRET changed after upgrade"
+        log_error "  Original: ${ORIGINAL_GATEWAY_SECRET:0:8}..."
+        log_error "  Current:  ${GATEWAY_SECRET:0:8}..."
+        return 1
+    fi
+
+    if [ "$POSTGRES_PASSWORD" != "$ORIGINAL_POSTGRES_PASSWORD" ]; then
+        log_error "POSTGRES_PASSWORD changed after upgrade"
+        log_error "  Original: ${ORIGINAL_POSTGRES_PASSWORD:0:8}..."
+        log_error "  Current:  ${POSTGRES_PASSWORD:0:8}..."
+        return 1
+    fi
+
+    log_success "All 4 secrets preserved correctly"
     return 0
 }
 
@@ -503,8 +534,9 @@ test_force_rebuild_upgrade() {
     # Load secrets
     source "$PROJECT_ROOT/.env.local"
 
-    # Force rebuild all containers
+    # Force rebuild all containers (all 4 secrets required)
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         LOGIN_RATE_LIMIT=100 \
         docker compose up -d --build --force-recreate 2>&1

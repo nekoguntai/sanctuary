@@ -27,6 +27,15 @@ FRONTEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^
 # Timeout for test runs (2 minutes)
 TEST_TIMEOUT=120
 
+# Check if Prisma schema changed and regenerate client
+SCHEMA_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/prisma/schema.prisma$' || true)
+if [ -n "$SCHEMA_CHANGED" ]; then
+    echo "${YELLOW}Prisma schema changed - regenerating client...${NC}"
+    cd "$REPO_ROOT/server"
+    npx prisma generate
+    echo "${GREEN}Prisma client regenerated${NC}"
+fi
+
 # Run backend tests if backend files changed
 if [ -n "$BACKEND_CHANGED" ]; then
     echo "${YELLOW}Backend files changed - running server tests...${NC}"

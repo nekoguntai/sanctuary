@@ -36,10 +36,12 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sanctuary}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanctuary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-sanctuary}
-    ports:
-      - "5432:5432"  # Expose for local development and testing
+    # Port exposure disabled by default for security
+    # Uncomment for local development or use: docker exec -it sanctuary-db psql -U sanctuary
+    # ports:
+    #   - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

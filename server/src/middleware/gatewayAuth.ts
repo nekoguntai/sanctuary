@@ -4,17 +4,18 @@
  * Verifies that requests to internal endpoints come from the authenticated gateway.
  * Uses HMAC-SHA256 signatures to prevent header spoofing attacks.
  *
+ * SECURITY: GATEWAY_SECRET must be configured. Requests are rejected if not set.
+ *
  * ## Security Design
  *
- * - Replaces simple X-Gateway-Request header with cryptographic verification
  * - Uses HMAC-SHA256 with timestamp to prevent replay attacks
  * - Signature includes: method, path, timestamp, optional body hash
+ * - Timing-safe comparison prevents timing attacks
  *
  * ## Headers Required
  *
  * - X-Gateway-Signature: HMAC-SHA256 signature
  * - X-Gateway-Timestamp: Unix timestamp (must be within 5 minutes)
- * - X-Gateway-Request: 'true' (for backwards compatibility during migration)
  *
  * ## Signature Format
  *
@@ -88,18 +89,13 @@ export function verifyGatewayRequest(
   res: Response,
   next: NextFunction
 ): void {
-  // If gateway secret is not configured, fall back to legacy header check
-  // This allows gradual migration
+  // Require GATEWAY_SECRET to be configured
   if (!config.gatewaySecret) {
-    log.warn('GATEWAY_SECRET not configured, using legacy header check');
-    if (req.headers['x-gateway-request'] !== 'true') {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'This endpoint is for internal gateway use only',
-      });
-      return;
-    }
-    next();
+    log.error('GATEWAY_SECRET not configured - rejecting gateway request');
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'Gateway authentication not configured',
+    });
     return;
   }
 

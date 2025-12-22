@@ -83,6 +83,19 @@ const twoFactorLimiter = rateLimit({
   validate: rateLimitValidations,
 });
 
+// Limiter for password change (5 attempts per 15 minutes)
+const passwordChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many password change attempts. Please try again in 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: rateLimitValidations,
+});
+
 /**
  * GET /api/v1/auth/registration-status
  * Check if public registration is enabled (public endpoint for login page)
@@ -612,7 +625,7 @@ router.get('/users/search', authenticate, async (req: Request, res: Response) =>
  * POST /api/v1/auth/me/change-password
  * Change user password
  */
-router.post('/me/change-password', authenticate, async (req: Request, res: Response) => {
+router.post('/me/change-password', authenticate, passwordChangeLimiter, async (req: Request, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
@@ -624,10 +637,13 @@ router.post('/me/change-password', authenticate, async (req: Request, res: Respo
       });
     }
 
-    if (newPassword.length < 6) {
+    // Validate new password strength (same requirements as registration)
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'New password must be at least 6 characters',
+        message: 'Password does not meet requirements',
+        details: passwordValidation.errors,
       });
     }
 

@@ -18,6 +18,7 @@
     "test:coverage": "jest --coverage",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
+    "test:integration:db": "DATABASE_URL='postgresql://sanctuary:sanctuary@localhost:5432/sanctuary_test?schema=public' npm run test:integration",
     "test:ci": "jest --ci --coverage",
     "test:bitcoin": "jest tests/unit/services/bitcoin",
     "test:pool": "jest tests/unit/services/bitcoin/electrumPool.test.ts tests/unit/services/bitcoin/nodeClient.test.ts",

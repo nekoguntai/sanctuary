@@ -105,6 +105,13 @@ jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
   resetNodeClient: mockResetNodeClient,
 }));
 
+// Mock electrum pool
+const mockReloadElectrumServers = jest.fn();
+
+jest.mock('../../../src/services/bitcoin/electrumPool', () => ({
+  reloadElectrumServers: mockReloadElectrumServers,
+}));
+
 // Mock encryption
 jest.mock('../../../src/utils/encryption', () => ({
   encrypt: jest.fn((data: string) => `encrypted_${data}`),
@@ -1930,7 +1937,7 @@ describe('Admin API', () => {
           const response = getResponse();
           expect(response.statusCode).toBe(201);
           expect(response.body.label).toBe(newServer.label);
-          expect(mockResetNodeClient).toHaveBeenCalled();
+          expect(mockReloadElectrumServers).toHaveBeenCalled();
         }
       });
 
@@ -1989,7 +1996,7 @@ describe('Admin API', () => {
           const response = getResponse();
           expect(response.statusCode).toBe(200);
           expect(response.body.label).toBe('New Label');
-          expect(mockResetNodeClient).toHaveBeenCalled();
+          expect(mockReloadElectrumServers).toHaveBeenCalled();
         }
       });
 
@@ -2040,7 +2047,7 @@ describe('Admin API', () => {
           const response = getResponse();
           expect(response.statusCode).toBe(200);
           expect(response.body.success).toBe(true);
-          expect(mockResetNodeClient).toHaveBeenCalled();
+          expect(mockReloadElectrumServers).toHaveBeenCalled();
         }
       });
     });
@@ -2162,7 +2169,7 @@ describe('Admin API', () => {
           expect(response.statusCode).toBe(200);
           expect(response.body.success).toBe(true);
           expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledTimes(3);
-          expect(mockResetNodeClient).toHaveBeenCalled();
+          expect(mockReloadElectrumServers).toHaveBeenCalled();
         }
       });
 

@@ -83,10 +83,15 @@ const twoFactorLimiter = rateLimit({
   validate: rateLimitValidations,
 });
 
-// Limiter for password change (5 attempts per 15 minutes)
+// Password change rate limit can be configured via environment variable for testing
+// Default: 5 attempts per 15 minutes (production)
+// Set PASSWORD_CHANGE_RATE_LIMIT=100 for testing environments
+const passwordChangeRateLimit = parseInt(process.env.PASSWORD_CHANGE_RATE_LIMIT || '5', 10);
+
+// Limiter for password change
 const passwordChangeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts
+  max: passwordChangeRateLimit,
   message: {
     error: 'Too Many Requests',
     message: 'Too many password change attempts. Please try again in 15 minutes.',

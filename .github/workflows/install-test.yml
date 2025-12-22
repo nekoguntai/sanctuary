@@ -281,11 +281,11 @@ jobs:
           # Generate SSL certs
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
 
-          # Start containers with higher rate limit for testing
+          # Start containers with higher rate limits for testing
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
-            LOGIN_RATE_LIMIT=100 \
+            LOGIN_RATE_LIMIT=100 PASSWORD_CHANGE_RATE_LIMIT=100 \
             docker compose up -d --build
 
           # Wait for migration to complete

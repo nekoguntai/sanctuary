@@ -2,7 +2,7 @@
  * Docker Container Management
  *
  * Secure interface for managing the Ollama container via Docker socket proxy.
- * Only allows start/stop/status operations on the sanctuary-ollama container.
+ * Supports dynamic container names via COMPOSE_PROJECT_NAME for multi-instance deployments.
  */
 
 import { createLogger } from './logger';
@@ -12,8 +12,9 @@ const log = createLogger('DOCKER');
 // Docker proxy URL (set via environment variable)
 const DOCKER_PROXY_URL = process.env.DOCKER_PROXY_URL || 'http://docker-proxy:2375';
 
-// Only allow management of this specific container
-const OLLAMA_CONTAINER_NAME = 'sanctuary-ollama';
+// Pattern to match ollama containers (supports dynamic project names)
+// Container names will be like: {project}-ollama-1
+const OLLAMA_CONTAINER_PATTERN = /-ollama-\d+$/;
 
 interface ContainerInfo {
   Id: string;
@@ -34,15 +35,11 @@ interface ContainerInspect {
 }
 
 /**
- * Get Ollama container status
+ * Find ollama container by pattern
+ * Returns the container info if found
  */
-export async function getOllamaStatus(): Promise<{
-  exists: boolean;
-  running: boolean;
-  status: string;
-}> {
+async function findOllamaContainer(): Promise<ContainerInfo | null> {
   try {
-    // List containers (including stopped ones)
     const response = await fetch(`${DOCKER_PROXY_URL}/containers/json?all=true`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -50,13 +47,33 @@ export async function getOllamaStatus(): Promise<{
 
     if (!response.ok) {
       log.warn('Failed to list containers', { status: response.status });
-      return { exists: false, running: false, status: 'unknown' };
+      return null;
     }
 
     const containers = (await response.json()) as ContainerInfo[];
+    // Find container matching the ollama pattern (e.g., sanctuary-ollama-1)
     const ollama = containers.find((c) =>
-      c.Names.some((name) => name === `/${OLLAMA_CONTAINER_NAME}`)
+      c.Names.some((name) => OLLAMA_CONTAINER_PATTERN.test(name))
     );
+
+    return ollama || null;
+  } catch (error) {
+    log.error('Error finding Ollama container', { error });
+    return null;
+  }
+}
+
+/**
+ * Get Ollama container status
+ */
+export async function getOllamaStatus(): Promise<{
+  exists: boolean;
+  running: boolean;
+  status: string;
+  containerId?: string;
+}> {
+  try {
+    const ollama = await findOllamaContainer();
 
     if (!ollama) {
       return { exists: false, running: false, status: 'not_created' };
@@ -66,6 +83,7 @@ export async function getOllamaStatus(): Promise<{
       exists: true,
       running: ollama.State === 'running',
       status: ollama.State,
+      containerId: ollama.Id,
     };
   } catch (error) {
     log.error('Error getting Ollama status', { error });
@@ -80,7 +98,7 @@ export async function startOllama(): Promise<{ success: boolean; message: string
   try {
     const status = await getOllamaStatus();
 
-    if (!status.exists) {
+    if (!status.exists || !status.containerId) {
       return {
         success: false,
         message: 'Ollama container not found. Run "./start.sh --with-ai" first to create it.',
@@ -91,9 +109,9 @@ export async function startOllama(): Promise<{ success: boolean; message: string
       return { success: true, message: 'Ollama is already running' };
     }
 
-    // Start the container
+    // Start the container using its ID
     const response = await fetch(
-      `${DOCKER_PROXY_URL}/containers/${OLLAMA_CONTAINER_NAME}/start`,
+      `${DOCKER_PROXY_URL}/containers/${status.containerId}/start`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,7 +139,7 @@ export async function stopOllama(): Promise<{ success: boolean; message: string 
   try {
     const status = await getOllamaStatus();
 
-    if (!status.exists) {
+    if (!status.exists || !status.containerId) {
       return { success: true, message: 'Ollama container does not exist' };
     }
 
@@ -129,9 +147,9 @@ export async function stopOllama(): Promise<{ success: boolean; message: string 
       return { success: true, message: 'Ollama is already stopped' };
     }
 
-    // Stop the container (with 10 second timeout)
+    // Stop the container using its ID (with 10 second timeout)
     const response = await fetch(
-      `${DOCKER_PROXY_URL}/containers/${OLLAMA_CONTAINER_NAME}/stop?t=10`,
+      `${DOCKER_PROXY_URL}/containers/${status.containerId}/stop?t=10`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

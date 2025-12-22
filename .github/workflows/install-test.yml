@@ -157,19 +157,19 @@ jobs:
           docker compose ps || true
           echo ""
           echo "=== Database Logs ==="
-          docker logs sanctuary-db --tail 100 2>&1 || true
+          docker compose logs --tail 100 postgres 2>&1 || true
           echo ""
           echo "=== Backend Logs ==="
-          docker logs sanctuary-backend --tail 100 2>&1 || true
+          docker compose logs --tail 100 backend 2>&1 || true
           echo ""
           echo "=== Frontend Logs ==="
-          docker logs sanctuary-frontend --tail 100 2>&1 || true
+          docker compose logs --tail 100 frontend 2>&1 || true
           echo ""
           echo "=== Gateway Logs ==="
-          docker logs sanctuary-gateway --tail 100 2>&1 || true
+          docker compose logs --tail 100 gateway 2>&1 || true
           echo ""
           echo "=== Migration Logs ==="
-          docker logs sanctuary-migrate 2>&1 || true
+          docker compose logs migrate 2>&1 || true
 
       - name: Cleanup
         if: always() && github.event.inputs.keep_containers != 'true'
@@ -234,9 +234,9 @@ jobs:
         if: failure()
         run: |
           docker compose ps || true
-          docker logs sanctuary-db --tail 50 2>&1 || true
-          docker logs sanctuary-backend --tail 50 2>&1 || true
-          docker logs sanctuary-frontend --tail 50 2>&1 || true
+          docker compose logs --tail 50 postgres 2>&1 || true
+          docker compose logs --tail 50 backend 2>&1 || true
+          docker compose logs --tail 50 frontend 2>&1 || true
 
       - name: Cleanup
         if: always()
@@ -289,7 +289,7 @@ jobs:
             docker compose up -d --build
 
           # Wait for migration to complete
-          timeout 120 bash -c 'until docker inspect sanctuary-migrate --format="{{.State.Status}}" 2>/dev/null | grep -q exited; do sleep 5; done' || true
+          timeout 120 bash -c 'until docker compose ps migrate --format "{{.Status}}" 2>/dev/null | grep -q "Exited"; do sleep 5; done' || true
 
           # Wait for services
           sleep 30
@@ -303,7 +303,7 @@ jobs:
         if: failure()
         run: |
           docker compose ps || true
-          docker logs sanctuary-backend --tail 100 2>&1 || true
+          docker compose logs --tail 100 backend 2>&1 || true
 
       - name: Cleanup
         if: always()
@@ -341,8 +341,8 @@ jobs:
         if: failure()
         run: |
           docker compose ps || true
-          docker logs sanctuary-db --tail 50 2>&1 || true
-          docker logs sanctuary-backend --tail 100 2>&1 || true
+          docker compose logs --tail 50 postgres 2>&1 || true
+          docker compose logs --tail 100 backend 2>&1 || true
 
       - name: Cleanup
         if: always()

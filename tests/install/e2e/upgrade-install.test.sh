@@ -139,8 +139,8 @@ test_ensure_existing_installation() {
 
     cd "$PROJECT_ROOT"
 
-    # Check if containers are running
-    local frontend_running=$(docker ps --filter "name=sanctuary-frontend" --filter "status=running" -q)
+    # Check if containers are running (use docker compose ps for dynamic names)
+    local frontend_running=$(docker compose ps -q frontend 2>/dev/null)
 
     if [ -n "$frontend_running" ]; then
         log_info "Found existing running installation"
@@ -289,7 +289,7 @@ test_capture_pre_upgrade_state() {
     fi
 
     # Capture database state
-    local user_count=$(docker exec sanctuary-db psql -U sanctuary -d sanctuary -t -c \
+    local user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
         "SELECT COUNT(*) FROM \"User\";" 2>/dev/null | tr -d ' ')
     log_info "User count: $user_count"
 
@@ -456,17 +456,24 @@ test_verify_data_preserved() {
 test_verify_migration_on_upgrade() {
     log_info "Verifying migration container ran..."
 
+    # Get migrate container name dynamically
+    local container=$(get_container_name "migrate")
+    if [ -z "$container" ]; then
+        log_warning "Migration container not found (may have been removed)"
+        return 0
+    fi
+
     # Check if migrate container exists and completed
-    local status=$(docker inspect -f '{{.State.Status}}' sanctuary-migrate 2>/dev/null || echo "not_found")
+    local status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo "not_found")
 
     if [ "$status" = "exited" ]; then
-        local exit_code=$(docker inspect -f '{{.State.ExitCode}}' sanctuary-migrate 2>/dev/null)
+        local exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$container" 2>/dev/null)
         if [ "$exit_code" = "0" ]; then
             log_success "Migration container completed successfully"
             return 0
         else
             log_error "Migration container failed with exit code: $exit_code"
-            docker logs sanctuary-migrate 2>&1 | tail -20
+            compose_logs migrate 20 | tail -20
             return 1
         fi
     elif [ "$status" = "not_found" ]; then
@@ -580,13 +587,8 @@ test_volume_data_persistence() {
 
     cd "$PROJECT_ROOT"
 
-    # Check postgres_data volume exists
-    local volume_exists=$(docker volume ls --filter "name=sanctuary_postgres_data" -q 2>/dev/null)
-
-    if [ -z "$volume_exists" ]; then
-        # Try alternative volume naming
-        volume_exists=$(docker volume ls --filter "name=postgres_data" -q 2>/dev/null)
-    fi
+    # Check postgres_data volume exists (volume names include project name)
+    local volume_exists=$(docker volume ls --filter "name=postgres_data" -q 2>/dev/null)
 
     if [ -z "$volume_exists" ]; then
         log_warning "PostgreSQL data volume not found with expected name"
@@ -596,7 +598,7 @@ test_volume_data_persistence() {
     fi
 
     # Verify data still accessible
-    local user_count=$(docker exec sanctuary-db psql -U sanctuary -d sanctuary -t -c \
+    local user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
         "SELECT COUNT(*) FROM \"User\";" 2>/dev/null | tr -d ' ')
 
     if [ -z "$user_count" ] || [ "$user_count" -lt 1 ]; then

@@ -72,8 +72,8 @@ case "${1:-}" in
         ;;
     --rebuild)
         echo "Rebuilding and starting Sanctuary..."
-        # Include ai profile in rebuild if ollama container exists
-        if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
+        # Include ai profile in rebuild if ollama container exists (matches any project name)
+        if docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$'; then
             docker compose --profile ai up -d --build
         else
             docker compose up -d --build
@@ -102,8 +102,8 @@ case "${1:-}" in
         ;;
     *)
         echo "Starting Sanctuary..."
-        # Include ai profile if ollama container exists (user previously used --with-ai)
-        if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
+        # Include ai profile if ollama container exists (matches any project name)
+        if docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$'; then
             docker compose --profile ai up -d
         else
             docker compose up -d

@@ -93,14 +93,15 @@ run_test() {
 test_containers_exist() {
     log_info "Checking if all containers exist..."
 
-    local containers=("sanctuary-db" "sanctuary-backend" "sanctuary-frontend" "sanctuary-gateway" "sanctuary-migrate")
+    local services=("postgres" "backend" "frontend" "gateway" "migrate")
     local all_exist=true
 
-    for container in "${containers[@]}"; do
-        if docker ps -a --filter "name=$container" --format "{{.Names}}" | grep -q "^${container}$"; then
-            log_debug "Container exists: $container"
+    for service in "${services[@]}"; do
+        local container=$(get_container_name "$service")
+        if [ -n "$container" ]; then
+            log_debug "Container exists for service $service: $container"
         else
-            log_error "Container not found: $container"
+            log_error "Container not found for service: $service"
             all_exist=false
         fi
     done
@@ -116,8 +117,9 @@ test_containers_exist() {
 test_database_container_running() {
     log_info "Checking database container..."
 
-    if ! assert_container_running "sanctuary-db" "Database container should be running"; then
-        docker logs sanctuary-db --tail 30 2>&1 | head -20
+    local container=$(get_container_name "postgres")
+    if ! assert_container_running "$container" "Database container should be running"; then
+        compose_logs postgres 30 | head -20
         return 1
     fi
 
@@ -127,9 +129,10 @@ test_database_container_running() {
 test_database_container_healthy() {
     log_info "Checking database container health..."
 
-    if ! wait_for_container_healthy "sanctuary-db" "$DB_TIMEOUT"; then
+    local container=$(get_container_name "postgres")
+    if ! wait_for_container_healthy "$container" "$DB_TIMEOUT"; then
         log_error "Database container not healthy"
-        docker inspect sanctuary-db --format='{{json .State}}' 2>/dev/null | head -5
+        docker inspect "$container" --format='{{json .State}}' 2>/dev/null | head -5
         return 1
     fi
 
@@ -140,7 +143,7 @@ test_database_connection() {
     log_info "Testing database connection..."
 
     # Try pg_isready
-    local result=$(docker exec sanctuary-db pg_isready -U sanctuary -d sanctuary 2>/dev/null)
+    local result=$(compose_exec postgres pg_isready -U sanctuary -d sanctuary 2>/dev/null)
 
     if [[ "$result" == *"accepting connections"* ]]; then
         log_success "Database is accepting connections"
@@ -155,7 +158,7 @@ test_database_tables_exist() {
     log_info "Checking if database tables exist..."
 
     # Check for users table (created by Prisma migration - see @@map("users") in schema.prisma)
-    local table_check=$(docker exec sanctuary-db psql -U sanctuary -d sanctuary -t -c \
+    local table_check=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
         "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users' AND table_schema = 'public');" 2>/dev/null | tr -d ' ')
 
     if [ "$table_check" = "t" ]; then
@@ -164,7 +167,7 @@ test_database_tables_exist() {
     else
         log_error "Database tables not found - migration may not have run"
         # Debug: show what tables actually exist
-        docker exec sanctuary-db psql -U sanctuary -d sanctuary -c "\dt public.*" 2>/dev/null | head -20
+        compose_exec postgres psql -U sanctuary -d sanctuary -c "\dt public.*" 2>/dev/null | head -20
         return 1
     fi
 }
@@ -172,8 +175,9 @@ test_database_tables_exist() {
 test_backend_container_running() {
     log_info "Checking backend container..."
 
-    if ! assert_container_running "sanctuary-backend" "Backend container should be running"; then
-        docker logs sanctuary-backend --tail 30 2>&1 | head -20
+    local container=$(get_container_name "backend")
+    if ! assert_container_running "$container" "Backend container should be running"; then
+        compose_logs backend 30 | head -20
         return 1
     fi
 
@@ -183,9 +187,10 @@ test_backend_container_running() {
 test_backend_container_healthy() {
     log_info "Checking backend container health..."
 
-    if ! wait_for_container_healthy "sanctuary-backend" "$CONTAINER_TIMEOUT"; then
+    local container=$(get_container_name "backend")
+    if ! wait_for_container_healthy "$container" "$CONTAINER_TIMEOUT"; then
         log_error "Backend container not healthy"
-        docker logs sanctuary-backend --tail 50 2>&1 | head -30
+        compose_logs backend 50 | head -30
         return 1
     fi
 
@@ -196,7 +201,7 @@ test_backend_health_endpoint() {
     log_info "Testing backend health endpoint..."
 
     # Test internal health endpoint
-    local health_response=$(docker exec sanctuary-backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "FAILED")
+    local health_response=$(compose_exec backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "FAILED")
 
     if [ "$health_response" = "FAILED" ]; then
         log_error "Backend health endpoint not responding"
@@ -212,8 +217,8 @@ test_backend_api_ready() {
     log_info "Testing backend API readiness..."
 
     # Try to access an API endpoint through the container network
-    local api_response=$(docker exec sanctuary-backend wget -q -O - http://localhost:3001/api/v1/health 2>/dev/null || \
-        docker exec sanctuary-backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "FAILED")
+    local api_response=$(compose_exec backend wget -q -O - http://localhost:3001/api/v1/health 2>/dev/null || \
+        compose_exec backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "FAILED")
 
     if [ "$api_response" = "FAILED" ]; then
         log_warning "Backend API health endpoint not responding"
@@ -228,8 +233,9 @@ test_backend_api_ready() {
 test_frontend_container_running() {
     log_info "Checking frontend container..."
 
-    if ! assert_container_running "sanctuary-frontend" "Frontend container should be running"; then
-        docker logs sanctuary-frontend --tail 30 2>&1 | head -20
+    local container=$(get_container_name "frontend")
+    if ! assert_container_running "$container" "Frontend container should be running"; then
+        compose_logs frontend 30 | head -20
         return 1
     fi
 
@@ -239,9 +245,10 @@ test_frontend_container_running() {
 test_frontend_container_healthy() {
     log_info "Checking frontend container health..."
 
-    if ! wait_for_container_healthy "sanctuary-frontend" "$CONTAINER_TIMEOUT"; then
+    local container=$(get_container_name "frontend")
+    if ! wait_for_container_healthy "$container" "$CONTAINER_TIMEOUT"; then
         log_error "Frontend container not healthy"
-        docker logs sanctuary-frontend --tail 50 2>&1 | head -30
+        compose_logs frontend 50 | head -30
         return 1
     fi
 
@@ -252,7 +259,7 @@ test_frontend_nginx_running() {
     log_info "Testing frontend nginx..."
 
     # Check if nginx is running inside the container
-    local nginx_pid=$(docker exec sanctuary-frontend pgrep nginx 2>/dev/null | head -1)
+    local nginx_pid=$(compose_exec frontend pgrep nginx 2>/dev/null | head -1)
 
     if [ -n "$nginx_pid" ]; then
         log_success "Nginx is running (PID: $nginx_pid)"
@@ -267,11 +274,11 @@ test_frontend_serves_content() {
     log_info "Testing frontend serves content..."
 
     # Try to get the index page
-    local content=$(docker exec sanctuary-frontend wget -q -O - --no-check-certificate https://localhost:443/ 2>/dev/null | head -20)
+    local content=$(compose_exec frontend wget -q -O - --no-check-certificate https://localhost:443/ 2>/dev/null | head -20)
 
     if [ -z "$content" ]; then
         # Try HTTP
-        content=$(docker exec sanctuary-frontend wget -q -O - http://localhost:80/ 2>/dev/null | head -20)
+        content=$(compose_exec frontend wget -q -O - http://localhost:80/ 2>/dev/null | head -20)
     fi
 
     if [ -n "$content" ]; then
@@ -286,8 +293,9 @@ test_frontend_serves_content() {
 test_gateway_container_running() {
     log_info "Checking gateway container..."
 
-    if ! assert_container_running "sanctuary-gateway" "Gateway container should be running"; then
-        docker logs sanctuary-gateway --tail 30 2>&1 | head -20
+    local container=$(get_container_name "gateway")
+    if ! assert_container_running "$container" "Gateway container should be running"; then
+        compose_logs gateway 30 | head -20
         return 1
     fi
 
@@ -297,9 +305,10 @@ test_gateway_container_running() {
 test_gateway_container_healthy() {
     log_info "Checking gateway container health..."
 
-    if ! wait_for_container_healthy "sanctuary-gateway" "$CONTAINER_TIMEOUT"; then
+    local container=$(get_container_name "gateway")
+    if ! wait_for_container_healthy "$container" "$CONTAINER_TIMEOUT"; then
         log_error "Gateway container not healthy"
-        docker logs sanctuary-gateway --tail 50 2>&1 | head -30
+        compose_logs gateway 50 | head -30
         return 1
     fi
 
@@ -309,7 +318,7 @@ test_gateway_container_healthy() {
 test_gateway_health_endpoint() {
     log_info "Testing gateway health endpoint..."
 
-    local health_response=$(docker exec sanctuary-gateway wget -q -O - http://localhost:4000/health 2>/dev/null || echo "FAILED")
+    local health_response=$(compose_exec gateway wget -q -O - http://localhost:4000/health 2>/dev/null || echo "FAILED")
 
     if [ "$health_response" = "FAILED" ]; then
         log_error "Gateway health endpoint not responding"
@@ -323,17 +332,23 @@ test_gateway_health_endpoint() {
 test_migrate_container_completed() {
     log_info "Checking migration container..."
 
-    local status=$(docker inspect -f '{{.State.Status}}' sanctuary-migrate 2>/dev/null || echo "not_found")
+    local container=$(get_container_name "migrate")
+    if [ -z "$container" ]; then
+        log_warning "Migration container not found (may have been removed)"
+        return 0
+    fi
+
+    local status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null || echo "not_found")
 
     case "$status" in
         "exited")
-            local exit_code=$(docker inspect -f '{{.State.ExitCode}}' sanctuary-migrate 2>/dev/null)
+            local exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$container" 2>/dev/null)
             if [ "$exit_code" = "0" ]; then
                 log_success "Migration completed successfully"
                 return 0
             else
                 log_error "Migration failed with exit code: $exit_code"
-                docker logs sanctuary-migrate 2>&1 | tail -20
+                compose_logs migrate 20 | tail -20
                 return 1
             fi
             ;;
@@ -359,7 +374,7 @@ test_migrate_container_completed() {
 test_container_network() {
     log_info "Testing container network..."
 
-    # Check if sanctuary-network exists
+    # Check if sanctuary-network exists (project name may vary)
     local network_exists=$(docker network ls --filter "name=sanctuary" -q 2>/dev/null)
 
     if [ -z "$network_exists" ]; then
@@ -367,9 +382,8 @@ test_container_network() {
         return 1
     fi
 
-    # Check containers are connected
-    local connected=$(docker network inspect sanctuary_sanctuary-network 2>/dev/null | grep -c "sanctuary-" || \
-        docker network inspect sanctuary-network 2>/dev/null | grep -c "sanctuary-" || echo "0")
+    # Check containers are connected (pattern matches any project name)
+    local connected=$(docker network ls --filter "name=sanctuary" -q | head -1 | xargs docker network inspect 2>/dev/null | grep -c '"Name":' || echo "0")
 
     if [ "$connected" -ge 3 ]; then
         log_success "Containers connected to network"
@@ -383,12 +397,9 @@ test_container_network() {
 test_backend_can_reach_database() {
     log_info "Testing backend can reach database..."
 
-    # Test from backend to database
-    local result=$(docker exec sanctuary-backend wget -q -O - --spider http://postgres:5432 2>&1 || echo "connection_test")
-
     # We expect this to fail with a protocol error (wget can't speak PostgreSQL)
     # but it means the network connection works
-    if docker exec sanctuary-backend getent hosts postgres &>/dev/null; then
+    if compose_exec backend getent hosts postgres &>/dev/null; then
         log_success "Backend can resolve database hostname"
         return 0
     else
@@ -400,7 +411,7 @@ test_backend_can_reach_database() {
 test_frontend_can_reach_backend() {
     log_info "Testing frontend can reach backend..."
 
-    if docker exec sanctuary-frontend getent hosts backend &>/dev/null; then
+    if compose_exec frontend getent hosts backend &>/dev/null; then
         log_success "Frontend can resolve backend hostname"
         return 0
     else
@@ -466,12 +477,15 @@ test_gateway_port_accessible() {
 test_container_memory_limits() {
     log_info "Checking container memory usage..."
 
-    local containers=("sanctuary-db" "sanctuary-backend" "sanctuary-frontend" "sanctuary-gateway")
+    local services=("postgres" "backend" "frontend" "gateway")
 
-    for container in "${containers[@]}"; do
-        local mem_usage=$(docker stats "$container" --no-stream --format "{{.MemUsage}}" 2>/dev/null | cut -d'/' -f1)
-        if [ -n "$mem_usage" ]; then
-            log_debug "$container memory usage: $mem_usage"
+    for service in "${services[@]}"; do
+        local container=$(get_container_name "$service")
+        if [ -n "$container" ]; then
+            local mem_usage=$(docker stats "$container" --no-stream --format "{{.MemUsage}}" 2>/dev/null | cut -d'/' -f1)
+            if [ -n "$mem_usage" ]; then
+                log_debug "$service ($container) memory usage: $mem_usage"
+            fi
         fi
     done
 
@@ -482,16 +496,19 @@ test_container_memory_limits() {
 test_container_restart_count() {
     log_info "Checking container restart counts..."
 
-    local containers=("sanctuary-db" "sanctuary-backend" "sanctuary-frontend" "sanctuary-gateway")
+    local services=("postgres" "backend" "frontend" "gateway")
     local high_restarts=false
 
-    for container in "${containers[@]}"; do
-        local restart_count=$(docker inspect -f '{{.RestartCount}}' "$container" 2>/dev/null || echo "0")
-        if [ "$restart_count" -gt 3 ]; then
-            log_warning "$container has restarted $restart_count times"
-            high_restarts=true
-        else
-            log_debug "$container restart count: $restart_count"
+    for service in "${services[@]}"; do
+        local container=$(get_container_name "$service")
+        if [ -n "$container" ]; then
+            local restart_count=$(docker inspect -f '{{.RestartCount}}' "$container" 2>/dev/null || echo "0")
+            if [ "$restart_count" -gt 3 ]; then
+                log_warning "$service ($container) has restarted $restart_count times"
+                high_restarts=true
+            else
+                log_debug "$service ($container) restart count: $restart_count"
+            fi
         fi
     done
 

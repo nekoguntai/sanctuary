@@ -52,6 +52,48 @@ log_debug() {
 # Docker Helper Functions
 # ============================================
 
+# Get container name for a service (supports dynamic project names)
+# Usage: get_container_name "postgres" -> returns "sanctuary-postgres-1" or "{project}-postgres-1"
+get_container_name() {
+    local service="$1"
+    local project="${COMPOSE_PROJECT_NAME:-sanctuary}"
+
+    # First try to find by docker compose ps (most accurate)
+    local container=$(docker compose ps -q "$service" 2>/dev/null | head -1)
+    if [ -n "$container" ]; then
+        docker inspect -f '{{.Name}}' "$container" 2>/dev/null | sed 's/^\///'
+        return 0
+    fi
+
+    # Fallback: search by pattern
+    docker ps -a --format '{{.Names}}' | grep -E "^${project}-${service}-[0-9]+$" | head -1
+}
+
+# Execute command in a service container (handles dynamic names)
+# Usage: compose_exec "backend" "wget -q -O - http://localhost:3001/health"
+compose_exec() {
+    local service="$1"
+    shift
+    docker compose exec -T "$service" "$@"
+}
+
+# Get logs from a service (handles dynamic names)
+# Usage: compose_logs "backend" 50
+compose_logs() {
+    local service="$1"
+    local lines="${2:-50}"
+    docker compose logs --tail "$lines" "$service" 2>&1
+}
+
+# Service name mappings (old hardcoded -> service name)
+# sanctuary-db -> postgres
+# sanctuary-backend -> backend
+# sanctuary-frontend -> frontend
+# sanctuary-gateway -> gateway
+# sanctuary-migrate -> migrate
+# sanctuary-ai -> ai
+# sanctuary-ollama -> ollama
+
 # Check if Docker is available and running
 check_docker_available() {
     if ! command -v docker &> /dev/null; then
@@ -138,9 +180,14 @@ wait_for_all_containers_healthy() {
 
     log_info "Waiting for all Sanctuary containers to be healthy..."
 
-    local containers=("sanctuary-db" "sanctuary-backend" "sanctuary-frontend" "sanctuary-gateway")
+    local services=("postgres" "backend" "frontend" "gateway")
 
-    for container in "${containers[@]}"; do
+    for service in "${services[@]}"; do
+        local container=$(get_container_name "$service")
+        if [ -z "$container" ]; then
+            log_error "Container for service '$service' not found"
+            return 1
+        fi
         if ! wait_for_container_healthy "$container" "$timeout"; then
             return 1
         fi
@@ -467,18 +514,30 @@ wait_for_migration_complete() {
 
     log_info "Waiting for database migration to complete (timeout: ${timeout}s)..."
 
+    # Get migrate container name dynamically
+    local migrate_container=$(get_container_name "migrate")
+    if [ -z "$migrate_container" ]; then
+        log_warning "Migrate container not found, checking by pattern..."
+        migrate_container=$(docker ps -a --format '{{.Names}}' | grep -E '.*-migrate-[0-9]+$' | head -1)
+    fi
+
+    if [ -z "$migrate_container" ]; then
+        log_error "Could not find migrate container"
+        return 1
+    fi
+
     while true; do
         # Check if migrate container exists and has finished
-        local status=$(docker inspect -f '{{.State.Status}}' sanctuary-migrate 2>/dev/null || echo "not_found")
+        local status=$(docker inspect -f '{{.State.Status}}' "$migrate_container" 2>/dev/null || echo "not_found")
 
         if [ "$status" = "exited" ]; then
-            local exit_code=$(docker inspect -f '{{.State.ExitCode}}' sanctuary-migrate 2>/dev/null)
+            local exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$migrate_container" 2>/dev/null)
             if [ "$exit_code" = "0" ]; then
                 log_success "Database migration completed successfully"
                 return 0
             else
                 log_error "Database migration failed with exit code: $exit_code"
-                docker logs sanctuary-migrate 2>&1 | tail -20
+                docker logs "$migrate_container" 2>&1 | tail -20
                 return 1
             fi
         fi
@@ -499,11 +558,18 @@ wait_for_migration_complete() {
 
 # Check if admin user exists in database
 check_admin_user_exists() {
-    local container="${1:-sanctuary-db}"
+    local service="${1:-postgres}"
     local max_attempts=15
     local attempt=1
 
     log_debug "Checking for admin user in database (max $max_attempts attempts)..."
+
+    # Get container name for the service
+    local container=$(get_container_name "$service")
+    if [ -z "$container" ]; then
+        log_debug "Container not found for service '$service', using direct compose exec"
+        container="$service"
+    fi
 
     # Retry multiple times since seeding might still be completing
     # Total wait time: up to 45 seconds (15 attempts × 3 seconds)
@@ -511,7 +577,7 @@ check_admin_user_exists() {
         # Capture both stdout and stderr for debugging
         local result
         local error
-        result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
+        result=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
             "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>&1)
         local exit_code=$?
 
@@ -548,9 +614,9 @@ check_admin_user_exists() {
 
 # Check if default password marker exists
 check_default_password_marker() {
-    local container="${1:-sanctuary-db}"
+    local service="${1:-postgres}"
 
-    local result=$(docker exec "$container" psql -U sanctuary -d sanctuary -t -c \
+    local result=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
         "SELECT COUNT(*) FROM \"SystemSetting\" WHERE key LIKE 'initialPassword_%';" 2>/dev/null | tr -d ' ')
 
     if [ "$result" -ge "1" ]; then

@@ -377,15 +377,17 @@ test_docker_compose_up() {
 test_database_container_health() {
     log_info "Testing database container health..."
 
+    local container=$(get_container_name "postgres")
+
     # Wait for database to be healthy
-    if ! wait_for_container_healthy "sanctuary-db" 120; then
+    if ! wait_for_container_healthy "$container" 120; then
         log_error "Database container failed to become healthy"
-        docker logs sanctuary-db --tail 50 2>&1 | head -30
+        compose_logs postgres 50 | head -30
         return 1
     fi
 
     # Verify we can connect to database
-    local result=$(docker exec sanctuary-db pg_isready -U sanctuary -d sanctuary 2>/dev/null)
+    local result=$(compose_exec postgres pg_isready -U sanctuary -d sanctuary 2>/dev/null)
     if [[ "$result" != *"accepting connections"* ]]; then
         log_error "Cannot connect to database"
         return 1
@@ -411,14 +413,14 @@ test_migration_container() {
     # Try to verify admin user was created via SQL query
     # Note: This may fail in some CI environments due to psql output formatting
     # The login test later provides definitive validation
-    if ! check_admin_user_exists "sanctuary-db"; then
+    if ! check_admin_user_exists "postgres"; then
         log_warning "Could not verify admin user via SQL (will be validated by login test)"
     else
         log_success "Admin user verified in database"
     fi
 
     # Verify default password marker was created
-    if ! check_default_password_marker "sanctuary-db"; then
+    if ! check_default_password_marker "postgres"; then
         log_warning "Default password marker not found (may be expected for some versions)"
     fi
 
@@ -433,15 +435,17 @@ test_migration_container() {
 test_backend_container_health() {
     log_info "Testing backend container health..."
 
+    local container=$(get_container_name "backend")
+
     # Wait for backend to be healthy
-    if ! wait_for_container_healthy "sanctuary-backend" 120; then
+    if ! wait_for_container_healthy "$container" 120; then
         log_error "Backend container failed to become healthy"
-        docker logs sanctuary-backend --tail 50 2>&1 | head -30
+        compose_logs backend 50 | head -30
         return 1
     fi
 
     # Verify health endpoint responds
-    local health_response=$(docker exec sanctuary-backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "failed")
+    local health_response=$(compose_exec backend wget -q -O - http://localhost:3001/health 2>/dev/null || echo "failed")
     if [ "$health_response" = "failed" ]; then
         log_error "Backend health endpoint not responding"
         return 1
@@ -458,10 +462,12 @@ test_backend_container_health() {
 test_frontend_container_health() {
     log_info "Testing frontend container health..."
 
+    local container=$(get_container_name "frontend")
+
     # Wait for frontend to be healthy
-    if ! wait_for_container_healthy "sanctuary-frontend" 120; then
+    if ! wait_for_container_healthy "$container" 120; then
         log_error "Frontend container failed to become healthy"
-        docker logs sanctuary-frontend --tail 50 2>&1 | head -30
+        compose_logs frontend 50 | head -30
         return 1
     fi
 
@@ -476,10 +482,12 @@ test_frontend_container_health() {
 test_gateway_container_health() {
     log_info "Testing gateway container health..."
 
+    local container=$(get_container_name "gateway")
+
     # Wait for gateway to be healthy
-    if ! wait_for_container_healthy "sanctuary-gateway" 120; then
+    if ! wait_for_container_healthy "$container" 120; then
         log_error "Gateway container failed to become healthy"
-        docker logs sanctuary-gateway --tail 50 2>&1 | head -30
+        compose_logs gateway 50 | head -30
         return 1
     fi
 

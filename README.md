@@ -406,14 +406,23 @@ If you prefer to run the commands yourself:
 git clone https://github.com/n-narusegawa/sanctuary.git
 cd sanctuary
 
-# 2. Generate SSL certificates
+# 2. Run setup script (generates all required secrets)
+./scripts/setup.sh
+
+# 3. Generate SSL certificates
 cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
 
-# 3. Start Sanctuary (replace secrets with random strings)
-HTTPS_PORT=8443 JWT_SECRET=your-jwt-secret ENCRYPTION_KEY=your-encryption-key docker compose up -d
+# 4. Start Sanctuary
+docker compose up -d
 
-# 4. Open https://localhost:8443
+# 5. Open https://localhost:8443
 ```
+
+The setup script automatically generates secure random values for:
+- `JWT_SECRET` - Authentication tokens
+- `ENCRYPTION_KEY` - Encrypts sensitive data
+- `GATEWAY_SECRET` - Internal service communication
+- `POSTGRES_PASSWORD` - Database password
 
 ---
 
@@ -434,8 +443,7 @@ HTTPS_PORT=8443 JWT_SECRET=your-jwt-secret ENCRYPTION_KEY=your-encryption-key do
    ```powershell
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   copy .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   wsl ./scripts/setup.sh  # Generates secure secrets
    docker compose up -d
    ```
 
@@ -460,8 +468,7 @@ For users who prefer not to use Docker Desktop:
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   cp .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   ./scripts/setup.sh  # Generates secure secrets
    docker compose up -d
    ```
 
@@ -482,8 +489,7 @@ For users who prefer not to use Docker Desktop:
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   cp .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   ./scripts/setup.sh  # Generates secure secrets
    docker compose up -d
    ```
 
@@ -505,8 +511,7 @@ For users who prefer a lighter-weight solution:
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   cp .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   ./scripts/setup.sh  # Generates secure secrets
    docker compose up -d
    ```
 
@@ -542,8 +547,7 @@ For users who prefer a lighter-weight solution:
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   cp .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   ./scripts/setup.sh  # Generates secure secrets
    docker compose up -d
    ```
 
@@ -564,8 +568,7 @@ For systems where you can't or don't want to run Docker:
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
-   cp .env.example .env
-   # Edit .env and replace CHANGE_ME values with random strings
+   ./scripts/setup.sh  # Generates secure secrets
    podman-compose up -d
    ```
 

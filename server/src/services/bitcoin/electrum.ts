@@ -397,6 +397,14 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Ping the server to keep connection alive
+   * Returns null on success (as per Electrum protocol)
+   */
+  async ping(): Promise<null> {
+    return this.request('server.ping');
+  }
+
+  /**
    * Get address balance
    */
   async getAddressBalance(address: string): Promise<{ confirmed: number; unconfirmed: number }> {

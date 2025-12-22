@@ -102,6 +102,9 @@ export interface ElectrumPoolConfig {
   // Resilience
   maxReconnectAttempts: number;
   reconnectDelayMs: number;
+
+  // Keepalive (to prevent servers from dropping idle connections)
+  keepaliveIntervalMs: number;
 }
 
 /**
@@ -119,6 +122,7 @@ const DEFAULT_POOL_CONFIG: ElectrumPoolConfig = {
   maxWaitingRequests: 100,
   maxReconnectAttempts: 3,
   reconnectDelayMs: 1000,
+  keepaliveIntervalMs: 15000, // Ping idle connections every 15 seconds
 };
 
 /**
@@ -201,6 +205,7 @@ export class ElectrumPool extends EventEmitter {
   private waitingQueue: WaitingRequest[] = [];
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private idleCheckInterval: NodeJS.Timeout | null = null;
+  private keepaliveInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private isInitialized = false;
   private subscriptionConnectionId: string | null = null;
@@ -307,6 +312,11 @@ export class ElectrumPool extends EventEmitter {
         }
 
         log.info(`Reloaded ${servers.length} servers from database`);
+
+        // Ensure new servers have connections
+        if (this.isInitialized) {
+          await this.ensureMinimumConnections();
+        }
       }
     } catch (error) {
       log.error('Failed to reload servers from database', { error: String(error) });
@@ -394,6 +404,12 @@ export class ElectrumPool extends EventEmitter {
       this.config.idleTimeoutMs / 2
     );
 
+    // Start keepalive interval (ping idle connections to prevent server-side timeouts)
+    this.keepaliveInterval = setInterval(
+      () => this.sendKeepalives(),
+      this.config.keepaliveIntervalMs
+    );
+
     this.isInitialized = true;
     log.info(`Electrum pool initialized with ${this.connections.size} connections`);
   }
@@ -409,6 +425,10 @@ export class ElectrumPool extends EventEmitter {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
+    }
+    if (this.keepaliveInterval) {
+      clearInterval(this.keepaliveInterval);
+      this.keepaliveInterval = null;
     }
     if (this.idleCheckInterval) {
       clearInterval(this.idleCheckInterval);
@@ -876,6 +896,66 @@ export class ElectrumPool extends EventEmitter {
         }
       }
     }
+
+    // After checking existing connections, ensure each server has at least one connection
+    await this.ensureMinimumConnections();
+  }
+
+  /**
+   * Send keepalive pings to idle connections to prevent server-side timeouts.
+   * Some servers (like BlueWallet) drop idle TCP connections after ~30 seconds.
+   */
+  private async sendKeepalives(): Promise<void> {
+    if (this.isShuttingDown) return;
+
+    for (const [id, conn] of this.connections) {
+      // Only ping idle, non-dedicated connections
+      if (conn.state === 'idle' && !conn.isDedicated) {
+        try {
+          if (conn.client.isConnected()) {
+            await conn.client.ping();
+            log.debug(`Keepalive ping sent to ${conn.serverLabel}`);
+          }
+        } catch (error) {
+          log.debug(`Keepalive ping failed for ${id} (${conn.serverLabel}): ${error}`);
+          // Don't handle errors here - the health check will catch dead connections
+        }
+      }
+    }
+  }
+
+  /**
+   * Ensure each configured server has at least one connection.
+   * This is called after health checks and after reloading servers.
+   */
+  private async ensureMinimumConnections(): Promise<void> {
+    if (this.isShuttingDown || !this.config.enabled) return;
+
+    // Count connections per server
+    const serverConnectionCounts = new Map<string, number>();
+    for (const server of this.servers) {
+      serverConnectionCounts.set(server.id, 0);
+    }
+    for (const conn of this.connections.values()) {
+      if (conn.state !== 'closed') {
+        const count = serverConnectionCounts.get(conn.serverId) || 0;
+        serverConnectionCounts.set(conn.serverId, count + 1);
+      }
+    }
+
+    // Create connections for servers with zero connections
+    for (const server of this.servers) {
+      const count = serverConnectionCounts.get(server.id) || 0;
+      if (count === 0) {
+        log.info(`Server ${server.label} has no connections, creating one...`);
+        try {
+          await this.createConnection(server);
+          log.info(`Created connection to ${server.label}`);
+        } catch (error) {
+          log.warn(`Failed to create connection to ${server.label}`, { error: String(error) });
+        }
+      }
+    }
   }
 
   /**
@@ -1054,6 +1134,10 @@ export function getElectrumPool(config?: Partial<ElectrumPoolConfig>): ElectrumP
         process.env.ELECTRUM_POOL_ACQUISITION_TIMEOUT_MS || '5000',
         10
       ),
+      keepaliveIntervalMs: parseInt(
+        process.env.ELECTRUM_POOL_KEEPALIVE_INTERVAL_MS || '15000',
+        10
+      ),
       ...config,
     });
   }
@@ -1081,6 +1165,10 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       ),
       acquisitionTimeoutMs: parseInt(
         process.env.ELECTRUM_POOL_ACQUISITION_TIMEOUT_MS || '5000',
+        10
+      ),
+      keepaliveIntervalMs: parseInt(
+        process.env.ELECTRUM_POOL_KEEPALIVE_INTERVAL_MS || '15000',
         10
       ),
     };

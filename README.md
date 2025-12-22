@@ -86,6 +86,8 @@
 
 **Prerequisites:** [Docker](https://www.docker.com/products/docker-desktop) and Git
 
+> **New to the command line?** See the [detailed installation guides](#installation) for step-by-step instructions for your operating system.
+
 **Option 1: One-liner** (downloads, clones, and installs automatically)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
@@ -441,19 +443,20 @@ HTTPS_PORT=8443 JWT_SECRET=your-jwt-secret ENCRYPTION_KEY=your-encryption-key do
 
 For users who prefer not to use Docker Desktop:
 
-1. **Install WSL 2**
+1. **Install WSL 2** (run this in PowerShell)
    ```powershell
    wsl --install -d Ubuntu
    ```
+   After installation completes, restart your computer. Then open **Ubuntu** from the Start menu to access the Linux terminal.
 
-2. **Inside WSL, install Docker**
+2. **Inside WSL, install Docker** (run these commands in the Ubuntu/Linux terminal, not PowerShell)
    ```bash
    curl -fsSL https://get.docker.com | sh
    sudo usermod -aG docker $USER
-   # Log out and back in
+   # Log out and back in (close and reopen the Ubuntu terminal)
    ```
 
-3. **Clone and run**
+3. **Clone and run** (still in the Ubuntu/Linux terminal)
    ```bash
    git clone https://github.com/n-narusegawa/sanctuary.git
    cd sanctuary
@@ -461,6 +464,8 @@ For users who prefer not to use Docker Desktop:
    # Edit .env and replace CHANGE_ME values with random strings
    docker compose up -d
    ```
+
+> **Note:** All commands after step 1 must be run in the Ubuntu/Linux terminal (WSL), not in PowerShell or Command Prompt.
 
 ---
 

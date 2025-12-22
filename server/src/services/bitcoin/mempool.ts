@@ -371,12 +371,19 @@ export async function getBlocksAndMempool() {
           const additionalBlocks = projectedBlocks.slice(3);
           const totalTxCount = additionalBlocks.reduce((sum, b) => sum + b.nTx, 0);
           const totalFees = additionalBlocks.reduce((sum, b) => sum + b.totalFees, 0);
+          const totalVsize = additionalBlocks.reduce((sum, b) => sum + b.blockVSize, 0);
           const avgFee = additionalBlocks.length > 0
             ? additionalBlocks.reduce((sum, b) => sum + b.medianFee, 0) / additionalBlocks.length
             : fees.economyFee;
 
+          // Calculate actual block count based on vsize
+          // A typical block is ~1MB (1,000,000 vbytes)
+          // The last API block often contains many blocks worth of transactions
+          const BLOCK_VSIZE = 1000000; // 1 MB
+          const estimatedBlockCount = Math.ceil(totalVsize / BLOCK_VSIZE);
+
           queuedBlocksSummary = {
-            blockCount: additionalBlocks.length,
+            blockCount: estimatedBlockCount,
             totalTransactions: totalTxCount,
             averageFee: avgFee < 1 ? parseFloat(avgFee.toFixed(2)) : Math.round(avgFee),
             totalFees: totalFees / 100000000,

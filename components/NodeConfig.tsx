@@ -11,12 +11,6 @@ const log = createLogger('NodeConfig');
 const PUBLIC_ELECTRUM_SERVERS = [
   { name: 'Blockstream (SSL)', host: 'electrum.blockstream.info', port: '50002', useSsl: true },
   { name: 'Blockstream (TCP)', host: 'electrum.blockstream.info', port: '50001', useSsl: false },
-  { name: 'mempool.space (SSL)', host: 'electrum.mempool.space', port: '50002', useSsl: true },
-  { name: 'Emzy (SSL)', host: 'electrum.emzy.de', port: '50002', useSsl: true },
-  { name: 'Bitaroo (SSL)', host: 'electrum.bitaroo.net', port: '50002', useSsl: true },
-  { name: 'Diynodes (SSL)', host: 'electrum.diynodes.com', port: '50002', useSsl: true },
-  { name: 'hsmiths (SSL)', host: 'electrum.hsmiths.com', port: '50002', useSsl: true },
-  { name: 'qtornado (SSL)', host: 'electrum.qtornado.com', port: '50002', useSsl: true },
 ];
 
 export const NodeConfig: React.FC = () => {
@@ -801,6 +795,21 @@ export const NodeConfig: React.FC = () => {
                                 )}
                               </button>
                               <button
+                                onClick={() => {
+                                  setEditingServerId(server.id);
+                                  setNewServer({
+                                    label: server.label,
+                                    host: server.host,
+                                    port: server.port,
+                                    useSsl: server.useSsl,
+                                  });
+                                }}
+                                className="p-1.5 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-600 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
                                 onClick={() => handleDeleteServer(server.id)}
                                 disabled={serverActionLoading === server.id}
                                 className="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded transition-colors text-rose-600 dark:text-rose-400"
@@ -895,6 +904,84 @@ export const NodeConfig: React.FC = () => {
                             className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             {serverActionLoading === 'add' ? 'Adding...' : 'Add Server'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Edit Server Form */}
+                    {editingServerId && (
+                      <div className="p-4 surface-secondary rounded-lg border border-amber-300 dark:border-amber-700 space-y-3">
+                        <div className="font-medium text-sm">Edit Server</div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-medium text-sanctuary-500 mb-1">Label</label>
+                            <input
+                              type="text"
+                              value={newServer.label}
+                              onChange={(e) => setNewServer({ ...newServer, label: e.target.value })}
+                              placeholder="My Server"
+                              className="w-full px-2 py-1.5 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-sanctuary-500 mb-1">Host</label>
+                            <input
+                              type="text"
+                              value={newServer.host}
+                              onChange={(e) => setNewServer({ ...newServer, host: e.target.value })}
+                              placeholder="electrum.example.com"
+                              className="w-full px-2 py-1.5 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-sanctuary-500 mb-1">Port</label>
+                            <input
+                              type="number"
+                              value={newServer.port}
+                              onChange={(e) => setNewServer({ ...newServer, port: parseInt(e.target.value) || 50002 })}
+                              className="w-full px-2 py-1.5 text-sm surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-sanctuary-500 mb-1">SSL</label>
+                            <button
+                              onClick={() => setNewServer({ ...newServer, useSsl: !newServer.useSsl })}
+                              className={`w-full px-2 py-1.5 text-sm rounded-lg border transition-colors ${
+                                newServer.useSsl
+                                  ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                                  : 'surface-muted border-sanctuary-200 dark:border-sanctuary-700'
+                              }`}
+                            >
+                              {newServer.useSsl ? 'SSL Enabled' : 'SSL Disabled'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-2 pt-2">
+                          <button
+                            onClick={() => {
+                              setEditingServerId(null);
+                              setNewServer({ label: '', host: '', port: 50002, useSsl: true });
+                            }}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleUpdateServer(editingServerId, {
+                                label: newServer.label,
+                                host: newServer.host,
+                                port: newServer.port,
+                                useSsl: newServer.useSsl,
+                              });
+                              setNewServer({ label: '', host: '', port: 50002, useSsl: true });
+                            }}
+                            disabled={!newServer.label || !newServer.host || serverActionLoading === editingServerId}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {serverActionLoading === editingServerId ? 'Saving...' : 'Save Changes'}
                           </button>
                         </div>
                       </div>

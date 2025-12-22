@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../models/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
+import { reloadElectrumServers } from '../services/bitcoin/electrumPool';
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
 import { validatePasswordStrength } from '../utils/password';
@@ -1574,8 +1575,8 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
 
     log.info('[ADMIN] Electrum server added', { id: server.id, label, host, port });
 
-    // Reset node client to pick up new server
-    await resetNodeClient();
+    // Reload pool to pick up new server (more graceful than full reset)
+    await reloadElectrumServers();
 
     res.status(201).json(server);
   } catch (error) {
@@ -1622,8 +1623,8 @@ router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Requ
 
     log.info('[ADMIN] Electrum server updated', { id, label: updatedServer.label });
 
-    // Reset node client to pick up changes
-    await resetNodeClient();
+    // Reload pool to pick up changes (more graceful than full reset)
+    await reloadElectrumServers();
 
     res.json(updatedServer);
   } catch (error) {
@@ -1660,8 +1661,8 @@ router.delete('/electrum-servers/:id', authenticate, requireAdmin, async (req: R
 
     log.info('[ADMIN] Electrum server deleted', { id, label: server.label });
 
-    // Reset node client to pick up changes
-    await resetNodeClient();
+    // Reload pool to pick up changes (more graceful than full reset)
+    await reloadElectrumServers();
 
     res.json({ success: true, message: 'Server deleted' });
   } catch (error) {
@@ -1760,8 +1761,8 @@ router.put('/electrum-servers/reorder', authenticate, requireAdmin, async (req: 
 
     log.info('[ADMIN] Electrum servers reordered', { count: serverIds.length });
 
-    // Reset node client to pick up new order
-    await resetNodeClient();
+    // Reload pool to pick up new order (more graceful than full reset)
+    await reloadElectrumServers();
 
     res.json({ success: true, message: 'Servers reordered' });
   } catch (error) {

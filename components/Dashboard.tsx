@@ -620,9 +620,15 @@ export const Dashboard: React.FC = () => {
                       {/* Per-server stats when multiple servers configured */}
                       {bitcoinStatus.pool.stats?.servers && bitcoinStatus.pool.stats.servers.length > 0 && (
                         <div className="ml-14 space-y-0.5">
-                          {bitcoinStatus.pool.stats.servers.map((server: { serverId: string; label: string; connectionCount: number; healthyConnections: number; isHealthy: boolean }) => (
+                          {bitcoinStatus.pool.stats.servers.map((server: { serverId: string; label: string; connectionCount: number; healthyConnections: number; isHealthy: boolean; lastHealthCheck: string | null }) => (
                             <div key={server.serverId} className="flex items-center text-[10px]">
-                              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${server.isHealthy ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                !server.lastHealthCheck
+                                  ? 'bg-sanctuary-400' // Not yet checked
+                                  : server.isHealthy
+                                    ? 'bg-emerald-500' // Healthy
+                                    : 'bg-amber-500'   // Unhealthy
+                              }`} />
                               <span className="text-sanctuary-500 truncate max-w-[100px]">{server.label}</span>
                               <span className="text-sanctuary-400 ml-1">
                                 ({server.connectionCount} conn{server.connectionCount !== 1 ? 's' : ''})

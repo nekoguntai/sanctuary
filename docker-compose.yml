@@ -38,6 +38,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sanctuary}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanctuary}
       POSTGRES_DB: ${POSTGRES_DB:-sanctuary}
+    ports:
+      - "5432:5432"  # Expose for local development and testing
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

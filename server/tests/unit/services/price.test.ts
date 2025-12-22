@@ -23,6 +23,7 @@ jest.mock('../../../src/utils/logger', () => ({
 
 import PriceService, { getPriceService } from '../../../src/services/price/index';
 import { supportedCurrencies } from '../../../src/services/price/providers';
+import { circuitBreakerRegistry } from '../../../src/utils/circuitBreaker';
 
 describe('Price Service', () => {
   let priceService: PriceService;
@@ -31,6 +32,8 @@ describe('Price Service', () => {
     // Create fresh instance for each test
     priceService = new PriceService();
     priceService.clearCache();
+    // Reset all circuit breakers to CLOSED state
+    circuitBreakerRegistry.resetAll();
     jest.clearAllMocks();
   });
 

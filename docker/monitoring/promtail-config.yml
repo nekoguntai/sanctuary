@@ -1,0 +1,100 @@
+# Promtail Configuration for Sanctuary
+# Collects logs from Docker containers
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Docker container logs
+  - job_name: containers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*-json.log
+
+    pipeline_stages:
+      # Parse Docker JSON log format
+      - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
+
+      # Extract container info from filename
+      - regex:
+          source: filename
+          expression: '/var/lib/docker/containers/(?P<container_id>[^/]+)/.*-json.log'
+
+      # Add container name label
+      - labels:
+          container_id:
+
+      # Parse the log content
+      - output:
+          source: log
+
+      # Extract log level from Sanctuary logs
+      # Format: [2024-01-01T12:00:00.000Z] INFO [SERVER] Message
+      - regex:
+          source: log
+          expression: '^\[.*\]\s+(?P<level>DEBUG|INFO|WARN|ERROR)\s+\[(?P<component>[^\]]+)\]'
+
+      - labels:
+          level:
+          component:
+
+      # Drop debug logs in production (optional - uncomment to enable)
+      # - match:
+      #     selector: '{level="DEBUG"}'
+      #     action: drop
+
+  # Sanctuary-specific scrape config with better filtering
+  - job_name: sanctuary
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    relabel_configs:
+      # Only keep Sanctuary containers
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/sanctuary-.*'
+        action: keep
+
+      # Add container name as label
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+
+      # Add service label based on container name
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/sanctuary-(.*)'
+        target_label: service
+
+      # Keep the log path
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+
+    pipeline_stages:
+      # Parse JSON logs from Docker
+      - docker: {}
+
+      # Extract Sanctuary log format
+      - regex:
+          expression: '^\[(?P<timestamp>[^\]]+)\]\s+(?P<level>DEBUG|INFO|WARN|ERROR)\s+\[(?P<component>[^\]]+)\]\s*(?P<message>.*)'
+
+      - labels:
+          level:
+          component:
+
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02T15:04:05.000Z"

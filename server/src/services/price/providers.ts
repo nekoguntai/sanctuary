@@ -2,10 +2,14 @@
  * Price Feed Providers
  *
  * Individual provider implementations for fetching Bitcoin prices
- * from various APIs.
+ * from various APIs with circuit breaker protection.
  */
 
 import axios from 'axios';
+import { createCircuitBreaker, CircuitBreakerError } from '../../utils/circuitBreaker';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('PRICE');
 
 export interface PriceData {
   provider: string;
@@ -15,12 +19,48 @@ export interface PriceData {
   change24h?: number; // 24-hour percentage change
 }
 
+// Create circuit breakers for each provider
+const mempoolCircuit = createCircuitBreaker({
+  name: 'price-mempool',
+  failureThreshold: 3,
+  resetTimeout: 60000, // 1 minute
+  requestTimeout: 5000,
+});
+
+const coingeckoCircuit = createCircuitBreaker({
+  name: 'price-coingecko',
+  failureThreshold: 3,
+  resetTimeout: 60000,
+  requestTimeout: 5000,
+});
+
+const krakenCircuit = createCircuitBreaker({
+  name: 'price-kraken',
+  failureThreshold: 3,
+  resetTimeout: 60000,
+  requestTimeout: 5000,
+});
+
+const coinbaseCircuit = createCircuitBreaker({
+  name: 'price-coinbase',
+  failureThreshold: 3,
+  resetTimeout: 60000,
+  requestTimeout: 5000,
+});
+
+const binanceCircuit = createCircuitBreaker({
+  name: 'price-binance',
+  failureThreshold: 3,
+  resetTimeout: 60000,
+  requestTimeout: 5000,
+});
+
 /**
  * Mempool.space API
  * Provides Bitcoin price data with good reliability
  */
 export async function fetchMempoolPrice(currency: string = 'USD'): Promise<PriceData> {
-  try {
+  return mempoolCircuit.execute(async () => {
     const response = await axios.get('https://mempool.space/api/v1/prices', {
       timeout: 5000,
     });
@@ -38,9 +78,7 @@ export async function fetchMempoolPrice(currency: string = 'USD'): Promise<Price
       currency: currencyKey,
       timestamp: new Date(),
     };
-  } catch (error: any) {
-    throw new Error(`Mempool API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -48,7 +86,7 @@ export async function fetchMempoolPrice(currency: string = 'USD'): Promise<Price
  * Free tier with good coverage of fiat currencies
  */
 export async function fetchCoinGeckoPrice(currency: string = 'USD'): Promise<PriceData> {
-  try {
+  return coingeckoCircuit.execute(async () => {
     const currencyLower = currency.toLowerCase();
     const response = await axios.get(
       `https://api.coingecko.com/api/v3/simple/price`,
@@ -76,9 +114,7 @@ export async function fetchCoinGeckoPrice(currency: string = 'USD'): Promise<Pri
       timestamp: new Date(),
       change24h: change24h !== undefined ? parseFloat(change24h.toFixed(2)) : undefined,
     };
-  } catch (error: any) {
-    throw new Error(`CoinGecko API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -86,7 +122,7 @@ export async function fetchCoinGeckoPrice(currency: string = 'USD'): Promise<Pri
  * Exchange price data, good for major fiat currencies
  */
 export async function fetchKrakenPrice(currency: string = 'USD'): Promise<PriceData> {
-  try {
+  return krakenCircuit.execute(async () => {
     // Kraken uses different currency codes
     const krakenCurrency = currency.toUpperCase();
     const pair = `XXBTZ${krakenCurrency}`;
@@ -115,9 +151,7 @@ export async function fetchKrakenPrice(currency: string = 'USD'): Promise<PriceD
       currency: krakenCurrency,
       timestamp: new Date(),
     };
-  } catch (error: any) {
-    throw new Error(`Kraken API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -125,7 +159,7 @@ export async function fetchKrakenPrice(currency: string = 'USD'): Promise<PriceD
  * Another reliable exchange source
  */
 export async function fetchCoinbasePrice(currency: string = 'USD'): Promise<PriceData> {
-  try {
+  return coinbaseCircuit.execute(async () => {
     const currencyUpper = currency.toUpperCase();
     const pair = `BTC-${currencyUpper}`;
 
@@ -144,9 +178,7 @@ export async function fetchCoinbasePrice(currency: string = 'USD'): Promise<Pric
       currency: currencyUpper,
       timestamp: new Date(),
     };
-  } catch (error: any) {
-    throw new Error(`Coinbase API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -154,7 +186,7 @@ export async function fetchCoinbasePrice(currency: string = 'USD'): Promise<Pric
  * High-volume exchange with good uptime
  */
 export async function fetchBinancePrice(currency: string = 'USD'): Promise<PriceData> {
-  try {
+  return binanceCircuit.execute(async () => {
     // Binance uses USDT for USD
     let symbol = 'BTCUSDT';
     if (currency.toUpperCase() === 'EUR') {
@@ -179,9 +211,7 @@ export async function fetchBinancePrice(currency: string = 'USD'): Promise<Price
       currency: currency.toUpperCase(),
       timestamp: new Date(),
     };
-  } catch (error: any) {
-    throw new Error(`Binance API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -196,6 +226,19 @@ export const providers = {
 };
 
 /**
+ * Get circuit breaker status for all price providers
+ */
+export function getPriceCircuitStatus(): Array<{ name: string; state: string; available: boolean }> {
+  return [
+    { name: 'mempool', state: mempoolCircuit.getState(), available: mempoolCircuit.isAvailable() },
+    { name: 'coingecko', state: coingeckoCircuit.getState(), available: coingeckoCircuit.isAvailable() },
+    { name: 'kraken', state: krakenCircuit.getState(), available: krakenCircuit.isAvailable() },
+    { name: 'coinbase', state: coinbaseCircuit.getState(), available: coinbaseCircuit.isAvailable() },
+    { name: 'binance', state: binanceCircuit.getState(), available: binanceCircuit.isAvailable() },
+  ];
+}
+
+/**
  * CoinGecko Historical Price API
  * Get Bitcoin price at a specific date
  */
@@ -203,7 +246,7 @@ export async function fetchCoinGeckoHistoricalPrice(
   date: Date,
   currency: string = 'USD'
 ): Promise<PriceData> {
-  try {
+  return coingeckoCircuit.execute(async () => {
     const currencyLower = currency.toLowerCase();
 
     // Format date as DD-MM-YYYY (CoinGecko format)
@@ -235,9 +278,7 @@ export async function fetchCoinGeckoHistoricalPrice(
       currency: currency.toUpperCase(),
       timestamp: date,
     };
-  } catch (error: any) {
-    throw new Error(`CoinGecko historical API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -248,7 +289,7 @@ export async function fetchCoinGeckoMarketChart(
   days: number,
   currency: string = 'USD'
 ): Promise<Array<{ timestamp: Date; price: number }>> {
-  try {
+  return coingeckoCircuit.execute(async () => {
     const currencyLower = currency.toLowerCase();
 
     const response = await axios.get(
@@ -274,9 +315,7 @@ export async function fetchCoinGeckoMarketChart(
       timestamp: new Date(timestamp),
       price,
     }));
-  } catch (error: any) {
-    throw new Error(`CoinGecko market chart API error: ${error.message}`);
-  }
+  });
 }
 
 /**
@@ -289,3 +328,35 @@ export const supportedCurrencies: Record<string, string[]> = {
   coinbase: ['USD', 'EUR', 'GBP', 'CAD'],
   binance: ['USD', 'EUR', 'GBP'],
 };
+
+/**
+ * Fetch price with automatic fallback to other providers
+ * Uses circuit breakers to avoid repeatedly calling failed providers
+ */
+export async function fetchPriceWithFallback(currency: string = 'USD'): Promise<PriceData> {
+  const providerOrder = ['mempool', 'coingecko', 'kraken', 'coinbase', 'binance'];
+  const errors: string[] = [];
+
+  for (const providerName of providerOrder) {
+    const provider = providers[providerName as keyof typeof providers];
+    const currencies = supportedCurrencies[providerName];
+
+    // Skip if provider doesn't support the currency
+    if (!currencies.includes(currency.toUpperCase())) {
+      continue;
+    }
+
+    try {
+      const result = await provider(currency);
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof CircuitBreakerError
+        ? `${providerName}: circuit open`
+        : `${providerName}: ${(error as Error).message}`;
+      errors.push(errorMsg);
+      log.warn(`Price provider ${providerName} failed`, { error: errorMsg });
+    }
+  }
+
+  throw new Error(`All price providers failed: ${errors.join(', ')}`);
+}

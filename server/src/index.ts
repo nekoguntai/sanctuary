@@ -33,8 +33,32 @@ import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
+import { connectWithRetry, disconnect } from './models/prisma';
 
 const log = createLogger('SERVER');
+
+// ========================================
+// GLOBAL EXCEPTION HANDLERS
+// ========================================
+// Catch unhandled errors to prevent silent crashes
+
+process.on('uncaughtException', (error: Error) => {
+  log.error('Uncaught exception - process will exit', {
+    error: error.message,
+    stack: error.stack,
+  });
+  // Give time for logs to flush
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  log.error('Unhandled promise rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+  // Don't exit for unhandled rejections, but log them
+  // In production, you might want to exit here too
+});
 
 // Validate required environment variables at startup
 try {
@@ -168,43 +192,63 @@ syncService.start().catch((err) => {
 // Start maintenance service (cleanup jobs)
 maintenanceService.start();
 
-// Run database migrations before starting server
+// Run database connection and migrations before starting server
 (async () => {
-  log.info('Checking database migrations...');
-  const migrationResult = await migrationService.runMigrations();
+  try {
+    // Connect to database with retry logic
+    await connectWithRetry();
 
-  if (!migrationResult.success) {
-    log.error('Database migration failed - server may not function correctly', {
-      error: migrationResult.error,
+    log.info('Checking database migrations...');
+    const migrationResult = await migrationService.runMigrations();
+
+    if (!migrationResult.success) {
+      log.error('Database migration failed - server may not function correctly', {
+        error: migrationResult.error,
+      });
+      // Continue anyway - some functionality may still work
+    }
+
+    // Start listening
+    httpServer.listen(config.port, async () => {
+      log.info('Sanctuary Wallet API Server starting');
+      log.info(`Environment: ${config.nodeEnv}`);
+      log.info(`Server: ${config.apiUrl}`);
+      log.info(`Client: ${config.clientUrl}`);
+      log.info(`Network: ${config.bitcoin.network}`);
+      log.info(`HTTP Server running on port ${config.port}`);
+      log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
+      log.info('Notification Service running');
+      log.info('Background Sync Service running');
+      log.info('Maintenance Service running (cleanup jobs)');
+
+      // Log final migration status
+      await migrationService.logMigrationStatus();
     });
-    // Continue anyway - some functionality may still work
+  } catch (error) {
+    log.error('Failed to start server', {
+      error: (error as Error).message,
+    });
+    process.exit(1);
   }
-
-  // Start listening
-  httpServer.listen(config.port, async () => {
-    log.info('Sanctuary Wallet API Server starting');
-    log.info(`Environment: ${config.nodeEnv}`);
-    log.info(`Server: ${config.apiUrl}`);
-    log.info(`Client: ${config.clientUrl}`);
-    log.info(`Network: ${config.bitcoin.network}`);
-    log.info(`HTTP Server running on port ${config.port}`);
-    log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
-    log.info('Notification Service running');
-    log.info('Background Sync Service running');
-    log.info('Maintenance Service running (cleanup jobs)');
-
-    // Log final migration status
-    await migrationService.logMigrationStatus();
-  });
 })();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   log.info('SIGTERM received, closing server...');
   wsServer.close();
   notificationService.stop();
   syncService.stop();
   maintenanceService.stop();
+
+  // Close database connection
+  try {
+    await disconnect();
+  } catch (error) {
+    log.error('Error disconnecting from database', {
+      error: (error as Error).message,
+    });
+  }
+
   httpServer.close(() => {
     log.info('Server closed');
     process.exit(0);

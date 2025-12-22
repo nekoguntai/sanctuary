@@ -26,16 +26,24 @@ if [ -f ".env.local" ]; then
     source .env.local
 fi
 
-# Check for JWT_SECRET
-if [ -z "$JWT_SECRET" ]; then
-    echo "Error: JWT_SECRET not set."
+# Check for required secrets
+MISSING_SECRETS=""
+[ -z "$JWT_SECRET" ] && MISSING_SECRETS="$MISSING_SECRETS JWT_SECRET"
+[ -z "$ENCRYPTION_KEY" ] && MISSING_SECRETS="$MISSING_SECRETS ENCRYPTION_KEY"
+[ -z "$GATEWAY_SECRET" ] && MISSING_SECRETS="$MISSING_SECRETS GATEWAY_SECRET"
+[ -z "$POSTGRES_PASSWORD" ] && MISSING_SECRETS="$MISSING_SECRETS POSTGRES_PASSWORD"
+
+if [ -n "$MISSING_SECRETS" ]; then
+    echo "Error: Missing required secrets:$MISSING_SECRETS"
     echo ""
-    echo "Either:"
-    echo "  1. Run install.sh first for initial setup"
-    echo "  2. Or set JWT_SECRET manually:"
-    echo "     export JWT_SECRET=your-secret-here && ./start.sh"
+    echo "Run install.sh first for initial setup, or run:"
+    echo "  ./scripts/setup.sh"
     exit 1
 fi
+
+# Export for docker compose
+export JWT_SECRET ENCRYPTION_KEY GATEWAY_SECRET POSTGRES_PASSWORD
+export HTTPS_PORT HTTP_PORT
 
 case "${1:-}" in
     --stop)
@@ -52,8 +60,7 @@ case "${1:-}" in
         echo "Note: First-time AI setup will download the Ollama image (~1GB)."
         echo "      Models are downloaded separately when you pull them in settings."
         echo ""
-        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-            docker compose --profile ai up -d
+        docker compose --profile ai up -d
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         echo ""
@@ -67,11 +74,9 @@ case "${1:-}" in
         echo "Rebuilding and starting Sanctuary..."
         # Include ai profile in rebuild if ollama container exists
         if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
-            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-                docker compose --profile ai up -d --build
+            docker compose --profile ai up -d --build
         else
-            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-                docker compose up -d --build
+            docker compose up -d --build
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
@@ -99,11 +104,9 @@ case "${1:-}" in
         echo "Starting Sanctuary..."
         # Include ai profile if ollama container exists (user previously used --with-ai)
         if docker ps -a --format '{{.Names}}' | grep -q sanctuary-ollama; then
-            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-                docker compose --profile ai up -d
+            docker compose --profile ai up -d
         else
-            HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" JWT_SECRET="$JWT_SECRET" \
-                docker compose up -d
+            docker compose up -d
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"

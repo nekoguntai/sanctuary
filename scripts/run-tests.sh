@@ -13,6 +13,7 @@
 #   --backend    Run backend tests only
 #   --frontend   Run frontend tests only
 #   --watch      Run in watch mode (frontend only, not with --docker)
+#   --integration  Run integration tests with database (backend only)
 #   --help       Show this help message
 #
 # Examples:
@@ -20,6 +21,7 @@
 #   ./scripts/run-tests.sh --docker           # Run all tests in Docker
 #   ./scripts/run-tests.sh --backend --coverage  # Backend with coverage
 #   ./scripts/run-tests.sh --frontend --watch    # Frontend in watch mode
+#   ./scripts/run-tests.sh --backend --integration  # Backend integration tests
 #
 # =============================================
 
@@ -42,6 +44,7 @@ WITH_COVERAGE=false
 RUN_BACKEND=true
 RUN_FRONTEND=true
 WATCH_MODE=false
+INTEGRATION_MODE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -66,6 +69,11 @@ while [[ $# -gt 0 ]]; do
             WATCH_MODE=true
             shift
             ;;
+        --integration)
+            INTEGRATION_MODE=true
+            RUN_FRONTEND=false
+            shift
+            ;;
         --help)
             head -30 "$0" | tail -25
             exit 0
@@ -86,10 +94,21 @@ echo ""
 
 # Docker mode
 if [ "$USE_DOCKER" = true ]; then
-    echo -e "${YELLOW}Running tests in Docker...${NC}"
+    if [ "$INTEGRATION_MODE" = true ]; then
+        echo -e "${YELLOW}Running integration tests in Docker...${NC}"
+    else
+        echo -e "${YELLOW}Running tests in Docker...${NC}"
+    fi
     echo ""
 
-    if [ "$WITH_COVERAGE" = true ]; then
+    if [ "$INTEGRATION_MODE" = true ]; then
+        # Run integration tests with database in Docker
+        docker compose -f docker-compose.test.yml run --rm backend-test sh -c "
+            npx prisma generate &&
+            npx prisma migrate deploy &&
+            npm run test:integration -- --ci
+        "
+    elif [ "$WITH_COVERAGE" = true ]; then
         if [ "$RUN_BACKEND" = true ] && [ "$RUN_FRONTEND" = true ]; then
             npm run test:docker:coverage
         elif [ "$RUN_BACKEND" = true ]; then
@@ -118,12 +137,36 @@ FRONTEND_RESULT=0
 
 # Run backend tests
 if [ "$RUN_BACKEND" = true ]; then
-    echo -e "${YELLOW}Running backend tests...${NC}"
+    if [ "$INTEGRATION_MODE" = true ]; then
+        echo -e "${YELLOW}Running backend integration tests (requires database)...${NC}"
+    else
+        echo -e "${YELLOW}Running backend tests...${NC}"
+    fi
     echo ""
 
     cd "$PROJECT_ROOT/server"
 
-    if [ "$WITH_COVERAGE" = true ]; then
+    if [ "$INTEGRATION_MODE" = true ]; then
+        # Check if PostgreSQL is accessible
+        if ! command -v pg_isready &> /dev/null; then
+            echo -e "${YELLOW}Note: pg_isready not found, skipping database check${NC}"
+        elif ! pg_isready -h localhost -p 5432 -U sanctuary -d sanctuary_test -q 2>/dev/null; then
+            echo -e "${RED}Error: PostgreSQL not accessible on localhost:5432${NC}"
+            echo ""
+            echo "Make sure Docker is running with exposed PostgreSQL port:"
+            echo "  docker compose up -d postgres"
+            echo ""
+            echo "Or create test database manually:"
+            echo "  docker exec sanctuary-db psql -U sanctuary -c 'CREATE DATABASE sanctuary_test'"
+            echo ""
+            BACKEND_RESULT=1
+            cd "$PROJECT_ROOT"
+        fi
+
+        if [ "$BACKEND_RESULT" -eq 0 ]; then
+            npm run test:integration:db || BACKEND_RESULT=$?
+        fi
+    elif [ "$WITH_COVERAGE" = true ]; then
         npm run test:coverage || BACKEND_RESULT=$?
     else
         npm test || BACKEND_RESULT=$?
@@ -155,10 +198,15 @@ echo -e "${BLUE}  Test Summary${NC}"
 echo -e "${BLUE}=============================================${NC}"
 
 if [ "$RUN_BACKEND" = true ]; then
-    if [ $BACKEND_RESULT -eq 0 ]; then
-        echo -e "  Backend:  ${GREEN}PASSED${NC}"
+    if [ "$INTEGRATION_MODE" = true ]; then
+        TEST_NAME="Integration"
     else
-        echo -e "  Backend:  ${RED}FAILED${NC}"
+        TEST_NAME="Backend"
+    fi
+    if [ $BACKEND_RESULT -eq 0 ]; then
+        echo -e "  ${TEST_NAME}:  ${GREEN}PASSED${NC}"
+    else
+        echo -e "  ${TEST_NAME}:  ${RED}FAILED${NC}"
     fi
 fi
 

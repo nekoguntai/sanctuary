@@ -1,0 +1,139 @@
+# =============================================
+# Sanctuary - Monitoring Stack
+# =============================================
+#
+# Optional monitoring services for production deployments.
+# Provides centralized logging, metrics, and alerting.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# Access:
+#   - Grafana: http://localhost:3000 (admin/sanctuary)
+#   - Loki: http://localhost:3100 (internal)
+#   - Promtail: Collects logs automatically
+#
+# =============================================
+
+services:
+  # ============================================
+  # Loki - Log Aggregation
+  # ============================================
+  # Stores and indexes logs from all containers.
+  # Query logs via Grafana or Loki API.
+  # ============================================
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: sanctuary-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+      - ./docker/monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ============================================
+  # Promtail - Log Collection Agent
+  # ============================================
+  # Collects logs from Docker containers and ships to Loki.
+  # Automatically discovers containers via Docker socket.
+  # ============================================
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: sanctuary-promtail
+    restart: unless-stopped
+    depends_on:
+      - loki
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./docker/monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  # ============================================
+  # Grafana - Visualization & Dashboards
+  # ============================================
+  # Pre-configured with Loki datasource and Sanctuary dashboards.
+  # Default login: admin / sanctuary
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: sanctuary-grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-sanctuary}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  loki_data:
+    driver: local
+  grafana_data:
+    driver: local

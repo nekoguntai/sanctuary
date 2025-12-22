@@ -20,6 +20,26 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, AI_REQUEST_TIMEOUT_MS } from './constants';
 
+// ========================================
+// GLOBAL EXCEPTION HANDLERS
+// ========================================
+// Catch unhandled errors to prevent silent crashes
+
+process.on('uncaughtException', (error: Error) => {
+  console.error('[AI] FATAL: Uncaught exception - process will exit', {
+    error: error.message,
+    stack: error.stack,
+  });
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error('[AI] Unhandled promise rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? (reason as Error).stack : undefined,
+  });
+});
+
 const app = express();
 const PORT = process.env.PORT || 3100;
 

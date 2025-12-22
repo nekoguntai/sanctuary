@@ -1,0 +1,16 @@
+# Grafana Dashboard Provisioning
+# Automatically loads Sanctuary dashboards
+
+apiVersion: 1
+
+providers:
+  - name: 'Sanctuary'
+    orgId: 1
+    folder: 'Sanctuary'
+    folderUid: 'sanctuary'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

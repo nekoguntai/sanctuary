@@ -18,6 +18,26 @@ import { startBackendEvents, stopBackendEvents } from './services/backendEvents'
 
 const log = createLogger('GATEWAY');
 
+// ========================================
+// GLOBAL EXCEPTION HANDLERS
+// ========================================
+// Catch unhandled errors to prevent silent crashes
+
+process.on('uncaughtException', (error: Error) => {
+  log.error('Uncaught exception - process will exit', {
+    error: error.message,
+    stack: error.stack,
+  });
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  log.error('Unhandled promise rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+
 // Validate configuration
 validateConfig();
 

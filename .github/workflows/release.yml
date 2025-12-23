@@ -42,6 +42,8 @@ jobs:
           check-name: 'Install Test Summary'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
+          # Install tests can take 30+ minutes for fresh-install E2E tests
+          running-workflow-name: 'Wait for Install Tests'
           allowed-conclusions: success
 
   # ============================================

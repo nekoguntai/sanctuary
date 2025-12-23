@@ -4,15 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'install.sh'
-      - 'docker-compose.yml'
-      - 'Dockerfile'
-      - 'server/Dockerfile'
-      - 'server/prisma/**'
-      - 'docker/**'
-      - 'tests/install/**'
-      - '.github/workflows/install-test.yml'
     tags:
       - 'v*.*.*'
   pull_request:

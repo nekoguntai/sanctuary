@@ -209,6 +209,8 @@ export class ElectrumPool extends EventEmitter {
   private isShuttingDown = false;
   private isInitialized = false;
   private subscriptionConnectionId: string | null = null;
+  // Lock to prevent concurrent initialization
+  private initializePromise: Promise<void> | null = null;
 
   // Multi-server support
   private servers: ServerConfig[] = [];
@@ -347,8 +349,34 @@ export class ElectrumPool extends EventEmitter {
    * Initialize the pool by creating minimum connections
    */
   async initialize(): Promise<void> {
+    // Fast path: already initialized
     if (this.isInitialized) {
       log.debug('Pool already initialized');
+      return;
+    }
+
+    // Another caller is already initializing - wait for their result
+    if (this.initializePromise) {
+      return this.initializePromise;
+    }
+
+    // We're the first caller - create and store the init promise
+    this.initializePromise = this.doInitialize();
+
+    try {
+      await this.initializePromise;
+    } finally {
+      // Clear the promise after completion
+      this.initializePromise = null;
+    }
+  }
+
+  /**
+   * Internal initialization logic (called only once via lock)
+   */
+  private async doInitialize(): Promise<void> {
+    // Double-check in case of race
+    if (this.isInitialized) {
       return;
     }
 
@@ -420,6 +448,7 @@ export class ElectrumPool extends EventEmitter {
   async shutdown(): Promise<void> {
     log.info('Shutting down Electrum pool...');
     this.isShuttingDown = true;
+    this.initializePromise = null;
 
     // Clear intervals
     if (this.healthCheckInterval) {
@@ -1066,6 +1095,8 @@ export class ElectrumPool extends EventEmitter {
 
 // Singleton pool instance
 let poolInstance: ElectrumPool | null = null;
+// Lock to prevent concurrent initialization (race condition fix)
+let poolInitPromise: Promise<ElectrumPool> | null = null;
 
 /**
  * Load pool configuration from database
@@ -1149,7 +1180,23 @@ export function getElectrumPool(config?: Partial<ElectrumPoolConfig>): ElectrumP
  * This loads settings from the database, falling back to environment variables
  */
 export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
-  if (!poolInstance) {
+  // Fast path: pool already exists
+  if (poolInstance) {
+    return poolInstance;
+  }
+
+  // Another caller is already initializing - wait for their result
+  if (poolInitPromise) {
+    return poolInitPromise;
+  }
+
+  // We're the first caller - create and store the init promise
+  poolInitPromise = (async () => {
+    // Double-check in case of race (defensive)
+    if (poolInstance) {
+      return poolInstance;
+    }
+
     // Load config and servers from database
     const { config: dbConfig, servers } = await loadPoolConfigFromDatabase();
 
@@ -1194,8 +1241,17 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       maxConnections: poolInstance['config'].maxConnections,
       loadBalancing: poolInstance['config'].loadBalancing,
     });
+
+    return poolInstance;
+  })();
+
+  try {
+    return await poolInitPromise;
+  } finally {
+    // Clear the promise after completion (success or failure)
+    // This allows retry on failure
+    poolInitPromise = null;
   }
-  return poolInstance;
 }
 
 /**
@@ -1214,6 +1270,9 @@ export async function initializeElectrumPool(
  * Shutdown the Electrum pool
  */
 export async function shutdownElectrumPool(): Promise<void> {
+  // Clear init promise to prevent new initialization during shutdown
+  poolInitPromise = null;
+
   if (poolInstance) {
     await poolInstance.shutdown();
     poolInstance = null;

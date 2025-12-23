@@ -39,7 +39,11 @@ interface ElectrumConfig {
   port: number;
   protocol: 'tcp' | 'ssl';
   allowSelfSignedCert?: boolean; // Optional: allow self-signed TLS certificates (default: false)
+  connectionTimeoutMs?: number; // Optional: connection/handshake timeout (default: 10000ms)
 }
+
+// Default connection timeout (10 seconds) - fails faster so pool can try other servers
+const DEFAULT_CONNECTION_TIMEOUT_MS = 10000;
 
 class ElectrumClient extends EventEmitter {
   private socket: net.Socket | tls.TLSSocket | null = null;
@@ -105,9 +109,50 @@ class ElectrumClient extends EventEmitter {
       }
     }
 
+    // Get connection timeout from config or use default
+    const connectionTimeoutMs = this.explicitConfig?.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+
     // Now create the connection using a sync Promise executor
     return new Promise((resolve, reject) => {
+      let connectionTimeout: NodeJS.Timeout | null = null;
+      let settled = false;
+
+      // Helper to clean up timeout and mark as settled
+      const cleanup = () => {
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout);
+          connectionTimeout = null;
+        }
+      };
+
+      const handleSuccess = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        this.connected = true;
+        resolve();
+      };
+
+      const handleError = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        this.connected = false;
+        // Destroy socket on error to clean up
+        if (this.socket) {
+          this.socket.destroy();
+        }
+        reject(error);
+      };
+
       try {
+        // Set connection timeout - fail fast so pool can try other servers
+        connectionTimeout = setTimeout(() => {
+          const timeoutError = new Error(`Connection timeout after ${connectionTimeoutMs}ms to ${host}:${port} (${protocol})`);
+          log.warn(`Connection timeout`, { host, port, protocol, timeoutMs: connectionTimeoutMs });
+          handleError(timeoutError);
+        }, connectionTimeoutMs);
+
         if (protocol === 'ssl') {
           // Log whether TLS verification is enabled or disabled
           if (allowSelfSignedCert) {
@@ -124,20 +169,27 @@ class ElectrumClient extends EventEmitter {
               // This protects against MITM attacks by default
               rejectUnauthorized: !allowSelfSignedCert,
               servername: host, // SNI support
+              // Enable TLS session resumption for faster reconnects
+              session: undefined, // Let Node.js handle session caching
             },
             () => {
               // This callback fires on secureConnect
               log.info(`Connected to ${host}:${port} (${protocol}) - TLS handshake complete`);
-              this.connected = true;
-              resolve();
+
+              // Apply socket optimizations after TLS handshake
+              // Disable Nagle's algorithm - reduces latency for small packets (JSON-RPC)
+              tlsSocket.setNoDelay(true);
+              // Enable TCP keepalive - detects dead connections faster (30 second interval)
+              tlsSocket.setKeepAlive(true, 30000);
+
+              handleSuccess();
             }
           );
           this.socket = tlsSocket;
 
           tlsSocket.on('error', (err) => {
             log.error(`TLS socket error`, { error: String(err) });
-            this.connected = false;
-            reject(err);
+            handleError(err);
           });
         } else {
           this.socket = net.connect({ host, port });
@@ -145,8 +197,14 @@ class ElectrumClient extends EventEmitter {
           // For plain TCP, connect event is sufficient
           this.socket.on('connect', () => {
             log.info(`Connected to ${host}:${port} (${protocol})`);
-            this.connected = true;
-            resolve();
+
+            // Apply socket optimizations
+            // Disable Nagle's algorithm - reduces latency for small packets (JSON-RPC)
+            this.socket!.setNoDelay(true);
+            // Enable TCP keepalive - detects dead connections faster (30 second interval)
+            this.socket!.setKeepAlive(true, 30000);
+
+            handleSuccess();
           });
         }
 
@@ -156,10 +214,9 @@ class ElectrumClient extends EventEmitter {
 
         this.socket.on('error', (error) => {
           log.error('Socket error', { error });
-          this.connected = false;
+          handleError(error);
           // Reject all pending requests on socket error
           this.rejectPendingRequests(new Error(`Socket error: ${error.message}`));
-          reject(error);
         });
 
         this.socket.on('close', () => {
@@ -177,7 +234,7 @@ class ElectrumClient extends EventEmitter {
         });
       } catch (error) {
         log.error('Connection error', { error });
-        reject(error);
+        handleError(error as Error);
       }
     });
   }

@@ -25,7 +25,7 @@ import draftRoutes from './api/drafts';
 import payjoinRoutes from './api/payjoin';
 import aiRoutes from './api/ai';
 import aiInternalRoutes from './api/ai-internal';
-import { initializeWebSocketServer } from './websocket/server';
+import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
@@ -175,8 +175,22 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 // Create HTTP server
 const httpServer = createServer(app);
 
-// Initialize WebSocket server
-const wsServer = initializeWebSocketServer(httpServer);
+// Initialize WebSocket servers
+const wsServer = initializeWebSocketServer();
+const gatewayWsServer = initializeGatewayWebSocketServer();
+
+// Handle WebSocket upgrades - route to correct server based on path
+httpServer.on('upgrade', (request, socket, head) => {
+  const pathname = request.url || '';
+
+  if (pathname === '/ws' || pathname.startsWith('/ws?')) {
+    wsServer.handleUpgrade(request, socket, head);
+  } else if (pathname === '/gateway' || pathname.startsWith('/gateway?')) {
+    gatewayWsServer.handleUpgrade(request, socket, head);
+  } else {
+    socket.destroy();
+  }
+});
 
 // Start notification service
 notificationService.start().catch((err) => {

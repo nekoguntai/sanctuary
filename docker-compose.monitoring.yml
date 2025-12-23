@@ -113,7 +113,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-${ENCRYPTION_KEY:?ENCRYPTION_KEY required}}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
-      GF_INSTALL_PLUGINS: grafana-clock-panel
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     volumes:

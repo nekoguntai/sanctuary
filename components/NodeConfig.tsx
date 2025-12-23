@@ -188,18 +188,21 @@ export const NodeConfig: React.FC = () => {
   };
 
   const handleMoveServer = async (id: string, direction: 'up' | 'down') => {
-    const index = servers.findIndex(s => s.id === id);
+    // Sort by current priority before finding index
+    const sortedServers = [...servers].sort((a, b) => a.priority - b.priority);
+    const index = sortedServers.findIndex(s => s.id === id);
     if (index === -1) return;
     if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === servers.length - 1) return;
+    if (direction === 'down' && index === sortedServers.length - 1) return;
 
-    const newServers = [...servers];
+    const newServers = [...sortedServers];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
     [newServers[index], newServers[swapIndex]] = [newServers[swapIndex], newServers[index]];
 
-    // Update priorities
-    const serverIds = newServers.map(s => s.id);
-    setServers(newServers);
+    // Update priority values to match new positions
+    const updatedServers = newServers.map((s, i) => ({ ...s, priority: i }));
+    const serverIds = updatedServers.map(s => s.id);
+    setServers(updatedServers);
 
     try {
       await adminApi.reorderElectrumServers(serverIds);

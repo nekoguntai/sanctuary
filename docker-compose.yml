@@ -104,6 +104,9 @@ services:
       # Encryption (for sensitive data like node passwords)
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
 
+      # Gateway secret (for gateway WebSocket connection)
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
+
       # Bitcoin Network
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
 
@@ -256,6 +259,9 @@ services:
 
       # JWT (must match backend)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+
+      # Gateway secret for backend WebSocket connection
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
 
       # Rate limiting
       RATE_LIMIT_WINDOW_MS: ${GATEWAY_RATE_LIMIT_WINDOW_MS:-60000}

@@ -101,6 +101,11 @@ check_openssl() {
     return 0
 }
 
+# Check if openssl is available (returns 0/1, no output)
+has_openssl() {
+    command -v openssl &> /dev/null
+}
+
 check_git() {
     if ! command -v git &> /dev/null; then
         echo -e "${RED}Error: Git is not installed.${NC}"
@@ -139,7 +144,8 @@ main() {
 
     check_docker
     check_git
-    HAS_OPENSSL=$(check_openssl && echo "yes" || echo "no")
+    check_openssl  # Display status message
+    HAS_OPENSSL=$(has_openssl && echo "yes" || echo "no")
 
     echo ""
 
@@ -198,29 +204,53 @@ main() {
     echo ""
 
     # Load existing secrets or generate new ones
-    if [ -f "$INSTALL_DIR/.env.local" ]; then
-        source "$INSTALL_DIR/.env.local"
-        echo -e "${GREEN}✓${NC} Using existing secrets from .env.local"
+    # Check .env first (Docker Compose default), then .env.local for backwards compatibility
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        set -a
+        source "$INSTALL_DIR/.env"
+        set +a
+        echo -e "${GREEN}✓${NC} Using existing secrets from .env"
+        ENV_FILE="$INSTALL_DIR/.env"
 
         # Generate missing secrets (upgrading from older version)
         UPDATED_ENV=false
         if [ -z "$ENCRYPTION_KEY" ]; then
             ENCRYPTION_KEY=$(generate_secret)
-            echo "ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$INSTALL_DIR/.env.local"
+            echo "ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$ENV_FILE"
             echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_KEY"
             UPDATED_ENV=true
         fi
         if [ -z "$GATEWAY_SECRET" ]; then
             GATEWAY_SECRET=$(generate_secret)
-            echo "GATEWAY_SECRET=$GATEWAY_SECRET" >> "$INSTALL_DIR/.env.local"
+            echo "GATEWAY_SECRET=$GATEWAY_SECRET" >> "$ENV_FILE"
             echo -e "${GREEN}✓${NC} Generated missing GATEWAY_SECRET"
             UPDATED_ENV=true
         fi
         if [ -z "$POSTGRES_PASSWORD" ]; then
             POSTGRES_PASSWORD=$(generate_secret | head -c 24)
-            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> "$INSTALL_DIR/.env.local"
+            echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> "$ENV_FILE"
             echo -e "${GREEN}✓${NC} Generated missing POSTGRES_PASSWORD"
             UPDATED_ENV=true
+        fi
+    elif [ -f "$INSTALL_DIR/.env.local" ]; then
+        # Backwards compatibility: migrate from .env.local to .env
+        source "$INSTALL_DIR/.env.local"
+        echo -e "${YELLOW}!${NC} Migrating secrets from .env.local to .env"
+        ENV_FILE="$INSTALL_DIR/.env"
+        UPDATED_ENV=true
+
+        # Generate missing secrets
+        if [ -z "$ENCRYPTION_KEY" ]; then
+            ENCRYPTION_KEY=$(generate_secret)
+            echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_KEY"
+        fi
+        if [ -z "$GATEWAY_SECRET" ]; then
+            GATEWAY_SECRET=$(generate_secret)
+            echo -e "${GREEN}✓${NC} Generated missing GATEWAY_SECRET"
+        fi
+        if [ -z "$POSTGRES_PASSWORD" ]; then
+            POSTGRES_PASSWORD=$(generate_secret | head -c 24)
+            echo -e "${GREEN}✓${NC} Generated missing POSTGRES_PASSWORD"
         fi
     else
         JWT_SECRET=$(generate_secret)
@@ -239,26 +269,57 @@ main() {
     fi
 
     echo ""
+
+    # Ask about optional features (skip if non-interactive or env var set)
+    ENABLE_MONITORING="${ENABLE_MONITORING:-}"
+    if [ -z "$ENABLE_MONITORING" ] && [ -t 0 ]; then
+        echo -e "${BLUE}Optional Features${NC}"
+        echo ""
+        echo "Would you like to enable monitoring? (Grafana/Loki/Promtail)"
+        echo "  - View logs and metrics in a web dashboard"
+        echo "  - Uses ~500MB additional disk space and ~512MB RAM"
+        echo ""
+        read -p "Enable monitoring? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ENABLE_MONITORING="yes"
+            echo -e "${GREEN}✓${NC} Monitoring will be enabled"
+        else
+            ENABLE_MONITORING="no"
+            echo -e "${GREEN}✓${NC} Monitoring skipped (run './start.sh --with-monitoring' later to enable)"
+        fi
+        echo ""
+    fi
+
     echo "Starting Sanctuary..."
     echo -e "${YELLOW}Note: First-time build may take 2-5 minutes. Subsequent starts are much faster.${NC}"
     echo ""
 
     # Start the services
     cd "$INSTALL_DIR"
-    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
-        JWT_SECRET="$JWT_SECRET" \
-        ENCRYPTION_KEY="$ENCRYPTION_KEY" \
-        GATEWAY_SECRET="$GATEWAY_SECRET" \
-        POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-        docker compose up -d --build
+    if [ "$ENABLE_MONITORING" = "yes" ]; then
+        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+            JWT_SECRET="$JWT_SECRET" \
+            ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+            GATEWAY_SECRET="$GATEWAY_SECRET" \
+            POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
+    else
+        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+            JWT_SECRET="$JWT_SECRET" \
+            ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+            GATEWAY_SECRET="$GATEWAY_SECRET" \
+            POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            docker compose up -d --build
+    fi
 
     # Wait for services to be healthy
     echo ""
     echo "Waiting for services to start..."
     sleep 5
 
-    # Check if services are running
-    if docker compose ps | grep -q "sanctuary-frontend.*running"; then
+    # Check if services are running (use docker compose ps which respects project name)
+    if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q "frontend.*running"; then
         FRONTEND_RUNNING=true
     else
         FRONTEND_RUNNING=false
@@ -291,6 +352,15 @@ main() {
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC}  ${YELLOW}You'll be asked to change the password on first login${NC}   ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    if [ "$ENABLE_MONITORING" = "yes" ]; then
+        echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  Monitoring (Grafana):                                    ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    ${GREEN}http://localhost:3000${NC}                                 ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Username: ${GREEN}admin${NC}                                        ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Password: ${GREEN}(your ENCRYPTION_KEY from .env)${NC}             ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    fi
     echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
@@ -301,14 +371,29 @@ main() {
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Save secrets for future restarts/upgrades
-    cat > "$INSTALL_DIR/.env.local" << ENVEOF
+    # Save secrets and preferences for future restarts/upgrades
+    # Write to .env (Docker Compose's default file) so docker compose works without start.sh
+    cat > "$INSTALL_DIR/.env" << ENVEOF
+# Sanctuary Environment Configuration
+# This file is auto-loaded by docker compose
+
 JWT_SECRET=$JWT_SECRET
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 GATEWAY_SECRET=$GATEWAY_SECRET
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+HTTP_PORT=${HTTP_PORT:-8080}
+HTTPS_PORT=${HTTPS_PORT:-8443}
+ENABLE_MONITORING=${ENABLE_MONITORING:-no}
 ENVEOF
-    echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env.local"
+
+    # Remove old .env.local if it exists (migrated to .env)
+    if [ -f "$INSTALL_DIR/.env.local" ]; then
+        rm -f "$INSTALL_DIR/.env.local"
+        echo -e "${GREEN}✓${NC} Cleaned up old .env.local (migrated to .env)"
+    fi
+
+    echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env"
     echo ""
     echo "Common commands:"
     echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"

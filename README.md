@@ -115,7 +115,7 @@ Open **https://localhost:8443** and accept the certificate warning.
 5. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
 6. Builds and starts the Docker containers
 7. Creates a default `admin` user with password `sanctuary` (must be changed on first login)
-8. Saves your configuration to `.env.local` for future restarts
+8. Saves your configuration to `.env` for future restarts
 
 **After installation:**
 - **Login credentials:** Username: `admin` / Password: `sanctuary`

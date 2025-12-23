@@ -40,3 +40,7 @@ sanctuary-backup-*.json
 coverage/
 junit.xml
 *.lcov
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/*.old

@@ -1535,6 +1535,21 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
       });
     }
 
+    // Check for duplicate (same host and port)
+    const existingServer = await prisma.electrumServer.findFirst({
+      where: {
+        host: host.toLowerCase(),
+        port: parseInt(port.toString(), 10),
+      },
+    });
+
+    if (existingServer) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: `A server with host ${host} and port ${port} already exists (${existingServer.label})`,
+      });
+    }
+
     // Get or create default node config
     let nodeConfig = await prisma.nodeConfig.findFirst({
       where: { isDefault: true },
@@ -1605,6 +1620,24 @@ router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Requ
       return res.status(404).json({
         error: 'Not Found',
         message: 'Electrum server not found',
+      });
+    }
+
+    // Check for duplicate (same host and port, excluding this server)
+    const newHost = host ?? server.host;
+    const newPort = port ? parseInt(port.toString(), 10) : server.port;
+    const existingServer = await prisma.electrumServer.findFirst({
+      where: {
+        host: newHost.toLowerCase(),
+        port: newPort,
+        id: { not: id },
+      },
+    });
+
+    if (existingServer) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: `A server with host ${newHost} and port ${newPort} already exists (${existingServer.label})`,
       });
     }
 

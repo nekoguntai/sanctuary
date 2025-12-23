@@ -55,16 +55,24 @@ export class SanctauryWebSocketServer {
   private subscriptions: Map<string, Set<AuthenticatedWebSocket>> = new Map();
   private connectionsPerUser: Map<string, Set<AuthenticatedWebSocket>> = new Map();
 
-  constructor(server: Server) {
+  constructor() {
     this.wss = new WebSocketServer({
-      server,
-      path: '/ws',
+      noServer: true,
     });
 
     this.wss.on('connection', this.handleConnection.bind(this));
     this.startHeartbeat();
 
-    log.debug('WebSocket server initialized on /ws');
+    log.debug('WebSocket server initialized');
+  }
+
+  /**
+   * Handle HTTP upgrade request
+   */
+  public handleUpgrade(request: IncomingMessage, socket: any, head: Buffer) {
+    this.wss.handleUpgrade(request, socket, head, (ws) => {
+      this.wss.emit('connection', ws, request);
+    });
   }
 
   /**
@@ -536,11 +544,11 @@ export class SanctauryWebSocketServer {
 // Export singleton instance (will be initialized in main server)
 let wsServer: SanctauryWebSocketServer | null = null;
 
-export const initializeWebSocketServer = (httpServer: Server): SanctauryWebSocketServer => {
+export const initializeWebSocketServer = (): SanctauryWebSocketServer => {
   if (wsServer) {
     throw new Error('WebSocket server already initialized');
   }
-  wsServer = new SanctauryWebSocketServer(httpServer);
+  wsServer = new SanctauryWebSocketServer();
   return wsServer;
 };
 
@@ -585,15 +593,23 @@ export class GatewayWebSocketServer {
   private wss: WebSocketServer;
   private gateway: GatewayWebSocket | null = null;
 
-  constructor(server: Server) {
+  constructor() {
     this.wss = new WebSocketServer({
-      server,
-      path: '/gateway',
+      noServer: true,
     });
 
     this.wss.on('connection', this.handleConnection.bind(this));
 
-    log.debug('Gateway WebSocket server initialized on /gateway');
+    log.debug('Gateway WebSocket server initialized');
+  }
+
+  /**
+   * Handle HTTP upgrade request
+   */
+  public handleUpgrade(request: IncomingMessage, socket: any, head: Buffer) {
+    this.wss.handleUpgrade(request, socket, head, (ws) => {
+      this.wss.emit('connection', ws, request);
+    });
   }
 
   /**
@@ -771,11 +787,11 @@ export class GatewayWebSocketServer {
 // Gateway WebSocket server singleton
 let gatewayWsServer: GatewayWebSocketServer | null = null;
 
-export const initializeGatewayWebSocketServer = (httpServer: Server): GatewayWebSocketServer => {
+export const initializeGatewayWebSocketServer = (): GatewayWebSocketServer => {
   if (gatewayWsServer) {
     throw new Error('Gateway WebSocket server already initialized');
   }
-  gatewayWsServer = new GatewayWebSocketServer(httpServer);
+  gatewayWsServer = new GatewayWebSocketServer();
   return gatewayWsServer;
 };
 

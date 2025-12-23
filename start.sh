@@ -5,11 +5,12 @@
 # Use this script to start Sanctuary after initial installation.
 #
 # Usage:
-#   ./start.sh              # Start with defaults
-#   ./start.sh --with-ai    # Start with bundled AI (Ollama)
-#   ./start.sh --rebuild    # Rebuild containers (after updates)
-#   ./start.sh --stop       # Stop all services
-#   ./start.sh --logs       # View logs
+#   ./start.sh                  # Start with defaults
+#   ./start.sh --with-ai        # Start with bundled AI (Ollama)
+#   ./start.sh --with-monitoring # Start with monitoring (Grafana/Loki)
+#   ./start.sh --rebuild        # Rebuild containers (after updates)
+#   ./start.sh --stop           # Stop all services
+#   ./start.sh --logs           # View logs
 # ============================================
 
 set -e
@@ -21,9 +22,17 @@ cd "$SCRIPT_DIR"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 HTTP_PORT="${HTTP_PORT:-8080}"
 
-# Load saved environment if it exists
-if [ -f ".env.local" ]; then
+# Load environment from .env (Docker Compose's default file)
+# This ensures start.sh and docker compose use the same values
+if [ -f ".env" ]; then
+    set -a  # Export all variables
+    source .env
+    set +a
+elif [ -f ".env.local" ]; then
+    # Fallback to .env.local for backwards compatibility
+    set -a  # Export all variables
     source .env.local
+    set +a
 fi
 
 # Check for required secrets
@@ -43,12 +52,17 @@ fi
 
 # Export for docker compose
 export JWT_SECRET ENCRYPTION_KEY GATEWAY_SECRET POSTGRES_PASSWORD
-export HTTPS_PORT HTTP_PORT
+export HTTPS_PORT HTTP_PORT ENABLE_MONITORING
 
 case "${1:-}" in
     --stop)
         echo "Stopping Sanctuary..."
-        docker compose --profile ai down
+        # Stop monitoring stack if running
+        if docker ps --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)'; then
+            docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile ai down
+        else
+            docker compose --profile ai down
+        fi
         echo "Sanctuary stopped."
         ;;
     --logs)
@@ -70,10 +84,37 @@ case "${1:-}" in
         echo "  3. Click 'Detect' - it will find the bundled Ollama automatically"
         echo "  4. Pull a model (llama3.2:3b recommended for most systems)"
         ;;
+    --with-monitoring)
+        echo "Starting Sanctuary with monitoring stack (Grafana/Loki/Promtail)..."
+        echo ""
+        echo "Note: First-time setup will download monitoring images (~500MB total)."
+        echo ""
+        docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+        echo ""
+        echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
+        echo ""
+        echo "Monitoring:"
+        echo "  Grafana: http://localhost:${GRAFANA_PORT:-3000}"
+        echo "    Username: admin"
+        echo "    Password: (your GRAFANA_PASSWORD or ENCRYPTION_KEY)"
+        echo ""
+        echo "  Dashboards are pre-configured with Sanctuary logs."
+        ;;
     --rebuild)
         echo "Rebuilding and starting Sanctuary..."
-        # Include ai profile in rebuild if ollama container exists (matches any project name)
-        if docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$'; then
+        # Detect which stacks are running (check containers or env preference)
+        HAS_AI=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$' && echo "yes" || echo "no")
+        HAS_MONITORING=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)' && echo "yes" || echo "no")
+        # Also check env preference from install
+        [ "$ENABLE_MONITORING" = "yes" ] && HAS_MONITORING="yes"
+
+        if [ "$HAS_MONITORING" = "yes" ]; then
+            if [ "$HAS_AI" = "yes" ]; then
+                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile ai up -d --build
+            else
+                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
+            fi
+        elif [ "$HAS_AI" = "yes" ]; then
             docker compose --profile ai up -d --build
         else
             docker compose up -d --build
@@ -85,25 +126,42 @@ case "${1:-}" in
         echo "Usage: ./start.sh [option]"
         echo ""
         echo "Options:"
-        echo "  (none)      Start Sanctuary"
-        echo "  --with-ai   Start with bundled AI (Ollama container)"
-        echo "  --rebuild   Rebuild containers (use after updates)"
-        echo "  --stop      Stop all services"
-        echo "  --logs      View container logs"
-        echo "  --help      Show this help"
+        echo "  (none)            Start Sanctuary"
+        echo "  --with-ai         Start with bundled AI (Ollama container)"
+        echo "  --with-monitoring Start with monitoring (Grafana/Loki/Promtail)"
+        echo "  --rebuild         Rebuild containers (use after updates)"
+        echo "  --stop            Stop all services"
+        echo "  --logs            View container logs"
+        echo "  --help            Show this help"
         echo ""
         echo "Environment variables:"
-        echo "  HTTPS_PORT  HTTPS port (default: 8443)"
-        echo "  HTTP_PORT   HTTP redirect port (default: 8080)"
+        echo "  HTTPS_PORT    HTTPS port (default: 8443)"
+        echo "  HTTP_PORT     HTTP redirect port (default: 8080)"
+        echo "  GRAFANA_PORT  Grafana port (default: 3000)"
         echo ""
         echo "AI Setup:"
         echo "  Run './start.sh --with-ai' to enable bundled AI features."
         echo "  This starts an Ollama container - no external setup needed."
+        echo ""
+        echo "Monitoring:"
+        echo "  Run './start.sh --with-monitoring' to enable monitoring."
+        echo "  Access Grafana at http://localhost:3000 (admin / your ENCRYPTION_KEY)"
         ;;
     *)
         echo "Starting Sanctuary..."
-        # Include ai profile if ollama container exists (matches any project name)
-        if docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$'; then
+        # Detect which stacks were previously running (check containers or env preference)
+        HAS_AI=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$' && echo "yes" || echo "no")
+        HAS_MONITORING=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)' && echo "yes" || echo "no")
+        # Also check env preference from install
+        [ "$ENABLE_MONITORING" = "yes" ] && HAS_MONITORING="yes"
+
+        if [ "$HAS_MONITORING" = "yes" ]; then
+            if [ "$HAS_AI" = "yes" ]; then
+                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile ai up -d
+            else
+                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+            fi
+        elif [ "$HAS_AI" = "yes" ]; then
             docker compose --profile ai up -d
         else
             docker compose up -d

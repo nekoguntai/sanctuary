@@ -6,7 +6,7 @@
 # This test simulates upgrading an existing Sanctuary installation
 # and verifies that:
 # - Existing data is preserved
-# - Secrets are reused from .env.local
+# - Secrets are reused from .env
 # - Database migrations run correctly
 # - Containers restart properly
 #
@@ -145,14 +145,14 @@ test_ensure_existing_installation() {
     if [ -n "$frontend_running" ]; then
         log_info "Found existing running installation"
 
-        # Get existing secrets from .env.local
-        if [ -f "$PROJECT_ROOT/.env.local" ]; then
-            source "$PROJECT_ROOT/.env.local"
+        # Get existing secrets from .env
+        if [ -f "$PROJECT_ROOT/.env" ]; then
+            source "$PROJECT_ROOT/.env"
             ORIGINAL_JWT_SECRET="$JWT_SECRET"
             ORIGINAL_ENCRYPTION_KEY="$ENCRYPTION_KEY"
             ORIGINAL_GATEWAY_SECRET="$GATEWAY_SECRET"
             ORIGINAL_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
-            log_info "Loaded existing secrets from .env.local"
+            log_info "Loaded existing secrets from .env"
         fi
 
         return 0
@@ -167,12 +167,18 @@ test_ensure_existing_installation() {
     ORIGINAL_GATEWAY_SECRET=$(openssl rand -base64 32 | tr -d '=/+' | head -c 48)
     ORIGINAL_POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
 
-    # Save to .env.local
-    cat > "$PROJECT_ROOT/.env.local" << EOF
+    # Save to .env (Docker Compose's default file)
+    cat > "$PROJECT_ROOT/.env" << EOF
+# Sanctuary Environment Configuration
+# This file is auto-loaded by docker compose
+
 JWT_SECRET=$ORIGINAL_JWT_SECRET
 ENCRYPTION_KEY=$ORIGINAL_ENCRYPTION_KEY
 GATEWAY_SECRET=$ORIGINAL_GATEWAY_SECRET
 POSTGRES_PASSWORD=$ORIGINAL_POSTGRES_PASSWORD
+
+HTTP_PORT=${HTTP_PORT:-8080}
+HTTPS_PORT=${HTTPS_PORT:-8443}
 EOF
 
     # Generate SSL certs if needed
@@ -272,9 +278,9 @@ test_create_pre_upgrade_data() {
 test_capture_pre_upgrade_state() {
     log_info "Capturing pre-upgrade state..."
 
-    # Capture .env.local contents
-    if [ -f "$PROJECT_ROOT/.env.local" ]; then
-        source "$PROJECT_ROOT/.env.local"
+    # Capture .env contents
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        source "$PROJECT_ROOT/.env"
         ORIGINAL_JWT_SECRET="$JWT_SECRET"
         ORIGINAL_ENCRYPTION_KEY="$ENCRYPTION_KEY"
         ORIGINAL_GATEWAY_SECRET="$GATEWAY_SECRET"
@@ -284,7 +290,7 @@ test_capture_pre_upgrade_state() {
         log_info "Captured GATEWAY_SECRET: ${ORIGINAL_GATEWAY_SECRET:0:8}..."
         log_info "Captured POSTGRES_PASSWORD: ${ORIGINAL_POSTGRES_PASSWORD:0:8}..."
     else
-        log_error ".env.local not found"
+        log_error ".env not found"
         return 1
     fi
 
@@ -355,8 +361,8 @@ test_restart_containers_after_upgrade() {
 
     cd "$PROJECT_ROOT"
 
-    # Load secrets from .env.local
-    source "$PROJECT_ROOT/.env.local"
+    # Load secrets from .env
+    source "$PROJECT_ROOT/.env"
 
     # Restart with existing secrets (all 4 required)
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
@@ -391,8 +397,8 @@ test_restart_containers_after_upgrade() {
 test_verify_secrets_preserved() {
     log_info "Verifying secrets were preserved..."
 
-    # Reload .env.local
-    source "$PROJECT_ROOT/.env.local"
+    # Reload .env
+    source "$PROJECT_ROOT/.env"
 
     if [ "$JWT_SECRET" != "$ORIGINAL_JWT_SECRET" ]; then
         log_error "JWT_SECRET changed after upgrade"
@@ -539,7 +545,7 @@ test_force_rebuild_upgrade() {
     cd "$PROJECT_ROOT"
 
     # Load secrets
-    source "$PROJECT_ROOT/.env.local"
+    source "$PROJECT_ROOT/.env"
 
     # Force rebuild all containers (all 4 secrets required)
     JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \

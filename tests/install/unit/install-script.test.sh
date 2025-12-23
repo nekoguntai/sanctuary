@@ -231,12 +231,19 @@ check_git() {
     return 0
 }
 
-# Check openssl
+# Check openssl (with output for user feedback)
 check_openssl() {
     if ! command -v openssl &> /dev/null; then
+        echo -e "${YELLOW}Warning: OpenSSL not found.${NC}"
         return 1
     fi
+    echo -e "${GREEN}✓${NC} OpenSSL is available"
     return 0
+}
+
+# Check openssl (silent, for capture patterns)
+has_openssl() {
+    command -v openssl &> /dev/null
 }
 
 # Get latest release (simplified for testing)
@@ -341,6 +348,42 @@ test_check_openssl_command_exists() {
     else
         check_openssl
         assert_exit_code 1 $? "check_openssl should return 1 when openssl is not installed"
+    fi
+}
+
+# ============================================
+# Unit Tests: has_openssl() capture pattern
+# ============================================
+
+test_has_openssl_capture_pattern() {
+    # This tests the actual pattern used in install.sh
+    # The bug was: HAS_OPENSSL=$(check_openssl && echo "yes" || echo "no")
+    # which captured the echo output from check_openssl PLUS "yes"
+
+    # Simulate the correct pattern (using has_openssl which has no output)
+    local result=$(has_openssl && echo "yes" || echo "no")
+
+    # Result should be exactly "yes" or "no", not multi-line
+    if [[ "$result" == "yes" ]] || [[ "$result" == "no" ]]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} has_openssl capture should produce 'yes' or 'no'"
+        echo "  Got: '$result'"
+        echo "  (If multi-line, the pattern is broken)"
+        return 1
+    fi
+}
+
+test_has_openssl_no_output() {
+    # has_openssl should produce NO output (unlike check_openssl which prints status)
+    local output=$(has_openssl 2>&1)
+
+    if [ -z "$output" ]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} has_openssl should produce no output"
+        echo "  Got: '$output'"
+        return 1
     fi
 }
 
@@ -490,13 +533,49 @@ test_install_script_uses_docker_compose() {
     fi
 }
 
-test_install_script_creates_env_local() {
-    if grep -q ".env.local" "$INSTALL_SCRIPT"; then
+test_install_script_creates_env_file() {
+    # install.sh now creates .env (Docker Compose's default) instead of .env.local
+    if grep -q 'cat > "\$INSTALL_DIR/.env"' "$INSTALL_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should create .env.local file"
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should create .env file"
         return 1
     fi
+}
+
+test_install_script_has_silent_openssl_check() {
+    # install.sh must have a silent has_openssl function for capture patterns
+    # Using check_openssl in $(cmd && echo yes) captures the echo output too
+    if grep -q "has_openssl" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have has_openssl function"
+        echo "  This is needed for clean capture patterns like \$(has_openssl && echo yes)"
+        return 1
+    fi
+}
+
+test_install_script_uses_has_openssl_for_capture() {
+    # The HAS_OPENSSL variable must use has_openssl (silent) not check_openssl (verbose)
+    if grep -q 'HAS_OPENSSL=.*has_openssl' "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} HAS_OPENSSL must use has_openssl (silent function)"
+        echo "  Using check_openssl captures echo output and breaks the comparison"
+        return 1
+    fi
+}
+
+test_install_script_no_hardcoded_container_names() {
+    # Container status checks should not hardcode project-specific names like 'sanctuary-frontend'
+    # They should use docker compose ps which respects COMPOSE_PROJECT_NAME
+    if grep -q 'sanctuary-frontend\|sanctuary-backend\|sanctuary-postgres' "$INSTALL_SCRIPT"; then
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh has hardcoded container names"
+        echo "  Use 'docker compose ps --format' with service names instead"
+        grep -n 'sanctuary-frontend\|sanctuary-backend\|sanctuary-postgres' "$INSTALL_SCRIPT"
+        return 1
+    fi
+    return 0
 }
 
 # ============================================
@@ -563,11 +642,51 @@ test_start_script_exports_secrets() {
     fi
 }
 
-test_start_script_sources_env_local() {
-    if grep -q "source.*\.env\.local\|\..*\.env\.local" "$START_SCRIPT"; then
+test_start_script_sources_env_file() {
+    # start.sh should source .env as primary (Docker Compose's default)
+    if grep -q 'source .env' "$START_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should source .env.local"
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should source .env file"
+        return 1
+    fi
+}
+
+test_start_script_has_env_local_fallback() {
+    # start.sh should have fallback to .env.local for backwards compatibility
+    if grep -q '\.env\.local' "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should have .env.local fallback"
+        return 1
+    fi
+}
+
+test_start_script_env_local_has_set_a() {
+    # CRITICAL: .env.local fallback must use set -a to export variables
+    # Without this, docker compose won't receive the secrets
+    # The pattern should be: set -a; source .env.local; set +a (or similar)
+
+    # Check that set -a appears before the .env.local source in the elif block
+    local env_local_block=$(sed -n '/elif.*\.env\.local/,/^fi$/p' "$START_SCRIPT")
+
+    if echo "$env_local_block" | grep -q "set -a"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} .env.local fallback must use 'set -a' to export variables"
+        echo "  Without this, secrets won't be passed to docker compose"
+        return 1
+    fi
+}
+
+test_start_script_env_has_set_a() {
+    # Primary .env source must also use set -a
+    local env_block=$(sed -n '/if.*-f.*\.env/,/elif\|^fi$/p' "$START_SCRIPT" | head -10)
+
+    if echo "$env_block" | grep -q "set -a"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} .env source must use 'set -a' to export variables"
         return 1
     fi
 }
@@ -636,6 +755,8 @@ main() {
 
     echo -e "${YELLOW}Test Suite: check_openssl()${NC}"
     run_test "check_openssl command exists" test_check_openssl_command_exists
+    run_test "has_openssl capture pattern" test_has_openssl_capture_pattern
+    run_test "has_openssl no output" test_has_openssl_no_output
     echo ""
 
     echo -e "${YELLOW}Test Suite: Environment Variables${NC}"
@@ -660,7 +781,10 @@ main() {
     run_test "install script generates GATEWAY_SECRET" test_install_script_generates_gateway_secret
     run_test "install script generates POSTGRES_PASSWORD" test_install_script_generates_postgres_password
     run_test "install script uses docker compose" test_install_script_uses_docker_compose
-    run_test "install script creates env.local" test_install_script_creates_env_local
+    run_test "install script creates .env file" test_install_script_creates_env_file
+    run_test "install script has silent openssl check" test_install_script_has_silent_openssl_check
+    run_test "install script uses has_openssl for capture" test_install_script_uses_has_openssl_for_capture
+    run_test "install script no hardcoded container names" test_install_script_no_hardcoded_container_names
     echo ""
 
     echo -e "${YELLOW}Test Suite: start.sh File Structure${NC}"
@@ -671,7 +795,10 @@ main() {
     run_test "start script checks GATEWAY_SECRET" test_start_script_checks_gateway_secret
     run_test "start script checks POSTGRES_PASSWORD" test_start_script_checks_postgres_password
     run_test "start script exports secrets" test_start_script_exports_secrets
-    run_test "start script sources env.local" test_start_script_sources_env_local
+    run_test "start script sources .env file" test_start_script_sources_env_file
+    run_test "start script has .env.local fallback" test_start_script_has_env_local_fallback
+    run_test "start script .env has set -a" test_start_script_env_has_set_a
+    run_test "start script .env.local has set -a" test_start_script_env_local_has_set_a
     echo ""
 
     echo -e "${YELLOW}Test Suite: SSL Certificate Generation${NC}"

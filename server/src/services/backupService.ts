@@ -396,6 +396,10 @@ export class BackupService {
       migratedBackup = this.migrateBackup(backup, currentSchemaVersion);
     }
 
+    // Get list of tables that actually exist in the database
+    const existingTables = await this.getExistingTables();
+    const existingTableSet = new Set(existingTables);
+
     try {
       // Use Prisma transaction for atomicity
       await prisma.$transaction(async (tx) => {
@@ -406,6 +410,13 @@ export class BackupService {
 
         log.debug('[BACKUP] Deleting existing data in reverse order');
         for (const table of [...allTables].reverse()) {
+          // Skip tables that don't exist in the current database
+          const snakeCase = this.camelToSnakeCase(table);
+          if (!existingTableSet.has(snakeCase)) {
+            log.debug(`[BACKUP] Skipping delete from ${table} (table does not exist)`);
+            continue;
+          }
+
           try {
             // @ts-ignore - Dynamic table access
             await tx[table].deleteMany({});
@@ -420,6 +431,14 @@ export class BackupService {
         for (const table of allTables) {
           const records = migratedBackup.data[table];
           if (!records || !Array.isArray(records) || records.length === 0) {
+            continue;
+          }
+
+          // Skip tables that don't exist in the current database
+          const snakeCase = this.camelToSnakeCase(table);
+          if (!existingTableSet.has(snakeCase)) {
+            log.warn(`[BACKUP] Skipping restore of ${table} (${records.length} records) - table does not exist`);
+            warnings.push(`Table ${table} was skipped during restore (not in current database schema)`);
             continue;
           }
 
@@ -495,24 +514,43 @@ export class BackupService {
    * Serialize a record for JSON export (converts BigInt to string)
    */
   private serializeRecord(record: any): any {
+    // Handle arrays - serialize each element but preserve array structure
+    if (Array.isArray(record)) {
+      return record.map((item) => this.serializeValue(item));
+    }
+
     const serialized: any = {};
 
     for (const key of Object.keys(record)) {
-      const value = record[key];
-      if (typeof value === 'bigint') {
-        // Store BigInt as string with special marker for restore
-        serialized[key] = `__bigint__${value.toString()}`;
-      } else if (value instanceof Date) {
-        serialized[key] = value.toISOString();
-      } else if (value !== null && typeof value === 'object') {
-        // Recursively handle nested objects
-        serialized[key] = this.serializeRecord(value);
-      } else {
-        serialized[key] = value;
-      }
+      serialized[key] = this.serializeValue(record[key]);
     }
 
     return serialized;
+  }
+
+  /**
+   * Serialize a single value for JSON export
+   */
+  private serializeValue(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (typeof value === 'bigint') {
+      // Store BigInt as string with special marker for restore
+      return `__bigint__${value.toString()}`;
+    }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+    if (Array.isArray(value)) {
+      // Preserve arrays, serialize each element
+      return value.map((item) => this.serializeValue(item));
+    }
+    if (typeof value === 'object') {
+      // Recursively handle nested objects
+      return this.serializeRecord(value);
+    }
+    return value;
   }
 
   /**
@@ -523,20 +561,57 @@ export class BackupService {
     const processed = { ...record };
 
     for (const key of Object.keys(processed)) {
-      const value = processed[key];
-      if (typeof value === 'string') {
-        // Check for BigInt marker
-        if (value.startsWith('__bigint__')) {
-          processed[key] = BigInt(value.replace('__bigint__', ''));
-        }
-        // Check for ISO date string
-        else if (this.isISODateString(value)) {
-          processed[key] = new Date(value);
-        }
-      }
+      processed[key] = this.processValue(processed[key]);
     }
 
     return processed;
+  }
+
+  /**
+   * Process a single value during restore
+   */
+  private processValue(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      // Check for BigInt marker
+      if (value.startsWith('__bigint__')) {
+        return BigInt(value.replace('__bigint__', ''));
+      }
+      // Check for ISO date string
+      if (this.isISODateString(value)) {
+        return new Date(value);
+      }
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      // Process each array element
+      return value.map((item) => this.processValue(item));
+    }
+
+    if (typeof value === 'object') {
+      // Check if this is a legacy array serialized as object with numeric keys
+      // e.g., {0: "usb", 1: "bluetooth"} should become ["usb", "bluetooth"]
+      const keys = Object.keys(value);
+      const isNumericObject = keys.length > 0 && keys.every((k) => /^\d+$/.test(k));
+      if (isNumericObject) {
+        // Convert back to array, sorted by numeric key
+        const sortedKeys = keys.map(Number).sort((a, b) => a - b);
+        return sortedKeys.map((k) => this.processValue(value[k]));
+      }
+
+      // Regular object - process recursively
+      const processed: any = {};
+      for (const k of keys) {
+        processed[k] = this.processValue(value[k]);
+      }
+      return processed;
+    }
+
+    return value;
   }
 
   /**
@@ -546,6 +621,60 @@ export class BackupService {
     // Match ISO 8601 date format
     const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
     return isoDateRegex.test(value);
+  }
+
+  /**
+   * Get list of tables that exist in the database
+   */
+  private async getExistingTables(): Promise<string[]> {
+    const result = await prisma.$queryRaw<Array<{ tablename: string }>>`
+      SELECT tablename FROM pg_tables
+      WHERE schemaname = 'public'
+      AND tablename NOT LIKE '_prisma%'
+    `;
+    return result.map((r) => r.tablename);
+  }
+
+  /**
+   * Convert Prisma model name (camelCase) to PostgreSQL table name (snake_case, plural)
+   * Prisma uses lowercase plural snake_case for table names by default
+   */
+  private camelToSnakeCase(modelName: string): string {
+    // Special cases mapping
+    const specialCases: Record<string, string> = {
+      'uTXO': 'utxos',
+      'hardwareDeviceModel': 'hardware_device_models',
+      'systemSetting': 'system_settings',
+      'nodeConfig': 'node_configs',
+      'groupMember': 'group_members',
+      'pushDevice': 'push_devices',
+      'walletUser': 'wallet_users',
+      'walletDevice': 'wallet_devices',
+      'draftTransaction': 'draft_transactions',
+      'transactionLabel': 'transaction_labels',
+      'addressLabel': 'address_labels',
+      'auditLog': 'audit_logs',
+      'priceData': 'price_data',
+      'feeEstimate': 'fee_estimates',
+    };
+
+    if (specialCases[modelName]) {
+      return specialCases[modelName];
+    }
+
+    // Default: convert to snake_case and pluralize
+    const snakeCase = modelName
+      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      .toLowerCase();
+
+    // Simple pluralization
+    if (snakeCase.endsWith('s')) {
+      return snakeCase + 'es'; // address -> addresses
+    }
+    if (snakeCase.endsWith('y')) {
+      return snakeCase.slice(0, -1) + 'ies'; // category -> categories
+    }
+    return snakeCase + 's'; // user -> users, wallet -> wallets
   }
 
   /**

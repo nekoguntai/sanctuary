@@ -600,15 +600,16 @@ export const WalletDetail: React.FC = () => {
     onSync: (data) => {
       log.debug('Sync status update', { status: data?.status });
 
-      // Update wallet sync status
-      if (wallet) {
-        setWallet({
-          ...wallet,
+      // Update wallet sync status (use functional form to avoid stale closure)
+      setWallet(prevWallet => {
+        if (!prevWallet) return prevWallet;
+        return {
+          ...prevWallet,
           syncInProgress: data.inProgress,
-          lastSyncStatus: data.status || wallet.lastSyncStatus,
-          lastSyncedAt: data.lastSyncedAt ? new Date(data.lastSyncedAt).toISOString() : wallet.lastSyncedAt,
-        });
-      }
+          lastSyncStatus: data.status || prevWallet.lastSyncStatus,
+          lastSyncedAt: data.lastSyncedAt ? new Date(data.lastSyncedAt).toISOString() : prevWallet.lastSyncedAt,
+        };
+      });
 
       // Update retry info
       if (data.status === 'retrying' && data.retryCount !== undefined && data.maxRetries !== undefined) {
@@ -620,6 +621,11 @@ export const WalletDetail: React.FC = () => {
       } else if (data.status === 'success' || data.status === 'failed') {
         // Clear retry info on success or final failure
         setSyncRetryInfo(null);
+      }
+
+      // If sync completed, clear local syncing state (don't wait for HTTP response)
+      if (!data.inProgress) {
+        setSyncing(false);
       }
 
       // If sync completed successfully, refresh data

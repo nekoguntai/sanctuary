@@ -79,7 +79,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
-        run: npm run test:unit -- --ci --coverage
+        run: npm run test:unit -- --ci --coverage --forceExit
 
       - name: Run integration tests
         env:

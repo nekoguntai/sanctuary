@@ -693,6 +693,10 @@ export const WalletDetail: React.FC = () => {
 
     setWallet(formattedWallet);
 
+    // Clear loading state immediately - wallet is ready to display
+    // Remaining data loads in background with individual loading states
+    setLoading(false);
+
     // Fetch remaining data in parallel, with individual error handling
     // These can fail gracefully without blocking the wallet view
     const fetchPromises = [];
@@ -847,8 +851,6 @@ export const WalletDetail: React.FC = () => {
       logError(log, err, 'Failed to fetch wallet share info');
       // Non-critical - user can still view wallet without share info
     }
-
-    setLoading(false);
   };
 
   const loadMoreTransactions = async () => {

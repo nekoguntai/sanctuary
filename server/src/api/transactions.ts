@@ -16,20 +16,12 @@ import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
-import { getBlockHeight, recalculateWalletBalances } from '../services/bitcoin/blockchain';
+import { recalculateWalletBalances } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
 
 const log = createLogger('TRANSACTIONS');
-
-/**
- * Calculate confirmations dynamically from block height
- */
-function calculateConfirmations(txBlockHeight: number | null, currentBlockHeight: number): number {
-  if (!txBlockHeight || txBlockHeight <= 0) return 0;
-  return Math.max(0, currentBlockHeight - txBlockHeight + 1);
-}
 
 const router = Router();
 
@@ -48,9 +40,8 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       req.query.offset as string
     );
 
-    // Get current block height for confirmation calculation
-    const currentBlockHeight = await getBlockHeight();
-
+    // Use stored confirmations from database - no network call needed
+    // Confirmations are updated during background wallet sync
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
       include: {
@@ -71,7 +62,7 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       skip: offset,
     });
 
-    // Convert BigInt amounts to numbers and calculate confirmations dynamically
+    // Convert BigInt amounts to numbers
     // The amounts in the database are already correctly signed:
     // - sent: negative (amount + fee already deducted during sync)
     // - consolidation: negative fee only (only fee lost)
@@ -95,7 +86,7 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
         fee: bigIntToNumber(tx.fee),
         balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
-        confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
+        confirmations: tx.confirmations, // Use stored value, not recalculated
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined, // Remove the raw join data
       };
@@ -1431,10 +1422,8 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
     const walletIds = accessibleWallets.map(w => w.id);
     const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
 
-    // Get current block height for confirmation calculation
-    const currentBlockHeight = await getBlockHeight();
-
-    // Fetch recent transactions from all accessible wallets in a single query
+    // Use stored confirmations from database - no network call needed
+    // Confirmations are updated during background wallet sync
     const transactions = await prisma.transaction.findMany({
       where: {
         walletId: { in: walletIds },
@@ -1467,7 +1456,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
         fee: bigIntToNumber(tx.fee),
         balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
-        confirmations: calculateConfirmations(blockHeight, currentBlockHeight),
+        confirmations: tx.confirmations, // Use stored value, not recalculated
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined,
         walletName: walletNameMap.get(tx.walletId),

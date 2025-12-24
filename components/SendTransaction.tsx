@@ -25,6 +25,8 @@ import { createLogger } from '../utils/logger';
 import { calculateFee as calculateTxFee } from '../utils/feeCalculation';
 import { parseBip21Uri } from '../utils/bip21Parser';
 import { useOutputManagement, OutputEntry } from '../hooks/useOutputManagement';
+import { AdvancedOptions } from './send/AdvancedOptions';
+import { FeeSelector } from './send/FeeSelector';
 
 const log = createLogger('SendTx');
 
@@ -1676,133 +1678,30 @@ export const SendTransaction: React.FC = () => {
             </div>
 
             {/* Advanced Options */}
-            <div className="border-t border-sanctuary-200 dark:border-sanctuary-800 pt-4">
-              <button
-                type="button"
-                onClick={() => !isResumingDraft && setShowAdvanced(!showAdvanced)}
-                disabled={isResumingDraft}
-                className={`flex items-center text-sm font-medium text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-              >
-                <Sliders className="w-4 h-4 mr-2" />
-                Advanced Options
-                <ChevronDown className={`w-4 h-4 ml-1 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showAdvanced && (
-                <div className="mt-4 space-y-3 pl-6">
-                  <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      checked={enableRBF}
-                      onChange={(e) => !isResumingDraft && setEnableRBF(e.target.checked)}
-                      disabled={isResumingDraft}
-                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Enable RBF</span>
-                      <p className="text-xs text-sanctuary-500">Replace-by-Fee allows you to bump the fee later if the transaction is stuck</p>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      checked={subtractFeesFromAmount}
-                      onChange={(e) => !isResumingDraft && setSubtractFeesFromAmount(e.target.checked)}
-                      disabled={isResumingDraft}
-                      className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Subtract fees from amount</span>
-                      <p className="text-xs text-sanctuary-500">Deduct network fees from the amount sent instead of adding to total</p>
-                    </div>
-                  </label>
-
-                  <div className={`space-y-2 ${isResumingDraft ? 'opacity-60' : ''}`}>
-                    <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                      <input
-                        type="checkbox"
-                        checked={enableDecoyOutputs}
-                        onChange={(e) => !isResumingDraft && setEnableDecoyOutputs(e.target.checked)}
-                        disabled={isResumingDraft}
-                        className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Stonewall-like Decoy Outputs</span>
-                        <p className="text-xs text-sanctuary-500">Split change into multiple outputs to confuse chain analysis</p>
-                      </div>
-                    </label>
-                    {enableDecoyOutputs && (
-                      <div className="ml-7 flex items-center gap-2">
-                        <span className="text-xs text-sanctuary-500">Number of outputs:</span>
-                        <select
-                          value={decoyCount}
-                          onChange={(e) => setDecoyCount(Number(e.target.value))}
-                          disabled={isResumingDraft}
-                          className="text-sm px-2 py-1 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 surface-secondary text-sanctuary-900 dark:text-sanctuary-100"
-                        >
-                          <option value={2}>2 outputs</option>
-                          <option value={3}>3 outputs</option>
-                          <option value={4}>4 outputs</option>
-                        </select>
-                        <span className="text-xs text-amber-600 dark:text-amber-400">+~{(decoyCount - 1) * 34} vBytes</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <AdvancedOptions
+              showAdvanced={showAdvanced}
+              setShowAdvanced={setShowAdvanced}
+              enableRBF={enableRBF}
+              setEnableRBF={setEnableRBF}
+              subtractFeesFromAmount={subtractFeesFromAmount}
+              setSubtractFeesFromAmount={setSubtractFeesFromAmount}
+              enableDecoyOutputs={enableDecoyOutputs}
+              setEnableDecoyOutputs={setEnableDecoyOutputs}
+              decoyCount={decoyCount}
+              setDecoyCount={setDecoyCount}
+              disabled={isResumingDraft}
+            />
         </div>
 
         {/* Fee Selection */}
-        <div className={`space-y-4 ${isResumingDraft ? 'opacity-60' : ''}`}>
-             <div>
-                <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Network Fee</h3>
-                <p className="text-sm text-sanctuary-500 mb-4">
-                  {isResumingDraft ? 'Fee rate is locked for draft transactions.' : 'Click a block below to target its confirmation speed, or select a preset.'}
-                </p>
-                <div className={`surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-2 mb-4 overflow-hidden ${isResumingDraft ? 'pointer-events-none' : ''}`}>
-                    <BlockVisualizer
-                      blocks={mempoolBlocks}
-                      queuedBlocksSummary={queuedBlocksSummary}
-                      onBlockClick={isResumingDraft ? undefined : (rate) => setFeeRate(rate)}
-                      compact={true}
-                    />
-                </div>
-             </div>
-
-             <div className="surface-elevated p-3 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800">
-                <div className="flex flex-wrap items-center gap-2">
-                    {[
-                        { label: 'High Priority', rate: fees?.fastestFee, time: '~10m' },
-                        { label: 'Standard', rate: fees?.halfHourFee, time: '~30m' },
-                        { label: 'Economy', rate: fees?.hourFee, time: '~1hr' },
-                    ].map((opt) => (
-                        <button
-                           key={opt.label}
-                           onClick={() => !isResumingDraft && setFeeRate(opt.rate || 1)}
-                           className={`px-3 py-2 rounded-lg border transition-all text-left ${feeRate === opt.rate ? 'border-sanctuary-800 dark:border-sanctuary-200 bg-sanctuary-100 dark:bg-sanctuary-800' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400'} ${isResumingDraft ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                        >
-                            <div className="text-xs text-sanctuary-500">{opt.label}</div>
-                            <div className="text-sm font-semibold">{opt.rate} <span className="text-[10px] font-normal text-sanctuary-400">sat/vB</span></div>
-                        </button>
-                    ))}
-                    <div className="flex items-center gap-2 ml-auto">
-                        <label className="text-xs text-sanctuary-500">Custom:</label>
-                        <input
-                           type="number"
-                           min={0.1}
-                           step={0.01}
-                           value={feeRate}
-                           onChange={(e) => !isResumingDraft && setFeeRate(parseFloat(e.target.value) || 0)}
-                           disabled={isResumingDraft}
-                           className={`w-20 px-2 py-1.5 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 bg-transparent focus:ring-2 focus:ring-sanctuary-500 ${isResumingDraft ? 'cursor-not-allowed' : ''}`}
-                        />
-                        <span className="text-xs text-sanctuary-400">sat/vB</span>
-                    </div>
-                </div>
-             </div>
-        </div>
+        <FeeSelector
+          feeRate={feeRate}
+          setFeeRate={setFeeRate}
+          fees={fees}
+          mempoolBlocks={mempoolBlocks}
+          queuedBlocksSummary={queuedBlocksSummary}
+          disabled={isResumingDraft}
+        />
 
         {/* Transaction Flow Preview */}
         {showFlowPreview && (

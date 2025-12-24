@@ -62,7 +62,7 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "is_release=true" >> $GITHUB_OUTPUT
             echo "test_suite=release-critical" >> $GITHUB_OUTPUT
-            echo "run_upgrade=false" >> $GITHUB_OUTPUT
+            echo "run_upgrade=true" >> $GITHUB_OUTPUT
             echo "Triggered by release tag: ${{ github.ref }}"
           elif [[ "${{ github.event.inputs.test_suite }}" != "" ]]; then
             echo "is_release=false" >> $GITHUB_OUTPUT

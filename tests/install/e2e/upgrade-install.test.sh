@@ -603,17 +603,40 @@ test_volume_data_persistence() {
         log_info "Found PostgreSQL data volume"
     fi
 
-    # Verify data still accessible
-    local user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
-        "SELECT COUNT(*) FROM \"User\";" 2>/dev/null | tr -d ' ')
+    # Verify data still accessible with retry mechanism
+    # After force-recreate, postgres may need a moment to fully initialize
+    local max_attempts=10
+    local attempt=1
+    local user_count=""
 
-    if [ -z "$user_count" ] || [ "$user_count" -lt 1 ]; then
-        log_error "No users found in database - data may have been lost"
-        return 1
-    fi
+    while [ $attempt -le $max_attempts ]; do
+        user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
+            "SELECT COUNT(*) FROM \"User\";" 2>&1)
+        local exit_code=$?
 
-    log_success "Volume data persisted correctly (found $user_count users)"
-    return 0
+        # Clean up whitespace
+        user_count=$(echo "$user_count" | tr -d ' \n\r\t')
+
+        log_debug "Attempt $attempt/$max_attempts: exit=$exit_code, user_count='$user_count'"
+
+        # Check if we got a valid number >= 1
+        if [ "$exit_code" = "0" ] && [[ "$user_count" =~ ^[0-9]+$ ]] && [ "$user_count" -ge 1 ]; then
+            log_success "Volume data persisted correctly (found $user_count users)"
+            return 0
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            log_info "Waiting for database to be ready (attempt $attempt/$max_attempts)..."
+            sleep 3
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_error "No users found in database after $max_attempts attempts - data may have been lost"
+    log_error "Last query result: '$user_count'"
+    # Show container status for debugging
+    docker ps --filter "name=postgres" --format "table {{.Names}}\t{{.Status}}"
+    return 1
 }
 
 # ============================================

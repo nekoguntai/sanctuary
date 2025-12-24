@@ -16,12 +16,21 @@ import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
-import { recalculateWalletBalances } from '../services/bitcoin/blockchain';
+import { recalculateWalletBalances, getCachedBlockHeight } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
 
 const log = createLogger('TRANSACTIONS');
+
+/**
+ * Calculate confirmations dynamically from block height using cached current height
+ * This avoids network calls while providing accurate confirmation counts
+ */
+function calculateConfirmations(txBlockHeight: number | null, cachedHeight: number): number {
+  if (!txBlockHeight || txBlockHeight <= 0 || cachedHeight <= 0) return 0;
+  return Math.max(0, cachedHeight - txBlockHeight + 1);
+}
 
 const router = Router();
 
@@ -40,8 +49,9 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       req.query.offset as string
     );
 
-    // Use stored confirmations from database - no network call needed
-    // Confirmations are updated during background wallet sync
+    // Get cached block height for dynamic confirmation calculation (no network call)
+    const currentHeight = getCachedBlockHeight();
+
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
       include: {
@@ -86,7 +96,9 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
         fee: bigIntToNumber(tx.fee),
         balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
-        confirmations: tx.confirmations, // Use stored value, not recalculated
+        // Calculate confirmations dynamically from cached block height
+        // Falls back to stored value if cache not yet populated
+        confirmations: currentHeight > 0 ? calculateConfirmations(blockHeight, currentHeight) : tx.confirmations,
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined, // Remove the raw join data
       };
@@ -1422,8 +1434,9 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
     const walletIds = accessibleWallets.map(w => w.id);
     const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
 
-    // Use stored confirmations from database - no network call needed
-    // Confirmations are updated during background wallet sync
+    // Get cached block height for dynamic confirmation calculation (no network call)
+    const currentHeight = getCachedBlockHeight();
+
     const transactions = await prisma.transaction.findMany({
       where: {
         walletId: { in: walletIds },
@@ -1456,7 +1469,8 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
         fee: bigIntToNumber(tx.fee),
         balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
-        confirmations: tx.confirmations, // Use stored value, not recalculated
+        // Calculate confirmations dynamically from cached block height
+        confirmations: currentHeight > 0 ? calculateConfirmations(blockHeight, currentHeight) : tx.confirmations,
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined,
         walletName: walletNameMap.get(tx.walletId),

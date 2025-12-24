@@ -15,6 +15,30 @@ import * as addressDerivation from './addressDerivation';
 
 const log = createLogger('BLOCKCHAIN');
 
+// Cached block height for fast confirmation calculations
+// Updated whenever getBlockHeight() is called or via setCachedBlockHeight()
+let cachedBlockHeight = 0;
+let cachedBlockHeightTime = 0;
+
+/**
+ * Get the cached block height (for fast confirmation calculations)
+ * Returns 0 if not yet cached
+ */
+export function getCachedBlockHeight(): number {
+  return cachedBlockHeight;
+}
+
+/**
+ * Set the cached block height (called from sync service when block headers are received)
+ */
+export function setCachedBlockHeight(height: number): void {
+  if (height > cachedBlockHeight) {
+    cachedBlockHeight = height;
+    cachedBlockHeightTime = Date.now();
+    log.debug(`[BLOCKCHAIN] Cached block height updated to ${height}`);
+  }
+}
+
 /**
  * Recalculate balanceAfter for all transactions in a wallet
  * Called after new transactions are inserted to ensure running balances are accurate
@@ -1246,9 +1270,12 @@ export async function syncWallet(walletId: string): Promise<{
  */
 export async function getBlockHeight(): Promise<number> {
   const client = await getNodeClient();
+  const height = await client.getBlockHeight();
 
+  // Update the cache
+  setCachedBlockHeight(height);
 
-  return client.getBlockHeight();
+  return height;
 }
 
 /**

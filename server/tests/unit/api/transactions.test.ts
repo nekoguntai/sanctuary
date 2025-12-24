@@ -27,6 +27,7 @@ jest.mock('../../../src/models/prisma', () => ({
 // Mock blockchain service
 jest.mock('../../../src/services/bitcoin/blockchain', () => ({
   getBlockHeight: jest.fn().mockResolvedValue(850000),
+  getCachedBlockHeight: jest.fn().mockReturnValue(850000),
   broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
 }));
 

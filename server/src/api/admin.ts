@@ -1604,6 +1604,47 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
 });
 
 /**
+ * PUT /api/v1/admin/electrum-servers/reorder
+ * Reorder Electrum servers (update priorities)
+ * NOTE: This route MUST be defined before /electrum-servers/:id to avoid ":id = 'reorder'" matching
+ */
+router.put('/electrum-servers/reorder', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { serverIds } = req.body;
+
+    if (!Array.isArray(serverIds)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'serverIds must be an array',
+      });
+    }
+
+    // Update priorities based on array order
+    await Promise.all(
+      serverIds.map((id: string, index: number) =>
+        prisma.electrumServer.update({
+          where: { id },
+          data: { priority: index },
+        })
+      )
+    );
+
+    log.info('[ADMIN] Electrum servers reordered', { count: serverIds.length });
+
+    // Reload pool to pick up new order (more graceful than full reset)
+    await reloadElectrumServers();
+
+    res.json({ success: true, message: 'Servers reordered' });
+  } catch (error) {
+    log.error('[ADMIN] Reorder electrum servers error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to reorder Electrum servers',
+    });
+  }
+});
+
+/**
  * PUT /api/v1/admin/electrum-servers/:id
  * Update an Electrum server
  */
@@ -1763,46 +1804,6 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test Electrum server',
-    });
-  }
-});
-
-/**
- * PUT /api/v1/admin/electrum-servers/reorder
- * Reorder Electrum servers (update priorities)
- */
-router.put('/electrum-servers/reorder', authenticate, requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const { serverIds } = req.body;
-
-    if (!Array.isArray(serverIds)) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'serverIds must be an array',
-      });
-    }
-
-    // Update priorities based on array order
-    await Promise.all(
-      serverIds.map((id: string, index: number) =>
-        prisma.electrumServer.update({
-          where: { id },
-          data: { priority: index },
-        })
-      )
-    );
-
-    log.info('[ADMIN] Electrum servers reordered', { count: serverIds.length });
-
-    // Reload pool to pick up new order (more graceful than full reset)
-    await reloadElectrumServers();
-
-    res.json({ success: true, message: 'Servers reordered' });
-  } catch (error) {
-    log.error('[ADMIN] Reorder electrum servers error', { error: String(error) });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to reorder Electrum servers',
     });
   }
 });

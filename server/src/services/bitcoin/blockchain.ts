@@ -1001,6 +1001,7 @@ export async function syncWallet(walletId: string): Promise<{
   walletLog(walletId, 'debug', 'SYNC', 'Phase 6: Fetching UTXOs...');
   log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses using batch RPC...`);
   const utxoResults: Array<{ address: string; utxos: any[] }> = [];
+  const successfullyFetchedAddresses = new Set<string>(); // Track which addresses were successfully queried
 
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batchAddresses = addresses.slice(i, i + BATCH_SIZE).map(a => a.address);
@@ -1009,6 +1010,7 @@ export async function syncWallet(walletId: string): Promise<{
       // Convert Map to array format
       for (const [addr, utxos] of batchResults) {
         utxoResults.push({ address: addr, utxos });
+        successfullyFetchedAddresses.add(addr);
       }
     } catch (error) {
       log.warn(`[BLOCKCHAIN] Batch UTXO fetch failed, falling back to individual requests`, { error: String(error) });
@@ -1017,9 +1019,10 @@ export async function syncWallet(walletId: string): Promise<{
         try {
           const utxos = await client.getAddressUTXOs(addr);
           utxoResults.push({ address: addr, utxos });
+          successfullyFetchedAddresses.add(addr);
         } catch (e) {
           log.warn(`[BLOCKCHAIN] Failed to get UTXOs for ${addr}`, { error: String(e) });
-          utxoResults.push({ address: addr, utxos: [] });
+          // Don't add to successfullyFetchedAddresses - we don't know the true state
         }
       }
     }
@@ -1039,15 +1042,16 @@ export async function syncWallet(walletId: string): Promise<{
 
   // PHASE 7: UTXO Reconciliation - Make blockchain authoritative
   walletLog(walletId, 'debug', 'SYNC', `Phase 7: Reconciling ${allUtxoKeys.size} UTXOs with database...`);
-  // Get all UTXOs from DB (both spent and unspent)
+  // Get all UTXOs from DB (both spent and unspent) with their addresses
   const existingUtxos = await prisma.uTXO.findMany({
     where: { walletId },
-    select: { id: true, txid: true, vout: true, spent: true, confirmations: true, blockHeight: true },
+    select: { id: true, txid: true, vout: true, spent: true, confirmations: true, blockHeight: true, address: true },
   });
   const existingUtxoMap = new Map(existingUtxos.map(u => [`${u.txid}:${u.vout}`, u]));
   const existingUtxoSet = new Set(existingUtxoMap.keys());
 
   // Reconcile: Mark UTXOs as spent if they no longer exist on blockchain
+  // IMPORTANT: Only mark as spent if we successfully queried the address
   const utxosToMarkSpent: string[] = [];
   const utxosToUpdate: Array<{ id: string; confirmations: number; blockHeight: number | null }> = [];
 
@@ -1055,8 +1059,9 @@ export async function syncWallet(walletId: string): Promise<{
     const blockchainUtxo = utxoDataMap.get(key);
 
     if (!blockchainUtxo) {
-      // UTXO not on blockchain anymore - mark as spent
-      if (!dbUtxo.spent) {
+      // UTXO not found on blockchain - only mark as spent if we successfully queried the address
+      // This prevents incorrectly marking UTXOs as spent when blockchain fetch fails
+      if (!dbUtxo.spent && successfullyFetchedAddresses.has(dbUtxo.address)) {
         utxosToMarkSpent.push(dbUtxo.id);
       }
     } else {

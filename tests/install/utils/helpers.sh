@@ -593,7 +593,7 @@ check_admin_user_exists() {
         local result
         local error
         result=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
-            "SELECT COUNT(*) FROM \"User\" WHERE username = 'admin';" 2>&1)
+            "SELECT COUNT(*) FROM users WHERE username = 'admin';" 2>&1)
         local exit_code=$?
 
         # Clean up whitespace from result
@@ -632,7 +632,7 @@ check_default_password_marker() {
     local service="${1:-postgres}"
 
     local result=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
-        "SELECT COUNT(*) FROM \"SystemSetting\" WHERE key LIKE 'initialPassword_%';" 2>/dev/null | tr -d ' ')
+        "SELECT COUNT(*) FROM system_settings WHERE key LIKE 'initialPassword_%';" 2>/dev/null | tr -d ' ')
 
     if [ "$result" -ge "1" ]; then
         return 0

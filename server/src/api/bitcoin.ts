@@ -24,21 +24,61 @@ const log = createLogger('BITCOIN');
  */
 router.get('/status', async (req: Request, res: Response) => {
   try {
-    const client = getElectrumClient();
-
-    if (!client.isConnected()) {
-      await client.connect();
-    }
-
-    const [version, blockHeight] = await Promise.all([
-      client.getServerVersion(),
-      blockchain.getBlockHeight(),
-    ]);
-
-    // Get the node config to include host info
+    // Get the node config first to determine connection strategy
     const nodeConfig = await prisma.nodeConfig.findFirst({
       where: { isDefault: true },
     });
+
+    let version: { server: string; protocol: string } | null = null;
+    let blockHeight: number | undefined;
+    let poolStats = null;
+    let effectiveMin = nodeConfig?.poolMinConnections;
+    let effectiveMax = nodeConfig?.poolMaxConnections;
+    let poolHandle: any = null;
+
+    // Try to use pool first if enabled and initialized
+    if (nodeConfig?.type === 'electrum' && nodeConfig.poolEnabled) {
+      try {
+        const pool = getElectrumPool();
+        if (pool.isPoolInitialized()) {
+          poolStats = pool.getPoolStats();
+          effectiveMin = pool.getEffectiveMinConnections();
+          effectiveMax = pool.getEffectiveMaxConnections();
+
+          // If pool has healthy connections, use one for status
+          if (poolStats.idleConnections > 0 || poolStats.activeConnections > 0) {
+            poolHandle = await pool.acquire({ purpose: 'status', timeoutMs: 5000 });
+            const [ver, height] = await Promise.all([
+              poolHandle.client.getServerVersion(),
+              poolHandle.client.getBlockHeight(),
+            ]);
+            version = ver;
+            blockHeight = height;
+          }
+        }
+      } catch (poolError) {
+        // Pool failed, will fall back to singleton
+        log.debug('Pool status check failed, falling back to singleton', { error: String(poolError) });
+      } finally {
+        if (poolHandle) {
+          poolHandle.release();
+        }
+      }
+    }
+
+    // Fall back to singleton client if pool didn't provide status
+    if (!version) {
+      const client = getElectrumClient();
+      if (!client.isConnected()) {
+        await client.connect();
+      }
+      const [ver, height] = await Promise.all([
+        client.getServerVersion(),
+        blockchain.getBlockHeight(),
+      ]);
+      version = ver;
+      blockHeight = height;
+    }
 
     // Get confirmation threshold settings
     const [thresholdSetting, deepThresholdSetting] = await Promise.all([
@@ -51,24 +91,6 @@ router.get('/status', async (req: Request, res: Response) => {
     const deepConfirmationThreshold = deepThresholdSetting
       ? JSON.parse(deepThresholdSetting.value)
       : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
-
-    // Get pool stats if Electrum and pool is initialized
-    let poolStats = null;
-    let effectiveMin = nodeConfig?.poolMinConnections;
-    let effectiveMax = nodeConfig?.poolMaxConnections;
-    if (nodeConfig?.type === 'electrum') {
-      try {
-        const pool = getElectrumPool();
-        if (pool.isPoolInitialized()) {
-          poolStats = pool.getPoolStats();
-          // Get effective values (adjusted for server count)
-          effectiveMin = pool.getEffectiveMinConnections();
-          effectiveMax = pool.getEffectiveMaxConnections();
-        }
-      } catch {
-        // Pool not initialized yet
-      }
-    }
 
     res.json({
       connected: true,

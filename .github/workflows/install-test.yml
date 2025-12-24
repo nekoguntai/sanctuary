@@ -54,7 +54,30 @@ jobs:
       is_release: ${{ steps.check.outputs.is_release }}
       test_suite: ${{ steps.check.outputs.test_suite }}
       run_upgrade: ${{ steps.check.outputs.run_upgrade }}
+      should_run: ${{ steps.check.outputs.should_run }}
     steps:
+      - name: Checkout for path filtering
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for relevant changes
+        id: paths
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          # Check if any install-relevant files changed
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          RELEVANT_PATTERNS="install.sh|docker-compose.yml|Dockerfile|server/Dockerfile|server/prisma/|docker/|tests/install/|.github/workflows/install-test.yml"
+          if echo "$CHANGED" | grep -qE "$RELEVANT_PATTERNS"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Relevant files changed:"
+            echo "$CHANGED" | grep -E "$RELEVANT_PATTERNS" || true
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No install-relevant files changed"
+          fi
+
       - name: Check trigger type
         id: check
         run: |
@@ -63,21 +86,38 @@ jobs:
             echo "is_release=true" >> $GITHUB_OUTPUT
             echo "test_suite=release-critical" >> $GITHUB_OUTPUT
             echo "run_upgrade=true" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_OUTPUT
             echo "Triggered by release tag: ${{ github.ref }}"
           elif [[ "${{ github.event.inputs.test_suite }}" != "" ]]; then
+            # Manual workflow_dispatch - always run
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "test_suite=${{ github.event.inputs.test_suite }}" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_OUTPUT
             if [[ "${{ github.event.inputs.test_suite }}" == "all" || "${{ github.event.inputs.test_suite }}" == "upgrade" ]]; then
               echo "run_upgrade=true" >> $GITHUB_OUTPUT
             else
               echo "run_upgrade=false" >> $GITHUB_OUTPUT
             fi
             echo "Triggered manually with suite: ${{ github.event.inputs.test_suite }}"
-          else
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR - always run (paths filter already applied in trigger)
             echo "is_release=false" >> $GITHUB_OUTPUT
             echo "test_suite=all" >> $GITHUB_OUTPUT
             echo "run_upgrade=false" >> $GITHUB_OUTPUT
-            echo "Triggered by push/PR - running standard suite (excluding upgrade)"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "Triggered by PR - running standard suite"
+          else
+            # Branch push - check if relevant files changed
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "test_suite=all" >> $GITHUB_OUTPUT
+            echo "run_upgrade=false" >> $GITHUB_OUTPUT
+            if [[ "${{ steps.paths.outputs.changed }}" == "true" ]]; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+              echo "Triggered by push with install-relevant changes"
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+              echo "Skipping - no install-relevant files changed"
+            fi
           fi
 
   # ============================================
@@ -88,9 +128,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: determine-scope
     if: |
-      needs.determine-scope.outputs.test_suite == 'all' ||
-      needs.determine-scope.outputs.test_suite == 'unit' ||
-      needs.determine-scope.outputs.test_suite == 'release-critical'
+      needs.determine-scope.outputs.should_run == 'true' &&
+      (needs.determine-scope.outputs.test_suite == 'all' ||
+       needs.determine-scope.outputs.test_suite == 'unit' ||
+       needs.determine-scope.outputs.test_suite == 'release-critical')
 
     steps:
       - name: Checkout repository
@@ -110,9 +151,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: determine-scope
     if: |
-      needs.determine-scope.outputs.test_suite == 'all' ||
-      needs.determine-scope.outputs.test_suite == 'fresh-install' ||
-      needs.determine-scope.outputs.test_suite == 'release-critical'
+      needs.determine-scope.outputs.should_run == 'true' &&
+      (needs.determine-scope.outputs.test_suite == 'all' ||
+       needs.determine-scope.outputs.test_suite == 'fresh-install' ||
+       needs.determine-scope.outputs.test_suite == 'release-critical')
     timeout-minutes: 30
 
     steps:
@@ -177,6 +219,7 @@ jobs:
     needs: [determine-scope, fresh-install-test]
     if: |
       always() &&
+      needs.determine-scope.outputs.should_run == 'true' &&
       needs.fresh-install-test.result == 'success' &&
       (needs.determine-scope.outputs.test_suite == 'all' ||
        needs.determine-scope.outputs.test_suite == 'container-health' ||
@@ -242,6 +285,7 @@ jobs:
     needs: [determine-scope, fresh-install-test]
     if: |
       always() &&
+      needs.determine-scope.outputs.should_run == 'true' &&
       needs.fresh-install-test.result == 'success' &&
       (needs.determine-scope.outputs.test_suite == 'all' ||
        needs.determine-scope.outputs.test_suite == 'auth-flow' ||
@@ -308,8 +352,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: determine-scope
     if: |
-      needs.determine-scope.outputs.run_upgrade == 'true' ||
-      needs.determine-scope.outputs.test_suite == 'upgrade'
+      needs.determine-scope.outputs.should_run == 'true' &&
+      (needs.determine-scope.outputs.run_upgrade == 'true' ||
+       needs.determine-scope.outputs.test_suite == 'upgrade')
     timeout-minutes: 45
 
     steps:
@@ -353,9 +398,24 @@ jobs:
         env:
           IS_RELEASE: ${{ needs.determine-scope.outputs.is_release }}
           TEST_SUITE: ${{ needs.determine-scope.outputs.test_suite }}
+          SHOULD_RUN: ${{ needs.determine-scope.outputs.should_run }}
         run: |
           echo "## Install Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if tests were skipped due to no relevant changes
+          if [ "$SHOULD_RUN" != "true" ]; then
+            echo "### Tests Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> No install-relevant files changed. Tests were skipped." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Install tests run when these files change:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`install.sh\`, \`docker-compose.yml\`, \`Dockerfile\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`server/Dockerfile\`, \`server/prisma/**\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`docker/**\`, \`tests/install/**\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`.github/workflows/install-test.yml\`" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
 
           # Show test context
           if [ "$IS_RELEASE" == "true" ]; then

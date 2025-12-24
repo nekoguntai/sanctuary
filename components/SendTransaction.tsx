@@ -22,11 +22,13 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
-import { calculateFee as calculateTxFee } from '../utils/feeCalculation';
 import { parseBip21Uri } from '../utils/bip21Parser';
 import { useOutputManagement, OutputEntry } from '../hooks/useOutputManagement';
+import { useFeeEstimation } from '../hooks/useFeeEstimation';
+import { useHardwareSigning } from '../hooks/useHardwareSigning';
 import { AdvancedOptions } from './send/AdvancedOptions';
 import { FeeSelector } from './send/FeeSelector';
+import { OutputRow } from './send/OutputRow';
 
 const log = createLogger('SendTx');
 
@@ -247,10 +249,23 @@ export const SendTransaction: React.FC = () => {
     }
   }, [updateOutput]);
 
-  // PSBT file handling
-  const [showPsbtOptions, setShowPsbtOptions] = useState(false);
-  const [unsignedPsbt, setUnsignedPsbt] = useState<string | null>(null);
-  const psbtFileInputRef = useRef<HTMLInputElement>(null);
+  // Hardware signing hook
+  const {
+    unsignedPsbt,
+    setUnsignedPsbt,
+    showPsbtOptions,
+    setShowPsbtOptions,
+    psbtFileInputRef,
+    signedDevices,
+    setSignedDevices,
+    signingDeviceId,
+    setSigningDeviceId,
+    expandedDeviceId,
+    setExpandedDeviceId,
+    psbtDeviceId,
+    setPsbtDeviceId,
+    downloadPsbt,
+  } = useHardwareSigning();
 
   // Consolidation mode
   const [isConsolidation, setIsConsolidation] = useState(false);
@@ -259,10 +274,6 @@ export const SendTransaction: React.FC = () => {
 
   // Multisig devices
   const [walletDevices, setWalletDevices] = useState<devicesApi.Device[]>([]);
-  const [signedDevices, setSignedDevices] = useState<Set<string>>(new Set()); // Device IDs that have signed
-  const [signingDeviceId, setSigningDeviceId] = useState<string | null>(null); // Currently signing device
-  const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null); // Device with expanded connection options
-  const [psbtDeviceId, setPsbtDeviceId] = useState<string | null>(null); // Device showing PSBT download/upload options
 
   // Loading and error states
   const [loading, setLoading] = useState(true);
@@ -635,113 +646,22 @@ export const SendTransaction: React.FC = () => {
     return utxos.filter(u => u.spendable !== false && !u.frozen);
   }, [utxos]);
 
-  // Calculate transaction fee given inputs, outputs, and fee rate
-  const calculateFee = useCallback((numInputs: number, numOutputs: number, rate: number) => {
-    return calculateTxFee(numInputs, numOutputs, rate, wallet?.scriptType);
-  }, [wallet?.scriptType]);
-
-  // Calculate total fee for current transaction (for display purposes)
-  const calculateTotalFee = useCallback(() => {
-    // Determine number of inputs
-    let numInputs: number;
-    if (showCoinControl && selectedUTXOs.size > 0) {
-      numInputs = selectedUTXOs.size;
-    } else {
-      // Estimate: use minimum number of UTXOs needed to cover amount + fee
-      // For simplicity, estimate 1-3 inputs based on amount vs balance ratio
-      const amountNeeded = parseInt(amount || '0');
-      if (amountNeeded === 0) {
-        numInputs = 1;
-      } else {
-        // Rough estimate: sort UTXOs by amount desc, count how many needed
-        const sorted = [...spendableUtxos].sort((a, b) => b.amount - a.amount);
-        let running = 0;
-        numInputs = 0;
-        for (const u of sorted) {
-          running += u.amount;
-          numInputs++;
-          if (running >= amountNeeded + calculateFee(numInputs, 2, feeRate)) break;
-        }
-        numInputs = Math.max(1, numInputs);
-      }
-    }
-
-    // Number of outputs: 1 for sendMax (no change), 2 for normal (recipient + change)
-    const numOutputs = isSendMax ? 1 : 2;
-
-    return calculateFee(numInputs, numOutputs, feeRate);
-  }, [showCoinControl, selectedUTXOs.size, amount, spendableUtxos, isSendMax, feeRate, calculateFee]);
-
-  // Calculate maximum sendable amount for a specific output (accounting for other outputs)
-  const calculateMaxForOutput = useMemo(() => {
-    return (outputIndex: number) => {
-      // Determine available balance
-      let availableBalance: number;
-      let numInputs: number;
-
-      if (showCoinControl && selectedUTXOs.size > 0) {
-        availableBalance = selectedTotal;
-        numInputs = selectedUTXOs.size;
-      } else if (showCoinControl) {
-        return 0;
-      } else {
-        availableBalance = spendableUtxos.reduce((sum, u) => sum + u.amount, 0);
-        numInputs = spendableUtxos.length;
-      }
-
-      if (availableBalance <= 0 || numInputs === 0) return 0;
-
-      // Sum of other outputs' amounts (excluding the sendMax output)
-      const otherOutputsTotal = outputs.reduce((sum, o, i) => {
-        if (i === outputIndex || o.sendMax) return sum;
-        return sum + (parseInt(o.amount) || 0);
-      }, 0);
-
-      // Number of outputs (sendMax means no change output)
-      const hasSendMax = outputs.some(o => o.sendMax);
-      const numOutputs = hasSendMax ? outputs.length : outputs.length + 1;
-      const estimatedFee = calculateFee(numInputs, numOutputs, feeRate);
-
-      // Max for this output = available - other outputs - fee
-      return Math.max(0, availableBalance - otherOutputsTotal - estimatedFee);
-    };
-  }, [showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, outputs, feeRate, calculateFee]);
-
-  // Calculate max sendable for display - remaining unallocated balance
-  const maxSendableAmount = useMemo(() => {
-    // If any output has sendMax, all remaining balance is allocated to it, so max sendable is 0
-    if (outputs.some(o => o.sendMax)) {
-      return 0;
-    }
-
-    // No sendMax output - calculate remaining balance after all fixed outputs
-    let availableBalance: number;
-    let numInputs: number;
-
-    if (showCoinControl && selectedUTXOs.size > 0) {
-      availableBalance = selectedTotal;
-      numInputs = selectedUTXOs.size;
-    } else if (showCoinControl) {
-      return 0;
-    } else {
-      availableBalance = spendableUtxos.reduce((sum, u) => sum + u.amount, 0);
-      numInputs = spendableUtxos.length;
-    }
-
-    if (availableBalance <= 0 || numInputs === 0) return 0;
-
-    // Sum all output amounts
-    const totalOutputs = outputs.reduce((sum, o) => sum + (parseInt(o.amount) || 0), 0);
-
-    // Estimate fee (outputs + change)
-    const numOutputs = outputs.length + 1; // +1 for change
-    const estimatedFee = calculateFee(numInputs, numOutputs, feeRate);
-
-    return Math.max(0, availableBalance - totalOutputs - estimatedFee);
-  }, [outputs, showCoinControl, selectedUTXOs.size, selectedTotal, spendableUtxos, feeRate, calculateFee]);
-
-  // Note: For sendMax outputs, the displayed value is calculated dynamically via calculateMaxForOutput(index)
-  // No useEffect needed to update amounts - the input field shows the calculated value directly when sendMax is true
+  // Fee estimation hook
+  const {
+    calculateFee,
+    calculateTotalFee,
+    calculateMaxForOutput,
+    maxSendableAmount,
+  } = useFeeEstimation({
+    scriptType: wallet?.scriptType,
+    spendableUtxos,
+    showCoinControl,
+    selectedUTXOs,
+    selectedTotal,
+    outputs,
+    isSendMax,
+    feeRate,
+  });
 
   // Prepare data for transaction flow preview
   const flowPreviewData = useMemo(() => {
@@ -1478,193 +1398,76 @@ export const SendTransaction: React.FC = () => {
               </div>
 
               {outputs.map((output, index) => (
-                <div key={index} className={`space-y-2 ${outputs.length > 1 ? 'p-3 rounded-lg surface-secondary border border-sanctuary-200 dark:border-sanctuary-700' : ''}`}>
-                  {outputs.length > 1 && (
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-sanctuary-500">Output #{index + 1}</span>
-                      {!isResumingDraft && (
-                        <button
-                          type="button"
-                          onClick={() => removeOutput(index)}
-                          className="text-sanctuary-400 hover:text-rose-500 transition-colors"
-                          title="Remove output"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Address Input */}
-                  {isConsolidation && index === 0 ? (
-                    <div className="relative">
-                      <select
-                        value={output.address}
-                        onChange={(e) => updateOutput(index, 'address', e.target.value)}
-                        disabled={isResumingDraft}
-                        className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      >
-                        {walletAddresses.map((addr, idx) => (
-                          <option key={addr} value={addr}>
-                            #{idx}: {addr.slice(0, 12)}...{addr.slice(-8)}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-sanctuary-400 pointer-events-none" />
-                    </div>
-                  ) : (
-                    <div className="flex space-x-2">
-                      <div className="flex-1 relative">
-                        <input
-                          type="text"
-                          value={output.address}
-                          onChange={(e) => handleAddressInput(index, e.target.value)}
-                          disabled={isResumingDraft}
-                          placeholder="bc1q... or bitcoin:..."
-                          className={`block w-full px-4 py-2.5 rounded-xl border ${
-                            outputsValid[index] === true
-                              ? 'border-green-500 dark:border-green-400'
-                              : outputsValid[index] === false
-                              ? 'border-rose-500 dark:border-rose-400'
-                              : payjoinUrl && index === 0
-                              ? 'border-zen-indigo dark:border-zen-indigo'
-                              : 'border-sanctuary-300 dark:border-sanctuary-700'
-                          } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors text-sm ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        />
-                        {payjoinUrl && index === 0 ? (
-                          <Shield className="absolute right-4 top-3 w-4 h-4 text-zen-indigo" />
-                        ) : outputsValid[index] === true ? (
-                          <Check className="absolute right-4 top-3 w-4 h-4 text-green-500" />
-                        ) : outputsValid[index] === false ? (
-                          <X className="absolute right-4 top-3 w-4 h-4 text-rose-500" />
-                        ) : null}
-                      </div>
-                      {!isResumingDraft && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            if (showScanner && scanningOutputIndex === index) {
-                              setShowScanner(false);
-                              setScanningOutputIndex(null);
-                              stopCamera();
-                            } else {
-                              setScanningOutputIndex(index);
-                              startCamera();
-                            }
-                          }}
-                        >
-                          {showScanner && scanningOutputIndex === index ? <X className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {!isConsolidation && outputsValid[index] === false && (
-                    <p className="text-xs text-rose-500">Invalid Bitcoin address</p>
-                  )}
-                  {payjoinUrl && index === 0 && (
-                    <div className="flex items-center space-x-1.5 mt-1">
-                      <Shield className="w-3 h-3 text-zen-indigo" />
-                      <p className="text-xs text-zen-indigo">
-                        Payjoin enabled - enhanced privacy for this transaction
-                        {payjoinStatus === 'attempting' && ' (attempting...)'}
-                        {payjoinStatus === 'success' && ' ✓'}
-                        {payjoinStatus === 'failed' && ' (fell back to regular send)'}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* QR Scanner for this output */}
-                  {showScanner && scanningOutputIndex === index && (
-                    <div className="relative overflow-hidden rounded-xl bg-black aspect-video flex items-center justify-center">
-                      <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
-                      <canvas ref={canvasRef} className="hidden" />
-                      <div className="z-10 border-2 border-white/50 w-48 h-48 rounded-lg"></div>
-                      <p className="absolute bottom-4 z-10 text-white bg-black/50 px-3 py-1 rounded-full text-xs">Scan Bitcoin QR Code</p>
-                    </div>
-                  )}
-
-                  {/* Amount Input */}
-                  <div className="flex items-center space-x-2">
-                    <div className="flex-1 relative">
-                      <input
-                        type="text"
-                        inputMode={unit === 'btc' ? 'decimal' : 'numeric'}
-                        value={output.sendMax ? satsToDisplay(calculateMaxForOutput(index)) : (output.displayValue ?? satsToDisplay(output.amount))}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Allow empty, digits, and decimal point for BTC mode
-                          const isValidBtc = value === '' || /^[0-9]*\.?[0-9]*$/.test(value);
-                          const isValidSats = value === '' || /^[0-9]*$/.test(value);
-
-                          if ((unit === 'btc' && isValidBtc) || (unit !== 'btc' && isValidSats)) {
-                            setOutputs(prev => {
-                              const newOutputs = [...prev];
-                              newOutputs[index] = {
-                                ...newOutputs[index],
-                                displayValue: value,
-                                amount: displayToSats(value),
-                                sendMax: false,
-                              };
-                              return newOutputs;
-                            });
-                          }
-                        }}
-                        onBlur={() => {
-                          // On blur, clear displayValue to use canonical sats display
-                          setOutputs(prev => {
-                            const newOutputs = [...prev];
-                            newOutputs[index] = { ...newOutputs[index], displayValue: undefined };
-                            return newOutputs;
-                          });
-                        }}
-                        placeholder="0"
-                        readOnly={output.sendMax || isResumingDraft}
-                        disabled={isResumingDraft}
-                        className={`block w-full px-4 py-2.5 pr-20 rounded-xl border text-sm ${
-                          output.sendMax
-                            ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
-                            : 'border-sanctuary-300 dark:border-sanctuary-700'
-                        } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${isResumingDraft ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      />
-                      <div className="absolute right-3 top-2.5 text-sanctuary-400 text-xs flex items-center">
-                        {output.sendMax && !isResumingDraft && (
-                          <button
-                            type="button"
-                            onClick={() => updateOutput(index, 'sendMax', false)}
-                            className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
-                            title="Click to exit MAX mode"
-                          >
-                            MAX
-                          </button>
-                        )}
-                        <span className="pointer-events-none">{unitLabel}</span>
-                      </div>
-                    </div>
-                    {!isResumingDraft && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          toggleSendMax(index);
-                          // Only select all UTXOs if none are currently selected
-                          // If user has already selected specific UTXOs, respect that selection
-                          if (!output.sendMax && selectedUTXOs.size === 0 && spendableUtxos.length > 0) {
-                            const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
-                            setSelectedUTXOs(allSpendable);
-                            setShowCoinControl(true);
-                          }
-                        }}
-                        className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
-                          output.sendMax
-                            ? 'bg-primary-500 text-white border-primary-500 hover:bg-primary-600'
-                            : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
-                        }`}
-                      >
-                        MAX
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <OutputRow
+                  key={index}
+                  output={output}
+                  index={index}
+                  totalOutputs={outputs.length}
+                  isValid={outputsValid[index]}
+                  onAddressChange={(idx, value) => {
+                    if (isConsolidation && idx === 0) {
+                      updateOutput(idx, 'address', value);
+                    } else {
+                      handleAddressInput(idx, value);
+                    }
+                  }}
+                  onAmountChange={(idx, displayValue, _satsValue) => {
+                    const isValidBtc = displayValue === '' || /^[0-9]*\.?[0-9]*$/.test(displayValue);
+                    const isValidSats = displayValue === '' || /^[0-9]*$/.test(displayValue);
+                    if ((unit === 'btc' && isValidBtc) || (unit !== 'btc' && isValidSats)) {
+                      setOutputs(prev => {
+                        const newOutputs = [...prev];
+                        newOutputs[idx] = {
+                          ...newOutputs[idx],
+                          displayValue,
+                          amount: displayToSats(displayValue),
+                          sendMax: false,
+                        };
+                        return newOutputs;
+                      });
+                    }
+                  }}
+                  onAmountBlur={(idx) => {
+                    setOutputs(prev => {
+                      const newOutputs = [...prev];
+                      newOutputs[idx] = { ...newOutputs[idx], displayValue: undefined };
+                      return newOutputs;
+                    });
+                  }}
+                  onRemove={removeOutput}
+                  onToggleSendMax={(idx) => {
+                    toggleSendMax(idx);
+                    if (!outputs[idx].sendMax && selectedUTXOs.size === 0 && spendableUtxos.length > 0) {
+                      const allSpendable = new Set(spendableUtxos.map(u => `${u.txid}:${u.vout}`));
+                      setSelectedUTXOs(allSpendable);
+                      setShowCoinControl(true);
+                    }
+                  }}
+                  onScanQR={(idx) => {
+                    if (showScanner && scanningOutputIndex === idx) {
+                      setShowScanner(false);
+                      setScanningOutputIndex(null);
+                      stopCamera();
+                    } else {
+                      setScanningOutputIndex(idx);
+                      startCamera();
+                    }
+                  }}
+                  isConsolidation={isConsolidation}
+                  walletAddresses={walletAddresses}
+                  disabled={isResumingDraft}
+                  showScanner={showScanner}
+                  scanningOutputIndex={scanningOutputIndex}
+                  payjoinUrl={payjoinUrl}
+                  payjoinStatus={payjoinStatus}
+                  videoRef={videoRef}
+                  canvasRef={canvasRef}
+                  unit={unit}
+                  unitLabel={unitLabel}
+                  displayValue={output.displayValue ?? satsToDisplay(output.amount)}
+                  maxAmount={calculateMaxForOutput(index)}
+                  formatAmount={satsToDisplay}
+                />
               ))}
 
               <div className="flex justify-between text-xs text-sanctuary-500 mt-2">

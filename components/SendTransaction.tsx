@@ -22,6 +22,9 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
+import { calculateFee as calculateTxFee } from '../utils/feeCalculation';
+import { parseBip21Uri } from '../utils/bip21Parser';
+import { useOutputManagement, OutputEntry } from '../hooks/useOutputManagement';
 
 const log = createLogger('SendTx');
 
@@ -171,15 +174,20 @@ export const SendTransaction: React.FC = () => {
   const [mempoolBlocks, setMempoolBlocks] = useState<BlockData[]>([]);
   const [queuedBlocksSummary, setQueuedBlocksSummary] = useState<QueuedBlocksSummary | null>(null);
 
-  // Multi-output support
-  interface OutputEntry {
-    address: string;
-    amount: string;
-    sendMax: boolean;
-    displayValue?: string; // Temporary display value while typing decimals
-  }
-  const [outputs, setOutputs] = useState<OutputEntry[]>([{ address: '', amount: '', sendMax: false }]);
-  const [scanningOutputIndex, setScanningOutputIndex] = useState<number | null>(null);
+  // Multi-output support (using extracted hook)
+  const {
+    outputs,
+    outputsValid,
+    scanningOutputIndex,
+    isSendMax,
+    addOutput,
+    removeOutput,
+    updateOutput,
+    toggleSendMax,
+    setOutputsValid,
+    setScanningOutputIndex,
+    setOutputs,
+  } = useOutputManagement();
 
   const [feeRate, setFeeRate] = useState<number>(0);
   const [selectedUTXOs, setSelectedUTXOs] = useState<Set<string>>(new Set());
@@ -205,73 +213,8 @@ export const SendTransaction: React.FC = () => {
   // Backwards compatibility helpers
   const recipient = outputs[0]?.address || '';
   const amount = outputs[0]?.amount || '';
-  const isSendMax = outputs.some(o => o.sendMax);
   const setRecipient = (value: string) => updateOutput(0, 'address', value);
   const setAmount = (value: string) => updateOutput(0, 'amount', value);
-
-  // Output management functions
-  const addOutput = () => {
-    setOutputs([...outputs, { address: '', amount: '', sendMax: false }]);
-    setOutputsValid([...outputsValid, null]);
-  };
-
-  const removeOutput = (index: number) => {
-    if (outputs.length > 1) {
-      setOutputs(outputs.filter((_, i) => i !== index));
-      setOutputsValid(outputsValid.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateOutput = (index: number, field: keyof OutputEntry, value: string | boolean | undefined) => {
-    const newOutputs = [...outputs];
-    newOutputs[index] = { ...newOutputs[index], [field]: value };
-    // If setting sendMax, clear the amount and unset sendMax on other outputs
-    if (field === 'sendMax' && value === true) {
-      newOutputs.forEach((o, i) => {
-        if (i !== index) o.sendMax = false;
-      });
-      newOutputs[index].amount = '';
-    }
-    setOutputs(newOutputs);
-  };
-
-  const toggleSendMax = (index: number) => {
-    updateOutput(index, 'sendMax', !outputs[index].sendMax);
-  };
-
-  // Parse BIP21 URI and extract address, amount, and payjoin URL
-  const parseBip21Uri = useCallback((uri: string): { address: string; amount?: number; payjoinUrl?: string } | null => {
-    // Check if it looks like a BIP21 URI
-    if (!uri.toLowerCase().startsWith('bitcoin:')) {
-      return null;
-    }
-
-    try {
-      let cleanUri = uri.substring(8); // Remove 'bitcoin:'
-      const [addressPart, paramsPart] = cleanUri.split('?');
-      const result: { address: string; amount?: number; payjoinUrl?: string } = {
-        address: addressPart,
-      };
-
-      if (paramsPart) {
-        const params = new URLSearchParams(paramsPart);
-
-        if (params.has('amount')) {
-          // BIP21 amount is in BTC, convert to satoshis
-          result.amount = Math.round(parseFloat(params.get('amount')!) * 100000000);
-        }
-
-        if (params.has('pj')) {
-          result.payjoinUrl = decodeURIComponent(params.get('pj')!);
-        }
-      }
-
-      return result;
-    } catch (e) {
-      log.warn('Failed to parse BIP21 URI', { uri, error: e });
-      return null;
-    }
-  }, []);
 
   // Handle address input that might be a BIP21 URI
   const handleAddressInput = useCallback((index: number, value: string) => {
@@ -300,7 +243,7 @@ export const SendTransaction: React.FC = () => {
         setPayjoinUrl(null);
       }
     }
-  }, [parseBip21Uri, updateOutput]);
+  }, [updateOutput]);
 
   // PSBT file handling
   const [showPsbtOptions, setShowPsbtOptions] = useState(false);
@@ -323,7 +266,6 @@ export const SendTransaction: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [broadcasting, setBroadcasting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [outputsValid, setOutputsValid] = useState<(boolean | null)[]>([null]);
 
   // Draft transaction state
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
@@ -691,36 +633,10 @@ export const SendTransaction: React.FC = () => {
     return utxos.filter(u => u.spendable !== false && !u.frozen);
   }, [utxos]);
 
-  // Calculate input size based on script type (vbytes per input)
-  const getInputSize = useCallback((scriptType?: string) => {
-    switch (scriptType) {
-      case 'native_segwit': return 68;   // P2WPKH
-      case 'nested_segwit': return 91;   // P2SH-P2WPKH
-      case 'taproot': return 58;         // P2TR (Schnorr)
-      case 'legacy': return 148;         // P2PKH
-      default: return 68;                // Default to native segwit
-    }
-  }, []);
-
-  // Calculate output size based on script type (vbytes per output)
-  const getOutputSize = useCallback((scriptType?: string) => {
-    switch (scriptType) {
-      case 'native_segwit': return 31;   // P2WPKH
-      case 'nested_segwit': return 32;   // P2SH
-      case 'taproot': return 43;         // P2TR
-      case 'legacy': return 34;          // P2PKH
-      default: return 31;                // Default to native segwit
-    }
-  }, []);
-
   // Calculate transaction fee given inputs, outputs, and fee rate
   const calculateFee = useCallback((numInputs: number, numOutputs: number, rate: number) => {
-    const inputSize = getInputSize(wallet?.scriptType);
-    const outputSize = getOutputSize(wallet?.scriptType);
-    const overhead = 11; // Version (4) + locktime (4) + input count (1) + output count (1) + segwit marker/flag (1)
-    const vbytes = (numInputs * inputSize) + (numOutputs * outputSize) + overhead;
-    return Math.ceil(vbytes * rate);
-  }, [wallet?.scriptType, getInputSize, getOutputSize]);
+    return calculateTxFee(numInputs, numOutputs, rate, wallet?.scriptType);
+  }, [wallet?.scriptType]);
 
   // Calculate total fee for current transaction (for display purposes)
   const calculateTotalFee = useCallback(() => {

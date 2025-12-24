@@ -71,6 +71,12 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
       poolMaxConnections: nodeConfig.poolMaxConnections,
       poolLoadBalancing: nodeConfig.poolLoadBalancing || 'round_robin',
       servers: nodeConfig.servers,
+      // Proxy settings
+      proxyEnabled: nodeConfig.proxyEnabled ?? false,
+      proxyHost: nodeConfig.proxyHost,
+      proxyPort: nodeConfig.proxyPort,
+      proxyUsername: nodeConfig.proxyUsername,
+      proxyPassword: nodeConfig.proxyPassword ? '********' : undefined, // Mask password
     });
   } catch (error) {
     log.error('[ADMIN] Get node config error', { error: String(error) });
@@ -87,9 +93,9 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { type, host, port, useSsl, allowSelfSignedCert, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing } = req.body;
+    const { type, host, port, useSsl, allowSelfSignedCert, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing, proxyEnabled, proxyHost, proxyPort, proxyUsername, proxyPassword } = req.body;
     // Log non-sensitive fields only (password excluded)
-    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, allowSelfSignedCert, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing });
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, allowSelfSignedCert, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing, proxyEnabled, proxyHost, proxyPort });
 
     // Validation
     if (!type || !host || !port) {
@@ -140,6 +146,12 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           poolMinConnections: poolMinConnections ?? 1,
           poolMaxConnections: poolMaxConnections ?? 5,
           poolLoadBalancing: loadBalancing,
+          // Proxy settings
+          proxyEnabled: proxyEnabled ?? false,
+          proxyHost: proxyHost || null,
+          proxyPort: proxyPort ? parseInt(proxyPort.toString(), 10) : null,
+          proxyUsername: proxyUsername || null,
+          proxyPassword: proxyPassword ? encrypt(proxyPassword) : null,
           updatedAt: new Date(),
         },
       });
@@ -162,6 +174,12 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           poolMinConnections: poolMinConnections ?? 1,
           poolMaxConnections: poolMaxConnections ?? 5,
           poolLoadBalancing: loadBalancing,
+          // Proxy settings
+          proxyEnabled: proxyEnabled ?? false,
+          proxyHost: proxyHost || null,
+          proxyPort: proxyPort ? parseInt(proxyPort.toString(), 10) : null,
+          proxyUsername: proxyUsername || null,
+          proxyPassword: proxyPassword ? encrypt(proxyPassword) : null,
           isDefault: true,
         },
       });
@@ -260,6 +278,61 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
       success: false,
       error: 'Internal Server Error',
       message: error.message || 'Failed to test node connection',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/proxy/test
+ * Test SOCKS5 proxy connection (admin only)
+ */
+router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { host, port, username, password, targetHost, targetPort } = req.body;
+
+    // Validation
+    if (!host || !port) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Proxy host and port are required',
+      });
+    }
+
+    // Test proxy connection by connecting to a target (default: blockstream electrum)
+    const testTarget = {
+      host: targetHost || 'electrum.blockstream.info',
+      port: targetPort || 50001,
+    };
+
+    const { SocksClient } = await import('socks');
+    const socksOptions = {
+      proxy: {
+        host,
+        port: parseInt(port.toString(), 10),
+        type: 5 as const, // SOCKS5
+        ...(username && password ? { userId: username, password } : {}),
+      },
+      command: 'connect' as const,
+      destination: {
+        host: testTarget.host,
+        port: testTarget.port,
+      },
+      timeout: 10000,
+    };
+
+    const { socket } = await SocksClient.createConnection(socksOptions);
+    socket.destroy(); // Close the test connection
+
+    res.json({
+      success: true,
+      message: `Successfully connected through proxy to ${testTarget.host}:${testTarget.port}`,
+    });
+  } catch (error: any) {
+    log.error('[ADMIN] Proxy test error', { error: String(error) });
+    res.status(500).json({
+      success: false,
+      error: 'Proxy Connection Failed',
+      message: error.message || 'Failed to connect through proxy',
     });
   }
 });
@@ -1804,6 +1877,94 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test Electrum server',
+    });
+  }
+});
+
+// ========================================
+// TOR CONTAINER MANAGEMENT
+// ========================================
+
+import * as docker from '../utils/docker';
+
+/**
+ * GET /api/v1/admin/tor-container/status
+ * Get the status of the bundled Tor container
+ */
+router.get('/tor-container/status', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const proxyAvailable = await docker.isDockerProxyAvailable();
+
+    if (!proxyAvailable) {
+      return res.json({
+        available: false,
+        exists: false,
+        running: false,
+        message: 'Docker management not available',
+      });
+    }
+
+    const status = await docker.getTorStatus();
+
+    res.json({
+      available: true,
+      ...status,
+    });
+  } catch (error) {
+    log.error('[ADMIN] Get Tor container status failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Tor container status',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/tor-container/start
+ * Start the bundled Tor container
+ */
+router.post('/tor-container/start', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await docker.startTor();
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Failed to start',
+        message: result.message,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    log.error('[ADMIN] Start Tor container failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to start Tor container',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/tor-container/stop
+ * Stop the bundled Tor container
+ */
+router.post('/tor-container/stop', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await docker.stopTor();
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Failed to stop',
+        message: result.message,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    log.error('[ADMIN] Stop Tor container failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to stop Tor container',
     });
   }
 });

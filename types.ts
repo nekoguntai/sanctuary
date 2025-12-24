@@ -189,6 +189,12 @@ export interface NodeConfig {
   poolLoadBalancing?: 'round_robin' | 'least_connections' | 'failover_only';
   // Electrum server list (multi-server pool support)
   servers?: ElectrumServer[];
+  // SOCKS5 proxy settings (for Tor support)
+  proxyEnabled?: boolean;
+  proxyHost?: string;
+  proxyPort?: number;
+  proxyUsername?: string;
+  proxyPassword?: string;
 }
 
 // Electrum server configuration

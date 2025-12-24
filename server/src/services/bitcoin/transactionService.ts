@@ -56,6 +56,72 @@ const bip32 = BIP32Factory(ecc);
 bitcoin.initEccLib(ecc);
 
 /**
+ * Generate realistic-looking decoy amounts from a total change amount
+ * Amounts avoid round numbers and vary in magnitude to look like real payments
+ */
+function generateDecoyAmounts(totalChange: number, count: number, dustThreshold: number): number[] {
+  if (count < 2) {
+    return [totalChange];
+  }
+
+  // Reserve dust threshold for each output
+  const minPerOutput = dustThreshold;
+  const usableChange = totalChange - (minPerOutput * count);
+
+  if (usableChange <= 0) {
+    // Not enough change to split into decoys, return single output
+    return [totalChange];
+  }
+
+  // Generate random weights for splitting
+  const weights: number[] = [];
+  let totalWeight = 0;
+
+  for (let i = 0; i < count; i++) {
+    // Use varied weight ranges to create different sized outputs
+    // Some outputs will be larger, some smaller
+    const weight = 0.3 + Math.random() * 0.7; // 0.3 to 1.0
+    weights.push(weight);
+    totalWeight += weight;
+  }
+
+  // Distribute change according to weights
+  const amounts: number[] = [];
+  let remaining = totalChange;
+
+  for (let i = 0; i < count - 1; i++) {
+    // Calculate proportional amount
+    let amount = Math.floor((weights[i] / totalWeight) * usableChange) + minPerOutput;
+
+    // Add small random variation to avoid patterns (+/- up to 3%)
+    const variation = Math.floor(amount * (Math.random() * 0.06 - 0.03));
+    amount += variation;
+
+    // Ensure minimum threshold
+    amount = Math.max(amount, minPerOutput);
+
+    // Don't exceed remaining
+    if (amount >= remaining - minPerOutput) {
+      amount = Math.floor(remaining / 2);
+    }
+
+    amounts.push(amount);
+    remaining -= amount;
+  }
+
+  // Last output gets the remainder
+  amounts.push(remaining);
+
+  // Shuffle the amounts so the largest isn't predictably in a certain position
+  for (let i = amounts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [amounts[i], amounts[j]] = [amounts[j], amounts[i]];
+  }
+
+  return amounts;
+}
+
+/**
  * UTXO Selection Strategy
  */
 export enum UTXOSelectionStrategy {
@@ -177,6 +243,10 @@ export async function createTransaction(
     memo?: string;
     sendMax?: boolean; // Send entire balance (no change output)
     subtractFees?: boolean; // Subtract fees from amount instead of adding
+    decoyOutputs?: {
+      enabled: boolean;
+      count: number; // 2-4 additional outputs
+    };
   } = {}
 ): Promise<{
   psbt: bitcoin.Psbt;
@@ -189,8 +259,9 @@ export async function createTransaction(
   utxos: Array<{ txid: string; vout: number }>;
   inputPaths: string[]; // Derivation paths for hardware wallet signing
   effectiveAmount: number; // The actual amount being sent
+  decoyOutputs?: Array<{ address: string; amount: number }>; // Decoy change outputs
 }> {
-  const { selectedUtxoIds, enableRBF = true, label, memo, sendMax = false, subtractFees = false } = options;
+  const { selectedUtxoIds, enableRBF = true, label, memo, sendMax = false, subtractFees = false, decoyOutputs } = options;
 
   // Get configurable thresholds
   const dustThreshold = await getDustThreshold();
@@ -499,61 +570,153 @@ export async function createTransaction(
     value: effectiveAmount,
   });
 
-  // Add change output if needed (skip for sendMax - no change)
+  // Add change output(s) if needed (skip for sendMax - no change)
   let changeAddress: string | undefined;
+  let decoyOutputsResult: Array<{ address: string; amount: number }> | undefined;
+  let actualFee = selection.estimatedFee;
+  let actualChangeAmount = selection.changeAmount;
 
   if (!sendMax && selection.changeAmount >= dustThreshold) {
-    // Get or create a change address
-    // Note: Address model doesn't distinguish between receive/change in schema
-    // We use derivationPath to identify change addresses (path includes '/1/')
-    const existingChangeAddress = await prisma.address.findFirst({
-      where: {
-        walletId,
-        used: false,
-        derivationPath: {
-          contains: '/1/',  // Change addresses use index 1 in BIP44
-        },
-      },
-      orderBy: { index: 'asc' },
-    });
+    // Determine number of change outputs needed
+    const useDecoys = decoyOutputs?.enabled && decoyOutputs.count >= 2;
+    const numChangeOutputs = useDecoys ? Math.min(Math.max(decoyOutputs.count, 2), 4) : 1;
 
-    if (existingChangeAddress) {
-      changeAddress = existingChangeAddress.address;
-    } else {
-      // For now, use any unused receiving address as fallback
-      // In production, you'd derive a proper change address
-      const receivingAddress = await prisma.address.findFirst({
+    // If using decoys, recalculate fee for extra outputs
+    // Each additional P2WPKH output adds ~34 vBytes
+    if (useDecoys && numChangeOutputs > 1) {
+      const extraOutputs = numChangeOutputs - 1;
+      const extraVbytes = extraOutputs * 34;
+      const extraFee = Math.ceil(extraVbytes * feeRate);
+
+      // Recalculate change after accounting for extra fee
+      actualFee = selection.estimatedFee + extraFee;
+      actualChangeAmount = selection.totalAmount - effectiveAmount - actualFee;
+
+      // If change is now below threshold, fall back to single output
+      if (actualChangeAmount < dustThreshold * numChangeOutputs) {
+        // Not enough change for decoys, use single output
+        actualFee = selection.estimatedFee;
+        actualChangeAmount = selection.changeAmount;
+      }
+    }
+
+    // Check if we still have enough for decoys after fee adjustment
+    const canUseDecoys = useDecoys && actualChangeAmount >= dustThreshold * numChangeOutputs;
+
+    if (canUseDecoys) {
+      // Get multiple unused change addresses
+      const changeAddresses = await prisma.address.findMany({
         where: {
           walletId,
           used: false,
+          derivationPath: {
+            contains: '/1/', // Change addresses use index 1 in BIP44
+          },
+        },
+        orderBy: { index: 'asc' },
+        take: numChangeOutputs,
+      });
+
+      // Fallback to receiving addresses if not enough change addresses
+      if (changeAddresses.length < numChangeOutputs) {
+        const additionalNeeded = numChangeOutputs - changeAddresses.length;
+        const receivingAddresses = await prisma.address.findMany({
+          where: {
+            walletId,
+            used: false,
+            address: { notIn: changeAddresses.map(a => a.address) },
+          },
+          orderBy: { index: 'asc' },
+          take: additionalNeeded,
+        });
+        changeAddresses.push(...receivingAddresses);
+      }
+
+      if (changeAddresses.length < numChangeOutputs) {
+        throw new Error(`Not enough change addresses for ${numChangeOutputs} decoy outputs`);
+      }
+
+      // Generate decoy amounts
+      const amounts = generateDecoyAmounts(actualChangeAmount, numChangeOutputs, dustThreshold);
+
+      // Shuffle addresses too for additional obfuscation
+      const shuffledAddresses = [...changeAddresses];
+      for (let i = shuffledAddresses.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledAddresses[i], shuffledAddresses[j]] = [shuffledAddresses[j], shuffledAddresses[i]];
+      }
+
+      // Add all change outputs
+      decoyOutputsResult = [];
+      for (let i = 0; i < numChangeOutputs; i++) {
+        const addr = shuffledAddresses[i].address;
+        const amt = amounts[i];
+
+        psbt.addOutput({
+          address: addr,
+          value: amt,
+        });
+
+        decoyOutputsResult.push({ address: addr, amount: amt });
+
+        // Set the primary change address to the first one (for backward compatibility)
+        if (i === 0) {
+          changeAddress = addr;
+        }
+      }
+
+      log.info(`Created ${numChangeOutputs} decoy change outputs for wallet ${walletId}`);
+    } else {
+      // Single change output (no decoys or not enough change)
+      const existingChangeAddress = await prisma.address.findFirst({
+        where: {
+          walletId,
+          used: false,
+          derivationPath: {
+            contains: '/1/', // Change addresses use index 1 in BIP44
+          },
         },
         orderBy: { index: 'asc' },
       });
 
-      if (!receivingAddress) {
-        throw new Error('No change address available');
+      if (existingChangeAddress) {
+        changeAddress = existingChangeAddress.address;
+      } else {
+        // Fallback to any unused receiving address
+        const receivingAddress = await prisma.address.findFirst({
+          where: {
+            walletId,
+            used: false,
+          },
+          orderBy: { index: 'asc' },
+        });
+
+        if (!receivingAddress) {
+          throw new Error('No change address available');
+        }
+
+        changeAddress = receivingAddress.address;
       }
 
-      changeAddress = receivingAddress.address;
+      psbt.addOutput({
+        address: changeAddress,
+        value: actualChangeAmount,
+      });
     }
-
-    psbt.addOutput({
-      address: changeAddress,
-      value: selection.changeAmount,
-    });
   }
 
   return {
     psbt,
     psbtBase64: psbt.toBase64(),
-    fee: selection.estimatedFee,
+    fee: actualFee,
     totalInput: selection.totalAmount,
-    totalOutput: effectiveAmount + (sendMax ? 0 : (selection.changeAmount >= dustThreshold ? selection.changeAmount : 0)),
-    changeAmount: sendMax ? 0 : selection.changeAmount,
+    totalOutput: effectiveAmount + (sendMax ? 0 : (actualChangeAmount >= dustThreshold ? actualChangeAmount : 0)),
+    changeAmount: sendMax ? 0 : actualChangeAmount,
     changeAddress,
     utxos: selection.utxos.map((u) => ({ txid: u.txid, vout: u.vout })),
     inputPaths,
     effectiveAmount, // The actual amount being sent (may differ from requested if sendMax or subtractFees)
+    decoyOutputs: decoyOutputsResult, // Decoy change outputs (if enabled)
   };
 }
 

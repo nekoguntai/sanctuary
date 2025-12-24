@@ -129,6 +129,7 @@ import { useUser } from '../contexts/UserContext';
 import jsQR from 'jsqr';
 import { CoinControlPanel } from './CoinControlPanel';
 import type { UIStrategy } from './StrategySelector';
+import { PrivacyWarnings, parseWarnings, type PrivacyWarning } from './PrivacyWarnings';
 
 export const SendTransaction: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -188,11 +189,18 @@ export const SendTransaction: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [enableRBF, setEnableRBF] = useState(true);
   const [subtractFeesFromAmount, setSubtractFeesFromAmount] = useState(false);
+  const [enableDecoyOutputs, setEnableDecoyOutputs] = useState(false);
+  const [decoyCount, setDecoyCount] = useState(2);
 
   // Payjoin state
   const [payjoinUrl, setPayjoinUrl] = useState<string | null>(null);
   const [payjoinAttempted, setPayjoinAttempted] = useState(false);
   const [payjoinStatus, setPayjoinStatus] = useState<'idle' | 'attempting' | 'success' | 'failed'>('idle');
+
+  // Privacy warnings state
+  const [privacyWarnings, setPrivacyWarnings] = useState<PrivacyWarning[]>([]);
+  const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
+  const [loadingPrivacy, setLoadingPrivacy] = useState(false);
 
   // Backwards compatibility helpers
   const recipient = outputs[0]?.address || '';
@@ -993,6 +1001,31 @@ export const SendTransaction: React.FC = () => {
     return () => clearTimeout(timer);
   }, [outputs, isConsolidation, walletAddresses]);
 
+  // Analyze privacy warnings when UTXOs are selected
+  useEffect(() => {
+    if (!id || selectedUTXOs.size === 0) {
+      setPrivacyWarnings([]);
+      return;
+    }
+
+    const analyzePrivacy = async () => {
+      setLoadingPrivacy(true);
+      try {
+        const utxoIds = Array.from(selectedUTXOs);
+        const analysis = await transactionsApi.analyzeSpendPrivacy(id, utxoIds);
+        setPrivacyWarnings(parseWarnings(analysis.warnings));
+      } catch (err) {
+        log.error('Privacy analysis failed', { error: err });
+        // Don't show error to user - privacy warnings are optional
+      } finally {
+        setLoadingPrivacy(false);
+      }
+    };
+
+    const timer = setTimeout(analyzePrivacy, 300); // Debounce
+    return () => clearTimeout(timer);
+  }, [id, selectedUTXOs]);
+
   // Handle transaction broadcast
   const handleBroadcast = async () => {
     if (!wallet || !id) return;
@@ -1063,6 +1096,7 @@ export const SendTransaction: React.FC = () => {
           enableRBF,
           sendMax: false,
           subtractFees: subtractFeesFromAmount,
+          decoyOutputs: enableDecoyOutputs ? { enabled: true, count: decoyCount } : undefined,
         });
       }
 
@@ -1287,6 +1321,7 @@ export const SendTransaction: React.FC = () => {
           enableRBF,
           sendMax: false,
           subtractFees: subtractFeesFromAmount,
+          decoyOutputs: enableDecoyOutputs ? { enabled: true, count: decoyCount } : undefined,
         });
       }
 
@@ -1493,6 +1528,15 @@ export const SendTransaction: React.FC = () => {
               onStrategyChange={setCoinControlStrategy}
               disabled={isResumingDraft}
             />
+
+            {/* Privacy Warnings */}
+            {privacyWarnings.length > 0 && !isResumingDraft && (
+              <PrivacyWarnings
+                warnings={privacyWarnings}
+                dismissedWarnings={dismissedWarnings}
+                onDismiss={(type) => setDismissedWarnings(prev => new Set([...prev, type]))}
+              />
+            )}
 
             {/* Outputs Section */}
             <div className="space-y-4">
@@ -1757,6 +1801,38 @@ export const SendTransaction: React.FC = () => {
                       <p className="text-xs text-sanctuary-500">Deduct network fees from the amount sent instead of adding to total</p>
                     </div>
                   </label>
+
+                  <div className={`space-y-2 ${isResumingDraft ? 'opacity-60' : ''}`}>
+                    <label className={`flex items-center space-x-3 ${isResumingDraft ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        checked={enableDecoyOutputs}
+                        onChange={(e) => !isResumingDraft && setEnableDecoyOutputs(e.target.checked)}
+                        disabled={isResumingDraft}
+                        className="w-4 h-4 rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500 surface-secondary"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Stonewall-like Decoy Outputs</span>
+                        <p className="text-xs text-sanctuary-500">Split change into multiple outputs to confuse chain analysis</p>
+                      </div>
+                    </label>
+                    {enableDecoyOutputs && (
+                      <div className="ml-7 flex items-center gap-2">
+                        <span className="text-xs text-sanctuary-500">Number of outputs:</span>
+                        <select
+                          value={decoyCount}
+                          onChange={(e) => setDecoyCount(Number(e.target.value))}
+                          disabled={isResumingDraft}
+                          className="text-sm px-2 py-1 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 surface-secondary text-sanctuary-900 dark:text-sanctuary-100"
+                        >
+                          <option value={2}>2 outputs</option>
+                          <option value={3}>3 outputs</option>
+                          <option value={4}>4 outputs</option>
+                        </select>
+                        <span className="text-xs text-amber-600 dark:text-amber-400">+~{(decoyCount - 1) * 34} vBytes</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1917,6 +1993,7 @@ export const SendTransaction: React.FC = () => {
                       enableRBF,
                       sendMax: isSendMax,
                       subtractFees: subtractFeesFromAmount,
+                      decoyOutputs: enableDecoyOutputs ? { enabled: true, count: decoyCount } : undefined,
                     });
 
                     // Download the base64 PSBT
@@ -2177,6 +2254,7 @@ export const SendTransaction: React.FC = () => {
                 enableRBF,
                 sendMax: isSendMax,
                 subtractFees: subtractFeesFromAmount,
+                decoyOutputs: enableDecoyOutputs ? { enabled: true, count: decoyCount } : undefined,
               });
 
               // Download the base64 PSBT
@@ -2435,6 +2513,7 @@ export const SendTransaction: React.FC = () => {
                                    enableRBF,
                                    sendMax: outputs[0].sendMax || false,
                                    subtractFees: subtractFeesFromAmount,
+                                   decoyOutputs: enableDecoyOutputs ? { enabled: true, count: decoyCount } : undefined,
                                  });
                                }
                                // Download PSBT

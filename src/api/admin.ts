@@ -465,3 +465,64 @@ export async function testElectrumServer(id: string): Promise<{
 export async function reorderElectrumServers(serverIds: string[]): Promise<ElectrumServer[]> {
   return apiClient.put<ElectrumServer[]>('/admin/electrum-servers/reorder', { serverIds });
 }
+
+/**
+ * Test SOCKS5 proxy connection
+ */
+export async function testProxy(config: {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  targetHost?: string;
+  targetPort?: number;
+}): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return apiClient.post('/admin/proxy/test', config);
+}
+
+// ========================================
+// TOR CONTAINER MANAGEMENT
+// ========================================
+
+/**
+ * Tor container status response
+ */
+export interface TorContainerStatus {
+  available: boolean;  // Docker proxy available
+  exists: boolean;     // Container exists
+  running: boolean;    // Container is running
+  status: string;      // Container state (running, exited, etc.)
+  message?: string;
+}
+
+/**
+ * Container action response
+ */
+export interface ContainerActionResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Get the status of the bundled Tor container
+ */
+export async function getTorContainerStatus(): Promise<TorContainerStatus> {
+  return apiClient.get<TorContainerStatus>('/admin/tor-container/status');
+}
+
+/**
+ * Start the bundled Tor container
+ */
+export async function startTorContainer(): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>('/admin/tor-container/start', {});
+}
+
+/**
+ * Stop the bundled Tor container
+ */
+export async function stopTorContainer(): Promise<ContainerActionResponse> {
+  return apiClient.post<ContainerActionResponse>('/admin/tor-container/stop', {});
+}

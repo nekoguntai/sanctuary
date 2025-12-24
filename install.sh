@@ -272,6 +272,7 @@ main() {
 
     # Ask about optional features (skip if non-interactive or env var set)
     ENABLE_MONITORING="${ENABLE_MONITORING:-}"
+    ENABLE_TOR="${ENABLE_TOR:-}"
     if [ -z "$ENABLE_MONITORING" ] && [ -t 0 ]; then
         echo -e "${BLUE}Optional Features${NC}"
         echo ""
@@ -291,27 +292,40 @@ main() {
         echo ""
     fi
 
+    if [ -z "$ENABLE_TOR" ] && [ -t 0 ]; then
+        echo "Would you like to enable the built-in Tor proxy?"
+        echo "  - Route Electrum connections through Tor for privacy"
+        echo "  - Hides your IP address from Electrum servers"
+        echo "  - Uses ~50MB additional disk space and ~128MB RAM"
+        echo ""
+        read -p "Enable Tor? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ENABLE_TOR="yes"
+            echo -e "${GREEN}✓${NC} Tor proxy will be enabled"
+        else
+            ENABLE_TOR="no"
+            echo -e "${GREEN}✓${NC} Tor skipped (run './start.sh --with-tor' later to enable)"
+        fi
+        echo ""
+    fi
+
     echo "Starting Sanctuary..."
     echo -e "${YELLOW}Note: First-time build may take 2-5 minutes. Subsequent starts are much faster.${NC}"
     echo ""
 
     # Start the services
     cd "$INSTALL_DIR"
-    if [ "$ENABLE_MONITORING" = "yes" ]; then
-        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
-            JWT_SECRET="$JWT_SECRET" \
-            ENCRYPTION_KEY="$ENCRYPTION_KEY" \
-            GATEWAY_SECRET="$GATEWAY_SECRET" \
-            POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
-    else
-        HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
-            JWT_SECRET="$JWT_SECRET" \
-            ENCRYPTION_KEY="$ENCRYPTION_KEY" \
-            GATEWAY_SECRET="$GATEWAY_SECRET" \
-            POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-            docker compose up -d --build
-    fi
+    COMPOSE_FILES="-f docker-compose.yml"
+    [ "$ENABLE_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
+    [ "$ENABLE_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
+
+    HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
+        JWT_SECRET="$JWT_SECRET" \
+        ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+        GATEWAY_SECRET="$GATEWAY_SECRET" \
+        POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+        docker compose $COMPOSE_FILES up -d --build
 
     # Wait for services to be healthy
     echo ""
@@ -361,6 +375,14 @@ main() {
         echo -e "${BLUE}║${NC}    Password: ${GREEN}(your ENCRYPTION_KEY from .env)${NC}             ${BLUE}║${NC}"
         echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     fi
+    if [ "$ENABLE_TOR" = "yes" ]; then
+        echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  Tor Proxy:                                               ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Go to ${GREEN}Admin → Node Configuration${NC}                      ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Enable ${GREEN}Proxy / Tor${NC} and select ${GREEN}Tor Container${NC}         ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    fi
     echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
@@ -385,6 +407,7 @@ POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 HTTP_PORT=${HTTP_PORT:-8080}
 HTTPS_PORT=${HTTPS_PORT:-8443}
 ENABLE_MONITORING=${ENABLE_MONITORING:-no}
+ENABLE_TOR=${ENABLE_TOR:-no}
 ENVEOF
 
     # Remove old .env.local if it exists (migrated to .env)

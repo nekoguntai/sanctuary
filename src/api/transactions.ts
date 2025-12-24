@@ -32,6 +32,10 @@ export interface CreateTransactionRequest {
   memo?: string;
   sendMax?: boolean;
   subtractFees?: boolean;
+  decoyOutputs?: {
+    enabled: boolean;
+    count: number;
+  };
 }
 
 export interface CreateTransactionResponse {
@@ -44,6 +48,7 @@ export interface CreateTransactionResponse {
   utxos: Array<{ txid: string; vout: number }>;
   effectiveAmount?: number;
   inputPaths?: string[];
+  decoyOutputs?: Array<{ address: string; amount: number }>;
 }
 
 export interface BroadcastTransactionRequest {

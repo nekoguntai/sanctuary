@@ -19,6 +19,7 @@ import { PrivacyBadge } from './PrivacyBadge';
 import { useCurrency } from '../contexts/CurrencyContext';
 import * as transactionsApi from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
+import { calculateUTXOAge, getAgeCategoryColor } from '../utils/utxoAge';
 
 // Map UI strategy to backend API strategy
 const strategyToApiStrategy: Record<UIStrategy, SelectionStrategy | null> = {
@@ -434,9 +435,14 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
                             {utxo.lockedByDraftLabel || 'Draft'}
                           </span>
                         )}
-                        <span className="text-xs text-sanctuary-400">
-                          {utxo.confirmations} confs
-                        </span>
+                        {(() => {
+                          const age = calculateUTXOAge(utxo);
+                          return (
+                            <span className={`text-xs ${getAgeCategoryColor(age.category)}`} title={`${utxo.confirmations.toLocaleString()} confirmations`}>
+                              {age.shortText}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

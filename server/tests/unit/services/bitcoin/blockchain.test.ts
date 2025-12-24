@@ -572,9 +572,9 @@ describe('Blockchain Service', () => {
         { id: 'addr-1', address, derivationPath: "m/84'/1'/0'/0/0" },
       ]);
 
-      // Existing UTXO in database
+      // Existing UTXO in database (must include address for spent detection to work)
       mockPrismaClient.uTXO.findMany.mockResolvedValue([
-        { id: 'utxo-1', txid: 'm'.repeat(64), vout: 0, spent: false, confirmations: 10, blockHeight: 799990 },
+        { id: 'utxo-1', txid: 'm'.repeat(64), vout: 0, spent: false, confirmations: 10, blockHeight: 799990, address },
       ]);
 
       // UTXO no longer on blockchain (was spent)

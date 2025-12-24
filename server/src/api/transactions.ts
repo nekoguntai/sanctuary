@@ -874,6 +874,7 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       memo,
       sendMax = false,
       subtractFees = false,
+      decoyOutputs,
     } = req.body;
 
     // Basic validation
@@ -927,6 +928,7 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
         memo,
         sendMax,
         subtractFees,
+        decoyOutputs,
       }
     );
 
@@ -940,6 +942,7 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       utxos: txData.utxos,
       inputPaths: txData.inputPaths, // Derivation paths for hardware wallet signing
       effectiveAmount: txData.effectiveAmount, // The actual amount being sent
+      decoyOutputs: txData.decoyOutputs, // Decoy change outputs (if enabled)
     });
   } catch (error: any) {
     log.error('Create transaction error', { error });

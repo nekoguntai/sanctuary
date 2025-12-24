@@ -10,6 +10,7 @@ import { PrivacyBadge } from './PrivacyBadge';
 import { PrivacyDetailPanel } from './PrivacyDetailPanel';
 import type { UtxoPrivacyInfo, WalletPrivacySummary } from '../src/api/transactions';
 import { createLogger } from '../utils/logger';
+import { calculateUTXOAge, getAgeCategoryColor } from '../utils/utxoAge';
 
 const log = createLogger('UTXOList');
 
@@ -202,6 +203,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 } : {};
 
                 const size = getSize(utxo.amount);
+                const age = calculateUTXOAge(utxo);
                 const statusLabel = utxo.frozen ? '(Frozen)'
                   : isLocked ? `(Locked: ${utxo.lockedByDraftLabel || 'Draft'})`
                   : isDust ? `(Dust - costs ${format(spendCost)} to spend)`
@@ -223,7 +225,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                             ${isSelected ? 'ring-2 ring-offset-1 ring-sanctuary-400 dark:ring-offset-sanctuary-900' : ''}
                             ${colorClass} text-white shadow-md
                         `}
-                        title={`${format(utxo.amount)} - ${utxo.label || 'No Label'} ${statusLabel}`}
+                        title={`${format(utxo.amount)} - ${age.displayText} old - ${utxo.label || 'No Label'} ${statusLabel}`}
                     >
                        <span className="text-[9px] font-bold opacity-0 hover:opacity-100 transition-opacity absolute bg-black/80 text-white px-1.5 py-0.5 rounded whitespace-nowrap -top-6 z-20 pointer-events-none">
                           {format(utxo.amount)}
@@ -376,34 +378,44 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                 </div>
 
                 <div className="flex flex-col items-end space-y-2">
-                <button 
+                <button
                     onClick={(e) => { e.stopPropagation(); onToggleFreeze(utxo.txid, utxo.vout); }}
                     title={isFrozen ? "Unfreeze coin for spending" : "Freeze coin to prevent spending"}
                     className={`p-2 rounded-lg transition-colors ${
-                        isFrozen 
-                        ? "bg-zen-vermilion/10 text-zen-vermilion hover:bg-zen-vermilion/20" 
+                        isFrozen
+                        ? "bg-zen-vermilion/10 text-zen-vermilion hover:bg-zen-vermilion/20"
                         : "text-sanctuary-300 hover:text-zen-matcha hover:bg-zen-matcha/10"
                     }`}
                 >
                     {isFrozen ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                 </button>
-                <div className="text-xs text-sanctuary-400 text-right">
-                    {utxo.confirmations.toLocaleString()} confs
-                    <br/>
-                    <span className="text-[10px] opacity-70">{new Date(utxo.date).toLocaleDateString()}</span>
-                    <br/>
-                    <a
-                      href={`${explorerUrl}/tx/${utxo.txid}#vout=${utxo.vout}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center font-mono text-[10px] text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300 hover:underline"
-                      title={`View transaction ${utxo.txid} output #${utxo.vout} on block explorer`}
-                    >
-                      txid:{utxo.txid.substring(0,8)}...:{utxo.vout}
-                      <ExternalLink className="w-2.5 h-2.5 ml-1" />
-                    </a>
-                </div>
+                {(() => {
+                    const age = calculateUTXOAge(utxo);
+                    return (
+                      <div className="text-xs text-sanctuary-400 text-right">
+                        <span className={`font-medium ${getAgeCategoryColor(age.category)}`} title={`${utxo.confirmations.toLocaleString()} confirmations`}>
+                          {age.displayText}
+                        </span>
+                        <span className="text-[10px] opacity-70"> old</span>
+                        <br/>
+                        <span className="text-[10px] opacity-70">
+                          {utxo.confirmations.toLocaleString()} confs
+                        </span>
+                        <br/>
+                        <a
+                          href={`${explorerUrl}/tx/${utxo.txid}#vout=${utxo.vout}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center font-mono text-[10px] text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300 hover:underline"
+                          title={`View transaction ${utxo.txid} output #${utxo.vout} on block explorer`}
+                        >
+                          txid:{utxo.txid.substring(0,8)}...:{utxo.vout}
+                          <ExternalLink className="w-2.5 h-2.5 ml-1" />
+                        </a>
+                      </div>
+                    );
+                })()}
                 </div>
             </div>
             </div>

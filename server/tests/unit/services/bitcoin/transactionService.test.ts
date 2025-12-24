@@ -61,6 +61,7 @@ import {
   createBatchTransaction,
   getPSBTInfo,
   UTXOSelectionStrategy,
+  generateDecoyAmounts,
 } from '../../../../src/services/bitcoin/transactionService';
 import { estimateTransactionSize, calculateFee } from '../../../../src/services/bitcoin/utils';
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
@@ -1196,6 +1197,83 @@ describe('Transaction Service', () => {
       // getNodeClient should be called to fetch raw transaction
       const { getNodeClient } = require('../../../../src/services/bitcoin/nodeClient');
       expect(getNodeClient).toHaveBeenCalled();
+    });
+  });
+
+  describe('generateDecoyAmounts', () => {
+    const dustThreshold = 546;
+
+    it('should return single amount when count is less than 2', () => {
+      const result = generateDecoyAmounts(100000, 1, dustThreshold);
+      expect(result).toEqual([100000]);
+
+      const result0 = generateDecoyAmounts(100000, 0, dustThreshold);
+      expect(result0).toEqual([100000]);
+    });
+
+    it('should split change into multiple amounts', () => {
+      const totalChange = 100000;
+      const count = 3;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      expect(result).toHaveLength(count);
+      expect(result.reduce((a, b) => a + b, 0)).toBe(totalChange);
+    });
+
+    it('should ensure all amounts are above dust threshold', () => {
+      const totalChange = 10000;
+      const count = 3;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      result.forEach(amount => {
+        expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+      });
+    });
+
+    it('should return single output if not enough change for decoys', () => {
+      const totalChange = 1000; // Less than dustThreshold * 2
+      const count = 3;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      expect(result).toEqual([totalChange]);
+    });
+
+    it('should handle exactly 2 outputs', () => {
+      const totalChange = 50000;
+      const count = 2;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      expect(result).toHaveLength(2);
+      expect(result[0] + result[1]).toBe(totalChange);
+      expect(result[0]).toBeGreaterThanOrEqual(dustThreshold);
+      expect(result[1]).toBeGreaterThanOrEqual(dustThreshold);
+    });
+
+    it('should handle 4 outputs (max decoys)', () => {
+      const totalChange = 200000;
+      const count = 4;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      expect(result).toHaveLength(4);
+      expect(result.reduce((a, b) => a + b, 0)).toBe(totalChange);
+      result.forEach(amount => {
+        expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+      });
+    });
+
+    it('should produce varied amounts (not equal splits)', () => {
+      const totalChange = 100000;
+      const count = 3;
+
+      // Run multiple times to verify randomness
+      const results = Array.from({ length: 10 }, () =>
+        generateDecoyAmounts(totalChange, count, dustThreshold)
+      );
+
+      // Check that not all results are identical
+      const firstResult = JSON.stringify(results[0]);
+      const allIdentical = results.every(r => JSON.stringify(r) === firstResult);
+      expect(allIdentical).toBe(false);
     });
   });
 });

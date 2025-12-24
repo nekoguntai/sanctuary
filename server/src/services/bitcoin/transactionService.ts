@@ -58,8 +58,9 @@ bitcoin.initEccLib(ecc);
 /**
  * Generate realistic-looking decoy amounts from a total change amount
  * Amounts avoid round numbers and vary in magnitude to look like real payments
+ * Exported for testing
  */
-function generateDecoyAmounts(totalChange: number, count: number, dustThreshold: number): number[] {
+export function generateDecoyAmounts(totalChange: number, count: number, dustThreshold: number): number[] {
   if (count < 2) {
     return [totalChange];
   }

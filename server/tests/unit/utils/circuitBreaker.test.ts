@@ -29,6 +29,11 @@ describe('CircuitBreaker', () => {
     });
   });
 
+  afterEach(() => {
+    // Ensure all circuits are reset to prevent timer leaks
+    circuitBreakerRegistry.resetAll();
+  });
+
   describe('CLOSED state', () => {
     it('should start in CLOSED state', () => {
       expect(circuit.getState()).toBe(CircuitState.CLOSED);

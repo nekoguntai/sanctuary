@@ -339,6 +339,8 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
 
     try {
       const { SocksProxyAgent } = await import('socks-proxy-agent');
+      const nodeFetch = (await import('node-fetch')).default;
+
       const proxyUrl = username && password
         ? `socks5://${username}:${password}@${host}:${proxyPort}`
         : `socks5://${host}:${proxyPort}`;
@@ -347,10 +349,11 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch('https://check.torproject.org/api/ip', {
+      // Use node-fetch which properly supports the agent option for SOCKS proxy
+      const response = await nodeFetch('https://check.torproject.org/api/ip', {
         agent,
-        signal: controller.signal,
-      } as any);
+        signal: controller.signal as any,
+      });
 
       clearTimeout(timeout);
 

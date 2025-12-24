@@ -54,6 +54,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.2.4",
+    "node-fetch": "^3.3.2",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.4",
     "socks": "^2.8.7",

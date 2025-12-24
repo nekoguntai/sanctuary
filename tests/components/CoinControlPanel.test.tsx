@@ -257,15 +257,17 @@ describe('CoinControlPanel', () => {
       });
     });
 
-    it('shows confirmation count for each UTXO', async () => {
+    it('shows age for each UTXO', async () => {
       renderPanel();
 
       fireEvent.click(screen.getByText(/Coin Control/));
 
+      // Ages are calculated from confirmations (10 min per block):
+      // 6 confs = 60 mins = 1h, 3 confs = 30 mins = 30m, 100 confs = 1000 mins ≈ 16h
       await waitFor(() => {
-        expect(screen.getByText('6 confs')).toBeInTheDocument();
-        expect(screen.getByText('3 confs')).toBeInTheDocument();
-        expect(screen.getByText('100 confs')).toBeInTheDocument();
+        expect(screen.getByText('1h')).toBeInTheDocument();
+        expect(screen.getByText('30m')).toBeInTheDocument();
+        expect(screen.getByText('16h')).toBeInTheDocument();
       });
     });
   });

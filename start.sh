@@ -8,6 +8,7 @@
 #   ./start.sh                  # Start with defaults
 #   ./start.sh --with-ai        # Start with bundled AI (Ollama)
 #   ./start.sh --with-monitoring # Start with monitoring (Grafana/Loki)
+#   ./start.sh --with-tor       # Start with Tor proxy
 #   ./start.sh --rebuild        # Rebuild containers (after updates)
 #   ./start.sh --stop           # Stop all services
 #   ./start.sh --logs           # View logs
@@ -52,7 +53,7 @@ fi
 
 # Export for docker compose
 export JWT_SECRET ENCRYPTION_KEY GATEWAY_SECRET POSTGRES_PASSWORD
-export HTTPS_PORT HTTP_PORT ENABLE_MONITORING
+export HTTPS_PORT HTTP_PORT ENABLE_MONITORING ENABLE_TOR
 
 case "${1:-}" in
     --stop)
@@ -100,24 +101,39 @@ case "${1:-}" in
         echo ""
         echo "  Dashboards are pre-configured with Sanctuary logs."
         ;;
+    --with-tor)
+        echo "Starting Sanctuary with Tor proxy..."
+        echo ""
+        echo "Note: First-time setup will download the Tor image (~50MB)."
+        echo ""
+        docker compose -f docker-compose.yml -f docker-compose.tor.yml up -d
+        echo ""
+        echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
+        echo ""
+        echo "Tor Setup:"
+        echo "  1. Go to Admin → Node Configuration"
+        echo "  2. Enable 'Proxy / Tor'"
+        echo "  3. Select 'Tor Container' preset (tor:9050)"
+        echo "  4. Save and test connection"
+        ;;
     --rebuild)
         echo "Rebuilding and starting Sanctuary..."
         # Detect which stacks are running (check containers or env preference)
         HAS_AI=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$' && echo "yes" || echo "no")
         HAS_MONITORING=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)' && echo "yes" || echo "no")
+        HAS_TOR=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-tor' && echo "yes" || echo "no")
         # Also check env preference from install
         [ "$ENABLE_MONITORING" = "yes" ] && HAS_MONITORING="yes"
+        [ "$ENABLE_TOR" = "yes" ] && HAS_TOR="yes"
 
-        if [ "$HAS_MONITORING" = "yes" ]; then
-            if [ "$HAS_AI" = "yes" ]; then
-                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile ai up -d --build
-            else
-                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
-            fi
-        elif [ "$HAS_AI" = "yes" ]; then
-            docker compose --profile ai up -d --build
+        COMPOSE_FILES="-f docker-compose.yml"
+        [ "$HAS_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
+        [ "$HAS_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
+
+        if [ "$HAS_AI" = "yes" ]; then
+            docker compose $COMPOSE_FILES --profile ai up -d --build
         else
-            docker compose up -d --build
+            docker compose $COMPOSE_FILES up -d --build
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
@@ -129,6 +145,7 @@ case "${1:-}" in
         echo "  (none)            Start Sanctuary"
         echo "  --with-ai         Start with bundled AI (Ollama container)"
         echo "  --with-monitoring Start with monitoring (Grafana/Loki/Promtail)"
+        echo "  --with-tor        Start with Tor proxy for privacy"
         echo "  --rebuild         Rebuild containers (use after updates)"
         echo "  --stop            Stop all services"
         echo "  --logs            View container logs"
@@ -146,25 +163,29 @@ case "${1:-}" in
         echo "Monitoring:"
         echo "  Run './start.sh --with-monitoring' to enable monitoring."
         echo "  Access Grafana at http://localhost:3000 (admin / your ENCRYPTION_KEY)"
+        echo ""
+        echo "Tor Privacy:"
+        echo "  Run './start.sh --with-tor' to enable Tor proxy."
+        echo "  Then enable in Admin → Node Configuration → Proxy / Tor."
         ;;
     *)
         echo "Starting Sanctuary..."
         # Detect which stacks were previously running (check containers or env preference)
         HAS_AI=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$' && echo "yes" || echo "no")
         HAS_MONITORING=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)' && echo "yes" || echo "no")
+        HAS_TOR=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-tor' && echo "yes" || echo "no")
         # Also check env preference from install
         [ "$ENABLE_MONITORING" = "yes" ] && HAS_MONITORING="yes"
+        [ "$ENABLE_TOR" = "yes" ] && HAS_TOR="yes"
 
-        if [ "$HAS_MONITORING" = "yes" ]; then
-            if [ "$HAS_AI" = "yes" ]; then
-                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml --profile ai up -d
-            else
-                docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
-            fi
-        elif [ "$HAS_AI" = "yes" ]; then
-            docker compose --profile ai up -d
+        COMPOSE_FILES="-f docker-compose.yml"
+        [ "$HAS_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
+        [ "$HAS_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
+
+        if [ "$HAS_AI" = "yes" ]; then
+            docker compose $COMPOSE_FILES --profile ai up -d
         else
-            docker compose up -d
+            docker compose $COMPOSE_FILES up -d
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"

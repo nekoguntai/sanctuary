@@ -9,11 +9,23 @@ import net from 'net';
 import tls from 'tls';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
+import { SocksClient, SocksClientOptions } from 'socks';
 import config from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ELECTRUM');
+
+/**
+ * SOCKS5 proxy configuration (for Tor support)
+ */
+interface ProxyConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
 
 interface ElectrumResponse {
   jsonrpc: string;
@@ -40,6 +52,7 @@ interface ElectrumConfig {
   protocol: 'tcp' | 'ssl';
   allowSelfSignedCert?: boolean; // Optional: allow self-signed TLS certificates (default: false)
   connectionTimeoutMs?: number; // Optional: connection/handshake timeout (default: 10000ms)
+  proxy?: ProxyConfig; // Optional: SOCKS5 proxy configuration (for Tor)
 }
 
 // Default connection timeout (10 seconds) - fails faster so pool can try other servers
@@ -70,6 +83,37 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Create a socket connection through a SOCKS5 proxy
+   */
+  private async createProxiedSocket(
+    proxy: ProxyConfig,
+    targetHost: string,
+    targetPort: number
+  ): Promise<net.Socket> {
+    const socksOptions: SocksClientOptions = {
+      proxy: {
+        host: proxy.host,
+        port: proxy.port,
+        type: 5, // SOCKS5
+        ...(proxy.username && proxy.password
+          ? { userId: proxy.username, password: proxy.password }
+          : {}),
+      },
+      command: 'connect',
+      destination: {
+        host: targetHost,
+        port: targetPort,
+      },
+      timeout: DEFAULT_CONNECTION_TIMEOUT_MS,
+    };
+
+    log.info(`Connecting through SOCKS5 proxy ${proxy.host}:${proxy.port} to ${targetHost}:${targetPort}`);
+
+    const { socket } = await SocksClient.createConnection(socksOptions);
+    return socket;
+  }
+
+  /**
    * Connect to Electrum server
    */
   async connect(): Promise<void> {
@@ -78,6 +122,7 @@ class ElectrumClient extends EventEmitter {
     let port: number;
     let protocol: 'tcp' | 'ssl';
     let allowSelfSignedCert = false; // Default: verify certificates
+    let proxy: ProxyConfig | undefined;
 
     // Use explicit config if provided (for testing connections)
     if (this.explicitConfig) {
@@ -86,6 +131,8 @@ class ElectrumClient extends EventEmitter {
       protocol = this.explicitConfig.protocol;
       // For explicit configs (testing), check if allowSelfSignedCert was passed
       allowSelfSignedCert = this.explicitConfig.allowSelfSignedCert ?? false;
+      // Proxy from explicit config
+      proxy = this.explicitConfig.proxy;
     } else {
       // Get node config from database
       const nodeConfig = await prisma.nodeConfig.findFirst({
@@ -99,6 +146,16 @@ class ElectrumClient extends EventEmitter {
         protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
         // Check if self-signed certificates are allowed (opt-in for security)
         allowSelfSignedCert = nodeConfig.allowSelfSignedCert ?? false;
+        // Load proxy config from database
+        if (nodeConfig.proxyEnabled && nodeConfig.proxyHost && nodeConfig.proxyPort) {
+          proxy = {
+            enabled: true,
+            host: nodeConfig.proxyHost,
+            port: nodeConfig.proxyPort,
+            username: nodeConfig.proxyUsername ?? undefined,
+            password: nodeConfig.proxyPassword ?? undefined,
+          };
+        }
       } else {
         // Fallback to env config
         host = config.bitcoin.electrum.host;
@@ -148,92 +205,112 @@ class ElectrumClient extends EventEmitter {
       try {
         // Set connection timeout - fail fast so pool can try other servers
         connectionTimeout = setTimeout(() => {
-          const timeoutError = new Error(`Connection timeout after ${connectionTimeoutMs}ms to ${host}:${port} (${protocol})`);
-          log.warn(`Connection timeout`, { host, port, protocol, timeoutMs: connectionTimeoutMs });
+          const timeoutError = new Error(`Connection timeout after ${connectionTimeoutMs}ms to ${host}:${port} (${protocol})${proxy?.enabled ? ' via proxy' : ''}`);
+          log.warn(`Connection timeout`, { host, port, protocol, proxy: proxy?.enabled, timeoutMs: connectionTimeoutMs });
           handleError(timeoutError);
         }, connectionTimeoutMs);
 
-        if (protocol === 'ssl') {
-          // Log whether TLS verification is enabled or disabled
-          if (allowSelfSignedCert) {
-            log.warn(`Initiating TLS connection to ${host}:${port} with certificate verification DISABLED (self-signed allowed)`);
+        // Helper function to create connection (direct or via proxy)
+        const createConnection = async (): Promise<net.Socket> => {
+          if (proxy?.enabled) {
+            // Use SOCKS5 proxy
+            return this.createProxiedSocket(proxy, host, port);
           } else {
-            log.info(`Initiating TLS connection to ${host}:${port} with certificate verification enabled`);
+            // Direct connection
+            return new Promise((resolveSocket, rejectSocket) => {
+              const socket = net.connect({ host, port });
+              socket.once('connect', () => resolveSocket(socket));
+              socket.once('error', rejectSocket);
+            });
           }
+        };
 
-          const tlsSocket = tls.connect(
-            {
-              host,
-              port,
-              // Only disable certificate verification if explicitly allowed
-              // This protects against MITM attacks by default
-              rejectUnauthorized: !allowSelfSignedCert,
-              servername: host, // SNI support
-              // Enable TLS session resumption for faster reconnects
-              session: undefined, // Let Node.js handle session caching
-            },
-            () => {
-              // This callback fires on secureConnect
-              log.info(`Connected to ${host}:${port} (${protocol}) - TLS handshake complete`);
+        // Create the base socket (either direct or via proxy)
+        createConnection()
+          .then((baseSocket) => {
+            if (protocol === 'ssl') {
+              // Wrap in TLS
+              if (allowSelfSignedCert) {
+                log.warn(`Initiating TLS connection to ${host}:${port} with certificate verification DISABLED (self-signed allowed)${proxy?.enabled ? ' via proxy' : ''}`);
+              } else {
+                log.info(`Initiating TLS connection to ${host}:${port} with certificate verification enabled${proxy?.enabled ? ' via proxy' : ''}`);
+              }
 
-              // Apply socket optimizations after TLS handshake
+              const tlsSocket = tls.connect(
+                {
+                  socket: baseSocket, // Use existing socket from proxy/direct connection
+                  // Only disable certificate verification if explicitly allowed
+                  // This protects against MITM attacks by default
+                  rejectUnauthorized: !allowSelfSignedCert,
+                  servername: host, // SNI support
+                  // Enable TLS session resumption for faster reconnects
+                  session: undefined, // Let Node.js handle session caching
+                },
+                () => {
+                  // This callback fires on secureConnect
+                  log.info(`Connected to ${host}:${port} (${protocol}) - TLS handshake complete${proxy?.enabled ? ' via proxy' : ''}`);
+
+                  // Apply socket optimizations after TLS handshake
+                  // Disable Nagle's algorithm - reduces latency for small packets (JSON-RPC)
+                  tlsSocket.setNoDelay(true);
+                  // Enable TCP keepalive - detects dead connections faster (30 second interval)
+                  tlsSocket.setKeepAlive(true, 30000);
+
+                  handleSuccess();
+                }
+              );
+              this.socket = tlsSocket;
+
+              tlsSocket.on('error', (err) => {
+                log.error(`TLS socket error`, { error: String(err) });
+                handleError(err);
+              });
+            } else {
+              // Plain TCP - socket is already connected
+              this.socket = baseSocket;
+              log.info(`Connected to ${host}:${port} (${protocol})${proxy?.enabled ? ' via proxy' : ''}`);
+
+              // Apply socket optimizations
               // Disable Nagle's algorithm - reduces latency for small packets (JSON-RPC)
-              tlsSocket.setNoDelay(true);
+              baseSocket.setNoDelay(true);
               // Enable TCP keepalive - detects dead connections faster (30 second interval)
-              tlsSocket.setKeepAlive(true, 30000);
+              baseSocket.setKeepAlive(true, 30000);
 
               handleSuccess();
             }
-          );
-          this.socket = tlsSocket;
 
-          tlsSocket.on('error', (err) => {
-            log.error(`TLS socket error`, { error: String(err) });
-            handleError(err);
+            // Set up event handlers on the socket
+            this.socket!.on('data', (data) => {
+              this.handleData(data);
+            });
+
+            this.socket!.on('error', (error) => {
+              log.error('Socket error', { error });
+              handleError(error);
+              // Reject all pending requests on socket error
+              this.rejectPendingRequests(new Error(`Socket error: ${error.message}`));
+            });
+
+            this.socket!.on('close', () => {
+              log.debug('Connection closed');
+              this.connected = false;
+              // Reject all pending requests on connection close
+              this.rejectPendingRequests(new Error('Connection closed unexpectedly'));
+            });
+
+            this.socket!.on('end', () => {
+              log.debug('Connection ended');
+              this.connected = false;
+              // Reject all pending requests on connection end
+              this.rejectPendingRequests(new Error('Connection ended'));
+            });
+          })
+          .catch((error) => {
+            log.error('Connection error', { error });
+            handleError(error as Error);
           });
-        } else {
-          this.socket = net.connect({ host, port });
-
-          // For plain TCP, connect event is sufficient
-          this.socket.on('connect', () => {
-            log.info(`Connected to ${host}:${port} (${protocol})`);
-
-            // Apply socket optimizations
-            // Disable Nagle's algorithm - reduces latency for small packets (JSON-RPC)
-            this.socket!.setNoDelay(true);
-            // Enable TCP keepalive - detects dead connections faster (30 second interval)
-            this.socket!.setKeepAlive(true, 30000);
-
-            handleSuccess();
-          });
-        }
-
-        this.socket.on('data', (data) => {
-          this.handleData(data);
-        });
-
-        this.socket.on('error', (error) => {
-          log.error('Socket error', { error });
-          handleError(error);
-          // Reject all pending requests on socket error
-          this.rejectPendingRequests(new Error(`Socket error: ${error.message}`));
-        });
-
-        this.socket.on('close', () => {
-          log.debug('Connection closed');
-          this.connected = false;
-          // Reject all pending requests on connection close
-          this.rejectPendingRequests(new Error('Connection closed unexpectedly'));
-        });
-
-        this.socket.on('end', () => {
-          log.debug('Connection ended');
-          this.connected = false;
-          // Reject all pending requests on connection end
-          this.rejectPendingRequests(new Error('Connection ended'));
-        });
       } catch (error) {
-        log.error('Connection error', { error });
+        log.error('Connection setup error', { error });
         handleError(error as Error);
       }
     });

@@ -423,6 +423,13 @@ model NodeConfig {
   // Load balancing strategy: round_robin, least_connections, failover_only
   poolLoadBalancing  String  @default("round_robin")
 
+  // SOCKS5 proxy settings (for Tor support)
+  proxyEnabled   Boolean @default(false)
+  proxyHost      String?
+  proxyPort      Int?
+  proxyUsername  String?
+  proxyPassword  String?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

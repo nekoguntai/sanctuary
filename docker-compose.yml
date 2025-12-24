@@ -375,12 +375,11 @@ services:
     image: tecnativa/docker-socket-proxy:latest
     restart: unless-stopped
     environment:
-      # Only allow container inspection and start/stop
+      # Allow container management and image pulls
       CONTAINERS: 1
       POST: 1
-      # Block everything else
-      IMAGES: 0
-      NETWORKS: 0
+      IMAGES: 1
+      NETWORKS: 1
       VOLUMES: 0
       EXEC: 0
       SWARM: 0

@@ -6,6 +6,7 @@
  */
 
 import { getNodeClient } from './nodeClient';
+import { getElectrumPool } from './electrumPool';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction } from './utils';
 import { createLogger } from '../../utils/logger';
@@ -576,7 +577,12 @@ export async function syncWallet(walletId: string): Promise<{
   utxos: number;
 }> {
   const startTime = Date.now();
-  walletLog(walletId, 'info', 'SYNC', 'Starting wallet sync...');
+
+  // Check if Tor proxy is enabled for this sync
+  const pool = getElectrumPool();
+  const viaTor = pool.isProxyEnabled();
+
+  walletLog(walletId, 'info', 'SYNC', viaTor ? 'Starting wallet sync via Tor...' : 'Starting wallet sync...', { viaTor });
   const client = await getNodeClient();
 
 
@@ -1256,6 +1262,7 @@ export async function syncWallet(walletId: string): Promise<{
     addresses: addresses.length + newAddresses.length,
     transactions: finalTxCount,
     utxos: finalUtxoCount,
+    viaTor,
   });
 
   return {

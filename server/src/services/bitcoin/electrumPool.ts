@@ -48,6 +48,17 @@ const log = createLogger('ELECTRUM_POOL');
 export type LoadBalancingStrategy = 'round_robin' | 'least_connections' | 'failover_only';
 
 /**
+ * SOCKS5 proxy configuration (for Tor support)
+ */
+interface ProxyConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
+
+/**
  * Server configuration
  */
 export interface ServerConfig {
@@ -217,6 +228,9 @@ export class ElectrumPool extends EventEmitter {
   private serverStats: Map<string, { totalRequests: number; failedRequests: number; lastHealthCheck: Date | null; isHealthy: boolean }> = new Map();
   private roundRobinIndex = 0;
 
+  // Proxy configuration (for Tor support)
+  private proxyConfig: ProxyConfig | null = null;
+
   // Statistics
   private stats = {
     totalAcquisitions: 0,
@@ -254,6 +268,33 @@ export class ElectrumPool extends EventEmitter {
   }
 
   /**
+   * Set proxy configuration for all pool connections
+   * When proxy is enabled, all connections will route through it (for Tor support)
+   */
+  setProxyConfig(proxy: ProxyConfig | null): void {
+    this.proxyConfig = proxy;
+    if (proxy?.enabled) {
+      log.info(`Pool proxy configured: ${proxy.host}:${proxy.port}`);
+    } else {
+      log.info('Pool proxy disabled');
+    }
+  }
+
+  /**
+   * Get current proxy configuration
+   */
+  getProxyConfig(): ProxyConfig | null {
+    return this.proxyConfig;
+  }
+
+  /**
+   * Check if proxy (Tor) is enabled
+   */
+  isProxyEnabled(): boolean {
+    return this.proxyConfig?.enabled ?? false;
+  }
+
+  /**
    * Get effective minimum connections (at least 1 per server)
    * This ensures even distribution across all configured servers at startup.
    */
@@ -281,7 +322,7 @@ export class ElectrumPool extends EventEmitter {
   }
 
   /**
-   * Reload servers from database (can be called to pick up config changes)
+   * Reload servers and proxy config from database (can be called to pick up config changes)
    */
   async reloadServers(): Promise<void> {
     try {
@@ -313,7 +354,22 @@ export class ElectrumPool extends EventEmitter {
           this.config.loadBalancing = nodeConfig.poolLoadBalancing as LoadBalancingStrategy;
         }
 
-        log.info(`Reloaded ${servers.length} servers from database`);
+        // Update proxy config
+        if (nodeConfig.proxyEnabled && nodeConfig.proxyHost && nodeConfig.proxyPort) {
+          this.setProxyConfig({
+            enabled: true,
+            host: nodeConfig.proxyHost,
+            port: nodeConfig.proxyPort,
+            username: nodeConfig.proxyUsername ?? undefined,
+            password: nodeConfig.proxyPassword ?? undefined,
+          });
+        } else {
+          this.setProxyConfig(null);
+        }
+
+        log.info(`Reloaded ${servers.length} servers from database`, {
+          proxyEnabled: this.proxyConfig?.enabled ?? false,
+        });
 
         // Ensure new servers have connections
         if (this.isInitialized) {
@@ -754,12 +810,20 @@ export class ElectrumPool extends EventEmitter {
 
     const id = `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+    // Determine connection timeout - increase significantly for Tor
+    // Tor adds ~2-5 seconds latency for circuit establishment
+    const baseTimeout = this.config.connectionTimeoutMs;
+    const connectionTimeout = this.proxyConfig?.enabled ? baseTimeout * 3 : baseTimeout;
+
     // Create client with specific server config if available
+    // Include proxy config so connections route through Tor when enabled
     const client = targetServer
       ? new ElectrumClient({
           host: targetServer.host,
           port: targetServer.port,
           protocol: targetServer.useSsl ? 'ssl' : 'tcp',
+          connectionTimeoutMs: connectionTimeout,
+          proxy: this.proxyConfig ?? undefined,
         })
       : new ElectrumClient();
 
@@ -1104,6 +1168,7 @@ let poolInitPromise: Promise<ElectrumPool> | null = null;
 async function loadPoolConfigFromDatabase(): Promise<{
   config: Partial<ElectrumPoolConfig>;
   servers: ServerConfig[];
+  proxy: ProxyConfig | null;
 }> {
   try {
     const nodeConfig = await prisma.nodeConfig.findFirst({
@@ -1127,6 +1192,18 @@ async function loadPoolConfigFromDatabase(): Promise<{
         enabled: s.enabled,
       }));
 
+      // Load proxy config if enabled
+      let proxy: ProxyConfig | null = null;
+      if (nodeConfig.proxyEnabled && nodeConfig.proxyHost && nodeConfig.proxyPort) {
+        proxy = {
+          enabled: true,
+          host: nodeConfig.proxyHost,
+          port: nodeConfig.proxyPort,
+          username: nodeConfig.proxyUsername ?? undefined,
+          password: nodeConfig.proxyPassword ?? undefined,
+        };
+      }
+
       return {
         config: {
           enabled: nodeConfig.poolEnabled,
@@ -1135,13 +1212,14 @@ async function loadPoolConfigFromDatabase(): Promise<{
           loadBalancing: nodeConfig.poolLoadBalancing as LoadBalancingStrategy,
         },
         servers,
+        proxy,
       };
     }
   } catch (error) {
     log.warn('Failed to load pool config from database, using defaults', { error: String(error) });
   }
 
-  return { config: {}, servers: [] };
+  return { config: {}, servers: [], proxy: null };
 }
 
 /**
@@ -1198,7 +1276,7 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
     }
 
     // Load config and servers from database
-    const { config: dbConfig, servers } = await loadPoolConfigFromDatabase();
+    const { config: dbConfig, servers, proxy } = await loadPoolConfigFromDatabase();
 
     // Environment variables as fallback
     const envConfig: Partial<ElectrumPoolConfig> = {
@@ -1226,6 +1304,15 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       ...dbConfig,
     });
 
+    // Set proxy config if loaded from database
+    if (proxy) {
+      poolInstance.setProxyConfig(proxy);
+      log.info('Electrum pool configured with Tor proxy', {
+        host: proxy.host,
+        port: proxy.port,
+      });
+    }
+
     // Set servers if any were loaded from database
     if (servers.length > 0) {
       poolInstance.setServers(servers);
@@ -1240,6 +1327,7 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       minConnections: poolInstance['config'].minConnections,
       maxConnections: poolInstance['config'].maxConnections,
       loadBalancing: poolInstance['config'].loadBalancing,
+      proxyEnabled: proxy?.enabled ?? false,
     });
 
     return poolInstance;

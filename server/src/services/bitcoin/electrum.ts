@@ -53,7 +53,18 @@ interface ElectrumConfig {
   allowSelfSignedCert?: boolean; // Optional: allow self-signed TLS certificates (default: false)
   connectionTimeoutMs?: number; // Optional: connection/handshake timeout (default: 10000ms)
   proxy?: ProxyConfig; // Optional: SOCKS5 proxy configuration (for Tor)
+  requestTimeoutMs?: number; // Optional: per-request timeout (default: 30000ms, higher for Tor)
+  batchRequestTimeoutMs?: number; // Optional: batch request timeout (default: 60000ms, higher for Tor)
 }
+
+// Default request timeout (30 seconds)
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+
+// Default batch request timeout (60 seconds)
+const DEFAULT_BATCH_REQUEST_TIMEOUT_MS = 60000;
+
+// Timeout multiplier for Tor connections (Tor adds significant latency)
+const TOR_TIMEOUT_MULTIPLIER = 3;
 
 // Default connection timeout (10 seconds) - fails faster so pool can try other servers
 const DEFAULT_CONNECTION_TIMEOUT_MS = 10000;
@@ -73,6 +84,10 @@ class ElectrumClient extends EventEmitter {
   private scriptHashToAddress = new Map<string, string>();  // Map scripthash to address
   private subscribedHeaders = false;
 
+  // Timeouts (adjusted for Tor when proxy is enabled)
+  private requestTimeoutMs: number;
+  private batchRequestTimeoutMs: number;
+
   /**
    * Create an ElectrumClient
    * @param explicitConfig Optional config to use instead of database/env config
@@ -80,6 +95,17 @@ class ElectrumClient extends EventEmitter {
   constructor(explicitConfig?: ElectrumConfig) {
     super();
     this.explicitConfig = explicitConfig || null;
+
+    // Calculate timeouts - increase for Tor connections
+    const isProxyEnabled = explicitConfig?.proxy?.enabled ?? false;
+    const multiplier = isProxyEnabled ? TOR_TIMEOUT_MULTIPLIER : 1;
+
+    this.requestTimeoutMs = (explicitConfig?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) * multiplier;
+    this.batchRequestTimeoutMs = (explicitConfig?.batchRequestTimeoutMs ?? DEFAULT_BATCH_REQUEST_TIMEOUT_MS) * multiplier;
+
+    if (isProxyEnabled) {
+      log.debug(`ElectrumClient configured with Tor timeouts: request=${this.requestTimeoutMs}ms, batch=${this.batchRequestTimeoutMs}ms`);
+    }
   }
 
   /**
@@ -88,7 +114,8 @@ class ElectrumClient extends EventEmitter {
   private async createProxiedSocket(
     proxy: ProxyConfig,
     targetHost: string,
-    targetPort: number
+    targetPort: number,
+    timeoutMs: number
   ): Promise<net.Socket> {
     const socksOptions: SocksClientOptions = {
       proxy: {
@@ -104,10 +131,10 @@ class ElectrumClient extends EventEmitter {
         host: targetHost,
         port: targetPort,
       },
-      timeout: DEFAULT_CONNECTION_TIMEOUT_MS,
+      timeout: timeoutMs,
     };
 
-    log.info(`Connecting through SOCKS5 proxy ${proxy.host}:${proxy.port} to ${targetHost}:${targetPort}`);
+    log.info(`Connecting through SOCKS5 proxy ${proxy.host}:${proxy.port} to ${targetHost}:${targetPort} (timeout: ${timeoutMs}ms)`);
 
     const { socket } = await SocksClient.createConnection(socksOptions);
     return socket;
@@ -213,8 +240,8 @@ class ElectrumClient extends EventEmitter {
         // Helper function to create connection (direct or via proxy)
         const createConnection = async (): Promise<net.Socket> => {
           if (proxy?.enabled) {
-            // Use SOCKS5 proxy
-            return this.createProxiedSocket(proxy, host, port);
+            // Use SOCKS5 proxy with extended timeout
+            return this.createProxiedSocket(proxy, host, port, connectionTimeoutMs);
           } else {
             // Direct connection
             return new Promise((resolveSocket, rejectSocket) => {
@@ -448,13 +475,13 @@ class ElectrumClient extends EventEmitter {
         id,
       };
 
-      // Timeout after 30 seconds
+      // Timeout after configured duration (default 30s, 90s for Tor)
       const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
+          reject(new Error(`Request timeout after ${this.requestTimeoutMs}ms`));
         }
-      }, 30000);
+      }, this.requestTimeoutMs);
 
       this.pendingRequests.set(id, { resolve, reject, timeoutId });
 
@@ -490,13 +517,13 @@ class ElectrumClient extends EventEmitter {
       };
 
       const promise = new Promise((resolve, reject) => {
-        // Timeout after 60 seconds for batch requests (longer than single requests)
+        // Timeout after configured duration (default 60s, 180s for Tor)
         const timeoutId = setTimeout(() => {
           if (this.pendingRequests.has(id)) {
             this.pendingRequests.delete(id);
-            reject(new Error(`Batch request timeout for id ${id}`));
+            reject(new Error(`Batch request timeout after ${this.batchRequestTimeoutMs}ms for id ${id}`));
           }
-        }, 60000);
+        }, this.batchRequestTimeoutMs);
 
         this.pendingRequests.set(id, { resolve, reject, timeoutId });
       });

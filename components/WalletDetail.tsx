@@ -1886,12 +1886,20 @@ export const WalletDetail: React.FC = () => {
                       }`}>
                         {entry.module}
                       </span>
+                      {/* Tor Badge - only shown when viaTor is true */}
+                      {entry.details?.viaTor && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300" title="Connection routed through Tor">
+                          🧅 TOR
+                        </span>
+                      )}
                       {/* Message */}
                       <span className="text-sanctuary-700 dark:text-sanctuary-300 flex-1 break-words">
                         {entry.message}
                         {entry.details && (
                           <span className="text-sanctuary-400 ml-2">
-                            {Object.entries(entry.details).map(([k, v]) => `${k}=${v}`).join(' ')}
+                            {Object.entries(entry.details)
+                              .filter(([k]) => k !== 'viaTor') // viaTor shown as badge
+                              .map(([k, v]) => `${k}=${v}`).join(' ')}
                           </span>
                         )}
                       </span>

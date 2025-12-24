@@ -647,13 +647,7 @@ class SyncService {
         },
       });
 
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
-      walletLog(walletId, 'info', 'SYNC', `Sync completed in ${duration}s`, {
-        transactions: result.transactions,
-        utxos: result.utxos,
-        addresses: result.addresses,
-      });
 
       // Always notify sync completion via WebSocket
       notificationService.broadcastSyncStatus(walletId, {

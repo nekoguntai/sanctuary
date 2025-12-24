@@ -695,7 +695,7 @@ export const NodeConfig: React.FC = () => {
 
                     {/* Server List with Health Stats */}
                     <div className="space-y-2">
-                      {servers.sort((a, b) => a.priority - b.priority).map((server, index) => (
+                      {[...servers].sort((a, b) => a.priority - b.priority).map((server, index) => (
                         <div
                           key={server.id}
                           className={`p-3 rounded-lg border transition-colors ${

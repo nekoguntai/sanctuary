@@ -238,7 +238,7 @@ export const NodeConfig: React.FC = () => {
     if (!nodeConfig?.proxyHost || !nodeConfig?.proxyPort) return;
 
     setProxyTestStatus('testing');
-    setProxyTestMessage('Testing proxy connection...');
+    setProxyTestMessage('Verifying Tor connection via .onion address...');
 
     try {
       const result = await adminApi.testProxy({
@@ -261,11 +261,11 @@ export const NodeConfig: React.FC = () => {
       setProxyTestMessage(error.response?.data?.message || error.message || 'Failed to test proxy');
     }
 
-    // Clear status after 5 seconds
+    // Clear status after 10 seconds (longer to show exit IP)
     setTimeout(() => {
       setProxyTestStatus('idle');
       setProxyTestMessage('');
-    }, 5000);
+    }, 10000);
   };
 
   const handleProxyPreset = (preset: 'tor' | 'tor-browser' | 'tor-container') => {
@@ -1346,7 +1346,7 @@ export const NodeConfig: React.FC = () => {
                     disabled={proxyTestStatus === 'testing' || !nodeConfig.proxyHost || !nodeConfig.proxyPort}
                     className="w-full"
                   >
-                    Test Proxy Connection
+                    Verify Tor Connection
                   </Button>
                 </div>
               )}

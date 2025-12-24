@@ -284,11 +284,13 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
 
 /**
  * POST /api/v1/admin/proxy/test
- * Test SOCKS5 proxy connection (admin only)
+ * Test SOCKS5/Tor proxy with comprehensive verification:
+ * 1. Connect to a .onion address (proves Tor routing works)
+ * 2. Check torproject.org to confirm Tor exit and get exit IP
  */
 router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { host, port, username, password, targetHost, targetPort } = req.body;
+    const { host, port, username, password } = req.body;
 
     // Validation
     if (!host || !port) {
@@ -298,41 +300,84 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
       });
     }
 
-    // Test proxy connection by connecting to a target (default: blockstream electrum)
-    const testTarget = {
-      host: targetHost || 'electrum.blockstream.info',
-      port: targetPort || 50001,
+    const proxyPort = parseInt(port.toString(), 10);
+    const { SocksClient } = await import('socks');
+
+    // Step 1: Test .onion connectivity (definitive proof Tor works)
+    const onionTarget = {
+      host: 'explorerzydxu5ecjrkwceayqybizmpjjznk5izmitf2modhcusuqlid.onion',
+      port: 143, // TCP Electrum port
     };
 
-    const { SocksClient } = await import('socks');
     const socksOptions = {
       proxy: {
         host,
-        port: parseInt(port.toString(), 10),
-        type: 5 as const, // SOCKS5
+        port: proxyPort,
+        type: 5 as const,
         ...(username && password ? { userId: username, password } : {}),
       },
       command: 'connect' as const,
-      destination: {
-        host: testTarget.host,
-        port: testTarget.port,
-      },
-      timeout: 10000,
+      destination: onionTarget,
+      timeout: 30000,
     };
 
-    const { socket } = await SocksClient.createConnection(socksOptions);
-    socket.destroy(); // Close the test connection
+    try {
+      const { socket } = await SocksClient.createConnection(socksOptions);
+      socket.destroy();
+    } catch (onionError: any) {
+      log.error('[ADMIN] .onion connection failed', { error: String(onionError) });
+      return res.status(500).json({
+        success: false,
+        error: 'Tor Verification Failed',
+        message: 'Could not reach .onion address - Tor may not be working',
+      });
+    }
+
+    // Step 2: Check torproject.org to get exit IP
+    let exitIp = 'unknown';
+    let isTorExit = false;
+
+    try {
+      const { SocksProxyAgent } = await import('socks-proxy-agent');
+      const proxyUrl = username && password
+        ? `socks5://${username}:${password}@${host}:${proxyPort}`
+        : `socks5://${host}:${proxyPort}`;
+      const agent = new SocksProxyAgent(proxyUrl);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch('https://check.torproject.org/api/ip', {
+        agent,
+        signal: controller.signal,
+      } as any);
+
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const data = await response.json() as { IsTor: boolean; IP: string };
+        isTorExit = data.IsTor;
+        exitIp = data.IP;
+      }
+    } catch (ipError: any) {
+      // Non-fatal - .onion test already passed, just couldn't get exit IP
+      log.warn('[ADMIN] Could not fetch exit IP from torproject.org', { error: String(ipError) });
+    }
 
     res.json({
       success: true,
-      message: `Successfully connected through proxy to ${testTarget.host}:${testTarget.port}`,
+      message: isTorExit
+        ? `Tor verified! Exit node IP: ${exitIp}`
+        : `.onion reachable, but exit check inconclusive. IP: ${exitIp}`,
+      exitIp,
+      isTorExit,
     });
   } catch (error: any) {
-    log.error('[ADMIN] Proxy test error', { error: String(error) });
+    log.error('[ADMIN] Tor verification failed', { error: String(error) });
     res.status(500).json({
       success: false,
-      error: 'Proxy Connection Failed',
-      message: error.message || 'Failed to connect through proxy',
+      error: 'Tor Verification Failed',
+      message: error.message || 'Failed to verify Tor connection',
     });
   }
 });

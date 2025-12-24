@@ -296,7 +296,7 @@ test_capture_pre_upgrade_state() {
 
     # Capture database state
     local user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
-        "SELECT COUNT(*) FROM \"User\";" 2>/dev/null | tr -d ' ')
+        "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' ')
     log_info "User count: $user_count"
 
     log_success "Pre-upgrade state captured"
@@ -611,7 +611,7 @@ test_volume_data_persistence() {
 
     while [ $attempt -le $max_attempts ]; do
         user_count=$(compose_exec postgres psql -U sanctuary -d sanctuary -t -c \
-            "SELECT COUNT(*) FROM \"User\";" 2>&1)
+            "SELECT COUNT(*) FROM users;" 2>&1)
         local exit_code=$?
 
         # Clean up whitespace

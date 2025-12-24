@@ -36,15 +36,44 @@ jobs:
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Wait for Install Tests workflow
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-name: 'Install Test Summary'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          # Install tests can take 30+ minutes for fresh-install E2E tests
-          running-workflow-name: 'Wait for Install Tests'
-          allowed-conclusions: success
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHECK_NAME="Install Test Summary"
+          MAX_ATTEMPTS=60  # 30 minutes at 30-second intervals
+          ATTEMPT=0
+
+          echo "Waiting for '$CHECK_NAME' check to complete on ${{ github.sha }}..."
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+
+            # Query for the check run
+            RESULT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs \
+              --jq ".check_runs[] | select(.name == \"$CHECK_NAME\") | {status: .status, conclusion: .conclusion}" 2>/dev/null || echo "{}")
+
+            STATUS=$(echo "$RESULT" | jq -r '.status // "not_found"')
+            CONCLUSION=$(echo "$RESULT" | jq -r '.conclusion // "null"')
+
+            if [ "$STATUS" == "not_found" ] || [ "$STATUS" == "null" ]; then
+              echo "[$ATTEMPT/$MAX_ATTEMPTS] Check '$CHECK_NAME' not found yet, waiting..."
+            elif [ "$STATUS" == "completed" ]; then
+              if [ "$CONCLUSION" == "success" ]; then
+                echo "✓ Install tests passed!"
+                exit 0
+              else
+                echo "✗ Install tests failed with conclusion: $CONCLUSION"
+                exit 1
+              fi
+            else
+              echo "[$ATTEMPT/$MAX_ATTEMPTS] Check status: $STATUS, waiting..."
+            fi
+
+            sleep 30
+          done
+
+          echo "✗ Timed out waiting for Install Test Summary after 30 minutes"
+          exit 1
 
   # ============================================
   # Run Release Candidate Validation

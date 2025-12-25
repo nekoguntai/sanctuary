@@ -1365,6 +1365,71 @@ export async function syncWallet(walletId: string): Promise<{
       data: { spent: true },
     });
     walletLog(walletId, 'info', 'UTXO', `Marked ${utxosToMarkSpent.length} UTXOs as spent (no longer on blockchain)`);
+
+    // Find and invalidate any draft transactions that were using these spent UTXOs
+    // This handles RBF scenarios where a replacement tx confirms, making the original draft invalid
+    const affectedLocks = await prisma.draftUtxoLock.findMany({
+      where: { utxoId: { in: utxosToMarkSpent } },
+      select: { draftId: true, draft: { select: { id: true, label: true, recipient: true } } },
+    });
+
+    if (affectedLocks.length > 0) {
+      const uniqueDraftIds = [...new Set(affectedLocks.map(lock => lock.draftId))];
+      const draftLabels = affectedLocks
+        .filter(lock => lock.draft.label)
+        .map(lock => lock.draft.label)
+        .filter((label, idx, arr) => arr.indexOf(label) === idx);
+
+      // Delete the invalidated drafts (UTXO locks cascade delete)
+      await prisma.draftTransaction.deleteMany({
+        where: { id: { in: uniqueDraftIds } },
+      });
+
+      walletLog(
+        walletId,
+        'info',
+        'DRAFT',
+        `Invalidated ${uniqueDraftIds.length} draft(s) due to spent UTXOs${draftLabels.length > 0 ? `: ${draftLabels.join(', ')}` : ''}`
+      );
+    }
+
+    // Also invalidate pending mempool transactions whose inputs were spent
+    // This handles RBF scenarios where a replacement tx confirms
+    const spentUtxoDetails = await prisma.uTXO.findMany({
+      where: { id: { in: utxosToMarkSpent } },
+      select: { txid: true, vout: true },
+    });
+
+    if (spentUtxoDetails.length > 0) {
+      // Find pending transactions that have inputs matching the spent UTXOs
+      const pendingTxsToInvalidate = await prisma.transaction.findMany({
+        where: {
+          walletId,
+          confirmations: 0,
+          rbfStatus: 'active',
+          inputs: {
+            some: {
+              OR: spentUtxoDetails.map(u => ({ txid: u.txid, vout: u.vout })),
+            },
+          },
+        },
+        select: { id: true, txid: true },
+      });
+
+      if (pendingTxsToInvalidate.length > 0) {
+        await prisma.transaction.updateMany({
+          where: { id: { in: pendingTxsToInvalidate.map(tx => tx.id) } },
+          data: { rbfStatus: 'replaced' },
+        });
+
+        walletLog(
+          walletId,
+          'info',
+          'TX',
+          `Marked ${pendingTxsToInvalidate.length} pending transaction(s) as replaced (inputs spent): ${pendingTxsToInvalidate.map(tx => tx.txid.slice(0, 8)).join(', ')}`
+        );
+      }
+    }
   }
 
   // Batch update UTXO confirmations

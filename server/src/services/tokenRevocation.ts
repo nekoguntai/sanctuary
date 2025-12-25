@@ -204,6 +204,3 @@ export function shutdownRevocationService(): void {
     log.info('Token revocation service shutdown');
   }
 }
-
-// Initialize on module load
-initializeRevocationService();

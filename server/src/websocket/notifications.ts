@@ -126,15 +126,24 @@ export class NotificationService {
   }
 
   /**
-   * Subscribe to new blocks
+   * Subscribe to new blocks with retry logic
    */
-  private async subscribeToBlocks() {
-    try {
-      // In production, this would subscribe to Electrum's blockchain.headers.subscribe
-      // For demo, we'll simulate periodic block checks
-      log.debug('Subscribed to blockchain headers');
-    } catch (err) {
-      log.error('Failed to subscribe to blocks', { error: String(err) });
+  private async subscribeToBlocks(maxRetries = 3, delayMs = 2000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // In production, this would subscribe to Electrum's blockchain.headers.subscribe
+        // For demo, we'll simulate periodic block checks
+        log.debug('Subscribed to blockchain headers');
+        return;
+      } catch (err) {
+        log.warn(`Failed to subscribe to blocks (attempt ${attempt}/${maxRetries})`, { error: String(err) });
+        if (attempt < maxRetries) {
+          const delay = delayMs * attempt;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          log.error('Failed to subscribe to blocks after all retries', { error: String(err) });
+        }
+      }
     }
   }
 

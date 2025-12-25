@@ -154,7 +154,13 @@ export class WebSocketClient {
       clearTimeout(this.reconnectTimer);
     }
 
-    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
+    // Calculate base delay with exponential backoff
+    const baseDelay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts), 30000);
+
+    // Add jitter (±25%) to prevent thundering herd
+    const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
+    const delay = Math.max(0, Math.round(baseDelay + jitter));
+
     log.debug(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {

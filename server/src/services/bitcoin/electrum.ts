@@ -313,7 +313,6 @@ class ElectrumClient extends EventEmitter {
 
             this.socket!.on('error', (error) => {
               log.error('Socket error', { error });
-              handleError(error);
               // Reject all pending requests on socket error
               this.rejectPendingRequests(new Error(`Socket error: ${error.message}`));
             });

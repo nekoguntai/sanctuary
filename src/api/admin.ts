@@ -468,6 +468,21 @@ export async function reorderElectrumServers(serverIds: string[]): Promise<Elect
 }
 
 /**
+ * Test Electrum connection with arbitrary host/port/ssl
+ */
+export async function testElectrumConnection(config: {
+  host: string;
+  port: number;
+  useSsl: boolean;
+}): Promise<{
+  success: boolean;
+  message: string;
+  blockHeight?: number;
+}> {
+  return apiClient.post('/admin/electrum-servers/test-connection', config);
+}
+
+/**
  * Test SOCKS5 proxy connection
  */
 export async function testProxy(config: {

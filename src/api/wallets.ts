@@ -14,7 +14,7 @@ export interface CreateWalletRequest {
   name: string;
   type: 'single_sig' | 'multi_sig';
   scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
-  network?: 'mainnet' | 'testnet' | 'regtest';
+  network?: 'mainnet' | 'testnet' | 'regtest' | 'signet';
   quorum?: number;
   totalSigners?: number;
   descriptor?: string;
@@ -64,7 +64,7 @@ export interface ImportValidationResult {
   format: 'descriptor' | 'json' | 'wallet_export' | 'bluewallet_text';
   walletType: 'single_sig' | 'multi_sig';
   scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
-  network: 'mainnet' | 'testnet' | 'regtest';
+  network: 'mainnet' | 'testnet' | 'regtest' | 'signet';
   quorum?: number;
   totalSigners?: number;
   devices: DeviceResolution[];
@@ -74,7 +74,7 @@ export interface ImportValidationResult {
 export interface ImportWalletRequest {
   data: string; // Descriptor or JSON
   name: string;
-  network?: 'mainnet' | 'testnet' | 'regtest';
+  network?: 'mainnet' | 'testnet' | 'regtest' | 'signet';
   deviceLabels?: Record<string, string>;
 }
 

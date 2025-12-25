@@ -186,10 +186,43 @@
         background-color: inherit !important;
       }
 
+      /* Form elements: Override browser defaults in dark mode
+       * These use bg-950 to match surface-inset/surface-muted */
       html.dark input[type="text"],
       html.dark input[type="password"],
-      html.dark input[type="email"] {
-        background-color: var(--color-bg-900) !important;
+      html.dark input[type="email"],
+      html.dark input[type="number"],
+      html.dark input[type="url"],
+      html.dark input[type="tel"],
+      html.dark input[type="search"],
+      html.dark select,
+      html.dark textarea {
+        background-color: var(--color-bg-950) !important;
+        color: var(--color-bg-100) !important;
+      }
+
+      /* Light mode form elements for surface-muted/surface-inset consistency */
+      input[type="text"].surface-muted,
+      input[type="password"].surface-muted,
+      input[type="email"].surface-muted,
+      input[type="number"].surface-muted,
+      input[type="url"].surface-muted,
+      input[type="tel"].surface-muted,
+      input[type="search"].surface-muted,
+      select.surface-muted,
+      textarea.surface-muted {
+        background-color: var(--color-bg-50);
+      }
+      html.dark input[type="text"].surface-muted,
+      html.dark input[type="password"].surface-muted,
+      html.dark input[type="email"].surface-muted,
+      html.dark input[type="number"].surface-muted,
+      html.dark input[type="url"].surface-muted,
+      html.dark input[type="tel"].surface-muted,
+      html.dark input[type="search"].surface-muted,
+      html.dark select.surface-muted,
+      html.dark textarea.surface-muted {
+        background-color: var(--color-bg-950) !important;
       }
 
       /* Pattern opacity CSS variable - default to 1 (50% user setting = design opacity) */

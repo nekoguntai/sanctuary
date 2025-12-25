@@ -97,6 +97,8 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
       const server = await adminApi.addElectrumServer({
         ...newServer,
         network: selectedNetwork,
+        enabled: true,
+        priority: servers[selectedNetwork].length + 1,
       });
 
       setServers((prev) => ({

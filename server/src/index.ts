@@ -33,7 +33,8 @@ import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
-import { connectWithRetry, disconnect } from './models/prisma';
+import { initializeRevocationService, shutdownRevocationService } from './services/tokenRevocation';
+import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
 
 const log = createLogger('SERVER');
 
@@ -197,10 +198,28 @@ notificationService.start().catch((err) => {
   log.error('Failed to start notification service', { error: err });
 });
 
-// Start background sync service
+// Start background sync service with retry logic
 const syncService = getSyncService();
-syncService.start().catch((err) => {
-  log.error('Failed to start sync service', { error: err });
+const startSyncServiceWithRetry = async (maxRetries = 3, delayMs = 2000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await syncService.start();
+      log.info('Sync service started successfully');
+      return;
+    } catch (err) {
+      log.warn(`Failed to start sync service (attempt ${attempt}/${maxRetries})`, { error: err });
+      if (attempt < maxRetries) {
+        const delay = delayMs * attempt;
+        log.info(`Retrying sync service start in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        log.error('Failed to start sync service after all retries', { error: err });
+      }
+    }
+  }
+};
+startSyncServiceWithRetry().catch(() => {
+  // Error already logged
 });
 
 // Start maintenance service (cleanup jobs)
@@ -211,6 +230,12 @@ maintenanceService.start();
   try {
     // Connect to database with retry logic
     await connectWithRetry();
+
+    // Start database health check and auto-reconnection
+    startDatabaseHealthCheck();
+
+    // Initialize token revocation service
+    initializeRevocationService();
 
     log.info('Checking database migrations...');
     const migrationResult = await migrationService.runMigrations();
@@ -246,13 +271,16 @@ maintenanceService.start();
   }
 })();
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  log.info('SIGTERM received, closing server...');
+// Graceful shutdown handler
+const handleShutdown = async (signal: string) => {
+  log.info(`${signal} received, closing server...`);
   wsServer.close();
+  gatewayWsServer.close();
   notificationService.stop();
   syncService.stop();
   maintenanceService.stop();
+  stopDatabaseHealthCheck();
+  shutdownRevocationService();
 
   // Close database connection
   try {
@@ -267,6 +295,10 @@ process.on('SIGTERM', async () => {
     log.info('Server closed');
     process.exit(0);
   });
-});
+};
+
+// Graceful shutdown on SIGTERM and SIGINT
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 export default app;

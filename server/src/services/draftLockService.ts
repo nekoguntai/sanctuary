@@ -62,64 +62,72 @@ export async function lockUtxosForDraft(
   }
 
   try {
-    // Check if any UTXOs are already locked by other drafts
-    const existingLocks = await prisma.draftUtxoLock.findMany({
-      where: {
-        utxoId: { in: utxoIds },
-        draftId: { not: draftId }, // Exclude our own draft (for re-locking scenarios)
-      },
-      include: {
-        draft: {
-          select: { id: true, label: true },
-        },
-        utxo: {
-          select: { txid: true, vout: true },
-        },
-      },
-    });
-
-    if (existingLocks.length > 0) {
-      const failedUtxoIds = existingLocks.map(lock => lock.utxoId);
-      const lockedByDraftIds = [...new Set(existingLocks.map(lock => lock.draftId))];
-
-      log.warn(`Cannot lock UTXOs for draft ${draftId}: ${existingLocks.length} UTXOs already locked`, {
-        failedUtxoIds,
-        lockedByDraftIds,
-      });
-
-      return {
-        success: false,
-        lockedCount: 0,
-        failedUtxoIds,
-        lockedByDraftIds,
-      };
-    }
-
     // Create locks for all UTXOs atomically using a transaction
-    await prisma.$transaction(async (tx) => {
+    // Check and lock are done together to prevent TOCTOU race conditions
+    const lockResult = await prisma.$transaction(async (tx) => {
       // First, remove any existing locks for this draft (in case of update)
       await tx.draftUtxoLock.deleteMany({
         where: { draftId },
       });
 
-      // Then create new locks
+      // Check if any UTXOs are already locked by other drafts
+      // This check is now inside the transaction to prevent race conditions
+      const existingLocks = await tx.draftUtxoLock.findMany({
+        where: {
+          utxoId: { in: utxoIds },
+          draftId: { not: draftId }, // Exclude our own draft
+        },
+        include: {
+          draft: {
+            select: { id: true, label: true },
+          },
+          utxo: {
+            select: { txid: true, vout: true },
+          },
+        },
+      });
+
+      if (existingLocks.length > 0) {
+        const failedUtxoIds = existingLocks.map(lock => lock.utxoId);
+        const lockedByDraftIds = [...new Set(existingLocks.map(lock => lock.draftId))];
+
+        log.warn(`Cannot lock UTXOs for draft ${draftId}: ${existingLocks.length} UTXOs already locked`, {
+          failedUtxoIds,
+          lockedByDraftIds,
+        });
+
+        return {
+          success: false,
+          lockedCount: 0,
+          failedUtxoIds,
+          lockedByDraftIds,
+        };
+      }
+
+      // Create new locks
       await tx.draftUtxoLock.createMany({
         data: utxoIds.map(utxoId => ({
           draftId,
           utxoId,
         })),
-        skipDuplicates: true, // In case of race condition
+        skipDuplicates: true,
       });
+
+      return {
+        success: true,
+        lockedCount: utxoIds.length,
+        failedUtxoIds: [],
+        lockedByDraftIds: [],
+      };
     });
+
+    if (!lockResult.success) {
+      return lockResult;
+    }
 
     log.debug(`Locked ${utxoIds.length} UTXOs for draft ${draftId}`);
 
-    return {
-      success: true,
-      lockedCount: utxoIds.length,
-      failedUtxoIds: [],
-      lockedByDraftIds: [],
-    };
+    return lockResult;
   } catch (error) {
     log.error(`Failed to lock UTXOs for draft ${draftId}`, { error: String(error) });
 

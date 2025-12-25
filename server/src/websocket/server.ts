@@ -498,16 +498,20 @@ export class SanctauryWebSocketServer {
    */
   private startHeartbeat() {
     const interval = setInterval(() => {
-      for (const client of this.clients) {
-        if (!client.isAlive) {
-          log.debug('Terminating dead connection');
-          client.terminate();
-          this.handleDisconnect(client);
-          continue;
-        }
+      try {
+        for (const client of this.clients) {
+          if (!client.isAlive) {
+            log.debug('Terminating dead connection');
+            client.terminate();
+            this.handleDisconnect(client);
+            continue;
+          }
 
-        client.isAlive = false;
-        client.ping();
+          client.isAlive = false;
+          client.ping();
+        }
+      } catch (error) {
+        log.error('Error in heartbeat interval', { error });
       }
     }, 30000); // 30 seconds
 

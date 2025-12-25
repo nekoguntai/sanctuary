@@ -18,6 +18,7 @@ import {
   Zap,
   Settings2,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { OutputRow } from '../OutputRow';
@@ -29,8 +30,9 @@ import { useCurrency } from '../../../contexts/CurrencyContext';
 import { parseBip21Uri } from '../../../utils/bip21Parser';
 import { validateAddress } from '../../../utils/validateAddress';
 import { calculateUTXOAge, getAgeCategoryColor } from '../../../utils/utxoAge';
-import { analyzeSpendPrivacy, type SpendPrivacyAnalysis } from '../../../src/api/transactions';
+import { analyzeSpendPrivacy, getWalletPrivacy, type SpendPrivacyAnalysis, type UtxoPrivacyInfo } from '../../../src/api/transactions';
 import SpendPrivacyCard from '../../SpendPrivacyCard';
+import { PrivacyBadge } from '../../PrivacyBadge';
 import type { UTXO } from '../../../types';
 
 export function OutputsStep() {
@@ -69,6 +71,7 @@ export function OutputsStep() {
   // Privacy analysis state
   const [privacyAnalysis, setPrivacyAnalysis] = useState<SpendPrivacyAnalysis | null>(null);
   const [privacyLoading, setPrivacyLoading] = useState(false);
+  const [utxoPrivacyMap, setUtxoPrivacyMap] = useState<Map<string, UtxoPrivacyInfo>>(new Map());
 
   // Video ref for QR scanning
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -141,9 +144,51 @@ export function OutputsStep() {
     return Math.max(0, needed - selectedTotal);
   }, [state.showCoinControl, state.selectedUTXOs.size, totalOutputAmount, estimatedFee, selectedTotal]);
 
+  // Fee warnings
+  const feeWarnings = useMemo(() => {
+    const warnings: string[] = [];
+
+    // Warning 1: Fee is excessive relative to amount being sent (>10% of amount)
+    if (totalOutputAmount > 0 && estimatedFee > 0) {
+      const feePercentage = (estimatedFee / totalOutputAmount) * 100;
+      if (feePercentage > 10) {
+        warnings.push(`Fee is ${feePercentage.toFixed(1)}% of the amount being sent`);
+      }
+    }
+
+    // Warning 2: Fee rate is much higher than slow estimate (>2x)
+    if (fees && state.feeRate > 0) {
+      const slowRate = fees.hourFee || fees.minimumFee || 1;
+      if (state.feeRate > slowRate * 2) {
+        warnings.push(`Fee rate (${state.feeRate} sat/vB) is ${(state.feeRate / slowRate).toFixed(1)}x the economy rate (${slowRate} sat/vB)`);
+      }
+    }
+
+    return warnings;
+  }, [totalOutputAmount, estimatedFee, fees, state.feeRate]);
+
+  // Fetch UTXO privacy data for display
+  useEffect(() => {
+    const fetchUtxoPrivacy = async () => {
+      try {
+        const data = await getWalletPrivacy(wallet.id);
+        const privacyMap = new Map<string, UtxoPrivacyInfo>();
+        for (const utxo of data.utxos) {
+          // Use txid:vout as key to match how UTXOs are identified in the UI
+          const key = `${utxo.txid}:${utxo.vout}`;
+          privacyMap.set(key, utxo);
+        }
+        setUtxoPrivacyMap(privacyMap);
+      } catch {
+        // Silently fail - privacy data is optional
+      }
+    };
+    fetchUtxoPrivacy();
+  }, [wallet.id]);
+
   // Fetch privacy analysis when UTXOs are selected
   useEffect(() => {
-    if (!state.showCoinControl || state.selectedUTXOs.size < 2) {
+    if (!state.showCoinControl || state.selectedUTXOs.size < 1) {
       setPrivacyAnalysis(null);
       return;
     }
@@ -348,15 +393,32 @@ export function OutputsStep() {
             </div>
           </div>
 
-          <div className="text-right flex-shrink-0">
-            <div className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100">
-              {format(utxo.amount)}
-            </div>
-            {formatFiat(utxo.amount) && (
-              <div className="text-[10px] text-sanctuary-500">
-                {formatFiat(utxo.amount)}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Privacy Badge */}
+            {(() => {
+              const privacyInfo = utxoPrivacyMap.get(utxoId);
+              if (privacyInfo?.score) {
+                return (
+                  <PrivacyBadge
+                    grade={privacyInfo.score.grade}
+                    score={privacyInfo.score.score}
+                    size="sm"
+                  />
+                );
+              }
+              return null;
+            })()}
+
+            <div className="text-right">
+              <div className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100">
+                {format(utxo.amount)}
               </div>
-            )}
+              {formatFiat(utxo.amount) && (
+                <div className="text-[10px] text-sanctuary-500">
+                  {formatFiat(utxo.amount)}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -408,6 +470,21 @@ export function OutputsStep() {
           </div>
         </div>
       </div>
+
+      {/* Fee Warnings */}
+      {feeWarnings.length > 0 && (
+        <div className="space-y-2">
+          {feeWarnings.map((warning, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+            >
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <span className="text-sm text-amber-700 dark:text-amber-300">{warning}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Recipients Section */}
       <div className="space-y-3">
@@ -519,7 +596,7 @@ export function OutputsStep() {
               </div>
 
               {/* Privacy Analysis Card */}
-              {privacyAnalysis && state.selectedUTXOs.size >= 2 && (
+              {privacyAnalysis && state.selectedUTXOs.size >= 1 && (
                 <SpendPrivacyCard analysis={privacyAnalysis} className="mt-3" />
               )}
 

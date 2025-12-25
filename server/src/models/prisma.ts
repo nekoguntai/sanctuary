@@ -134,8 +134,61 @@ export async function disconnect(): Promise<void> {
   log.info('Database disconnected');
 }
 
+// Database health check and reconnection
+let healthCheckInterval: NodeJS.Timeout | null = null;
+let isReconnecting = false;
+
+/**
+ * Start database health check monitoring
+ * Periodically checks connection and reconnects if needed
+ */
+export function startDatabaseHealthCheck(intervalMs: number = 60000): void {
+  if (healthCheckInterval) {
+    return; // Already running
+  }
+
+  healthCheckInterval = setInterval(async () => {
+    const isHealthy = await checkDatabaseHealth();
+
+    if (!isHealthy && !isReconnecting) {
+      isReconnecting = true;
+      log.warn('Database connection lost, attempting to reconnect...');
+
+      try {
+        // Disconnect and reconnect
+        await prisma.$disconnect();
+        await connectWithRetry();
+        log.info('Database reconnection successful');
+      } catch (error) {
+        log.error('Database reconnection failed', {
+          error: (error as Error).message,
+        });
+      } finally {
+        isReconnecting = false;
+      }
+    }
+  }, intervalMs);
+
+  // Prevent interval from keeping process alive during shutdown
+  healthCheckInterval.unref();
+
+  log.debug('Database health check monitoring started');
+}
+
+/**
+ * Stop database health check monitoring
+ */
+export function stopDatabaseHealthCheck(): void {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+    log.debug('Database health check monitoring stopped');
+  }
+}
+
 // Handle cleanup on shutdown
 process.on('beforeExit', async () => {
+  stopDatabaseHealthCheck();
   await prisma.$disconnect();
 });
 

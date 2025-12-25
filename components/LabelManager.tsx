@@ -145,7 +145,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
         {!isCreating && !editingLabel && (
           <button
             onClick={handleCreate}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary-500 hover:bg-primary-600 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary-500 hover:bg-primary-600 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             New Label
@@ -236,7 +236,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
             <button
               onClick={handleSave}
               disabled={!formName.trim() || saving}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 disabled:cursor-not-allowed text-white dark:text-sanctuary-100 rounded-lg text-sm font-medium transition-colors"
             >
               {saving ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />

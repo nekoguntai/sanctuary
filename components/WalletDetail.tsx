@@ -1617,7 +1617,7 @@ export const WalletDetail: React.FC = () => {
                                  <button
                                    onClick={handleSaveAddressLabels}
                                    disabled={savingAddressLabels}
-                                   className="p-1 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white rounded transition-colors"
+                                   className="p-1 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 text-white dark:text-sanctuary-100 rounded transition-colors"
                                    title="Save"
                                  >
                                    {savingAddressLabels ? (

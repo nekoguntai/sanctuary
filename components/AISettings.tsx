@@ -1366,7 +1366,7 @@ export default function AISettings() {
               <button
                 onClick={() => performToggleAI(true)}
                 disabled={isLoadingResources || (systemResources && !systemResources.overall.sufficient && !acknowledgeInsufficient)}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 Enable AI
               </button>

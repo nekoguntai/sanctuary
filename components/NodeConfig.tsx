@@ -1018,7 +1018,7 @@ export const NodeConfig: React.FC = () => {
                           <button
                             onClick={handleAddServer}
                             disabled={!newServer.label || !newServer.host || serverActionLoading === 'add'}
-                            className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             {serverActionLoading === 'add' ? 'Adding...' : 'Add Server'}
                           </button>
@@ -1096,7 +1096,7 @@ export const NodeConfig: React.FC = () => {
                               setNewServer({ label: '', host: '', port: 50002, useSsl: true });
                             }}
                             disabled={!newServer.label || !newServer.host || serverActionLoading === editingServerId}
-                            className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-3 py-1.5 text-xs rounded-lg bg-primary-600 text-white hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             {serverActionLoading === editingServerId ? 'Saving...' : 'Save Changes'}
                           </button>

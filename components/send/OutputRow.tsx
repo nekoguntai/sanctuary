@@ -230,7 +230,7 @@ export function OutputRow({
               <button
                 type="button"
                 onClick={() => onToggleSendMax(index)}
-                className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+                className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 rounded hover:bg-primary-600 dark:hover:bg-sanctuary-500 transition-colors"
                 title="Click to exit MAX mode"
               >
                 MAX
@@ -245,7 +245,7 @@ export function OutputRow({
             onClick={() => onToggleSendMax(index)}
             className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
               output.sendMax
-                ? 'bg-primary-500 text-white border-primary-500 hover:bg-primary-600'
+                ? 'bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 border-primary-500 dark:border-sanctuary-500 hover:bg-primary-600 dark:hover:bg-sanctuary-500'
                 : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
             }`}
           >

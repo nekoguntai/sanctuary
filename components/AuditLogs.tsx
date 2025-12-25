@@ -319,7 +319,7 @@ export const AuditLogs: React.FC = () => {
             </button>
             <button
               onClick={applyFilters}
-              className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+              className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 transition-colors"
             >
               Apply Filters
             </button>

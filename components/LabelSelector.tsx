@@ -258,7 +258,7 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
                   <button
                     onClick={handleCreateLabel}
                     disabled={!newLabelName.trim() || creating}
-                    className="p-1.5 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white rounded transition-colors"
+                    className="p-1.5 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 text-white dark:text-sanctuary-100 rounded transition-colors"
                   >
                     {creating ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />

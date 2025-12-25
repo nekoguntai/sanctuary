@@ -573,7 +573,7 @@ export const DraftList: React.FC<DraftListProps> = ({
                 ) : (
                   <button
                     onClick={() => handleResume(draft)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 transition-colors"
                   >
                     <Play className="w-4 h-4" />
                     Resume

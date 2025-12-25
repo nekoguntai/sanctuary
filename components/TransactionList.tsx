@@ -813,7 +813,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                               <button
                                 onClick={handleSaveLabels}
                                 disabled={savingLabels}
-                                className="flex items-center gap-1 text-xs text-white bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 px-2 py-1 rounded transition-colors"
+                                className="flex items-center gap-1 text-xs text-white dark:text-sanctuary-100 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 dark:bg-sanctuary-700 dark:hover:bg-sanctuary-600 dark:disabled:bg-sanctuary-800 dark:border dark:border-sanctuary-600 px-2 py-1 rounded transition-colors"
                               >
                                 {savingLabels ? (
                                   <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent" />

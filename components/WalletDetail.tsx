@@ -11,6 +11,8 @@ import * as authApi from '../src/api/auth';
 import * as draftsApi from '../src/api/drafts';
 import * as payjoinApi from '../src/api/payjoin';
 import * as privacyApi from '../src/api/transactions';
+import { truncateAddress } from '../utils/formatters';
+import { getAddressExplorerUrl } from '../utils/explorer';
 import {
   useWallet,
   useWalletUtxos,
@@ -1004,11 +1006,7 @@ export const WalletDetail: React.FC = () => {
       }
   };
 
-  // Truncate address to show first 10 + "..." + last 6 characters
-  const truncateAddress = (address: string) => {
-    if (address.length <= 18) return address;
-    return `${address.slice(0, 10)}...${address.slice(-6)}`;
-  };
+  // Note: truncateAddress is now imported from utils/formatters
 
   // Address label editing functions
   const handleEditAddressLabels = async (addr: Address) => {
@@ -1281,6 +1279,18 @@ export const WalletDetail: React.FC = () => {
              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
                {wallet.type === 'Multi Sig' ? `${getQuorumM(wallet.quorum)} of ${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Signature'}
              </span>
+             {/* Network Badge - only show if not mainnet */}
+             {wallet.network && wallet.network !== 'mainnet' && (
+               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${
+                 wallet.network === 'testnet'
+                   ? 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20'
+                   : wallet.network === 'signet'
+                   ? 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-500/20'
+                   : 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20'
+               }`}>
+                 {wallet.network}
+               </span>
+             )}
              {devices.map(d => (
                  <span key={d.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sanctuary-50 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-300 dark:border-sanctuary-700">
                     {getDeviceIcon(d.type, "w-3 h-3 mr-1")} {d.label}
@@ -1509,6 +1519,7 @@ export const WalletDetail: React.FC = () => {
             privacyData={privacyData}
             privacySummary={privacySummary}
             showPrivacy={showPrivacy}
+            network={wallet?.network}
           />
         )}
 
@@ -1576,7 +1587,7 @@ export const WalletDetail: React.FC = () => {
                                <QrCode className="w-3 h-3" />
                              </button>
                              <a
-                               href={`${explorerUrl}/address/${addr.address}`}
+                               href={getAddressExplorerUrl(addr.address, wallet?.network || 'mainnet', explorerUrl)}
                                target="_blank"
                                rel="noopener noreferrer"
                                className="text-sanctuary-400 hover:text-primary-500 dark:hover:text-primary-400"

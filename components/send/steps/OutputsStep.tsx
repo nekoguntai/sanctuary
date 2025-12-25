@@ -28,7 +28,7 @@ import { WizardNavigation } from '../WizardNavigation';
 import { useSendTransaction } from '../../../contexts/send';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { parseBip21Uri } from '../../../utils/bip21Parser';
-import { validateAddress } from '../../../utils/validateAddress';
+import { validateAddress, addressMatchesNetwork } from '../../../utils/validateAddress';
 import { calculateUTXOAge, getAgeCategoryColor } from '../../../utils/utxoAge';
 import { analyzeSpendPrivacy, getWalletPrivacy, type SpendPrivacyAnalysis, type UtxoPrivacyInfo } from '../../../src/api/transactions';
 import SpendPrivacyCard from '../../SpendPrivacyCard';
@@ -217,12 +217,32 @@ export function OutputsStep() {
     if (value.toLowerCase().startsWith('bitcoin:')) {
       try {
         const parsed = parseBip21Uri(value);
+        if (!parsed) {
+          // Fall through to regular address handling
+          updateOutputAddress(index, value);
+          return;
+        }
+
         updateOutputAddress(index, parsed.address);
         if (parsed.amount) {
           updateOutputAmount(index, parsed.amount.toString());
         }
+
+        // Validate payjoin URL: check if address network matches wallet network
         if (parsed.payjoinUrl) {
-          dispatch({ type: 'SET_PAYJOIN_URL', url: parsed.payjoinUrl });
+          const walletNetwork = (wallet.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
+          const addressMatches = addressMatchesNetwork(parsed.address, walletNetwork);
+
+          if (addressMatches) {
+            dispatch({ type: 'SET_PAYJOIN_URL', url: parsed.payjoinUrl });
+          } else {
+            // Network mismatch: disable payjoin for this transaction
+            dispatch({ type: 'SET_PAYJOIN_URL', url: null });
+            console.warn(
+              `Payjoin disabled: Address network doesn't match wallet network (${walletNetwork}). ` +
+              `Payjoin requires sender and receiver to be on the same network.`
+            );
+          }
         }
         return;
       } catch {
@@ -235,7 +255,7 @@ export function OutputsStep() {
     if (index === 0 && state.payjoinUrl) {
       dispatch({ type: 'SET_PAYJOIN_URL', url: null });
     }
-  }, [updateOutputAddress, updateOutputAmount, dispatch, state.payjoinUrl]);
+  }, [updateOutputAddress, updateOutputAmount, dispatch, state.payjoinUrl, wallet.network]);
 
   // Validate addresses on change
   useEffect(() => {

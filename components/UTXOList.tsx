@@ -4,6 +4,7 @@ import { Lock, Unlock, Check, ArrowUpRight, ExternalLink, FileText, AlertTriangl
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
+import { getAddressExplorerUrl, getTxExplorerUrl } from '../utils/explorer';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { useFeeEstimates } from '../hooks/queries/useBitcoin';
 import { PrivacyBadge } from './PrivacyBadge';
@@ -63,6 +64,7 @@ interface UTXOListProps {
   privacyData?: UtxoPrivacyInfo[];
   privacySummary?: WalletPrivacySummary;
   showPrivacy?: boolean;
+  network?: string; // Network for explorer URLs (mainnet, testnet, signet, regtest)
 }
 
 export const UTXOList: React.FC<UTXOListProps> = ({
@@ -75,6 +77,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
   privacyData,
   privacySummary,
   showPrivacy = false,
+  network = 'mainnet',
 }) => {
   const { format } = useCurrency();
   const [explorerUrl, setExplorerUrl] = useState('https://mempool.space');
@@ -351,7 +354,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                       )}
                     </div>
                     <a
-                      href={`${explorerUrl}/address/${utxo.address}`}
+                      href={getAddressExplorerUrl(utxo.address, network, explorerUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -403,7 +406,7 @@ export const UTXOList: React.FC<UTXOListProps> = ({
                         </span>
                         <br/>
                         <a
-                          href={`${explorerUrl}/tx/${utxo.txid}#vout=${utxo.vout}`}
+                          href={`${getTxExplorerUrl(utxo.txid, network, explorerUrl)}#vout=${utxo.vout}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}

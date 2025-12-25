@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { Server, Check, AlertCircle, Link as LinkIcon, CheckCircle, XCircle, Gauge, Globe, Layers, Plus, Trash2, Edit2, ChevronUp, ChevronDown, RefreshCw, Activity, Shield, Play, Square, Loader2 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { createLogger } from '../utils/logger';
+import { ElectrumServerSettings } from './ElectrumServerSettings';
 
 const log = createLogger('NodeConfig');
 
@@ -1119,6 +1120,29 @@ export const NodeConfig: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Section 4.5: Network-Specific Electrum Server Management */}
+          {nodeConfig.type === 'electrum' && (
+            <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+              <div className="p-4 border-b border-sanctuary-100 dark:border-sanctuary-800 bg-sanctuary-50/50 dark:bg-sanctuary-800/30">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Electrum Server Settings</h3>
+                    <p className="text-xs text-sanctuary-500">Manage servers per network (Mainnet, Testnet, Signet)</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5">
+                <ElectrumServerSettings
+                  poolEnabled={nodeConfig.poolEnabled}
+                  onPoolEnabledChange={(enabled) => setNodeConfig({ ...nodeConfig, poolEnabled: enabled })}
+                />
+              </div>
             </div>
           )}
 

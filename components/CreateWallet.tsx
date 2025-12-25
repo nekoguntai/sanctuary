@@ -25,6 +25,7 @@ export const CreateWallet: React.FC = () => {
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set());
   const [walletName, setWalletName] = useState('');
   const [scriptType, setScriptType] = useState<'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy'>('native_segwit');
+  const [network, setNetwork] = useState<'mainnet' | 'testnet' | 'signet' | 'regtest'>('mainnet');
   const [quorumM, setQuorumM] = useState(2);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -90,7 +91,7 @@ export const CreateWallet: React.FC = () => {
         name: walletName,
         type: walletType === WalletType.SINGLE_SIG ? 'single_sig' : 'multi_sig',
         scriptType: scriptType,
-        network: 'mainnet',
+        network: network,
         quorum: walletType === WalletType.MULTI_SIG ? quorumM : undefined,
         totalSigners: walletType === WalletType.MULTI_SIG ? selectedDeviceIds.size : undefined,
         deviceIds: Array.from(selectedDeviceIds),
@@ -190,14 +191,48 @@ export const CreateWallet: React.FC = () => {
         <div className="space-y-4">
             <div>
                 <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Wallet Name</label>
-                <input 
-                    type="text" 
+                <input
+                    type="text"
                     value={walletName}
                     onChange={(e) => setWalletName(e.target.value)}
                     placeholder={walletType === WalletType.SINGLE_SIG ? "e.g., My ColdCard Wallet" : "e.g., Family Savings"}
                     className="w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
                     autoFocus
                 />
+            </div>
+
+            {/* Network Selection */}
+            <div>
+                <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">Network</label>
+                <div className="flex gap-2">
+                    {(['mainnet', 'testnet', 'signet'] as const).map(net => (
+                        <button
+                            key={net}
+                            type="button"
+                            onClick={() => setNetwork(net)}
+                            className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
+                                network === net
+                                    ? net === 'mainnet'
+                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-900/20 dark:text-emerald-400'
+                                        : net === 'testnet'
+                                        ? 'border-amber-600 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/20 dark:text-amber-400'
+                                        : 'border-purple-600 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/20 dark:text-purple-400'
+                                    : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
+                            }`}
+                        >
+                            {net.charAt(0).toUpperCase() + net.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                {network !== 'mainnet' && (
+                    <div className={`mt-2 p-3 rounded-lg border text-xs ${
+                        network === 'testnet'
+                            ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
+                            : 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300'
+                    }`}>
+                        <strong>Warning:</strong> This wallet will operate on {network}. {network === 'testnet' ? 'Testnet coins have no real-world value.' : 'Signet is a controlled testing network.'}
+                    </div>
+                )}
             </div>
 
             {walletType === WalletType.SINGLE_SIG && (
@@ -267,6 +302,20 @@ export const CreateWallet: React.FC = () => {
                  <div className="px-6 py-4 grid grid-cols-2 gap-4">
                      <dt className="text-sm text-sanctuary-500">Type</dt>
                      <dd className="text-sm font-medium">{walletType}</dd>
+                 </div>
+                 <div className="px-6 py-4 grid grid-cols-2 gap-4">
+                     <dt className="text-sm text-sanctuary-500">Network</dt>
+                     <dd className="text-sm font-medium">
+                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                             network === 'mainnet'
+                                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                 : network === 'testnet'
+                                 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                 : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                         }`}>
+                             {network.charAt(0).toUpperCase() + network.slice(1)}
+                         </span>
+                     </dd>
                  </div>
                  {walletType === WalletType.SINGLE_SIG ? (
                      <div className="px-6 py-4 grid grid-cols-2 gap-4">

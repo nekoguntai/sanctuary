@@ -208,6 +208,9 @@ export const SendTransactionPage: React.FC = () => {
             unsignedPsbt: draftData.signedPsbtBase64 || draftData.psbtBase64,
             // Pass signed devices if any
             signedDevices: draftData.signedDeviceIds || [],
+            // Restore payjoin URL to allow re-attempt if previously failed
+            payjoinUrl: draftData.payjoinUrl || null,
+            payjoinStatus: 'idle', // Reset status to allow re-attempt
             outputs: draftData.outputs && draftData.outputs.length > 0
               ? draftData.outputs.map(o => ({
                   address: o.address,

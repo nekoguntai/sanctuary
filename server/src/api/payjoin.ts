@@ -257,21 +257,33 @@ router.post('/parse-uri', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/payjoin/attempt
- * Attempt to perform a Payjoin send (for testing)
+ * Attempt to perform a Payjoin send
  */
 router.post('/attempt', async (req: Request, res: Response) => {
   try {
-    const { psbt, payjoinUrl } = req.body;
+    const { psbt, payjoinUrl, network } = req.body;
 
     if (!psbt || !payjoinUrl) {
       return res.status(400).json({ error: 'psbt and payjoinUrl are required' });
     }
 
+    // Validate network parameter
+    if (network && !['mainnet', 'testnet', 'regtest'].includes(network)) {
+      return res.status(400).json({ error: 'Invalid network. Must be mainnet, testnet, or regtest' });
+    }
+
     const payjoinService = await import('../services/payjoinService');
+    const { getNetwork } = await import('../services/bitcoin/utils');
+
+    // Use provided network or default to mainnet
+    const networkStr = (network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
+    const networkObj = getNetwork(networkStr);
+
     const result = await payjoinService.attemptPayjoinSend(
       psbt,
       payjoinUrl,
-      [0] // Assume first input is sender's
+      [0], // Assume first input is sender's
+      networkObj
     );
 
     res.json(result);

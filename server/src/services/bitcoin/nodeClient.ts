@@ -5,7 +5,7 @@
  * supporting both Electrum servers and Bitcoin Core RPC.
  */
 
-import { ElectrumClient, getElectrumClient, resetElectrumClient } from './electrum';
+import { ElectrumClient, getElectrumClient, getElectrumClientForNetwork, resetElectrumClient } from './electrum';
 import { BitcoinRpcClient, getBitcoinRpcClient, resetBitcoinRpcClient } from './bitcoinRpc';
 import {
   initializeElectrumPool,
@@ -151,8 +151,9 @@ function getDefaultElectrumConfig(): NodeConfig {
 
 /**
  * Get the node client based on active configuration
+ * @param network Optional network parameter (mainnet, testnet, signet, or regtest)
  */
-export async function getNodeClient(): Promise<NodeClientInterface> {
+export async function getNodeClient(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<NodeClientInterface> {
   // Return cached client if available and connected
   if (activeClient && activeClient.isConnected()) {
     return activeClient;
@@ -202,25 +203,25 @@ export async function getNodeClient(): Promise<NodeClientInterface> {
       } catch (error) {
         // Fall back to singleton if pool fails
         log.warn('Pool initialization failed, falling back to singleton', { error: String(error) });
-        const electrumClient = getElectrumClient();
+        const electrumClient = getElectrumClientForNetwork(network);
 
         if (!electrumClient.isConnected()) {
           await electrumClient.connect();
         }
 
         activeClient = electrumClient;
-        log.info(`Using Electrum singleton at ${activeConfig.host}:${activeConfig.port}`);
+        log.info(`Using Electrum singleton (${network}) at ${activeConfig.host}:${activeConfig.port}`);
       }
     } else {
       // Single server mode - use direct connection to configured host
-      const electrumClient = getElectrumClient();
+      const electrumClient = getElectrumClientForNetwork(network);
 
       if (!electrumClient.isConnected()) {
         await electrumClient.connect();
       }
 
       activeClient = electrumClient;
-      log.info(`Using Electrum single server at ${activeConfig.host}:${activeConfig.port}`);
+      log.info(`Using Electrum single server (${network}) at ${activeConfig.host}:${activeConfig.port}`);
     }
   }
 

@@ -12,6 +12,7 @@ import * as walletService from '../services/wallet';
 import { notifyNewDraft } from '../services/notifications/notificationService';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 import { lockUtxosForDraft, resolveUtxoIds } from '../services/draftLockService';
+import { serializeDraftTransaction, serializeDraftTransactions } from '../utils/serialization';
 
 const router = Router();
 const log = createLogger('DRAFTS');
@@ -59,18 +60,7 @@ router.get('/wallets/:walletId/drafts', async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Convert BigInt to numbers for JSON serialization
-    const serializedDrafts = drafts.map(draft => ({
-      ...draft,
-      amount: Number(draft.amount),
-      fee: Number(draft.fee),
-      totalInput: Number(draft.totalInput),
-      totalOutput: Number(draft.totalOutput),
-      changeAmount: Number(draft.changeAmount),
-      effectiveAmount: Number(draft.effectiveAmount),
-    }));
-
-    res.json(serializedDrafts);
+    res.json(serializeDraftTransactions(drafts));
   } catch (error) {
     log.error('[DRAFTS] Get drafts error', { error: String(error) });
     res.status(500).json({
@@ -109,18 +99,7 @@ router.get('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Respo
       });
     }
 
-    // Convert BigInt to numbers for JSON serialization
-    const serializedDraft = {
-      ...draft,
-      amount: Number(draft.amount),
-      fee: Number(draft.fee),
-      totalInput: Number(draft.totalInput),
-      totalOutput: Number(draft.totalOutput),
-      changeAmount: Number(draft.changeAmount),
-      effectiveAmount: Number(draft.effectiveAmount),
-    };
-
-    res.json(serializedDraft);
+    res.json(serializeDraftTransaction(draft));
   } catch (error) {
     log.error('[DRAFTS] Get draft error', { error: String(error) });
     res.status(500).json({
@@ -149,6 +128,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       outputs, // Multiple outputs support
       inputs, // Multiple inputs for flow visualization
       decoyOutputs, // Decoy change outputs for privacy
+      payjoinUrl, // Payjoin endpoint URL
       isRBF, // RBF replacement transactions skip UTXO locking
       label,
       memo,
@@ -206,6 +186,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
         outputs: outputs || null,
         inputs: inputs || null,
         decoyOutputs: decoyOutputs || null,
+        payjoinUrl: payjoinUrl || null,
         isRBF: isRBF ?? false,
         label,
         memo,
@@ -266,18 +247,7 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       log.warn('[DRAFTS] Failed to send draft notification', { error: String(err) });
     });
 
-    // Convert BigInt to numbers for JSON serialization
-    const serializedDraft = {
-      ...draft,
-      amount: Number(draft.amount),
-      fee: Number(draft.fee),
-      totalInput: Number(draft.totalInput),
-      totalOutput: Number(draft.totalOutput),
-      changeAmount: Number(draft.changeAmount),
-      effectiveAmount: Number(draft.effectiveAmount),
-    };
-
-    res.status(201).json(serializedDraft);
+    res.status(201).json(serializeDraftTransaction(draft));
   } catch (error: any) {
     log.error('[DRAFTS] Create draft error', { error: String(error) });
     res.status(400).json({
@@ -374,18 +344,7 @@ router.patch('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Res
 
     log.info('[DRAFTS] Updated draft', { draftId, walletId, status: draft.status });
 
-    // Convert BigInt to numbers for JSON serialization
-    const serializedDraft = {
-      ...draft,
-      amount: Number(draft.amount),
-      fee: Number(draft.fee),
-      totalInput: Number(draft.totalInput),
-      totalOutput: Number(draft.totalOutput),
-      changeAmount: Number(draft.changeAmount),
-      effectiveAmount: Number(draft.effectiveAmount),
-    };
-
-    res.json(serializedDraft);
+    res.json(serializeDraftTransaction(draft));
   } catch (error: any) {
     log.error('[DRAFTS] Update draft error', { error: String(error) });
     res.status(400).json({

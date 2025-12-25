@@ -92,3 +92,36 @@ export function isTestnetAddress(address: string): boolean {
     PATTERNS.testnetSegwit.test(trimmed)
   );
 }
+
+/**
+ * Get the network for an address
+ */
+export function getAddressNetwork(address: string): 'mainnet' | 'testnet' | 'regtest' | null {
+  if (!address) return null;
+
+  const trimmed = address.trim();
+
+  if (isMainnetAddress(trimmed)) return 'mainnet';
+  if (isTestnetAddress(trimmed)) return 'testnet';
+  // Note: regtest addresses look the same as testnet addresses
+  // They can only be distinguished by context (i.e., which network the wallet is on)
+  return null;
+}
+
+/**
+ * Check if an address matches a specific network
+ */
+export function addressMatchesNetwork(
+  address: string,
+  network: 'mainnet' | 'testnet' | 'regtest'
+): boolean {
+  const addressNetwork = getAddressNetwork(address);
+  if (!addressNetwork) return false;
+
+  // Regtest uses testnet address format
+  if (network === 'regtest') {
+    return addressNetwork === 'testnet';
+  }
+
+  return addressNetwork === network;
+}

@@ -7,6 +7,7 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
+import { INPUT_VBYTES, OUTPUT_VBYTES, OVERHEAD_VBYTES } from './constants';
 
 // Initialize ECC library for Taproot/P2TR support
 // This is required by bitcoinjs-lib v6+ for bech32m address validation
@@ -91,23 +92,8 @@ export function estimateTransactionSize(
   outputCount: number,
   scriptType: 'legacy' | 'nested_segwit' | 'native_segwit' | 'taproot' = 'native_segwit'
 ): number {
-  // Base transaction size
-  let size = 10; // version (4) + locktime (4) + input count (1) + output count (1)
-
-  // Input sizes (approximate)
-  const inputSizes: Record<string, number> = {
-    legacy: 148,           // P2PKH
-    nested_segwit: 91,     // P2SH-P2WPKH
-    native_segwit: 68,     // P2WPKH
-    taproot: 58,           // P2TR
-  };
-
-  // Output size (approximately same for all types)
-  const outputSize = 34;
-
-  size += inputCount * inputSizes[scriptType];
-  size += outputCount * outputSize;
-
+  const inputSize = INPUT_VBYTES[scriptType] || INPUT_VBYTES.native_segwit;
+  const size = OVERHEAD_VBYTES + inputCount * inputSize + outputCount * OUTPUT_VBYTES;
   return size;
 }
 

@@ -11,19 +11,9 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { INPUT_VBYTES, DEFAULT_INPUT_VBYTES, OUTPUT_VBYTES, OVERHEAD_VBYTES } from './bitcoin/constants';
 
 const log = createLogger('UTXO-SELECTION');
-
-// Input virtual bytes by script type
-const INPUT_VBYTES: Record<string, number> = {
-  legacy: 148,
-  nested_segwit: 91,
-  native_segwit: 68,
-  taproot: 57.5,
-};
-
-// Default to native_segwit for unknown script types
-const DEFAULT_INPUT_VBYTES = 68;
 
 // UTXO selection strategy type (duplicated from frontend types for Docker build isolation)
 export type SelectionStrategy =
@@ -134,10 +124,7 @@ function calculateFee(
   scriptType: string = 'native_segwit'
 ): bigint {
   const inputVBytes = INPUT_VBYTES[scriptType] || DEFAULT_INPUT_VBYTES;
-  const outputVBytes = 34; // P2WPKH output
-  const overheadVBytes = 10.5; // Transaction overhead
-
-  const vSize = overheadVBytes + inputCount * inputVBytes + outputCount * outputVBytes;
+  const vSize = OVERHEAD_VBYTES + inputCount * inputVBytes + outputCount * OUTPUT_VBYTES;
   return BigInt(Math.ceil(vSize * feeRate));
 }
 

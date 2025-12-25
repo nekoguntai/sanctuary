@@ -4,6 +4,8 @@ import {
   getAddressType,
   isMainnetAddress,
   isTestnetAddress,
+  getAddressNetwork,
+  addressMatchesNetwork,
 } from '../../utils/validateAddress';
 
 describe('validateAddress', () => {
@@ -209,5 +211,124 @@ describe('isTestnetAddress', () => {
 
   it('should trim whitespace', () => {
     expect(isTestnetAddress('  tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx  ')).toBe(true);
+  });
+});
+
+describe('getAddressNetwork', () => {
+  it('should return mainnet for mainnet legacy addresses', () => {
+    expect(getAddressNetwork('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa')).toBe('mainnet');
+  });
+
+  it('should return mainnet for mainnet P2SH addresses', () => {
+    expect(getAddressNetwork('3J98t1WpEZ73CNmYviecrnyiWrnqRhWNLy')).toBe('mainnet');
+  });
+
+  it('should return mainnet for mainnet native SegWit addresses', () => {
+    expect(getAddressNetwork('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4')).toBe('mainnet');
+  });
+
+  it('should return mainnet for mainnet Taproot addresses', () => {
+    expect(getAddressNetwork('bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297')).toBe('mainnet');
+  });
+
+  it('should return testnet for testnet legacy addresses', () => {
+    expect(getAddressNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn')).toBe('testnet');
+    expect(getAddressNetwork('n1ZCYg9YXtB5XCZazLxSmPDa8iwJRZHhGx')).toBe('testnet');
+  });
+
+  it('should return testnet for testnet P2SH addresses', () => {
+    expect(getAddressNetwork('2MzQwSSnBHWHqSAqtTVQ6v47XtaisrJa1Vc')).toBe('testnet');
+  });
+
+  it('should return testnet for testnet SegWit addresses', () => {
+    expect(getAddressNetwork('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx')).toBe('testnet');
+  });
+
+  it('should return null for invalid addresses', () => {
+    expect(getAddressNetwork('invalid-address')).toBeNull();
+    expect(getAddressNetwork('')).toBeNull();
+  });
+
+  it('should trim whitespace', () => {
+    expect(getAddressNetwork('  bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4  ')).toBe('mainnet');
+    expect(getAddressNetwork('  tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx  ')).toBe('testnet');
+  });
+});
+
+describe('addressMatchesNetwork - Cross-Network Rejection', () => {
+  describe('Mainnet wallet address validation', () => {
+    it('should accept mainnet legacy addresses on mainnet wallets', () => {
+      expect(addressMatchesNetwork('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'mainnet')).toBe(true);
+    });
+
+    it('should accept mainnet P2SH addresses on mainnet wallets', () => {
+      expect(addressMatchesNetwork('3J98t1WpEZ73CNmYviecrnyiWrnqRhWNLy', 'mainnet')).toBe(true);
+    });
+
+    it('should accept mainnet native SegWit addresses on mainnet wallets', () => {
+      expect(addressMatchesNetwork('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', 'mainnet')).toBe(true);
+    });
+
+    it('should accept mainnet Taproot addresses on mainnet wallets', () => {
+      expect(addressMatchesNetwork('bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297', 'mainnet')).toBe(true);
+    });
+
+    it('should reject testnet addresses on mainnet wallets', () => {
+      expect(addressMatchesNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'mainnet')).toBe(false);
+      expect(addressMatchesNetwork('n1ZCYg9YXtB5XCZazLxSmPDa8iwJRZHhGx', 'mainnet')).toBe(false);
+      expect(addressMatchesNetwork('2MzQwSSnBHWHqSAqtTVQ6v47XtaisrJa1Vc', 'mainnet')).toBe(false);
+      expect(addressMatchesNetwork('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx', 'mainnet')).toBe(false);
+    });
+  });
+
+  describe('Testnet wallet address validation', () => {
+    it('should accept testnet legacy addresses on testnet wallets', () => {
+      expect(addressMatchesNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'testnet')).toBe(true);
+      expect(addressMatchesNetwork('n1ZCYg9YXtB5XCZazLxSmPDa8iwJRZHhGx', 'testnet')).toBe(true);
+    });
+
+    it('should accept testnet P2SH addresses on testnet wallets', () => {
+      expect(addressMatchesNetwork('2MzQwSSnBHWHqSAqtTVQ6v47XtaisrJa1Vc', 'testnet')).toBe(true);
+    });
+
+    it('should accept testnet SegWit addresses on testnet wallets', () => {
+      expect(addressMatchesNetwork('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx', 'testnet')).toBe(true);
+    });
+
+    it('should reject mainnet addresses on testnet wallets', () => {
+      expect(addressMatchesNetwork('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'testnet')).toBe(false);
+      expect(addressMatchesNetwork('3J98t1WpEZ73CNmYviecrnyiWrnqRhWNLy', 'testnet')).toBe(false);
+      expect(addressMatchesNetwork('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', 'testnet')).toBe(false);
+      expect(addressMatchesNetwork('bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297', 'testnet')).toBe(false);
+    });
+  });
+
+  describe('Regtest wallet address validation', () => {
+    it('should accept testnet-format addresses on regtest wallets', () => {
+      // Regtest uses same address format as testnet
+      expect(addressMatchesNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'regtest')).toBe(true);
+      expect(addressMatchesNetwork('2MzQwSSnBHWHqSAqtTVQ6v47XtaisrJa1Vc', 'regtest')).toBe(true);
+      expect(addressMatchesNetwork('tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx', 'regtest')).toBe(true);
+    });
+
+    it('should reject mainnet addresses on regtest wallets', () => {
+      expect(addressMatchesNetwork('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'regtest')).toBe(false);
+      expect(addressMatchesNetwork('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', 'regtest')).toBe(false);
+    });
+  });
+
+  describe('Invalid addresses', () => {
+    it('should return false for invalid addresses regardless of network', () => {
+      expect(addressMatchesNetwork('invalid-address', 'mainnet')).toBe(false);
+      expect(addressMatchesNetwork('invalid-address', 'testnet')).toBe(false);
+      expect(addressMatchesNetwork('', 'mainnet')).toBe(false);
+    });
+  });
+
+  describe('Whitespace handling', () => {
+    it('should trim whitespace before validation', () => {
+      expect(addressMatchesNetwork('  bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4  ', 'mainnet')).toBe(true);
+      expect(addressMatchesNetwork('  tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx  ', 'testnet')).toBe(true);
+    });
   });
 });

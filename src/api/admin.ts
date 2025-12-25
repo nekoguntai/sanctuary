@@ -420,10 +420,11 @@ export async function checkVersion(): Promise<VersionInfo> {
 // ========================================
 
 /**
- * Get all Electrum servers
+ * Get all Electrum servers, optionally filtered by network
  */
-export async function getElectrumServers(): Promise<ElectrumServer[]> {
-  return apiClient.get<ElectrumServer[]>('/admin/electrum-servers');
+export async function getElectrumServers(network?: string): Promise<ElectrumServer[]> {
+  const params = network ? `?network=${network}` : '';
+  return apiClient.get<ElectrumServer[]>(`/admin/electrum-servers${params}`);
 }
 
 /**

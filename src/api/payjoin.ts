@@ -76,11 +76,13 @@ export async function parsePayjoinUri(uri: string): Promise<ParsedUri> {
  */
 export async function attemptPayjoin(
   psbt: string,
-  payjoinUrl: string
+  payjoinUrl: string,
+  network: 'mainnet' | 'testnet' | 'regtest'
 ): Promise<PayjoinAttemptResult> {
   return apiClient.post<PayjoinAttemptResult>('/payjoin/attempt', {
     psbt,
     payjoinUrl,
+    network,
   });
 }
 

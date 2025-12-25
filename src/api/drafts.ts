@@ -43,6 +43,9 @@ export interface DraftTransaction {
   // Decoy change outputs (for privacy)
   decoyOutputs?: Array<{ address: string; amount: number }>;
 
+  // Payjoin support
+  payjoinUrl?: string;
+
   // Labels
   label?: string;
   memo?: string;
@@ -80,6 +83,7 @@ export interface CreateDraftRequest {
   outputs?: DraftOutput[]; // Multiple outputs support
   inputs?: DraftInput[]; // Multiple inputs for flow visualization
   decoyOutputs?: Array<{ address: string; amount: number }>; // Decoy change outputs
+  payjoinUrl?: string; // Payjoin endpoint URL
   label?: string;
   memo?: string;
   psbtBase64: string;

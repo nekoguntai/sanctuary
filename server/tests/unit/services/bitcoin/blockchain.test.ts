@@ -212,6 +212,14 @@ describe('Blockchain Service', () => {
   describe('syncWallet', () => {
     const walletId = 'test-wallet-id';
 
+    beforeEach(() => {
+      // Mock wallet lookup for network-aware sync
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'testnet',
+      });
+    });
+
     it('should sync all wallet addresses', async () => {
       const addresses = [
         { id: 'addr-1', address: testnetAddresses.nativeSegwit[0], derivationPath: "m/84'/1'/0'/0/0" },
@@ -564,8 +572,17 @@ describe('Blockchain Service', () => {
   });
 
   describe('UTXO Reconciliation', () => {
+    const walletId = 'test-wallet-id';
+
+    beforeEach(() => {
+      // Mock wallet lookup for network-aware sync
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'testnet',
+      });
+    });
+
     it('should mark spent UTXOs correctly', async () => {
-      const walletId = 'test-wallet-id';
       const address = testnetAddresses.nativeSegwit[0];
 
       mockPrismaClient.address.findMany.mockResolvedValue([
@@ -700,6 +717,14 @@ describe('Blockchain Service', () => {
 
   describe('syncWallet Edge Cases', () => {
     const walletId = 'test-wallet-id';
+
+    beforeEach(() => {
+      // Mock wallet lookup for network-aware sync
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'testnet',
+      });
+    });
 
     it('should handle batch RPC failures gracefully', async () => {
       const addresses = [

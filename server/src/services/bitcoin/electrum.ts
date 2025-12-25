@@ -50,6 +50,7 @@ interface ElectrumConfig {
   host: string;
   port: number;
   protocol: 'tcp' | 'ssl';
+  network?: 'mainnet' | 'testnet' | 'signet' | 'regtest'; // Bitcoin network (default: mainnet)
   allowSelfSignedCert?: boolean; // Optional: allow self-signed TLS certificates (default: false)
   connectionTimeoutMs?: number; // Optional: connection/handshake timeout (default: 10000ms)
   proxy?: ProxyConfig; // Optional: SOCKS5 proxy configuration (for Tor)
@@ -83,6 +84,7 @@ class ElectrumClient extends EventEmitter {
   private explicitConfig: ElectrumConfig | null = null;
   private scriptHashToAddress = new Map<string, string>();  // Map scripthash to address
   private subscribedHeaders = false;
+  private network: 'mainnet' | 'testnet' | 'signet' | 'regtest'; // Bitcoin network
 
   // Timeouts (adjusted for Tor when proxy is enabled)
   private requestTimeoutMs: number;
@@ -95,6 +97,7 @@ class ElectrumClient extends EventEmitter {
   constructor(explicitConfig?: ElectrumConfig) {
     super();
     this.explicitConfig = explicitConfig || null;
+    this.network = explicitConfig?.network ?? 'mainnet'; // Default to mainnet
 
     // Calculate timeouts - increase for Tor connections
     const isProxyEnabled = explicitConfig?.proxy?.enabled ?? false;
@@ -105,6 +108,22 @@ class ElectrumClient extends EventEmitter {
 
     if (isProxyEnabled) {
       log.debug(`ElectrumClient configured with Tor timeouts: request=${this.requestTimeoutMs}ms, batch=${this.batchRequestTimeoutMs}ms`);
+    }
+  }
+
+  /**
+   * Get the bitcoinjs-lib network object for the current network
+   */
+  private getNetworkLib() {
+    const bitcoin = require('bitcoinjs-lib');
+    switch (this.network) {
+      case 'testnet':
+        return bitcoin.networks.testnet;
+      case 'regtest':
+        return bitcoin.networks.regtest;
+      case 'mainnet':
+      default:
+        return bitcoin.networks.bitcoin;
     }
   }
 
@@ -629,8 +648,8 @@ class ElectrumClient extends EventEmitter {
         let address: string | undefined;
 
         try {
-          // Try to extract address from output script
-          address = bitcoin.address.fromOutputScript(output.script, bitcoin.networks.bitcoin);
+          // Try to extract address from output script (using the correct network)
+          address = bitcoin.address.fromOutputScript(output.script, this.getNetworkLib());
         } catch (e) {
           // Some outputs (like OP_RETURN) don't have addresses
         }
@@ -876,8 +895,8 @@ class ElectrumClient extends EventEmitter {
   private addressToScriptHash(address: string): string {
     const bitcoin = require('bitcoinjs-lib');
 
-    // Decode address to get scriptPubKey
-    const script = bitcoin.address.toOutputScript(address);
+    // Decode address to get scriptPubKey (using the correct network)
+    const script = bitcoin.address.toOutputScript(address, this.getNetworkLib());
 
     // SHA256 hash
     const hash = crypto.createHash('sha256').update(script).digest();
@@ -889,27 +908,58 @@ class ElectrumClient extends EventEmitter {
   }
 }
 
-// Singleton instance
-let electrumClient: ElectrumClient | null = null;
+// Network-keyed client registry (replaces singleton pattern)
+const electrumClients = new Map<string, ElectrumClient>();
 
 /**
- * Get Electrum client instance
+ * Get Electrum client instance for a specific network
+ * @param network Bitcoin network (mainnet, testnet, signet, or regtest)
  */
-export function getElectrumClient(): ElectrumClient {
-  if (!electrumClient) {
-    electrumClient = new ElectrumClient();
+export function getElectrumClientForNetwork(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): ElectrumClient {
+  if (!electrumClients.has(network)) {
+    electrumClients.set(network, new ElectrumClient({
+      host: '', // Will be loaded from config in connect()
+      port: 0,
+      protocol: 'ssl',
+      network
+    }));
   }
-  return electrumClient;
+  return electrumClients.get(network)!;
 }
 
 /**
- * Close Electrum connection
+ * Get Electrum client instance (backward compatibility - defaults to mainnet)
+ */
+export function getElectrumClient(): ElectrumClient {
+  return getElectrumClientForNetwork('mainnet');
+}
+
+/**
+ * Close Electrum connection for a specific network
+ */
+export function closeElectrumClientForNetwork(network: 'mainnet' | 'testnet' | 'signet' | 'regtest'): void {
+  const client = electrumClients.get(network);
+  if (client) {
+    client.disconnect();
+    electrumClients.delete(network);
+  }
+}
+
+/**
+ * Close Electrum connection (backward compatibility - closes mainnet)
  */
 export function closeElectrumClient(): void {
-  if (electrumClient) {
-    electrumClient.disconnect();
-    electrumClient = null;
+  closeElectrumClientForNetwork('mainnet');
+}
+
+/**
+ * Close all Electrum connections
+ */
+export function closeAllElectrumClients(): void {
+  for (const [network, client] of electrumClients.entries()) {
+    client.disconnect();
   }
+  electrumClients.clear();
 }
 
 /**

@@ -680,12 +680,19 @@ export async function syncWallet(walletId: string): Promise<{
 }> {
   const startTime = Date.now();
 
+  // Get wallet to determine network
+  const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+  if (!wallet) {
+    throw new Error(`Wallet ${walletId} not found`);
+  }
+  const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+
   // Check if Tor proxy is enabled for this sync
   const pool = getElectrumPool();
   const viaTor = pool.isProxyEnabled();
 
   walletLog(walletId, 'info', 'SYNC', viaTor ? 'Starting wallet sync via Tor...' : 'Starting wallet sync...', { viaTor });
-  const client = await getNodeClient();
+  const client = await getNodeClient(network);
 
 
   // Get all addresses for the wallet

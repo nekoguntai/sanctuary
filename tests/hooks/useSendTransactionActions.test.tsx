@@ -659,6 +659,7 @@ describe('useSendTransactionActions', () => {
       vi.mocked(payjoinApi.attemptPayjoin).mockResolvedValue({
         success: true,
         proposalPsbt: 'payjoin-psbt',
+        isPayjoin: true,
       });
 
       const state = createMockState({
@@ -688,6 +689,7 @@ describe('useSendTransactionActions', () => {
       vi.mocked(payjoinApi.attemptPayjoin).mockResolvedValue({
         success: false,
         error: 'Payjoin server unavailable',
+        isPayjoin: false,
       });
 
       const state = createMockState({

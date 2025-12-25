@@ -1971,6 +1971,7 @@ describe('Admin API', () => {
           useSsl: true,
           priority: 0,
           enabled: true,
+          network: 'mainnet',
         };
 
         mockPrismaClient.electrumServer.findUnique.mockResolvedValue(existingServer);

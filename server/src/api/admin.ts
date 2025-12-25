@@ -1614,9 +1614,13 @@ router.get('/version', async (req: Request, res: Response) => {
 /**
  * GET /api/v1/admin/electrum-servers
  * Get all Electrum servers for the default node config
+ * Query params:
+ *   - network: Filter by network (mainnet, testnet, signet, regtest)
  */
 router.get('/electrum-servers', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
+    const { network } = req.query;
+
     const nodeConfig = await prisma.nodeConfig.findFirst({
       where: { isDefault: true },
     });
@@ -1625,8 +1629,13 @@ router.get('/electrum-servers', authenticate, requireAdmin, async (req: Request,
       return res.json([]);
     }
 
+    const where: any = { nodeConfigId: nodeConfig.id };
+    if (network) {
+      where.network = network;
+    }
+
     const servers = await prisma.electrumServer.findMany({
-      where: { nodeConfigId: nodeConfig.id },
+      where,
       orderBy: { priority: 'asc' },
     });
 
@@ -1641,12 +1650,57 @@ router.get('/electrum-servers', authenticate, requireAdmin, async (req: Request,
 });
 
 /**
+ * GET /api/v1/admin/electrum-servers/:network
+ * Get Electrum servers for a specific network
+ */
+router.get('/electrum-servers/:network', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { network } = req.params;
+
+    // Validate network
+    const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
+    if (!validNetworks.includes(network)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid network. Must be one of: ${validNetworks.join(', ')}`,
+      });
+    }
+
+    const nodeConfig = await prisma.nodeConfig.findFirst({
+      where: { isDefault: true },
+    });
+
+    if (!nodeConfig) {
+      return res.json([]);
+    }
+
+    const servers = await prisma.electrumServer.findMany({
+      where: {
+        nodeConfigId: nodeConfig.id,
+        network,
+      },
+      orderBy: { priority: 'asc' },
+    });
+
+    res.json(servers);
+  } catch (error) {
+    log.error('[ADMIN] Get electrum servers by network error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Electrum servers',
+    });
+  }
+});
+
+/**
  * POST /api/v1/admin/electrum-servers
  * Add a new Electrum server
+ * Body params:
+ *   - network: Network (mainnet, testnet, signet, regtest) - defaults to mainnet
  */
 router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { label, host, port, useSsl, priority, enabled } = req.body;
+    const { label, host, port, useSsl, priority, enabled, network } = req.body;
 
     // Validation
     if (!label || !host || !port) {
@@ -1656,18 +1710,28 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
       });
     }
 
-    // Check for duplicate (same host and port)
+    const serverNetwork = network || 'mainnet';
+    const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
+    if (!validNetworks.includes(serverNetwork)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid network. Must be one of: ${validNetworks.join(', ')}`,
+      });
+    }
+
+    // Check for duplicate (same host, port, and network)
     const existingServer = await prisma.electrumServer.findFirst({
       where: {
         host: host.toLowerCase(),
         port: parseInt(port.toString(), 10),
+        network: serverNetwork,
       },
     });
 
     if (existingServer) {
       return res.status(409).json({
         error: 'Conflict',
-        message: `A server with host ${host} and port ${port} already exists (${existingServer.label})`,
+        message: `A server with host ${host}, port ${port}, and network ${serverNetwork} already exists (${existingServer.label})`,
       });
     }
 
@@ -1682,6 +1746,7 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
         data: {
           id: 'default',
           type: 'electrum',
+          network: serverNetwork,
           host: host,
           port: parseInt(port.toString(), 10),
           useSsl: useSsl ?? true,
@@ -1690,9 +1755,12 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
       });
     }
 
-    // Get highest priority to set new server at end if not specified
+    // Get highest priority for this network to set new server at end if not specified
     const highestPriority = await prisma.electrumServer.findFirst({
-      where: { nodeConfigId: nodeConfig.id },
+      where: {
+        nodeConfigId: nodeConfig.id,
+        network: serverNetwork,
+      },
       orderBy: { priority: 'desc' },
       select: { priority: true },
     });
@@ -1700,6 +1768,7 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
     const server = await prisma.electrumServer.create({
       data: {
         nodeConfigId: nodeConfig.id,
+        network: serverNetwork,
         label,
         host,
         port: parseInt(port.toString(), 10),
@@ -1709,7 +1778,7 @@ router.post('/electrum-servers', authenticate, requireAdmin, async (req: Request
       },
     });
 
-    log.info('[ADMIN] Electrum server added', { id: server.id, label, host, port });
+    log.info('[ADMIN] Electrum server added', { id: server.id, label, host, port, network: serverNetwork });
 
     // Reload pool to pick up new server (more graceful than full reset)
     await reloadElectrumServers();
@@ -1772,7 +1841,7 @@ router.put('/electrum-servers/reorder', authenticate, requireAdmin, async (req: 
 router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { label, host, port, useSsl, priority, enabled } = req.body;
+    const { label, host, port, useSsl, priority, enabled, network } = req.body;
 
     const server = await prisma.electrumServer.findUnique({
       where: { id },
@@ -1785,13 +1854,24 @@ router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Requ
       });
     }
 
-    // Check for duplicate (same host and port, excluding this server)
+    // Validate network if provided
+    const serverNetwork = network ?? server.network;
+    const validNetworks = ['mainnet', 'testnet', 'signet', 'regtest'];
+    if (!validNetworks.includes(serverNetwork)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid network. Must be one of: ${validNetworks.join(', ')}`,
+      });
+    }
+
+    // Check for duplicate (same host, port, and network, excluding this server)
     const newHost = host ?? server.host;
     const newPort = port ? parseInt(port.toString(), 10) : server.port;
     const existingServer = await prisma.electrumServer.findFirst({
       where: {
         host: newHost.toLowerCase(),
         port: newPort,
+        network: serverNetwork,
         id: { not: id },
       },
     });
@@ -1799,7 +1879,7 @@ router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Requ
     if (existingServer) {
       return res.status(409).json({
         error: 'Conflict',
-        message: `A server with host ${newHost} and port ${newPort} already exists (${existingServer.label})`,
+        message: `A server with host ${newHost}, port ${newPort}, and network ${serverNetwork} already exists (${existingServer.label})`,
       });
     }
 
@@ -1812,11 +1892,12 @@ router.put('/electrum-servers/:id', authenticate, requireAdmin, async (req: Requ
         useSsl: useSsl ?? server.useSsl,
         priority: priority ?? server.priority,
         enabled: enabled ?? server.enabled,
+        network: serverNetwork,
         updatedAt: new Date(),
       },
     });
 
-    log.info('[ADMIN] Electrum server updated', { id, label: updatedServer.label });
+    log.info('[ADMIN] Electrum server updated', { id, label: updatedServer.label, network: updatedServer.network });
 
     // Reload pool to pick up changes (more graceful than full reset)
     await reloadElectrumServers();

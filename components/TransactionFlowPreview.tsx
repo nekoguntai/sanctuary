@@ -7,6 +7,7 @@
 
 import React, { useMemo } from 'react';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { truncateAddress } from '../utils/formatters';
 
 export interface FlowInput {
   txid: string;
@@ -33,11 +34,6 @@ interface TransactionFlowPreviewProps {
   isEstimate?: boolean;
   className?: string;
 }
-
-const truncateAddress = (address: string): string => {
-  if (!address || address.length <= 16) return address;
-  return `${address.slice(0, 8)}...${address.slice(-8)}`;
-};
 
 export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
   inputs,
@@ -116,7 +112,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                 {/* Address */}
                 <div className="flex-1 min-w-0 px-2 py-1 bg-[#2d2f43]/80 backdrop-blur-sm flex items-center rounded-r-xl overflow-hidden">
                   <span className="font-mono text-xs text-white/90 truncate flex-shrink min-w-0">
-                    {truncateAddress(input.address)}
+                    {truncateAddress(input.address, 8, 8)}
                   </span>
                   {input.label && (
                     <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-cyan-500 text-white flex-shrink-0 whitespace-nowrap">
@@ -154,7 +150,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                 {/* Address */}
                 <div className="flex-1 min-w-0 px-2 py-1 bg-[#2d2f43]/80 backdrop-blur-sm flex items-center rounded-l-xl overflow-hidden">
                   <span className="font-mono text-xs text-white/90 truncate flex-shrink min-w-0">
-                    {truncateAddress(output.address)}
+                    {truncateAddress(output.address, 8, 8)}
                   </span>
                   {output.isChange && (
                     <span className="ml-1 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-amber-500/30 text-amber-300 flex-shrink-0 whitespace-nowrap">

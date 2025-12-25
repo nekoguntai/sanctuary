@@ -183,10 +183,12 @@ export function useSendTransactionActions({
       if (state.payjoinUrl && state.outputs.length === 1 && !payjoinAttempted.current) {
         setPayjoinStatus('attempting');
         payjoinAttempted.current = true;
-        log.info('Attempting Payjoin', { payjoinUrl: state.payjoinUrl });
+        log.info('Attempting Payjoin', { payjoinUrl: state.payjoinUrl, network: wallet.network });
 
         try {
-          const payjoinResult = await payjoinApi.attemptPayjoin(result.psbtBase64, state.payjoinUrl);
+          // Use wallet's network for payjoin
+          const network = (wallet.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
+          const payjoinResult = await payjoinApi.attemptPayjoin(result.psbtBase64, state.payjoinUrl, network);
 
           if (payjoinResult.success && payjoinResult.proposalPsbt) {
             result.psbtBase64 = payjoinResult.proposalPsbt;
@@ -434,6 +436,7 @@ export function useSendTransactionActions({
         outputs: outputsToSave,
         inputs: inputsToSave.length > 0 ? inputsToSave : undefined,
         decoyOutputs: currentTxData.decoyOutputs,
+        payjoinUrl: state.payjoinUrl || undefined,
         psbtBase64: currentTxData.psbtBase64,
         fee: currentTxData.fee,
         totalInput: currentTxData.totalInput,

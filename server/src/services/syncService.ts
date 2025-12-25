@@ -899,12 +899,19 @@ class SyncService {
    * This enables real-time updates when transactions are received
    */
   async subscribeWalletAddresses(walletId: string): Promise<void> {
+    // Get wallet to determine network
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { network: true }
+    });
+    const network = (wallet?.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+
     const addresses = await prisma.address.findMany({
       where: { walletId },
       select: { address: true },
     });
 
-    const client = await getNodeClient();
+    const client = await getNodeClient(network);
 
     for (const { address } of addresses) {
       try {

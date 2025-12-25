@@ -3,6 +3,7 @@ import { TableVirtuoso } from 'react-virtuoso';
 import { Transaction, Wallet, WalletType, Label, TransactionInput, TransactionOutput } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
+import { getTxExplorerUrl } from '../utils/explorer';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
 import * as transactionsApi from '../src/api/transactions';
@@ -626,7 +627,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                      </div>
                      
                      <a
-                        href={`${explorerUrl}/tx/${selectedTx.txid}`}
+                        href={getTxExplorerUrl(selectedTx.txid, wallets.find(w => w.id === selectedTx.walletId)?.network || 'mainnet', explorerUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center justify-center w-full py-3 bg-sanctuary-800 dark:bg-sanctuary-700 text-sanctuary-50 dark:text-sanctuary-100 rounded-xl hover:bg-sanctuary-700 dark:hover:bg-sanctuary-600 transition-colors font-medium"

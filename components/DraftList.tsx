@@ -19,6 +19,7 @@ import { WalletType } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { createLogger } from '../utils/logger';
+import { truncateAddress } from '../utils/formatters';
 
 const log = createLogger('DraftList');
 
@@ -405,10 +406,7 @@ export const DraftList: React.FC<DraftListProps> = ({
     });
   };
 
-  const truncateAddress = (address: string) => {
-    if (address.length <= 20) return address;
-    return `${address.slice(0, 10)}...${address.slice(-8)}`;
-  };
+  // Note: truncateAddress is now imported from utils/formatters
 
   if (loading) {
     return (

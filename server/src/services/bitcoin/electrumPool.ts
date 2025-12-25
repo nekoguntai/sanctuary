@@ -247,7 +247,10 @@ export class ElectrumPool extends EventEmitter {
    * Set the server list for the pool
    */
   setServers(servers: ServerConfig[]): void {
+    const oldServerIds = new Set(this.servers.map(s => s.id));
     this.servers = servers.filter(s => s.enabled).sort((a, b) => a.priority - b.priority);
+    const newServerIds = new Set(this.servers.map(s => s.id));
+
     // Initialize stats for each server
     for (const server of this.servers) {
       if (!this.serverStats.has(server.id)) {
@@ -259,12 +262,56 @@ export class ElectrumPool extends EventEmitter {
         });
       }
     }
+
+    // Disconnect connections to servers that were removed or disabled
+    const removedServerIds = [...oldServerIds].filter(id => !newServerIds.has(id));
+    if (removedServerIds.length > 0) {
+      log.info(`Disconnecting connections to ${removedServerIds.length} removed/disabled servers`);
+      for (const serverId of removedServerIds) {
+        this.disconnectServerConnections(serverId);
+        this.serverStats.delete(serverId);
+      }
+    }
+
     log.info(`Pool configured with ${this.servers.length} servers`, {
       effectiveMin: this.getEffectiveMinConnections(),
       effectiveMax: this.getEffectiveMaxConnections(),
       configuredMin: this.config.minConnections,
       configuredMax: this.config.maxConnections,
     });
+  }
+
+  /**
+   * Disconnect all connections to a specific server
+   * Used when a server is disabled or removed from the pool
+   */
+  disconnectServerConnections(serverId: string): void {
+    const serverConnections = [...this.connections.entries()]
+      .filter(([_, conn]) => conn.serverId === serverId);
+
+    if (serverConnections.length === 0) {
+      log.debug(`No connections to disconnect for server ${serverId}`);
+      return;
+    }
+
+    log.info(`Disconnecting ${serverConnections.length} connections to server ${serverId}`);
+
+    for (const [connId, conn] of serverConnections) {
+      try {
+        conn.client.disconnect();
+        this.connections.delete(connId);
+
+        // If this was the subscription connection, clear it
+        if (this.subscriptionConnectionId === connId) {
+          this.subscriptionConnectionId = null;
+          log.info('Subscription connection was disconnected, will be reassigned');
+        }
+      } catch (error) {
+        log.warn(`Error disconnecting connection ${connId}`, { error: String(error) });
+      }
+    }
+
+    log.info(`Disconnected all connections to server ${serverId}`);
   }
 
   /**

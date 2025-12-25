@@ -62,12 +62,13 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getColors = () => {
-    // Use theme colors: success for receives (theme-aware), neutral gray for sends
+    // Use surface-* utility classes for theme-aware backgrounds
+    // These automatically adapt to all themes (sanctuary, sunrise, etc.)
     switch (notification.type) {
       case 'transaction':
         return notification.data?.type === 'received'
           ? 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700'
-          : 'bg-sanctuary-100 dark:bg-sanctuary-800/50 border-sanctuary-300 dark:border-sanctuary-600';
+          : 'surface-secondary border-sanctuary-300 dark:border-sanctuary-600';
       case 'balance':
         return 'surface-secondary border-primary-200 dark:border-primary-700';
       case 'confirmation':

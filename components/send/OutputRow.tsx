@@ -14,7 +14,7 @@
 import React, { RefObject } from 'react';
 import { Check, X, Shield, QrCode, ChevronDown, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
-import type { OutputEntry } from '../../hooks/useOutputManagement';
+import type { OutputEntry, WalletAddress } from '../../contexts/send/types';
 
 export interface OutputRowProps {
   // Output data
@@ -33,7 +33,7 @@ export interface OutputRowProps {
 
   // Consolidation mode
   isConsolidation?: boolean;
-  walletAddresses?: string[];
+  walletAddresses?: WalletAddress[];
 
   // State flags
   disabled?: boolean;
@@ -124,11 +124,18 @@ export function OutputRow({
             disabled={disabled}
             className={`block w-full px-4 py-3 rounded-xl border border-sanctuary-300 dark:border-sanctuary-700 surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors appearance-none pr-10 font-mono text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
           >
-            {walletAddresses.map((addr, idx) => (
-              <option key={addr} value={addr}>
-                #{idx}: {addr.slice(0, 12)}...{addr.slice(-8)}
-              </option>
-            ))}
+            {/* Only show receive addresses (not change addresses) for consolidation */}
+            {walletAddresses
+              .filter(addr => !addr.isChange)
+              .map((addr) => (
+                <option
+                  key={addr.address}
+                  value={addr.address}
+                  className={addr.used ? 'text-sanctuary-400' : ''}
+                >
+                  #{addr.index}: {addr.address.slice(0, 12)}...{addr.address.slice(-8)}{addr.used ? ' (used)' : ''}
+                </option>
+              ))}
           </select>
           <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-sanctuary-400 pointer-events-none" />
         </div>

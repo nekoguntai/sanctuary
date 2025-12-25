@@ -12,6 +12,13 @@ export interface DraftOutput {
   sendMax?: boolean;
 }
 
+export interface DraftInput {
+  txid: string;
+  vout: number;
+  address: string;
+  amount: number;
+}
+
 export interface DraftTransaction {
   id: string;
   walletId: string;
@@ -29,6 +36,12 @@ export interface DraftTransaction {
 
   // Multiple outputs support
   outputs?: DraftOutput[];
+
+  // Multiple inputs support (for flow visualization)
+  inputs?: DraftInput[];
+
+  // Decoy change outputs (for privacy)
+  decoyOutputs?: Array<{ address: string; amount: number }>;
 
   // Labels
   label?: string;
@@ -65,6 +78,8 @@ export interface CreateDraftRequest {
   sendMax?: boolean;
   isRBF?: boolean; // Skip UTXO locking for RBF replacement transactions
   outputs?: DraftOutput[]; // Multiple outputs support
+  inputs?: DraftInput[]; // Multiple inputs for flow visualization
+  decoyOutputs?: Array<{ address: string; amount: number }>; // Decoy change outputs
   label?: string;
   memo?: string;
   psbtBase64: string;

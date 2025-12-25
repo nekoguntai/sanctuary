@@ -605,6 +605,7 @@ router.post('/transaction/:txid/rbf', authenticate, async (req: Request, res: Re
       feeDelta: result.feeDelta,
       inputs: result.inputs,
       outputs: result.outputs,
+      inputPaths: result.inputPaths,
     });
   } catch (error: any) {
     log.error('[BITCOIN] RBF creation error', { error: String(error) });

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -374,6 +374,12 @@ export const WalletList: React.FC = () => {
                             </th>
                             <th
                               scope="col"
+                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
+                            >
+                              Sync
+                            </th>
+                            <th
+                              scope="col"
                               onClick={() => setSortBy('balance')}
                               className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
                             >
@@ -436,6 +442,39 @@ export const WalletList: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-sanctuary-500 capitalize">
                                         {wallet.network}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {wallet.syncInProgress ? (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400">
+                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                Syncing
+                                            </span>
+                                        ) : wallet.lastSyncStatus === 'success' ? (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-success-600 dark:text-success-400">
+                                                <CheckCircle className="w-3.5 h-3.5" />
+                                                Synced
+                                            </span>
+                                        ) : wallet.lastSyncStatus === 'failed' ? (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400">
+                                                <AlertCircle className="w-3.5 h-3.5" />
+                                                Failed
+                                            </span>
+                                        ) : wallet.lastSyncStatus === 'retrying' ? (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-warning-600 dark:text-warning-400">
+                                                <RefreshCw className="w-3.5 h-3.5" />
+                                                Retrying
+                                            </span>
+                                        ) : wallet.lastSyncStatus === 'partial' ? (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-warning-600 dark:text-warning-400">
+                                                <Clock className="w-3.5 h-3.5" />
+                                                Partial
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-sanctuary-400">
+                                                <Clock className="w-3.5 h-3.5" />
+                                                Pending
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
                                         <Amount sats={wallet.balance} size="sm" className="font-bold text-sanctuary-900 dark:text-sanctuary-100 items-end" />

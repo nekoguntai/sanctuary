@@ -68,7 +68,8 @@ const Block: React.FC<{
   animationDirection: 'enter' | 'exit' | 'none';
   pendingTxs?: PendingTransaction[];
   explorerUrl: string;
-}> = ({ block, index, onClick, compact, isAnimating, animationDirection, pendingTxs = [], explorerUrl }) => {
+  blockMinFee?: number;
+}> = ({ block, index, onClick, compact, isAnimating, animationDirection, pendingTxs = [], explorerUrl, blockMinFee }) => {
   const isPending = block.status === 'pending';
   const colors = getBlockColors(isPending);
 
@@ -114,6 +115,7 @@ const Block: React.FC<{
                 tx={tx}
                 explorerUrl={explorerUrl}
                 compact={compact}
+                isStuck={blockMinFee !== undefined && tx.feeRate < blockMinFee}
               />
             ))}
             {pendingTxs.length > (compact ? 3 : 5) && (
@@ -198,7 +200,9 @@ const Block: React.FC<{
 const QueuedSummaryBlock: React.FC<{
   summary: QueuedBlocksSummary;
   compact: boolean;
-}> = ({ summary, compact }) => {
+  stuckTxs?: PendingTransaction[];
+  explorerUrl?: string;
+}> = ({ summary, compact, stuckTxs = [], explorerUrl = 'https://mempool.space' }) => {
   // Generate mini block indicators for the bottom bar
   const maxVisibleBlocks = 8;
   const visibleBlocks = Math.min(summary.blockCount, maxVisibleBlocks);
@@ -214,6 +218,33 @@ const QueuedSummaryBlock: React.FC<{
           bg-warning-500 dark:bg-warning-100
         `}
       >
+        {/* Stuck transaction dots - top right corner */}
+        {stuckTxs.length > 0 && (
+          <div className={`
+            absolute z-20
+            ${compact ? 'top-0.5 right-0.5' : 'top-1 right-1'}
+            flex flex-wrap gap-0.5 max-w-[50%] justify-end
+          `}>
+            {stuckTxs.slice(0, compact ? 3 : 5).map((tx) => (
+              <PendingTxDot
+                key={tx.txid}
+                tx={tx}
+                explorerUrl={explorerUrl}
+                compact={compact}
+                isStuck={true}
+              />
+            ))}
+            {stuckTxs.length > (compact ? 3 : 5) && (
+              <span className={`
+                ${compact ? 'text-[8px]' : 'text-[9px]'}
+                font-bold text-white dark:text-warning-900
+              `}>
+                +{stuckTxs.length - (compact ? 3 : 5)}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className={`relative z-10 flex flex-col items-center justify-between h-full ${compact ? 'py-1.5 px-1' : 'py-2 px-1'}`}>
           {/* Top spacer - hidden in compact */}
@@ -267,6 +298,7 @@ const QueuedSummaryBlock: React.FC<{
           whitespace-nowrap z-50 pointer-events-none shadow-lg
         `}>
           {summary.totalTransactions.toLocaleString()} txs waiting
+          {stuckTxs.length > 0 && ` • ${stuckTxs.length} stuck`}
         </div>
       )}
     </div>
@@ -287,14 +319,17 @@ const PendingTxDot: React.FC<{
   tx: PendingTransaction;
   explorerUrl: string;
   compact: boolean;
-}> = ({ tx, explorerUrl, compact }) => {
+  isStuck?: boolean;
+}> = ({ tx, explorerUrl, compact, isStuck = false }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const isSent = tx.type === 'sent';
 
-  // Colors: rose for sent, muted red/coral for received
-  const dotColor = isSent
-    ? 'bg-rose-500 dark:bg-rose-400'
-    : 'bg-red-400/80 dark:bg-red-400/70';
+  // Colors: amber for stuck, rose for sent, muted red/coral for received
+  const dotColor = isStuck
+    ? 'bg-amber-500 dark:bg-amber-400 animate-pulse'
+    : isSent
+      ? 'bg-rose-500 dark:bg-rose-400'
+      : 'bg-red-400/80 dark:bg-red-400/70';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -303,6 +338,7 @@ const PendingTxDot: React.FC<{
 
   // Calculate ETA based on position in mempool (rough estimate)
   const estimateEta = (): string => {
+    if (isStuck) return 'Stuck - fee too low';
     if (tx.feeRate >= 20) return '~10 min';
     if (tx.feeRate >= 10) return '~30 min';
     if (tx.feeRate >= 5) return '~1 hour';
@@ -414,6 +450,8 @@ const parseFeeRange = (feeRange: string): [number, number] => {
 //
 // Helper to match pending transactions to blocks based on fee rate
 // Uses actual fee ranges from mempool data for accurate predictions
+// Note: "Stuck" transactions (feeRate < lowest block's minFee) are NOT included here;
+// they are displayed in QueuedSummaryBlock instead
 const getTxsForBlock = (
   block: BlockData,
   allPendingTxs: PendingTransaction[],
@@ -424,7 +462,7 @@ const getTxsForBlock = (
   // Only show in pending blocks
   if (block.status !== 'pending') return [];
 
-  const [minFee, maxFee] = parseFeeRange(block.feeRange);
+  const [minFee] = parseFeeRange(block.feeRange);
 
   // Check if this is the "Next" block (closest to confirmation)
   // It's the last in the display order (rightmost pending block)
@@ -440,14 +478,25 @@ const getTxsForBlock = (
       return tx.feeRate >= minFee;
     }
 
-    // Furthest block (+3, leftmost): low fee transactions
-    if (blockIndex === 0) {
-      return tx.feeRate >= minFee && tx.feeRate < closerBlockMinFee;
-    }
-
-    // Middle blocks: fee rate between this block's min and closer block's min
+    // All other blocks: fee rate >= this block's min fee AND < closer block's min fee
+    // Stuck txs (feeRate < this block's minFee) go to QueuedSummaryBlock instead
     return tx.feeRate >= minFee && tx.feeRate < closerBlockMinFee;
   });
+};
+
+// Helper to get "stuck" transactions - those with fee rate below the lowest pending block's minimum
+const getStuckTxs = (
+  allPendingTxs: PendingTransaction[],
+  pendingBlocks: BlockData[]
+): PendingTransaction[] => {
+  if (pendingBlocks.length === 0) return [];
+
+  // The lowest fee block is index 0 (furthest from confirmation)
+  const lowestBlock = pendingBlocks[0];
+  const [lowestMinFee] = parseFeeRange(lowestBlock.feeRange);
+
+  // Transactions with fee rate below the lowest block's minimum are "stuck"
+  return allPendingTxs.filter(tx => tx.feeRate < lowestMinFee);
 };
 
 export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
@@ -630,15 +679,36 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
           </div>
         ) : (
           <>
-            {/* Queued blocks summary (leftmost) */}
-            {queuedBlocksSummary && queuedBlocksSummary.blockCount > 0 && (
-              <QueuedSummaryBlock summary={queuedBlocksSummary} compact={compact} />
-            )}
+            {/* Queued blocks summary (leftmost) - also shows stuck transactions */}
+            {(() => {
+              const stuckTxs = getStuckTxs(pendingTxs, pendingBlocks);
+              // Show if there are queued blocks OR stuck transactions
+              const showQueuedBlock = (queuedBlocksSummary && queuedBlocksSummary.blockCount > 0) || stuckTxs.length > 0;
+              if (!showQueuedBlock) return null;
+
+              // If no queuedBlocksSummary but we have stuck txs, create a minimal summary
+              const summary = queuedBlocksSummary || {
+                blockCount: 0,
+                totalTransactions: 0,
+                averageFee: 0,
+                totalFees: 0,
+              };
+
+              return (
+                <QueuedSummaryBlock
+                  summary={summary}
+                  compact={compact}
+                  stuckTxs={stuckTxs}
+                  explorerUrl={explorerUrl}
+                />
+              );
+            })()}
 
             {/* Pending/Mempool blocks */}
             {pendingBlocks.map((block, idx) => {
               // Mempool-block index: rightmost (closest to confirmed) = 0, leftmost = highest
               const mempoolBlockIndex = pendingBlocks.length - 1 - idx;
+              const [blockMinFee] = parseFeeRange(block.feeRange);
               return (
                 <Block
                   key={`pending-${block.height}-${idx}`}
@@ -650,6 +720,7 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
                   animationDirection="none"
                   pendingTxs={getTxsForBlock(block, pendingTxs, idx, pendingBlocks.length, pendingBlocks)}
                   explorerUrl={explorerUrl}
+                  blockMinFee={blockMinFee}
                 />
               );
             })}

@@ -64,6 +64,10 @@ const getExpirationInfo = (expiresAt: string | undefined): ExpirationInfo | null
   return { text: `Expires in ${diffDay} days`, urgency: 'normal', diffMs };
 };
 
+interface WalletAddressInfo {
+  address: string;
+}
+
 interface DraftListProps {
   walletId: string;
   walletType: WalletType;
@@ -71,6 +75,8 @@ interface DraftListProps {
   onResume?: (draft: DraftTransaction) => void;
   canEdit?: boolean;
   onDraftsChange?: (count: number) => void;
+  walletAddresses?: WalletAddressInfo[];
+  walletName?: string;
 }
 
 export const DraftList: React.FC<DraftListProps> = ({
@@ -80,9 +86,24 @@ export const DraftList: React.FC<DraftListProps> = ({
   onResume,
   canEdit = true,
   onDraftsChange,
+  walletAddresses = [],
+  walletName,
 }) => {
   const navigate = useNavigate();
   const { format } = useCurrency();
+
+  // Create a set of known wallet addresses for quick lookup
+  const knownAddresses = React.useMemo(() => {
+    return new Set(walletAddresses.map(wa => wa.address));
+  }, [walletAddresses]);
+
+  // Helper to get label for an address if it belongs to our wallet
+  const getAddressLabel = React.useCallback((address: string): string | undefined => {
+    if (knownAddresses.has(address)) {
+      return walletName || 'Own wallet';
+    }
+    return undefined;
+  }, [knownAddresses, walletName]);
   const [drafts, setDrafts] = useState<DraftTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,13 +132,25 @@ export const DraftList: React.FC<DraftListProps> = ({
 
   // Build flow preview data from draft
   const getFlowPreviewData = (draft: DraftTransaction) => {
-    // For inputs, we only have totalInput - create a summary input
-    const inputs: FlowInput[] = [{
-      txid: 'inputs',
-      vout: 0,
-      address: `${draft.selectedUtxoIds?.length || 1} input${(draft.selectedUtxoIds?.length || 1) !== 1 ? 's' : ''}`,
-      amount: draft.totalInput,
-    }];
+    // Use individual inputs if available, otherwise create a summary input
+    let inputs: FlowInput[];
+    if (draft.inputs && draft.inputs.length > 0) {
+      inputs = draft.inputs.map(input => ({
+        txid: input.txid,
+        vout: input.vout,
+        address: input.address,
+        amount: input.amount,
+        label: getAddressLabel(input.address),
+      }));
+    } else {
+      // Fallback: create a summary input
+      inputs = [{
+        txid: 'inputs',
+        vout: 0,
+        address: `${draft.selectedUtxoIds?.length || 1} input${(draft.selectedUtxoIds?.length || 1) !== 1 ? 's' : ''}`,
+        amount: draft.totalInput,
+      }];
+    }
 
     // Build outputs from draft data
     const flowOutputs: FlowOutput[] = [];
@@ -128,6 +161,7 @@ export const DraftList: React.FC<DraftListProps> = ({
           address: output.address,
           amount: output.sendMax ? draft.effectiveAmount : output.amount,
           isChange: false,
+          label: getAddressLabel(output.address),
         });
       });
     } else {
@@ -136,15 +170,27 @@ export const DraftList: React.FC<DraftListProps> = ({
         address: draft.recipient,
         amount: draft.effectiveAmount,
         isChange: false,
+        label: getAddressLabel(draft.recipient),
       });
     }
 
-    // Add change output if present
-    if (draft.changeAmount > 0 && draft.changeAddress) {
+    // Add decoy outputs if present (these are change outputs distributed for privacy)
+    // Or add single change output if no decoys
+    if (draft.decoyOutputs && draft.decoyOutputs.length > 0) {
+      draft.decoyOutputs.forEach(decoy => {
+        flowOutputs.push({
+          address: decoy.address,
+          amount: decoy.amount,
+          isChange: true,
+          label: getAddressLabel(decoy.address),
+        });
+      });
+    } else if (draft.changeAmount > 0 && draft.changeAddress) {
       flowOutputs.push({
         address: draft.changeAddress,
         amount: draft.changeAmount,
         isChange: true,
+        label: getAddressLabel(draft.changeAddress),
       });
     }
 

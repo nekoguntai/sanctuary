@@ -190,7 +190,29 @@ export async function selectUTXOs(
     throw new Error('No spendable UTXOs available');
   }
 
-  // Select UTXOs to cover the amount
+  // If user explicitly selected UTXOs, use ALL of them (no optimization)
+  // This allows users to consolidate UTXOs or control exactly which are spent
+  if (selectedUtxoIds && selectedUtxoIds.length > 0) {
+    const totalAmount = utxos.reduce((sum, u) => sum + Number(u.amount), 0);
+    const estimatedSize = estimateTransactionSize(utxos.length, 2, 'native_segwit');
+    const estimatedFee = calculateFee(estimatedSize, feeRate);
+
+    if (totalAmount < targetAmount + estimatedFee) {
+      throw new Error(
+        `Insufficient funds. Need ${targetAmount + estimatedFee} sats, have ${totalAmount} sats`
+      );
+    }
+
+    const changeAmount = totalAmount - targetAmount - estimatedFee;
+    return {
+      utxos,
+      totalAmount,
+      estimatedFee,
+      changeAmount,
+    };
+  }
+
+  // Auto-selection: optimize to minimize inputs while covering the amount
   const selectedUtxos: typeof utxos = [];
   let totalAmount = 0;
 
@@ -706,19 +728,46 @@ export async function createTransaction(
     }
   }
 
+  // When decoys are used, don't return changeAmount/changeAddress separately
+  // as all change is distributed among decoy outputs
+  const hasDecoys = decoyOutputsResult && decoyOutputsResult.length > 0;
+
   return {
     psbt,
     psbtBase64: psbt.toBase64(),
     fee: actualFee,
     totalInput: selection.totalAmount,
     totalOutput: effectiveAmount + (sendMax ? 0 : (actualChangeAmount >= dustThreshold ? actualChangeAmount : 0)),
-    changeAmount: sendMax ? 0 : actualChangeAmount,
-    changeAddress,
-    utxos: selection.utxos.map((u) => ({ txid: u.txid, vout: u.vout })),
+    // When decoys are used, changeAmount is 0 (change is in decoys)
+    changeAmount: hasDecoys ? 0 : (sendMax ? 0 : actualChangeAmount),
+    changeAddress: hasDecoys ? undefined : changeAddress,
+    utxos: selection.utxos.map((u) => ({ txid: u.txid, vout: u.vout, address: u.address, amount: Number(u.amount) })),
     inputPaths,
     effectiveAmount, // The actual amount being sent (may differ from requested if sendMax or subtractFees)
     decoyOutputs: decoyOutputsResult, // Decoy change outputs (if enabled)
   };
+}
+
+/**
+ * Input metadata for transaction storage
+ */
+export interface TransactionInputMetadata {
+  txid: string;
+  vout: number;
+  address: string;
+  amount: number;
+  derivationPath?: string;
+}
+
+/**
+ * Output metadata for transaction storage
+ */
+export interface TransactionOutputMetadata {
+  address: string;
+  amount: number;
+  outputType: 'recipient' | 'change' | 'decoy' | 'consolidation' | 'unknown';
+  isOurs: boolean;
+  scriptPubKey?: string;
 }
 
 /**
@@ -739,6 +788,9 @@ export async function broadcastAndSave(
     utxos: Array<{ txid: string; vout: number }>;
     rawTxHex?: string; // For Trezor: fully signed raw transaction hex
     draftId?: string; // If broadcasting from a draft, release UTXO locks
+    // Enhanced metadata for full I/O storage
+    inputs?: TransactionInputMetadata[];
+    outputs?: TransactionOutputMetadata[];
   }
 ): Promise<{
   txid: string;
@@ -847,7 +899,7 @@ export async function broadcastAndSave(
 
   // Save transaction to database
   const txType = isConsolidation ? 'consolidation' : 'sent';
-  await prisma.transaction.create({
+  const txRecord = await prisma.transaction.create({
     data: {
       txid,
       walletId,
@@ -861,8 +913,140 @@ export async function broadcastAndSave(
       blockTime: null,
       replacementForTxid,
       rbfStatus: 'active',
+      rawTx,
+      counterpartyAddress: metadata.recipient,
     },
   });
+
+  // Store transaction inputs if provided
+  if (metadata.inputs && metadata.inputs.length > 0) {
+    const inputData = metadata.inputs.map((input, index) => ({
+      transactionId: txRecord.id,
+      inputIndex: index,
+      txid: input.txid,
+      vout: input.vout,
+      address: input.address,
+      amount: BigInt(input.amount),
+      derivationPath: input.derivationPath,
+    }));
+
+    await prisma.transactionInput.createMany({ data: inputData });
+    log.debug(`Stored ${inputData.length} transaction inputs for ${txid}`);
+  } else {
+    // Fallback: try to get input data from UTXO table if not provided
+    const utxoInputs = await Promise.all(
+      metadata.utxos.map(async (utxo, index) => {
+        const utxoRecord = await prisma.uTXO.findUnique({
+          where: { txid_vout: { txid: utxo.txid, vout: utxo.vout } },
+        });
+
+        if (utxoRecord) {
+          // Get derivation path from address
+          const addressRecord = await prisma.address.findFirst({
+            where: { address: utxoRecord.address, walletId },
+          });
+
+          return {
+            transactionId: txRecord.id,
+            inputIndex: index,
+            txid: utxo.txid,
+            vout: utxo.vout,
+            address: utxoRecord.address,
+            amount: utxoRecord.amount,
+            derivationPath: addressRecord?.derivationPath,
+          };
+        }
+        return null;
+      })
+    );
+
+    const validInputs = utxoInputs.filter(Boolean) as Array<{
+      transactionId: string;
+      inputIndex: number;
+      txid: string;
+      vout: number;
+      address: string;
+      amount: bigint;
+      derivationPath: string | null | undefined;
+    }>;
+
+    if (validInputs.length > 0) {
+      await prisma.transactionInput.createMany({ data: validInputs });
+      log.debug(`Stored ${validInputs.length} transaction inputs (from UTXO fallback) for ${txid}`);
+    }
+  }
+
+  // Store transaction outputs if provided
+  if (metadata.outputs && metadata.outputs.length > 0) {
+    const outputData = metadata.outputs.map((output, index) => ({
+      transactionId: txRecord.id,
+      outputIndex: index,
+      address: output.address,
+      amount: BigInt(output.amount),
+      outputType: output.outputType,
+      isOurs: output.isOurs,
+      scriptPubKey: output.scriptPubKey,
+    }));
+
+    await prisma.transactionOutput.createMany({ data: outputData });
+    log.debug(`Stored ${outputData.length} transaction outputs for ${txid}`);
+  } else {
+    // Fallback: try to parse outputs from the raw transaction or PSBT
+    try {
+      const tx = bitcoin.Transaction.fromHex(rawTx);
+      const network = await prisma.wallet.findUnique({
+        where: { id: walletId },
+        select: { network: true },
+      });
+      const networkObj = getNetwork(network?.network === 'testnet' ? 'testnet' : 'mainnet');
+
+      // Get all wallet addresses to check ownership
+      const walletAddresses = await prisma.address.findMany({
+        where: { walletId },
+        select: { address: true },
+      });
+      const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+
+      const outputData = tx.outs.map((output, index) => {
+        let address = '';
+        try {
+          address = bitcoin.address.fromOutputScript(output.script, networkObj);
+        } catch (e) {
+          // OP_RETURN or non-standard output
+        }
+
+        const isOurs = walletAddressSet.has(address);
+        let outputType: string = 'unknown';
+
+        if (address === metadata.recipient) {
+          outputType = 'recipient';
+        } else if (isOurs) {
+          outputType = isConsolidation ? 'consolidation' : 'change';
+        } else if (address) {
+          outputType = 'recipient'; // External address, must be a recipient
+        } else {
+          outputType = 'op_return';
+        }
+
+        return {
+          transactionId: txRecord.id,
+          outputIndex: index,
+          address,
+          amount: BigInt(output.value),
+          outputType,
+          isOurs,
+          scriptPubKey: output.script.toString('hex'),
+        };
+      });
+
+      if (outputData.length > 0) {
+        await prisma.transactionOutput.createMany({ data: outputData });
+        log.debug(`Stored ${outputData.length} transaction outputs (from raw tx) for ${txid}`);
+      }
+    } catch (e) {
+      log.warn(`Failed to parse outputs from raw transaction: ${e}`);
+    }
+  }
 
   // Recalculate running balances for all transactions in this wallet
   await recalculateWalletBalances(walletId);
@@ -1077,12 +1261,25 @@ export async function createBatchTransaction(
   const sendMaxOutputIndex = outputs.findIndex(o => o.sendMax);
   const hasSendMax = sendMaxOutputIndex !== -1;
 
-  // Get available UTXOs
+  // Get confirmation threshold setting
+  const thresholdSetting = await prisma.systemSetting.findUnique({
+    where: { key: 'confirmationThreshold' },
+  });
+  const confirmationThreshold = thresholdSetting
+    ? JSON.parse(thresholdSetting.value)
+    : DEFAULT_CONFIRMATION_THRESHOLD;
+
+  // Get available UTXOs (respecting confirmation threshold and draft locks)
   let utxos = await prisma.uTXO.findMany({
     where: {
       walletId,
       spent: false,
       frozen: false,
+      confirmations: { gte: confirmationThreshold }, // Must have enough confirmations
+      // Exclude UTXOs locked by other drafts (unless user explicitly selected them)
+      ...(selectedUtxoIds && selectedUtxoIds.length > 0
+        ? {} // Don't filter locks if user selected specific UTXOs
+        : { draftLock: null }), // Auto-selection: exclude locked UTXOs
     },
     orderBy: { amount: 'desc' },
   });
@@ -1096,6 +1293,25 @@ export async function createBatchTransaction(
 
   if (utxos.length === 0) {
     throw new Error('No spendable UTXOs available');
+  }
+
+  // Log UTXO details for debugging PSBT issues
+  log.info(`[BATCH] Creating batch transaction with ${utxos.length} UTXOs`, {
+    walletId,
+    utxoCount: utxos.length,
+    hasSelectedUtxos: !!selectedUtxoIds && selectedUtxoIds.length > 0,
+    hasSendMax,
+    outputs: outputs.map(o => ({ address: o.address.slice(0, 10) + '...', amount: o.amount, sendMax: o.sendMax })),
+  });
+
+  // Validate all UTXOs have required scriptPubKey
+  const invalidUtxos = utxos.filter(u => !u.scriptPubKey || u.scriptPubKey.length === 0);
+  if (invalidUtxos.length > 0) {
+    log.error('[BATCH] UTXOs missing scriptPubKey', {
+      invalidCount: invalidUtxos.length,
+      invalidUtxos: invalidUtxos.map(u => ({ txid: u.txid, vout: u.vout, address: u.address })),
+    });
+    throw new Error(`${invalidUtxos.length} UTXO(s) are missing scriptPubKey data and cannot be spent. Please sync your wallet.`);
   }
 
   // Calculate total available
@@ -1327,7 +1543,7 @@ export async function createBatchTransaction(
     totalOutput,
     changeAmount: hasSendMax ? 0 : changeAmount,
     changeAddress,
-    utxos: utxos.map(u => ({ txid: u.txid, vout: u.vout })),
+    utxos: utxos.map(u => ({ txid: u.txid, vout: u.vout, address: u.address, amount: Number(u.amount) })),
     inputPaths,
     outputs: finalOutputs,
   };

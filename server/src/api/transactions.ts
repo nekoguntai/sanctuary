@@ -200,11 +200,14 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
       select: { name: true, network: true },
     });
 
-    // Query unconfirmed transactions (confirmations === 0)
+    // Query unconfirmed transactions (blockHeight is null or 0)
     const pendingTxs = await prisma.transaction.findMany({
       where: {
         walletId,
-        confirmations: 0,
+        OR: [
+          { blockHeight: 0 },
+          { blockHeight: null },
+        ],
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -241,6 +244,14 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
         } catch (err) {
           // Mempool fetch failed, use estimate if possible
           log.warn('Failed to fetch tx from mempool.space', { txid: tx.txid, error: err });
+        }
+
+        // If mempool.space didn't provide feeRate, fallback to rawTx calculation
+        if (feeRate === 0 && tx.rawTx && fee > 0) {
+          const size = Math.ceil(tx.rawTx.length / 2); // hex to bytes
+          if (size > 0) {
+            feeRate = Math.round((fee / size) * 10) / 10;
+          }
         }
 
         // Calculate time in queue
@@ -448,6 +459,51 @@ router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('
 });
 
 /**
+ * GET /api/v1/transactions/:txid/raw
+ * Get raw transaction hex for hardware wallet signing (Trezor needs full prev tx data)
+ * First checks database, then fetches from mempool.space if not found
+ */
+router.get('/transactions/:txid/raw', async (req: Request, res: Response) => {
+  try {
+    const { txid } = req.params;
+
+    // First, check if we have it in our database
+    const transaction = await prisma.transaction.findFirst({
+      where: { txid },
+      select: { rawTx: true, wallet: { select: { network: true } } },
+    });
+
+    if (transaction?.rawTx) {
+      return res.json({ hex: transaction.rawTx });
+    }
+
+    // Not in database - fetch from mempool.space
+    const network = transaction?.wallet?.network || 'mainnet';
+    const mempoolBaseUrl = network === 'testnet'
+      ? 'https://mempool.space/testnet/api'
+      : 'https://mempool.space/api';
+
+    const response = await fetch(`${mempoolBaseUrl}/tx/${txid}/hex`);
+    if (!response.ok) {
+      log.warn('Failed to fetch raw tx from mempool.space', { txid, status: response.status });
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Transaction not found',
+      });
+    }
+
+    const hex = await response.text();
+    return res.json({ hex });
+  } catch (error) {
+    log.error('Get raw transaction error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch raw transaction',
+    });
+  }
+});
+
+/**
  * GET /api/v1/transactions/:txid
  * Get a specific transaction by txid
  */
@@ -480,6 +536,13 @@ router.get('/transactions/:txid', async (req: Request, res: Response) => {
             label: true,
           },
         },
+        // Include transaction inputs and outputs
+        inputs: {
+          orderBy: { inputIndex: 'asc' },
+        },
+        outputs: {
+          orderBy: { outputIndex: 'asc' },
+        },
       },
     });
 
@@ -495,9 +558,19 @@ router.get('/transactions/:txid', async (req: Request, res: Response) => {
       ...transaction,
       amount: Number(transaction.amount),
       fee: transaction.fee ? Number(transaction.fee) : null,
+      balanceAfter: transaction.balanceAfter ? Number(transaction.balanceAfter) : null,
       blockHeight: transaction.blockHeight ? Number(transaction.blockHeight) : null,
       labels: transaction.transactionLabels.map(tl => tl.label),
       transactionLabels: undefined, // Remove the raw join data
+      // Serialize inputs/outputs
+      inputs: transaction.inputs.map(input => ({
+        ...input,
+        amount: Number(input.amount),
+      })),
+      outputs: transaction.outputs.map(output => ({
+        ...output,
+        amount: Number(output.amount),
+      })),
     };
 
     res.json(serializedTransaction);
@@ -718,13 +791,22 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
       addressBalances.set(utxo.address, current + Number(utxo.amount));
     }
 
-    // Add balance and labels to each address
-    const addressesWithBalance = addresses.map(addr => ({
-      ...addr,
-      balance: addressBalances.get(addr.address) || 0,
-      labels: addr.addressLabels.map(al => al.label),
-      addressLabels: undefined, // Remove the raw join data
-    }));
+    // Add balance, labels, and isChange flag to each address
+    const addressesWithBalance = addresses.map(addr => {
+      // Determine if this is a change address from derivation path
+      // Change addresses have /1/ before the final index, receive addresses have /0/
+      // e.g., m/84'/0'/0'/1/5 is change, m/84'/0'/0'/0/5 is receive
+      const pathParts = addr.derivationPath.split('/');
+      const isChange = pathParts.length >= 2 && pathParts[pathParts.length - 2] === '1';
+
+      return {
+        ...addr,
+        balance: addressBalances.get(addr.address) || 0,
+        labels: addr.addressLabels.map(al => al.label),
+        isChange,
+        addressLabels: undefined, // Remove the raw join data
+      };
+    });
 
     res.json(addressesWithBalance);
   } catch (error) {

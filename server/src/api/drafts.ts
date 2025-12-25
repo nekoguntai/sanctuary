@@ -147,6 +147,8 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       subtractFees,
       sendMax,
       outputs, // Multiple outputs support
+      inputs, // Multiple inputs for flow visualization
+      decoyOutputs, // Decoy change outputs for privacy
       isRBF, // RBF replacement transactions skip UTXO locking
       label,
       memo,
@@ -202,6 +204,8 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
         subtractFees: subtractFees ?? false,
         sendMax: sendMax ?? false,
         outputs: outputs || null,
+        inputs: inputs || null,
+        decoyOutputs: decoyOutputs || null,
         isRBF: isRBF ?? false,
         label,
         memo,

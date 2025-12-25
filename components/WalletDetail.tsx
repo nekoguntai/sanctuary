@@ -474,9 +474,21 @@ export const WalletDetail: React.FC = () => {
   const [payjoinLoading, setPayjoinLoading] = useState(false);
   const [receiveAmount, setReceiveAmount] = useState<string>('');
 
-  // Get first unused address for Payjoin
+  // Get first unused receive address (not change address)
   const receiveAddressForPayjoin = useMemo(() => {
-    return addresses.find(a => !a.used) || addresses[0] || null;
+    // Filter out change addresses - standard BIP derivation: m/purpose'/coin'/account'/change/index
+    // change = 0 for external/receive, 1 for internal/change
+    const isReceiveAddress = (path: string): boolean => {
+      const parts = path.split('/');
+      if (parts.length >= 2) {
+        const changeIndicator = parts[parts.length - 2];
+        return changeIndicator === '0';
+      }
+      return true; // Default to receive if can't determine
+    };
+
+    const receiveAddresses = addresses.filter(a => isReceiveAddress(a.derivationPath));
+    return receiveAddresses.find(a => !a.used) || receiveAddresses[0] || null;
   }, [addresses]);
 
   // Fetch Payjoin URI when enabled
@@ -1750,6 +1762,8 @@ export const WalletDetail: React.FC = () => {
               walletType={wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
               quorum={wallet.quorum ? { m: getQuorumM(wallet.quorum), n: getQuorumN(wallet.quorum, wallet.totalSigners) } : undefined}
               canEdit={wallet.userRole !== 'viewer'}
+              walletAddresses={addresses}
+              walletName={wallet.name}
               onDraftsChange={(count) => {
                 setDraftsCount(count);
                 // Update app notifications

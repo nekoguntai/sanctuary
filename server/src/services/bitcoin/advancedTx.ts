@@ -9,11 +9,16 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import { BIP32Factory } from 'bip32';
+import * as ecc from 'tiny-secp256k1';
 import { getNetwork, estimateTransactionSize, calculateFee, parseTransaction } from './utils';
-import { getElectrumClient } from './electrum';
+import { parseDescriptor } from './addressDerivation';
+import { getNodeClient } from './nodeClient';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { DEFAULT_DUST_THRESHOLD } from '../../constants';
+
+const bip32 = BIP32Factory(ecc);
 
 const log = createLogger('ADVANCED_TX');
 
@@ -56,10 +61,8 @@ export async function canReplaceTransaction(txid: string): Promise<{
   minNewFeeRate?: number;
 }> {
   try {
-    const client = getElectrumClient();
-    if (!client.isConnected()) {
-      await client.connect();
-    }
+    // Use nodeClient which respects poolEnabled setting from node_configs
+    const client = await getNodeClient();
 
     // Get transaction details
     const txDetails = await client.getTransaction(txid);
@@ -150,14 +153,57 @@ export async function createRBFTransaction(
   feeDelta: number;
   inputs: Array<{ txid: string; vout: number; value: number }>;
   outputs: Array<{ address: string; value: number }>;
+  inputPaths: string[];
 }> {
-  const client = getElectrumClient();
-  if (!client.isConnected()) {
-    await client.connect();
-  }
+  // Use nodeClient which respects poolEnabled setting from node_configs
+  const client = await getNodeClient();
 
   // Get configurable thresholds
   const dustThreshold = await getDustThreshold();
+
+  // Get wallet with devices for fingerprint and xpub
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found');
+  }
+
+  // Get master fingerprint and account xpub for bip32Derivation
+  let masterFingerprint: Buffer | undefined;
+  let accountXpub: string | undefined;
+
+  if (wallet.devices && wallet.devices.length > 0) {
+    const primaryDevice = wallet.devices[0].device;
+    if (primaryDevice.fingerprint) {
+      masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
+    }
+    if (primaryDevice.xpub) {
+      accountXpub = primaryDevice.xpub;
+    }
+  } else if (wallet.fingerprint) {
+    masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
+  }
+
+  // Try to get xpub from descriptor if not from device
+  if (!accountXpub && wallet.descriptor) {
+    try {
+      const parsed = parseDescriptor(wallet.descriptor);
+      if (parsed.xpub) {
+        accountXpub = parsed.xpub;
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
 
   // Check if transaction can be replaced
   const rbfCheck = await canReplaceTransaction(originalTxid);
@@ -179,15 +225,51 @@ export async function createRBFTransaction(
   // Create new PSBT with same inputs and outputs
   const psbt = new bitcoin.Psbt({ network: networkObj });
 
+  // Get addresses with derivation paths for bip32Derivation
+  const addressRecords = await prisma.address.findMany({
+    where: { walletId },
+    select: {
+      address: true,
+      derivationPath: true,
+    },
+  });
+  const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
+
+  // Parse account xpub for deriving public keys
+  let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
+  if (accountXpub) {
+    try {
+      accountNode = bip32.fromBase58(accountXpub, networkObj);
+    } catch (e) {
+      log.warn('Failed to parse account xpub for RBF', { error: String(e) });
+    }
+  }
+
   // Add inputs with RBF sequence
   const inputs: Array<{ txid: string; vout: number; value: number }> = [];
+  const inputPaths: string[] = [];
   let totalInput = 0;
 
-  for (const input of tx.ins) {
+  for (let i = 0; i < tx.ins.length; i++) {
+    const input = tx.ins[i];
     const inputTxid = Buffer.from(input.hash).reverse().toString('hex');
     const inputTx = await client.getTransaction(inputTxid);
     const prevOut = inputTx.vout[input.index];
     const value = Math.round(prevOut.value * 100000000);
+
+    // Get address from scriptPubKey to look up derivation path
+    let inputAddress: string | undefined;
+    try {
+      inputAddress = bitcoin.address.fromOutputScript(
+        Buffer.from(prevOut.scriptPubKey.hex, 'hex'),
+        networkObj
+      );
+    } catch (e) {
+      log.warn('Failed to decode input address', { txid: inputTxid, vout: input.index });
+    }
+
+    const derivationPath = inputAddress ? addressPathMap.get(inputAddress) : undefined;
+    inputPaths.push(derivationPath || '');
 
     psbt.addInput({
       hash: inputTxid,
@@ -198,6 +280,42 @@ export async function createRBFTransaction(
         value,
       },
     });
+
+    // Add BIP32 derivation info for hardware wallet signing
+    if (masterFingerprint && derivationPath && accountNode) {
+      try {
+        // Parse the derivation path
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+
+        // Find where the account path ends (after 3 hardened levels)
+        let accountPathEnd = 0;
+        for (let j = 0; j < pathParts.length && j < 3; j++) {
+          if (pathParts[j].endsWith("'") || pathParts[j].endsWith('h')) {
+            accountPathEnd = j + 1;
+          }
+        }
+
+        // Derive from account node using the remaining path (change/index)
+        let pubkeyNode = accountNode;
+        for (let j = accountPathEnd; j < pathParts.length; j++) {
+          const part = pathParts[j];
+          const idx = parseInt(part.replace(/['h]/g, ''), 10);
+          pubkeyNode = pubkeyNode.derive(idx);
+        }
+
+        if (pubkeyNode.publicKey) {
+          psbt.updateInput(i, {
+            bip32Derivation: [{
+              masterFingerprint,
+              path: derivationPath,
+              pubkey: pubkeyNode.publicKey,
+            }],
+          });
+        }
+      } catch (e) {
+        log.warn('Failed to add bip32Derivation for RBF input', { index: i, error: String(e) });
+      }
+    }
 
     inputs.push({
       txid: inputTxid,
@@ -269,6 +387,7 @@ export async function createRBFTransaction(
     feeDelta,
     inputs,
     outputs,
+    inputPaths,
   };
 }
 
@@ -332,10 +451,8 @@ export async function createCPFPTransaction(
   parentFeeRate: number;
   effectiveFeeRate: number;
 }> {
-  const client = getElectrumClient();
-  if (!client.isConnected()) {
-    await client.connect();
-  }
+  // Use nodeClient which respects poolEnabled setting from node_configs
+  const client = await getNodeClient();
 
   // Get configurable thresholds
   const dustThreshold = await getDustThreshold();
@@ -596,10 +713,8 @@ export async function getAdvancedFeeEstimates(): Promise<{
   slow: { feeRate: number; blocks: number; minutes: number };
   minimum: { feeRate: number; blocks: number; minutes: number };
 }> {
-  const client = getElectrumClient();
-  if (!client.isConnected()) {
-    await client.connect();
-  }
+  // Use nodeClient which respects poolEnabled setting from node_configs
+  const client = await getNodeClient();
 
   try {
     const [fastest, fast, medium, slow, minimum] = await Promise.all([

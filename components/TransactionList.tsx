@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, forwardRef } from 'react';
 import { TableVirtuoso } from 'react-virtuoso';
-import { Transaction, Wallet, WalletType, Label } from '../types';
+import { Transaction, Wallet, WalletType, Label, TransactionInput, TransactionOutput } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as labelsApi from '../src/api/labels';
-import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2, TrendingUp } from 'lucide-react';
+import * as transactionsApi from '../src/api/transactions';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, ExternalLink, Copy, X, Check, Edit2, TrendingUp, Loader2 } from 'lucide-react';
 import { TransactionActions } from './TransactionActions';
+import { TransactionFlowPreview } from './TransactionFlowPreview';
 import { LabelBadges } from './LabelSelector';
 import { AILabelSuggestion } from './AILabelSuggestion';
 import { useAIStatus } from '../hooks/useAIStatus';
@@ -62,6 +64,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [savingLabels, setSavingLabels] = useState(false);
 
+  // Full transaction details (with inputs/outputs)
+  const [fullTxDetails, setFullTxDetails] = useState<Transaction | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
   // Load explorer URL from server config
   useEffect(() => {
     const fetchExplorerUrl = async () => {
@@ -74,6 +80,26 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     };
     fetchExplorerUrl();
   }, []);
+
+  // Fetch full transaction details when modal opens
+  useEffect(() => {
+    if (selectedTx) {
+      setLoadingDetails(true);
+      setFullTxDetails(null);
+      transactionsApi.getTransaction(selectedTx.txid)
+        .then(details => {
+          setFullTxDetails(details);
+        })
+        .catch(err => {
+          log.error('Failed to fetch transaction details', { error: err, txid: selectedTx.txid });
+        })
+        .finally(() => {
+          setLoadingDetails(false);
+        });
+    } else {
+      setFullTxDetails(null);
+    }
+  }, [selectedTx]);
 
   // Filter out replaced transactions (rbfStatus === 'replaced')
   const filteredTransactions = useMemo(() => {
@@ -611,18 +637,52 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   </div>
 
                   {/* Transaction Actions (RBF/CPFP) for pending transactions */}
-                  {selectedTx.confirmations === 0 && (
-                    <TransactionActions
-                      txid={selectedTx.txid}
-                      walletId={selectedTx.walletId}
-                      confirmed={false}
-                      isReceived={selectedTx.amount > 0}
-                      onActionComplete={() => {
-                        setSelectedTx(null);
-                        onLabelsChange?.();
-                      }}
+                  {selectedTx.confirmations === 0 && (() => {
+                    // Consolidations are sent BY the user (to themselves), so should show RBF not CPFP
+                    const isConsolidationTx = selectedTx.type === 'consolidation' ||
+                      (selectedTx.counterpartyAddress && walletAddresses.includes(selectedTx.counterpartyAddress));
+                    // Treat consolidations as "not received" for RBF eligibility
+                    const isReceivedForActions = isConsolidationTx ? false : selectedTx.amount > 0;
+                    return (
+                      <TransactionActions
+                        txid={selectedTx.txid}
+                        walletId={selectedTx.walletId}
+                        confirmed={false}
+                        isReceived={isReceivedForActions}
+                        onActionComplete={() => {
+                          setSelectedTx(null);
+                          onLabelsChange?.();
+                        }}
+                      />
+                    );
+                  })()}
+
+                  {/* Transaction Flow Visualization */}
+                  {loadingDetails ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-sanctuary-400" />
+                      <span className="ml-2 text-sanctuary-500">Loading transaction details...</span>
+                    </div>
+                  ) : fullTxDetails?.inputs && fullTxDetails.inputs.length > 0 ? (
+                    <TransactionFlowPreview
+                      inputs={fullTxDetails.inputs.map(input => ({
+                        txid: input.txid,
+                        vout: input.vout,
+                        address: input.address,
+                        amount: input.amount,
+                      }))}
+                      outputs={(fullTxDetails.outputs || []).map(output => ({
+                        address: output.address,
+                        amount: output.amount,
+                        isChange: output.outputType === 'change',
+                        label: output.outputType !== 'unknown' ? output.outputType : undefined,
+                      }))}
+                      fee={selectedTx.fee || 0}
+                      feeRate={0}
+                      totalInput={fullTxDetails.inputs.reduce((sum, i) => sum + i.amount, 0)}
+                      totalOutput={(fullTxDetails.outputs || []).reduce((sum, o) => sum + o.amount, 0)}
                     />
-                  )}
+                  ) : null}
 
                   {/* Transaction Details Grid */}
                   <div className="space-y-4">

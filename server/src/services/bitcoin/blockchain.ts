@@ -8,11 +8,12 @@
 import { getNodeClient } from './nodeClient';
 import { getElectrumPool } from './electrumPool';
 import prisma from '../../models/prisma';
-import { validateAddress, parseTransaction } from './utils';
+import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
 import { walletLog } from '../../websocket/notifications';
 import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD, ADDRESS_GAP_LIMIT } from '../../constants';
 import * as addressDerivation from './addressDerivation';
+import * as bitcoin from 'bitcoinjs-lib';
 
 const log = createLogger('BLOCKCHAIN');
 
@@ -558,6 +559,107 @@ export async function syncAddress(addressId: string): Promise<{
       });
     }
 
+    // Store transaction inputs/outputs for newly created transactions
+    if (transactionCount > 0) {
+      try {
+        // Get transactions created in this sync that don't have I/O stored
+        const txsWithoutIO = await prisma.transaction.findMany({
+          where: {
+            walletId: addressRecord.walletId,
+            txid: { in: history.map(h => h.tx_hash) },
+            inputs: { none: {} },
+            outputs: { none: {} },
+          },
+          select: { id: true, txid: true, type: true },
+        });
+
+        for (const txRecord of txsWithoutIO) {
+          const txDetails = await client.getTransaction(txRecord.txid, true);
+          if (!txDetails) continue;
+
+          const inputs = txDetails.vin || [];
+          const outputs = txDetails.vout || [];
+
+          // Store inputs
+          for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
+            const input = inputs[inputIdx];
+            if (input.coinbase) continue;
+
+            let inputAddress: string | undefined;
+            let inputAmount = 0;
+
+            if (input.prevout && input.prevout.scriptPubKey) {
+              inputAddress = input.prevout.scriptPubKey.address ||
+                (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+              if (input.prevout.value !== undefined) {
+                inputAmount = input.prevout.value >= 1000000
+                  ? input.prevout.value
+                  : Math.round(input.prevout.value * 100000000);
+              }
+            }
+
+            if (inputAddress && input.txid !== undefined && input.vout !== undefined) {
+              await prisma.transactionInput.upsert({
+                where: {
+                  transactionId_inputIndex: { transactionId: txRecord.id, inputIndex: inputIdx },
+                },
+                create: {
+                  transactionId: txRecord.id,
+                  inputIndex: inputIdx,
+                  txid: input.txid,
+                  vout: input.vout,
+                  address: inputAddress,
+                  amount: BigInt(inputAmount),
+                },
+                update: {},
+              });
+            }
+          }
+
+          // Store outputs
+          for (let outputIdx = 0; outputIdx < outputs.length; outputIdx++) {
+            const output = outputs[outputIdx];
+            const outputAddress = output.scriptPubKey?.address ||
+              (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
+
+            if (!outputAddress) continue;
+
+            const outputAmount = Math.round((output.value || 0) * 100000000);
+            const isOurs = walletAddressSet.has(outputAddress);
+
+            let outputType = 'unknown';
+            if (txRecord.type === 'sent') {
+              outputType = isOurs ? 'change' : 'recipient';
+            } else if (txRecord.type === 'received') {
+              outputType = isOurs ? 'recipient' : 'unknown';
+            } else if (txRecord.type === 'consolidation') {
+              outputType = 'consolidation';
+            }
+
+            await prisma.transactionOutput.upsert({
+              where: {
+                transactionId_outputIndex: { transactionId: txRecord.id, outputIndex: outputIdx },
+              },
+              create: {
+                transactionId: txRecord.id,
+                outputIndex: outputIdx,
+                address: outputAddress,
+                amount: BigInt(outputAmount),
+                scriptPubKey: output.scriptPubKey?.hex,
+                outputType,
+                isOurs,
+              },
+              update: {},
+            });
+          }
+        }
+
+        log.debug(`[BLOCKCHAIN] Stored I/O for ${txsWithoutIO.length} transactions in address sync`);
+      } catch (ioError) {
+        log.warn(`[BLOCKCHAIN] Failed to store transaction I/O in address sync: ${ioError}`);
+      }
+    }
+
     return {
       transactions: transactionCount,
       utxos: utxoCount,
@@ -930,6 +1032,152 @@ export async function syncWallet(walletId: string): Promise<{
     // Recalculate running balances for all transactions in this wallet
     if (newTransactions.length > 0) {
       await recalculateWalletBalances(walletId);
+    }
+
+    // PHASE 5.25: Store transaction inputs and outputs for new transactions
+    // This provides full transaction normalization for detailed transaction views
+    if (newTransactions.length > 0) {
+      try {
+        // Query the created transaction records to get their database IDs
+        const createdTxRecords = await prisma.transaction.findMany({
+          where: {
+            walletId,
+            txid: { in: newTransactions.map(tx => tx.txid) },
+          },
+          select: { id: true, txid: true, type: true },
+        });
+
+        const txInputsToCreate: Array<{
+          transactionId: string;
+          inputIndex: number;
+          txid: string;
+          vout: number;
+          address: string;
+          amount: bigint;
+          derivationPath?: string;
+        }> = [];
+
+        const txOutputsToCreate: Array<{
+          transactionId: string;
+          outputIndex: number;
+          address: string;
+          amount: bigint;
+          scriptPubKey?: string;
+          outputType: string;
+          isOurs: boolean;
+        }> = [];
+
+        // Build address to derivation path map for input derivation paths
+        const addressToDerivationPath = new Map<string, string>();
+        for (const addr of addresses) {
+          if (addr.derivationPath) {
+            addressToDerivationPath.set(addr.address, addr.derivationPath);
+          }
+        }
+
+        for (const txRecord of createdTxRecords) {
+          const txDetails = txDetailsCache.get(txRecord.txid);
+          if (!txDetails) continue;
+
+          const inputs = txDetails.vin || [];
+          const outputs = txDetails.vout || [];
+
+          // Process inputs
+          for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
+            const input = inputs[inputIdx];
+            if (input.coinbase) continue; // Skip coinbase inputs
+
+            let inputAddress: string | undefined;
+            let inputAmount = 0;
+
+            // Try to get input info from prevout (verbose mode) or cached tx
+            if (input.prevout && input.prevout.scriptPubKey) {
+              inputAddress = input.prevout.scriptPubKey.address ||
+                (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+              if (input.prevout.value !== undefined) {
+                inputAmount = input.prevout.value >= 1000000
+                  ? input.prevout.value  // already in sats
+                  : Math.round(input.prevout.value * 100000000);  // BTC to sats
+              }
+            } else if (input.txid && input.vout !== undefined) {
+              // Look up from cached transaction
+              const prevTx = txDetailsCache.get(input.txid);
+              if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+                const prevOutput = prevTx.vout[input.vout];
+                inputAddress = prevOutput.scriptPubKey?.address ||
+                  (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+                if (prevOutput.value !== undefined) {
+                  inputAmount = Math.round(prevOutput.value * 100000000);
+                }
+              }
+            }
+
+            if (inputAddress && input.txid !== undefined && input.vout !== undefined) {
+              txInputsToCreate.push({
+                transactionId: txRecord.id,
+                inputIndex: inputIdx,
+                txid: input.txid,
+                vout: input.vout,
+                address: inputAddress,
+                amount: BigInt(inputAmount),
+                derivationPath: addressToDerivationPath.get(inputAddress),
+              });
+            }
+          }
+
+          // Process outputs
+          for (let outputIdx = 0; outputIdx < outputs.length; outputIdx++) {
+            const output = outputs[outputIdx];
+            const outputAddress = output.scriptPubKey?.address ||
+              (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
+
+            if (!outputAddress) continue; // Skip OP_RETURN or non-standard outputs
+
+            const outputAmount = Math.round((output.value || 0) * 100000000);
+            const isOurs = walletAddressSet.has(outputAddress);
+
+            // Classify output type based on transaction type and ownership
+            let outputType = 'unknown';
+            if (txRecord.type === 'sent') {
+              outputType = isOurs ? 'change' : 'recipient';
+            } else if (txRecord.type === 'received') {
+              outputType = isOurs ? 'recipient' : 'unknown';
+            } else if (txRecord.type === 'consolidation') {
+              outputType = 'consolidation';
+            }
+
+            txOutputsToCreate.push({
+              transactionId: txRecord.id,
+              outputIndex: outputIdx,
+              address: outputAddress,
+              amount: BigInt(outputAmount),
+              scriptPubKey: output.scriptPubKey?.hex,
+              outputType,
+              isOurs,
+            });
+          }
+        }
+
+        // Batch insert inputs and outputs
+        if (txInputsToCreate.length > 0) {
+          await prisma.transactionInput.createMany({
+            data: txInputsToCreate,
+            skipDuplicates: true,
+          });
+          log.debug(`[BLOCKCHAIN] Stored ${txInputsToCreate.length} transaction inputs`);
+        }
+
+        if (txOutputsToCreate.length > 0) {
+          await prisma.transactionOutput.createMany({
+            data: txOutputsToCreate,
+            skipDuplicates: true,
+          });
+          log.debug(`[BLOCKCHAIN] Stored ${txOutputsToCreate.length} transaction outputs`);
+        }
+      } catch (ioError) {
+        // Don't fail the sync if I/O storage fails
+        log.warn(`[BLOCKCHAIN] Failed to store transaction inputs/outputs: ${ioError}`);
+      }
     }
 
     // Log transaction type breakdown (only new ones)

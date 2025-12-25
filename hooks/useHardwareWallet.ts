@@ -126,7 +126,8 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
    * Returns both the signed PSBT and optionally a raw transaction hex (for Trezor)
    */
   const signPSBT = useCallback(async (psbtBase64: string, inputPaths: string[] = []): Promise<{ psbt: string; rawTx?: string }> => {
-    if (!device) {
+    // Check the service's connection state directly (not React state which updates async)
+    if (!hardwareWalletService.isConnected()) {
       throw new Error('No device connected');
     }
 
@@ -148,7 +149,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
     } finally {
       setSigning(false);
     }
-  }, [device]);
+  }, []);
 
   /**
    * Clear error state

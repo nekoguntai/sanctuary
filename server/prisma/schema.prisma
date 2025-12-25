@@ -18,7 +18,7 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   username  String   @unique
-  password  String   // Hashed with bcrypt
+  password  String // Hashed with bcrypt
   email     String?  @unique
   isAdmin   Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -28,21 +28,21 @@ model User {
   preferences Json?
 
   // Two-Factor Authentication
-  twoFactorEnabled    Boolean  @default(false)
-  twoFactorSecret     String?  // TOTP secret (base32)
+  twoFactorEnabled     Boolean @default(false)
+  twoFactorSecret      String? // TOTP secret (base32)
   twoFactorBackupCodes String? // JSON array of hashed backup codes
 
   // Relationships
-  wallets     WalletUser[]
-  devices     Device[]
-  transactions Transaction[]
-  groupMemberships GroupMember[]
-  pushDevices PushDevice[]
+  wallets           WalletUser[]
+  devices           Device[]
+  transactions      Transaction[]
+  groupMemberships  GroupMember[]
+  pushDevices       PushDevice[]
   draftTransactions DraftTransaction[]
-  refreshTokens RefreshToken[]
-  revokedTokens RevokedToken[]
+  refreshTokens     RefreshToken[]
+  revokedTokens     RevokedToken[]
 
-  @@index([isAdmin])                      // For admin user lookups
+  @@index([isAdmin]) // For admin user lookups
   @@map("users")
 }
 
@@ -82,46 +82,46 @@ model GroupMember {
 // ========================================
 
 model Wallet {
-  id          String   @id @default(uuid())
-  name        String
-  type        String   // single_sig, multi_sig
-  scriptType  String   // native_segwit, nested_segwit, taproot, legacy
-  network     String   @default("mainnet") // mainnet, testnet, regtest
+  id         String @id @default(uuid())
+  name       String
+  type       String // single_sig, multi_sig
+  scriptType String // native_segwit, nested_segwit, taproot, legacy
+  network    String @default("mainnet") // mainnet, testnet, regtest
 
   // Multi-sig configuration
-  quorum      Int?     // e.g., 2 for 2-of-3
-  totalSigners Int?    // e.g., 3 for 2-of-3
+  quorum       Int? // e.g., 2 for 2-of-3
+  totalSigners Int? // e.g., 3 for 2-of-3
 
   // Wallet descriptors
-  descriptor  String?  // Output descriptor
-  fingerprint String?  // Master key fingerprint
+  descriptor  String? // Output descriptor
+  fingerprint String? // Master key fingerprint
 
   // Optional group ownership
-  groupId     String?
-  groupRole   String   @default("viewer") // Role for group members: owner, signer, viewer
+  groupId   String?
+  groupRole String  @default("viewer") // Role for group members: owner, signer, viewer
 
   // Sync metadata - for caching layer
-  lastSyncedAt    DateTime?  // Last successful full sync
-  lastSyncStatus  String?    // success, failed, partial
-  lastSyncError   String?    // Error message if failed
-  syncInProgress  Boolean    @default(false)
+  lastSyncedAt   DateTime? // Last successful full sync
+  lastSyncStatus String? // success, failed, partial
+  lastSyncError  String? // Error message if failed
+  syncInProgress Boolean   @default(false)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
-  users        WalletUser[]
-  devices      WalletDevice[]
-  addresses    Address[]
-  transactions Transaction[]
-  utxos        UTXO[]
-  labels       Label[]
-  group        Group?   @relation(fields: [groupId], references: [id])
+  users             WalletUser[]
+  devices           WalletDevice[]
+  addresses         Address[]
+  transactions      Transaction[]
+  utxos             UTXO[]
+  labels            Label[]
+  group             Group?             @relation(fields: [groupId], references: [id])
   draftTransactions DraftTransaction[]
 
   @@index([groupId])
-  @@index([syncInProgress])               // For sync service startup & scheduling
-  @@index([lastSyncedAt])                 // For stale wallet detection
+  @@index([syncInProgress]) // For sync service startup & scheduling
+  @@index([lastSyncedAt]) // For stale wallet detection
   @@map("wallets")
 }
 
@@ -146,18 +146,18 @@ model WalletUser {
 
 // Hardware device model catalog - stores device specifications and capabilities
 model HardwareDeviceModel {
-  id              String   @id @default(uuid())
-  name            String   @unique // Display name (e.g., "ColdCard Mk4")
-  slug            String   @unique // URL-friendly identifier (e.g., "coldcard-mk4")
-  manufacturer    String   // Company name (e.g., "Coinkite")
+  id           String @id @default(uuid())
+  name         String @unique // Display name (e.g., "ColdCard Mk4")
+  slug         String @unique // URL-friendly identifier (e.g., "coldcard-mk4")
+  manufacturer String // Company name (e.g., "Coinkite")
 
   // Connectivity capabilities (stored as array of strings)
-  connectivity    String[] // usb, bluetooth, nfc, sd_card, qr_code, air_gapped
+  connectivity String[] // usb, bluetooth, nfc, sd_card, qr_code, air_gapped
 
   // Security features
-  secureElement   Boolean  @default(false)
-  openSource      Boolean  @default(false)
-  airGapped       Boolean  @default(false)
+  secureElement Boolean @default(false)
+  openSource    Boolean @default(false)
+  airGapped     Boolean @default(false)
 
   // Bitcoin features
   supportsBitcoinOnly Boolean @default(true)
@@ -166,57 +166,57 @@ model HardwareDeviceModel {
   supportsPassphrase  Boolean @default(true)
 
   // Supported script types (stored as array)
-  scriptTypes     String[] // legacy, nested_segwit, native_segwit, taproot
+  scriptTypes String[] // legacy, nested_segwit, native_segwit, taproot
 
   // Display info
-  hasScreen       Boolean  @default(true)
-  screenType      String?  // e-ink, lcd, oled, none
+  hasScreen  Boolean @default(true)
+  screenType String? // e-ink, lcd, oled, none
 
   // Additional info
-  releaseYear     Int?
-  discontinued    Boolean  @default(false)
-  imageUrl        String?
-  websiteUrl      String?
+  releaseYear  Int?
+  discontinued Boolean @default(false)
+  imageUrl     String?
+  websiteUrl   String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationship to user's registered devices
-  devices         Device[]
+  devices Device[]
 
-  @@index([manufacturer])                 // For device catalog filtering
-  @@index([discontinued])                 // For active device filtering
+  @@index([manufacturer]) // For device catalog filtering
+  @@index([discontinued]) // For active device filtering
   @@map("hardware_device_models")
 }
 
 // User's registered device instances
 model Device {
-  id              String   @id @default(uuid())
-  userId          String
-  modelId         String?  // Reference to HardwareDeviceModel
-  type            String   // Legacy field for backward compatibility
-  label           String
-  fingerprint     String   @unique
-  derivationPath  String?  // e.g., m/84'/0'/0'
-  xpub            String   // Extended public key
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String
+  modelId        String? // Reference to HardwareDeviceModel
+  type           String // Legacy field for backward compatibility
+  label          String
+  fingerprint    String   @unique
+  derivationPath String? // e.g., m/84'/0'/0'
+  xpub           String // Extended public key
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   model   HardwareDeviceModel? @relation(fields: [modelId], references: [id])
   wallets WalletDevice[]
 
   @@index([userId])
-  @@index([modelId])                      // For device by model lookups
+  @@index([modelId]) // For device by model lookups
   @@map("devices")
 }
 
 model WalletDevice {
-  id        String   @id @default(uuid())
-  walletId  String
-  deviceId  String
-  signerIndex Int?   // For multi-sig wallets
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  walletId    String
+  deviceId    String
+  signerIndex Int? // For multi-sig wallets
+  createdAt   DateTime @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
@@ -234,89 +234,139 @@ model Address {
   id             String   @id @default(uuid())
   walletId       String
   address        String   @unique
-  derivationPath String   // e.g., m/84'/0'/0'/0/0
+  derivationPath String // e.g., m/84'/0'/0'/0/0
   index          Int
   used           Boolean  @default(false)
   createdAt      DateTime @default(now())
 
-  wallet       Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  wallet        Wallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
   addressLabels AddressLabel[]
 
-  @@index([walletId])                     // For address listing queries
+  @@index([walletId]) // For address listing queries
   @@index([walletId, used])
   @@map("addresses")
 }
 
 model Transaction {
-  id            String   @id @default(uuid())
-  txid          String
-  walletId      String
-  userId        String?
-  type          String   // sent, received
-  amount        BigInt   // Amount in satoshis
-  fee           BigInt?  // Fee in satoshis
-  balanceAfter  BigInt?  // Wallet balance after this transaction (running balance)
-  confirmations Int      @default(0)
-  blockHeight   Int?
-  blockTime     DateTime?
-  label         String?
-  memo          String?
-  rawTx         String?  // Raw transaction hex
+  id                  String    @id @default(uuid())
+  txid                String
+  walletId            String
+  userId              String?
+  type                String // sent, received
+  amount              BigInt // Amount in satoshis
+  fee                 BigInt? // Fee in satoshis
+  balanceAfter        BigInt? // Wallet balance after this transaction (running balance)
+  confirmations       Int       @default(0)
+  blockHeight         Int?
+  blockTime           DateTime?
+  label               String?
+  memo                String?
+  rawTx               String? // Raw transaction hex
   counterpartyAddress String? // Sender address (for receives) or recipient address (for sends)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // RBF tracking
-  replacedByTxid     String?  // If this tx was replaced, points to replacement
-  replacementForTxid String?  // If this is a replacement, points to original
-  rbfStatus          String   @default("active")  // active, replaced, confirmed
+  replacedByTxid     String? // If this tx was replaced, points to replacement
+  replacementForTxid String? // If this is a replacement, points to original
+  rbfStatus          String  @default("active") // active, replaced, confirmed
 
-  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  user    User?    @relation(fields: [userId], references: [id])
-  address Address? @relation(fields: [addressId], references: [id])
-  addressId String?
+  wallet            Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user              User?              @relation(fields: [userId], references: [id])
+  address           Address?           @relation(fields: [addressId], references: [id])
+  addressId         String?
   transactionLabels TransactionLabel[]
 
-  @@unique([txid, walletId])  // Same blockchain tx can exist for multiple wallets
+  // Input/Output relations for full transaction data
+  inputs  TransactionInput[]
+  outputs TransactionOutput[]
+
+  @@unique([txid, walletId]) // Same blockchain tx can exist for multiple wallets
   @@index([walletId])
   @@index([txid])
   @@index([walletId, blockHeight(sort: Desc)])
-  @@index([walletId, type])           // For filtering by transaction type
-  @@index([blockTime])                 // For date-range exports
-  @@index([walletId, confirmations])   // For pending transaction queries
+  @@index([walletId, type]) // For filtering by transaction type
+  @@index([blockTime]) // For date-range exports
+  @@index([walletId, confirmations]) // For pending transaction queries
   @@index([walletId, blockTime, createdAt]) // For running balance calculation
-  @@index([userId])                    // For user-filtered transaction queries
-  @@index([addressId])                 // For transaction by address lookups
-  @@index([walletId, rbfStatus])       // For filtering replaced transactions
-  @@index([replacedByTxid])            // For finding replacement chains
-  @@index([replacementForTxid])        // For finding original transactions
+  @@index([userId]) // For user-filtered transaction queries
+  @@index([addressId]) // For transaction by address lookups
+  @@index([walletId, rbfStatus]) // For filtering replaced transactions
+  @@index([replacedByTxid]) // For finding replacement chains
+  @@index([replacementForTxid]) // For finding original transactions
   @@map("transactions")
+}
+
+// Transaction inputs - stores which UTXOs were spent
+model TransactionInput {
+  id             String  @id @default(uuid())
+  transactionId  String
+  inputIndex     Int // Position in transaction
+  txid           String // Previous tx being spent
+  vout           Int // Output index being spent
+  address        String
+  amount         BigInt // Amount in satoshis
+  derivationPath String? // BIP32 path if known
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, inputIndex])
+  @@index([transactionId])
+  @@index([address]) // Find all txs spending from address
+  @@index([txid, vout]) // Find spending tx for a UTXO
+  @@map("transaction_inputs")
+}
+
+// Transaction outputs - stores all outputs with classification
+model TransactionOutput {
+  id            String  @id @default(uuid())
+  transactionId String
+  outputIndex   Int // Position in transaction (vout)
+  address       String
+  amount        BigInt // Amount in satoshis
+  scriptPubKey  String?
+
+  // Classification
+  outputType String  @default("unknown") // recipient, change, decoy, consolidation, op_return, unknown
+  isOurs     Boolean @default(false) // Does this address belong to our wallet?
+
+  // Optional label for this specific output
+  label String?
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, outputIndex])
+  @@index([transactionId])
+  @@index([address]) // Find all txs to address
+  @@index([outputType]) // Filter by output type (decoys, change, etc.)
+  @@index([isOurs]) // Find our outputs
+  @@map("transaction_outputs")
 }
 
 model UTXO {
   id            String   @id @default(uuid())
   walletId      String
   txid          String
-  vout          Int      // Output index
+  vout          Int // Output index
   address       String
-  amount        BigInt   // Amount in satoshis
+  amount        BigInt // Amount in satoshis
   scriptPubKey  String
   confirmations Int      @default(0)
   blockHeight   Int?
   spent         Boolean  @default(false)
-  spentTxid     String?  // Transaction ID that spent this UTXO
+  spentTxid     String? // Transaction ID that spent this UTXO
   frozen        Boolean  @default(false) // Prevent UTXO from being used in transactions
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  draftLock DraftUtxoLock?  // If locked by a draft, points to the lock record
+  wallet    Wallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  draftLock DraftUtxoLock? // If locked by a draft, points to the lock record
 
   @@unique([txid, vout])
-  @@index([walletId])                  // For balance calculations
+  @@index([walletId]) // For balance calculations
   @@index([walletId, spent])
-  @@index([walletId, frozen])          // For UTXO selection excluding frozen
+  @@index([walletId, frozen]) // For UTXO selection excluding frozen
   @@map("utxos")
 }
 
@@ -325,9 +375,9 @@ model UTXO {
 // ========================================
 
 model DraftTransaction {
-  id              String   @id @default(uuid())
-  walletId        String
-  userId          String
+  id       String @id @default(uuid())
+  walletId String
+  userId   String
 
   // Transaction parameters (user inputs)
   recipient       String
@@ -337,42 +387,44 @@ model DraftTransaction {
   enableRBF       Boolean  @default(true)
   subtractFees    Boolean  @default(false)
   sendMax         Boolean  @default(false)
-  outputs         Json?    // Multiple outputs: [{ address, amount, sendMax? }]
+  outputs         Json? // Multiple outputs: [{ address, amount, sendMax? }]
+  inputs          Json? // Multiple inputs: [{ txid, vout, address, amount }]
+  decoyOutputs    Json? // Decoy change outputs: [{ address, amount }]
 
   // RBF flag - skip UTXO locking for RBF transactions (they reuse same UTXOs)
-  isRBF           Boolean  @default(false)
+  isRBF Boolean @default(false)
 
   // Labels
-  label           String?
-  memo            String?
+  label String?
+  memo  String?
 
   // Generated PSBT data
-  psbtBase64      String   // Unsigned PSBT
+  psbtBase64       String // Unsigned PSBT
   signedPsbtBase64 String? // Partially/fully signed PSBT
-  fee             BigInt
-  totalInput      BigInt
-  totalOutput     BigInt
-  changeAmount    BigInt
-  changeAddress   String?
-  effectiveAmount BigInt
-  inputPaths      String[] // Derivation paths for signing
+  fee              BigInt
+  totalInput       BigInt
+  totalOutput      BigInt
+  changeAmount     BigInt
+  changeAddress    String?
+  effectiveAmount  BigInt
+  inputPaths       String[] // Derivation paths for signing
 
   // Signing status (for multisig)
   status          String   @default("unsigned") // unsigned, partial, signed
   signedDeviceIds String[] // Device IDs that have signed
 
   // Timestamps
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  expiresAt       DateTime? // Optional auto-cleanup
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime? // Optional auto-cleanup
 
-  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id])
+  wallet    Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id])
   utxoLocks DraftUtxoLock[]
 
   @@index([walletId, status])
   @@index([userId])
-  @@index([expiresAt])                 // For hourly maintenance cleanup
+  @@index([expiresAt]) // For hourly maintenance cleanup
   @@map("draft_transactions")
 }
 
@@ -386,8 +438,8 @@ model DraftUtxoLock {
   draft DraftTransaction @relation(fields: [draftId], references: [id], onDelete: Cascade)
   utxo  UTXO             @relation(fields: [utxoId], references: [id], onDelete: Cascade)
 
-  @@unique([draftId, utxoId])  // Same UTXO can only be in same draft once
-  @@unique([utxoId])           // CRITICAL: Each UTXO can only be in ONE draft
+  @@unique([draftId, utxoId]) // Same UTXO can only be in same draft once
+  @@unique([utxoId]) // CRITICAL: Each UTXO can only be in ONE draft
   @@index([draftId])
   @@index([utxoId])
   @@map("draft_utxo_locks")
@@ -398,17 +450,17 @@ model DraftUtxoLock {
 // ========================================
 
 model NodeConfig {
-  id               String   @id @default(uuid())
-  type             String   // bitcoin_core, electrum
-  host             String   // Primary/legacy server host (kept for backward compatibility)
-  port             Int      // Primary/legacy server port
-  useSsl           Boolean  @default(false)
+  id               String  @id @default(uuid())
+  type             String // bitcoin_core, electrum
+  host             String // Primary/legacy server host (kept for backward compatibility)
+  port             Int // Primary/legacy server port
+  useSsl           Boolean @default(false)
   username         String?
   password         String?
-  isDefault        Boolean  @default(false)
+  isDefault        Boolean @default(false)
   explorerUrl      String?
-  feeEstimatorUrl  String?  // URL for mempool.space-compatible API (defaults to mempool.space)
-  mempoolEstimator String   @default("mempool_space") // simple, mempool_space
+  feeEstimatorUrl  String? // URL for mempool.space-compatible API (defaults to mempool.space)
+  mempoolEstimator String  @default("mempool_space") // simple, mempool_space
 
   // TLS certificate verification (for SSL connections)
   // When true, self-signed certificates are allowed (verification disabled)
@@ -416,50 +468,50 @@ model NodeConfig {
   allowSelfSignedCert Boolean @default(false)
 
   // Connection pooling settings (Electrum only)
-  poolEnabled        Boolean @default(false)  // false = single server mode, true = multi-server pool
+  poolEnabled        Boolean @default(false) // false = single server mode, true = multi-server pool
   poolMinConnections Int     @default(1)
   poolMaxConnections Int     @default(5)
 
   // Load balancing strategy: round_robin, least_connections, failover_only
-  poolLoadBalancing  String  @default("round_robin")
+  poolLoadBalancing String @default("round_robin")
 
   // SOCKS5 proxy settings (for Tor support)
-  proxyEnabled   Boolean @default(false)
-  proxyHost      String?
-  proxyPort      Int?
-  proxyUsername  String?
-  proxyPassword  String?
+  proxyEnabled  Boolean @default(false)
+  proxyHost     String?
+  proxyPort     Int?
+  proxyUsername String?
+  proxyPassword String?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationship to server list
-  servers          ElectrumServer[]
+  servers ElectrumServer[]
 
   @@map("node_configs")
 }
 
 // Electrum server configuration for multi-server pool
 model ElectrumServer {
-  id           String   @id @default(uuid())
+  id           String  @id @default(uuid())
   nodeConfigId String
-  label        String   // User-friendly name (e.g., "Blockstream SSL", "My Umbrel")
+  label        String // User-friendly name (e.g., "Blockstream SSL", "My Umbrel")
   host         String
   port         Int
-  useSsl       Boolean  @default(true)
-  priority     Int      @default(0)  // Lower = higher priority (0 is highest)
-  enabled      Boolean  @default(true)
+  useSsl       Boolean @default(true)
+  priority     Int     @default(0) // Lower = higher priority (0 is highest)
+  enabled      Boolean @default(true)
 
   // Health tracking
   lastHealthCheck      DateTime?
-  healthCheckFails     Int       @default(0)  // Consecutive failures
+  healthCheckFails     Int       @default(0) // Consecutive failures
   isHealthy            Boolean   @default(true)
-  lastHealthCheckError String?   // Last error message (e.g., "Certificate mismatch: expected x, got y")
+  lastHealthCheckError String? // Last error message (e.g., "Certificate mismatch: expected x, got y")
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  nodeConfig   NodeConfig @relation(fields: [nodeConfigId], references: [id], onDelete: Cascade)
+  nodeConfig NodeConfig @relation(fields: [nodeConfigId], references: [id], onDelete: Cascade)
 
   @@index([nodeConfigId])
   @@index([priority])
@@ -467,20 +519,20 @@ model ElectrumServer {
 }
 
 model FeeEstimate {
-  id          String   @id @default(uuid())
-  fastest     Float    // sat/vB
-  halfHour    Float    // sat/vB
-  hour        Float    // sat/vB
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  fastest   Float // sat/vB
+  halfHour  Float // sat/vB
+  hour      Float // sat/vB
+  createdAt DateTime @default(now())
 
-  @@index([createdAt])                 // For daily maintenance cleanup
+  @@index([createdAt]) // For daily maintenance cleanup
   @@map("fee_estimates")
 }
 
 model SystemSetting {
   id        String   @id @default(uuid())
   key       String   @unique
-  value     String   // JSON-encoded value
+  value     String // JSON-encoded value
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -489,13 +541,13 @@ model SystemSetting {
 
 model PriceData {
   id        String   @id @default(uuid())
-  currency  String   // USD, EUR, GBP, etc.
+  currency  String // USD, EUR, GBP, etc.
   price     Float
-  source    String   // mempool, coingecko, kraken
+  source    String // mempool, coingecko, kraken
   createdAt DateTime @default(now())
 
   @@index([currency, createdAt])
-  @@index([createdAt])                 // For daily maintenance cleanup
+  @@index([createdAt]) // For daily maintenance cleanup
   @@map("price_data")
 }
 
@@ -512,9 +564,9 @@ model Label {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  wallet              Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  transactionLabels   TransactionLabel[]
-  addressLabels       AddressLabel[]
+  wallet            Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  transactionLabels TransactionLabel[]
+  addressLabels     AddressLabel[]
 
   @@unique([walletId, name]) // Labels must be unique per wallet
   @@index([walletId])
@@ -557,23 +609,23 @@ model AddressLabel {
 
 model AuditLog {
   id        String   @id @default(uuid())
-  userId    String?  // Null for system events or failed auth
-  username  String   // Stored separately in case user is deleted
-  action    String   // e.g., "user.create", "wallet.share", "backup.create"
-  category  String   // auth, user, wallet, device, admin, system
-  details   Json?    // Additional context (target user, wallet name, etc.)
-  ipAddress String?  // Client IP address
-  userAgent String?  // Browser/client info
+  userId    String? // Null for system events or failed auth
+  username  String // Stored separately in case user is deleted
+  action    String // e.g., "user.create", "wallet.share", "backup.create"
+  category  String // auth, user, wallet, device, admin, system
+  details   Json? // Additional context (target user, wallet name, etc.)
+  ipAddress String? // Client IP address
+  userAgent String? // Browser/client info
   success   Boolean  @default(true)
-  errorMsg  String?  // Error message if success=false
+  errorMsg  String? // Error message if success=false
   createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([action])
   @@index([category])
   @@index([createdAt])
-  @@index([userId, createdAt])         // For user activity timeline
-  @@index([success, createdAt])        // For security monitoring queries
+  @@index([userId, createdAt]) // For user activity timeline
+  @@index([success, createdAt]) // For security monitoring queries
   @@map("audit_logs")
 }
 
@@ -582,19 +634,19 @@ model AuditLog {
 // ========================================
 
 model PushDevice {
-  id          String   @id @default(uuid())
-  userId      String
-  token       String   @unique  // Device token from APNs/FCM
-  platform    String   // "ios" or "android"
-  deviceName  String?  // User-friendly name (e.g., "John's iPhone")
-  appVersion  String?  // Mobile app version
-  lastUsedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique // Device token from APNs/FCM
+  platform   String // "ios" or "android"
+  deviceName String? // User-friendly name (e.g., "John's iPhone")
+  appVersion String? // Mobile app version
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([platform])                  // For notification routing by platform
+  @@index([platform]) // For notification routing by platform
   @@map("push_devices")
 }
 
@@ -605,36 +657,36 @@ model PushDevice {
 // Refresh tokens for mobile app session management
 // Tokens are stored as SHA256 hashes for security
 model RefreshToken {
-  id          String   @id @default(uuid())
-  userId      String
-  tokenHash   String   @unique  // SHA256 hash of the refresh token
-  deviceId    String?           // Optional device identifier
-  deviceName  String?           // User-friendly device name (e.g., "iPhone 15")
-  userAgent   String?           // Browser/app user agent
-  ipAddress   String?           // IP address at token creation
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  lastUsedAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String   @unique // SHA256 hash of the refresh token
+  deviceId   String? // Optional device identifier
+  deviceName String? // User-friendly device name (e.g., "iPhone 15")
+  userAgent  String? // Browser/app user agent
+  ipAddress  String? // IP address at token creation
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([expiresAt])                 // For cleanup of expired tokens
+  @@index([expiresAt]) // For cleanup of expired tokens
   @@map("refresh_tokens")
 }
 
 // Revoked access tokens (for logout before expiry)
 // Tokens are tracked by their JWT ID (jti) until natural expiration
 model RevokedToken {
-  jti       String   @id        // JWT ID from the token
-  userId    String?             // User who owned the token (optional for cleanup)
-  reason    String?             // Reason for revocation (logout, security, admin)
+  jti       String   @id // JWT ID from the token
+  userId    String? // User who owned the token (optional for cleanup)
+  reason    String? // Reason for revocation (logout, security, admin)
   revokedAt DateTime @default(now())
-  expiresAt DateTime            // When the token would have expired (for cleanup)
+  expiresAt DateTime // When the token would have expired (for cleanup)
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([expiresAt])                 // For cleanup of expired revocations
-  @@index([userId])                    // For user-specific revocation queries
+  @@index([expiresAt]) // For cleanup of expired revocations
+  @@index([userId]) // For user-specific revocation queries
   @@map("revoked_tokens")
 }

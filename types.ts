@@ -340,6 +340,7 @@ export interface Address {
   labels?: Label[]; // Multiple labels support
   used: boolean;
   balance: number;
+  isChange?: boolean; // true for change addresses (/1/x), false for receive (/0/x)
   createdAt?: string;
 }
 
@@ -347,14 +348,35 @@ export interface Address {
 // TRANSACTION TYPES
 // ============================================================================
 
+/**
+ * Full transaction input with UTXO reference and derivation path
+ * Stores which UTXOs were spent in a transaction
+ */
 export interface TransactionInput {
+  id?: string;
+  transactionId?: string;
+  inputIndex: number;
+  txid: string; // Previous tx being spent
+  vout: number; // Output index being spent
   address: string;
-  amount: number;
+  amount: number; // in satoshis
+  derivationPath?: string; // BIP32 path if known (for our wallet inputs)
 }
 
+/**
+ * Full transaction output with classification
+ * Stores all outputs with type classification (recipient, change, decoy, etc.)
+ */
 export interface TransactionOutput {
+  id?: string;
+  transactionId?: string;
+  outputIndex: number;
   address: string;
-  amount: number;
+  amount: number; // in satoshis
+  scriptPubKey?: string;
+  outputType: 'recipient' | 'change' | 'decoy' | 'consolidation' | 'op_return' | 'unknown';
+  isOurs: boolean; // Does this address belong to our wallet?
+  label?: string;
 }
 
 export interface Transaction {
@@ -413,8 +435,8 @@ export interface Quorum {
  * Helper to get the 'm' value from a Quorum (required signatures)
  * Handles both Quorum object and plain number
  */
-export function getQuorumM(quorum: Quorum | number | undefined, fallback = 1): number {
-  if (quorum === undefined) return fallback;
+export function getQuorumM(quorum: Quorum | number | undefined | null, fallback = 1): number {
+  if (quorum === undefined || quorum === null) return fallback;
   return typeof quorum === 'number' ? quorum : quorum.m;
 }
 
@@ -422,8 +444,8 @@ export function getQuorumM(quorum: Quorum | number | undefined, fallback = 1): n
  * Helper to get the 'n' value from a Quorum (total signers)
  * Handles both Quorum object and plain number (needs totalSigners)
  */
-export function getQuorumN(quorum: Quorum | number | undefined, totalSigners?: number, fallback = 1): number {
-  if (quorum === undefined) return totalSigners ?? fallback;
+export function getQuorumN(quorum: Quorum | number | undefined | null, totalSigners?: number, fallback = 1): number {
+  if (quorum === undefined || quorum === null) return totalSigners ?? fallback;
   return typeof quorum === 'number' ? (totalSigners ?? fallback) : quorum.n;
 }
 

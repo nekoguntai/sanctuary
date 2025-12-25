@@ -1276,4 +1276,183 @@ describe('Transaction Service', () => {
       expect(allIdentical).toBe(false);
     });
   });
+
+  describe('isChange flag detection', () => {
+    it('should detect change addresses from derivation path', () => {
+      // In BIP44/49/84, the 4th level indicates change (0=receive, 1=change)
+      const receivePathBIP84 = "m/84'/0'/0'/0/5"; // Receive address
+      const changePathBIP84 = "m/84'/0'/0'/1/3"; // Change address
+
+      // Parse derivation path to determine isChange
+      const isChangeReceive = receivePathBIP84.split('/')[4] === '1';
+      const isChangeChange = changePathBIP84.split('/')[4] === '1';
+
+      expect(isChangeReceive).toBe(false);
+      expect(isChangeChange).toBe(true);
+    });
+
+    it('should detect change for BIP49 (nested SegWit) paths', () => {
+      const receivePathBIP49 = "m/49'/0'/0'/0/0";
+      const changePathBIP49 = "m/49'/0'/0'/1/10";
+
+      const isChangeReceive = receivePathBIP49.split('/')[4] === '1';
+      const isChangeChange = changePathBIP49.split('/')[4] === '1';
+
+      expect(isChangeReceive).toBe(false);
+      expect(isChangeChange).toBe(true);
+    });
+
+    it('should detect change for BIP86 (Taproot) paths', () => {
+      const receivePathBIP86 = "m/86'/0'/0'/0/2";
+      const changePathBIP86 = "m/86'/0'/0'/1/8";
+
+      const isChangeReceive = receivePathBIP86.split('/')[4] === '1';
+      const isChangeChange = changePathBIP86.split('/')[4] === '1';
+
+      expect(isChangeReceive).toBe(false);
+      expect(isChangeChange).toBe(true);
+    });
+
+    it('should handle testnet derivation paths', () => {
+      const receivePathTestnet = "m/84'/1'/0'/0/0"; // Testnet
+      const changePathTestnet = "m/84'/1'/0'/1/5"; // Testnet change
+
+      const isChangeReceive = receivePathTestnet.split('/')[4] === '1';
+      const isChangeChange = changePathTestnet.split('/')[4] === '1';
+
+      expect(isChangeReceive).toBe(false);
+      expect(isChangeChange).toBe(true);
+    });
+
+    it('should handle edge cases for path parsing', () => {
+      // Empty or malformed paths
+      const emptyPath = '';
+      const shortPath = "m/84'/0'";
+
+      const parseIsChange = (path: string) => {
+        const parts = path.split('/');
+        return parts.length > 4 && parts[4] === '1';
+      };
+
+      expect(parseIsChange(emptyPath)).toBe(false);
+      expect(parseIsChange(shortPath)).toBe(false);
+    });
+  });
+
+  describe('Consolidation address filtering', () => {
+    it('should only return receive addresses for consolidation', () => {
+      const addresses = [
+        { address: 'bc1qreceive1', derivationPath: "m/84'/0'/0'/0/0", isChange: false },
+        { address: 'bc1qreceive2', derivationPath: "m/84'/0'/0'/0/1", isChange: false },
+        { address: 'bc1qchange1', derivationPath: "m/84'/0'/0'/1/0", isChange: true },
+        { address: 'bc1qchange2', derivationPath: "m/84'/0'/0'/1/1", isChange: true },
+      ];
+
+      const receiveAddresses = addresses.filter(addr => !addr.isChange);
+
+      expect(receiveAddresses).toHaveLength(2);
+      expect(receiveAddresses.every(addr => !addr.isChange)).toBe(true);
+      expect(receiveAddresses[0].address).toBe('bc1qreceive1');
+      expect(receiveAddresses[1].address).toBe('bc1qreceive2');
+    });
+
+    it('should exclude change addresses from consolidation options', () => {
+      const addresses = [
+        { address: 'bc1qa1', derivationPath: "m/84'/0'/0'/0/0", isChange: false },
+        { address: 'bc1qb2', derivationPath: "m/84'/0'/0'/1/0", isChange: true },
+        { address: 'bc1qc3', derivationPath: "m/84'/0'/0'/0/1", isChange: false },
+        { address: 'bc1qd4', derivationPath: "m/84'/0'/0'/1/1", isChange: true },
+        { address: 'bc1qe5', derivationPath: "m/84'/0'/0'/0/2", isChange: false },
+      ];
+
+      const consolidationAddresses = addresses.filter(addr => !addr.isChange);
+
+      expect(consolidationAddresses).toHaveLength(3);
+      expect(consolidationAddresses.map(a => a.address)).toEqual([
+        'bc1qa1',
+        'bc1qc3',
+        'bc1qe5',
+      ]);
+    });
+
+    it('should handle wallet with only receive addresses', () => {
+      const addresses = [
+        { address: 'bc1qreceive1', derivationPath: "m/84'/0'/0'/0/0", isChange: false },
+        { address: 'bc1qreceive2', derivationPath: "m/84'/0'/0'/0/1", isChange: false },
+      ];
+
+      const receiveAddresses = addresses.filter(addr => !addr.isChange);
+
+      expect(receiveAddresses).toHaveLength(2);
+      expect(receiveAddresses).toEqual(addresses);
+    });
+
+    it('should handle wallet with only change addresses', () => {
+      const addresses = [
+        { address: 'bc1qchange1', derivationPath: "m/84'/0'/0'/1/0", isChange: true },
+        { address: 'bc1qchange2', derivationPath: "m/84'/0'/0'/1/1", isChange: true },
+      ];
+
+      const receiveAddresses = addresses.filter(addr => !addr.isChange);
+
+      expect(receiveAddresses).toHaveLength(0);
+    });
+
+    it('should correctly identify change from derivation path', () => {
+      const getIsChangeFromPath = (path: string) => {
+        const parts = path.split('/');
+        return parts.length > 4 && parts[4] === '1';
+      };
+
+      const addresses = [
+        { address: 'bc1q1', path: "m/84'/0'/0'/0/0" }, // receive
+        { address: 'bc1q2', path: "m/84'/0'/0'/1/0" }, // change
+        { address: 'bc1q3', path: "m/49'/0'/0'/0/5" }, // receive (P2SH-SegWit)
+        { address: 'bc1q4', path: "m/49'/0'/0'/1/2" }, // change (P2SH-SegWit)
+        { address: 'bc1q5', path: "m/86'/0'/0'/0/1" }, // receive (Taproot)
+        { address: 'bc1q6', path: "m/86'/0'/0'/1/3" }, // change (Taproot)
+      ];
+
+      const receiveAddresses = addresses.filter(
+        addr => !getIsChangeFromPath(addr.path)
+      );
+
+      expect(receiveAddresses).toHaveLength(3);
+      expect(receiveAddresses.map(a => a.address)).toEqual([
+        'bc1q1',
+        'bc1q3',
+        'bc1q5',
+      ]);
+    });
+
+    it('should preserve address metadata when filtering', () => {
+      const addresses = [
+        {
+          address: 'bc1qreceive',
+          derivationPath: "m/84'/0'/0'/0/0",
+          isChange: false,
+          index: 0,
+          used: false,
+        },
+        {
+          address: 'bc1qchange',
+          derivationPath: "m/84'/0'/0'/1/0",
+          isChange: true,
+          index: 0,
+          used: true,
+        },
+      ];
+
+      const receiveAddresses = addresses.filter(addr => !addr.isChange);
+
+      expect(receiveAddresses).toHaveLength(1);
+      expect(receiveAddresses[0]).toEqual({
+        address: 'bc1qreceive',
+        derivationPath: "m/84'/0'/0'/0/0",
+        isChange: false,
+        index: 0,
+        used: false,
+      });
+    });
+  });
 });

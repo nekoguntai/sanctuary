@@ -899,12 +899,17 @@ export async function broadcastAndSave(
 
   // Save transaction to database
   const txType = isConsolidation ? 'consolidation' : 'sent';
+  // For consolidation: amount is negative fee (only fee is lost, funds stay in wallet)
+  // For sent: amount is negative (funds leaving wallet = amount + fee)
+  const txAmount = isConsolidation
+    ? -metadata.fee  // Consolidation: only fee is lost
+    : -(metadata.amount + metadata.fee);  // Sent: amount + fee leaves wallet
   const txRecord = await prisma.transaction.create({
     data: {
       txid,
       walletId,
       type: txType,
-      amount: BigInt(metadata.amount),
+      amount: BigInt(txAmount),
       fee: BigInt(metadata.fee),
       confirmations: 0,
       label: labelToUse,

@@ -709,6 +709,32 @@ export async function syncWallet(walletId: string): Promise<{
     change: changeAddrs,
   });
 
+  // Cleanup: Mark any pending transactions as replaced if their inputs are already spent
+  // This catches edge cases where UTXOs were marked spent before this logic was deployed
+  const staleReplacedTxs = await prisma.$queryRaw<Array<{ id: string; txid: string }>>`
+    SELECT DISTINCT t.id, t.txid
+    FROM transactions t
+    JOIN transaction_inputs ti ON ti."transactionId" = t.id
+    JOIN utxos u ON u.txid = ti.txid AND u.vout = ti.vout
+    WHERE t."walletId" = ${walletId}
+      AND t.confirmations = 0
+      AND t."rbfStatus" = 'active'
+      AND u.spent = true
+  `;
+
+  if (staleReplacedTxs.length > 0) {
+    await prisma.transaction.updateMany({
+      where: { id: { in: staleReplacedTxs.map(tx => tx.id) } },
+      data: { rbfStatus: 'replaced' },
+    });
+    walletLog(
+      walletId,
+      'info',
+      'TX',
+      `Cleanup: Marked ${staleReplacedTxs.length} stale pending transaction(s) as replaced: ${staleReplacedTxs.map(tx => tx.txid.slice(0, 8)).join(', ')}`
+    );
+  }
+
   // PHASE 1: Batch fetch all address histories using true RPC batching
   walletLog(walletId, 'debug', 'SYNC', 'Phase 1: Fetching address histories...');
   log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses using batch RPC...`);

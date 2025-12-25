@@ -57,20 +57,44 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
 
     res.json({
       type: nodeConfig.type,
+      // Legacy singleton config (deprecated)
       host: nodeConfig.host,
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
       allowSelfSignedCert: nodeConfig.allowSelfSignedCert ?? false,
-      user: nodeConfig.username,
-      hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
       mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
+      // Legacy pool settings (deprecated)
       poolEnabled: nodeConfig.poolEnabled,
       poolMinConnections: nodeConfig.poolMinConnections,
       poolMaxConnections: nodeConfig.poolMaxConnections,
       poolLoadBalancing: nodeConfig.poolLoadBalancing || 'round_robin',
       servers: nodeConfig.servers,
+      // Per-network settings (new)
+      mainnetMode: nodeConfig.mainnetMode,
+      mainnetSingletonHost: nodeConfig.mainnetSingletonHost,
+      mainnetSingletonPort: nodeConfig.mainnetSingletonPort,
+      mainnetSingletonSsl: nodeConfig.mainnetSingletonSsl,
+      mainnetPoolMin: nodeConfig.mainnetPoolMin,
+      mainnetPoolMax: nodeConfig.mainnetPoolMax,
+      mainnetPoolLoadBalancing: nodeConfig.mainnetPoolLoadBalancing,
+      testnetEnabled: nodeConfig.testnetEnabled,
+      testnetMode: nodeConfig.testnetMode,
+      testnetSingletonHost: nodeConfig.testnetSingletonHost,
+      testnetSingletonPort: nodeConfig.testnetSingletonPort,
+      testnetSingletonSsl: nodeConfig.testnetSingletonSsl,
+      testnetPoolMin: nodeConfig.testnetPoolMin,
+      testnetPoolMax: nodeConfig.testnetPoolMax,
+      testnetPoolLoadBalancing: nodeConfig.testnetPoolLoadBalancing,
+      signetEnabled: nodeConfig.signetEnabled,
+      signetMode: nodeConfig.signetMode,
+      signetSingletonHost: nodeConfig.signetSingletonHost,
+      signetSingletonPort: nodeConfig.signetSingletonPort,
+      signetSingletonSsl: nodeConfig.signetSingletonSsl,
+      signetPoolMin: nodeConfig.signetPoolMin,
+      signetPoolMax: nodeConfig.signetPoolMax,
+      signetPoolLoadBalancing: nodeConfig.signetPoolLoadBalancing,
       // Proxy settings
       proxyEnabled: nodeConfig.proxyEnabled ?? false,
       proxyHost: nodeConfig.proxyHost,
@@ -105,10 +129,11 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       });
     }
 
-    if (type !== 'electrum' && type !== 'bitcoind') {
+    // Only Electrum is supported
+    if (type && type !== 'electrum') {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Type must be either "electrum" or "bitcoind"',
+        message: 'Only Electrum connection type is supported',
       });
     }
 
@@ -137,8 +162,6 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
           allowSelfSignedCert: allowSelfSignedCert === true, // Opt-in to disable certificate verification
-          username: user || null,
-          password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
@@ -165,8 +188,6 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           port: parseInt(port.toString(), 10),
           useSsl: useSsl === true,
           allowSelfSignedCert: allowSelfSignedCert === true, // Opt-in to disable certificate verification
-          username: user || null,
-          password: password ? encrypt(password) : null,
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
@@ -201,8 +222,6 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       port: nodeConfig.port.toString(),
       useSsl: nodeConfig.useSsl,
       allowSelfSignedCert: nodeConfig.allowSelfSignedCert ?? false,
-      user: nodeConfig.username,
-      hasPassword: !!nodeConfig.password,
       explorerUrl: nodeConfig.explorerUrl,
       feeEstimatorUrl: nodeConfig.feeEstimatorUrl || 'https://mempool.space',
       mempoolEstimator: nodeConfig.mempoolEstimator || 'simple',
@@ -237,23 +256,20 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
       });
     }
 
-    if (type !== 'electrum' && type !== 'bitcoind') {
+    // Only Electrum is supported
+    if (type && type !== 'electrum') {
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
-        message: 'Type must be either "electrum" or "bitcoind"',
+        message: 'Only Electrum connection type is supported',
       });
     }
 
     // Build config for testing
     const testConfig: NodeConfig = {
-      type: type === 'bitcoind' ? 'bitcoind' : 'electrum',
       host,
       port: parseInt(port.toString(), 10),
       protocol: useSsl ? 'ssl' : 'tcp',
-      user: user || undefined,
-      password: password || undefined,
-      ssl: useSsl === true,
     };
 
     // Test the connection using the nodeClient abstraction
@@ -1971,7 +1987,6 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
 
     // Test connection using nodeClient's testNodeConfig
     const result = await testNodeConfig({
-      type: 'electrum',
       host: server.host,
       port: server.port,
       protocol: server.useSsl ? 'ssl' : 'tcp',
@@ -2006,6 +2021,50 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to test Electrum server',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/admin/electrum-servers/test-connection
+ * Test connection to an Electrum server with arbitrary host/port/ssl
+ */
+router.post('/electrum-servers/test-connection', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { host, port, useSsl } = req.body;
+
+    if (!host || !port) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Host and port are required',
+      });
+    }
+
+    // Test connection using nodeClient's testNodeConfig
+    const result = await testNodeConfig({
+      host,
+      port: parseInt(port, 10),
+      protocol: useSsl ? 'ssl' : 'tcp',
+    });
+
+    log.info('[ADMIN] Electrum connection test result', {
+      host,
+      port,
+      useSsl,
+      success: result.success,
+      message: result.message,
+    });
+
+    res.json({
+      success: result.success,
+      message: result.message,
+      blockHeight: result.info?.blockHeight,
+    });
+  } catch (error) {
+    log.error('[ADMIN] Test electrum connection error', { error: String(error) });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test Electrum connection',
     });
   }
 });

@@ -454,37 +454,70 @@ model DraftUtxoLock {
 
 model NodeConfig {
   id               String  @id @default(uuid())
-  type             String // bitcoin_core, electrum
-  network          String  @default("mainnet") // mainnet, testnet, signet, regtest
-  host             String // Primary/legacy server host (kept for backward compatibility)
-  port             Int // Primary/legacy server port
-  useSsl           Boolean @default(false)
-  username         String?
-  password         String?
+  type             String  @default("electrum") // Only 'electrum' is supported
   isDefault        Boolean @default(false)
   explorerUrl      String?
   feeEstimatorUrl  String? // URL for mempool.space-compatible API (defaults to mempool.space)
   mempoolEstimator String  @default("mempool_space") // simple, mempool_space
 
   // TLS certificate verification (for SSL connections)
-  // When true, self-signed certificates are allowed (verification disabled)
-  // Default: false (verify certificates for security)
   allowSelfSignedCert Boolean @default(false)
 
-  // Connection pooling settings (Electrum only)
-  poolEnabled        Boolean @default(false) // false = single server mode, true = multi-server pool
-  poolMinConnections Int     @default(1)
-  poolMaxConnections Int     @default(5)
+  // ========================================
+  // MAINNET SETTINGS (always enabled)
+  // ========================================
+  mainnetMode              String  @default("pool") // "singleton" | "pool"
+  mainnetSingletonHost     String? // Used when mainnetMode = "singleton"
+  mainnetSingletonPort     Int?
+  mainnetSingletonSsl      Boolean @default(true)
+  mainnetPoolMin           Int     @default(1) // Used when mainnetMode = "pool"
+  mainnetPoolMax           Int     @default(5)
+  mainnetPoolLoadBalancing String  @default("round_robin") // round_robin, least_connections, failover_only
 
-  // Load balancing strategy: round_robin, least_connections, failover_only
-  poolLoadBalancing String @default("round_robin")
+  // ========================================
+  // TESTNET SETTINGS (optional)
+  // ========================================
+  testnetEnabled           Boolean @default(false)
+  testnetMode              String  @default("singleton") // "singleton" | "pool"
+  testnetSingletonHost     String?
+  testnetSingletonPort     Int?
+  testnetSingletonSsl      Boolean @default(true)
+  testnetPoolMin           Int     @default(1)
+  testnetPoolMax           Int     @default(3)
+  testnetPoolLoadBalancing String  @default("round_robin")
 
-  // SOCKS5 proxy settings (for Tor support)
+  // ========================================
+  // SIGNET SETTINGS (optional)
+  // ========================================
+  signetEnabled            Boolean @default(false)
+  signetMode               String  @default("singleton") // "singleton" | "pool"
+  signetSingletonHost      String?
+  signetSingletonPort      Int?
+  signetSingletonSsl       Boolean @default(true)
+  signetPoolMin            Int     @default(1)
+  signetPoolMax            Int     @default(3)
+  signetPoolLoadBalancing  String  @default("round_robin")
+
+  // ========================================
+  // PROXY SETTINGS (global, applies to all networks)
+  // ========================================
   proxyEnabled  Boolean @default(false)
   proxyHost     String?
   proxyPort     Int?
   proxyUsername String?
   proxyPassword String?
+
+  // ========================================
+  // LEGACY FIELDS (deprecated, kept for migration)
+  // ========================================
+  network          String  @default("mainnet") // @deprecated - use per-network settings
+  host             String  @default("electrum.blockstream.info") // @deprecated - use per-network singleton fields
+  port             Int     @default(50002) // @deprecated
+  useSsl           Boolean @default(true) // @deprecated
+  poolEnabled      Boolean @default(false) // @deprecated - use per-network mode fields
+  poolMinConnections Int   @default(1) // @deprecated
+  poolMaxConnections Int   @default(5) // @deprecated
+  poolLoadBalancing String @default("round_robin") // @deprecated
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

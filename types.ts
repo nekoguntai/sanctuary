@@ -31,7 +31,7 @@ export type WalletScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | '
 /**
  * Bitcoin network
  */
-export type WalletNetwork = 'mainnet' | 'testnet' | 'regtest';
+export type WalletNetwork = 'mainnet' | 'testnet' | 'regtest' | 'signet';
 
 // ============================================================================
 // HARDWARE DEVICE ENUMS & TYPES
@@ -172,35 +172,80 @@ export interface Group {
 // NODE CONFIGURATION
 // ============================================================================
 
+export type ConnectionMode = 'singleton' | 'pool';
+export type LoadBalancingStrategy = 'round_robin' | 'least_connections' | 'failover_only';
+
 export interface NodeConfig {
-  type: 'bitcoind' | 'electrum';
-  host: string;
-  port: string;
-  useSsl: boolean;
-  user?: string;
-  password?: string;
+  type: 'electrum'; // Only Electrum is supported
   explorerUrl?: string; // e.g., https://mempool.space
   feeEstimatorUrl?: string; // e.g., https://mempool.space (mempool.space-compatible API for fee estimation)
   mempoolEstimator?: 'simple' | 'mempool_space'; // Algorithm for block confirmation estimation
-  // Connection pooling settings (Electrum only)
-  poolEnabled?: boolean; // false = single connection mode
-  poolMinConnections?: number;
-  poolMaxConnections?: number;
-  poolLoadBalancing?: 'round_robin' | 'least_connections' | 'failover_only';
-  // Electrum server list (multi-server pool support)
-  servers?: ElectrumServer[];
-  // SOCKS5 proxy settings (for Tor support)
+  allowSelfSignedCert?: boolean;
+
+  // ========================================
+  // MAINNET SETTINGS (always enabled)
+  // ========================================
+  mainnetMode: ConnectionMode;
+  mainnetSingletonHost?: string;
+  mainnetSingletonPort?: number;
+  mainnetSingletonSsl?: boolean;
+  mainnetPoolMin?: number;
+  mainnetPoolMax?: number;
+  mainnetPoolLoadBalancing?: LoadBalancingStrategy;
+
+  // ========================================
+  // TESTNET SETTINGS (optional)
+  // ========================================
+  testnetEnabled?: boolean;
+  testnetMode?: ConnectionMode;
+  testnetSingletonHost?: string;
+  testnetSingletonPort?: number;
+  testnetSingletonSsl?: boolean;
+  testnetPoolMin?: number;
+  testnetPoolMax?: number;
+  testnetPoolLoadBalancing?: LoadBalancingStrategy;
+
+  // ========================================
+  // SIGNET SETTINGS (optional)
+  // ========================================
+  signetEnabled?: boolean;
+  signetMode?: ConnectionMode;
+  signetSingletonHost?: string;
+  signetSingletonPort?: number;
+  signetSingletonSsl?: boolean;
+  signetPoolMin?: number;
+  signetPoolMax?: number;
+  signetPoolLoadBalancing?: LoadBalancingStrategy;
+
+  // ========================================
+  // PROXY SETTINGS (global, applies to all networks)
+  // ========================================
   proxyEnabled?: boolean;
   proxyHost?: string;
   proxyPort?: number;
   proxyUsername?: string;
   proxyPassword?: string;
+
+  // ========================================
+  // LEGACY FIELDS (deprecated, kept for backward compatibility)
+  // ========================================
+  host?: string;
+  port?: string;
+  useSsl?: boolean;
+  poolEnabled?: boolean;
+  poolMinConnections?: number;
+  poolMaxConnections?: number;
+  poolLoadBalancing?: LoadBalancingStrategy;
+
+  // Electrum server list (multi-server pool support)
+  servers?: ElectrumServer[];
 }
 
 // Electrum server configuration
 export interface ElectrumServer {
   id: string;
   nodeConfigId: string;
+  network: 'mainnet' | 'testnet' | 'signet';
   label: string;
   host: string;
   port: number;

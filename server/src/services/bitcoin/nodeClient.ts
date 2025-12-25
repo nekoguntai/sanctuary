@@ -1,37 +1,43 @@
 /**
  * Node Client Abstraction
  *
- * Provides a unified interface for communicating with Bitcoin nodes,
- * supporting both Electrum servers and Bitcoin Core RPC.
+ * Provides a unified interface for communicating with Bitcoin nodes via Electrum protocol.
+ * Supports per-network connection modes (singleton vs pool).
  */
 
-import { ElectrumClient, getElectrumClient, getElectrumClientForNetwork, resetElectrumClient } from './electrum';
-import { BitcoinRpcClient, getBitcoinRpcClient, resetBitcoinRpcClient } from './bitcoinRpc';
+import { ElectrumClient, getElectrumClientForNetwork, resetElectrumClient } from './electrum';
 import {
   initializeElectrumPool,
   resetElectrumPool,
   getElectrumPool,
+  getElectrumPoolForNetwork,
+  resetElectrumPoolForNetwork,
+  NetworkType,
 } from './electrumPool';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
-import { decryptIfEncrypted } from '../../utils/encryption';
 
 const log = createLogger('NODE_CLIENT');
 
-export type NodeType = 'electrum' | 'bitcoind';
-
 export interface NodeConfig {
-  type: NodeType;
   host: string;
   port: number;
-  // Electrum specific
   protocol?: 'tcp' | 'ssl';
-  // Bitcoin RPC specific
-  user?: string;
-  password?: string;
-  ssl?: boolean;
   // Pool mode - when true, use multi-server pool; when false, use single server
   poolEnabled?: boolean;
+}
+
+/**
+ * Per-network connection mode settings
+ */
+export interface NetworkModeConfig {
+  mode: 'singleton' | 'pool';
+  singletonHost?: string;
+  singletonPort?: number;
+  singletonSsl?: boolean;
+  poolMin?: number;
+  poolMax?: number;
+  poolLoadBalancing?: 'round_robin' | 'least_connections' | 'failover_only';
 }
 
 export interface NodeClientInterface {
@@ -55,9 +61,12 @@ export interface NodeClientInterface {
   getTransactionsBatch(txids: string[], verbose?: boolean): Promise<Map<string, any>>;
 }
 
-// Cache for the active node configuration
+// Cache for the active node configuration (legacy - for mainnet)
 let activeConfig: NodeConfig | null = null;
 let activeClient: NodeClientInterface | null = null;
+
+// Per-network client cache
+const networkClients = new Map<NetworkType, NodeClientInterface>();
 
 /**
  * Load node configuration from database
@@ -69,20 +78,10 @@ async function loadNodeConfig(): Promise<NodeConfig | null> {
     });
 
     if (nodeConfig) {
-      // Map database NodeConfig to our NodeConfig interface
-      const type: NodeType = nodeConfig.type === 'bitcoin_core' ? 'bitcoind' : 'electrum';
-      // Decrypt password if it's encrypted (backward compatible with plaintext)
-      const password = nodeConfig.password
-        ? decryptIfEncrypted(nodeConfig.password)
-        : undefined;
       return {
-        type,
         host: nodeConfig.host,
         port: nodeConfig.port,
         protocol: nodeConfig.useSsl ? 'ssl' : 'tcp',
-        user: nodeConfig.username || undefined,
-        password,
-        ssl: nodeConfig.useSsl,
         poolEnabled: nodeConfig.poolEnabled,
       };
     }
@@ -97,9 +96,6 @@ async function loadNodeConfig(): Promise<NodeConfig | null> {
  * Save node configuration to database
  */
 export async function saveNodeConfig(config: NodeConfig): Promise<void> {
-  // Map our NodeConfig to database schema
-  const dbType = config.type === 'bitcoind' ? 'bitcoin_core' : 'electrum';
-
   // First, unset any existing default
   await prisma.nodeConfig.updateMany({
     where: { isDefault: true },
@@ -110,22 +106,17 @@ export async function saveNodeConfig(config: NodeConfig): Promise<void> {
   await prisma.nodeConfig.upsert({
     where: { id: 'default' },
     update: {
-      type: dbType,
       host: config.host,
       port: config.port,
-      useSsl: config.ssl || config.protocol === 'ssl',
-      username: config.user,
-      password: config.password,
+      useSsl: config.protocol === 'ssl',
       isDefault: true,
     },
     create: {
       id: 'default',
-      type: dbType,
+      type: 'electrum', // Only Electrum is supported
       host: config.host,
       port: config.port,
-      useSsl: config.ssl || config.protocol === 'ssl',
-      username: config.user,
-      password: config.password,
+      useSsl: config.protocol === 'ssl',
       isDefault: true,
     },
   });
@@ -134,7 +125,7 @@ export async function saveNodeConfig(config: NodeConfig): Promise<void> {
   activeConfig = config;
   activeClient = null;
 
-  log.info(`Saved node config: ${config.type} at ${config.host}:${config.port}`);
+  log.info(`Saved node config: Electrum at ${config.host}:${config.port}`);
 }
 
 /**
@@ -142,7 +133,6 @@ export async function saveNodeConfig(config: NodeConfig): Promise<void> {
  */
 function getDefaultElectrumConfig(): NodeConfig {
   return {
-    type: 'electrum',
     host: process.env.ELECTRUM_HOST || 'electrum.blockstream.info',
     port: parseInt(process.env.ELECTRUM_PORT || '50002', 10),
     protocol: (process.env.ELECTRUM_PROTOCOL as 'tcp' | 'ssl') || 'ssl',
@@ -150,92 +140,138 @@ function getDefaultElectrumConfig(): NodeConfig {
 }
 
 /**
- * Get the node client based on active configuration
- * @param network Optional network parameter (mainnet, testnet, signet, or regtest)
+ * Get per-network mode configuration from database
  */
-export async function getNodeClient(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<NodeClientInterface> {
-  // Return cached client if available and connected
-  if (activeClient && activeClient.isConnected()) {
-    return activeClient;
-  }
-
-  // Load config from database if not cached
-  if (!activeConfig) {
-    activeConfig = await loadNodeConfig();
-  }
-
-  // Fall back to default Electrum config
-  if (!activeConfig) {
-    activeConfig = getDefaultElectrumConfig();
-  }
-
-  // Create appropriate client based on config type
-  if (activeConfig.type === 'bitcoind') {
-    if (!activeConfig.user || !activeConfig.password) {
-      throw new Error('Bitcoin RPC requires user and password');
-    }
-
-    const rpcClient = getBitcoinRpcClient({
-      host: activeConfig.host,
-      port: activeConfig.port,
-      user: activeConfig.user,
-      password: activeConfig.password,
-      ssl: activeConfig.ssl,
+async function getNetworkModeConfig(network: NetworkType): Promise<NetworkModeConfig> {
+  try {
+    const nodeConfig = await prisma.nodeConfig.findFirst({
+      where: { isDefault: true },
     });
 
-    if (!rpcClient.isConnected()) {
-      await rpcClient.connect();
+    if (!nodeConfig) {
+      // Default to pool mode for mainnet, singleton for others
+      return { mode: network === 'mainnet' ? 'pool' : 'singleton' };
     }
 
-    activeClient = rpcClient;
-    log.info(`Using Bitcoin RPC at ${activeConfig.host}:${activeConfig.port}`);
-  } else {
-    // Default to Electrum - check if pool mode is enabled
-    if (activeConfig.poolEnabled) {
-      // Pool mode - use multi-server connection pool
-      try {
-        const pool = await initializeElectrumPool();
-        const handle = await pool.acquire({ purpose: 'nodeClient' });
-
-        // Return the client directly - pool handles connection lifecycle
-        activeClient = handle.client;
-        log.info('Using Electrum connection pool');
-      } catch (error) {
-        // Fall back to singleton if pool fails
-        log.warn('Pool initialization failed, falling back to singleton', { error: String(error) });
-        const electrumClient = getElectrumClientForNetwork(network);
-
-        if (!electrumClient.isConnected()) {
-          await electrumClient.connect();
+    // Extract per-network settings based on network
+    switch (network) {
+      case 'mainnet':
+        return {
+          mode: (nodeConfig.mainnetMode as 'singleton' | 'pool') || 'pool',
+          singletonHost: nodeConfig.mainnetSingletonHost ?? undefined,
+          singletonPort: nodeConfig.mainnetSingletonPort ?? undefined,
+          singletonSsl: nodeConfig.mainnetSingletonSsl ?? true,
+          poolMin: nodeConfig.mainnetPoolMin ?? 1,
+          poolMax: nodeConfig.mainnetPoolMax ?? 5,
+          poolLoadBalancing: (nodeConfig.mainnetPoolLoadBalancing as NetworkModeConfig['poolLoadBalancing']) ?? 'round_robin',
+        };
+      case 'testnet':
+        // Check if testnet is enabled
+        if (!nodeConfig.testnetEnabled) {
+          throw new Error('Testnet is not enabled');
         }
+        return {
+          mode: (nodeConfig.testnetMode as 'singleton' | 'pool') || 'singleton',
+          singletonHost: nodeConfig.testnetSingletonHost ?? undefined,
+          singletonPort: nodeConfig.testnetSingletonPort ?? undefined,
+          singletonSsl: nodeConfig.testnetSingletonSsl ?? true,
+          poolMin: nodeConfig.testnetPoolMin ?? 1,
+          poolMax: nodeConfig.testnetPoolMax ?? 3,
+          poolLoadBalancing: (nodeConfig.testnetPoolLoadBalancing as NetworkModeConfig['poolLoadBalancing']) ?? 'round_robin',
+        };
+      case 'signet':
+        // Check if signet is enabled
+        if (!nodeConfig.signetEnabled) {
+          throw new Error('Signet is not enabled');
+        }
+        return {
+          mode: (nodeConfig.signetMode as 'singleton' | 'pool') || 'singleton',
+          singletonHost: nodeConfig.signetSingletonHost ?? undefined,
+          singletonPort: nodeConfig.signetSingletonPort ?? undefined,
+          singletonSsl: nodeConfig.signetSingletonSsl ?? true,
+          poolMin: nodeConfig.signetPoolMin ?? 1,
+          poolMax: nodeConfig.signetPoolMax ?? 3,
+          poolLoadBalancing: (nodeConfig.signetPoolLoadBalancing as NetworkModeConfig['poolLoadBalancing']) ?? 'round_robin',
+        };
+      case 'regtest':
+        // Regtest uses legacy config (singleton mode)
+        return {
+          mode: 'singleton',
+          singletonHost: nodeConfig.host,
+          singletonPort: nodeConfig.port,
+          singletonSsl: nodeConfig.useSsl,
+        };
+      default:
+        return { mode: 'pool' };
+    }
+  } catch (error) {
+    log.warn(`Failed to load network mode config for ${network}`, { error: String(error) });
+    return { mode: network === 'mainnet' ? 'pool' : 'singleton' };
+  }
+}
 
-        activeClient = electrumClient;
-        log.info(`Using Electrum singleton (${network}) at ${activeConfig.host}:${activeConfig.port}`);
-      }
-    } else {
-      // Single server mode - use direct connection to configured host
+/**
+ * Get the node client based on active configuration
+ * @param network Network parameter (mainnet, testnet, signet, or regtest)
+ */
+export async function getNodeClient(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<NodeClientInterface> {
+  // Check if we have a cached client for this network
+  const cachedClient = networkClients.get(network);
+  if (cachedClient && cachedClient.isConnected()) {
+    return cachedClient;
+  }
+
+  // Get the network-specific mode configuration
+  const networkConfig = await getNetworkModeConfig(network);
+
+  log.debug(`Getting client for ${network}, mode: ${networkConfig.mode}`);
+
+  let client: NodeClientInterface;
+
+  if (networkConfig.mode === 'pool') {
+    // Pool mode - use multi-server connection pool for this network
+    try {
+      const pool = await getElectrumPoolForNetwork(network);
+      const handle = await pool.acquire({ purpose: 'nodeClient', network });
+
+      // Return the client directly - pool handles connection lifecycle
+      client = handle.client;
+      log.info(`Using Electrum connection pool for ${network}`);
+    } catch (error) {
+      // Fall back to singleton if pool fails
+      log.warn(`Pool initialization failed for ${network}, falling back to singleton`, { error: String(error) });
       const electrumClient = getElectrumClientForNetwork(network);
 
       if (!electrumClient.isConnected()) {
         await electrumClient.connect();
       }
 
-      activeClient = electrumClient;
-      log.info(`Using Electrum single server (${network}) at ${activeConfig.host}:${activeConfig.port}`);
+      client = electrumClient;
+      log.info(`Using Electrum singleton fallback for ${network}`);
     }
+  } else {
+    // Singleton mode - use direct connection to configured host
+    const electrumClient = getElectrumClientForNetwork(network);
+
+    if (!electrumClient.isConnected()) {
+      await electrumClient.connect();
+    }
+
+    client = electrumClient;
+    const host = networkConfig.singletonHost || 'default';
+    const port = networkConfig.singletonPort || 50002;
+    log.info(`Using Electrum singleton for ${network} at ${host}:${port}`);
   }
 
-  return activeClient;
-}
+  // Cache the client
+  networkClients.set(network, client);
 
-/**
- * Get the current node type
- */
-export async function getNodeType(): Promise<NodeType> {
-  if (!activeConfig) {
-    activeConfig = await loadNodeConfig();
+  // Also set as the legacy active client if this is mainnet
+  if (network === 'mainnet') {
+    activeClient = client;
   }
-  return activeConfig?.type || 'electrum';
+
+  return client;
 }
 
 /**
@@ -250,21 +286,44 @@ export async function getActiveNodeConfig(): Promise<NodeConfig> {
 
 /**
  * Reset the active client (for reconnection or config change)
+ * @param network Optional network to reset. If not specified, resets all networks.
  */
-export async function resetNodeClient(): Promise<void> {
-  if (activeClient) {
-    activeClient.disconnect();
+export async function resetNodeClient(network?: NetworkType): Promise<void> {
+  if (network) {
+    // Reset specific network
+    const client = networkClients.get(network);
+    if (client) {
+      client.disconnect();
+      networkClients.delete(network);
+    }
+    await resetElectrumPoolForNetwork(network);
+
+    // Reset legacy active client if it was the mainnet client
+    if (network === 'mainnet' && activeClient === client) {
+      activeClient = null;
+      activeConfig = null;
+    }
+
+    log.debug(`Client reset for ${network}`);
+  } else {
+    // Reset all networks
+    for (const [net, client] of networkClients) {
+      client.disconnect();
+      await resetElectrumPoolForNetwork(net);
+    }
+    networkClients.clear();
+
+    activeClient = null;
+    activeConfig = null;
+    resetElectrumClient();
+    await resetElectrumPool();
+
+    log.debug('All clients reset');
   }
-  activeClient = null;
-  activeConfig = null;
-  resetElectrumClient();
-  resetBitcoinRpcClient();
-  await resetElectrumPool();
-  log.debug('Client reset');
 }
 
 /**
- * Get the underlying Electrum client if that's the active node type
+ * Get the underlying Electrum client for subscriptions
  * Used for subscribing to real-time notifications
  * Returns the dedicated subscription connection from the pool
  */
@@ -273,24 +332,22 @@ export async function getElectrumClientIfActive(): Promise<ElectrumClient | null
     activeConfig = await loadNodeConfig();
   }
 
-  if (activeConfig?.type === 'electrum') {
-    // Only use pool for subscriptions if pool mode is enabled
-    if (activeConfig.poolEnabled) {
-      try {
-        const pool = getElectrumPool();
-        if (pool.isPoolInitialized()) {
-          // Return the dedicated subscription connection
-          return await pool.getSubscriptionConnection();
-        }
-      } catch {
-        // Pool not available, fall back to singleton
+  // Only use pool for subscriptions if pool mode is enabled
+  if (activeConfig?.poolEnabled) {
+    try {
+      const pool = getElectrumPool();
+      if (pool.isPoolInitialized()) {
+        // Return the dedicated subscription connection
+        return await pool.getSubscriptionConnection();
       }
+    } catch {
+      // Pool not available, fall back to singleton
     }
+  }
 
-    // Fall back to singleton client (or use singleton when pool disabled)
-    if (activeClient) {
-      return activeClient as ElectrumClient;
-    }
+  // Fall back to singleton client (or use singleton when pool disabled)
+  if (activeClient) {
+    return activeClient as ElectrumClient;
   }
   return null;
 }
@@ -300,47 +357,22 @@ export async function getElectrumClientIfActive(): Promise<ElectrumClient | null
  */
 export async function testNodeConfig(config: NodeConfig): Promise<{ success: boolean; message: string; info?: any }> {
   try {
-    if (config.type === 'bitcoind') {
-      if (!config.user || !config.password) {
-        return { success: false, message: 'Bitcoin RPC requires user and password' };
-      }
+    const ElectrumClientClass = (await import('./electrum')).ElectrumClient;
+    const testClient = new ElectrumClientClass({
+      host: config.host,
+      port: config.port,
+      protocol: config.protocol || 'ssl',
+    });
 
-      const testClient = new BitcoinRpcClient({
-        host: config.host,
-        port: config.port,
-        user: config.user,
-        password: config.password,
-        ssl: config.ssl,
-      });
+    await testClient.connect();
+    const height = await testClient.getBlockHeight();
+    testClient.disconnect();
 
-      await testClient.connect();
-      const height = await testClient.getBlockHeight();
-      testClient.disconnect();
-
-      return {
-        success: true,
-        message: `Connected to Bitcoin Core at block ${height}`,
-        info: { blockHeight: height },
-      };
-    } else {
-      // Electrum
-      const ElectrumClientClass = (await import('./electrum')).ElectrumClient;
-      const testClient = new ElectrumClientClass({
-        host: config.host,
-        port: config.port,
-        protocol: config.protocol || 'ssl',
-      });
-
-      await testClient.connect();
-      const height = await testClient.getBlockHeight();
-      testClient.disconnect();
-
-      return {
-        success: true,
-        message: `Connected to Electrum server at block ${height}`,
-        info: { blockHeight: height },
-      };
-    }
+    return {
+      success: true,
+      message: `Connected to Electrum server at block ${height}`,
+      info: { blockHeight: height },
+    };
   } catch (error: any) {
     return {
       success: false,

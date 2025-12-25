@@ -182,6 +182,7 @@ export interface PoolStats {
 export interface AcquireOptions {
   purpose?: string;
   timeoutMs?: number;
+  network?: NetworkType;
 }
 
 /**
@@ -1204,15 +1205,25 @@ export class ElectrumPool extends EventEmitter {
   }
 }
 
-// Singleton pool instance
+// Singleton pool instance (legacy - for backward compatibility, uses mainnet)
 let poolInstance: ElectrumPool | null = null;
 // Lock to prevent concurrent initialization (race condition fix)
 let poolInitPromise: Promise<ElectrumPool> | null = null;
 
 /**
- * Load pool configuration from database
+ * Network type for pool operations
  */
-async function loadPoolConfigFromDatabase(): Promise<{
+export type NetworkType = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+
+// Per-network pool registry
+const networkPools = new Map<NetworkType, ElectrumPool>();
+const networkPoolInitPromises = new Map<NetworkType, Promise<ElectrumPool>>();
+
+/**
+ * Load pool configuration from database for a specific network
+ * @param network Network to load config for (defaults to mainnet)
+ */
+async function loadPoolConfigFromDatabase(network: NetworkType = 'mainnet'): Promise<{
   config: Partial<ElectrumPoolConfig>;
   servers: ServerConfig[];
   proxy: ProxyConfig | null;
@@ -1222,7 +1233,7 @@ async function loadPoolConfigFromDatabase(): Promise<{
       where: { isDefault: true, type: 'electrum' },
       include: {
         servers: {
-          where: { enabled: true },
+          where: { enabled: true, network: network },
           orderBy: { priority: 'asc' },
         },
       },
@@ -1251,22 +1262,144 @@ async function loadPoolConfigFromDatabase(): Promise<{
         };
       }
 
+      // Get per-network pool settings
+      let minConnections = nodeConfig.poolMinConnections;
+      let maxConnections = nodeConfig.poolMaxConnections;
+      let loadBalancing = nodeConfig.poolLoadBalancing as LoadBalancingStrategy;
+
+      // Use per-network settings if available (new schema)
+      if (network === 'mainnet') {
+        minConnections = nodeConfig.mainnetPoolMin ?? minConnections;
+        maxConnections = nodeConfig.mainnetPoolMax ?? maxConnections;
+        loadBalancing = (nodeConfig.mainnetPoolLoadBalancing as LoadBalancingStrategy) ?? loadBalancing;
+      } else if (network === 'testnet') {
+        minConnections = nodeConfig.testnetPoolMin ?? minConnections;
+        maxConnections = nodeConfig.testnetPoolMax ?? maxConnections;
+        loadBalancing = (nodeConfig.testnetPoolLoadBalancing as LoadBalancingStrategy) ?? loadBalancing;
+      } else if (network === 'signet') {
+        minConnections = nodeConfig.signetPoolMin ?? minConnections;
+        maxConnections = nodeConfig.signetPoolMax ?? maxConnections;
+        loadBalancing = (nodeConfig.signetPoolLoadBalancing as LoadBalancingStrategy) ?? loadBalancing;
+      }
+
       return {
         config: {
           enabled: nodeConfig.poolEnabled,
-          minConnections: nodeConfig.poolMinConnections,
-          maxConnections: nodeConfig.poolMaxConnections,
-          loadBalancing: nodeConfig.poolLoadBalancing as LoadBalancingStrategy,
+          minConnections,
+          maxConnections,
+          loadBalancing,
         },
         servers,
         proxy,
       };
     }
   } catch (error) {
-    log.warn('Failed to load pool config from database, using defaults', { error: String(error) });
+    log.warn('Failed to load pool config from database, using defaults', { error: String(error), network });
   }
 
   return { config: {}, servers: [], proxy: null };
+}
+
+/**
+ * Get or create an Electrum pool for a specific network
+ * This loads settings from the database and filters servers by network.
+ * @param network Network to get pool for
+ */
+export async function getElectrumPoolForNetwork(network: NetworkType): Promise<ElectrumPool> {
+  // Fast path: pool already exists for this network
+  const existingPool = networkPools.get(network);
+  if (existingPool) {
+    return existingPool;
+  }
+
+  // Another caller is already initializing this network's pool - wait for their result
+  const existingPromise = networkPoolInitPromises.get(network);
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  // We're the first caller for this network - create and store the init promise
+  const initPromise = (async () => {
+    // Double-check in case of race
+    const poolCheck = networkPools.get(network);
+    if (poolCheck) {
+      return poolCheck;
+    }
+
+    log.info(`Initializing Electrum pool for network: ${network}`);
+
+    // Load config and servers from database for this specific network
+    const { config: dbConfig, servers, proxy } = await loadPoolConfigFromDatabase(network);
+
+    // Environment variables as fallback
+    const envConfig: Partial<ElectrumPoolConfig> = {
+      enabled: process.env.ELECTRUM_POOL_ENABLED !== 'false',
+      minConnections: parseInt(process.env.ELECTRUM_POOL_MIN_CONNECTIONS || '1', 10),
+      maxConnections: parseInt(process.env.ELECTRUM_POOL_MAX_CONNECTIONS || '5', 10),
+      idleTimeoutMs: parseInt(process.env.ELECTRUM_POOL_IDLE_TIMEOUT_MS || '300000', 10),
+      healthCheckIntervalMs: parseInt(
+        process.env.ELECTRUM_POOL_HEALTH_CHECK_INTERVAL_MS || '30000',
+        10
+      ),
+      acquisitionTimeoutMs: parseInt(
+        process.env.ELECTRUM_POOL_ACQUISITION_TIMEOUT_MS || '5000',
+        10
+      ),
+      keepaliveIntervalMs: parseInt(
+        process.env.ELECTRUM_POOL_KEEPALIVE_INTERVAL_MS || '15000',
+        10
+      ),
+    };
+
+    // Database config takes precedence over environment variables
+    const pool = new ElectrumPool({
+      ...envConfig,
+      ...dbConfig,
+    });
+
+    // Configure proxy if enabled
+    if (proxy) {
+      pool.setProxyConfig(proxy);
+    }
+
+    // Configure servers for this network
+    if (servers.length > 0) {
+      pool.setServers(servers);
+    }
+
+    // Store in registry
+    networkPools.set(network, pool);
+
+    // Also set as the global pool instance if this is mainnet (backward compat)
+    if (network === 'mainnet' && !poolInstance) {
+      poolInstance = pool;
+    }
+
+    log.info(`Electrum pool for ${network} initialized with ${servers.length} servers`);
+
+    return pool;
+  })();
+
+  networkPoolInitPromises.set(network, initPromise);
+
+  try {
+    return await initPromise;
+  } finally {
+    // Clear the init promise once resolved
+    networkPoolInitPromises.delete(network);
+  }
+}
+
+/**
+ * Reset the pool for a specific network (for testing or config changes)
+ */
+export async function resetElectrumPoolForNetwork(network: NetworkType): Promise<void> {
+  const pool = networkPools.get(network);
+  if (pool) {
+    await pool.shutdown();
+    networkPools.delete(network);
+    log.info(`Electrum pool for ${network} has been reset`);
+  }
 }
 
 /**

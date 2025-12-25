@@ -1,14 +1,13 @@
 /**
  * Node API Routes
  *
- * API endpoints for testing connections to Bitcoin nodes and Electrum servers
+ * API endpoints for testing connections to Electrum servers
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import net from 'net';
 import tls from 'tls';
-import axios from 'axios';
 import { createLogger } from '../utils/logger';
 
 const router = Router();
@@ -21,14 +20,6 @@ interface ElectrumTestConfig {
   host: string;
   port: number;
   protocol: 'tcp' | 'ssl';
-}
-
-interface BitcoinCoreTestConfig {
-  host: string;
-  port: number;
-  rpcUser: string;
-  rpcPassword: string;
-  ssl: boolean;
 }
 
 /**
@@ -149,146 +140,44 @@ async function testElectrumConnection(config: ElectrumTestConfig): Promise<{ suc
 }
 
 /**
- * Test Bitcoin Core RPC connection
- */
-async function testBitcoinCoreConnection(config: BitcoinCoreTestConfig): Promise<{ success: boolean; message: string; nodeInfo?: any }> {
-  const { host, port, rpcUser, rpcPassword, ssl } = config;
-
-  try {
-    const protocol = ssl ? 'https' : 'http';
-    const url = `${protocol}://${host}:${port}`;
-
-    // Create Basic Auth header
-    const auth = Buffer.from(`${rpcUser}:${rpcPassword}`).toString('base64');
-
-    // Call getblockchaininfo
-    const response = await axios.post(
-      url,
-      {
-        jsonrpc: '1.0',
-        id: 'sanctuary-test',
-        method: 'getblockchaininfo',
-        params: [],
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${auth}`,
-        },
-        timeout: 10000,
-        // Allow self-signed certificates
-        httpsAgent: ssl ? new (require('https').Agent)({
-          rejectUnauthorized: false
-        }) : undefined,
-      }
-    );
-
-    if (response.data.error) {
-      return {
-        success: false,
-        message: `RPC error: ${response.data.error.message}`,
-      };
-    }
-
-    const result = response.data.result;
-    const nodeInfo = {
-      chain: result.chain,
-      blocks: result.blocks,
-      headers: result.headers,
-      verificationProgress: result.verificationprogress,
-    };
-
-    return {
-      success: true,
-      message: `Connected to Bitcoin Core (${result.chain} network, ${result.blocks} blocks)`,
-      nodeInfo,
-    };
-  } catch (error: any) {
-    if (error.code === 'ECONNREFUSED') {
-      return {
-        success: false,
-        message: 'Connection refused. Check if Bitcoin Core is running.',
-      };
-    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      return {
-        success: false,
-        message: 'Connection timeout. Check host and port.',
-      };
-    } else if (error.response?.status === 401) {
-      return {
-        success: false,
-        message: 'Authentication failed. Check RPC username and password.',
-      };
-    } else if (error.response?.status === 403) {
-      return {
-        success: false,
-        message: 'Access forbidden. Check rpcallowip in bitcoin.conf.',
-      };
-    } else {
-      return {
-        success: false,
-        message: `Connection failed: ${error.message}`,
-      };
-    }
-  }
-}
-
-/**
  * POST /api/v1/node/test
- * Test connection to a Bitcoin node or Electrum server
+ * Test connection to an Electrum server
  */
 router.post('/test', async (req: Request, res: Response) => {
   try {
-    const { nodeType, host, port, protocol, rpcUser, rpcPassword, ssl } = req.body;
+    const { nodeType, host, port, protocol } = req.body;
 
-    log.debug('Testing connection', { nodeType, host, port, protocol, ssl });
+    log.debug('Testing connection', { nodeType, host, port, protocol });
 
     // Validate required fields
-    if (!nodeType || !host || !port) {
+    if (!host || !port) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Missing required fields: nodeType, host, port',
+        message: 'Missing required fields: host, port',
       });
     }
 
-    let result;
-
-    if (nodeType === 'electrum') {
-      // Test Electrum connection
-      if (!protocol) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Missing required field for Electrum: protocol',
-        });
-      }
-
-      result = await testElectrumConnection({
-        host,
-        port: parseInt(port),
-        protocol: protocol as 'tcp' | 'ssl',
-      });
-    } else if (nodeType === 'bitcoind') {
-      // Test Bitcoin Core connection
-      if (!rpcUser || !rpcPassword) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Missing required fields for Bitcoin Core: rpcUser, rpcPassword',
-        });
-      }
-
-      result = await testBitcoinCoreConnection({
-        host,
-        port: parseInt(port),
-        rpcUser,
-        rpcPassword,
-        ssl: ssl === true || ssl === 'true',
-      });
-    } else {
+    // Only Electrum is supported
+    if (nodeType && nodeType !== 'electrum') {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Invalid nodeType. Must be "electrum" or "bitcoind"',
+        message: 'Only Electrum connection type is supported',
       });
     }
+
+    // Test Electrum connection
+    if (!protocol) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Missing required field: protocol (tcp or ssl)',
+      });
+    }
+
+    const result = await testElectrumConnection({
+      host,
+      port: parseInt(port),
+      protocol: protocol as 'tcp' | 'ssl',
+    });
 
     log.debug('Test result', { result });
     res.json(result);

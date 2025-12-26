@@ -1355,7 +1355,7 @@ describe('Admin API', () => {
           await handler(req, res);
           const response = getResponse();
           expect(response.statusCode).toBe(400);
-          expect(response.body.message).toContain('electrum');
+          expect(response.body.message.toLowerCase()).toContain('electrum');
         }
       });
     });

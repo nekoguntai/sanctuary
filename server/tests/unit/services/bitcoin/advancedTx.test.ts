@@ -19,6 +19,11 @@ jest.mock('../../../../src/services/bitcoin/electrum', () => ({
   getElectrumClient: jest.fn().mockReturnValue(mockElectrumClient),
 }));
 
+// Mock nodeClient - canReplaceTransaction uses getNodeClient
+jest.mock('../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: jest.fn().mockResolvedValue(mockElectrumClient),
+}));
+
 // Import after mocks
 import {
   isRBFSignaled,
@@ -122,6 +127,15 @@ describe('Advanced Transaction Features', () => {
     const walletId = 'test-wallet-id';
 
     beforeEach(() => {
+      // Mock wallet lookup
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+        descriptor: 'wpkh([aabbccdd/84h/1h/0h]tpub.../0/*)',
+        fingerprint: 'aabbccdd',
+        devices: [],
+      });
+
       // Mock wallet addresses
       mockPrismaClient.address.findMany.mockResolvedValue([
         { address: testnetAddresses.nativeSegwit[1], walletId },

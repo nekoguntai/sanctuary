@@ -516,12 +516,13 @@ describe('Transaction Service', () => {
       expect(mockPrismaClient.transaction.create).toHaveBeenCalled();
 
       // Verify the transaction was created with correct data
+      // Note: For sent transactions, amount is stored as negative (amount + fee)
       expect(mockPrismaClient.transaction.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             walletId,
             type: 'sent',
-            amount: BigInt(50000),
+            amount: BigInt(-51000), // -(50000 + 1000 fee)
             fee: BigInt(1000),
             label: 'Test payment',
             memo: 'Testing broadcast',

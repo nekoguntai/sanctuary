@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Wallet, Transaction, WalletType } from '../types';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Wallet, Transaction, WalletType, WalletNetwork } from '../types';
+import { NetworkTabs, TabNetwork } from './NetworkTabs';
 
 // Local fee estimate type for dashboard display
 interface DashboardFeeEstimate {
@@ -129,7 +130,25 @@ export const Dashboard: React.FC = () => {
   const { format, btcPrice, priceChange24h, currencySymbol, priceLoading, lastPriceUpdate, showFiat } = useCurrency();
   const { user } = useUser();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [timeframe, setTimeframe] = useState<Timeframe>('1W');
+
+  // Network tab state - persist in URL
+  const networkFromUrl = searchParams.get('network') as TabNetwork | null;
+  const [selectedNetwork, setSelectedNetwork] = useState<TabNetwork>(
+    networkFromUrl && ['mainnet', 'testnet', 'signet'].includes(networkFromUrl) ? networkFromUrl : 'mainnet'
+  );
+
+  // Update URL when network changes
+  const handleNetworkChange = (network: TabNetwork) => {
+    setSelectedNetwork(network);
+    if (network === 'mainnet') {
+      searchParams.delete('network');
+    } else {
+      searchParams.set('network', network);
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
 
   // Version check state
   const [versionInfo, setVersionInfo] = useState<adminApi.VersionInfo | null>(null);
@@ -163,13 +182,14 @@ export const Dashboard: React.FC = () => {
   // Use stable empty arrays when data is undefined to prevent re-renders
   const safeApiWallets = apiWallets ?? EMPTY_WALLETS;
 
-  // Convert API wallets to component format
+  // Convert API wallets to component format (with network)
   const wallets: Wallet[] = useMemo(() => safeApiWallets.map(w => ({
     id: w.id,
     name: w.name,
     type: w.type as WalletType,
     balance: w.balance,
     scriptType: w.scriptType,
+    network: (w.network as WalletNetwork) || 'mainnet',
     derivationPath: w.descriptor || '',
     fingerprint: w.fingerprint || '',
     label: w.name,
@@ -179,14 +199,36 @@ export const Dashboard: React.FC = () => {
     syncInProgress: w.syncInProgress,
   })), [safeApiWallets]);
 
-  // Fetch recent transactions from all wallets using React Query
+  // Filter wallets by selected network
+  const filteredWallets = useMemo(() =>
+    wallets.filter(w => w.network === selectedNetwork),
+    [wallets, selectedNetwork]
+  );
+
+  // Count wallets per network for tabs
+  const walletCounts = useMemo(() => ({
+    mainnet: wallets.filter(w => w.network === 'mainnet').length,
+    testnet: wallets.filter(w => w.network === 'testnet').length,
+    signet: wallets.filter(w => w.network === 'signet').length,
+  }), [wallets]);
+
+  // All wallet IDs for subscriptions
   const walletIds = useMemo(() => wallets.map(w => w.id), [wallets]);
-  const { data: recentTxRawData, isLoading: txLoading } = useRecentTransactions(walletIds, 10);
+
+  // Filtered wallet IDs for network-specific data
+  const filteredWalletIds = useMemo(() => filteredWallets.map(w => w.id), [filteredWallets]);
+
+  // Fetch recent transactions for selected network only
+  const { data: recentTxRawData, isLoading: txLoading } = useRecentTransactions(filteredWalletIds, 10);
   const recentTxRaw = recentTxRawData ?? EMPTY_TRANSACTIONS;
 
-  // Fetch pending transactions for block queue visualization
-  const { data: pendingTxsData } = usePendingTransactions(walletIds);
+  // Fetch pending transactions for selected network only
+  const { data: pendingTxsData } = usePendingTransactions(filteredWalletIds);
   const pendingTxs = pendingTxsData ?? EMPTY_PENDING;
+
+  // Check if this network has any wallets (to determine if node should be shown)
+  const networkHasWallets = filteredWallets.length > 0;
+  const isMainnet = selectedNetwork === 'mainnet';
 
   // Convert API transactions to component format
   const recentTx: Transaction[] = useMemo(() => recentTxRaw.map(tx => {
@@ -363,10 +405,11 @@ export const Dashboard: React.FC = () => {
     }
   }, [invalidateAllWallets]);
 
-  const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
+  // Calculate total balance for filtered wallets (network-specific)
+  const totalBalance = filteredWallets.reduce((acc, w) => acc + w.balance, 0);
 
-  // Use the balance history hook for accurate chart data
-  const { data: balanceHistoryData } = useBalanceHistory(walletIds, totalBalance, timeframe);
+  // Use the balance history hook for accurate chart data (filtered by network)
+  const { data: balanceHistoryData } = useBalanceHistory(filteredWalletIds, totalBalance, timeframe);
 
   // Convert to chart format (value -> sats for tooltip compatibility)
   const chartData = useMemo(() =>
@@ -429,58 +472,114 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Network Tabs */}
+      <div className="flex items-center justify-between">
+        <NetworkTabs
+          selectedNetwork={selectedNetwork}
+          onNetworkChange={handleNetworkChange}
+          walletCounts={walletCounts}
+        />
+      </div>
+
       {/* Block Visualizer Section */}
       <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
          <div className="flex items-center justify-between px-2 mb-2">
-            <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Bitcoin Network Status</h4>
-            <div className="flex items-center space-x-4">
-               {/* Manual refresh button */}
-               <button
-                  onClick={refreshMempoolData}
-                  disabled={mempoolRefreshing}
-                  className="flex items-center text-xs text-sanctuary-500 hover:text-sanctuary-700 dark:text-sanctuary-400 dark:hover:text-sanctuary-200 transition-colors disabled:opacity-50"
-                  title="Refresh mempool data"
-               >
-                  <RefreshCw className={`w-3.5 h-3.5 mr-1 ${mempoolRefreshing ? 'animate-spin' : ''}`} />
-                  {lastMempoolUpdate && (
-                     <span className="hidden sm:inline">
-                        {lastMempoolUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                     </span>
-                  )}
-               </button>
-               {/* WebSocket Status */}
-               <div className="flex items-center text-xs">
-                  {wsConnected ? (
-                     <>
-                        <Wifi className="w-3.5 h-3.5 text-success-500 mr-1.5" />
-                        <span className="text-success-600 dark:text-success-400 font-medium">Live</span>
-                     </>
-                  ) : wsState === 'connecting' ? (
-                     <>
-                        <div className="w-3.5 h-3.5 rounded-full border-2 border-warning-500 border-t-transparent animate-spin mr-1.5"></div>
-                        <span className="text-warning-600 dark:text-warning-400 font-medium">Connecting</span>
-                     </>
-                  ) : (
-                     <>
-                        <WifiOff className="w-3.5 h-3.5 text-sanctuary-400 mr-1.5" />
-                        <span className="text-sanctuary-500 dark:text-sanctuary-400">Offline</span>
-                     </>
-                  )}
-               </div>
-               {/* Sync Status */}
-               <div className="flex items-center text-xs text-sanctuary-400">
-                  <span className="w-2 h-2 rounded-full bg-success-500 mr-2 animate-pulse"></span>
-                  Synced to Tip
-               </div>
+            <div className="flex items-center space-x-2">
+               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">
+                  {selectedNetwork === 'mainnet' ? 'Bitcoin' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Network Status
+               </h4>
+               {!isMainnet && (
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                     selectedNetwork === 'testnet'
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                  }`}>
+                     {selectedNetwork.toUpperCase()}
+                  </span>
+               )}
             </div>
+            {isMainnet && (
+               <div className="flex items-center space-x-4">
+                  {/* Manual refresh button */}
+                  <button
+                     onClick={refreshMempoolData}
+                     disabled={mempoolRefreshing}
+                     className="flex items-center text-xs text-sanctuary-500 hover:text-sanctuary-700 dark:text-sanctuary-400 dark:hover:text-sanctuary-200 transition-colors disabled:opacity-50"
+                     title="Refresh mempool data"
+                  >
+                     <RefreshCw className={`w-3.5 h-3.5 mr-1 ${mempoolRefreshing ? 'animate-spin' : ''}`} />
+                     {lastMempoolUpdate && (
+                        <span className="hidden sm:inline">
+                           {lastMempoolUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                     )}
+                  </button>
+                  {/* WebSocket Status */}
+                  <div className="flex items-center text-xs">
+                     {wsConnected ? (
+                        <>
+                           <Wifi className="w-3.5 h-3.5 text-success-500 mr-1.5" />
+                           <span className="text-success-600 dark:text-success-400 font-medium">Live</span>
+                        </>
+                     ) : wsState === 'connecting' ? (
+                        <>
+                           <div className="w-3.5 h-3.5 rounded-full border-2 border-warning-500 border-t-transparent animate-spin mr-1.5"></div>
+                           <span className="text-warning-600 dark:text-warning-400 font-medium">Connecting</span>
+                        </>
+                     ) : (
+                        <>
+                           <WifiOff className="w-3.5 h-3.5 text-sanctuary-400 mr-1.5" />
+                           <span className="text-sanctuary-500 dark:text-sanctuary-400">Offline</span>
+                        </>
+                     )}
+                  </div>
+                  {/* Sync Status */}
+                  <div className="flex items-center text-xs text-sanctuary-400">
+                     <span className="w-2 h-2 rounded-full bg-success-500 mr-2 animate-pulse"></span>
+                     Synced to Tip
+                  </div>
+               </div>
+            )}
          </div>
-         <BlockVisualizer
-            blocks={mempoolBlocks}
-            queuedBlocksSummary={queuedBlocksSummary}
-            pendingTxs={pendingTxs}
-            explorerUrl={bitcoinStatus?.explorerUrl}
-            onRefresh={refreshMempoolData}
-         />
+         {isMainnet ? (
+            <BlockVisualizer
+               blocks={mempoolBlocks}
+               queuedBlocksSummary={queuedBlocksSummary}
+               pendingTxs={pendingTxs}
+               explorerUrl={bitcoinStatus?.explorerUrl}
+               onRefresh={refreshMempoolData}
+            />
+         ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+               <div className={`p-4 rounded-2xl mb-4 ${
+                  selectedNetwork === 'testnet'
+                     ? 'bg-amber-100 dark:bg-amber-900/20'
+                     : 'bg-purple-100 dark:bg-purple-900/20'
+               }`}>
+                  <Bitcoin className={`w-10 h-10 ${
+                     selectedNetwork === 'testnet'
+                        ? 'text-amber-500 dark:text-amber-400'
+                        : 'text-purple-500 dark:text-purple-400'
+                  }`} />
+               </div>
+               <h4 className="text-lg font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">
+                  {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Node Not Configured
+               </h4>
+               <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 max-w-md">
+                  Configure an Electrum server for {selectedNetwork} in Settings to see mempool and block data.
+               </p>
+               <button
+                  onClick={() => navigate('/settings/node')}
+                  className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                     selectedNetwork === 'testnet'
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50'
+                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                  }`}
+               >
+                  Configure Node
+               </button>
+            </div>
+         )}
       </div>
 
       {/* Top Stats Row - 3 columns */}
@@ -495,28 +594,41 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <AnimatedPrice value={btcPrice} symbol={currencySymbol} />
+          {isMainnet ? (
+            <>
+              <AnimatedPrice value={btcPrice} symbol={currencySymbol} />
 
-          <div className="flex items-center justify-between mt-4">
-            <div className={`flex items-center text-sm font-medium ${
-              priceChangePositive
-                ? 'text-success-600 dark:text-success-400'
-                : 'text-rose-600 dark:text-rose-400'
-            }`}>
-              {priceChangePositive ? (
-                <TrendingUp className="w-4 h-4 mr-1" />
-              ) : (
-                <TrendingDown className="w-4 h-4 mr-1" />
-              )}
-              {priceChange24h !== null ? `${priceChangePositive ? '+' : ''}${priceChange24h.toFixed(2)}%` : '---'}
-              <span className="text-sanctuary-400 font-normal ml-2">24h</span>
-            </div>
-            {lastPriceUpdate && (
-              <span className="text-xs text-sanctuary-400">
-                {lastPriceUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div className="flex items-center justify-between mt-4">
+                <div className={`flex items-center text-sm font-medium ${
+                  priceChangePositive
+                    ? 'text-success-600 dark:text-success-400'
+                    : 'text-rose-600 dark:text-rose-400'
+                }`}>
+                  {priceChangePositive ? (
+                    <TrendingUp className="w-4 h-4 mr-1" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 mr-1" />
+                  )}
+                  {priceChange24h !== null ? `${priceChangePositive ? '+' : ''}${priceChange24h.toFixed(2)}%` : '---'}
+                  <span className="text-sanctuary-400 font-normal ml-2">24h</span>
+                </div>
+                {lastPriceUpdate && (
+                  <span className="text-xs text-sanctuary-400">
+                    {lastPriceUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-4">
+              <span className="text-2xl font-bold text-sanctuary-400 dark:text-sanctuary-500 mb-2">
+                {selectedNetwork === 'testnet' ? 'tBTC' : 'sBTC'}
               </span>
-            )}
-          </div>
+              <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400 text-center">
+                {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} coins have no market value
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Fee Estimation Card */}
@@ -555,110 +667,139 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">MAINNET</span>
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                selectedNetwork === 'mainnet'
+                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                  : selectedNetwork === 'testnet'
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                  : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+              }`}>
+                {selectedNetwork.toUpperCase()}
+              </span>
             </div>
-            {nodeStatus === 'connected' && <div className="h-2.5 w-2.5 rounded-full bg-success-500 animate-pulse"></div>}
-            {nodeStatus === 'error' && <div className="h-2.5 w-2.5 rounded-full bg-rose-500"></div>}
-            {nodeStatus === 'checking' && <div className="h-2.5 w-2.5 rounded-full bg-warning-500 animate-pulse"></div>}
-            {nodeStatus === 'unknown' && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
+            {isMainnet && nodeStatus === 'connected' && <div className="h-2.5 w-2.5 rounded-full bg-success-500 animate-pulse"></div>}
+            {isMainnet && nodeStatus === 'error' && <div className="h-2.5 w-2.5 rounded-full bg-rose-500"></div>}
+            {isMainnet && nodeStatus === 'checking' && <div className="h-2.5 w-2.5 rounded-full bg-warning-500 animate-pulse"></div>}
+            {isMainnet && nodeStatus === 'unknown' && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
+            {!isMainnet && <div className="h-2.5 w-2.5 rounded-full bg-sanctuary-400"></div>}
           </div>
-          <div className="flex items-start">
-            <div className={`p-2.5 rounded-xl mr-3 transition-colors flex-shrink-0 ${
-              nodeStatus === 'connected'
-                ? 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success-400'
-                : nodeStatus === 'error'
-                  ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
-                  : 'bg-sanctuary-100 text-sanctuary-500'
-            }`}>
-              <Zap className="w-5 h-5" />
+
+          {isMainnet ? (
+            <div className="flex items-start">
+              <div className={`p-2.5 rounded-xl mr-3 transition-colors flex-shrink-0 ${
+                nodeStatus === 'connected'
+                  ? 'bg-success-100 text-success-600 dark:bg-success-900/30 dark:text-success-400'
+                  : nodeStatus === 'error'
+                    ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
+                    : 'bg-sanctuary-100 text-sanctuary-500'
+              }`}>
+                <Zap className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    Electrum Server
+                  </p>
+                  {nodeStatus === 'connected' && (
+                    <span className="text-xs text-success-600 dark:text-success-400 flex items-center">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Connected
+                    </span>
+                  )}
+                  {nodeStatus === 'error' && (
+                    <span className="text-xs text-rose-600 dark:text-rose-400 flex items-center">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Error
+                    </span>
+                  )}
+                  {nodeStatus === 'checking' && (
+                    <span className="text-xs text-sanctuary-400">Checking...</span>
+                  )}
+                  {nodeStatus === 'unknown' && (
+                    <span className="text-xs text-sanctuary-400">Unknown</span>
+                  )}
+                </div>
+                {nodeStatus === 'connected' && bitcoinStatus && (
+                  <div className="mt-2 space-y-0.5">
+                    {bitcoinStatus.blockHeight && (
+                      <div className="flex items-center text-xs">
+                        <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Height:</span>
+                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">{bitcoinStatus.blockHeight.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {/* Show Host when pool is disabled, Pool when enabled */}
+                    {bitcoinStatus.pool?.enabled ? (
+                      <div className="text-xs space-y-1">
+                        <div className="flex items-center">
+                          <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Pool:</span>
+                          <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">
+                            {bitcoinStatus.pool.stats ? (
+                              <span>
+                                {bitcoinStatus.pool.stats.activeConnections}/{bitcoinStatus.pool.stats.totalConnections}
+                                <span className="text-sanctuary-400 ml-1">
+                                  (active/total)
+                                </span>
+                              </span>
+                            ) : 'initializing...'}
+                          </span>
+                        </div>
+                        {/* Per-server stats when multiple servers configured */}
+                        {bitcoinStatus.pool.stats?.servers && bitcoinStatus.pool.stats.servers.length > 0 && (
+                          <div className="ml-14 space-y-0.5">
+                            {bitcoinStatus.pool.stats.servers.map((server: { serverId: string; label: string; connectionCount: number; healthyConnections: number; isHealthy: boolean; lastHealthCheck: string | null }) => (
+                              <div key={server.serverId} className="flex items-center text-[10px]">
+                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                  !server.lastHealthCheck
+                                    ? 'bg-sanctuary-400' // Not yet checked
+                                    : server.isHealthy
+                                      ? 'bg-emerald-500' // Healthy
+                                      : 'bg-amber-500'   // Unhealthy
+                                }`} />
+                                <span className="text-sanctuary-500 truncate max-w-[100px]">{server.label}</span>
+                                <span className="text-sanctuary-400 ml-1">
+                                  ({server.connectionCount} conn{server.connectionCount !== 1 ? 's' : ''})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : bitcoinStatus.host && (
+                      <div className="flex items-center text-xs">
+                        <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Host:</span>
+                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono truncate">
+                          {bitcoinStatus.useSsl && <span className="text-success-500 mr-1">🔒</span>}
+                          {bitcoinStatus.host}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {nodeStatus === 'error' && bitcoinStatus?.error && (
+                  <div className="mt-2 text-xs text-rose-600 dark:text-rose-400 truncate">
+                    {bitcoinStatus.error}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
+          ) : (
+            <div className="flex items-start">
+              <div className="p-2.5 rounded-xl mr-3 bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400 flex-shrink-0">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
                   Electrum Server
                 </p>
-                {nodeStatus === 'connected' && (
-                  <span className="text-xs text-success-600 dark:text-success-400 flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Connected
-                  </span>
-                )}
-                {nodeStatus === 'error' && (
-                  <span className="text-xs text-rose-600 dark:text-rose-400 flex items-center">
-                    <XCircle className="w-3 h-3 mr-1" />
-                    Error
-                  </span>
-                )}
-                {nodeStatus === 'checking' && (
-                  <span className="text-xs text-sanctuary-400">Checking...</span>
-                )}
-                {nodeStatus === 'unknown' && (
-                  <span className="text-xs text-sanctuary-400">Unknown</span>
-                )}
+                <p className="text-xs text-sanctuary-500 dark:text-sanctuary-400 mt-1">
+                  {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} node not configured
+                </p>
+                <p className="text-xs text-sanctuary-400 mt-1">
+                  Configure in Settings → Node Configuration
+                </p>
               </div>
-              {nodeStatus === 'connected' && bitcoinStatus && (
-                <div className="mt-2 space-y-0.5">
-                  {bitcoinStatus.blockHeight && (
-                    <div className="flex items-center text-xs">
-                      <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Height:</span>
-                      <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">{bitcoinStatus.blockHeight.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {/* Show Host when pool is disabled, Pool when enabled */}
-                  {bitcoinStatus.pool?.enabled ? (
-                    <div className="text-xs space-y-1">
-                      <div className="flex items-center">
-                        <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Pool:</span>
-                        <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono">
-                          {bitcoinStatus.pool.stats ? (
-                            <span>
-                              {bitcoinStatus.pool.stats.activeConnections}/{bitcoinStatus.pool.stats.totalConnections}
-                              <span className="text-sanctuary-400 ml-1">
-                                (active/total)
-                              </span>
-                            </span>
-                          ) : 'initializing...'}
-                        </span>
-                      </div>
-                      {/* Per-server stats when multiple servers configured */}
-                      {bitcoinStatus.pool.stats?.servers && bitcoinStatus.pool.stats.servers.length > 0 && (
-                        <div className="ml-14 space-y-0.5">
-                          {bitcoinStatus.pool.stats.servers.map((server: { serverId: string; label: string; connectionCount: number; healthyConnections: number; isHealthy: boolean; lastHealthCheck: string | null }) => (
-                            <div key={server.serverId} className="flex items-center text-[10px]">
-                              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                                !server.lastHealthCheck
-                                  ? 'bg-sanctuary-400' // Not yet checked
-                                  : server.isHealthy
-                                    ? 'bg-emerald-500' // Healthy
-                                    : 'bg-amber-500'   // Unhealthy
-                              }`} />
-                              <span className="text-sanctuary-500 truncate max-w-[100px]">{server.label}</span>
-                              <span className="text-sanctuary-400 ml-1">
-                                ({server.connectionCount} conn{server.connectionCount !== 1 ? 's' : ''})
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : bitcoinStatus.host && (
-                    <div className="flex items-center text-xs">
-                      <span className="text-sanctuary-500 dark:text-sanctuary-400 w-14">Host:</span>
-                      <span className="text-sanctuary-700 dark:text-sanctuary-300 font-mono truncate">
-                        {bitcoinStatus.useSsl && <span className="text-success-500 mr-1">🔒</span>}
-                        {bitcoinStatus.host}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {nodeStatus === 'error' && bitcoinStatus?.error && (
-                <div className="mt-2 text-xs text-rose-600 dark:text-rose-400 truncate">
-                  {bitcoinStatus.error}
-                </div>
-              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -719,15 +860,15 @@ export const Dashboard: React.FC = () => {
          <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 flex items-center">
                <WalletIcon className="w-5 h-5 mr-2 text-sanctuary-400" />
-               Wallet Distribution
+               {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Wallets
             </h3>
          </div>
 
          {/* Visual Bar */}
          <div className="h-4 w-full surface-secondary rounded-full overflow-hidden flex mb-8">
-            {wallets.length === 0 ? (
+            {filteredWallets.length === 0 ? (
                <div className="w-full h-full bg-sanctuary-200 dark:bg-sanctuary-700"></div>
-            ) : wallets.map((w, idx) => {
+            ) : filteredWallets.map((w, idx) => {
                const percent = totalBalance > 0 ? (w.balance / totalBalance) * 100 : 0;
                const colorClass = distributionColors[idx % distributionColors.length];
 
@@ -756,12 +897,14 @@ export const Dashboard: React.FC = () => {
                   </tr>
                </thead>
                <tbody className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
-                  {wallets.length === 0 && (
+                  {filteredWallets.length === 0 && (
                      <tr className="bg-transparent">
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-sanctuary-500 bg-transparent">No wallets found. Create one to get started.</td>
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-sanctuary-500 bg-transparent">
+                           No {selectedNetwork} wallets found. Create or import a {selectedNetwork} wallet to get started.
+                        </td>
                      </tr>
                   )}
-                  {wallets.map((w, idx) => {
+                  {filteredWallets.map((w, idx) => {
                      const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
                      const dotColorClass = distributionColors[idx % distributionColors.length];
 

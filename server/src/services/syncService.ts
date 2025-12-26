@@ -26,23 +26,8 @@ const MAX_CONCURRENT_SYNCS = 3;
 // Retry configuration
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [5000, 15000, 45000]; // Exponential backoff: 5s, 15s, 45s
-const SYNC_TIMEOUT_MS = 3 * 60 * 1000; // 3 minute timeout for each sync operation
-
-/**
- * Wrap a promise with a timeout
- */
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  let timeoutId: NodeJS.Timeout;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(errorMessage));
-    }, timeoutMs);
-  });
-
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    clearTimeout(timeoutId);
-  });
-}
+// NOTE: No overall sync timeout - sync continues as long as progress is being made
+// Individual operations (like transaction fetching) may have their own timeouts
 
 interface SyncJob {
   walletId: string;
@@ -618,12 +603,9 @@ class SyncService {
       const previousBalances = await this.getWalletBalance(walletId);
       const previousTotal = previousBalances.confirmed + previousBalances.unconfirmed;
 
-      // Execute the sync with a timeout to prevent hanging
-      const result = await withTimeout(
-        syncWallet(walletId),
-        SYNC_TIMEOUT_MS,
-        `Sync timed out after ${SYNC_TIMEOUT_MS / 1000}s`
-      );
+      // Execute the sync - no overall timeout since sync writes incrementally
+      // and continues as long as progress is being made
+      const result = await syncWallet(walletId);
 
       // Populate missing fields for any existing transactions
       const populateResult = await populateMissingTransactionFields(walletId);
@@ -803,12 +785,40 @@ class SyncService {
   }
 
   /**
-   * Check for stale wallets and queue them for sync
+   * Check for stale wallets and queue them for sync.
+   * Also auto-unstuck wallets that have syncInProgress=true but aren't actually syncing.
    */
   private async checkAndQueueStaleSyncs(): Promise<void> {
     if (!this.isRunning) return;
 
     try {
+      // First, check for stuck syncs - wallets marked as syncing in DB but not in memory
+      // This can happen if sync times out or crashes without proper cleanup
+      const stuckWallets = await prisma.wallet.findMany({
+        where: {
+          syncInProgress: true,
+        },
+        select: { id: true, name: true },
+      });
+
+      // Reset any wallet that's marked as syncing but isn't actually syncing
+      let unstuckCount = 0;
+      for (const wallet of stuckWallets) {
+        if (!this.activeSyncs.has(wallet.id)) {
+          log.warn(`[SYNC] Auto-unstuck wallet ${wallet.name || wallet.id} (was stuck with syncInProgress=true)`);
+          await prisma.wallet.update({
+            where: { id: wallet.id },
+            data: { syncInProgress: false },
+          });
+          unstuckCount++;
+        }
+      }
+
+      if (unstuckCount > 0) {
+        log.info(`[SYNC] Auto-unstuck ${unstuckCount} wallets that had stale syncInProgress flags`);
+      }
+
+      // Now check for stale wallets that need syncing
       const staleWallets = await prisma.wallet.findMany({
         where: {
           OR: [

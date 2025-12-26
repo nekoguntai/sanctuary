@@ -261,6 +261,14 @@ export interface ElectrumServer {
   updatedAt?: string;
 }
 
+// Health check result for history tracking
+export interface HealthCheckResult {
+  timestamp: string;
+  success: boolean;
+  latencyMs?: number;
+  error?: string;
+}
+
 // Per-server statistics (from pool stats)
 export interface ElectrumServerStats {
   serverId: string;
@@ -273,6 +281,13 @@ export interface ElectrumServerStats {
   failedRequests: number;
   isHealthy: boolean;
   lastHealthCheck: string | null;
+  // Backoff state
+  consecutiveFailures: number;
+  backoffLevel: number;
+  cooldownUntil: string | null;
+  weight: number;
+  // Health check history (most recent first)
+  healthHistory: HealthCheckResult[];
 }
 
 // Electrum connection pool statistics

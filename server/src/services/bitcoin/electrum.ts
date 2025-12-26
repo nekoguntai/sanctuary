@@ -459,9 +459,11 @@ class ElectrumClient extends EventEmitter {
             // Clear timeout since we got a response
             clearTimeout(request.timeoutId);
             this.pendingRequests.delete(response.id);
+            log.debug(`Received response: id=${response.id} pendingCount=${this.pendingRequests.size} hasError=${!!response.error}`);
 
             if (response.error) {
               const errorMsg = response.error.message || JSON.stringify(response.error);
+              log.debug(`Electrum error response: id=${response.id} error=${errorMsg}`);
               request.reject(new Error(errorMsg));
             } else {
               request.resolve(response.result);
@@ -532,6 +534,7 @@ class ElectrumClient extends EventEmitter {
       const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
+          log.warn(`Request timeout: method=${method} id=${id} pendingCount=${this.pendingRequests.size}`);
           reject(new Error(`Request timeout after ${this.requestTimeoutMs}ms`));
         }
       }, this.requestTimeoutMs);
@@ -539,6 +542,7 @@ class ElectrumClient extends EventEmitter {
       this.pendingRequests.set(id, { resolve, reject, timeoutId });
 
       const message = JSON.stringify(request) + '\n';
+      log.debug(`Sending request: method=${method} id=${id} pendingCount=${this.pendingRequests.size}`);
       this.socket!.write(message);
     });
   }
@@ -574,6 +578,7 @@ class ElectrumClient extends EventEmitter {
         const timeoutId = setTimeout(() => {
           if (this.pendingRequests.has(id)) {
             this.pendingRequests.delete(id);
+            log.warn(`Batch request timeout: method=${requests[i].method} id=${id} pendingCount=${this.pendingRequests.size}`);
             reject(new Error(`Batch request timeout after ${this.batchRequestTimeoutMs}ms for id ${id}`));
           }
         }, this.batchRequestTimeoutMs);
@@ -587,6 +592,7 @@ class ElectrumClient extends EventEmitter {
 
     // Send all requests in a single write (separated by newlines)
     const batchMessage = messages.join('\n') + '\n';
+    log.debug(`Sending batch: count=${requests.length} firstId=${startId} lastId=${this.requestId} pendingCount=${this.pendingRequests.size}`);
     this.socket!.write(batchMessage);
 
     // Wait for all responses
@@ -653,20 +659,14 @@ class ElectrumClient extends EventEmitter {
 
   /**
    * Get transaction details
-   * Note: verbose=true is not supported by all servers (e.g., Blockstream)
-   * If verbose fails, falls back to fetching raw tx and decoding locally
+   * Note: verbose=true is not supported by all servers (e.g., Blockstream's electrs)
+   * We now default to non-verbose mode and decode locally to avoid error/retry overhead
    */
-  async getTransaction(txid: string, verbose: boolean = true): Promise<any> {
-    try {
-      return await this.request('blockchain.transaction.get', [txid, verbose]);
-    } catch (error: any) {
-      // If verbose not supported, get raw tx and decode it ourselves
-      if (verbose && error.message?.includes('verbose') || error.message?.includes('unsupported')) {
-        const rawTx = await this.request('blockchain.transaction.get', [txid, false]);
-        return this.decodeRawTransaction(rawTx);
-      }
-      throw error;
-    }
+  async getTransaction(txid: string, verbose: boolean = false): Promise<any> {
+    // Always use non-verbose mode since most electrs servers don't support verbose
+    // This avoids the error/retry overhead and extra round trips
+    const rawTx = await this.request('blockchain.transaction.get', [txid, false]);
+    return this.decodeRawTransaction(rawTx);
   }
 
   /**
@@ -887,27 +887,37 @@ class ElectrumClient extends EventEmitter {
   async getTransactionsBatch(txids: string[], verbose: boolean = true): Promise<Map<string, any>> {
     if (txids.length === 0) return new Map();
 
+    // Always use non-verbose mode since Blockstream (and other electrs) doesn't support verbose
+    // This avoids the verbose error and retry overhead
+    const useVerbose = false;
+
     // Prepare batch requests
     const requests = txids.map(txid => ({
       method: 'blockchain.transaction.get',
-      params: [txid, verbose],
+      params: [txid, useVerbose],
     }));
 
-    // Execute batch
+    // Execute batch with retry for timeouts
     let results: any[];
-    try {
-      results = await this.batchRequest(requests);
-    } catch (error: any) {
-      // If verbose not supported by server, retry without verbose and decode locally
-      if (verbose && (error.message?.includes('verbose') || error.message?.includes('unsupported'))) {
-        log.debug('Verbose transactions not supported, falling back to raw tx decoding');
-        const rawRequests = txids.map(txid => ({
-          method: 'blockchain.transaction.get',
-          params: [txid, false],
-        }));
-        const rawResults = await this.batchRequest(rawRequests);
-        results = rawResults.map(rawTx => this.decodeRawTransaction(rawTx));
-      } else {
+    const MAX_RETRIES = 2;
+    let lastError: any;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        results = await this.batchRequest(requests);
+        // Decode raw transactions since we're using non-verbose mode
+        results = results.map(rawTx => this.decodeRawTransaction(rawTx));
+        break;
+      } catch (error: any) {
+        lastError = error;
+        // If timeout, retry after delay
+        if (error.message?.includes('timeout')) {
+          log.warn(`Batch transaction fetch timeout, attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+            continue;
+          }
+        }
         throw error;
       }
     }
@@ -915,8 +925,8 @@ class ElectrumClient extends EventEmitter {
     // Map results back to txids
     const resultMap = new Map<string, any>();
     for (let i = 0; i < txids.length; i++) {
-      if (results[i]) {
-        resultMap.set(txids[i], results[i]);
+      if (results![i]) {
+        resultMap.set(txids[i], results![i]);
       }
     }
 

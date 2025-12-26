@@ -10,6 +10,13 @@ import type { BitcoinTransactionDetails, BlockHeader } from '../types';
 // Re-export types for convenience
 export type { BitcoinTransactionDetails, BlockHeader } from '../types';
 
+export interface HealthCheckResult {
+  timestamp: string;
+  success: boolean;
+  latencyMs?: number;
+  error?: string;
+}
+
 export interface ServerStats {
   serverId: string;
   label: string;
@@ -21,6 +28,13 @@ export interface ServerStats {
   failedRequests: number;
   isHealthy: boolean;
   lastHealthCheck: string | null;
+  // Backoff state
+  consecutiveFailures: number;
+  backoffLevel: number;
+  cooldownUntil: string | null;
+  weight: number;
+  // Health check history (most recent first)
+  healthHistory: HealthCheckResult[];
 }
 
 export interface PoolStats {

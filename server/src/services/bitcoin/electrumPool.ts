@@ -85,7 +85,59 @@ export interface ServerStats {
   failedRequests: number;
   isHealthy: boolean;
   lastHealthCheck: Date | null;
+  // Backoff state
+  consecutiveFailures: number;
+  backoffLevel: number;
+  cooldownUntil: Date | null;
+  weight: number;
+  // Health check history (most recent first)
+  healthHistory: HealthCheckResult[];
 }
+
+/**
+ * Health check result for history tracking
+ */
+export interface HealthCheckResult {
+  timestamp: Date;
+  success: boolean;
+  latencyMs?: number;
+  error?: string;
+}
+
+/**
+ * Maximum number of health check results to keep per server
+ */
+const MAX_HEALTH_HISTORY = 20;
+
+/**
+ * Backoff configuration
+ */
+export interface BackoffConfig {
+  // Initial cooldown duration after first failure (ms)
+  baseDelayMs: number;
+  // Maximum cooldown duration (ms)
+  maxDelayMs: number;
+  // Number of consecutive failures before triggering backoff
+  failureThreshold: number;
+  // Number of consecutive successes needed to fully recover
+  recoveryThreshold: number;
+  // Weight reduction per backoff level (0.0 - 1.0)
+  weightPenalty: number;
+  // Minimum weight for a server (prevents complete exclusion)
+  minWeight: number;
+}
+
+/**
+ * Default backoff configuration
+ */
+const DEFAULT_BACKOFF_CONFIG: BackoffConfig = {
+  baseDelayMs: 30000,        // 30 seconds initial backoff
+  maxDelayMs: 300000,        // 5 minutes max backoff
+  failureThreshold: 2,       // 2 failures triggers backoff
+  recoveryThreshold: 3,      // 3 successes for full recovery
+  weightPenalty: 0.3,        // 30% weight reduction per level
+  minWeight: 0.1,            // Never go below 10% weight
+};
 
 /**
  * Pool configuration options
@@ -226,8 +278,24 @@ export class ElectrumPool extends EventEmitter {
 
   // Multi-server support
   private servers: ServerConfig[] = [];
-  private serverStats: Map<string, { totalRequests: number; failedRequests: number; lastHealthCheck: Date | null; isHealthy: boolean }> = new Map();
+  private serverStats: Map<string, {
+    totalRequests: number;
+    failedRequests: number;
+    lastHealthCheck: Date | null;
+    isHealthy: boolean;
+    // Backoff state
+    consecutiveFailures: number;
+    consecutiveSuccesses: number;
+    backoffLevel: number;
+    cooldownUntil: Date | null;
+    weight: number;
+    // Health check history
+    healthHistory: HealthCheckResult[];
+  }> = new Map();
   private roundRobinIndex = 0;
+
+  // Backoff configuration
+  private backoffConfig: BackoffConfig = DEFAULT_BACKOFF_CONFIG;
 
   // Proxy configuration (for Tor support)
   private proxyConfig: ProxyConfig | null = null;
@@ -260,6 +328,14 @@ export class ElectrumPool extends EventEmitter {
           failedRequests: 0,
           lastHealthCheck: null,
           isHealthy: true,
+          // Backoff state
+          consecutiveFailures: 0,
+          consecutiveSuccesses: 0,
+          backoffLevel: 0,
+          cooldownUntil: null,
+          weight: 1.0,
+          // Health history
+          healthHistory: [],
         });
       }
     }
@@ -751,10 +827,14 @@ export class ElectrumPool extends EventEmitter {
     const idleCount = connections.filter((c) => c.state === 'idle').length;
 
     // Build per-server stats
+    const now = Date.now();
     const serverStatsArray: ServerStats[] = this.servers.map(server => {
       const serverConnections = connections.filter(c => c.serverId === server.id);
       const healthyConns = serverConnections.filter(c => c.state !== 'closed' && c.client.isConnected()).length;
       const stats = this.serverStats.get(server.id);
+
+      // Check if currently in cooldown
+      const inCooldown = stats?.cooldownUntil ? stats.cooldownUntil.getTime() > now : false;
 
       return {
         serverId: server.id,
@@ -767,6 +847,13 @@ export class ElectrumPool extends EventEmitter {
         failedRequests: stats?.failedRequests || 0,
         isHealthy: stats?.isHealthy ?? true,
         lastHealthCheck: stats?.lastHealthCheck || null,
+        // Backoff state
+        consecutiveFailures: stats?.consecutiveFailures || 0,
+        backoffLevel: stats?.backoffLevel || 0,
+        cooldownUntil: inCooldown ? stats?.cooldownUntil || null : null,
+        weight: stats?.weight ?? 1.0,
+        // Health history (most recent first)
+        healthHistory: stats?.healthHistory || [],
       };
     });
 
@@ -805,36 +892,70 @@ export class ElectrumPool extends EventEmitter {
   // Private methods
 
   /**
-   * Select a server based on load balancing strategy
+   * Select a server based on load balancing strategy with backoff awareness
    */
   private selectServer(): ServerConfig | null {
-    const healthyServers = this.servers.filter(s => {
+    const now = Date.now();
+
+    // Filter servers: healthy, not in cooldown
+    const availableServers = this.servers.filter(s => {
       const stats = this.serverStats.get(s.id);
-      return s.enabled && (!stats || stats.isHealthy);
+      if (!s.enabled) return false;
+      if (!stats) return true;
+      if (!stats.isHealthy) return false;
+
+      // Check if server is in cooldown
+      if (stats.cooldownUntil && stats.cooldownUntil.getTime() > now) {
+        return false;
+      }
+
+      return true;
     });
 
-    if (healthyServers.length === 0) {
-      // If no healthy servers, try all enabled servers
+    if (availableServers.length === 0) {
+      // If no available servers, check if any are just in cooldown (not unhealthy)
+      // We can use cooldown servers as last resort
+      const cooldownServers = this.servers.filter(s => {
+        const stats = this.serverStats.get(s.id);
+        return s.enabled && stats?.isHealthy && stats?.cooldownUntil && stats.cooldownUntil.getTime() > now;
+      });
+
+      if (cooldownServers.length > 0) {
+        // Use the one with shortest remaining cooldown
+        log.warn('All available servers in cooldown, using server with shortest cooldown');
+        cooldownServers.sort((a, b) => {
+          const statsA = this.serverStats.get(a.id);
+          const statsB = this.serverStats.get(b.id);
+          return (statsA?.cooldownUntil?.getTime() || 0) - (statsB?.cooldownUntil?.getTime() || 0);
+        });
+        return cooldownServers[0];
+      }
+
+      // Fall back to any enabled server
       const enabledServers = this.servers.filter(s => s.enabled);
       if (enabledServers.length === 0) return null;
-      // In failover mode, use first by priority
       return enabledServers[0];
     }
 
     switch (this.config.loadBalancing) {
       case 'failover_only':
-        // Always use highest priority (lowest number) healthy server
-        return healthyServers[0];
+        // Always use highest priority (lowest number) available server
+        return availableServers[0];
 
       case 'least_connections':
-        // Select server with fewest active connections
-        let minConnections = Infinity;
-        let selectedServer = healthyServers[0];
-        for (const server of healthyServers) {
+        // Select server with fewest active connections, weighted by reliability
+        let bestScore = -Infinity;
+        let selectedServer = availableServers[0];
+        for (const server of availableServers) {
+          const stats = this.serverStats.get(server.id);
+          const weight = stats?.weight ?? 1.0;
           const serverConnections = Array.from(this.connections.values())
             .filter(c => c.serverId === server.id && c.state === 'active').length;
-          if (serverConnections < minConnections) {
-            minConnections = serverConnections;
+          // Higher weight = better, fewer connections = better
+          // Score combines both factors
+          const score = weight * 10 - serverConnections;
+          if (score > bestScore) {
+            bestScore = score;
             selectedServer = server;
           }
         }
@@ -842,10 +963,226 @@ export class ElectrumPool extends EventEmitter {
 
       case 'round_robin':
       default:
-        // Cycle through healthy servers
-        const server = healthyServers[this.roundRobinIndex % healthyServers.length];
-        this.roundRobinIndex = (this.roundRobinIndex + 1) % healthyServers.length;
-        return server;
+        // Weighted round robin - servers with higher weight are selected more often
+        return this.selectWeightedRoundRobin(availableServers);
+    }
+  }
+
+  /**
+   * Weighted round-robin selection
+   * Servers with higher weights are selected more frequently
+   */
+  private selectWeightedRoundRobin(servers: ServerConfig[]): ServerConfig {
+    // Calculate total weight
+    let totalWeight = 0;
+    const weights: number[] = [];
+    for (const server of servers) {
+      const stats = this.serverStats.get(server.id);
+      const weight = stats?.weight ?? 1.0;
+      weights.push(weight);
+      totalWeight += weight;
+    }
+
+    // Generate a random point in the weight space
+    // Use round robin index as seed for deterministic but varied selection
+    this.roundRobinIndex++;
+    const point = (this.roundRobinIndex * 0.618033988749895) % 1 * totalWeight; // Golden ratio for good distribution
+
+    // Find which server this point falls into
+    let cumulative = 0;
+    for (let i = 0; i < servers.length; i++) {
+      cumulative += weights[i];
+      if (point < cumulative) {
+        return servers[i];
+      }
+    }
+
+    // Fallback to last server
+    return servers[servers.length - 1];
+  }
+
+  /**
+   * Record a failure for a server (call this when requests fail)
+   */
+  recordServerFailure(serverId: string, errorType: 'timeout' | 'error' | 'disconnect' = 'error'): void {
+    const stats = this.serverStats.get(serverId);
+    if (!stats) return;
+
+    stats.failedRequests++;
+    stats.consecutiveFailures++;
+    stats.consecutiveSuccesses = 0;
+
+    // Apply extra penalty for timeouts (they waste more time)
+    const failureWeight = errorType === 'timeout' ? 2 : 1;
+    const effectiveFailures = stats.consecutiveFailures * failureWeight;
+
+    // Check if we've hit the threshold for backoff
+    if (effectiveFailures >= this.backoffConfig.failureThreshold) {
+      stats.backoffLevel = Math.min(stats.backoffLevel + 1, 5); // Max 5 levels
+
+      // Calculate cooldown with exponential backoff + jitter
+      const delay = this.calculateBackoffDelay(stats.backoffLevel);
+      stats.cooldownUntil = new Date(Date.now() + delay);
+
+      // Reduce weight
+      const newWeight = Math.max(
+        this.backoffConfig.minWeight,
+        1.0 - (stats.backoffLevel * this.backoffConfig.weightPenalty)
+      );
+      stats.weight = newWeight;
+
+      const server = this.servers.find(s => s.id === serverId);
+      log.warn(`Server ${server?.label || serverId} entered backoff level ${stats.backoffLevel}`, {
+        cooldownMs: delay,
+        cooldownUntil: stats.cooldownUntil.toISOString(),
+        weight: stats.weight,
+        consecutiveFailures: stats.consecutiveFailures,
+        errorType,
+      });
+
+      // Update database (fire and forget)
+      this.updateServerHealthInDb(serverId, stats.isHealthy, stats.consecutiveFailures);
+    }
+  }
+
+  /**
+   * Record a success for a server (call this when requests succeed)
+   */
+  recordServerSuccess(serverId: string): void {
+    const stats = this.serverStats.get(serverId);
+    if (!stats) return;
+
+    stats.totalRequests++;
+    stats.consecutiveSuccesses++;
+
+    // Clear cooldown immediately on success
+    if (stats.cooldownUntil) {
+      stats.cooldownUntil = null;
+    }
+
+    // Gradual recovery
+    if (stats.consecutiveSuccesses >= this.backoffConfig.recoveryThreshold) {
+      if (stats.backoffLevel > 0) {
+        stats.backoffLevel = Math.max(0, stats.backoffLevel - 1);
+        stats.weight = Math.min(1.0, stats.weight + this.backoffConfig.weightPenalty);
+        stats.consecutiveFailures = 0;
+
+        const server = this.servers.find(s => s.id === serverId);
+        if (stats.backoffLevel === 0) {
+          log.info(`Server ${server?.label || serverId} fully recovered from backoff`, {
+            weight: stats.weight,
+          });
+        } else {
+          log.info(`Server ${server?.label || serverId} recovered one backoff level`, {
+            newLevel: stats.backoffLevel,
+            weight: stats.weight,
+          });
+        }
+
+        // Update database
+        this.updateServerHealthInDb(serverId, true, stats.consecutiveFailures);
+      }
+      stats.consecutiveSuccesses = 0; // Reset for next recovery cycle
+    }
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   */
+  private calculateBackoffDelay(level: number): number {
+    // Exponential: baseDelay * 2^(level-1)
+    const exponentialDelay = this.backoffConfig.baseDelayMs * Math.pow(2, level - 1);
+
+    // Cap at max delay
+    const cappedDelay = Math.min(exponentialDelay, this.backoffConfig.maxDelayMs);
+
+    // Add jitter (±20%) to prevent thundering herd
+    const jitter = cappedDelay * 0.2 * (Math.random() * 2 - 1);
+
+    return Math.round(cappedDelay + jitter);
+  }
+
+  /**
+   * Check if a server is currently in cooldown
+   */
+  isServerInCooldown(serverId: string): boolean {
+    const stats = this.serverStats.get(serverId);
+    if (!stats || !stats.cooldownUntil) return false;
+    return stats.cooldownUntil.getTime() > Date.now();
+  }
+
+  /**
+   * Get current backoff state for a server
+   */
+  getServerBackoffState(serverId: string): {
+    level: number;
+    weight: number;
+    inCooldown: boolean;
+    cooldownRemaining: number;
+    consecutiveFailures: number;
+  } | null {
+    const stats = this.serverStats.get(serverId);
+    if (!stats) return null;
+
+    const now = Date.now();
+    const inCooldown = stats.cooldownUntil ? stats.cooldownUntil.getTime() > now : false;
+    const cooldownRemaining = inCooldown && stats.cooldownUntil
+      ? stats.cooldownUntil.getTime() - now
+      : 0;
+
+    return {
+      level: stats.backoffLevel,
+      weight: stats.weight,
+      inCooldown,
+      cooldownRemaining,
+      consecutiveFailures: stats.consecutiveFailures,
+    };
+  }
+
+  /**
+   * Manually reset backoff state for a server (e.g., after manual health check)
+   */
+  resetServerBackoff(serverId: string): void {
+    const stats = this.serverStats.get(serverId);
+    if (!stats) return;
+
+    const server = this.servers.find(s => s.id === serverId);
+    log.info(`Manually resetting backoff for server ${server?.label || serverId}`);
+
+    stats.consecutiveFailures = 0;
+    stats.consecutiveSuccesses = 0;
+    stats.backoffLevel = 0;
+    stats.cooldownUntil = null;
+    stats.weight = 1.0;
+    stats.isHealthy = true;
+
+    this.updateServerHealthInDb(serverId, true, 0);
+  }
+
+  /**
+   * Record a health check result to history
+   * @param serverId Server ID
+   * @param success Whether the health check succeeded
+   * @param latencyMs Response time in milliseconds
+   * @param error Error message if failed
+   */
+  private recordHealthCheckResult(serverId: string, success: boolean, latencyMs?: number, error?: string): void {
+    const stats = this.serverStats.get(serverId);
+    if (!stats) return;
+
+    const result: HealthCheckResult = {
+      timestamp: new Date(),
+      success,
+      latencyMs,
+      error: error ? error.substring(0, 200) : undefined, // Limit error message length
+    };
+
+    // Add to front of array (most recent first)
+    stats.healthHistory.unshift(result);
+
+    // Trim to max length
+    if (stats.healthHistory.length > MAX_HEALTH_HISTORY) {
+      stats.healthHistory = stats.healthHistory.slice(0, MAX_HEALTH_HISTORY);
     }
   }
 
@@ -982,7 +1319,7 @@ export class ElectrumPool extends EventEmitter {
    */
   private async performHealthChecks(): Promise<void> {
     // Track health status per server during this check cycle
-    const serverHealthResults: Map<string, { success: number; fail: number }> = new Map();
+    const serverHealthResults: Map<string, { success: number; fail: number; latencyMs?: number }> = new Map();
 
     for (const [id, conn] of this.connections) {
       if (conn.state === 'idle' || (conn.state === 'active' && conn.isDedicated)) {
@@ -991,22 +1328,51 @@ export class ElectrumPool extends EventEmitter {
           serverHealthResults.set(conn.serverId, { success: 0, fail: 0 });
         }
 
+        const startTime = Date.now();
         try {
           if (!conn.client.isConnected()) {
             throw new Error('Connection not connected');
           }
           // Lightweight health check
           await conn.client.getBlockHeight();
+          const latencyMs = Date.now() - startTime;
           conn.lastHealthCheck = new Date();
 
           // Track success for this server
-          serverHealthResults.get(conn.serverId)!.success++;
+          const serverResult = serverHealthResults.get(conn.serverId)!;
+          serverResult.success++;
+          serverResult.latencyMs = latencyMs;
+
+          // Record success for backoff recovery
+          this.recordServerSuccess(conn.serverId);
+
+          // Record to health history (only record once per server per cycle)
+          if (serverResult.success === 1) {
+            this.recordHealthCheckResult(conn.serverId, true, latencyMs);
+          }
         } catch (error) {
+          const latencyMs = Date.now() - startTime;
           this.stats.healthCheckFailures++;
-          log.warn(`Health check failed for connection ${id} (${conn.serverLabel})`, { error: String(error) });
+          const errorStr = String(error);
+          log.warn(`Health check failed for connection ${id} (${conn.serverLabel})`, { error: errorStr });
 
           // Track failure for this server
-          serverHealthResults.get(conn.serverId)!.fail++;
+          const serverResult = serverHealthResults.get(conn.serverId)!;
+          serverResult.fail++;
+
+          // Determine error type for backoff
+          const errorType: 'timeout' | 'error' | 'disconnect' =
+            errorStr.includes('timeout') || errorStr.includes('Timeout') ? 'timeout' :
+            errorStr.includes('not connected') || errorStr.includes('disconnect') ? 'disconnect' :
+            'error';
+
+          // Record failure for backoff
+          this.recordServerFailure(conn.serverId, errorType);
+
+          // Record to health history (only record once per server per cycle - on first failure)
+          if (serverResult.fail === 1) {
+            this.recordHealthCheckResult(conn.serverId, false, latencyMs, errorStr);
+          }
 
           if (conn.isDedicated) {
             // For dedicated connection, try to reconnect
@@ -1028,7 +1394,7 @@ export class ElectrumPool extends EventEmitter {
         if (results.fail > 0 && results.success === 0) {
           stats.isHealthy = false;
           // Update database (fire and forget)
-          this.updateServerHealthInDb(serverId, false, (stats as { failCount?: number }).failCount || 1);
+          this.updateServerHealthInDb(serverId, false, stats.consecutiveFailures);
           log.warn(`Server ${serverId} marked unhealthy after all connections failed health check`);
         } else if (results.success > 0) {
           // At least one success - mark healthy

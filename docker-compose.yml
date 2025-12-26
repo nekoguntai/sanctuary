@@ -81,6 +81,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # Node.js memory settings (increase heap for large wallet syncs)
+      NODE_OPTIONS: "--max-old-space-size=1536"
+
       # Server
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3001
@@ -146,12 +149,12 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 1G
+          memory: 2G
         reservations:
           cpus: '0.5'
-          memory: 512M
+          memory: 1G
     mem_swappiness: 10
-    memswap_limit: 1536M  # memory + 512M swap
+    memswap_limit: 2560M  # memory + 512M swap
 
   # ============================================
   # Database Migrations & Seeding (one-time run)

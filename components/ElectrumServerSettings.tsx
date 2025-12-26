@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ElectrumServer } from '../types';
 import { Button } from './ui/Button';
 import {
@@ -13,13 +13,60 @@ import {
   XCircle,
   Globe,
   Activity,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('ElectrumServerSettings');
 
 type Network = 'mainnet' | 'testnet' | 'signet';
+
+// Health History Blocks Component - shows colored blocks for recent health checks
+interface HealthHistoryBlocksProps {
+  history: bitcoinApi.HealthCheckResult[];
+  maxBlocks?: number;
+}
+
+const HealthHistoryBlocks: React.FC<HealthHistoryBlocksProps> = ({ history, maxBlocks = 10 }) => {
+  if (!history || history.length === 0) {
+    return null;
+  }
+
+  // Take the most recent N blocks (history is most-recent-first from backend)
+  const blocks = history.slice(0, maxBlocks);
+
+  return (
+    <div className="flex items-center space-x-0.5" title="Recent health checks (newest → oldest)">
+      {blocks.map((check, index) => {
+        const timestamp = new Date(check.timestamp).toLocaleString();
+        const latencyText = check.latencyMs ? `${check.latencyMs}ms` : '';
+        const tooltipText = check.success
+          ? `✓ ${timestamp}${latencyText ? ` (${latencyText})` : ''}`
+          : `✗ ${timestamp}${check.error ? `: ${check.error}` : ''}`;
+
+        return (
+          <div
+            key={`${check.timestamp}-${index}`}
+            className={`w-2 h-2 rounded-sm cursor-help transition-transform hover:scale-125 ${
+              check.success
+                ? 'bg-emerald-500 dark:bg-emerald-400'
+                : 'bg-rose-500 dark:bg-rose-400'
+            }`}
+            title={tooltipText}
+          />
+        );
+      })}
+      {history.length > maxBlocks && (
+        <span className="text-[9px] text-sanctuary-400 ml-1">
+          +{history.length - maxBlocks}
+        </span>
+      )}
+    </div>
+  );
+};
 
 // Preset servers for each network
 const PRESET_SERVERS = {
@@ -64,9 +111,17 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
   const [serverTestStatus, setServerTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
   const [serverTestErrors, setServerTestErrors] = useState<Record<string, string>>({});
   const [serverActionLoading, setServerActionLoading] = useState<string | null>(null);
+  const [poolStats, setPoolStats] = useState<bitcoinApi.PoolStats | null>(null);
 
   useEffect(() => {
     loadServers();
+    loadPoolStats();
+  }, []);
+
+  // Periodically refresh pool stats
+  useEffect(() => {
+    const interval = setInterval(loadPoolStats, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const loadServers = async () => {
@@ -89,6 +144,23 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPoolStats = async () => {
+    try {
+      const status = await bitcoinApi.getStatus();
+      if (status.pool?.stats) {
+        setPoolStats(status.pool.stats);
+      }
+    } catch (error) {
+      // Silently fail - pool stats are optional enhancement
+      log.debug('Failed to load pool stats', { error });
+    }
+  };
+
+  // Get pool stats for a specific server by ID
+  const getServerPoolStats = (serverId: string): bitcoinApi.ServerStats | undefined => {
+    return poolStats?.servers?.find(s => s.serverId === serverId);
   };
 
   const handleAddServer = async () => {
@@ -416,41 +488,75 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                     <div className="text-[10px] text-sanctuary-500 font-mono truncate">
                       {server.host}:{server.port} {server.useSsl && '(SSL)'}
                     </div>
-                    {/* Health Stats */}
-                    <div className="flex items-center space-x-3 mt-1 text-[10px] text-sanctuary-400">
-                      {server.lastHealthCheck && (
-                        <span title="Last health check">
-                          Checked: {new Date(server.lastHealthCheck).toLocaleTimeString()}
-                        </span>
-                      )}
-                      {server.healthCheckFails !== undefined && server.healthCheckFails > 0 && (
-                        <span className="text-amber-500" title="Consecutive failures">
-                          Fails: {server.healthCheckFails}
-                        </span>
-                      )}
-                    </div>
+                    {/* Health Stats and History */}
+                    {(() => {
+                      const poolServerStats = getServerPoolStats(server.id);
+                      return (
+                        <div className="flex flex-col space-y-1 mt-1">
+                          {/* Health History Blocks */}
+                          {poolServerStats?.healthHistory && poolServerStats.healthHistory.length > 0 && (
+                            <HealthHistoryBlocks history={poolServerStats.healthHistory} maxBlocks={12} />
+                          )}
+
+                          {/* Stats Row */}
+                          <div className="flex items-center space-x-3 text-[10px] text-sanctuary-400">
+                            {server.lastHealthCheck && (
+                              <span title="Last health check">
+                                Checked: {new Date(server.lastHealthCheck).toLocaleTimeString()}
+                              </span>
+                            )}
+                            {poolServerStats?.consecutiveFailures !== undefined && poolServerStats.consecutiveFailures > 0 && (
+                              <span className="text-amber-500" title="Consecutive failures">
+                                Fails: {poolServerStats.consecutiveFailures}
+                              </span>
+                            )}
+                            {poolServerStats?.weight !== undefined && poolServerStats.weight < 1.0 && (
+                              <span className="text-amber-500" title="Server weight (reduced due to failures)">
+                                Weight: {Math.round(poolServerStats.weight * 100)}%
+                              </span>
+                            )}
+                            {poolServerStats?.cooldownUntil && new Date(poolServerStats.cooldownUntil) > new Date() && (
+                              <span className="flex items-center space-x-1 text-rose-500" title="Server in cooldown">
+                                <Clock className="w-3 h-3" />
+                                <span>Cooldown until {new Date(poolServerStats.cooldownUntil).toLocaleTimeString()}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center space-x-1 ml-2">
-                  {/* Test Status */}
+                  {/* Test Status Badge */}
                   {serverTestStatus[server.id] === 'testing' && (
-                    <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                    <span className="flex items-center space-x-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-[10px] font-medium">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Testing...</span>
+                    </span>
                   )}
                   {serverTestStatus[server.id] === 'success' && (
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span className="flex items-center space-x-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded text-[10px] font-medium">
+                      <CheckCircle className="w-3 h-3" />
+                      <span>Connected</span>
+                    </span>
                   )}
                   {serverTestStatus[server.id] === 'error' && (
-                    <span title={serverTestErrors[server.id] || server.lastHealthCheckError || 'Connection test failed'}>
-                      <XCircle className="w-4 h-4 text-rose-500 cursor-help" />
+                    <span
+                      className="flex items-center space-x-1 px-2 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded text-[10px] font-medium cursor-help"
+                      title={serverTestErrors[server.id] || server.lastHealthCheckError || 'Connection test failed'}
+                    >
+                      <XCircle className="w-3 h-3" />
+                      <span>Failed</span>
                     </span>
                   )}
 
                   <button
                     onClick={() => handleTestServer(server.id)}
                     disabled={serverTestStatus[server.id] === 'testing'}
-                    className="p-1.5 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-600 rounded transition-colors"
+                    className="p-1.5 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-600 rounded transition-colors disabled:opacity-50"
                     title="Test connection"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />

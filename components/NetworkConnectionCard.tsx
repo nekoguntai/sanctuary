@@ -380,7 +380,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
 
           {/* Singleton Config */}
           {mode === 'singleton' && (
-            <div className="space-y-4 p-4 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded-xl">
+            <div className="space-y-4 p-4 surface-muted rounded-xl">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 sm:col-span-1">
                   <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Host</label>
@@ -476,7 +476,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
           {mode === 'pool' && (
             <div className="space-y-4">
               {/* Pool Settings */}
-              <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded-xl">
+              <div className="p-4 surface-muted rounded-xl">
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-1">Min Connections</label>
@@ -527,7 +527,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                 </div>
 
                 {servers.length === 0 && !isAddingServer && (
-                  <div className="p-4 text-center text-sanctuary-500 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded-xl">
+                  <div className="p-4 text-center text-sanctuary-500 surface-muted rounded-xl">
                     <Server className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No servers configured</p>
                     <div className="flex flex-wrap justify-center gap-2 mt-3">
@@ -632,7 +632,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
 
                 {/* Add Server Form */}
                 {isAddingServer && (
-                  <div className="mt-3 p-4 bg-sanctuary-50 dark:bg-sanctuary-800/30 rounded-xl space-y-3">
+                  <div className="mt-3 p-4 surface-muted rounded-xl space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <label className="block text-xs font-medium text-sanctuary-500 mb-1">Label</label>

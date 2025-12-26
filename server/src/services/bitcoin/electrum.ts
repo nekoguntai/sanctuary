@@ -112,6 +112,20 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Set the network for this client (used when created without explicitConfig)
+   */
+  setNetwork(network: 'mainnet' | 'testnet' | 'signet' | 'regtest'): void {
+    this.network = network;
+  }
+
+  /**
+   * Get the network for this client
+   */
+  getNetwork(): 'mainnet' | 'testnet' | 'signet' | 'regtest' {
+    return this.network;
+  }
+
+  /**
    * Get the bitcoinjs-lib network object for the current network
    */
   private getNetworkLib() {
@@ -186,13 +200,34 @@ class ElectrumClient extends EventEmitter {
       });
 
       if (nodeConfig && nodeConfig.type === 'electrum') {
-        host = nodeConfig.host;
-        port = nodeConfig.port;
-        // Use explicit useSsl setting from config
-        protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+        // Load per-network singleton config based on this.network
+        switch (this.network) {
+          case 'mainnet':
+            host = nodeConfig.mainnetSingletonHost || nodeConfig.host;
+            port = nodeConfig.mainnetSingletonPort || nodeConfig.port;
+            protocol = (nodeConfig.mainnetSingletonSsl ?? nodeConfig.useSsl) ? 'ssl' : 'tcp';
+            break;
+          case 'testnet':
+            host = nodeConfig.testnetSingletonHost || config.bitcoin.electrum.host;
+            port = nodeConfig.testnetSingletonPort || 51001;
+            protocol = nodeConfig.testnetSingletonSsl ? 'ssl' : 'tcp';
+            break;
+          case 'signet':
+            host = nodeConfig.signetSingletonHost || config.bitcoin.electrum.host;
+            port = nodeConfig.signetSingletonPort || 60001;
+            protocol = nodeConfig.signetSingletonSsl ? 'ssl' : 'tcp';
+            break;
+          case 'regtest':
+          default:
+            // Regtest uses legacy config
+            host = nodeConfig.host;
+            port = nodeConfig.port;
+            protocol = nodeConfig.useSsl ? 'ssl' : 'tcp';
+            break;
+        }
         // Check if self-signed certificates are allowed (opt-in for security)
         allowSelfSignedCert = nodeConfig.allowSelfSignedCert ?? false;
-        // Load proxy config from database
+        // Load proxy config from database (global, applies to all networks)
         if (nodeConfig.proxyEnabled && nodeConfig.proxyHost && nodeConfig.proxyPort) {
           proxy = {
             enabled: true,
@@ -914,15 +949,16 @@ const electrumClients = new Map<string, ElectrumClient>();
 /**
  * Get Electrum client instance for a specific network
  * @param network Bitcoin network (mainnet, testnet, signet, or regtest)
+ *
+ * Note: The client is created without explicitConfig, so connect() will load
+ * per-network config from the database.
  */
 export function getElectrumClientForNetwork(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): ElectrumClient {
   if (!electrumClients.has(network)) {
-    electrumClients.set(network, new ElectrumClient({
-      host: '', // Will be loaded from config in connect()
-      port: 0,
-      protocol: 'ssl',
-      network
-    }));
+    // Create client without explicitConfig - connect() will load per-network config from database
+    const client = new ElectrumClient();
+    client.setNetwork(network);
+    electrumClients.set(network, client);
   }
   return electrumClients.get(network)!;
 }

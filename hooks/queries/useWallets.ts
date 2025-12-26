@@ -208,11 +208,12 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
         .slice(0, limit);
     },
     enabled: walletIds.length > 0,
-    placeholderData: keepPreviousData,
+    // Don't keep previous data when wallet IDs change - show empty for new networks
   });
 
   return {
-    data: query.data ?? EMPTY_TRANSACTIONS,
+    // When no wallets selected (empty array), always return empty - don't show stale data
+    data: walletIds.length === 0 ? EMPTY_TRANSACTIONS : (query.data ?? EMPTY_TRANSACTIONS),
     isLoading: query.isLoading,
     isError: query.isError,
     refetch: query.refetch,
@@ -244,11 +245,12 @@ export function usePendingTransactions(walletIds: string[]) {
     enabled: walletIds.length > 0,
     refetchInterval: 30000, // 30 seconds
     staleTime: 15000, // Consider data stale after 15 seconds
-    placeholderData: keepPreviousData,
+    // Don't keep previous data when wallet IDs change - show empty for new networks
   });
 
   return {
-    data: query.data ?? EMPTY_PENDING,
+    // When no wallets selected (empty array), always return empty - don't show stale data
+    data: walletIds.length === 0 ? EMPTY_PENDING : (query.data ?? EMPTY_PENDING),
     isLoading: query.isLoading,
     isError: query.isError,
     refetch: query.refetch,
@@ -402,7 +404,7 @@ export function useBalanceHistory(
     },
     enabled: walletIds.length > 0,
     staleTime: 60000, // Consider stale after 1 minute
-    placeholderData: keepPreviousData,
+    // Don't keep previous data when wallet IDs change - show fresh for new networks
   });
 
   // Memoize default data to prevent re-renders when query.data is undefined
@@ -412,7 +414,8 @@ export function useBalanceHistory(
   ], [totalBalance]);
 
   return {
-    data: query.data ?? defaultData,
+    // When no wallets selected (empty array), always return default - don't show stale data
+    data: walletIds.length === 0 ? defaultData : (query.data ?? defaultData),
     isLoading: query.isLoading,
     isError: query.isError,
   };

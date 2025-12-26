@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
 import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
@@ -9,7 +9,9 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useWallets, useBalanceHistory } from '../hooks/queries/useWallets';
+import { useWallets, useBalanceHistory, useInvalidateAllWallets } from '../hooks/queries/useWallets';
+import { NetworkTabs, TabNetwork } from './NetworkTabs';
+import { NetworkSyncActions } from './NetworkSyncActions';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
@@ -19,8 +21,27 @@ type SortOrder = 'asc' | 'desc';
 export const WalletList: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { format } = useCurrency();
   const { user, updatePreferences } = useUser();
+  const invalidateAllWallets = useInvalidateAllWallets();
+
+  // Network tab state - persist in URL
+  const networkFromUrl = searchParams.get('network') as TabNetwork | null;
+  const [selectedNetwork, setSelectedNetwork] = useState<TabNetwork>(
+    networkFromUrl && ['mainnet', 'testnet', 'signet'].includes(networkFromUrl) ? networkFromUrl : 'mainnet'
+  );
+
+  // Update URL when network changes
+  const handleNetworkChange = (network: TabNetwork) => {
+    setSelectedNetwork(network);
+    if (network === 'mainnet') {
+      searchParams.delete('network');
+    } else {
+      searchParams.set('network', network);
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
 
   // Get view mode from user preferences, fallback to 'grid'
   const viewMode = (user?.preferences?.viewSettings?.wallets?.layout as ViewMode) || 'grid';
@@ -52,11 +73,24 @@ export const WalletList: React.FC = () => {
   // Use React Query for wallet data with automatic caching and refetching
   const { data: wallets = [], isLoading: loading, error } = useWallets();
 
+  // Filter wallets by selected network
+  const filteredWallets = useMemo(() =>
+    wallets.filter(w => w.network === selectedNetwork),
+    [wallets, selectedNetwork]
+  );
+
+  // Count wallets per network for tabs
+  const walletCounts = useMemo(() => ({
+    mainnet: wallets.filter(w => w.network === 'mainnet').length,
+    testnet: wallets.filter(w => w.network === 'testnet').length,
+    signet: wallets.filter(w => w.network === 'signet').length,
+  }), [wallets]);
+
   // Sort wallets based on current sort settings
   const sortedWallets = useMemo(() => {
-    if (!wallets.length) return wallets;
+    if (!filteredWallets.length) return filteredWallets;
 
-    return [...wallets].sort((a, b) => {
+    return [...filteredWallets].sort((a, b) => {
       let comparison = 0;
 
       switch (sortBy) {
@@ -81,10 +115,10 @@ export const WalletList: React.FC = () => {
 
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [wallets, sortBy, sortOrder]);
+  }, [filteredWallets, sortBy, sortOrder]);
 
-  const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
-  const walletIds = wallets.map(w => w.id);
+  const totalBalance = filteredWallets.reduce((acc, w) => acc + w.balance, 0);
+  const walletIds = filteredWallets.map(w => w.id);
 
   // Fetch real balance history from transactions
   const { data: chartData, isLoading: chartLoading } = useBalanceHistory(walletIds, totalBalance, timeframe);
@@ -131,11 +165,22 @@ export const WalletList: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in pb-8">
 
+      {/* Network Tabs */}
+      <div className="flex items-center justify-between">
+        <NetworkTabs
+          selectedNetwork={selectedNetwork}
+          onNetworkChange={handleNetworkChange}
+          walletCounts={walletCounts}
+        />
+      </div>
+
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">Wallet Overview</h2>
-          <p className="text-sanctuary-500">Manage your wallets and spending accounts</p>
+          <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">
+            {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Wallets
+          </h2>
+          <p className="text-sanctuary-500">Manage your {selectedNetwork} wallets and spending accounts</p>
         </div>
         <div className="flex items-center space-x-3">
             {/* Sort dropdown - shown in grid view */}
@@ -206,7 +251,7 @@ export const WalletList: React.FC = () => {
                 </div>
                 <div className="mt-6">
                     <p className="text-xs text-sanctuary-400">
-                        Aggregated across {wallets.length} wallet{wallets.length !== 1 ? 's' : ''}.
+                        Aggregated across {filteredWallets.length} {selectedNetwork} wallet{filteredWallets.length !== 1 ? 's' : ''}.
                     </p>
                 </div>
              </div>
@@ -283,17 +328,6 @@ export const WalletList: React.FC = () => {
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
                                 <Users className="w-3 h-3" />
                                 Shared
-                            </span>
-                        )}
-                        {wallet.network && wallet.network !== 'mainnet' && (
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                                wallet.network === 'testnet'
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20'
-                                    : wallet.network === 'signet'
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-500/20'
-                                    : 'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20'
-                            }`}>
-                                {wallet.network.charAt(0).toUpperCase() + wallet.network.slice(1)}
                             </span>
                         )}
                     </div>
@@ -373,18 +407,6 @@ export const WalletList: React.FC = () => {
                             </th>
                             <th
                               scope="col"
-                              onClick={() => setSortBy('network')}
-                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
-                            >
-                              <span className="inline-flex items-center gap-1">
-                                Network
-                                {sortBy === 'network' ? (
-                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                              </span>
-                            </th>
-                            <th
-                              scope="col"
                               className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
                             >
                               Sync
@@ -452,19 +474,6 @@ export const WalletList: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
-                                            wallet.network === 'mainnet'
-                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                                : wallet.network === 'testnet'
-                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
-                                                : wallet.network === 'signet'
-                                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
-                                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                                        }`}>
-                                            {wallet.network}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
                                         {wallet.syncInProgress ? (
                                             <span className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400">
                                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -508,6 +517,23 @@ export const WalletList: React.FC = () => {
             </div>
         </div>
       )}
+
+      {/* Network Sync Actions */}
+      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium text-sanctuary-500 uppercase tracking-wide mb-1">Sync Actions</h3>
+            <p className="text-xs text-sanctuary-400">
+              Sync or resync all {selectedNetwork} wallets
+            </p>
+          </div>
+          <NetworkSyncActions
+            network={selectedNetwork}
+            walletCount={filteredWallets.length}
+            onSyncStarted={() => invalidateAllWallets()}
+          />
+        </div>
+      </div>
     </div>
   );
 };

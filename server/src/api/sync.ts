@@ -295,4 +295,228 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/v1/sync/network/:network
+ * Queue all user's wallets for a specific network
+ */
+router.post('/network/:network', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { network } = req.params;
+    const { priority = 'normal' } = req.body;
+
+    // Validate network
+    if (!['mainnet', 'testnet', 'signet'].includes(network)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid network. Must be mainnet, testnet, or signet.',
+      });
+    }
+
+    // Find all user's wallets for this network
+    const wallets = await prisma.wallet.findMany({
+      where: {
+        network,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (wallets.length === 0) {
+      return res.json({
+        success: true,
+        queued: 0,
+        walletIds: [],
+        message: `No ${network} wallets found`,
+      });
+    }
+
+    const syncService = getSyncService();
+    const walletIds = wallets.map(w => w.id);
+
+    // Queue each wallet
+    for (const walletId of walletIds) {
+      syncService.queueSync(walletId, priority);
+    }
+
+    res.json({
+      success: true,
+      queued: walletIds.length,
+      walletIds,
+    });
+  } catch (error: any) {
+    log.error('[SYNC_API] Queue network wallets error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to queue network wallets',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/sync/network/:network/resync
+ * Full resync for all user's wallets of a specific network
+ * Requires X-Confirm-Resync: true header
+ */
+router.post('/network/:network/resync', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { network } = req.params;
+
+    // Validate network
+    if (!['mainnet', 'testnet', 'signet'].includes(network)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid network. Must be mainnet, testnet, or signet.',
+      });
+    }
+
+    // Require confirmation header for destructive operation
+    const confirmHeader = req.headers['x-confirm-resync'];
+    if (confirmHeader !== 'true') {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Full resync requires X-Confirm-Resync: true header',
+      });
+    }
+
+    // Find all user's wallets for this network
+    const wallets = await prisma.wallet.findMany({
+      where: {
+        network,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: { id: true, syncInProgress: true },
+    });
+
+    if (wallets.length === 0) {
+      return res.json({
+        success: true,
+        queued: 0,
+        walletIds: [],
+        message: `No ${network} wallets found`,
+      });
+    }
+
+    // Skip wallets with sync in progress
+    const eligibleWallets = wallets.filter(w => !w.syncInProgress);
+    const walletIds = eligibleWallets.map(w => w.id);
+
+    let totalDeletedTxs = 0;
+
+    // Clear transactions and reset state for each wallet
+    for (const walletId of walletIds) {
+      const deletedTxs = await prisma.transaction.deleteMany({
+        where: { walletId },
+      });
+      totalDeletedTxs += deletedTxs.count;
+
+      // Reset address used flags
+      await prisma.address.updateMany({
+        where: { walletId },
+        data: { used: false },
+      });
+
+      // Reset wallet sync state
+      await prisma.wallet.update({
+        where: { id: walletId },
+        data: {
+          syncInProgress: false,
+          lastSyncedAt: null,
+          lastSyncStatus: null,
+        },
+      });
+    }
+
+    // Queue all wallets for high-priority sync
+    const syncService = getSyncService();
+    for (const walletId of walletIds) {
+      syncService.queueSync(walletId, 'high');
+    }
+
+    res.json({
+      success: true,
+      queued: walletIds.length,
+      walletIds,
+      deletedTransactions: totalDeletedTxs,
+      skipped: wallets.length - eligibleWallets.length,
+    });
+  } catch (error: any) {
+    log.error('[SYNC_API] Resync network wallets error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to resync network wallets',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/sync/network/:network/status
+ * Get aggregate sync status for all wallets of a network
+ */
+router.get('/network/:network/status', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { network } = req.params;
+
+    // Validate network
+    if (!['mainnet', 'testnet', 'signet'].includes(network)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid network. Must be mainnet, testnet, or signet.',
+      });
+    }
+
+    // Find all user's wallets for this network with sync status
+    const wallets = await prisma.wallet.findMany({
+      where: {
+        network,
+        OR: [
+          { users: { some: { userId } } },
+          { group: { members: { some: { userId } } } },
+        ],
+      },
+      select: {
+        id: true,
+        syncInProgress: true,
+        lastSyncStatus: true,
+        lastSyncedAt: true,
+      },
+    });
+
+    const syncing = wallets.filter(w => w.syncInProgress).length;
+    const synced = wallets.filter(w => !w.syncInProgress && w.lastSyncStatus === 'success').length;
+    const failed = wallets.filter(w => !w.syncInProgress && w.lastSyncStatus === 'failed').length;
+    const pending = wallets.filter(w => !w.syncInProgress && !w.lastSyncStatus).length;
+
+    // Find the most recent sync time
+    const syncTimes = wallets
+      .filter(w => w.lastSyncedAt)
+      .map(w => new Date(w.lastSyncedAt!).getTime());
+    const lastSyncAt = syncTimes.length > 0 ? new Date(Math.max(...syncTimes)).toISOString() : null;
+
+    res.json({
+      network,
+      total: wallets.length,
+      syncing,
+      synced,
+      failed,
+      pending,
+      lastSyncAt,
+    });
+  } catch (error: any) {
+    log.error('[SYNC_API] Get network sync status error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to get network sync status',
+    });
+  }
+});
+
 export default router;

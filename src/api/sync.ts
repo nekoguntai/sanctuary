@@ -75,3 +75,61 @@ export interface ResyncResult {
 export async function resyncWallet(walletId: string): Promise<ResyncResult> {
   return apiClient.post<ResyncResult>(`/sync/resync/${walletId}`);
 }
+
+// Network-based sync types
+export type NetworkType = 'mainnet' | 'testnet' | 'signet';
+
+export interface NetworkSyncResult {
+  success: boolean;
+  queued: number;
+  walletIds: string[];
+  message?: string;
+}
+
+export interface NetworkResyncResult {
+  success: boolean;
+  queued: number;
+  walletIds: string[];
+  deletedTransactions: number;
+  skipped: number;
+  message?: string;
+}
+
+export interface NetworkSyncStatus {
+  network: NetworkType;
+  total: number;
+  syncing: number;
+  synced: number;
+  failed: number;
+  pending: number;
+  lastSyncAt: string | null;
+}
+
+/**
+ * Queue all wallets of a specific network for sync
+ */
+export async function syncNetworkWallets(
+  network: NetworkType,
+  priority: 'high' | 'normal' | 'low' = 'normal'
+): Promise<NetworkSyncResult> {
+  return apiClient.post<NetworkSyncResult>(`/sync/network/${network}`, { priority });
+}
+
+/**
+ * Full resync for all wallets of a specific network
+ * Clears all transactions and re-syncs from blockchain
+ */
+export async function resyncNetworkWallets(network: NetworkType): Promise<NetworkResyncResult> {
+  return apiClient.post<NetworkResyncResult>(`/sync/network/${network}/resync`, {}, {
+    headers: {
+      'X-Confirm-Resync': 'true',
+    },
+  });
+}
+
+/**
+ * Get aggregate sync status for all wallets of a network
+ */
+export async function getNetworkSyncStatus(network: NetworkType): Promise<NetworkSyncStatus> {
+  return apiClient.get<NetworkSyncStatus>(`/sync/network/${network}/status`);
+}

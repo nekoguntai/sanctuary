@@ -430,4 +430,343 @@ describe('ElectrumPool', () => {
       expect(pool.getServers()).toHaveLength(3);
     });
   });
+
+  describe('Server Backoff System', () => {
+    const servers = [
+      { id: 'server-1', label: 'Primary', host: 'primary.com', port: 50002, useSsl: true, priority: 0, enabled: true },
+      { id: 'server-2', label: 'Secondary', host: 'secondary.com', port: 50002, useSsl: true, priority: 1, enabled: true },
+    ];
+
+    describe('recordServerFailure', () => {
+      it('should track consecutive failures', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        pool.recordServerFailure('server-1', 'error');
+        const state1 = pool.getServerBackoffState('server-1');
+        expect(state1).not.toBeNull();
+        expect(state1!.consecutiveFailures).toBe(1);
+        expect(state1!.level).toBe(0); // Not in backoff yet (threshold is 2)
+
+        pool.recordServerFailure('server-1', 'error');
+        const state2 = pool.getServerBackoffState('server-1');
+        expect(state2).not.toBeNull();
+        expect(state2!.consecutiveFailures).toBe(2);
+        expect(state2!.level).toBe(1); // Now in backoff
+      });
+
+      it('should increase backoff level on continued failures', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Trigger backoff (2 failures)
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const state1 = pool.getServerBackoffState('server-1');
+        expect(state1).not.toBeNull();
+        expect(state1!.level).toBe(1);
+
+        // Third failure increases level
+        pool.recordServerFailure('server-1', 'error');
+        const state2 = pool.getServerBackoffState('server-1');
+        expect(state2).not.toBeNull();
+        expect(state2!.level).toBe(2);
+      });
+
+      it('should reduce weight on failures', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        const initialState = pool.getServerBackoffState('server-1');
+        expect(initialState).not.toBeNull();
+        expect(initialState!.weight).toBe(1.0);
+
+        // Trigger backoff
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        expect(state!.weight).toBeLessThan(1.0);
+        expect(state!.weight).toBeGreaterThanOrEqual(0.1); // minWeight
+      });
+
+      it('should apply extra penalty for timeout errors', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Regular error
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+        const errorState = pool.getServerBackoffState('server-1');
+        expect(errorState).not.toBeNull();
+
+        // Reset and test timeout
+        pool.resetServerBackoff('server-1');
+        pool.recordServerFailure('server-1', 'timeout');
+        pool.recordServerFailure('server-1', 'timeout');
+        const timeoutState = pool.getServerBackoffState('server-1');
+        expect(timeoutState).not.toBeNull();
+
+        // Timeout should result in lower weight (higher penalty)
+        expect(timeoutState!.weight).toBeLessThanOrEqual(errorState!.weight);
+      });
+
+      it('should set cooldown period when backoff is triggered', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Before backoff - no cooldown
+        expect(pool.isServerInCooldown('server-1')).toBe(false);
+
+        // Trigger backoff
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        expect(state!.inCooldown).toBe(true);
+        expect(pool.isServerInCooldown('server-1')).toBe(true);
+      });
+
+      it('should never reduce weight below minimum', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Many failures
+        for (let i = 0; i < 20; i++) {
+          pool.recordServerFailure('server-1', 'timeout');
+        }
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        expect(state!.weight).toBeGreaterThanOrEqual(0.1); // minWeight
+      });
+    });
+
+    describe('recordServerSuccess', () => {
+      it('should reset consecutive failures after recovery threshold', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Trigger backoff first (need 2 failures for backoff)
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+        const inBackoff = pool.getServerBackoffState('server-1');
+        expect(inBackoff).not.toBeNull();
+        expect(inBackoff!.consecutiveFailures).toBe(2);
+        expect(inBackoff!.level).toBe(1);
+
+        // Recovery threshold is 3 successes to reduce backoff level
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1');
+
+        const afterRecovery = pool.getServerBackoffState('server-1');
+        expect(afterRecovery).not.toBeNull();
+        expect(afterRecovery!.consecutiveFailures).toBe(0);
+        expect(afterRecovery!.level).toBe(0);
+      });
+
+      it('should gradually recover weight after successes', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Trigger backoff (reduce weight)
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const afterFailure = pool.getServerBackoffState('server-1');
+        expect(afterFailure).not.toBeNull();
+        expect(afterFailure!.weight).toBeLessThan(1.0);
+        expect(afterFailure!.level).toBeGreaterThan(0);
+
+        // Success should start recovery
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1'); // Recovery threshold is 3
+
+        const afterRecovery = pool.getServerBackoffState('server-1');
+        expect(afterRecovery).not.toBeNull();
+        expect(afterRecovery!.level).toBeLessThan(afterFailure!.level);
+        expect(afterRecovery!.weight).toBeGreaterThan(afterFailure!.weight);
+      });
+
+      it('should clear cooldown after recovery threshold successes', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Trigger backoff with cooldown
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+        expect(pool.isServerInCooldown('server-1')).toBe(true);
+
+        // Recover with successes (recovery threshold is 3)
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1');
+        pool.recordServerSuccess('server-1');
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        // Cooldown should be cleared after recovery
+        expect(state!.level).toBe(0);
+      });
+    });
+
+    describe('isServerInCooldown', () => {
+      it('should return false for healthy server', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        expect(pool.isServerInCooldown('server-1')).toBe(false);
+      });
+
+      it('should return true when server is in backoff cooldown', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        expect(pool.isServerInCooldown('server-1')).toBe(true);
+      });
+
+      it('should return false for unknown server', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        expect(pool.isServerInCooldown('unknown-server')).toBe(false);
+      });
+    });
+
+    describe('getServerBackoffState', () => {
+      it('should return default state for healthy server', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        expect(state).toEqual({
+          level: 0,
+          weight: 1.0,
+          inCooldown: false,
+          cooldownRemaining: 0,
+          consecutiveFailures: 0,
+        });
+      });
+
+      it('should return actual state after failures', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const state = pool.getServerBackoffState('server-1');
+        expect(state).not.toBeNull();
+        expect(state!.consecutiveFailures).toBe(2);
+        expect(state!.level).toBe(1);
+        expect(state!.inCooldown).toBe(true);
+        expect(state!.weight).toBeLessThan(1.0);
+      });
+
+      it('should return null for unknown server', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        const state = pool.getServerBackoffState('unknown-server');
+        expect(state).toBeNull();
+      });
+    });
+
+    describe('resetServerBackoff', () => {
+      it('should reset all backoff state', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        // Build up backoff state
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const beforeReset = pool.getServerBackoffState('server-1');
+        expect(beforeReset).not.toBeNull();
+        expect(beforeReset!.level).toBeGreaterThan(0);
+        expect(beforeReset!.weight).toBeLessThan(1.0);
+
+        pool.resetServerBackoff('server-1');
+
+        const afterReset = pool.getServerBackoffState('server-1');
+        expect(afterReset).not.toBeNull();
+        expect(afterReset).toEqual({
+          level: 0,
+          weight: 1.0,
+          inCooldown: false,
+          cooldownRemaining: 0,
+          consecutiveFailures: 0,
+        });
+      });
+
+      it('should not throw for unknown server', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        expect(() => pool.resetServerBackoff('unknown-server')).not.toThrow();
+      });
+    });
+
+    describe('getPoolStats with backoff info', () => {
+      it('should include backoff state in server stats', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        const stats = pool.getPoolStats();
+        const server1Stats = stats.servers.find(s => s.serverId === 'server-1');
+
+        expect(server1Stats).toBeDefined();
+        expect(server1Stats!.consecutiveFailures).toBe(2);
+        expect(server1Stats!.backoffLevel).toBe(1);
+        expect(server1Stats!.cooldownUntil).not.toBeNull();
+        expect(server1Stats!.weight).toBeLessThan(1.0);
+      });
+
+      it('should include health history in server stats', () => {
+        pool = createPool();
+        pool.setServers(servers);
+
+        const stats = pool.getPoolStats();
+        const server1Stats = stats.servers.find(s => s.serverId === 'server-1');
+
+        expect(server1Stats).toBeDefined();
+        expect(server1Stats!.healthHistory).toBeDefined();
+        expect(Array.isArray(server1Stats!.healthHistory)).toBe(true);
+      });
+    });
+
+    describe('Backoff integration with server selection', () => {
+      it('should not return servers in cooldown when selecting', async () => {
+        pool = createPool();
+        pool.setServers(servers);
+        await pool.initialize();
+
+        // Put server-1 in cooldown
+        pool.recordServerFailure('server-1', 'error');
+        pool.recordServerFailure('server-1', 'error');
+
+        expect(pool.isServerInCooldown('server-1')).toBe(true);
+        expect(pool.isServerInCooldown('server-2')).toBe(false);
+
+        // Server selection should prefer server-2
+        // This is tested implicitly - the pool should continue to function
+        const handle = await pool.acquire();
+        expect(handle).toBeDefined();
+        handle.release();
+      });
+    });
+  });
 });

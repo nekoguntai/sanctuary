@@ -11,301 +11,37 @@ import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
 import { walletLog } from '../../websocket/notifications';
-import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD, ADDRESS_GAP_LIMIT } from '../../constants';
-import * as addressDerivation from './addressDerivation';
-import * as bitcoin from 'bitcoinjs-lib';
+
+// Import modular utilities
+import {
+  getCachedBlockHeight,
+  setCachedBlockHeight,
+  getBlockHeight,
+  getBlockTimestamp,
+} from './utils/blockHeight';
+import { recalculateWalletBalances } from './utils/balanceCalculation';
+import { ensureGapLimit } from './sync/addressDiscovery';
+import {
+  updateTransactionConfirmations,
+  populateMissingTransactionFields,
+  type ConfirmationUpdate,
+  type PopulateFieldsResult,
+} from './sync/confirmations';
+
+// Re-export for backward compatibility
+export {
+  getCachedBlockHeight,
+  setCachedBlockHeight,
+  getBlockHeight,
+  recalculateWalletBalances,
+  ensureGapLimit,
+  updateTransactionConfirmations,
+  populateMissingTransactionFields,
+  type ConfirmationUpdate,
+  type PopulateFieldsResult,
+};
 
 const log = createLogger('BLOCKCHAIN');
-
-// Cached block height for fast confirmation calculations
-// Updated whenever getBlockHeight() is called or via setCachedBlockHeight()
-let cachedBlockHeight = 0;
-let cachedBlockHeightTime = 0;
-
-/**
- * Get the cached block height (for fast confirmation calculations)
- * Returns 0 if not yet cached
- */
-export function getCachedBlockHeight(): number {
-  return cachedBlockHeight;
-}
-
-/**
- * Set the cached block height (called from sync service when block headers are received)
- */
-export function setCachedBlockHeight(height: number): void {
-  if (height > cachedBlockHeight) {
-    cachedBlockHeight = height;
-    cachedBlockHeightTime = Date.now();
-    log.debug(`[BLOCKCHAIN] Cached block height updated to ${height}`);
-  }
-}
-
-/**
- * Recalculate balanceAfter for all transactions in a wallet
- * Called after new transactions are inserted to ensure running balances are accurate
- * OPTIMIZED: Uses batched updates instead of N+1 individual queries
- */
-export async function recalculateWalletBalances(walletId: string): Promise<void> {
-  // Get all transactions sorted by block time (oldest first)
-  const transactions = await prisma.transaction.findMany({
-    where: { walletId },
-    orderBy: [
-      { blockTime: 'asc' },
-      { createdAt: 'asc' },
-    ],
-    select: { id: true, amount: true },
-  });
-
-  if (transactions.length === 0) {
-    return;
-  }
-
-  // Calculate all running balances first
-  let runningBalance = BigInt(0);
-  const updates: { id: string; balanceAfter: bigint }[] = [];
-
-  for (const tx of transactions) {
-    runningBalance += tx.amount;
-    updates.push({ id: tx.id, balanceAfter: runningBalance });
-  }
-
-  // Batch update in chunks of 500 to avoid overwhelming the database
-  const BATCH_SIZE = 500;
-  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-    const batch = updates.slice(i, i + BATCH_SIZE);
-    await prisma.$transaction(
-      batch.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: { balanceAfter: u.balanceAfter },
-        })
-      )
-    );
-  }
-
-  log.debug(`[BLOCKCHAIN] Recalculated balances for ${transactions.length} transactions in wallet ${walletId}`);
-}
-
-/**
- * Check and expand addresses to maintain gap limit
- *
- * BIP-44 specifies a "gap limit" of 20 - the wallet should stop looking for
- * addresses after finding 20 consecutive unused addresses. Conversely, we need
- * to ensure there are always at least 20 unused addresses at the end of both
- * the receive and change chains.
- *
- * @returns Array of newly generated addresses that should be scanned
- */
-export async function ensureGapLimit(walletId: string): Promise<Array<{ address: string; derivationPath: string }>> {
-  const wallet = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { id: true, descriptor: true, network: true },
-  });
-
-  if (!wallet?.descriptor) {
-    log.debug(`[BLOCKCHAIN] Wallet ${walletId} has no descriptor, skipping gap limit check`);
-    return [];
-  }
-
-  // Get all addresses with their used status
-  const addresses = await prisma.address.findMany({
-    where: { walletId },
-    select: { derivationPath: true, index: true, used: true },
-    orderBy: { index: 'asc' },
-  });
-
-  // Separate into receive (/0/) and change (/1/) addresses
-  const receiveAddrs = addresses.filter(a => a.derivationPath?.includes('/0/'));
-  const changeAddrs = addresses.filter(a => a.derivationPath?.includes('/1/'));
-
-  const newAddresses: Array<{ address: string; derivationPath: string }> = [];
-
-  // Check receive addresses gap limit
-  const receiveGap = countUnusedGap(receiveAddrs);
-  if (receiveGap < ADDRESS_GAP_LIMIT) {
-    const maxReceiveIndex = Math.max(-1, ...receiveAddrs.map(a => a.index));
-    const toGenerate = ADDRESS_GAP_LIMIT - receiveGap;
-
-    walletLog(walletId, 'info', 'ADDRESS', `Expanding receive addresses (gap: ${receiveGap}/${ADDRESS_GAP_LIMIT})`, {
-      currentMax: maxReceiveIndex,
-      generating: toGenerate,
-    });
-
-    for (let i = maxReceiveIndex + 1; i <= maxReceiveIndex + toGenerate; i++) {
-      try {
-        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-          wallet.descriptor,
-          i,
-          { network: wallet.network as 'mainnet' | 'testnet' | 'regtest', change: false }
-        );
-        newAddresses.push({ address, derivationPath });
-      } catch (err) {
-        log.error(`Failed to derive receive address ${i}`, { error: err });
-      }
-    }
-  }
-
-  // Check change addresses gap limit
-  const changeGap = countUnusedGap(changeAddrs);
-  if (changeGap < ADDRESS_GAP_LIMIT) {
-    const maxChangeIndex = Math.max(-1, ...changeAddrs.map(a => a.index));
-    const toGenerate = ADDRESS_GAP_LIMIT - changeGap;
-
-    walletLog(walletId, 'info', 'ADDRESS', `Expanding change addresses (gap: ${changeGap}/${ADDRESS_GAP_LIMIT})`, {
-      currentMax: maxChangeIndex,
-      generating: toGenerate,
-    });
-
-    for (let i = maxChangeIndex + 1; i <= maxChangeIndex + toGenerate; i++) {
-      try {
-        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-          wallet.descriptor,
-          i,
-          { network: wallet.network as 'mainnet' | 'testnet' | 'regtest', change: true }
-        );
-        newAddresses.push({ address, derivationPath });
-      } catch (err) {
-        log.error(`Failed to derive change address ${i}`, { error: err });
-      }
-    }
-  }
-
-  // Bulk insert new addresses
-  if (newAddresses.length > 0) {
-    const addressesToCreate = newAddresses.map(a => ({
-      walletId,
-      address: a.address,
-      derivationPath: a.derivationPath,
-      index: parseInt(a.derivationPath.split('/').pop() || '0', 10),
-      used: false,
-    }));
-
-    await prisma.address.createMany({
-      data: addressesToCreate,
-      skipDuplicates: true,
-    });
-
-    walletLog(walletId, 'info', 'ADDRESS', `Generated ${newAddresses.length} new addresses to maintain gap limit`);
-  }
-
-  return newAddresses;
-}
-
-/**
- * Count consecutive unused addresses at the end of an address list
- */
-function countUnusedGap(addresses: Array<{ index: number; used: boolean }>): number {
-  if (addresses.length === 0) return 0;
-
-  // Sort by index descending to count from the end
-  const sorted = [...addresses].sort((a, b) => b.index - a.index);
-
-  let gap = 0;
-  for (const addr of sorted) {
-    if (!addr.used) {
-      gap++;
-    } else {
-      break; // Stop counting when we hit a used address
-    }
-  }
-
-  return gap;
-}
-
-/**
- * Simple LRU cache using Map's insertion order
- * When max size reached, evicts oldest entries
- */
-class LRUCache<K, V> {
-  private cache: Map<K, V>;
-  private maxSize: number;
-
-  constructor(maxSize: number) {
-    this.cache = new Map();
-    this.maxSize = maxSize;
-  }
-
-  get(key: K): V | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Move to end (most recently used)
-      this.cache.delete(key);
-      this.cache.set(key, value);
-    }
-    return value;
-  }
-
-  has(key: K): boolean {
-    return this.cache.has(key);
-  }
-
-  set(key: K, value: V): void {
-    // If key exists, delete first to update position
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    } else if (this.cache.size >= this.maxSize) {
-      // Evict oldest (first) entry
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
-      }
-    }
-    this.cache.set(key, value);
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  get size(): number {
-    return this.cache.size;
-  }
-}
-
-// Cache for block timestamps to avoid repeated lookups (max 1000 blocks)
-const blockTimestampCache = new LRUCache<number, Date>(1000);
-
-/**
- * Get block timestamp from block height
- * Block header is 80 bytes hex; timestamp is at bytes 68-72 (little-endian uint32)
- */
-async function getBlockTimestamp(height: number): Promise<Date | null> {
-  if (height <= 0) return null;
-
-  // Check cache first
-  const cached = blockTimestampCache.get(height);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  try {
-    const client = await getNodeClient();
-    const headerHex = await client.getBlockHeader(height);
-
-    // Block header structure (80 bytes):
-    // - version: 4 bytes (0-3)
-    // - prev_block_hash: 32 bytes (4-35)
-    // - merkle_root: 32 bytes (36-67)
-    // - timestamp: 4 bytes (68-71) - little-endian uint32
-    // - bits: 4 bytes (72-75)
-    // - nonce: 4 bytes (76-79)
-
-    // Extract timestamp bytes (68-71, each byte is 2 hex chars)
-    const timestampHex = headerHex.slice(136, 144); // bytes 68-71 = chars 136-143
-
-    // Convert from little-endian hex to number
-    const timestampBuffer = Buffer.from(timestampHex, 'hex');
-    const timestamp = timestampBuffer.readUInt32LE(0);
-
-    const date = new Date(timestamp * 1000);
-    blockTimestampCache.set(height, date);
-    return date;
-  } catch (error) {
-    log.warn(`[BLOCKCHAIN] Failed to get timestamp for block ${height}`, { error: String(error) });
-    return null;
-  }
-}
 
 /**
  * Sync address with blockchain
@@ -810,37 +546,13 @@ export async function syncWallet(walletId: string): Promise<{
     });
   }
 
-  // PHASE 3: Batch fetch transaction details for new txids using true RPC batching
-  walletLog(walletId, 'debug', 'SYNC', `Phase 3: Fetching ${newTxids.length} transaction details...`);
+  // PHASE 3/4/5 COMBINED: Incremental fetch, process, and insert
+  // This ensures progress is saved to DB as we go, so retries can continue where they left off
+  walletLog(walletId, 'debug', 'SYNC', `Phase 3: Incrementally fetching and saving ${newTxids.length} transactions...`);
   const txDetailsCache: Map<string, any> = new Map();
-  const TX_BATCH_SIZE = 25; // Number of transactions per batch RPC call
-
-  for (let i = 0; i < newTxids.length; i += TX_BATCH_SIZE) {
-    const batchTxids = newTxids.slice(i, i + TX_BATCH_SIZE);
-    try {
-      const batchResults = await client.getTransactionsBatch(batchTxids, true);
-      // Merge results into cache
-      for (const [txid, details] of batchResults) {
-        txDetailsCache.set(txid, details);
-      }
-    } catch (error) {
-      log.warn(`[BLOCKCHAIN] Batch tx fetch failed, falling back to individual requests`, { error: String(error) });
-      // Fallback to individual requests if batch fails
-      for (const txid of batchTxids) {
-        try {
-          const details = await client.getTransaction(txid, true);
-          txDetailsCache.set(txid, details);
-        } catch (e) {
-          log.warn(`[BLOCKCHAIN] Failed to get tx ${txid}`, { error: String(e) });
-        }
-      }
-    }
-  }
-
-  // PHASE 4: Process transactions and collect records to insert
-  walletLog(walletId, 'debug', 'SYNC', 'Phase 4: Processing transactions...');
-  const transactionsToCreate: any[] = [];
+  const TX_BATCH_SIZE = 10; // Reduced from 25 to avoid server rate limiting
   const currentHeight = await getBlockHeight();
+  let totalTransactions = 0;
 
   // Build txid -> height map from histories
   const txHeightMap = new Map<string, number>();
@@ -857,455 +569,483 @@ export async function syncWallet(walletId: string): Promise<{
     return false;
   };
 
-  // Process each address's history
-  for (const [addressStr, history] of historyResults) {
-    const addressRecord = addressMap.get(addressStr)!;
-
-    for (const item of history) {
-      const txDetails = txDetailsCache.get(item.tx_hash);
-      if (!txDetails) continue;
-
-      const outputs = txDetails.vout || [];
-      const inputs = txDetails.vin || [];
-
-      // Check if this address received funds
-      const isReceived = outputs.some((out: any) => outputMatchesAddress(out, addressStr));
-
-      // Get block timestamp
-      let blockTime: Date | null = null;
-      if (txDetails.time) {
-        blockTime = new Date(txDetails.time * 1000);
-      } else if (item.height > 0) {
-        blockTime = await getBlockTimestamp(item.height);
-      }
-
-      const confirmations = item.height > 0 ? Math.max(0, currentHeight - item.height + 1) : 0;
-
-      // First, check if wallet sent funds (any wallet address in inputs)
-      // This is needed to detect consolidations BEFORE creating received records
-      let isSent = false;
-      for (const input of inputs) {
-        if (input.coinbase) continue;
-
-        let inputAddr: string | undefined;
-        if (input.prevout && input.prevout.scriptPubKey) {
-          inputAddr = input.prevout.scriptPubKey.address ||
-            (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
-        } else if (input.txid && input.vout !== undefined) {
-          // Electrum doesn't provide prevout, so look up the previous transaction
-          // First check if we have it cached
-          const prevTx = txDetailsCache.get(input.txid);
-          if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-            const prevOutput = prevTx.vout[input.vout];
-            inputAddr = prevOutput.scriptPubKey?.address ||
-              (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-          } else {
-            // Need to fetch the previous transaction
-            try {
-              const fetchedPrevTx = await client.getTransaction(input.txid);
-              if (fetchedPrevTx && fetchedPrevTx.vout && fetchedPrevTx.vout[input.vout]) {
-                const prevOutput = fetchedPrevTx.vout[input.vout];
-                inputAddr = prevOutput.scriptPubKey?.address ||
-                  (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-                // Cache it for future use
-                txDetailsCache.set(input.txid, fetchedPrevTx);
-              }
-            } catch (e) {
-              // Skip if we can't look up the prev tx
-            }
-          }
-        }
-
-        if (inputAddr && walletAddressSet.has(inputAddr)) {
-          isSent = true;
-          break;
-        }
-      }
-
-      // Calculate output destinations and total outputs
-      let totalToExternal = 0;
-      let totalToWallet = 0;
-      let totalOutputs = 0;
-      for (const out of outputs) {
-        const outValue = Math.round(out.value * 100000000);
-        totalOutputs += outValue;
-        const outAddr = out.scriptPubKey?.address ||
-          (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
-        if (outAddr && !walletAddressSet.has(outAddr)) {
-          totalToExternal += outValue;
-        } else if (outAddr) {
-          totalToWallet += outValue;
-        }
-      }
-
-      // Calculate total inputs for fee calculation (only for sent/consolidation txs)
-      let totalInputs = 0;
-      if (isSent) {
-        for (const input of inputs) {
-          if (input.coinbase) continue;
-
-          let inputValue = 0;
-          if (input.prevout && input.prevout.value !== undefined) {
-            // mempool.space/esplora format - value in sats or BTC
-            inputValue = input.prevout.value >= 1000000
-              ? input.prevout.value  // already in sats
-              : Math.round(input.prevout.value * 100000000);  // BTC to sats
-          } else if (input.txid && input.vout !== undefined) {
-            // Look up from cached transaction
-            const prevTx = txDetailsCache.get(input.txid);
-            if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-              inputValue = Math.round(prevTx.vout[input.vout].value * 100000000);
-            }
-          }
-          totalInputs += inputValue;
-        }
-      }
-
-      // Calculate fee (only meaningful for sent/consolidation transactions)
-      const fee = isSent && totalInputs > 0 ? totalInputs - totalOutputs : null;
-
-      // Determine transaction type and create appropriate record
-      // Priority: consolidation > sent > received
-      // A consolidation is when funds move within wallet (inputs from wallet, all outputs to wallet)
-      const isConsolidation = isSent && totalToExternal === 0 && totalToWallet > 0;
-
-      if (isConsolidation && !existingTxMap.has(`${item.tx_hash}:consolidation`)) {
-        // Consolidation - funds moved within wallet, only fee is lost
-        // Amount is negative (fee paid)
-        const consolidationAmount = fee !== null ? -fee : 0;
-        transactionsToCreate.push({
-          txid: item.tx_hash,
-          walletId,
-          addressId: addressRecord.id,
-          type: 'consolidation',
-          amount: BigInt(consolidationAmount),
-          fee: fee !== null ? BigInt(fee) : null,
-          confirmations,
-          blockHeight: item.height > 0 ? item.height : null,
-          blockTime,
-        });
-        existingTxMap.set(`${item.tx_hash}:consolidation`, true);
-      } else if (isSent && totalToExternal > 0 && !existingTxMap.has(`${item.tx_hash}:sent`)) {
-        // Regular send to external address
-        // Amount is negative (funds leaving wallet = amount sent + fee)
-        const sentAmount = -(totalToExternal + (fee ?? 0));
-        transactionsToCreate.push({
-          txid: item.tx_hash,
-          walletId,
-          addressId: addressRecord.id,
-          type: 'sent',
-          amount: BigInt(sentAmount),
-          fee: fee !== null ? BigInt(fee) : null,
-          confirmations,
-          blockHeight: item.height > 0 ? item.height : null,
-          blockTime,
-        });
-        existingTxMap.set(`${item.tx_hash}:sent`, true);
-      } else if (!isSent && isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
-        // Received from external - only if NOT sent from wallet (not consolidation)
-        // Sum ALL outputs to ANY wallet address (handles batched payouts with multiple outputs to same wallet)
-        const amount = outputs
-          .filter((out: any) => {
-            const outAddr = out.scriptPubKey?.address || out.scriptPubKey?.addresses?.[0];
-            return outAddr && walletAddressSet.has(outAddr);
-          })
-          .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
-
-        transactionsToCreate.push({
-          txid: item.tx_hash,
-          walletId,
-          addressId: addressRecord.id,
-          type: 'received',
-          amount: BigInt(amount),
-          confirmations,
-          blockHeight: item.height > 0 ? item.height : null,
-          blockTime,
-        });
-        existingTxMap.set(`${item.tx_hash}:received`, true);
-      }
+  // Build address to derivation path map for input derivation paths
+  const addressToDerivationPath = new Map<string, string>();
+  for (const addr of addresses) {
+    if (addr.derivationPath) {
+      addressToDerivationPath.set(addr.address, addr.derivationPath);
     }
   }
 
-  // PHASE 5: Batch insert transactions
-  let totalTransactions = 0;
-  if (transactionsToCreate.length > 0) {
-    // Deduplicate by txid:type
-    const uniqueTxs = new Map<string, any>();
-    for (const tx of transactionsToCreate) {
-      const key = `${tx.txid}:${tx.type}`;
-      if (!uniqueTxs.has(key)) {
-        uniqueTxs.set(key, tx);
+  // Track all new transactions across batches for final stats
+  const allNewTransactions: any[] = [];
+
+  // INCREMENTAL SYNC: Process transactions in batches, saving to DB after each batch
+  // This ensures progress is preserved even if sync is interrupted
+  for (let batchIndex = 0; batchIndex < newTxids.length; batchIndex += TX_BATCH_SIZE) {
+    const batchTxids = newTxids.slice(batchIndex, batchIndex + TX_BATCH_SIZE);
+    const batchNumber = Math.floor(batchIndex / TX_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(newTxids.length / TX_BATCH_SIZE);
+
+    // Log progress for large syncs
+    if (newTxids.length > TX_BATCH_SIZE) {
+      walletLog(walletId, 'debug', 'SYNC', `Processing batch ${batchNumber}/${totalBatches} (${batchTxids.length} transactions)...`);
+    }
+
+    // Step 1: Fetch this batch of transactions
+    try {
+      const batchResults = await client.getTransactionsBatch(batchTxids, true);
+      // Merge results into cache (accumulates for input lookups)
+      for (const [txid, details] of batchResults) {
+        txDetailsCache.set(txid, details);
+      }
+    } catch (error) {
+      log.warn(`[BLOCKCHAIN] Batch tx fetch failed, falling back to individual requests`, { error: String(error) });
+      // Fallback to individual requests if batch fails
+      for (const txid of batchTxids) {
+        try {
+          const details = await client.getTransaction(txid, true);
+          txDetailsCache.set(txid, details);
+        } catch (e) {
+          log.warn(`[BLOCKCHAIN] Failed to get tx ${txid}`, { error: String(e) });
+        }
       }
     }
 
-    const uniqueTxArray = Array.from(uniqueTxs.values());
-    log.debug(`[BLOCKCHAIN] Inserting ${uniqueTxArray.length} transactions...`);
+    // Create a set of txids in this batch that were successfully fetched
+    const batchTxidSet = new Set(batchTxids.filter(txid => txDetailsCache.has(txid)));
 
-    // Check which transactions already exist (to avoid duplicate notifications)
-    const existingTxids = new Set(
-      (await prisma.transaction.findMany({
-        where: {
-          walletId,
-          txid: { in: uniqueTxArray.map(tx => tx.txid) },
-        },
-        select: { txid: true },
-      })).map(tx => tx.txid)
-    );
+    // Step 2: Process ONLY transactions in this batch
+    const transactionsToCreate: any[] = [];
 
-    // Filter to only truly new transactions
-    const newTransactions = uniqueTxArray.filter(tx => !existingTxids.has(tx.txid));
+    for (const [addressStr, history] of historyResults) {
+      const addressRecord = addressMap.get(addressStr)!;
 
-    // Use createMany for bulk insert (note: doesn't return created records)
-    await prisma.transaction.createMany({
-      data: uniqueTxArray,
-      skipDuplicates: true,
-    });
-    totalTransactions = newTransactions.length;
+      for (const item of history) {
+        // Skip if not in this batch
+        if (!batchTxidSet.has(item.tx_hash)) continue;
 
-    // Recalculate running balances for all transactions in this wallet
-    if (newTransactions.length > 0) {
-      await recalculateWalletBalances(walletId);
-    }
+        const txDetails = txDetailsCache.get(item.tx_hash);
+        if (!txDetails) continue;
 
-    // PHASE 5.25: Store transaction inputs and outputs for new transactions
-    // This provides full transaction normalization for detailed transaction views
-    if (newTransactions.length > 0) {
-      try {
-        // Query the created transaction records to get their database IDs
-        const createdTxRecords = await prisma.transaction.findMany({
-          where: {
-            walletId,
-            txid: { in: newTransactions.map(tx => tx.txid) },
-          },
-          select: { id: true, txid: true, type: true },
-        });
+        const outputs = txDetails.vout || [];
+        const inputs = txDetails.vin || [];
 
-        const txInputsToCreate: Array<{
-          transactionId: string;
-          inputIndex: number;
-          txid: string;
-          vout: number;
-          address: string;
-          amount: bigint;
-          derivationPath?: string;
-        }> = [];
+        // Check if this address received funds
+        const isReceived = outputs.some((out: any) => outputMatchesAddress(out, addressStr));
 
-        const txOutputsToCreate: Array<{
-          transactionId: string;
-          outputIndex: number;
-          address: string;
-          amount: bigint;
-          scriptPubKey?: string;
-          outputType: string;
-          isOurs: boolean;
-        }> = [];
+        // Get block timestamp
+        let blockTime: Date | null = null;
+        if (txDetails.time) {
+          blockTime = new Date(txDetails.time * 1000);
+        } else if (item.height > 0) {
+          blockTime = await getBlockTimestamp(item.height);
+        }
 
-        // Build address to derivation path map for input derivation paths
-        const addressToDerivationPath = new Map<string, string>();
-        for (const addr of addresses) {
-          if (addr.derivationPath) {
-            addressToDerivationPath.set(addr.address, addr.derivationPath);
+        const confirmations = item.height > 0 ? Math.max(0, currentHeight - item.height + 1) : 0;
+
+        // First, check if wallet sent funds (any wallet address in inputs)
+        // This is needed to detect consolidations BEFORE creating received records
+        let isSent = false;
+        for (const input of inputs) {
+          if (input.coinbase) continue;
+
+          let inputAddr: string | undefined;
+          if (input.prevout && input.prevout.scriptPubKey) {
+            inputAddr = input.prevout.scriptPubKey.address ||
+              (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+          } else if (input.txid && input.vout !== undefined) {
+            // Electrum doesn't provide prevout, so look up the previous transaction
+            // First check if we have it cached
+            const prevTx = txDetailsCache.get(input.txid);
+            if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+              const prevOutput = prevTx.vout[input.vout];
+              inputAddr = prevOutput.scriptPubKey?.address ||
+                (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+            } else {
+              // Need to fetch the previous transaction
+              try {
+                const fetchedPrevTx = await client.getTransaction(input.txid);
+                if (fetchedPrevTx && fetchedPrevTx.vout && fetchedPrevTx.vout[input.vout]) {
+                  const prevOutput = fetchedPrevTx.vout[input.vout];
+                  inputAddr = prevOutput.scriptPubKey?.address ||
+                    (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+                  // Cache it for future use
+                  txDetailsCache.set(input.txid, fetchedPrevTx);
+                }
+              } catch (e) {
+                // Skip if we can't look up the prev tx
+              }
+            }
+          }
+
+          if (inputAddr && walletAddressSet.has(inputAddr)) {
+            isSent = true;
+            break;
           }
         }
 
-        for (const txRecord of createdTxRecords) {
-          const txDetails = txDetailsCache.get(txRecord.txid);
-          if (!txDetails) continue;
+        // Calculate output destinations and total outputs
+        let totalToExternal = 0;
+        let totalToWallet = 0;
+        let totalOutputs = 0;
+        for (const out of outputs) {
+          const outValue = Math.round(out.value * 100000000);
+          totalOutputs += outValue;
+          const outAddr = out.scriptPubKey?.address ||
+            (out.scriptPubKey?.addresses && out.scriptPubKey.addresses[0]);
+          if (outAddr && !walletAddressSet.has(outAddr)) {
+            totalToExternal += outValue;
+          } else if (outAddr) {
+            totalToWallet += outValue;
+          }
+        }
 
-          const inputs = txDetails.vin || [];
-          const outputs = txDetails.vout || [];
+        // Calculate total inputs for fee calculation (only for sent/consolidation txs)
+        let totalInputs = 0;
+        if (isSent) {
+          for (const input of inputs) {
+            if (input.coinbase) continue;
 
-          // Process inputs
-          for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
-            const input = inputs[inputIdx];
-            if (input.coinbase) continue; // Skip coinbase inputs
-
-            let inputAddress: string | undefined;
-            let inputAmount = 0;
-
-            // Try to get input info from prevout (verbose mode) or cached tx
-            if (input.prevout && input.prevout.scriptPubKey) {
-              inputAddress = input.prevout.scriptPubKey.address ||
-                (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
-              if (input.prevout.value !== undefined) {
-                inputAmount = input.prevout.value >= 1000000
-                  ? input.prevout.value  // already in sats
-                  : Math.round(input.prevout.value * 100000000);  // BTC to sats
-              }
+            let inputValue = 0;
+            if (input.prevout && input.prevout.value !== undefined) {
+              // mempool.space/esplora format - value in sats or BTC
+              inputValue = input.prevout.value >= 1000000
+                ? input.prevout.value  // already in sats
+                : Math.round(input.prevout.value * 100000000);  // BTC to sats
             } else if (input.txid && input.vout !== undefined) {
               // Look up from cached transaction
               const prevTx = txDetailsCache.get(input.txid);
               if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-                const prevOutput = prevTx.vout[input.vout];
-                inputAddress = prevOutput.scriptPubKey?.address ||
-                  (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-                if (prevOutput.value !== undefined) {
-                  inputAmount = Math.round(prevOutput.value * 100000000);
+                inputValue = Math.round(prevTx.vout[input.vout].value * 100000000);
+              }
+            }
+            totalInputs += inputValue;
+          }
+        }
+
+        // Calculate fee (only meaningful for sent/consolidation transactions)
+        const fee = isSent && totalInputs > 0 ? totalInputs - totalOutputs : null;
+
+        // Determine transaction type and create appropriate record
+        // Priority: consolidation > sent > received
+        // A consolidation is when funds move within wallet (inputs from wallet, all outputs to wallet)
+        const isConsolidation = isSent && totalToExternal === 0 && totalToWallet > 0;
+
+        if (isConsolidation && !existingTxMap.has(`${item.tx_hash}:consolidation`)) {
+          // Consolidation - funds moved within wallet, only fee is lost
+          // Amount is negative (fee paid)
+          const consolidationAmount = fee !== null ? -fee : 0;
+          transactionsToCreate.push({
+            txid: item.tx_hash,
+            walletId,
+            addressId: addressRecord.id,
+            type: 'consolidation',
+            amount: BigInt(consolidationAmount),
+            fee: fee !== null ? BigInt(fee) : null,
+            confirmations,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
+          });
+          existingTxMap.set(`${item.tx_hash}:consolidation`, true);
+        } else if (isSent && totalToExternal > 0 && !existingTxMap.has(`${item.tx_hash}:sent`)) {
+          // Regular send to external address
+          // Amount is negative (funds leaving wallet = amount sent + fee)
+          const sentAmount = -(totalToExternal + (fee ?? 0));
+          transactionsToCreate.push({
+            txid: item.tx_hash,
+            walletId,
+            addressId: addressRecord.id,
+            type: 'sent',
+            amount: BigInt(sentAmount),
+            fee: fee !== null ? BigInt(fee) : null,
+            confirmations,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
+          });
+          existingTxMap.set(`${item.tx_hash}:sent`, true);
+        } else if (!isSent && isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
+          // Received from external - only if NOT sent from wallet (not consolidation)
+          // Sum ALL outputs to ANY wallet address (handles batched payouts with multiple outputs to same wallet)
+          const amount = outputs
+            .filter((out: any) => {
+              const outAddr = out.scriptPubKey?.address || out.scriptPubKey?.addresses?.[0];
+              return outAddr && walletAddressSet.has(outAddr);
+            })
+            .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+
+          transactionsToCreate.push({
+            txid: item.tx_hash,
+            walletId,
+            addressId: addressRecord.id,
+            type: 'received',
+            amount: BigInt(amount),
+            confirmations,
+            blockHeight: item.height > 0 ? item.height : null,
+            blockTime,
+          });
+          existingTxMap.set(`${item.tx_hash}:received`, true);
+        }
+      }
+    }
+
+    // Step 3: Insert this batch to DB immediately
+    if (transactionsToCreate.length > 0) {
+      // Deduplicate by txid:type
+      const uniqueTxs = new Map<string, any>();
+      for (const tx of transactionsToCreate) {
+        const key = `${tx.txid}:${tx.type}`;
+        if (!uniqueTxs.has(key)) {
+          uniqueTxs.set(key, tx);
+        }
+      }
+
+      const uniqueTxArray = Array.from(uniqueTxs.values());
+
+      // Check which transactions already exist (to avoid duplicate notifications)
+      const existingTxids = new Set(
+        (await prisma.transaction.findMany({
+          where: {
+            walletId,
+            txid: { in: uniqueTxArray.map(tx => tx.txid) },
+          },
+          select: { txid: true },
+        })).map(tx => tx.txid)
+      );
+
+      // Filter to only truly new transactions
+      const newTransactions = uniqueTxArray.filter(tx => !existingTxids.has(tx.txid));
+
+      if (newTransactions.length > 0) {
+        // Use createMany for bulk insert
+        await prisma.transaction.createMany({
+          data: uniqueTxArray,
+          skipDuplicates: true,
+        });
+        totalTransactions += newTransactions.length;
+        allNewTransactions.push(...newTransactions);
+
+        log.debug(`[BLOCKCHAIN] Batch ${batchNumber}: Inserted ${newTransactions.length} transactions`);
+
+        // Store transaction inputs and outputs for this batch
+        try {
+          const createdTxRecords = await prisma.transaction.findMany({
+            where: {
+              walletId,
+              txid: { in: newTransactions.map(tx => tx.txid) },
+            },
+            select: { id: true, txid: true, type: true },
+          });
+
+          const txInputsToCreate: Array<{
+            transactionId: string;
+            inputIndex: number;
+            txid: string;
+            vout: number;
+            address: string;
+            amount: bigint;
+            derivationPath?: string;
+          }> = [];
+
+          const txOutputsToCreate: Array<{
+            transactionId: string;
+            outputIndex: number;
+            address: string;
+            amount: bigint;
+            scriptPubKey?: string;
+            outputType: string;
+            isOurs: boolean;
+          }> = [];
+
+          for (const txRecord of createdTxRecords) {
+            const txDetails = txDetailsCache.get(txRecord.txid);
+            if (!txDetails) continue;
+
+            const inputs = txDetails.vin || [];
+            const outputs = txDetails.vout || [];
+
+            // Process inputs
+            for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
+              const input = inputs[inputIdx];
+              if (input.coinbase) continue;
+
+              let inputAddress: string | undefined;
+              let inputAmount = 0;
+
+              if (input.prevout && input.prevout.scriptPubKey) {
+                inputAddress = input.prevout.scriptPubKey.address ||
+                  (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
+                if (input.prevout.value !== undefined) {
+                  inputAmount = input.prevout.value >= 1000000
+                    ? input.prevout.value
+                    : Math.round(input.prevout.value * 100000000);
                 }
+              } else if (input.txid && input.vout !== undefined) {
+                const prevTx = txDetailsCache.get(input.txid);
+                if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+                  const prevOutput = prevTx.vout[input.vout];
+                  inputAddress = prevOutput.scriptPubKey?.address ||
+                    (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+                  if (prevOutput.value !== undefined) {
+                    inputAmount = Math.round(prevOutput.value * 100000000);
+                  }
+                }
+              }
+
+              if (inputAddress && input.txid !== undefined && input.vout !== undefined) {
+                txInputsToCreate.push({
+                  transactionId: txRecord.id,
+                  inputIndex: inputIdx,
+                  txid: input.txid,
+                  vout: input.vout,
+                  address: inputAddress,
+                  amount: BigInt(inputAmount),
+                  derivationPath: addressToDerivationPath.get(inputAddress),
+                });
               }
             }
 
-            if (inputAddress && input.txid !== undefined && input.vout !== undefined) {
-              txInputsToCreate.push({
+            // Process outputs
+            for (let outputIdx = 0; outputIdx < outputs.length; outputIdx++) {
+              const output = outputs[outputIdx];
+              const outputAddress = output.scriptPubKey?.address ||
+                (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
+
+              if (!outputAddress) continue;
+
+              const outputAmount = Math.round((output.value || 0) * 100000000);
+              const isOurs = walletAddressSet.has(outputAddress);
+
+              let outputType = 'unknown';
+              if (txRecord.type === 'sent') {
+                outputType = isOurs ? 'change' : 'recipient';
+              } else if (txRecord.type === 'received') {
+                outputType = isOurs ? 'recipient' : 'unknown';
+              } else if (txRecord.type === 'consolidation') {
+                outputType = 'consolidation';
+              }
+
+              txOutputsToCreate.push({
                 transactionId: txRecord.id,
-                inputIndex: inputIdx,
-                txid: input.txid,
-                vout: input.vout,
-                address: inputAddress,
-                amount: BigInt(inputAmount),
-                derivationPath: addressToDerivationPath.get(inputAddress),
+                outputIndex: outputIdx,
+                address: outputAddress,
+                amount: BigInt(outputAmount),
+                scriptPubKey: output.scriptPubKey?.hex,
+                outputType,
+                isOurs,
               });
             }
           }
 
-          // Process outputs
-          for (let outputIdx = 0; outputIdx < outputs.length; outputIdx++) {
-            const output = outputs[outputIdx];
-            const outputAddress = output.scriptPubKey?.address ||
-              (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
-
-            if (!outputAddress) continue; // Skip OP_RETURN or non-standard outputs
-
-            const outputAmount = Math.round((output.value || 0) * 100000000);
-            const isOurs = walletAddressSet.has(outputAddress);
-
-            // Classify output type based on transaction type and ownership
-            let outputType = 'unknown';
-            if (txRecord.type === 'sent') {
-              outputType = isOurs ? 'change' : 'recipient';
-            } else if (txRecord.type === 'received') {
-              outputType = isOurs ? 'recipient' : 'unknown';
-            } else if (txRecord.type === 'consolidation') {
-              outputType = 'consolidation';
-            }
-
-            txOutputsToCreate.push({
-              transactionId: txRecord.id,
-              outputIndex: outputIdx,
-              address: outputAddress,
-              amount: BigInt(outputAmount),
-              scriptPubKey: output.scriptPubKey?.hex,
-              outputType,
-              isOurs,
+          if (txInputsToCreate.length > 0) {
+            await prisma.transactionInput.createMany({
+              data: txInputsToCreate,
+              skipDuplicates: true,
             });
           }
+
+          if (txOutputsToCreate.length > 0) {
+            await prisma.transactionOutput.createMany({
+              data: txOutputsToCreate,
+              skipDuplicates: true,
+            });
+          }
+        } catch (ioError) {
+          log.warn(`[BLOCKCHAIN] Failed to store transaction inputs/outputs: ${ioError}`);
         }
 
-        // Batch insert inputs and outputs
-        if (txInputsToCreate.length > 0) {
-          await prisma.transactionInput.createMany({
-            data: txInputsToCreate,
-            skipDuplicates: true,
-          });
-          log.debug(`[BLOCKCHAIN] Stored ${txInputsToCreate.length} transaction inputs`);
+        // Auto-apply address labels for this batch
+        try {
+          const addressIds = [...new Set(newTransactions.map(tx => tx.addressId).filter(Boolean))] as string[];
+          if (addressIds.length > 0) {
+            const addressLabels = await prisma.addressLabel.findMany({
+              where: { addressId: { in: addressIds } },
+            });
+
+            if (addressLabels.length > 0) {
+              const labelsByAddress = new Map<string, string[]>();
+              for (const al of addressLabels) {
+                const labels = labelsByAddress.get(al.addressId) || [];
+                labels.push(al.labelId);
+                labelsByAddress.set(al.addressId, labels);
+              }
+
+              const createdTxs = await prisma.transaction.findMany({
+                where: {
+                  walletId,
+                  txid: { in: newTransactions.map(tx => tx.txid) },
+                },
+                select: { id: true, txid: true, addressId: true },
+              });
+
+              const txLabelData: { transactionId: string; labelId: string }[] = [];
+              for (const tx of createdTxs) {
+                if (tx.addressId) {
+                  const labels = labelsByAddress.get(tx.addressId) || [];
+                  for (const labelId of labels) {
+                    txLabelData.push({ transactionId: tx.id, labelId });
+                  }
+                }
+              }
+
+              if (txLabelData.length > 0) {
+                await prisma.transactionLabel.createMany({
+                  data: txLabelData,
+                  skipDuplicates: true,
+                });
+              }
+            }
+          }
+        } catch (labelError) {
+          log.warn(`[BLOCKCHAIN] Failed to auto-apply address labels: ${labelError}`);
         }
 
-        if (txOutputsToCreate.length > 0) {
-          await prisma.transactionOutput.createMany({
-            data: txOutputsToCreate,
-            skipDuplicates: true,
+        // Send notifications for this batch (async, don't block)
+        const { notifyNewTransactions } = await import('../notifications/notificationService');
+        notifyNewTransactions(walletId, newTransactions.map(tx => ({
+          txid: tx.txid,
+          type: tx.type,
+          amount: tx.amount,
+        }))).catch(err => {
+          log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
+        });
+
+        // Broadcast WebSocket events for this batch
+        const { getNotificationService } = await import('../../websocket/notifications');
+        const notificationService = getNotificationService();
+        for (const tx of newTransactions) {
+          notificationService.broadcastTransactionNotification({
+            txid: tx.txid,
+            walletId,
+            type: tx.type === 'received' ? 'received' : 'sent',
+            amount: Number(tx.amount),
+            confirmations: tx.confirmations || 0,
+            blockHeight: tx.blockHeight ?? undefined,
+            timestamp: tx.blockTime || new Date(),
           });
-          log.debug(`[BLOCKCHAIN] Stored ${txOutputsToCreate.length} transaction outputs`);
         }
-      } catch (ioError) {
-        // Don't fail the sync if I/O storage fails
-        log.warn(`[BLOCKCHAIN] Failed to store transaction inputs/outputs: ${ioError}`);
       }
     }
 
-    // Log transaction type breakdown (only new ones)
-    const received = newTransactions.filter(t => t.type === 'received').length;
-    const sent = newTransactions.filter(t => t.type === 'sent').length;
-    const consolidation = newTransactions.filter(t => t.type === 'consolidation').length;
+    // Small delay between batches to avoid overwhelming server
+    if (batchIndex + TX_BATCH_SIZE < newTxids.length) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  // Recalculate running balances once after all transactions are inserted
+  if (allNewTransactions.length > 0) {
+    await recalculateWalletBalances(walletId);
+
+    // Log transaction type breakdown
+    const received = allNewTransactions.filter(t => t.type === 'received').length;
+    const sent = allNewTransactions.filter(t => t.type === 'sent').length;
+    const consolidation = allNewTransactions.filter(t => t.type === 'consolidation').length;
     walletLog(walletId, 'info', 'BLOCKCHAIN', `Recorded ${totalTransactions} new transactions`, {
       received,
       sent,
       consolidation,
     });
-
-    // Only send notifications for NEW transactions (not already in database)
-    if (newTransactions.length > 0) {
-      // Send notifications for new transactions (Telegram + Push, async, don't block sync)
-      const { notifyNewTransactions } = await import('../notifications/notificationService');
-      notifyNewTransactions(walletId, newTransactions.map(tx => ({
-        txid: tx.txid,
-        type: tx.type,
-        amount: tx.amount,
-      }))).catch(err => {
-        log.warn(`[BLOCKCHAIN] Failed to send notifications: ${err}`);
-      });
-
-      // Broadcast WebSocket events for real-time frontend notifications and sounds
-      const { getNotificationService } = await import('../../websocket/notifications');
-      const notificationService = getNotificationService();
-      for (const tx of newTransactions) {
-        notificationService.broadcastTransactionNotification({
-          txid: tx.txid,
-          walletId,
-          type: tx.type === 'received' ? 'received' : 'sent',
-          amount: Number(tx.amount),
-          confirmations: tx.confirmations || 0,
-          blockHeight: tx.blockHeight ?? undefined,
-          timestamp: tx.blockTime || new Date(),
-        });
-      }
-    }
-
-    // PHASE 5.5: Auto-apply address labels to new transactions
-    // When an address has labels, new transactions at that address inherit them
-    try {
-      // Get unique addressIds from created transactions
-      const addressIds = [...new Set(uniqueTxArray.map(tx => tx.addressId).filter(Boolean))] as string[];
-
-      if (addressIds.length > 0) {
-        // Fetch address labels for these addresses
-        const addressLabels = await prisma.addressLabel.findMany({
-          where: { addressId: { in: addressIds } },
-        });
-
-        if (addressLabels.length > 0) {
-          // Group labels by addressId
-          const labelsByAddress = new Map<string, string[]>();
-          for (const al of addressLabels) {
-            const labels = labelsByAddress.get(al.addressId) || [];
-            labels.push(al.labelId);
-            labelsByAddress.set(al.addressId, labels);
-          }
-
-          // Query the created transactions to get their IDs
-          const createdTxs = await prisma.transaction.findMany({
-            where: {
-              walletId,
-              txid: { in: uniqueTxArray.map(tx => tx.txid) },
-            },
-            select: { id: true, txid: true, addressId: true },
-          });
-
-          // Build TransactionLabel records
-          const txLabelData: { transactionId: string; labelId: string }[] = [];
-          for (const tx of createdTxs) {
-            if (tx.addressId) {
-              const labels = labelsByAddress.get(tx.addressId) || [];
-              for (const labelId of labels) {
-                txLabelData.push({ transactionId: tx.id, labelId });
-              }
-            }
-          }
-
-          // Batch insert transaction labels
-          if (txLabelData.length > 0) {
-            await prisma.transactionLabel.createMany({
-              data: txLabelData,
-              skipDuplicates: true,
-            });
-            log.debug(`[BLOCKCHAIN] Auto-applied ${txLabelData.length} labels to transactions from address labels`);
-          }
-        }
-      }
-    } catch (labelError) {
-      // Don't fail the sync if labeling fails
-      log.warn(`[BLOCKCHAIN] Failed to auto-apply address labels: ${labelError}`);
-    }
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses using true RPC batching
@@ -1619,20 +1359,7 @@ export async function syncWallet(walletId: string): Promise<{
 }
 
 /**
- * Get current block height
- */
-export async function getBlockHeight(): Promise<number> {
-  const client = await getNodeClient();
-  const height = await client.getBlockHeight();
-
-  // Update the cache
-  setCachedBlockHeight(height);
-
-  return height;
-}
-
-/**
- * Calculate confirmations for a transaction
+ * Calculate confirmations for a transaction (internal helper)
  */
 async function getConfirmations(blockHeight: number): Promise<number> {
   if (blockHeight <= 0) return 0;
@@ -1768,443 +1495,4 @@ export async function checkAddress(
       error: 'Could not check address on blockchain',
     };
   }
-}
-
-/**
- * Confirmation update result with milestone tracking
- */
-export interface ConfirmationUpdate {
-  txid: string;
-  oldConfirmations: number;
-  newConfirmations: number;
-}
-
-/**
- * Update confirmations for pending transactions - OPTIMIZED with batch updates
- * Returns detailed info about which transactions changed, for milestone notifications
- */
-export async function updateTransactionConfirmations(walletId: string): Promise<ConfirmationUpdate[]> {
-  // Get deep confirmation threshold from settings
-  const deepThresholdSetting = await prisma.systemSetting.findUnique({
-    where: { key: 'deepConfirmationThreshold' },
-  });
-  const deepConfirmationThreshold = deepThresholdSetting
-    ? JSON.parse(deepThresholdSetting.value)
-    : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
-
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      confirmations: { lt: deepConfirmationThreshold }, // Only update transactions below deep confirmation threshold
-      blockHeight: { not: null },
-    },
-    select: { id: true, txid: true, blockHeight: true, confirmations: true },
-  });
-
-  if (transactions.length === 0) return [];
-
-  const currentHeight = await getBlockHeight();
-
-  // Calculate new confirmations and collect updates
-  const updates: Array<{ id: string; txid: string; oldConfirmations: number; newConfirmations: number }> = [];
-
-  for (const tx of transactions) {
-    if (tx.blockHeight) {
-      const newConfirmations = Math.max(0, currentHeight - tx.blockHeight + 1);
-      if (newConfirmations !== tx.confirmations) {
-        updates.push({
-          id: tx.id,
-          txid: tx.txid,
-          oldConfirmations: tx.confirmations,
-          newConfirmations,
-        });
-      }
-    }
-  }
-
-  // Batch update using a transaction
-  if (updates.length > 0) {
-    await prisma.$transaction(
-      updates.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: { confirmations: u.newConfirmations },
-        })
-      )
-    );
-  }
-
-  return updates.map(u => ({
-    txid: u.txid,
-    oldConfirmations: u.oldConfirmations,
-    newConfirmations: u.newConfirmations,
-  }));
-}
-
-/**
- * Result from populating missing transaction fields
- */
-export interface PopulateFieldsResult {
-  updated: number;
-  confirmationUpdates: ConfirmationUpdate[];
-}
-
-/**
- * Populate missing transaction fields (blockHeight, addressId, blockTime, fee) from blockchain
- * Called during sync to fill in data for transactions that were created before
- * these fields existed or were populated
- * OPTIMIZED with batch fetching and batch updates
- * Returns both count and confirmation updates for notification broadcasting
- */
-export async function populateMissingTransactionFields(walletId: string): Promise<PopulateFieldsResult> {
-  const client = await getNodeClient();
-
-
-  // Find transactions with missing fields (including fee and counterparty address)
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      walletId,
-      OR: [
-        { blockHeight: null },
-        { addressId: null },
-        { blockTime: null },
-        { fee: null },
-        { counterpartyAddress: null },
-      ],
-    },
-    include: {
-      wallet: {
-        include: {
-          addresses: true,
-        },
-      },
-    },
-  });
-
-  if (transactions.length === 0) {
-    return { updated: 0, confirmationUpdates: [] };
-  }
-
-  log.debug(`[BLOCKCHAIN] Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
-
-  const currentHeight = await getBlockHeight();
-
-  // PHASE 0: Get block heights from address history (more reliable than verbose tx for some servers)
-  // This handles servers like Blockstream that don't support verbose transaction responses
-  const txHeightFromHistory = new Map<string, number>();
-  const addressesForHistory = new Set<string>();
-
-  // Collect addresses that have transactions with missing blockHeight
-  for (const tx of transactions) {
-    if (tx.blockHeight === null && tx.wallet.addresses) {
-      for (const addr of tx.wallet.addresses) {
-        addressesForHistory.add(addr.address);
-      }
-    }
-  }
-
-  // Fetch address histories to get transaction heights
-  const HISTORY_BATCH_SIZE = 10;
-  const addressList = Array.from(addressesForHistory);
-  for (let i = 0; i < addressList.length; i += HISTORY_BATCH_SIZE) {
-    const batch = addressList.slice(i, i + HISTORY_BATCH_SIZE);
-    const results = await Promise.all(
-      batch.map(async (address) => {
-        try {
-          const history = await client.getAddressHistory(address);
-          return history;
-        } catch (error) {
-          return [];
-        }
-      })
-    );
-    for (const history of results) {
-      for (const item of history) {
-        if (item.height > 0) {
-          txHeightFromHistory.set(item.tx_hash, item.height);
-        }
-      }
-    }
-  }
-
-  // PHASE 1: Batch fetch all transaction details in parallel
-  const TX_BATCH_SIZE = 5;
-  const txDetailsCache = new Map<string, any>();
-  const txids = transactions.map(tx => tx.txid);
-
-  for (let i = 0; i < txids.length; i += TX_BATCH_SIZE) {
-    const batch = txids.slice(i, i + TX_BATCH_SIZE);
-    const results = await Promise.all(
-      batch.map(async (txid) => {
-        try {
-          const details = await client.getTransaction(txid, true);
-          return { txid, details };
-        } catch (error) {
-          log.warn(`[BLOCKCHAIN] Failed to fetch tx ${txid}`, { error: String(error) });
-          return { txid, details: null };
-        }
-      })
-    );
-    for (const result of results) {
-      if (result.details) {
-        txDetailsCache.set(result.txid, result.details);
-      }
-    }
-  }
-
-  // Collect all pending updates
-  const pendingUpdates: Array<{ id: string; txid: string; oldConfirmations: number; data: any }> = [];
-  let updated = 0;
-
-  for (const tx of transactions) {
-    try {
-      // Get transaction details from cache (may be null if verbose not supported)
-      const txDetails = txDetailsCache.get(tx.txid);
-      const oldConfirmations = tx.confirmations;
-
-      const updates: any = {};
-
-      // Populate blockHeight if missing
-      // Handle Electrum (blockheight), Bitcoin Core RPC (confirmations), or address history
-      if (tx.blockHeight === null) {
-        if (txDetails?.blockheight) {
-          // Electrum provides blockheight directly
-          updates.blockHeight = txDetails.blockheight;
-          updates.confirmations = Math.max(0, currentHeight - txDetails.blockheight + 1);
-        } else if (txDetails?.confirmations && txDetails.confirmations > 0) {
-          // Bitcoin Core RPC provides confirmations, calculate blockHeight
-          const calculatedBlockHeight = currentHeight - txDetails.confirmations + 1;
-          updates.blockHeight = calculatedBlockHeight;
-          updates.confirmations = txDetails.confirmations;
-        } else if (txHeightFromHistory.has(tx.txid)) {
-          // Fallback: get height from address history (for servers like Blockstream that don't support verbose)
-          const heightFromHistory = txHeightFromHistory.get(tx.txid)!;
-          updates.blockHeight = heightFromHistory;
-          updates.confirmations = Math.max(0, currentHeight - heightFromHistory + 1);
-          log.debug(`[BLOCKCHAIN] Got blockHeight ${heightFromHistory} from address history for tx ${tx.txid}`);
-        }
-      }
-
-      // Skip remaining field population if we don't have transaction details
-      if (!txDetails) {
-        // Still save blockHeight update if we got it from address history
-        if (Object.keys(updates).length > 0) {
-          pendingUpdates.push({ id: tx.id, txid: tx.txid, oldConfirmations, data: updates });
-          updated++;
-        }
-        continue;
-      }
-
-      // Populate blockTime if missing
-      if (tx.blockTime === null) {
-        if (txDetails.time) {
-          updates.blockTime = new Date(txDetails.time * 1000);
-        } else if (tx.blockHeight || updates.blockHeight) {
-          // Derive timestamp from block header if tx.time not available
-          const height = updates.blockHeight || tx.blockHeight;
-          const blockTime = await getBlockTimestamp(height);
-          if (blockTime) {
-            updates.blockTime = blockTime;
-          }
-        }
-      }
-
-      const inputs = txDetails.vin || [];
-      const outputs = txDetails.vout || [];
-      const isSentTx = tx.type === 'sent' || tx.type === 'send';
-      const isConsolidationTx = tx.type === 'consolidation';
-      const isReceivedTx = tx.type === 'received' || tx.type === 'receive';
-
-      // Populate fee if missing - for sent and consolidation transactions (receiver doesn't pay fees)
-      if (tx.fee === null && (isSentTx || isConsolidationTx)) {
-        try {
-          // Some Electrum servers provide fee directly
-          if (txDetails.fee != null) {
-            // Fee is in BTC, convert to sats
-            updates.fee = BigInt(Math.round(txDetails.fee * 100000000));
-          } else {
-            // Calculate fee from inputs - outputs
-            let totalInputValue = 0;
-            let totalOutputValue = 0;
-
-            // Calculate total output value
-            for (const output of outputs) {
-              if (output.value != null) {
-                totalOutputValue += Math.round(output.value * 100000000);
-              }
-            }
-
-            // Calculate total input value (need to look up previous outputs)
-            for (const input of inputs) {
-              // Skip coinbase transactions
-              if (input.coinbase) {
-                totalInputValue = totalOutputValue; // Coinbase has no fee from user perspective
-                break;
-              }
-
-              // If prevout info is included (verbose mode)
-              if (input.prevout && input.prevout.value != null) {
-                totalInputValue += Math.round(input.prevout.value * 100000000);
-              } else if (input.txid && input.vout != null) {
-                // Need to fetch the previous transaction to get the value
-                try {
-                  const prevTx = await client.getTransaction(input.txid, true);
-                  if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-                    totalInputValue += Math.round(prevTx.vout[input.vout].value * 100000000);
-                  }
-                } catch (e) {
-                  log.warn(`[BLOCKCHAIN] Could not fetch input tx ${input.txid}`, { error: String(e) });
-                }
-              }
-            }
-
-            // Only set fee if we successfully calculated inputs
-            if (totalInputValue > 0 && totalInputValue >= totalOutputValue) {
-              const fee = totalInputValue - totalOutputValue;
-              if (fee > 0 && fee < 100000000) { // Sanity check: fee should be less than 1 BTC
-                updates.fee = BigInt(fee);
-              }
-            }
-          }
-        } catch (feeError) {
-          log.warn(`[BLOCKCHAIN] Could not calculate fee for tx ${tx.txid}`, { error: String(feeError) });
-        }
-      }
-
-      // Populate counterparty address if missing
-      if (tx.counterpartyAddress === null) {
-        try {
-          if (isReceivedTx) {
-            // For received transactions, get the sender address from inputs
-            for (const input of inputs) {
-              // Skip coinbase transactions
-              if (input.coinbase) break;
-
-              // Try to get address from prevout (verbose mode)
-              if (input.prevout && input.prevout.scriptPubKey) {
-                const senderAddr = input.prevout.scriptPubKey.address ||
-                  (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
-                if (senderAddr) {
-                  updates.counterpartyAddress = senderAddr;
-                  break;
-                }
-              } else if (input.txid && input.vout != null) {
-                // Fetch the previous transaction to get sender address
-                try {
-                  const prevTx = await client.getTransaction(input.txid, true);
-                  if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-                    const prevOutput = prevTx.vout[input.vout];
-                    const senderAddr = prevOutput.scriptPubKey?.address ||
-                      (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-                    if (senderAddr) {
-                      updates.counterpartyAddress = senderAddr;
-                      break;
-                    }
-                  }
-                } catch (e) {
-                  log.warn(`[BLOCKCHAIN] Could not fetch input tx for sender address`, { error: String(e) });
-                }
-              }
-            }
-          } else if (isSentTx) {
-            // For sent transactions, get the recipient address from outputs
-            // Skip change outputs (outputs that go back to our wallet)
-            const walletAddressStrings = tx.wallet.addresses.map(a => a.address);
-            for (const output of outputs) {
-              const outputAddr = output.scriptPubKey?.address ||
-                (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
-              // Skip if it's our own address (change output)
-              if (outputAddr && !walletAddressStrings.includes(outputAddr)) {
-                updates.counterpartyAddress = outputAddr;
-                break;
-              }
-            }
-          }
-        } catch (counterpartyError) {
-          log.warn(`[BLOCKCHAIN] Could not get counterparty address for tx ${tx.txid}`, { error: String(counterpartyError) });
-        }
-      }
-
-      // Populate addressId if missing - find which wallet address was involved
-      const walletAddressStrings = tx.wallet.addresses.map(a => a.address);
-
-      if (tx.addressId === null && tx.wallet.addresses.length > 0) {
-        // Check outputs for receive transactions
-        if (tx.type === 'received' || tx.type === 'receive') {
-          const outputs = txDetails.vout || [];
-          for (const output of outputs) {
-            const outputAddresses = output.scriptPubKey?.addresses || [];
-            // Also check for address field directly (newer Electrum format)
-            if (output.scriptPubKey?.address) {
-              outputAddresses.push(output.scriptPubKey.address);
-            }
-
-            for (const addr of outputAddresses) {
-              if (walletAddressStrings.includes(addr)) {
-                const matchingAddress = tx.wallet.addresses.find(a => a.address === addr);
-                if (matchingAddress) {
-                  updates.addressId = matchingAddress.id;
-                  break;
-                }
-              }
-            }
-            if (updates.addressId) break;
-          }
-        }
-
-        // Check inputs for send transactions
-        if (tx.type === 'sent' || tx.type === 'send') {
-          const inputs = txDetails.vin || [];
-          for (const input of inputs) {
-            if (input.prevout && input.prevout.scriptPubKey) {
-              const inputAddress = input.prevout.scriptPubKey.address ||
-                (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
-
-              if (inputAddress && walletAddressStrings.includes(inputAddress)) {
-                const matchingAddress = tx.wallet.addresses.find(a => a.address === inputAddress);
-                if (matchingAddress) {
-                  updates.addressId = matchingAddress.id;
-                  break;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Collect updates if any
-      if (Object.keys(updates).length > 0) {
-        pendingUpdates.push({ id: tx.id, txid: tx.txid, oldConfirmations, data: updates });
-      }
-    } catch (error) {
-      log.warn(`[BLOCKCHAIN] Failed to populate fields for tx ${tx.txid}`, { error: String(error) });
-    }
-  }
-
-  // PHASE 2: Batch apply all updates
-  if (pendingUpdates.length > 0) {
-    log.debug(`[BLOCKCHAIN] Applying ${pendingUpdates.length} transaction updates...`);
-    await prisma.$transaction(
-      pendingUpdates.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: u.data,
-        })
-      )
-    );
-    updated = pendingUpdates.length;
-  }
-
-  // Extract confirmation updates for notification broadcasting
-  // Only include updates where confirmations actually changed
-  const confirmationUpdates: ConfirmationUpdate[] = pendingUpdates
-    .filter(u => u.data.confirmations !== undefined && u.data.confirmations !== u.oldConfirmations)
-    .map(u => ({
-      txid: u.txid,
-      oldConfirmations: u.oldConfirmations,
-      newConfirmations: u.data.confirmations,
-    }));
-
-  log.debug(`[BLOCKCHAIN] Populated missing fields for ${updated} transactions, ${confirmationUpdates.length} confirmation updates`);
-  return { updated, confirmationUpdates };
 }

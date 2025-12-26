@@ -195,9 +195,18 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
     setServerTestStatus(prev => ({ ...prev, [server.id]: 'testing' }));
     try {
       const result = await onTestConnection(server.host, server.port, server.useSsl);
-      setServerTestStatus(prev => ({ ...prev, [server.id]: result.success ? 'success' : 'error' }));
+      const status = result.success ? 'success' : 'error';
+      setServerTestStatus(prev => ({ ...prev, [server.id]: status }));
+      // Auto-clear status after 5 seconds
+      setTimeout(() => {
+        setServerTestStatus(prev => ({ ...prev, [server.id]: 'idle' }));
+      }, 5000);
     } catch {
       setServerTestStatus(prev => ({ ...prev, [server.id]: 'error' }));
+      // Auto-clear error status after 5 seconds
+      setTimeout(() => {
+        setServerTestStatus(prev => ({ ...prev, [server.id]: 'idle' }));
+      }, 5000);
     }
   };
 
@@ -557,33 +566,77 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-2 h-2 rounded-full ${
-                              serverTestStatus[server.id] === 'success' ? 'bg-green-500' :
-                              serverTestStatus[server.id] === 'error' ? 'bg-red-500' :
-                              server.isHealthy ? 'bg-green-500' : 'bg-sanctuary-400'
+                            {/* Health Status Indicator */}
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              serverTestStatus[server.id] === 'success' ? 'bg-emerald-500' :
+                              serverTestStatus[server.id] === 'error' ? 'bg-rose-500' :
+                              server.isHealthy ? 'bg-emerald-500' :
+                              server.isHealthy === false ? 'bg-rose-500' : 'bg-sanctuary-400'
                             }`} />
-                            <div>
+                            <div className="min-w-0">
                               <div className="flex items-center space-x-2">
-                                <span className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100">
+                                <span className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100 truncate">
                                   {server.label}
                                 </span>
-                                <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                <span className={`px-1.5 py-0.5 text-xs rounded flex-shrink-0 ${
                                   server.useSsl ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-500'
                                 }`}>
                                   {server.useSsl ? 'SSL' : 'TCP'}
                                 </span>
                               </div>
                               <span className="text-xs text-sanctuary-500">{server.host}:{server.port}</span>
+                              {/* Health History Blocks & Stats */}
+                              <div className="flex items-center space-x-2 mt-1">
+                                {/* Health History Blocks - 10 blocks showing recent health */}
+                                <div className="flex items-center space-x-0.5" title={
+                                  server.lastHealthCheck
+                                    ? `Last check: ${new Date(server.lastHealthCheck).toLocaleTimeString()}${server.healthCheckFails ? ` | ${server.healthCheckFails} consecutive fail${server.healthCheckFails > 1 ? 's' : ''}` : ''}`
+                                    : 'No health checks yet'
+                                }>
+                                  {Array.from({ length: 10 }).map((_, i) => {
+                                    // Calculate health block color based on fail count
+                                    // Most recent blocks (lower index) show current state
+                                    const failCount = server.healthCheckFails ?? 0;
+                                    const isFailedBlock = i < failCount;
+                                    const hasHealthData = server.lastHealthCheck !== null && server.lastHealthCheck !== undefined;
+
+                                    return (
+                                      <div
+                                        key={i}
+                                        className={`w-1.5 h-3 rounded-sm ${
+                                          !hasHealthData ? 'bg-sanctuary-300 dark:bg-sanctuary-600' :
+                                          isFailedBlock ? 'bg-rose-400 dark:bg-rose-500' :
+                                          'bg-emerald-400 dark:bg-emerald-500'
+                                        }`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                                {/* Last check time */}
+                                {server.lastHealthCheck && (
+                                  <span className="text-[10px] text-sanctuary-400">
+                                    {new Date(server.lastHealthCheck).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center space-x-1">
+                            {/* Manual Test Status Icons */}
+                            {serverTestStatus[server.id] === 'success' && (
+                              <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            )}
+                            {serverTestStatus[server.id] === 'error' && (
+                              <XCircle className="w-4 h-4 text-rose-500" />
+                            )}
                             <button
                               onClick={() => handleTestServer(server)}
                               className="p-1.5 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800"
                               disabled={serverTestStatus[server.id] === 'testing'}
+                              title="Test connection"
                             >
                               {serverTestStatus[server.id] === 'testing' ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-sanctuary-400" />
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                               ) : (
                                 <RefreshCw className="w-4 h-4 text-sanctuary-400" />
                               )}

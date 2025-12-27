@@ -466,7 +466,7 @@ export class SanctauryWebSocketServer {
     const channels: string[] = [];
 
     // Global channels
-    if (event.type === 'block') {
+    if (event.type === 'block' || event.type === 'newBlock') {
       channels.push('blocks');
     }
 

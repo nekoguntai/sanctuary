@@ -19,6 +19,7 @@ export type WebSocketEventType =
   | 'balance'
   | 'confirmation'
   | 'block'
+  | 'newBlock'
   | 'mempool'
   | 'sync'
   | 'log'

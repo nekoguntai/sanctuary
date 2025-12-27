@@ -523,7 +523,20 @@ export async function createTransaction(
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   // Parse account xpub for deriving public keys
-  // Convert zpub/ypub/etc to standard xpub format for parsing
+  //
+  // CRITICAL FOR HARDWARE WALLET SIGNING:
+  // Hardware wallets (Foundation Passport, Keystone, SeedSigner) require BIP32 derivation
+  // info in PSBT inputs to verify the signing key belongs to them. This includes:
+  //   - Master fingerprint (first 4 bytes of hash160 of master public key)
+  //   - Derivation path (e.g., m/84'/0'/0'/0/5)
+  //   - Public key at that path
+  //
+  // zpub/ypub/vpub use different version bytes than xpub, which causes bip32.fromBase58()
+  // to calculate the wrong fingerprint. This makes hardware wallets reject the PSBT with
+  // errors like "already signed" or "unknown key" because the fingerprint doesn't match.
+  //
+  // The convertToStandardXpub() function replaces version bytes to standard xpub format
+  // while preserving the actual key data, ensuring correct fingerprint calculation.
   let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
   if (accountXpub) {
     try {
@@ -1472,7 +1485,20 @@ export async function createBatchTransaction(
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   // Parse account xpub for deriving public keys
-  // Convert zpub/ypub/etc to standard xpub format for parsing
+  //
+  // CRITICAL FOR HARDWARE WALLET SIGNING:
+  // Hardware wallets (Foundation Passport, Keystone, SeedSigner) require BIP32 derivation
+  // info in PSBT inputs to verify the signing key belongs to them. This includes:
+  //   - Master fingerprint (first 4 bytes of hash160 of master public key)
+  //   - Derivation path (e.g., m/84'/0'/0'/0/5)
+  //   - Public key at that path
+  //
+  // zpub/ypub/vpub use different version bytes than xpub, which causes bip32.fromBase58()
+  // to calculate the wrong fingerprint. This makes hardware wallets reject the PSBT with
+  // errors like "already signed" or "unknown key" because the fingerprint doesn't match.
+  //
+  // The convertToStandardXpub() function replaces version bytes to standard xpub format
+  // while preserving the actual key data, ensuring correct fingerprint calculation.
   let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
   if (accountXpub) {
     try {

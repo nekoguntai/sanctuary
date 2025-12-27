@@ -305,14 +305,27 @@ export const useModelDownloadProgress = (
 /**
  * Hook to invalidate React Query cache when WebSocket events are received
  * This ensures that Dashboard pending transactions update immediately
- * when a transaction is confirmed or received
+ * when a transaction is confirmed, received, or when a new block arrives.
+ *
+ * BLOCK CONFIRMATION SPEED:
+ * Previously, confirmations only updated when the backend finished processing
+ * all wallets and sent individual 'confirmation' events. This was slow compared
+ * to Sparrow Wallet which updates immediately on new blocks.
+ *
+ * Now we subscribe to 'blocks' channel and listen for 'newBlock' events,
+ * which are broadcast immediately when Electrum notifies of a new block.
+ * This triggers an immediate cache invalidation, making the UI react
+ * as fast as Sparrow does.
  */
 export const useWebSocketQueryInvalidation = () => {
   // Import queryClient dynamically to avoid circular dependencies
-  const { connected } = useWebSocket();
+  const { connected, subscribe, unsubscribe } = useWebSocket();
 
   useEffect(() => {
     if (!connected) return;
+
+    // Subscribe to blocks channel for new block notifications
+    subscribe('blocks');
 
     // Import queryClient lazily
     let queryClient: import('@tanstack/react-query').QueryClient | null = null;
@@ -337,14 +350,29 @@ export const useWebSocketQueryInvalidation = () => {
       }
     };
 
+    // Handle new block events - immediately refresh confirmations
+    const handleNewBlock = (event: WebSocketEvent) => {
+      if (!queryClient) return;
+      if (event.event !== 'newBlock') return;
+
+      // Invalidate pending transactions to show updated confirmations
+      queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
+      // Also refresh wallets since UTXOs may have new confirmations
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+    };
+
     websocketClient.on('transaction', handleTransactionEvent);
     websocketClient.on('confirmation', handleTransactionEvent);
     websocketClient.on('balance', handleTransactionEvent);
+    websocketClient.on('newBlock', handleNewBlock);
 
     return () => {
+      unsubscribe('blocks');
       websocketClient.off('transaction', handleTransactionEvent);
       websocketClient.off('confirmation', handleTransactionEvent);
       websocketClient.off('balance', handleTransactionEvent);
+      websocketClient.off('newBlock', handleNewBlock);
     };
-  }, [connected]);
+  }, [connected, subscribe, unsubscribe]);
 };

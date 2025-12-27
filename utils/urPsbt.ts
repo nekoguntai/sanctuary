@@ -4,10 +4,33 @@
  * Encode and decode PSBTs using Uniform Resources (UR) format
  * for QR code-based signing with air-gapped hardware wallets.
  *
- * Supports:
+ * SUPPORTED DEVICES:
  * - Foundation Passport (ur:crypto-psbt)
  * - Keystone (ur:crypto-psbt)
  * - SeedSigner (ur:crypto-psbt)
+ *
+ * UR FORMAT NOTES:
+ * - UR (Uniform Resource) is a standard for encoding binary data in QR codes
+ * - For PSBTs, the type is "crypto-psbt" which wraps the binary PSBT in CBOR
+ * - Large PSBTs use fountain codes to split across multiple animated QR frames
+ * - The UREncoder automatically handles splitting; URDecoder handles reassembly
+ *
+ * CBOR DECODING VARIATIONS:
+ * Different hardware wallets return signed PSBTs in slightly different formats:
+ * 1. Raw PSBT bytes directly in CBOR - check for 'psbt' magic bytes (0x70737274)
+ * 2. CryptoPSBT wrapper object - use CryptoPSBT.fromCBOR() to extract
+ * 3. Object with 'data' property containing bytes
+ *
+ * The getDecodedPsbt() function handles all these cases by:
+ * 1. First checking if CBOR data is raw bytes with PSBT magic
+ * 2. Falling back to CryptoPSBT.fromCBOR() wrapper
+ * 3. Checking for data.data property as last resort
+ *
+ * TROUBLESHOOTING:
+ * If hardware wallet shows "already signed" or rejects PSBT:
+ * - Ensure BIP32 derivation info is included in PSBT inputs
+ * - Verify fingerprint matches (see transactionService.ts notes on zpub conversion)
+ * - Check witnessUtxo/nonWitnessUtxo is present for the script type
  */
 
 import { CryptoPSBT } from '@keystonehq/bc-ur-registry';
@@ -141,6 +164,14 @@ export function feedDecoderPart(
 
 /**
  * Get the decoded PSBT from a completed decoder
+ *
+ * DEVICE FORMAT VARIATIONS (tested):
+ * - Foundation Passport: Returns raw PSBT bytes directly in CBOR (no wrapper)
+ * - Keystone: Uses CryptoPSBT wrapper
+ * - SeedSigner: Uses CryptoPSBT wrapper
+ *
+ * This function handles all variations by checking for raw bytes first,
+ * then falling back to the CryptoPSBT wrapper.
  *
  * @returns Base64-encoded signed PSBT
  */

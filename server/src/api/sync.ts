@@ -248,12 +248,10 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if sync is already in progress
+    // Full resync should reset everything, including stuck sync flags
+    // Don't block on syncInProgress - that's the point of a full resync
     if (wallet.syncInProgress) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Sync already in progress for this wallet',
-      });
+      log.info(`[SYNC_API] Full resync clearing stuck syncInProgress for wallet ${walletId}`);
     }
 
     // Clear all transactions for this wallet
@@ -404,10 +402,14 @@ router.post('/network/:network/resync', async (req: Request, res: Response) => {
       });
     }
 
-    // Skip wallets with sync in progress
-    const eligibleWallets = wallets.filter(w => !w.syncInProgress);
-    const walletIds = eligibleWallets.map(w => w.id);
+    // Full resync should reset everything, including stuck sync flags
+    // Don't skip wallets with syncInProgress - that's the point of a full resync
+    const stuckWallets = wallets.filter(w => w.syncInProgress);
+    if (stuckWallets.length > 0) {
+      log.info(`[SYNC_API] Full network resync clearing ${stuckWallets.length} stuck syncInProgress flags`);
+    }
 
+    const walletIds = wallets.map(w => w.id);
     let totalDeletedTxs = 0;
 
     // Clear transactions and reset state for each wallet
@@ -445,7 +447,7 @@ router.post('/network/:network/resync', async (req: Request, res: Response) => {
       queued: walletIds.length,
       walletIds,
       deletedTransactions: totalDeletedTxs,
-      skipped: wallets.length - eligibleWallets.length,
+      clearedStuckFlags: stuckWallets.length,
     });
   } catch (error: any) {
     log.error('[SYNC_API] Resync network wallets error:', error);

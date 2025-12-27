@@ -546,6 +546,10 @@ model ElectrumServer {
   isHealthy            Boolean   @default(true)
   lastHealthCheckError String? // Last error message (e.g., "Certificate mismatch: expected x, got y")
 
+  // Capability tracking
+  supportsVerbose      Boolean?  // null = unknown, true = supports verbose tx, false = doesn't support
+  lastCapabilityCheck  DateTime? // When verbose capability was last tested
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

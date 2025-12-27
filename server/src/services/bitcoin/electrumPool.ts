@@ -69,6 +69,8 @@ export interface ServerConfig {
   useSsl: boolean;
   priority: number;
   enabled: boolean;
+  // Capability flags
+  supportsVerbose?: boolean | null; // null = unknown
 }
 
 /**
@@ -92,6 +94,8 @@ export interface ServerStats {
   weight: number;
   // Health check history (most recent first)
   healthHistory: HealthCheckResult[];
+  // Capability flags
+  supportsVerbose?: boolean | null; // null = unknown
 }
 
 /**
@@ -469,6 +473,7 @@ export class ElectrumPool extends EventEmitter {
           useSsl: s.useSsl,
           priority: s.priority,
           enabled: s.enabled,
+          supportsVerbose: s.supportsVerbose,
         }));
 
         this.setServers(servers);
@@ -854,6 +859,8 @@ export class ElectrumPool extends EventEmitter {
         weight: stats?.weight ?? 1.0,
         // Health history (most recent first)
         healthHistory: stats?.healthHistory || [],
+        // Capability flags
+        supportsVerbose: server.supportsVerbose,
       };
     });
 
@@ -948,7 +955,11 @@ export class ElectrumPool extends EventEmitter {
         let selectedServer = availableServers[0];
         for (const server of availableServers) {
           const stats = this.serverStats.get(server.id);
-          const weight = stats?.weight ?? 1.0;
+          let weight = stats?.weight ?? 1.0;
+          // Small bonus (10%) for verbose-capable servers - secondary to health
+          if (server.supportsVerbose === true) {
+            weight *= 1.1;
+          }
           const serverConnections = Array.from(this.connections.values())
             .filter(c => c.serverId === server.id && c.state === 'active').length;
           // Higher weight = better, fewer connections = better
@@ -971,6 +982,7 @@ export class ElectrumPool extends EventEmitter {
   /**
    * Weighted round-robin selection
    * Servers with higher weights are selected more frequently
+   * Verbose-capable servers get a small (10%) weight bonus
    */
   private selectWeightedRoundRobin(servers: ServerConfig[]): ServerConfig {
     // Calculate total weight
@@ -978,7 +990,11 @@ export class ElectrumPool extends EventEmitter {
     const weights: number[] = [];
     for (const server of servers) {
       const stats = this.serverStats.get(server.id);
-      const weight = stats?.weight ?? 1.0;
+      let weight = stats?.weight ?? 1.0;
+      // Small bonus (10%) for verbose-capable servers - secondary to health
+      if (server.supportsVerbose === true) {
+        weight *= 1.1;
+      }
       weights.push(weight);
       totalWeight += weight;
     }
@@ -1614,6 +1630,7 @@ async function loadPoolConfigFromDatabase(network: NetworkType = 'mainnet'): Pro
         useSsl: s.useSsl,
         priority: s.priority,
         enabled: s.enabled,
+        supportsVerbose: s.supportsVerbose,
       }));
 
       // Load proxy config if enabled

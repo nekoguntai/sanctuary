@@ -608,6 +608,7 @@ class SyncService {
       const result = await syncWallet(walletId);
 
       // Populate missing fields for any existing transactions
+      walletLog(walletId, 'info', 'SYNC', 'Completing sync (populating transaction details)...');
       const populateResult = await populateMissingTransactionFields(walletId);
       if (populateResult.updated > 0) {
         log.info(`[SYNC] Populated missing fields for ${populateResult.updated} existing transactions`);
@@ -630,6 +631,7 @@ class SyncService {
       });
 
       log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
+      walletLog(walletId, 'info', 'SYNC', `Sync complete (${result.transactions} transactions, ${result.utxos} UTXOs)`);
 
       // Always notify sync completion via WebSocket
       notificationService.broadcastSyncStatus(walletId, {

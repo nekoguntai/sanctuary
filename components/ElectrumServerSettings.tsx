@@ -471,6 +471,23 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2">
                       <span className="font-medium text-sm truncate">{server.label}</span>
+                      {/* Verbose Support Indicator */}
+                      {server.supportsVerbose === true && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded cursor-help"
+                          title="Server supports verbose transaction data (includes fee info directly)"
+                        >
+                          verbose
+                        </span>
+                      )}
+                      {server.supportsVerbose === false && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-500 dark:text-sanctuary-400 rounded cursor-help"
+                          title="Server does not support verbose transactions (fees calculated from inputs)"
+                        >
+                          basic
+                        </span>
+                      )}
                       {server.isHealthy === false && (
                         <span
                           className="text-[10px] px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded cursor-help"

@@ -38,14 +38,16 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getIcon = () => {
-    // Use theme colors: success for receives (green on sanctuary, gold on sunrise), neutral gray for sends
+    // Transaction colors: receive=primary/blue, sent=rose/red, consolidation=warning/amber
     switch (notification.type) {
       case 'transaction':
-        return notification.data?.type === 'received' ? (
-          <ArrowDownLeft className="w-5 h-5 text-success-600 dark:text-success-400" />
-        ) : (
-          <ArrowUpRight className="w-5 h-5 text-sanctuary-500 dark:text-sanctuary-400" />
-        );
+        if (notification.data?.type === 'received') {
+          return <ArrowDownLeft className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
+        } else if (notification.data?.type === 'consolidation') {
+          return <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />;
+        } else {
+          return <ArrowUpRight className="w-5 h-5 text-rose-600 dark:text-rose-400" />;
+        }
       case 'balance':
         return <TrendingUp className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
       case 'confirmation':
@@ -62,13 +64,16 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getColors = () => {
-    // Use surface-* utility classes for theme-aware backgrounds
-    // These automatically adapt to all themes (sanctuary, sunrise, etc.)
+    // Transaction colors: receive=primary/blue, sent=rose/red, consolidation=warning/amber
     switch (notification.type) {
       case 'transaction':
-        return notification.data?.type === 'received'
-          ? 'bg-success-50 dark:bg-success-900/30 border-success-200 dark:border-success-700'
-          : 'surface-secondary border-sanctuary-300 dark:border-sanctuary-600';
+        if (notification.data?.type === 'received') {
+          return 'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-700';
+        } else if (notification.data?.type === 'consolidation') {
+          return 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
+        } else {
+          return 'bg-rose-50 dark:bg-rose-950/80 border-rose-300 dark:border-rose-700';
+        }
       case 'balance':
         return 'surface-secondary border-primary-200 dark:border-primary-700';
       case 'confirmation':

@@ -316,10 +316,18 @@ export const Dashboard: React.FC = () => {
   useWebSocketEvent('transaction', (event) => {
     const { data } = event;
 
+    // Determine title based on transaction type
+    const title = data.type === 'received' ? 'Bitcoin Received'
+      : data.type === 'consolidation' ? 'Consolidation'
+      : 'Bitcoin Sent';
+
+    // Determine amount prefix based on type
+    const prefix = data.type === 'received' ? '+' : '-';
+
     addNotification({
       type: 'transaction',
-      title: data.type === 'received' ? 'Bitcoin Received' : 'Bitcoin Sent',
-      message: `${data.type === 'received' ? '+' : '-'}${(data.amount / 100000000).toFixed(8)} BTC • ${data.confirmations} confirmations`,
+      title,
+      message: `${prefix}${(Math.abs(data.amount) / 100000000).toFixed(8)} BTC • ${data.confirmations} confirmations`,
       duration: 10000,
       data,
     });
@@ -327,7 +335,7 @@ export const Dashboard: React.FC = () => {
     // Play sound for receive/send events
     if (data.type === 'received') {
       playEventSound('receive');
-    } else if (data.type === 'sent') {
+    } else if (data.type === 'sent' || data.type === 'consolidation') {
       playEventSound('send');
     }
 

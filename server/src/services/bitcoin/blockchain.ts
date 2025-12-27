@@ -479,14 +479,22 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 1: Batch fetch all address histories using true RPC batching
-  walletLog(walletId, 'debug', 'SYNC', 'Phase 1: Fetching address histories...');
+  walletLog(walletId, 'info', 'SYNC', `Fetching address histories (${addresses.length} addresses)...`);
   log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses using batch RPC...`);
   const BATCH_SIZE = 50; // Number of addresses per batch RPC call
   const historyResults: Map<string, Array<{ tx_hash: string; height: number }>> = new Map();
+  const totalAddressBatches = Math.ceil(addresses.length / BATCH_SIZE);
 
   // Process addresses in batches for true RPC batching
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batchAddresses = addresses.slice(i, i + BATCH_SIZE).map(a => a.address);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    // Log progress for larger wallets
+    if (addresses.length > BATCH_SIZE) {
+      walletLog(walletId, 'debug', 'SYNC', `Address history batch ${batchNum}/${totalAddressBatches}...`);
+    }
+
     try {
       const batchResults = await client.getAddressHistoryBatch(batchAddresses);
       // Merge results into historyResults
@@ -520,9 +528,7 @@ export async function syncWallet(walletId: string): Promise<{
     }
   }
 
-  walletLog(walletId, 'debug', 'BLOCKCHAIN', `Found ${addressesWithActivity} addresses with activity`, {
-    totalTransactions: allTxids.size,
-  });
+  walletLog(walletId, 'info', 'SYNC', `Found ${allTxids.size} transactions across ${addressesWithActivity} active addresses`);
 
   // PHASE 2: Batch check which transactions already exist in DB
   walletLog(walletId, 'debug', 'SYNC', `Phase 2: Checking ${allTxids.size} transactions against database...`);
@@ -548,7 +554,9 @@ export async function syncWallet(walletId: string): Promise<{
 
   // PHASE 3/4/5 COMBINED: Incremental fetch, process, and insert
   // This ensures progress is saved to DB as we go, so retries can continue where they left off
-  walletLog(walletId, 'debug', 'SYNC', `Phase 3: Incrementally fetching and saving ${newTxids.length} transactions...`);
+  if (newTxids.length > 0) {
+    walletLog(walletId, 'info', 'SYNC', `Processing ${newTxids.length} new transactions...`);
+  }
   const txDetailsCache: Map<string, any> = new Map();
   const TX_BATCH_SIZE = 10; // Reduced from 25 to avoid server rate limiting
   const currentHeight = await getBlockHeight();
@@ -587,10 +595,8 @@ export async function syncWallet(walletId: string): Promise<{
     const batchNumber = Math.floor(batchIndex / TX_BATCH_SIZE) + 1;
     const totalBatches = Math.ceil(newTxids.length / TX_BATCH_SIZE);
 
-    // Log progress for large syncs
-    if (newTxids.length > TX_BATCH_SIZE) {
-      walletLog(walletId, 'debug', 'SYNC', `Processing batch ${batchNumber}/${totalBatches} (${batchTxids.length} transactions)...`);
-    }
+    // Log progress for all syncs with new transactions
+    walletLog(walletId, 'info', 'SYNC', `Fetching transactions ${batchIndex + 1}-${Math.min(batchIndex + TX_BATCH_SIZE, newTxids.length)} of ${newTxids.length}...`);
 
     // Step 1: Fetch this batch of transactions
     try {
@@ -825,6 +831,20 @@ export async function syncWallet(walletId: string): Promise<{
         totalTransactions += newTransactions.length;
         allNewTransactions.push(...newTransactions);
 
+        // Log batch results with amounts
+        const received = newTransactions.filter(t => t.type === 'received');
+        const sent = newTransactions.filter(t => t.type === 'sent');
+        const consolidation = newTransactions.filter(t => t.type === 'consolidation');
+        const receivedTotal = received.reduce((sum, t) => sum + t.amount, BigInt(0));
+        const sentTotal = sent.reduce((sum, t) => sum + t.amount, BigInt(0));
+
+        const parts: string[] = [];
+        if (received.length > 0) parts.push(`+${(Number(receivedTotal) / 100000000).toFixed(8)} BTC (${received.length} received)`);
+        if (sent.length > 0) parts.push(`${(Number(sentTotal) / 100000000).toFixed(8)} BTC (${sent.length} sent)`);
+        if (consolidation.length > 0) parts.push(`${consolidation.length} consolidation`);
+
+        walletLog(walletId, 'info', 'TX', `Saved: ${parts.join(', ')}`);
+
         log.debug(`[BLOCKCHAIN] Batch ${batchNumber}: Inserted ${newTransactions.length} transactions`);
 
         // Store transaction inputs and outputs for this batch
@@ -1017,7 +1037,7 @@ export async function syncWallet(walletId: string): Promise<{
           notificationService.broadcastTransactionNotification({
             txid: tx.txid,
             walletId,
-            type: tx.type === 'received' ? 'received' : 'sent',
+            type: tx.type as 'received' | 'sent' | 'consolidation',
             amount: Number(tx.amount),
             confirmations: tx.confirmations || 0,
             blockHeight: tx.blockHeight ?? undefined,
@@ -1049,13 +1069,21 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 6: Batch fetch all UTXOs for all addresses using true RPC batching
-  walletLog(walletId, 'debug', 'SYNC', 'Phase 6: Fetching UTXOs...');
+  walletLog(walletId, 'info', 'SYNC', `Fetching UTXOs (${addresses.length} addresses)...`);
   log.debug(`[BLOCKCHAIN] Fetching UTXOs for ${addresses.length} addresses using batch RPC...`);
   const utxoResults: Array<{ address: string; utxos: any[] }> = [];
   const successfullyFetchedAddresses = new Set<string>(); // Track which addresses were successfully queried
+  const totalUtxoBatches = Math.ceil(addresses.length / BATCH_SIZE);
 
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batchAddresses = addresses.slice(i, i + BATCH_SIZE).map(a => a.address);
+    const utxoBatchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    // Log progress for larger wallets
+    if (addresses.length > BATCH_SIZE) {
+      walletLog(walletId, 'debug', 'SYNC', `UTXO batch ${utxoBatchNum}/${totalUtxoBatches}...`);
+    }
+
     try {
       const batchResults = await client.getAddressUTXOsBatch(batchAddresses);
       // Convert Map to array format
@@ -1092,7 +1120,7 @@ export async function syncWallet(walletId: string): Promise<{
   }
 
   // PHASE 7: UTXO Reconciliation - Make blockchain authoritative
-  walletLog(walletId, 'debug', 'SYNC', `Phase 7: Reconciling ${allUtxoKeys.size} UTXOs with database...`);
+  walletLog(walletId, 'info', 'SYNC', `Reconciling ${allUtxoKeys.size} UTXOs with database...`);
   // Get all UTXOs from DB (both spent and unspent) with their addresses
   const existingUtxos = await prisma.uTXO.findMany({
     where: { walletId },
@@ -1271,10 +1299,7 @@ export async function syncWallet(walletId: string): Promise<{
 
     // Calculate total value of new UTXOs
     const totalValue = utxosToCreate.reduce((sum, u) => sum + Number(u.amount), 0);
-    walletLog(walletId, 'info', 'UTXO', `Found ${totalUtxos} new UTXOs`, {
-      totalSats: totalValue,
-      existing: existingUtxoSet.size,
-    });
+    walletLog(walletId, 'info', 'UTXO', `Found ${totalUtxos} new UTXOs (${(totalValue / 100000000).toFixed(8)} BTC)`);
   }
 
   // PHASE 10: Batch update used addresses

@@ -831,6 +831,32 @@ class ElectrumClient extends EventEmitter {
   }
 
   /**
+   * Test if server supports verbose transaction responses
+   * Returns true if server returns parsed JSON with vin/vout fields
+   * Returns false if server returns raw hex or errors
+   */
+  async testVerboseSupport(testTxid?: string): Promise<boolean> {
+    try {
+      // Use the genesis coinbase tx as a test - exists on all Bitcoin networks
+      const txid = testTxid || '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b';
+
+      // Try verbose request (second param = true)
+      const result = await this.request('blockchain.transaction.get', [txid, true]);
+
+      // If we get an object with 'vin' or 'vout' fields, server supports verbose
+      if (result && typeof result === 'object' && (result.vin || result.vout)) {
+        return true;
+      }
+
+      // Got raw hex string - doesn't support verbose
+      return false;
+    } catch (error) {
+      // Request failed - server doesn't support verbose
+      return false;
+    }
+  }
+
+  /**
    * Batch: Get transaction history for multiple addresses in a single RPC batch
    * Returns a Map of address -> history array
    */

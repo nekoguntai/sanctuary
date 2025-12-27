@@ -269,7 +269,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
       if (isConsolidation) {
         consolidations++;
-        totalFees += Math.abs(tx.amount);
+        // Use actual fee, not amount (amount is the consolidated value, fee is much smaller)
+        if (tx.fee && tx.fee > 0) {
+          totalFees += tx.fee;
+        }
       } else if (isReceive) {
         received++;
         totalReceived += tx.amount;

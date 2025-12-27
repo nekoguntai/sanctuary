@@ -257,6 +257,9 @@ export interface ElectrumServer {
   healthCheckFails?: number;
   isHealthy?: boolean;
   lastHealthCheckError?: string | null;
+  // Capability tracking
+  supportsVerbose?: boolean | null; // null = unknown
+  lastCapabilityCheck?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -288,6 +291,8 @@ export interface ElectrumServerStats {
   weight: number;
   // Health check history (most recent first)
   healthHistory: HealthCheckResult[];
+  // Capability flags
+  supportsVerbose?: boolean | null; // null = unknown
 }
 
 // Electrum connection pool statistics

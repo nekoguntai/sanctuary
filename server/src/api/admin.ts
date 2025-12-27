@@ -1992,7 +1992,7 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
       protocol: server.useSsl ? 'ssl' : 'tcp',
     });
 
-    // Update health status based on test result
+    // Update health status and capability info based on test result
     await prisma.electrumServer.update({
       where: { id },
       data: {
@@ -2000,6 +2000,11 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
         isHealthy: result.success,
         healthCheckFails: result.success ? 0 : server.healthCheckFails + 1,
         lastHealthCheckError: result.success ? null : result.message,
+        // Update verbose capability if we got a result
+        ...(result.info?.supportsVerbose !== undefined && {
+          supportsVerbose: result.info.supportsVerbose,
+          lastCapabilityCheck: new Date(),
+        }),
       },
     });
 
@@ -2007,7 +2012,8 @@ router.post('/electrum-servers/:id/test', authenticate, requireAdmin, async (req
       serverId: id,
       success: result.success,
       message: result.message,
-      info: result.info
+      info: result.info,
+      supportsVerbose: result.info?.supportsVerbose,
     });
 
     res.json({

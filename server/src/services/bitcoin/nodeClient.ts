@@ -354,8 +354,16 @@ export async function getElectrumClientIfActive(): Promise<ElectrumClient | null
 
 /**
  * Test a node configuration without activating it
+ * Returns connection status and capability info (including verbose transaction support)
  */
-export async function testNodeConfig(config: NodeConfig): Promise<{ success: boolean; message: string; info?: any }> {
+export async function testNodeConfig(config: NodeConfig): Promise<{
+  success: boolean;
+  message: string;
+  info?: {
+    blockHeight: number;
+    supportsVerbose?: boolean;
+  };
+}> {
   try {
     const ElectrumClientClass = (await import('./electrum')).ElectrumClient;
     const testClient = new ElectrumClientClass({
@@ -366,12 +374,26 @@ export async function testNodeConfig(config: NodeConfig): Promise<{ success: boo
 
     await testClient.connect();
     const height = await testClient.getBlockHeight();
+
+    // Test verbose transaction support
+    let supportsVerbose: boolean | undefined;
+    try {
+      supportsVerbose = await testClient.testVerboseSupport();
+      log.debug(`Server ${config.host}:${config.port} verbose support: ${supportsVerbose}`);
+    } catch (capabilityError: any) {
+      // Capability check failed, leave as unknown
+      log.debug(`Could not determine verbose capability for ${config.host}:${config.port}: ${capabilityError.message}`);
+    }
+
     testClient.disconnect();
+
+    const verboseStatus = supportsVerbose === true ? ' (verbose: yes)' :
+                          supportsVerbose === false ? ' (verbose: no)' : '';
 
     return {
       success: true,
-      message: `Connected to Electrum server at block ${height}`,
-      info: { blockHeight: height },
+      message: `Connected to Electrum server at block ${height}${verboseStatus}`,
+      info: { blockHeight: height, supportsVerbose },
     };
   } catch (error: any) {
     return {

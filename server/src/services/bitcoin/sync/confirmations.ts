@@ -10,6 +10,7 @@ import { createLogger } from '../../../utils/logger';
 import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../../constants';
 import { getNodeClient } from '../nodeClient';
 import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
+import { walletLog } from '../../../websocket/notifications';
 
 const log = createLogger('CONFIRMATIONS');
 
@@ -124,10 +125,20 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   });
 
   if (transactions.length === 0) {
+    walletLog(walletId, 'info', 'POPULATE', 'All transaction fields are complete');
     return { updated: 0, confirmationUpdates: [] };
   }
 
   log.debug(`Populating missing fields for ${transactions.length} transactions in wallet ${walletId}`);
+  walletLog(walletId, 'info', 'POPULATE', `Starting field population for ${transactions.length} transactions`, {
+    missingFields: {
+      blockHeight: transactions.filter(t => t.blockHeight === null).length,
+      fee: transactions.filter(t => t.fee === null).length,
+      blockTime: transactions.filter(t => t.blockTime === null).length,
+      counterpartyAddress: transactions.filter(t => t.counterpartyAddress === null).length,
+      addressId: transactions.filter(t => t.addressId === null).length,
+    },
+  });
 
   const currentHeight = await getBlockHeight();
 
@@ -148,8 +159,18 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   // Fetch address histories to get transaction heights
   const HISTORY_BATCH_SIZE = 10;
   const addressList = Array.from(addressesForHistory);
+
+  if (addressList.length > 0) {
+    walletLog(walletId, 'info', 'POPULATE', `Fetching address history for ${addressList.length} addresses`);
+  }
+
   for (let i = 0; i < addressList.length; i += HISTORY_BATCH_SIZE) {
     const batch = addressList.slice(i, i + HISTORY_BATCH_SIZE);
+    const batchNum = Math.floor(i / HISTORY_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(addressList.length / HISTORY_BATCH_SIZE);
+
+    walletLog(walletId, 'debug', 'POPULATE', `Address history batch ${batchNum}/${totalBatches} (${batch.length} addresses)`);
+
     const results = await Promise.all(
       batch.map(async (address) => {
         try {
@@ -169,13 +190,27 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     }
   }
 
+  if (txHeightFromHistory.size > 0) {
+    walletLog(walletId, 'info', 'POPULATE', `Found block heights for ${txHeightFromHistory.size} transactions from address history`);
+  }
+
   // PHASE 1: Batch fetch all transaction details in parallel
   const TX_BATCH_SIZE = 5;
   const txDetailsCache = new Map<string, any>();
   const txids = transactions.map(tx => tx.txid);
 
+  walletLog(walletId, 'info', 'POPULATE', `Fetching details for ${txids.length} transactions`);
+
+  let fetchedCount = 0;
+  let failedCount = 0;
+
   for (let i = 0; i < txids.length; i += TX_BATCH_SIZE) {
     const batch = txids.slice(i, i + TX_BATCH_SIZE);
+    const batchNum = Math.floor(i / TX_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(txids.length / TX_BATCH_SIZE);
+
+    walletLog(walletId, 'debug', 'POPULATE', `Transaction batch ${batchNum}/${totalBatches} (${batch.length} txs)`);
+
     const results = await Promise.all(
       batch.map(async (txid) => {
         try {
@@ -190,7 +225,15 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     for (const result of results) {
       if (result.details) {
         txDetailsCache.set(result.txid, result.details);
+        fetchedCount++;
+      } else {
+        failedCount++;
       }
+    }
+
+    // Progress update every 5 batches or at the end
+    if (batchNum % 5 === 0 || batchNum === totalBatches) {
+      walletLog(walletId, 'info', 'POPULATE', `Transaction fetch progress: ${fetchedCount}/${txids.length} (${failedCount} failed)`);
     }
   }
 
@@ -198,7 +241,25 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   const pendingUpdates: Array<{ id: string; txid: string; oldConfirmations: number; data: any }> = [];
   let updated = 0;
 
+  walletLog(walletId, 'info', 'POPULATE', 'Processing transactions and calculating fields...');
+
+  // Track what fields we're populating
+  let feesPopulated = 0;
+  let blockHeightsPopulated = 0;
+  let blockTimesPopulated = 0;
+  let counterpartyAddressesPopulated = 0;
+  let addressIdsPopulated = 0;
+  let processedCount = 0;
+  const totalTxCount = transactions.length;
+  const LOG_INTERVAL = 20; // Log progress every 20 transactions
+
   for (const tx of transactions) {
+    processedCount++;
+
+    // Log progress every LOG_INTERVAL transactions
+    if (processedCount % LOG_INTERVAL === 0 || processedCount === totalTxCount) {
+      walletLog(walletId, 'info', 'POPULATE', `Processing: ${processedCount}/${totalTxCount} (fees: ${feesPopulated}, heights: ${blockHeightsPopulated}, times: ${blockTimesPopulated})`);
+    }
     try {
       // Get transaction details from cache (may be null if verbose not supported)
       const txDetails = txDetailsCache.get(tx.txid);
@@ -213,16 +274,19 @@ export async function populateMissingTransactionFields(walletId: string): Promis
           // Electrum provides blockheight directly
           updates.blockHeight = txDetails.blockheight;
           updates.confirmations = Math.max(0, currentHeight - txDetails.blockheight + 1);
+          blockHeightsPopulated++;
         } else if (txDetails?.confirmations && txDetails.confirmations > 0) {
           // Bitcoin Core RPC provides confirmations, calculate blockHeight
           const calculatedBlockHeight = currentHeight - txDetails.confirmations + 1;
           updates.blockHeight = calculatedBlockHeight;
           updates.confirmations = txDetails.confirmations;
+          blockHeightsPopulated++;
         } else if (txHeightFromHistory.has(tx.txid)) {
           // Fallback: get height from address history (for servers like Blockstream that don't support verbose)
           const heightFromHistory = txHeightFromHistory.get(tx.txid)!;
           updates.blockHeight = heightFromHistory;
           updates.confirmations = Math.max(0, currentHeight - heightFromHistory + 1);
+          blockHeightsPopulated++;
           log.debug(`Got blockHeight ${heightFromHistory} from address history for tx ${tx.txid}`);
         }
       }
@@ -241,12 +305,14 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       if (tx.blockTime === null) {
         if (txDetails.time) {
           updates.blockTime = new Date(txDetails.time * 1000);
+          blockTimesPopulated++;
         } else if (tx.blockHeight || updates.blockHeight) {
           // Derive timestamp from block header if tx.time not available
           const height = updates.blockHeight || tx.blockHeight;
           const blockTime = await getBlockTimestamp(height);
           if (blockTime) {
             updates.blockTime = blockTime;
+            blockTimesPopulated++;
           }
         }
       }
@@ -261,9 +327,16 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       if (tx.fee === null && (isSentTx || isConsolidationTx)) {
         try {
           // Some Electrum servers provide fee directly
-          if (txDetails.fee != null) {
+          if (txDetails.fee != null && txDetails.fee > 0) {
             // Fee is in BTC, convert to sats
-            updates.fee = BigInt(Math.round(txDetails.fee * 100000000));
+            const feeSats = Math.round(txDetails.fee * 100000000);
+            // Sanity check: fee should be positive and less than 1 BTC
+            if (feeSats > 0 && feeSats < 100000000) {
+              updates.fee = BigInt(feeSats);
+              feesPopulated++;
+            } else {
+              log.warn(`Invalid fee from Electrum for tx ${tx.txid}: ${txDetails.fee} BTC`);
+            }
           } else {
             // Calculate fee from inputs - outputs
             let totalInputValue = 0;
@@ -305,6 +378,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
               const fee = totalInputValue - totalOutputValue;
               if (fee > 0 && fee < 100000000) { // Sanity check: fee should be less than 1 BTC
                 updates.fee = BigInt(fee);
+                feesPopulated++;
               }
             }
           }
@@ -416,15 +490,33 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
       // Collect updates if any
       if (Object.keys(updates).length > 0) {
+        // Track what we're populating
+        if (updates.fee !== undefined) feesPopulated++;
+        if (updates.blockHeight !== undefined) blockHeightsPopulated++;
+        if (updates.blockTime !== undefined) blockTimesPopulated++;
+        if (updates.counterpartyAddress !== undefined) counterpartyAddressesPopulated++;
+        if (updates.addressId !== undefined) addressIdsPopulated++;
+
         pendingUpdates.push({ id: tx.id, txid: tx.txid, oldConfirmations, data: updates });
       }
     } catch (error) {
       log.warn(`Failed to populate fields for tx ${tx.txid}`, { error: String(error) });
+      walletLog(walletId, 'warn', 'POPULATE', `Failed to process tx ${tx.txid.slice(0, 8)}...`, { error: String(error) });
     }
   }
 
+  // Log field population summary
+  walletLog(walletId, 'info', 'POPULATE', `Fields calculated: ${pendingUpdates.length} transactions have updates`, {
+    fees: feesPopulated,
+    blockHeights: blockHeightsPopulated,
+    blockTimes: blockTimesPopulated,
+    counterpartyAddresses: counterpartyAddressesPopulated,
+    addressIds: addressIdsPopulated,
+  });
+
   // PHASE 2: Batch apply all updates
   if (pendingUpdates.length > 0) {
+    walletLog(walletId, 'info', 'POPULATE', `Saving ${pendingUpdates.length} transaction updates to database...`);
     log.debug(`Applying ${pendingUpdates.length} transaction updates...`);
     await prisma.$transaction(
       pendingUpdates.map(u =>
@@ -435,6 +527,9 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       )
     );
     updated = pendingUpdates.length;
+    walletLog(walletId, 'info', 'POPULATE', `Saved ${updated} transaction updates`);
+  } else {
+    walletLog(walletId, 'info', 'POPULATE', 'No transaction updates needed');
   }
 
   // Extract confirmation updates for notification broadcasting
@@ -448,5 +543,6 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     }));
 
   log.debug(`Populated missing fields for ${updated} transactions, ${confirmationUpdates.length} confirmation updates`);
+  walletLog(walletId, 'info', 'POPULATE', `Field population complete: ${updated} transactions updated, ${confirmationUpdates.length} confirmation changes`);
   return { updated, confirmationUpdates };
 }

@@ -16,7 +16,7 @@ const log = createLogger('NOTIFY');
 export interface TransactionNotification {
   txid: string;
   walletId: string;
-  type: 'received' | 'sent';
+  type: 'received' | 'sent' | 'consolidation';
   amount: number; // satoshis
   confirmations: number;
   blockHeight?: number;

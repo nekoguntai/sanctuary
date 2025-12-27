@@ -66,7 +66,7 @@ const mockWallet: Wallet = {
   name: 'Test Wallet',
   type: 'Single Sig' as WalletType,
   balance: 100000,
-  scriptType: 'p2wpkh',
+  scriptType: 'native_segwit',
   derivationPath: "m/84'/0'/0'",
   fingerprint: 'abcd1234',
   label: 'Test Wallet',
@@ -287,7 +287,7 @@ describe('useSendTransactionActions', () => {
   describe('broadcastTransaction', () => {
     it('should broadcast transaction with PSBT', async () => {
       vi.mocked(transactionsApi.createTransaction).mockResolvedValue(mockTxResult);
-      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123' });
+      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123', broadcasted: true });
 
       const { result } = renderHook(
         () => useSendTransactionActions({
@@ -321,7 +321,7 @@ describe('useSendTransactionActions', () => {
 
     it('should broadcast transaction with raw hex (Trezor path)', async () => {
       vi.mocked(transactionsApi.createTransaction).mockResolvedValue(mockTxResult);
-      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123' });
+      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123', broadcasted: true });
 
       const { result } = renderHook(
         () => useSendTransactionActions({
@@ -378,7 +378,7 @@ describe('useSendTransactionActions', () => {
 
     it('should delete draft after successful broadcast', async () => {
       vi.mocked(transactionsApi.createTransaction).mockResolvedValue(mockTxResult);
-      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123' });
+      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123', broadcasted: true });
       vi.mocked(draftsApi.deleteDraft).mockResolvedValue(undefined);
 
       const state = createMockState({

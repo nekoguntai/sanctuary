@@ -549,6 +549,7 @@ export const WalletDetail: React.FC = () => {
   // Auto-scroll ref for log container
   const logContainerRef = React.useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = React.useState(true);
+  const [logLevelFilter, setLogLevelFilter] = React.useState<'all' | 'info' | 'warn' | 'error'>('info');
 
   // Auto-scroll to bottom when new logs arrive
   React.useEffect(() => {
@@ -565,11 +566,17 @@ export const WalletDetail: React.FC = () => {
     onTransaction: (data) => {
       log.debug('Real-time transaction received', { txid: data?.txid });
 
+      // Determine title based on transaction type
+      const title = data.type === 'received' ? 'Bitcoin Received'
+        : data.type === 'consolidation' ? 'Consolidation'
+        : 'Bitcoin Sent';
+      const prefix = data.type === 'received' ? '+' : '-';
+
       // Show notification
       addNotification({
         type: 'transaction',
-        title: data.type === 'received' ? 'Bitcoin Received' : 'Bitcoin Sent',
-        message: `${data.type === 'received' ? '+' : '-'}${(data.amount / 100000000).toFixed(8)} BTC in ${wallet?.name || 'wallet'}`,
+        title,
+        message: `${prefix}${(Math.abs(data.amount) / 100000000).toFixed(8)} BTC in ${wallet?.name || 'wallet'}`,
         duration: 10000,
         data,
       });
@@ -1812,7 +1819,16 @@ export const WalletDetail: React.FC = () => {
                 <ScrollText className="w-4 h-4 text-sanctuary-500" />
                 <span className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">Sync Log</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-500">
-                  {logs.length} entries
+                  {(() => {
+                    const filteredCount = logs.filter((entry) => {
+                      if (logLevelFilter === 'all') return true;
+                      const levelOrder = ['debug', 'info', 'warn', 'error'];
+                      const entryLevel = levelOrder.indexOf(entry.level);
+                      const filterLevel = levelOrder.indexOf(logLevelFilter);
+                      return entryLevel >= filterLevel;
+                    }).length;
+                    return logLevelFilter === 'all' ? `${logs.length} entries` : `${filteredCount}/${logs.length} entries`;
+                  })()}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -1835,6 +1851,18 @@ export const WalletDetail: React.FC = () => {
                   <RotateCcw className="w-3 h-3" />
                   <span>Full Resync</span>
                 </button>
+                <div className="w-px h-4 bg-sanctuary-200 dark:bg-sanctuary-700" />
+                {/* Log level filter */}
+                <select
+                  value={logLevelFilter}
+                  onChange={(e) => setLogLevelFilter(e.target.value as typeof logLevelFilter)}
+                  className="text-xs px-2 py-1 rounded border border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-800 text-sanctuary-700 dark:text-sanctuary-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="info">Info+</option>
+                  <option value="warn">Warn+</option>
+                  <option value="error">Error Only</option>
+                </select>
                 <div className="w-px h-4 bg-sanctuary-200 dark:bg-sanctuary-700" />
                 {/* Log controls */}
                 <button
@@ -1886,7 +1914,15 @@ export const WalletDetail: React.FC = () => {
                 </div>
               ) : (
                 <div className="p-2">
-                  {logs.map((entry) => (
+                  {logs
+                    .filter((entry) => {
+                      if (logLevelFilter === 'all') return true;
+                      const levelOrder = ['debug', 'info', 'warn', 'error'];
+                      const entryLevel = levelOrder.indexOf(entry.level);
+                      const filterLevel = levelOrder.indexOf(logLevelFilter);
+                      return entryLevel >= filterLevel;
+                    })
+                    .map((entry) => (
                     <div
                       key={entry.id}
                       className={`flex items-start py-1 px-2 rounded hover:bg-sanctuary-50 dark:hover:bg-sanctuary-900 ${
@@ -1911,6 +1947,7 @@ export const WalletDetail: React.FC = () => {
                       <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${
                         entry.module === 'SYNC' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' :
                         entry.module === 'BLOCKCHAIN' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' :
+                        entry.module === 'TX' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
                         entry.module === 'UTXO' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
                         entry.module === 'ELECTRUM' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
                         'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'

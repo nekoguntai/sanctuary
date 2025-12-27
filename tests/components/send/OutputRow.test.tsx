@@ -6,13 +6,14 @@ import { OutputRow, OutputRowProps } from '../../../components/send/OutputRow';
 import type { OutputEntry, WalletAddress } from '../../../contexts/send/types';
 
 describe('OutputRow', () => {
-  let mockOnAddressChange: (index: number, value: string) => void;
-  let mockOnAmountChange: (index: number, displayValue: string, satsValue: string) => void;
-  let mockOnAmountBlur: (index: number) => void;
-  let mockOnRemove: (index: number) => void;
-  let mockOnToggleSendMax: (index: number) => void;
-  let mockOnScanQR: (index: number) => void;
-  let mockFormatAmount: (sats: number) => string;
+  // Use vi.fn() directly - these will be reset in beforeEach
+  const mockOnAddressChange = vi.fn();
+  const mockOnAmountChange = vi.fn();
+  const mockOnAmountBlur = vi.fn();
+  const mockOnRemove = vi.fn();
+  const mockOnToggleSendMax = vi.fn();
+  const mockOnScanQR = vi.fn();
+  const mockFormatAmount = vi.fn((sats: number) => sats.toString());
 
   const defaultOutput: OutputEntry = {
     address: '',
@@ -47,13 +48,7 @@ describe('OutputRow', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOnAddressChange = vi.fn();
-    mockOnAmountChange = vi.fn();
-    mockOnAmountBlur = vi.fn();
-    mockOnRemove = vi.fn();
-    mockOnToggleSendMax = vi.fn();
-    mockOnScanQR = vi.fn();
-    mockFormatAmount = vi.fn((sats: number) => sats.toString());
+    mockFormatAmount.mockImplementation((sats: number) => sats.toString());
   });
 
   const renderRow = (props: Partial<OutputRowProps> = {}) => {

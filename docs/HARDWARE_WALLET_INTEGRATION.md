@@ -359,7 +359,27 @@ if (fpHex !== masterFpHex) {
 
 This prevents "path mismatch" errors during signing.
 
-#### 6. Debugging Was Essential
+#### 6. Already-Finalized PSBT Fix (103470b) - by matt mcp
+
+The final piece of the puzzle! The Ledger adapter finalizes the PSBT after signing (`psbt.finalizeAllInputs()`), but the backend broadcast endpoint was *also* trying to finalize it, causing "Cannot finalize input" errors.
+
+The fix checks if inputs are already finalized before attempting to finalize again:
+
+```typescript
+// Check if all inputs are already finalized (e.g., from hardware wallet signing)
+const allFinalized = psbt.data.inputs.every(
+  (input) => input.finalScriptSig || input.finalScriptWitness
+);
+
+// Only finalize if not already finalized
+if (!allFinalized) {
+  psbt.finalizeAllInputs();
+}
+```
+
+This was the key fix that made Ledger USB signing work end-to-end.
+
+#### 7. Debugging Was Essential
 
 Multiple commits added extensive logging (`c7cc4a0`, `ab0e69e`) because Ledger errors are often opaque APDU codes. The logging helped identify:
 - Which step failed (transport, app client, signing)

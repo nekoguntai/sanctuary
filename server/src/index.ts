@@ -271,11 +271,35 @@ maintenanceService.start();
   }
 })();
 
-// Graceful shutdown handler
+// Graceful shutdown configuration
+const SHUTDOWN_TIMEOUT_MS = 30000; // 30 seconds to drain connections
+let isShuttingDown = false;
+
+// Graceful shutdown handler with connection draining
 const handleShutdown = async (signal: string) => {
-  log.info(`${signal} received, closing server...`);
+  // Prevent multiple shutdown attempts
+  if (isShuttingDown) {
+    log.warn(`${signal} received again, already shutting down...`);
+    return;
+  }
+  isShuttingDown = true;
+
+  log.info(`${signal} received, starting graceful shutdown (${SHUTDOWN_TIMEOUT_MS / 1000}s timeout)...`);
+
+  // Set a hard timeout - force exit if graceful shutdown takes too long
+  const forceExitTimeout = setTimeout(() => {
+    log.error('Graceful shutdown timed out, forcing exit');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+
+  // Don't let this timeout keep the process alive if everything else closes
+  forceExitTimeout.unref();
+
+  // Close WebSocket servers first (stop accepting new connections)
   wsServer.close();
   gatewayWsServer.close();
+
+  // Stop background services
   notificationService.stop();
   syncService.stop();
   maintenanceService.stop();
@@ -291,8 +315,10 @@ const handleShutdown = async (signal: string) => {
     });
   }
 
+  // Close HTTP server and wait for active connections to drain
   httpServer.close(() => {
-    log.info('Server closed');
+    clearTimeout(forceExitTimeout);
+    log.info('Server closed gracefully');
     process.exit(0);
   });
 };

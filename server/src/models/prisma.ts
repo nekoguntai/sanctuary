@@ -7,9 +7,16 @@
  * - Connection retry logic for startup resilience
  * - Slow query detection middleware
  * - Graceful shutdown handling
+ * - Periodic health check with auto-reconnection
  *
- * Connection pool is configured via DATABASE_URL:
- * postgresql://user:pass@host:5432/db?connection_limit=20&pool_timeout=30
+ * Connection pool and timeouts are configured via DATABASE_URL:
+ * postgresql://user:pass@host:5432/db?connection_limit=20&pool_timeout=30&connect_timeout=10&statement_timeout=30000
+ *
+ * Timeout parameters:
+ * - connection_limit: Max connections in pool (default: 20)
+ * - pool_timeout: Wait time for connection from pool in seconds (default: 30)
+ * - connect_timeout: Connection establishment timeout in seconds (default: 10)
+ * - statement_timeout: Query execution timeout in milliseconds (default: 30000)
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -142,7 +149,7 @@ let isReconnecting = false;
  * Start database health check monitoring
  * Periodically checks connection and reconnects if needed
  */
-export function startDatabaseHealthCheck(intervalMs: number = 60000): void {
+export function startDatabaseHealthCheck(intervalMs: number = 30000): void {
   if (healthCheckInterval) {
     return; // Already running
   }

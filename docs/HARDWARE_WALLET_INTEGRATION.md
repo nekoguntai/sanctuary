@@ -188,14 +188,108 @@ Common Trezor errors and their user-friendly messages:
 
 ### Overview
 
-The Ledger adapter uses **WebUSB** to communicate directly with Ledger devices in the browser. This requires HTTPS (secure context).
+The Ledger adapter uses **WebUSB** to communicate directly with Ledger devices in the browser. This requires HTTPS (secure context). The adapter uses two Ledger libraries:
+
+- `@ledgerhq/hw-transport-webusb` - WebUSB transport layer
+- `@ledgerhq/hw-app-btc` - Legacy Bitcoin app interface
+- `ledger-bitcoin` - Modern Bitcoin app client with wallet policy support
 
 ### Supported Devices
 
-- Ledger Nano S / S Plus
-- Ledger Nano X
-- Ledger Stax
-- Ledger Flex
+| Device | Product ID | Detection |
+|--------|-----------|-----------|
+| Ledger Nano S | `0x0001` | `productId === 0x0001` |
+| Ledger Nano X | `0x0004` | `productId === 0x0004` |
+| Ledger Nano S Plus | `0x0005` | `productId === 0x0005` |
+| Ledger Stax | `0x0006` | `productId === 0x0006` |
+| Ledger Flex | `0x0007` | `productId === 0x0007` |
+
+All Ledger devices share the USB vendor ID: `0x2c97`
+
+### Connection Flow
+
+1. **Check WebUSB support** and secure context (HTTPS)
+2. **Request USB permission** via `TransportWebUSB.create()`
+3. **Create app instances** - both `AppBtc` and `AppClient`
+4. **Get master fingerprint** via `appClient.getMasterFingerprint()`
+5. Return `HardwareWalletDevice` with device info
+
+```typescript
+const transport = await TransportWebUSB.create();
+const app = new AppBtc({ transport });
+const appClient = new AppClient(transport);
+const fingerprint = await appClient.getMasterFingerprint();
+```
+
+### Wallet Policy System
+
+Ledger uses **wallet policies** (BIP-388) for transaction signing. The adapter creates a `DefaultWalletPolicy` with:
+
+1. **Descriptor template** based on script type:
+   - `wpkh(@0/**)` - Native SegWit (BIP84)
+   - `sh(wpkh(@0/**))` - Nested SegWit (BIP49)
+   - `pkh(@0/**)` - Legacy (BIP44)
+   - `tr(@0/**)` - Taproot (BIP86)
+
+2. **Key info** in format `[fingerprint/path]xpub`:
+   ```
+   [73c5da0a/84'/0'/0']xpub6...
+   ```
+
+```typescript
+const keyInfo = `[${masterFpHex}/${pathWithoutM}]${xpub}`;
+const walletPolicy = new DefaultWalletPolicy(descriptorTemplate, keyInfo);
+const signatures = await appClient.signPsbt(psbtBase64, walletPolicy, null);
+```
+
+### Fingerprint Handling
+
+PSBTs contain fingerprints that must match the connected device. The adapter automatically fixes mismatches:
+
+```typescript
+// If PSBT fingerprint doesn't match connected device, update it
+if (fpHex.toLowerCase() !== masterFpHex.toLowerCase()) {
+  deriv.masterFingerprint = connectedFpBuffer;
+}
+```
+
+This is important when a PSBT was created with a different fingerprint (e.g., from wallet import).
+
+### BIP32 Derivation Requirement
+
+**Critical:** Ledger requires `bip32Derivation` data in the PSBT for each input. Without this, signing will fail:
+
+```typescript
+// Each input must have bip32Derivation
+psbt.data.inputs.forEach(input => {
+  if (!input.bip32Derivation || input.bip32Derivation.length === 0) {
+    // ERROR: Ledger cannot sign this input
+  }
+});
+```
+
+The backend PSBT creation endpoints ensure this data is always present.
+
+### Error Codes
+
+Ledger returns APDU status codes. Common codes and their meanings:
+
+| Status Code | Meaning | User Message |
+|-------------|---------|--------------|
+| `0x6985` | User rejected | Transaction rejected on device |
+| `0x6d00` | INS not supported | Bitcoin app not open on device |
+| `0x6e00` | CLA not supported | Bitcoin app not open on device |
+| `0x6982` | Security condition not satisfied | Device is locked. Please unlock with PIN. |
+| `denied` / `NotAllowed` | USB permission denied | Access denied. Please allow USB access. |
+
+### Address Verification
+
+Ledger supports displaying addresses on device for verification:
+
+```typescript
+await app.getWalletPublicKey(path, { verify: true });
+// User sees address on device screen and can confirm/reject
+```
 
 ### Key Differences from Trezor
 
@@ -206,6 +300,8 @@ The Ledger adapter uses **WebUSB** to communicate directly with Ledger devices i
 | Returns | Signed PSBT | Raw Transaction |
 | Desktop App | Close Ledger Live | Open Trezor Suite |
 | Bitcoin App | Must be open | Not required |
+| Signing Method | Wallet Policy (BIP-388) | Direct transaction signing |
+| Reference Txs | Not required | Required for each input |
 
 ---
 

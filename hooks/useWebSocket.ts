@@ -301,3 +301,50 @@ export const useModelDownloadProgress = (
 
   return { progress };
 };
+
+/**
+ * Hook to invalidate React Query cache when WebSocket events are received
+ * This ensures that Dashboard pending transactions update immediately
+ * when a transaction is confirmed or received
+ */
+export const useWebSocketQueryInvalidation = () => {
+  // Import queryClient dynamically to avoid circular dependencies
+  const { connected } = useWebSocket();
+
+  useEffect(() => {
+    if (!connected) return;
+
+    // Import queryClient lazily
+    let queryClient: import('@tanstack/react-query').QueryClient | null = null;
+    import('../providers/QueryProvider').then((module) => {
+      queryClient = module.queryClient;
+    });
+
+    const handleTransactionEvent = (event: WebSocketEvent) => {
+      if (!queryClient) return;
+
+      // Invalidate pending transactions when any transaction event occurs
+      if (event.event === 'transaction' || event.event === 'confirmation') {
+        // Invalidate pending transactions query (Dashboard block visualization)
+        queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
+        // Also invalidate recent transactions query
+        queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
+      }
+
+      // Invalidate wallet balance when balance changes
+      if (event.event === 'balance') {
+        queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      }
+    };
+
+    websocketClient.on('transaction', handleTransactionEvent);
+    websocketClient.on('confirmation', handleTransactionEvent);
+    websocketClient.on('balance', handleTransactionEvent);
+
+    return () => {
+      websocketClient.off('transaction', handleTransactionEvent);
+      websocketClient.off('confirmation', handleTransactionEvent);
+      websocketClient.off('balance', handleTransactionEvent);
+    };
+  }, [connected]);
+};

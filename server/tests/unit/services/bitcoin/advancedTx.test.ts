@@ -142,10 +142,26 @@ describe('Advanced Transaction Features', () => {
       ]);
     });
 
-    it.skip('should create RBF transaction with higher fee', async () => {
-      // RBF transaction creation requires complex internal state
-      // including wallet descriptor, address derivation, and PSBT building.
-      // This is better tested in integration tests with real wallet context.
+    it('should reject RBF if original transaction not replaceable', async () => {
+      // Mock a confirmed transaction (not replaceable)
+      const mockTx = createMockTransaction({ txid: originalTxid, confirmations: 1 });
+      mockTx.hex = sampleTransactions.rbfEnabled;
+      mockElectrumClient.getTransaction.mockResolvedValue(mockTx);
+
+      await expect(
+        createRBFTransaction(originalTxid, 50, walletId, 'testnet')
+      ).rejects.toThrow('confirmed');
+    });
+
+    it('should reject RBF for non-RBF signaled transaction', async () => {
+      // Mock an unconfirmed transaction without RBF signaling
+      const mockTx = createMockTransaction({ txid: originalTxid, confirmations: 0 });
+      mockTx.hex = sampleTransactions.simpleP2pkh; // This has sequence 0xffffffff (no RBF)
+      mockElectrumClient.getTransaction.mockResolvedValue(mockTx);
+
+      await expect(
+        createRBFTransaction(originalTxid, 50, walletId, 'testnet')
+      ).rejects.toThrow('RBF');
     });
 
     it('should throw error if new fee rate is not higher', async () => {
@@ -210,7 +226,8 @@ describe('Advanced Transaction Features', () => {
   });
 
   describe('CPFP Transaction Creation', () => {
-    const parentTxid = 'p'.repeat(64);
+    // Use valid hex txid (not 'p' which is invalid hex)
+    const parentTxid = 'c'.repeat(64);
     const parentVout = 0;
     const walletId = 'test-wallet-id';
     const recipientAddress = testnetAddresses.nativeSegwit[0];
@@ -226,12 +243,6 @@ describe('Advanced Transaction Features', () => {
       });
     });
 
-    it.skip('should create CPFP transaction with calculated fee', async () => {
-      // CPFP transaction creation requires complex internal state
-      // including wallet descriptor, address derivation, and PSBT building.
-      // This is better tested in integration tests with real wallet context.
-    });
-
     it('should throw error if UTXO not found', async () => {
       mockPrismaClient.uTXO.findUnique.mockResolvedValue(null);
 
@@ -240,10 +251,20 @@ describe('Advanced Transaction Features', () => {
       ).rejects.toThrow('UTXO not found');
     });
 
-    it.skip('should throw error if UTXO already spent', async () => {
-      // This test requires the createCPFPTransaction function to check spent status
-      // before attempting to get parent transaction details.
-      // Integration tests cover this with real wallet state.
+    it('should throw error if UTXO already spent', async () => {
+      // Mock UTXO that is already spent
+      mockPrismaClient.uTXO.findUnique.mockResolvedValue({
+        txid: parentTxid,
+        vout: parentVout,
+        amount: BigInt(50000),
+        scriptPubKey: '0014' + 'a'.repeat(40),
+        walletId,
+        spent: true, // Already spent!
+      });
+
+      await expect(
+        createCPFPTransaction(parentTxid, parentVout, 30, recipientAddress, walletId, 'testnet')
+      ).rejects.toThrow('already spent');
     });
 
     it('should throw error if UTXO value insufficient for fee', async () => {

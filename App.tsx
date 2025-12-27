@@ -29,6 +29,7 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './contexts/NotificationContext';
 import { QueryProvider } from './providers/QueryProvider';
+import { useWebSocketQueryInvalidation } from './hooks/useWebSocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
 
@@ -38,6 +39,10 @@ const AppRoutes: React.FC = () => {
   const { isAuthenticated, logout, user, updatePreferences } = useUser();
   const { notifications, removeNotification } = useNotifications();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  // Invalidate React Query cache when WebSocket events are received
+  // This ensures Dashboard pending transactions update immediately
+  useWebSocketQueryInvalidation();
 
   // Check if user is using default password and show modal
   useEffect(() => {

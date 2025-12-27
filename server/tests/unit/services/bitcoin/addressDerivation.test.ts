@@ -4,6 +4,8 @@
  * Tests for BIP32/44/49/84/86 address derivation paths.
  */
 
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
 import {
   parseDescriptor,
   deriveAddress,
@@ -13,6 +15,9 @@ import {
   deriveAddressesFromDescriptor,
 } from '../../../../src/services/bitcoin/addressDerivation';
 import { testXpubs, testnetAddresses, mainnetAddresses } from '../../../fixtures/bitcoin';
+
+// Initialize ECC library for Taproot support
+bitcoin.initEccLib(ecc);
 
 describe('Address Derivation Service', () => {
   describe('parseDescriptor', () => {
@@ -176,10 +181,55 @@ describe('Address Derivation Service', () => {
     });
 
     describe('Taproot (P2TR)', () => {
-      it.skip('should derive taproot address', () => {
-        // Taproot derivation requires ECC library initialization
-        // via initEccLib(). This is tested in integration tests
-        // where the full application context is available.
+      it('should derive taproot address for testnet', () => {
+        const result = deriveAddress(testTpub, 0, {
+          scriptType: 'taproot',
+          network: 'testnet',
+          change: false,
+        });
+
+        // Testnet P2TR addresses start with 'tb1p'
+        expect(result.address).toMatch(/^tb1p[a-z0-9]{58}$/);
+        expect(result.derivationPath).toContain('/0/0');
+        expect(result.publicKey).toBeDefined();
+      });
+
+      it('should derive different taproot addresses at different indices', () => {
+        const addr0 = deriveAddress(testTpub, 0, { scriptType: 'taproot', network: 'testnet' });
+        const addr1 = deriveAddress(testTpub, 1, { scriptType: 'taproot', network: 'testnet' });
+        const addr2 = deriveAddress(testTpub, 2, { scriptType: 'taproot', network: 'testnet' });
+
+        expect(addr0.address).not.toBe(addr1.address);
+        expect(addr1.address).not.toBe(addr2.address);
+        expect(addr0.address).not.toBe(addr2.address);
+      });
+
+      it('should derive taproot change addresses', () => {
+        const receive = deriveAddress(testTpub, 0, {
+          scriptType: 'taproot',
+          network: 'testnet',
+          change: false,
+        });
+        const change = deriveAddress(testTpub, 0, {
+          scriptType: 'taproot',
+          network: 'testnet',
+          change: true,
+        });
+
+        expect(receive.address).not.toBe(change.address);
+        expect(receive.derivationPath).toContain('/0/');
+        expect(change.derivationPath).toContain('/1/');
+      });
+
+      it('should derive mainnet taproot address', () => {
+        const mainnetXpub = testXpubs.mainnet.bip44;
+        const result = deriveAddress(mainnetXpub, 0, {
+          scriptType: 'taproot',
+          network: 'mainnet',
+        });
+
+        // Mainnet P2TR addresses start with 'bc1p'
+        expect(result.address).toMatch(/^bc1p[a-z0-9]{58}$/);
       });
     });
 
@@ -205,11 +255,38 @@ describe('Address Derivation Service', () => {
     });
 
     describe('SLIP-132 Format Conversion', () => {
-      // Note: zpub/ypub SLIP-132 conversion is tested in integration tests
-      // with real wallet-generated keys. Unit tests use standard xpub format.
-      it.skip('should handle zpub format', () => {
-        // zpub SLIP-132 format requires wallet-generated keys for testing
-        // This is tested in integration tests
+      it('should handle zpub format (mainnet native segwit)', () => {
+        // zpub is BIP84 native segwit format for mainnet
+        const zpub = testXpubs.mainnet.bip84;
+        expect(zpub).toMatch(/^zpub/);
+
+        const result = deriveAddress(zpub, 0, {
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+        });
+
+        // Should derive a mainnet native segwit address (bc1q...)
+        expect(result.address).toMatch(/^bc1q/);
+        expect(result.derivationPath).toBeDefined();
+        expect(result.publicKey).toBeDefined();
+      });
+
+      it('should derive different addresses from zpub at different indices', () => {
+        const zpub = testXpubs.mainnet.bip84;
+        const addr0 = deriveAddress(zpub, 0, { network: 'mainnet' });
+        const addr1 = deriveAddress(zpub, 1, { network: 'mainnet' });
+
+        expect(addr0.address).not.toBe(addr1.address);
+        expect(addr0.address).toMatch(/^bc1q/);
+        expect(addr1.address).toMatch(/^bc1q/);
+      });
+
+      it('should validate zpub format', () => {
+        const zpub = testXpubs.mainnet.bip84;
+        const result = validateXpub(zpub, 'mainnet');
+
+        expect(result.valid).toBe(true);
+        expect(result.scriptType).toBe('native_segwit');
       });
 
       it('should handle ypub format', () => {
@@ -311,9 +388,14 @@ describe('Address Derivation Service', () => {
       expect(result.valid).toBe(false);
     });
 
-    it.skip('should validate zpub format', () => {
-      // zpub SLIP-132 format validation requires wallet-generated keys
-      // This is tested in integration tests
+    it('should validate zpub format', () => {
+      const zpub = testXpubs.mainnet.bip84;
+      expect(zpub).toMatch(/^zpub/);
+
+      const result = validateXpub(zpub, 'mainnet');
+
+      expect(result.valid).toBe(true);
+      expect(result.scriptType).toBe('native_segwit');
     });
 
     it('should validate ypub format', () => {

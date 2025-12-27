@@ -186,11 +186,13 @@ export const SendTransactionPage: React.FC = () => {
         );
 
         if (draftData) {
+          const unsignedPsbtToUse = draftData.signedPsbtBase64 || draftData.psbtBase64;
           log.info('Loading draft data:', {
             draftId: draftData.id,
             hasPsbtBase64: !!draftData.psbtBase64,
             hasSignedPsbtBase64: !!draftData.signedPsbtBase64,
-            psbtLength: (draftData.signedPsbtBase64 || draftData.psbtBase64)?.length,
+            psbtLength: unsignedPsbtToUse?.length,
+            psbtPreview: unsignedPsbtToUse?.substring(0, 30) + '...',
             outputCount: draftData.outputs?.length ?? 1,
             recipient: draftData.recipient?.substring(0, 20) + '...',
           });

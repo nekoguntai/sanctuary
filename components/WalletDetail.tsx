@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN } from '../types';
 import * as walletsApi from '../src/api/wallets';
@@ -475,23 +475,44 @@ export const WalletDetail: React.FC = () => {
   const [payjoinUri, setPayjoinUri] = useState<string | null>(null);
   const [payjoinLoading, setPayjoinLoading] = useState(false);
   const [receiveAmount, setReceiveAmount] = useState<string>('');
+  const [selectedReceiveAddressId, setSelectedReceiveAddressId] = useState<string | null>(null);
 
-  // Get first unused receive address (not change address)
-  const receiveAddressForPayjoin = useMemo(() => {
+  // Helper to check if an address is a receive address (not change)
+  const isReceiveAddress = useCallback((path: string): boolean => {
     // Filter out change addresses - standard BIP derivation: m/purpose'/coin'/account'/change/index
     // change = 0 for external/receive, 1 for internal/change
-    const isReceiveAddress = (path: string): boolean => {
-      const parts = path.split('/');
-      if (parts.length >= 2) {
-        const changeIndicator = parts[parts.length - 2];
-        return changeIndicator === '0';
-      }
-      return true; // Default to receive if can't determine
-    };
+    const parts = path.split('/');
+    if (parts.length >= 2) {
+      const changeIndicator = parts[parts.length - 2];
+      return changeIndicator === '0';
+    }
+    return true; // Default to receive if can't determine
+  }, []);
 
-    const receiveAddresses = addresses.filter(a => isReceiveAddress(a.derivationPath));
-    return receiveAddresses.find(a => !a.used) || receiveAddresses[0] || null;
-  }, [addresses]);
+  // Get all unused receive addresses for the dropdown
+  const unusedReceiveAddresses = useMemo(() => {
+    return addresses
+      .filter(a => isReceiveAddress(a.derivationPath) && !a.used)
+      .sort((a, b) => a.index - b.index);
+  }, [addresses, isReceiveAddress]);
+
+  // Get the selected receive address (or default to first unused)
+  const selectedReceiveAddress = useMemo(() => {
+    if (selectedReceiveAddressId) {
+      const selected = unusedReceiveAddresses.find(a => a.id === selectedReceiveAddressId);
+      if (selected) return selected;
+    }
+    // Default to first unused, or first receive address if none unused
+    if (unusedReceiveAddresses.length > 0) {
+      return unusedReceiveAddresses[0];
+    }
+    // Fallback to first receive address even if used
+    const allReceive = addresses.filter(a => isReceiveAddress(a.derivationPath));
+    return allReceive[0] || null;
+  }, [selectedReceiveAddressId, unusedReceiveAddresses, addresses, isReceiveAddress]);
+
+  // Legacy alias for Payjoin integration
+  const receiveAddressForPayjoin = selectedReceiveAddress;
 
   // Fetch Payjoin URI when enabled
   useEffect(() => {
@@ -2549,6 +2570,7 @@ export const WalletDetail: React.FC = () => {
           setPayjoinEnabled(false);
           setPayjoinUri(null);
           setReceiveAmount('');
+          setSelectedReceiveAddressId(null);
         };
 
         return (
@@ -2574,6 +2596,26 @@ export const WalletDetail: React.FC = () => {
                       <QRCodeSVG value={displayValue} size={200} level="M" />
                     )}
                   </div>
+
+                  {/* Address Selector */}
+                  {unusedReceiveAddresses.length > 1 && (
+                    <div className="w-full mb-4">
+                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">
+                        Select Address ({unusedReceiveAddresses.length} unused)
+                      </label>
+                      <select
+                        value={selectedReceiveAddress?.id || ''}
+                        onChange={(e) => setSelectedReceiveAddressId(e.target.value || null)}
+                        className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        {unusedReceiveAddresses.map((addr) => (
+                          <option key={addr.id} value={addr.id}>
+                            #{addr.index} - {addr.address.slice(0, 12)}...{addr.address.slice(-8)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Payjoin Section */}
                   <PayjoinSection

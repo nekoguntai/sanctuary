@@ -403,12 +403,14 @@ export const Dashboard: React.FC = () => {
     invalidateAllWallets();
   }, [addNotification, playEventSound, invalidateAllWallets]);
 
-  // Handle sync completion - refresh wallet data when background sync finishes
+  // Handle sync status changes - update syncInProgress in real-time
   useWebSocketEvent('sync', (event) => {
     const { data } = event;
+    const walletId = data.walletId;
 
-    // When a sync completes, invalidate wallet queries
-    if (!data.inProgress && data.status === 'success') {
+    // Update syncInProgress status in real-time by invalidating queries
+    // This ensures all windows see the same sync status
+    if (walletId) {
       invalidateAllWallets();
     }
   }, [invalidateAllWallets]);

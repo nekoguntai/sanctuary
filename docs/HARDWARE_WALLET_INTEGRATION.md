@@ -303,6 +303,69 @@ await app.getWalletPublicKey(path, { verify: true });
 | Signing Method | Wallet Policy (BIP-388) | Direct transaction signing |
 | Reference Txs | Not required | Required for each input |
 
+### Development Journey & Lessons Learned
+
+The Ledger integration went through several iterations. Key learnings from the commit history:
+
+#### 1. DefaultWalletPolicy Discovery (ba8509b)
+
+Initial attempts used the older `@ledgerhq/hw-app-btc` API which required complex wallet registration. The breakthrough was discovering `DefaultWalletPolicy` from `ledger-bitcoin`:
+
+```typescript
+// No registration required for standard single-sig wallets!
+const walletPolicy = new DefaultWalletPolicy(descriptorTemplate, keyInfo);
+```
+
+This works for BIP44/49/84/86 standard derivation paths without pre-registering the wallet on the device.
+
+#### 2. Backend Must Include BIP32 Derivation (d6acefb)
+
+Ledger signing failed silently until we realized PSBTs **must** contain `bip32Derivation` for each input. The backend PSBT creation was modified to:
+
+- Derive public keys from account xpub for each input
+- Include master fingerprint in derivation info
+- Add full derivation paths (e.g., `m/84'/0'/0'/0/5`)
+
+Without this, Ledger cannot determine which key to use for signing.
+
+#### 3. Account Path Must Match PSBT (a2e0658)
+
+Early versions defaulted to BIP84 (`m/84'/0'/0'`), but this broke signing for BIP44/49 wallets. The fix: detect the account path from the PSBT's `bip32Derivation` data:
+
+```typescript
+// Extract account path from first input's derivation
+const fullPath = input.bip32Derivation[0].path;  // e.g., "m/44'/0'/0'/0/3"
+const accountPath = extractAccountPath(fullPath); // e.g., "m/44'/0'/0'"
+```
+
+#### 4. Legacy Addresses Need Full Previous Tx (43876f2)
+
+SegWit inputs use `witnessUtxo` (just the output being spent), but legacy P2PKH inputs require `nonWitnessUtxo` (the entire previous transaction). The backend now:
+
+- Detects legacy wallets by `scriptType === 'p2pkh'`
+- Fetches raw transaction hex for each input
+- Uses `nonWitnessUtxo` for legacy, `witnessUtxo` for SegWit
+
+#### 5. Fingerprint Mismatch Auto-Fix (89eb491)
+
+Imported wallets often have different fingerprints than the connected device (e.g., wallet was created on a different Ledger, or fingerprint wasn't captured at import). The adapter now auto-corrects:
+
+```typescript
+// If PSBT fingerprint doesn't match connected device, update it
+if (fpHex !== masterFpHex) {
+  deriv.masterFingerprint = connectedFpBuffer;
+}
+```
+
+This prevents "path mismatch" errors during signing.
+
+#### 6. Debugging Was Essential
+
+Multiple commits added extensive logging (`c7cc4a0`, `ab0e69e`) because Ledger errors are often opaque APDU codes. The logging helped identify:
+- Which step failed (transport, app client, signing)
+- What the PSBT contained vs what Ledger expected
+- Fingerprint/path mismatches
+
 ---
 
 ## Adding a New Device Adapter

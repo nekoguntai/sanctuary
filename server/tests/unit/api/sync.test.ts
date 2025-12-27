@@ -168,7 +168,7 @@ describe('Sync API - Network Endpoints', () => {
         queued: 2,
         walletIds: ['wallet-1', 'wallet-2'],
         deletedTransactions: 100, // 50 per wallet
-        skipped: 0,
+        clearedStuckFlags: 0,
       });
     });
 
@@ -181,7 +181,7 @@ describe('Sync API - Network Endpoints', () => {
       expect(response.body.message).toContain('X-Confirm-Resync');
     });
 
-    it('should skip wallets with sync in progress', async () => {
+    it('should clear stuck sync flags and resync all wallets', async () => {
       mockPrismaClient.wallet.findMany.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: true },
         { id: 'wallet-2', syncInProgress: false },
@@ -196,8 +196,9 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       expect(response.status).toBe(200);
-      expect(response.body.queued).toBe(1);
-      expect(response.body.skipped).toBe(1);
+      // Full resync processes ALL wallets, including stuck ones
+      expect(response.body.queued).toBe(2);
+      expect(response.body.clearedStuckFlags).toBe(1);
     });
 
     it('should reject invalid network', async () => {

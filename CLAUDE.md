@@ -2,8 +2,20 @@
 
 ## Docker Compose Commands
 
-**IMPORTANT**: Always run docker compose commands WITHOUT inline environment variables.
-The `.env` file in the project root contains all required secrets and configuration.
+**IMPORTANT**: Always use `./start.sh` for building and running containers. This ensures proper environment setup and avoids issues with inline variables.
+
+### Preferred: Use start.sh
+
+```bash
+./start.sh              # Start all services
+./start.sh --rebuild    # Rebuild ALL containers and start (use this after code changes)
+./start.sh --with-ai    # Start with Ollama AI
+./start.sh --stop       # Stop all services
+```
+
+### Direct docker compose (if needed)
+
+When using docker compose directly, NEVER use inline environment variables:
 
 ```bash
 # CORRECT - relies on .env file
@@ -15,12 +27,6 @@ docker compose logs -f backend
 # WRONG - do NOT use inline env vars
 # POSTGRES_PASSWORD="..." JWT_SECRET="..." docker compose up
 ```
-
-Use `./start.sh` for common operations:
-- `./start.sh` - Start all services
-- `./start.sh --rebuild` - Rebuild and start
-- `./start.sh --with-ai` - Start with Ollama
-- `./start.sh --stop` - Stop all services
 
 ## Project Structure
 

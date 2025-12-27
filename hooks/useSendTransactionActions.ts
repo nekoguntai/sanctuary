@@ -15,6 +15,7 @@ import { useErrorHandler } from './useErrorHandler';
 import { useNotificationSound } from './useNotificationSound';
 import { useHardwareWallet } from './useHardwareWallet';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { queryClient } from '../providers/QueryProvider';
 import { createLogger } from '../utils/logger';
 import type { Wallet, UTXO, Device } from '../types';
 import type { TransactionState } from '../contexts/send/types';
@@ -87,6 +88,7 @@ export interface UseSendTransactionActionsResult {
   saveDraft: (label?: string) => Promise<string | null>;
   downloadPsbt: () => void;
   uploadSignedPsbt: (file: File) => Promise<void>;
+  processQrSignedPsbt: (signedPsbt: string, deviceId: string) => void;
   markDeviceSigned: (deviceId: string) => void;
   clearError: () => void;
   reset: () => void;
@@ -363,6 +365,14 @@ export function useSendTransactionActions({
 
       playEventSound('send');
 
+      // Immediately invalidate React Query caches so Dashboard updates
+      // This ensures the pending transaction appears right away without waiting for WebSocket or polling
+      queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
+      queryClient.invalidateQueries({ queryKey: ['wallets'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet', walletId] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', walletId] });
+
       // Delete draft if exists
       if (state.draftId) {
         try {
@@ -479,7 +489,7 @@ export function useSendTransactionActions({
     }
   }, [walletId, txData, unsignedPsbt, state, createTransaction, showSuccess, navigate]);
 
-  // Download PSBT file (base64 format - widely supported)
+  // Download PSBT file (binary format - required by most hardware wallets)
   const downloadPsbt = useCallback(() => {
     const psbt = unsignedPsbt || txData?.psbtBase64;
     if (!psbt) {
@@ -494,8 +504,21 @@ export function useSendTransactionActions({
       isValidBase64: /^[A-Za-z0-9+/=]+$/.test(psbt),
     });
 
-    // Save as base64 text (most wallets auto-detect format)
-    const blob = new Blob([psbt], { type: 'text/plain' });
+    // Convert base64 to binary (BIP 174 standard format for .psbt files)
+    const binaryString = atob(psbt);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Verify it starts with PSBT magic bytes
+    if (bytes[0] !== 0x70 || bytes[1] !== 0x73 || bytes[2] !== 0x62 || bytes[3] !== 0x74) {
+      log.warn('PSBT does not start with magic bytes', {
+        bytes: Array.from(bytes.slice(0, 8)),
+      });
+    }
+
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -543,6 +566,13 @@ export function useSendTransactionActions({
     });
   }, []);
 
+  // Process QR-scanned signed PSBT
+  const processQrSignedPsbt = useCallback((signedPsbt: string, deviceId: string) => {
+    log.info('Processing QR-signed PSBT', { deviceId, psbtLength: signedPsbt.length });
+    setUnsignedPsbt(signedPsbt);
+    setSignedDevices(prev => new Set([...prev, deviceId]));
+  }, []);
+
   // Mark device as signed
   const markDeviceSigned = useCallback((deviceId: string) => {
     setSignedDevices(prev => new Set([...prev, deviceId]));
@@ -584,6 +614,7 @@ export function useSendTransactionActions({
     saveDraft,
     downloadPsbt,
     uploadSignedPsbt,
+    processQrSignedPsbt,
     markDeviceSigned,
     clearError,
     reset,

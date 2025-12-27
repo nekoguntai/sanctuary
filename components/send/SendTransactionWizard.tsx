@@ -42,6 +42,15 @@ function WizardContent({
   const { currentStep, wallet, state, devices, isReadyToSign, utxos } = useSendTransaction();
   const hardwareWallet = useHardwareWallet();
 
+  // Debug logging for draft mode
+  log.debug('WizardContent state', {
+    isDraftMode: state.isDraftMode,
+    hasUnsignedPsbt: !!state.unsignedPsbt,
+    unsignedPsbtLength: state.unsignedPsbt?.length,
+    hasDraftTxData: !!draftTxData,
+    currentStep,
+  });
+
   // For draft mode, construct initial txData from draft data
   // This is computed before the actions hook so we can pass it as initial values
   const draftInitialTxData = useMemo(() => {
@@ -196,6 +205,7 @@ function WizardContent({
             onUploadSignedPsbt={actions.uploadSignedPsbt}
             onSignWithDevice={actions.signWithDevice}
             onMarkDeviceSigned={actions.markDeviceSigned}
+            onProcessQrSignedPsbt={actions.processQrSignedPsbt}
             onBroadcastSigned={() => actions.broadcastTransaction()}
             hardwareWallet={hardwareWallet}
             isDraftMode={state.isDraftMode}

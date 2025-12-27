@@ -35,7 +35,7 @@ const XPUB_VERSIONS: Record<string, { prefix: string; targetPrefix: string; targ
  * This handles zpub, ypub, Zpub, Ypub, vpub, upub, Vpub, Upub formats
  * which use different version bytes but contain the same key material
  */
-function convertToStandardXpub(extendedKey: string): string {
+export function convertToStandardXpub(extendedKey: string): string {
   // Detect the prefix (first 4 characters)
   const prefix = extendedKey.slice(0, 4);
   const versionInfo = XPUB_VERSIONS[prefix];

@@ -19,7 +19,9 @@ import {
   Loader2,
   CheckCircle2,
   Usb,
+  QrCode,
 } from 'lucide-react';
+import { QRSigningModal } from '../../qr';
 import { Button } from '../../ui/Button';
 import { TransactionFlowPreview, FlowInput, FlowOutput } from '../../TransactionFlowPreview';
 import { useSendTransaction } from '../../../contexts/send';
@@ -33,7 +35,7 @@ import type { Device } from '../../../types';
 const log = createLogger('ReviewStep');
 
 // Device connection capabilities
-type ConnectionMethod = 'usb' | 'airgap';
+type ConnectionMethod = 'usb' | 'airgap' | 'qr';
 
 interface DeviceCapabilities {
   methods: ConnectionMethod[];
@@ -44,15 +46,15 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   const normalizedType = deviceType.toLowerCase();
 
   if (normalizedType.includes('coldcard')) {
-    return { methods: ['usb', 'airgap'], labels: { usb: 'USB', airgap: 'PSBT File' } };
+    return { methods: ['usb', 'airgap'], labels: { usb: 'USB', airgap: 'PSBT File', qr: '' } };
   }
   if (normalizedType.includes('ledger') || normalizedType.includes('trezor') || normalizedType.includes('bitbox') || normalizedType.includes('jade')) {
-    return { methods: ['usb'], labels: { usb: 'USB', airgap: '' } };
+    return { methods: ['usb'], labels: { usb: 'USB', airgap: '', qr: '' } };
   }
   if (normalizedType.includes('passport') || normalizedType.includes('foundation') || normalizedType.includes('keystone') || normalizedType.includes('seedsigner')) {
-    return { methods: ['airgap'], labels: { usb: '', airgap: 'QR / SD Card' } };
+    return { methods: ['qr', 'airgap'], labels: { usb: '', airgap: 'PSBT File', qr: 'QR Code' } };
   }
-  return { methods: ['usb', 'airgap'], labels: { usb: 'USB', airgap: 'PSBT File' } };
+  return { methods: ['usb', 'airgap'], labels: { usb: 'USB', airgap: 'PSBT File', qr: '' } };
 };
 
 export interface ReviewStepProps {
@@ -75,6 +77,7 @@ export interface ReviewStepProps {
   onUploadSignedPsbt?: (file: File) => Promise<void>;
   onSignWithDevice?: (device: Device) => Promise<boolean>;
   onMarkDeviceSigned?: (deviceId: string) => void;
+  onProcessQrSignedPsbt?: (signedPsbt: string, deviceId: string) => void;
   onBroadcastSigned?: () => Promise<boolean>;
   hardwareWallet?: any;
   // Draft mode - locks editing, shows draft info
@@ -98,6 +101,7 @@ export function ReviewStep({
   onUploadSignedPsbt,
   onSignWithDevice,
   onMarkDeviceSigned,
+  onProcessQrSignedPsbt,
   onBroadcastSigned,
   hardwareWallet,
   isDraftMode = false,
@@ -120,6 +124,7 @@ export function ReviewStep({
   const { format, formatFiat } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [signingDeviceId, setSigningDeviceId] = useState<string | null>(null);
+  const [qrSigningDevice, setQrSigningDevice] = useState<Device | null>(null);
 
   // Calculate change amount
   const changeAmount = useMemo(() => {
@@ -560,6 +565,15 @@ export function ReviewStep({
                           {signingDeviceId === device.id ? 'Signing...' : 'USB'}
                         </button>
                       )}
+                      {capabilities.methods.includes('qr') && unsignedPsbt && (
+                        <button
+                          onClick={() => setQrSigningDevice(device)}
+                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-sanctuary-700 dark:text-sanctuary-100 dark:hover:bg-sanctuary-600 dark:border dark:border-sanctuary-600 rounded-lg transition-colors"
+                        >
+                          <QrCode className="w-3 h-3 mr-1.5" />
+                          QR Code
+                        </button>
+                      )}
                       {capabilities.methods.includes('airgap') && (
                         <button
                           onClick={onDownloadPsbt}
@@ -579,7 +593,7 @@ export function ReviewStep({
       )}
 
       {/* Signing panel for single-sig */}
-      {!isMultiSig && txData && (
+      {!isMultiSig && (txData || unsignedPsbt) && (
         <div className="surface-secondary rounded-xl p-4 space-y-3">
           <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
             Sign Transaction
@@ -615,6 +629,22 @@ export function ReviewStep({
                   <Usb className="w-4 h-4 mr-2" />
                 )}
                 {signingDeviceId === device.id ? 'Signing...' : `Sign with ${device.label}`}
+              </Button>
+            ))}
+            {/* QR signing for single-sig - show button for each QR-capable device */}
+            {devices.filter(d => {
+              const caps = getDeviceCapabilities(d.type);
+              return caps.methods.includes('qr');
+            }).map(device => (
+              <Button
+                key={`qr-${device.id}`}
+                variant="primary"
+                size="sm"
+                onClick={() => setQrSigningDevice(device)}
+                disabled={!unsignedPsbt}
+              >
+                <QrCode className="w-4 h-4 mr-2" />
+                QR Sign ({device.label})
               </Button>
             ))}
             <Button
@@ -746,6 +776,20 @@ export function ReviewStep({
           </Button>
         )}
       </div>
+
+      {/* QR Signing Modal */}
+      {qrSigningDevice && unsignedPsbt && (
+        <QRSigningModal
+          isOpen={true}
+          onClose={() => setQrSigningDevice(null)}
+          psbtBase64={unsignedPsbt}
+          deviceLabel={qrSigningDevice.label}
+          onSignedPsbt={(signedPsbt) => {
+            onProcessQrSignedPsbt?.(signedPsbt, qrSigningDevice.id);
+            setQrSigningDevice(null);
+          }}
+        />
+      )}
     </div>
   );
 }

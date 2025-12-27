@@ -74,10 +74,10 @@ export const testXpubs = {
   },
 
   // Mainnet xpubs
-  // Derived from mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  // Derived from standard test mnemonic
   mainnet: {
-    // BIP84 (zpub) - m/84'/0'/0'
-    bip84: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf68b6NFFH5hTTfJwNALtjN9',
+    // BIP84 (zpub) - m/84'/0'/0' - converted from xpub below
+    bip84: 'zpub6qUQGY8YyN3ZxYEgf8J6KCQBqQAbdSWaT9RK54L5FWTTh8na8NkCkZpYHnWt7zEwNhqd6p9Utq562cSZsqGqFE87NNsUKnyZeJ5KvbhfC8E',
     // BIP49 (ypub) - m/49'/0'/0'
     bip49: 'ypub6Ww3ibxVfGzLtJR4F9SRBicspAfvmvw54yern9Q6qZWFC9T6FYA34K57La5Sgs8pXuyvpDfEHX5KNZRiZRukUWaVPyL4NxA69sEAqdoV8ve',
     // BIP44 (xpub) - m/44'/0'/0'

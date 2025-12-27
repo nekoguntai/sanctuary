@@ -284,7 +284,13 @@ export const DraftList: React.FC<DraftListProps> = ({
 
   const handleDownloadPsbt = (draft: DraftTransaction) => {
     const psbtToDownload = draft.signedPsbtBase64 || draft.psbtBase64;
-    const blob = new Blob([psbtToDownload], { type: 'text/plain' });
+    // Convert base64 to binary (BIP 174 standard format for .psbt files)
+    const binaryString = atob(psbtToDownload);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

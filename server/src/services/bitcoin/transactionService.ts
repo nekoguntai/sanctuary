@@ -12,7 +12,7 @@ import { broadcastTransaction, recalculateWalletBalances } from './blockchain';
 import { RBF_SEQUENCE } from './advancedTx';
 import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
-import { parseDescriptor } from './addressDerivation';
+import { parseDescriptor, convertToStandardXpub } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { unlockUtxosForDraft } from '../draftLockService';
@@ -317,8 +317,23 @@ export async function createTransaction(
   let masterFingerprint: Buffer | undefined;
   let accountXpub: string | undefined;
 
+  log.info('BIP32 derivation: checking wallet data', {
+    walletId,
+    hasDevices: wallet.devices?.length > 0,
+    deviceCount: wallet.devices?.length || 0,
+    walletFingerprint: wallet.fingerprint,
+    hasDescriptor: !!wallet.descriptor,
+    descriptorPreview: wallet.descriptor?.substring(0, 60),
+  });
+
   if (wallet.devices && wallet.devices.length > 0) {
     const primaryDevice = wallet.devices[0].device;
+    log.info('BIP32 derivation: found primary device', {
+      deviceId: primaryDevice.id,
+      deviceFingerprint: primaryDevice.fingerprint,
+      hasXpub: !!primaryDevice.xpub,
+      xpubPrefix: primaryDevice.xpub?.substring(0, 4),
+    });
     if (primaryDevice.fingerprint) {
       masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
     }
@@ -327,6 +342,7 @@ export async function createTransaction(
     }
   } else if (wallet.fingerprint) {
     // Fallback to wallet fingerprint if available
+    log.info('BIP32 derivation: using wallet fingerprint fallback', { fingerprint: wallet.fingerprint });
     masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
   }
 
@@ -334,13 +350,31 @@ export async function createTransaction(
   if (!accountXpub && wallet.descriptor) {
     try {
       const parsed = parseDescriptor(wallet.descriptor);
+      log.info('BIP32 derivation: parsed descriptor', {
+        hasXpub: !!parsed.xpub,
+        xpubPrefix: parsed.xpub?.substring(0, 4),
+        fingerprint: parsed.fingerprint,
+        accountPath: parsed.accountPath,
+      });
       if (parsed.xpub) {
         accountXpub = parsed.xpub;
       }
+      // Also try to get fingerprint from descriptor if not already set
+      if (!masterFingerprint && parsed.fingerprint) {
+        masterFingerprint = Buffer.from(parsed.fingerprint, 'hex');
+        log.info('BIP32 derivation: using fingerprint from descriptor', { fingerprint: parsed.fingerprint });
+      }
     } catch (e) {
-      // Ignore parsing errors
+      log.warn('BIP32 derivation: failed to parse descriptor', { error: (e as Error).message });
     }
   }
+
+  log.info('BIP32 derivation: final values', {
+    hasMasterFingerprint: !!masterFingerprint,
+    masterFingerprintHex: masterFingerprint?.toString('hex'),
+    hasAccountXpub: !!accountXpub,
+    accountXpubPrefix: accountXpub?.substring(0, 4),
+  });
 
   try {
     bitcoin.address.toOutputScript(recipient, networkObj);
@@ -489,12 +523,19 @@ export async function createTransaction(
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   // Parse account xpub for deriving public keys
+  // Convert zpub/ypub/etc to standard xpub format for parsing
   let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
   if (accountXpub) {
     try {
-      accountNode = bip32.fromBase58(accountXpub, networkObj);
+      const standardXpub = convertToStandardXpub(accountXpub);
+      accountNode = bip32.fromBase58(standardXpub, networkObj);
+      log.debug('Parsed account xpub for BIP32 derivation:', {
+        originalPrefix: accountXpub.substring(0, 4),
+        converted: standardXpub.substring(0, 4),
+        hasAccountNode: !!accountNode,
+      });
     } catch (e) {
-      // Ignore parsing errors
+      log.warn('Failed to parse account xpub:', { xpubPrefix: accountXpub?.substring(0, 4), error: (e as Error).message });
     }
   }
 
@@ -546,6 +587,13 @@ export async function createTransaction(
     psbt.addInput(inputOptions);
 
     // Add BIP32 derivation info if we have the master fingerprint
+    log.debug('BIP32 derivation check for input', {
+      inputIndex: inputPaths.length - 1,
+      hasMasterFingerprint: !!masterFingerprint,
+      hasDerivationPath: !!derivationPath,
+      derivationPath,
+      hasAccountNode: !!accountNode,
+    });
     if (masterFingerprint && derivationPath && accountNode) {
       try {
         // Parse the derivation path
@@ -580,10 +628,26 @@ export async function createTransaction(
               pubkey: pubkeyNode.publicKey,
             }],
           });
+          log.info('BIP32 derivation added to input', {
+            inputIndex: inputPaths.length - 1,
+            fingerprint: masterFingerprint.toString('hex'),
+            path: derivationPath,
+            pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
+          });
         }
       } catch (e) {
-        // Skip BIP32 derivation if we can't derive the key
+        log.warn('BIP32 derivation failed for input', {
+          inputIndex: inputPaths.length - 1,
+          error: (e as Error).message,
+        });
       }
+    } else {
+      log.warn('BIP32 derivation skipped - missing required data', {
+        inputIndex: inputPaths.length - 1,
+        hasMasterFingerprint: !!masterFingerprint,
+        hasDerivationPath: !!derivationPath,
+        hasAccountNode: !!accountNode,
+      });
     }
   }
 
@@ -1408,12 +1472,19 @@ export async function createBatchTransaction(
   const addressPathMap = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
 
   // Parse account xpub for deriving public keys
+  // Convert zpub/ypub/etc to standard xpub format for parsing
   let accountNode: ReturnType<typeof bip32.fromBase58> | undefined;
   if (accountXpub) {
     try {
-      accountNode = bip32.fromBase58(accountXpub, networkObj);
+      const standardXpub = convertToStandardXpub(accountXpub);
+      accountNode = bip32.fromBase58(standardXpub, networkObj);
+      log.debug('Parsed account xpub for BIP32 derivation:', {
+        originalPrefix: accountXpub.substring(0, 4),
+        converted: standardXpub.substring(0, 4),
+        hasAccountNode: !!accountNode,
+      });
     } catch (e) {
-      // Ignore parsing errors
+      log.warn('Failed to parse account xpub:', { xpubPrefix: accountXpub?.substring(0, 4), error: (e as Error).message });
     }
   }
 

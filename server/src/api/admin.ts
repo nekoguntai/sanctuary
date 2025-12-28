@@ -1,22 +1,34 @@
 /**
  * Admin API Routes
  *
- * Admin-only endpoints for system configuration, user management, and group management
+ * Admin-only endpoints for system configuration, user management, and group management.
+ *
+ * Route domains are being progressively extracted to ./admin/ subdirectory:
+ * - /users -> ./admin/users.ts
+ * - /groups -> ./admin/groups.ts
  */
 
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../models/prisma';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { validatePasswordStrength } from '../utils/password';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 import { reloadElectrumServers } from '../services/bitcoin/electrumPool';
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
-import { validatePasswordStrength } from '../utils/password';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
+
+// Domain routers (extracted for maintainability)
+import usersRouter from './admin/users';
+import groupsRouter from './admin/groups';
 
 const router = Router();
 const log = createLogger('ADMIN');
+
+// Mount domain routers
+router.use('/users', usersRouter);
+router.use('/groups', groupsRouter);
 
 /**
  * GET /api/v1/admin/node-config

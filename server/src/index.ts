@@ -25,6 +25,7 @@ import draftRoutes from './api/drafts';
 import payjoinRoutes from './api/payjoin';
 import aiRoutes from './api/ai';
 import aiInternalRoutes from './api/ai-internal';
+import healthRoutes from './api/health';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
@@ -33,6 +34,7 @@ import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
+import { startAllServices, getStartupStatus, isSystemDegraded, type ServiceDefinition } from './services/startupManager';
 import { initializeRevocationService, shutdownRevocationService } from './services/tokenRevocation';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
 
@@ -116,7 +118,8 @@ app.use(requestLogger);
 // ROUTES
 // ========================================
 
-// Health check (both paths for compatibility)
+// Health check routes (comprehensive health monitoring)
+// Simple /health for basic liveness, /api/v1/health for detailed status
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
@@ -125,13 +128,8 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-app.get('/api/v1/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: config.nodeEnv,
-  });
-});
+// Comprehensive health check with component status
+app.use('/api/v1/health', healthRoutes);
 
 // API v1 routes
 // Note: Routes with specific paths must come BEFORE catch-all routes mounted at /api/v1
@@ -193,37 +191,32 @@ httpServer.on('upgrade', (request, socket, head) => {
   }
 });
 
-// Start notification service
-notificationService.start().catch((err) => {
-  log.error('Failed to start notification service', { error: err });
-});
-
-// Start background sync service with retry logic
+// Define background services with startup manager
 const syncService = getSyncService();
-const startSyncServiceWithRetry = async (maxRetries = 3, delayMs = 2000) => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      await syncService.start();
-      log.info('Sync service started successfully');
-      return;
-    } catch (err) {
-      log.warn(`Failed to start sync service (attempt ${attempt}/${maxRetries})`, { error: err });
-      if (attempt < maxRetries) {
-        const delay = delayMs * attempt;
-        log.info(`Retrying sync service start in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      } else {
-        log.error('Failed to start sync service after all retries', { error: err });
-      }
-    }
-  }
-};
-startSyncServiceWithRetry().catch(() => {
-  // Error already logged
-});
 
-// Start maintenance service (cleanup jobs)
-maintenanceService.start();
+const backgroundServices: ServiceDefinition[] = [
+  {
+    name: 'notifications',
+    start: () => notificationService.start(),
+    critical: false,
+    maxRetries: 2,
+    backoffMs: [1000, 3000],
+  },
+  {
+    name: 'sync',
+    start: () => syncService.start(),
+    critical: false,
+    maxRetries: 3,
+    backoffMs: [2000, 5000, 10000],
+  },
+  {
+    name: 'maintenance',
+    start: async () => { maintenanceService.start(); },
+    critical: false,
+    maxRetries: 2,
+    backoffMs: [1000, 2000],
+  },
+];
 
 // Run database connection and migrations before starting server
 (async () => {
@@ -256,9 +249,33 @@ maintenanceService.start();
       log.info(`Network: ${config.bitcoin.network}`);
       log.info(`HTTP Server running on port ${config.port}`);
       log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
-      log.info('Notification Service running');
-      log.info('Background Sync Service running');
-      log.info('Maintenance Service running (cleanup jobs)');
+
+      // Start background services with resilient startup manager
+      try {
+        const startupResults = await startAllServices(backgroundServices);
+        const startupStatus = getStartupStatus();
+
+        for (const result of startupResults) {
+          if (result.started) {
+            log.info(`Service ${result.name} running`);
+          } else if (result.degraded) {
+            log.warn(`Service ${result.name} failed (degraded mode)`, { error: result.error });
+          }
+        }
+
+        if (isSystemDegraded()) {
+          log.warn('System running in degraded mode - some services failed to start');
+        }
+
+        log.info('All background services initialization complete', {
+          duration: startupStatus.duration,
+          started: startupResults.filter(r => r.started).length,
+          degraded: startupResults.filter(r => r.degraded).length,
+        });
+      } catch (err) {
+        log.error('Critical service startup failure', { error: (err as Error).message });
+        // Critical service failed - this would have thrown, but handle gracefully
+      }
 
       // Log final migration status
       await migrationService.logMigrationStatus();

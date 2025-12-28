@@ -20,6 +20,7 @@ import { Server } from 'http';
 import { createLogger } from '../utils/logger';
 import { checkWalletAccess } from '../services/wallet';
 import config from '../config';
+import type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
 
 const log = createLogger('WS');
 
@@ -42,12 +43,19 @@ export interface WebSocketMessage {
   data?: Record<string, unknown>;
 }
 
+/**
+ * WebSocket event for broadcasting
+ * @deprecated Use typed events from './events' instead
+ */
 export interface WebSocketEvent {
   type: 'transaction' | 'balance' | 'confirmation' | 'block' | 'newBlock' | 'mempool' | 'sync' | 'log' | 'modelDownload';
   data: any;
   walletId?: string;
   addressId?: string;
 }
+
+// Re-export typed events for gradual migration
+export type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
 
 export class SanctauryWebSocketServer {
   private wss: WebSocketServer;

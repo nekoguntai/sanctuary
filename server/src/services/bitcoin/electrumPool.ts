@@ -39,6 +39,7 @@ import { EventEmitter } from 'events';
 import { ElectrumClient } from './electrum';
 import { createLogger } from '../../utils/logger';
 import prisma from '../../models/prisma';
+import { CircuitBreaker, createCircuitBreaker, circuitBreakerRegistry } from '../circuitBreaker';
 
 const log = createLogger('ELECTRUM_POOL');
 
@@ -311,9 +312,31 @@ export class ElectrumPool extends EventEmitter {
     healthCheckFailures: 0,
   };
 
+  // Circuit breaker for pool-level fault tolerance
+  private circuitBreaker: CircuitBreaker<PooledConnectionHandle>;
+
   constructor(poolConfig?: Partial<ElectrumPoolConfig>) {
     super();
     this.config = { ...DEFAULT_POOL_CONFIG, ...poolConfig };
+
+    // Initialize circuit breaker for pool acquisition
+    this.circuitBreaker = createCircuitBreaker<PooledConnectionHandle>({
+      name: 'electrum-pool',
+      failureThreshold: 5,
+      recoveryTimeout: 30000,
+      successThreshold: 2,
+      onStateChange: (newState, oldState) => {
+        log.info(`Electrum pool circuit breaker: ${oldState} → ${newState}`);
+        this.emit('circuitStateChange', { newState, oldState });
+      },
+    });
+  }
+
+  /**
+   * Get circuit breaker health for monitoring
+   */
+  getCircuitHealth() {
+    return this.circuitBreaker.getHealth();
   }
 
   /**
@@ -674,8 +697,17 @@ export class ElectrumPool extends EventEmitter {
 
   /**
    * Acquire a connection from the pool
+   * Protected by circuit breaker to prevent cascade failures
    */
   async acquire(options: AcquireOptions = {}): Promise<PooledConnectionHandle> {
+    // Use circuit breaker for resilience
+    return this.circuitBreaker.execute(() => this.acquireInternal(options));
+  }
+
+  /**
+   * Internal acquire implementation (called by circuit breaker)
+   */
+  private async acquireInternal(options: AcquireOptions = {}): Promise<PooledConnectionHandle> {
     if (this.isShuttingDown) {
       throw new Error('Pool is shutting down');
     }

@@ -7,7 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { getSyncService } from '../services/syncService';
-import prisma from '../models/prisma';
+import { walletRepository, transactionRepository, addressRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
 
 const router = Router();
@@ -26,15 +26,7 @@ router.post('/wallet/:walletId', async (req: Request, res: Response) => {
     const { walletId } = req.params;
 
     // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -73,15 +65,7 @@ router.post('/queue/:walletId', async (req: Request, res: Response) => {
     const { priority = 'normal' } = req.body;
 
     // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -119,15 +103,7 @@ router.get('/status/:walletId', async (req: Request, res: Response) => {
     const { walletId } = req.params;
 
     // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -184,15 +160,7 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
     const { walletId } = req.params;
 
     // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -202,10 +170,7 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
     }
 
     // Reset the sync state
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: { syncInProgress: false },
-    });
+    await walletRepository.updateSyncState(walletId, { syncInProgress: false });
 
     res.json({
       success: true,
@@ -231,15 +196,7 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
     const { walletId } = req.params;
 
     // Check user has access to wallet
-    const wallet = await prisma.wallet.findFirst({
-      where: {
-        id: walletId,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-    });
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -255,25 +212,13 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
     }
 
     // Clear all transactions for this wallet
-    const deletedTxs = await prisma.transaction.deleteMany({
-      where: { walletId },
-    });
+    const deletedCount = await transactionRepository.deleteByWalletId(walletId);
 
     // Reset address used flags so they get properly marked during sync
-    await prisma.address.updateMany({
-      where: { walletId },
-      data: { used: false },
-    });
+    await addressRepository.resetUsedFlags(walletId);
 
     // Reset the wallet sync state
-    await prisma.wallet.update({
-      where: { id: walletId },
-      data: {
-        syncInProgress: false,
-        lastSyncedAt: null,
-        lastSyncStatus: null,
-      },
-    });
+    await walletRepository.resetSyncState(walletId);
 
     // Trigger immediate high-priority sync
     const syncService = getSyncService();
@@ -281,8 +226,8 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: `Cleared ${deletedTxs.count} transactions. Full resync queued.`,
-      deletedTransactions: deletedTxs.count,
+      message: `Cleared ${deletedCount} transactions. Full resync queued.`,
+      deletedTransactions: deletedCount,
     });
   } catch (error: any) {
     log.error('[SYNC_API] Resync error:', error);
@@ -312,18 +257,9 @@ router.post('/network/:network', async (req: Request, res: Response) => {
     }
 
     // Find all user's wallets for this network
-    const wallets = await prisma.wallet.findMany({
-      where: {
-        network,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: { id: true },
-    });
+    const walletIds = await walletRepository.getIdsByNetwork(userId, network as any);
 
-    if (wallets.length === 0) {
+    if (walletIds.length === 0) {
       return res.json({
         success: true,
         queued: 0,
@@ -333,7 +269,6 @@ router.post('/network/:network', async (req: Request, res: Response) => {
     }
 
     const syncService = getSyncService();
-    const walletIds = wallets.map(w => w.id);
 
     // Queue each wallet
     for (const walletId of walletIds) {
@@ -381,17 +316,8 @@ router.post('/network/:network/resync', async (req: Request, res: Response) => {
       });
     }
 
-    // Find all user's wallets for this network
-    const wallets = await prisma.wallet.findMany({
-      where: {
-        network,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: { id: true, syncInProgress: true },
-    });
+    // Find all user's wallets for this network with sync status
+    const wallets = await walletRepository.findByNetworkWithSyncStatus(userId, network as any);
 
     if (wallets.length === 0) {
       return res.json({
@@ -410,30 +336,18 @@ router.post('/network/:network/resync', async (req: Request, res: Response) => {
     }
 
     const walletIds = wallets.map(w => w.id);
-    let totalDeletedTxs = 0;
 
     // Clear transactions and reset state for each wallet
+    let totalDeletedTxs = 0;
     for (const walletId of walletIds) {
-      const deletedTxs = await prisma.transaction.deleteMany({
-        where: { walletId },
-      });
-      totalDeletedTxs += deletedTxs.count;
+      const deletedCount = await transactionRepository.deleteByWalletId(walletId);
+      totalDeletedTxs += deletedCount;
 
       // Reset address used flags
-      await prisma.address.updateMany({
-        where: { walletId },
-        data: { used: false },
-      });
+      await addressRepository.resetUsedFlags(walletId);
 
       // Reset wallet sync state
-      await prisma.wallet.update({
-        where: { id: walletId },
-        data: {
-          syncInProgress: false,
-          lastSyncedAt: null,
-          lastSyncStatus: null,
-        },
-      });
+      await walletRepository.resetSyncState(walletId);
     }
 
     // Queue all wallets for high-priority sync
@@ -476,21 +390,7 @@ router.get('/network/:network/status', async (req: Request, res: Response) => {
     }
 
     // Find all user's wallets for this network with sync status
-    const wallets = await prisma.wallet.findMany({
-      where: {
-        network,
-        OR: [
-          { users: { some: { userId } } },
-          { group: { members: { some: { userId } } } },
-        ],
-      },
-      select: {
-        id: true,
-        syncInProgress: true,
-        lastSyncStatus: true,
-        lastSyncedAt: true,
-      },
-    });
+    const wallets = await walletRepository.findByNetworkWithSyncStatus(userId, network as any);
 
     const syncing = wallets.filter(w => w.syncInProgress).length;
     const synced = wallets.filter(w => !w.syncInProgress && w.lastSyncStatus === 'success').length;

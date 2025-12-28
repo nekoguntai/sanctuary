@@ -2,62 +2,225 @@
  * Server Configuration
  *
  * Centralized configuration management for all environment variables
- * and application settings.
+ * and application settings. This is the single source of truth for
+ * all configuration values.
+ *
+ * Usage:
+ *   import { getConfig } from './config';
+ *   const config = getConfig();
+ *   console.log(config.server.port);
  */
 
 import dotenv from 'dotenv';
 import path from 'path';
+import type { AppConfig, CombinedConfig, LogLevel, NetworkType, ElectrumProtocol } from './types';
+import { loadFeatureFlags } from './features';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-interface Config {
-  // Server
-  nodeEnv: string;
-  port: number;
-  apiUrl: string;
-  clientUrl: string;
+// Singleton config instance
+let configInstance: CombinedConfig | null = null;
 
-  // Database
-  databaseUrl: string;
-
-  // JWT
-  jwtSecret: string;
-  jwtExpiresIn: string;
-  jwtRefreshExpiresIn: string;
-
-  // Gateway authentication
-  gatewaySecret: string;
-
-  // CORS
-  corsAllowedOrigins: string[];
-
-  // Bitcoin
-  bitcoin: {
-    network: 'mainnet' | 'testnet' | 'regtest';
-    rpc: {
-      host: string;
-      port: number;
-      user: string;
-      password: string;
-    };
-    electrum: {
-      host: string;
-      port: number;
-      protocol: 'tcp' | 'ssl';
-    };
-  };
-
-  // Price APIs
-  priceApis: {
-    mempool: string;
-    coingecko: string;
-    kraken: string;
-  };
+/**
+ * Get the application configuration
+ * Loads and validates config on first call, returns cached instance after
+ *
+ * Returns combined config with both nested structure (new) and flat properties (legacy)
+ */
+export function getConfig(): CombinedConfig {
+  if (!configInstance) {
+    configInstance = loadConfig();
+  }
+  return configInstance;
 }
 
-// Validate JWT_SECRET is set - this is critical for security
-// We no longer allow a default secret in ANY environment
+/**
+ * Load configuration from environment variables
+ * Called once at startup
+ */
+function loadConfig(): CombinedConfig {
+  // Build nested config structure
+  const jwtSecret = getJwtSecret();
+  const jwtExpiresIn = process.env.JWT_EXPIRES_IN || '1h';
+  const jwtRefreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+  const gatewaySecret = getGatewaySecret();
+  const corsAllowedOrigins = getCorsAllowedOrigins();
+  const nodeEnv = parseNodeEnv();
+  const port = parseInt(process.env.PORT || '3001', 10);
+  const apiUrl = process.env.API_URL || 'http://localhost:3001';
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const databaseUrl = process.env.DATABASE_URL || '';
+
+  const bitcoin = {
+    network: parseBitcoinNetwork(),
+    rpc: {
+      host: process.env.BITCOIN_RPC_HOST || 'localhost',
+      port: parseInt(process.env.BITCOIN_RPC_PORT || '8332', 10),
+      user: process.env.BITCOIN_RPC_USER || '',
+      password: process.env.BITCOIN_RPC_PASSWORD || '',
+    },
+    electrum: {
+      host: process.env.ELECTRUM_HOST || 'electrum.blockstream.info',
+      port: parseInt(process.env.ELECTRUM_PORT || '50002', 10),
+      protocol: parseElectrumProtocol(),
+    },
+  };
+
+  const priceApis = {
+    mempool: process.env.MEMPOOL_API || 'https://mempool.space/api/v1',
+    coingecko: process.env.COINGECKO_API || 'https://api.coingecko.com/api/v3',
+    kraken: process.env.KRAKEN_API || 'https://api.kraken.com/0/public',
+  };
+
+  const config: CombinedConfig = {
+    // New nested structure
+    server: {
+      nodeEnv,
+      port,
+      apiUrl,
+      clientUrl,
+    },
+
+    database: {
+      url: databaseUrl,
+    },
+
+    security: {
+      jwt: {
+        secret: jwtSecret,
+        expiresIn: jwtExpiresIn,
+        refreshExpiresIn: jwtRefreshExpiresIn,
+      },
+      gatewaySecret,
+      corsAllowedOrigins,
+      encryptionKey: getEncryptionKey(),
+      encryptionSalt: process.env.ENCRYPTION_SALT || '',
+    },
+
+    rateLimit: {
+      loginAttempts: parseInt(process.env.LOGIN_RATE_LIMIT || '5', 10),
+      passwordChangeAttempts: parseInt(process.env.PASSWORD_CHANGE_RATE_LIMIT || '5', 10),
+    },
+
+    bitcoin,
+    priceApis,
+
+    ai: {
+      containerUrl: process.env.AI_CONTAINER_URL || 'http://ai:3100',
+      configSecret: process.env.AI_CONFIG_SECRET || '',
+    },
+
+    maintenance: {
+      auditLogRetentionDays: parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '90', 10),
+      priceDataRetentionDays: parseInt(process.env.PRICE_DATA_RETENTION_DAYS || '30', 10),
+      feeEstimateRetentionDays: parseInt(process.env.FEE_ESTIMATE_RETENTION_DAYS || '7', 10),
+      diskWarningThresholdPercent: parseInt(process.env.DISK_WARNING_THRESHOLD_PERCENT || '80', 10),
+    },
+
+    websocket: {
+      maxConnections: parseInt(process.env.MAX_WEBSOCKET_CONNECTIONS || '10000', 10),
+      maxPerUser: parseInt(process.env.MAX_WEBSOCKET_PER_USER || '10', 10),
+    },
+
+    push: {
+      fcm: {
+        serviceAccountPath: process.env.FCM_SERVICE_ACCOUNT || '',
+      },
+      apns: {
+        keyId: process.env.APNS_KEY_ID || '',
+        teamId: process.env.APNS_TEAM_ID || '',
+        keyPath: process.env.APNS_KEY_PATH || '',
+        bundleId: process.env.APNS_BUNDLE_ID || '',
+        isProduction: process.env.APNS_PRODUCTION === 'true',
+      },
+    },
+
+    docker: {
+      proxyUrl: process.env.DOCKER_PROXY_URL || 'http://docker-proxy:2375',
+    },
+
+    logging: {
+      level: parseLogLevel(),
+    },
+
+    features: loadFeatureFlags(),
+
+    // Legacy flat properties for backward compatibility
+    nodeEnv,
+    port,
+    apiUrl,
+    clientUrl,
+    databaseUrl,
+    jwtSecret,
+    jwtExpiresIn,
+    jwtRefreshExpiresIn,
+    gatewaySecret,
+    corsAllowedOrigins,
+  };
+
+  // Validate configuration
+  validateConfig(config);
+
+  return config;
+}
+
+/**
+ * Validate configuration for required values
+ */
+function validateConfig(config: CombinedConfig): void {
+  // Production-specific validation
+  if (config.server.nodeEnv === 'production') {
+    if (!config.database.url) {
+      throw new Error('DATABASE_URL is required in production');
+    }
+  }
+}
+
+// =============================================================================
+// Environment Parsing Helpers
+// =============================================================================
+
+function parseNodeEnv(): 'development' | 'production' | 'test' {
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'production' || env === 'test' || env === 'development') {
+    return env;
+  }
+  return 'development';
+}
+
+function parseBitcoinNetwork(): NetworkType {
+  const network = process.env.BITCOIN_NETWORK || 'mainnet';
+  if (network === 'mainnet' || network === 'testnet' || network === 'signet' || network === 'regtest') {
+    return network;
+  }
+  return 'mainnet';
+}
+
+function parseElectrumProtocol(): ElectrumProtocol {
+  const protocol = process.env.ELECTRUM_PROTOCOL || 'ssl';
+  if (protocol === 'tcp' || protocol === 'ssl') {
+    return protocol;
+  }
+  return 'ssl';
+}
+
+function parseLogLevel(): LogLevel {
+  const level = process.env.LOG_LEVEL?.toLowerCase();
+  if (level === 'error' || level === 'warn' || level === 'info' || level === 'debug' || level === 'trace') {
+    return level;
+  }
+  return 'info';
+}
+
+// =============================================================================
+// Security Value Helpers (with validation)
+// =============================================================================
+
+/**
+ * Get JWT secret with validation
+ * Critical for security - never allow default in any environment
+ */
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -79,7 +242,6 @@ function getJwtSecret(): string {
     throw new Error('JWT_SECRET environment variable is required but not set. See error above for instructions.');
   }
 
-  // Warn if the secret appears to be weak
   if (secret.length < 32) {
     console.warn('');
     console.warn('SECURITY WARNING: JWT_SECRET is shorter than 32 characters.');
@@ -93,7 +255,6 @@ function getJwtSecret(): string {
 
 /**
  * Get gateway secret for internal communication
- * Required for HMAC-based authentication between gateway and backend
  */
 function getGatewaySecret(): string {
   const secret = process.env.GATEWAY_SECRET;
@@ -115,6 +276,22 @@ function getGatewaySecret(): string {
 }
 
 /**
+ * Get encryption key with validation
+ */
+function getEncryptionKey(): string {
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) {
+    console.warn('');
+    console.warn('SECURITY WARNING: ENCRYPTION_KEY is not set.');
+    console.warn('Sensitive data encryption will not work properly.');
+    console.warn('Generate one with: openssl rand -base64 32');
+    console.warn('');
+    return '';
+  }
+  return key;
+}
+
+/**
  * Parse CORS allowed origins from environment
  */
 function getCorsAllowedOrigins(): string[] {
@@ -125,49 +302,17 @@ function getCorsAllowedOrigins(): string[] {
   return origins.split(',').map(o => o.trim()).filter(o => o.length > 0);
 }
 
-const config: Config = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3001', 10),
-  apiUrl: process.env.API_URL || 'http://localhost:3001',
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+// =============================================================================
+// Legacy Compatibility Export
+// =============================================================================
 
-  databaseUrl: process.env.DATABASE_URL || '',
-
-  jwtSecret: getJwtSecret(),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h', // SEC-005: Reduced from 7d to 1h
-  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-
-  gatewaySecret: getGatewaySecret(),
-  corsAllowedOrigins: getCorsAllowedOrigins(),
-
-  bitcoin: {
-    network: (process.env.BITCOIN_NETWORK as any) || 'mainnet',
-    rpc: {
-      host: process.env.BITCOIN_RPC_HOST || 'localhost',
-      port: parseInt(process.env.BITCOIN_RPC_PORT || '8332', 10),
-      user: process.env.BITCOIN_RPC_USER || '',
-      password: process.env.BITCOIN_RPC_PASSWORD || '',
-    },
-    electrum: {
-      host: process.env.ELECTRUM_HOST || 'electrum.blockstream.info',
-      port: parseInt(process.env.ELECTRUM_PORT || '50002', 10),
-      protocol: (process.env.ELECTRUM_PROTOCOL as any) || 'ssl',
-    },
-  },
-
-  priceApis: {
-    mempool: process.env.MEMPOOL_API || 'https://mempool.space/api/v1',
-    coingecko: process.env.COINGECKO_API || 'https://api.coingecko.com/api/v3',
-    kraken: process.env.KRAKEN_API || 'https://api.kraken.com/0/public',
-  },
-};
-
-// Validation for production environment
-if (config.nodeEnv === 'production') {
-  if (!config.databaseUrl) {
-    throw new Error('DATABASE_URL is required in production');
-  }
-  // Note: JWT_SECRET is now validated at startup in getJwtSecret() for ALL environments
-}
-
+/**
+ * Default export for backward compatibility
+ * Prefer using getConfig() for new code
+ */
+const config = getConfig();
 export default config;
+
+// Re-export types
+export type { AppConfig, CombinedConfig, FeatureFlags, ExperimentalFeatures, FeatureFlagKey, NetworkType, LogLevel } from './types';
+export { defaultFeatureFlags } from './features';

@@ -1,0 +1,318 @@
+/**
+ * Health Check API
+ *
+ * Provides comprehensive health status for monitoring and alerting.
+ * Aggregates status from database, external services, and internal components.
+ */
+
+import { Router, Request, Response } from 'express';
+import prisma from '../models/prisma';
+import { circuitBreakerRegistry } from '../services/circuitBreaker';
+import { getSyncService } from '../services/syncService';
+import { getWebSocketServer } from '../websocket/server';
+import { createLogger } from '../utils/logger';
+
+const router = Router();
+const log = createLogger('HEALTH');
+
+export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+
+export interface ComponentHealth {
+  status: HealthStatus;
+  message?: string;
+  latency?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface HealthResponse {
+  status: HealthStatus;
+  timestamp: string;
+  uptime: number;
+  version: string;
+  components: {
+    database: ComponentHealth;
+    electrum: ComponentHealth;
+    websocket: ComponentHealth;
+    sync: ComponentHealth;
+    circuitBreakers: ComponentHealth;
+  };
+}
+
+const startTime = Date.now();
+
+/**
+ * Check database connectivity
+ */
+async function checkDatabase(): Promise<ComponentHealth> {
+  const start = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return {
+      status: 'healthy',
+      latency: Date.now() - start,
+    };
+  } catch (error) {
+    log.error('Database health check failed', { error });
+    return {
+      status: 'unhealthy',
+      message: error instanceof Error ? error.message : 'Database unreachable',
+      latency: Date.now() - start,
+    };
+  }
+}
+
+/**
+ * Check Electrum/blockchain service status
+ */
+function checkElectrum(): ComponentHealth {
+  const breakers = circuitBreakerRegistry.getAllHealth();
+  const electrumBreaker = breakers.find(b => b.name.includes('electrum'));
+
+  if (!electrumBreaker) {
+    return {
+      status: 'healthy',
+      message: 'No circuit breaker registered',
+    };
+  }
+
+  if (electrumBreaker.state === 'open') {
+    return {
+      status: 'unhealthy',
+      message: 'Circuit open - service unavailable',
+      details: {
+        failures: electrumBreaker.failures,
+        lastFailure: electrumBreaker.lastFailure,
+      },
+    };
+  }
+
+  if (electrumBreaker.state === 'half-open') {
+    return {
+      status: 'degraded',
+      message: 'Circuit half-open - recovering',
+      details: {
+        successes: electrumBreaker.successes,
+      },
+    };
+  }
+
+  return {
+    status: 'healthy',
+    details: {
+      totalRequests: electrumBreaker.totalRequests,
+      lastSuccess: electrumBreaker.lastSuccess,
+    },
+  };
+}
+
+/**
+ * Check WebSocket server status
+ */
+function checkWebSocket(): ComponentHealth {
+  try {
+    const wsServer = getWebSocketServer();
+    if (!wsServer) {
+      return {
+        status: 'degraded',
+        message: 'WebSocket server not initialized',
+      };
+    }
+
+    const stats = wsServer.getStats();
+    return {
+      status: 'healthy',
+      details: {
+        connections: stats.clients,
+        maxConnections: stats.maxClients,
+        subscriptions: stats.subscriptions,
+        uniqueUsers: stats.uniqueUsers,
+      },
+    };
+  } catch {
+    return {
+      status: 'healthy',
+      message: 'WebSocket stats unavailable',
+    };
+  }
+}
+
+/**
+ * Check sync service status
+ */
+function checkSync(): ComponentHealth {
+  try {
+    const syncService = getSyncService();
+    const metrics = syncService.getHealthMetrics();
+
+    if (!metrics.isRunning) {
+      return {
+        status: 'degraded',
+        message: 'Sync service not running',
+      };
+    }
+
+    // Check if there are stalled jobs
+    const hasStalled = metrics.queueLength > 10 && metrics.activeSyncs === 0;
+    if (hasStalled) {
+      return {
+        status: 'degraded',
+        message: 'Sync queue appears stalled',
+        details: metrics,
+      };
+    }
+
+    return {
+      status: 'healthy',
+      details: {
+        queueLength: metrics.queueLength,
+        activeSyncs: metrics.activeSyncs,
+        subscribedAddresses: metrics.subscribedAddresses,
+      },
+    };
+  } catch {
+    return {
+      status: 'healthy',
+      message: 'Sync stats unavailable',
+    };
+  }
+}
+
+/**
+ * Check all circuit breakers
+ */
+function checkCircuitBreakers(): ComponentHealth {
+  const breakers = circuitBreakerRegistry.getAllHealth();
+
+  if (breakers.length === 0) {
+    return {
+      status: 'healthy',
+      message: 'No circuit breakers registered',
+    };
+  }
+
+  const openBreakers = breakers.filter(b => b.state === 'open');
+  const halfOpenBreakers = breakers.filter(b => b.state === 'half-open');
+
+  if (openBreakers.length === breakers.length) {
+    return {
+      status: 'unhealthy',
+      message: `All ${breakers.length} circuits open`,
+      details: { breakers: breakers.map(b => ({ name: b.name, state: b.state })) },
+    };
+  }
+
+  if (openBreakers.length > 0) {
+    return {
+      status: 'degraded',
+      message: `${openBreakers.length}/${breakers.length} circuits open`,
+      details: { breakers: breakers.map(b => ({ name: b.name, state: b.state })) },
+    };
+  }
+
+  if (halfOpenBreakers.length > 0) {
+    return {
+      status: 'degraded',
+      message: `${halfOpenBreakers.length}/${breakers.length} circuits recovering`,
+      details: { breakers: breakers.map(b => ({ name: b.name, state: b.state })) },
+    };
+  }
+
+  return {
+    status: 'healthy',
+    details: {
+      total: breakers.length,
+      healthy: breakers.filter(b => b.state === 'closed').length,
+    },
+  };
+}
+
+/**
+ * Determine overall status from component statuses
+ */
+function determineOverallStatus(components: Record<string, ComponentHealth>): HealthStatus {
+  const statuses = Object.values(components).map(c => c.status);
+
+  // Database unhealthy = overall unhealthy
+  if (components.database?.status === 'unhealthy') {
+    return 'unhealthy';
+  }
+
+  // Any unhealthy = overall degraded (unless database)
+  if (statuses.includes('unhealthy')) {
+    return 'degraded';
+  }
+
+  // Any degraded = overall degraded
+  if (statuses.includes('degraded')) {
+    return 'degraded';
+  }
+
+  return 'healthy';
+}
+
+/**
+ * GET /api/v1/health
+ * Comprehensive health check
+ */
+router.get('/', async (req: Request, res: Response) => {
+  const components = {
+    database: await checkDatabase(),
+    electrum: checkElectrum(),
+    websocket: checkWebSocket(),
+    sync: checkSync(),
+    circuitBreakers: checkCircuitBreakers(),
+  };
+
+  const status = determineOverallStatus(components);
+
+  const response: HealthResponse = {
+    status,
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    version: process.env.npm_package_version || '0.0.0',
+    components,
+  };
+
+  // Return 503 for unhealthy, 200 for healthy/degraded
+  const httpStatus = status === 'unhealthy' ? 503 : 200;
+  res.status(httpStatus).json(response);
+});
+
+/**
+ * GET /api/v1/health/live
+ * Kubernetes liveness probe - just checks if server is responding
+ */
+router.get('/live', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'alive' });
+});
+
+/**
+ * GET /api/v1/health/ready
+ * Kubernetes readiness probe - checks if ready to accept traffic
+ */
+router.get('/ready', async (req: Request, res: Response) => {
+  const dbHealth = await checkDatabase();
+
+  if (dbHealth.status === 'unhealthy') {
+    return res.status(503).json({
+      status: 'not ready',
+      reason: 'Database unavailable',
+    });
+  }
+
+  res.status(200).json({ status: 'ready' });
+});
+
+/**
+ * GET /api/v1/health/circuits
+ * Detailed circuit breaker status
+ */
+router.get('/circuits', (req: Request, res: Response) => {
+  const breakers = circuitBreakerRegistry.getAllHealth();
+  res.json({
+    overall: circuitBreakerRegistry.getOverallStatus(),
+    circuits: breakers,
+  });
+});
+
+export default router;

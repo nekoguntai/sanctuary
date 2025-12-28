@@ -47,7 +47,7 @@ jobs:
             context: .
             file: ./Dockerfile
           - name: backend
-            context: ./server
+            context: .
             file: ./server/Dockerfile
 
     steps:

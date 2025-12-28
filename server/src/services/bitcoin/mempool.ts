@@ -411,6 +411,27 @@ export async function getBlocksAndMempool() {
       return rate.toFixed(2);
     };
 
+    // Helper to get valid medianFee - falls back to feeRange if medianFee is 0 or missing
+    const getValidMedianFee = (
+      medianFee: number | undefined,
+      feeRangeArr: number[] | undefined
+    ): number => {
+      // If medianFee is valid (non-zero positive), use it
+      if (medianFee && medianFee > 0) {
+        return medianFee;
+      }
+      // Derive from feeRange if available
+      if (feeRangeArr && feeRangeArr.length >= 2) {
+        // Use average of min and max
+        return (feeRangeArr[0] + feeRangeArr[feeRangeArr.length - 1]) / 2;
+      }
+      if (feeRangeArr && feeRangeArr.length >= 1) {
+        return feeRangeArr[0];
+      }
+      // Fallback default
+      return 50;
+    };
+
     // Format confirmed blocks
     const confirmedBlocks = blocks.slice(0, 4).map((block) => {
       const age = Math.floor((Date.now() / 1000 - block.timestamp) / 60);
@@ -420,9 +441,10 @@ export async function getBlocksAndMempool() {
       const totalFeesSats = block.extras?.totalFees || 0;
       const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
       const feeRangeArr = block.extras?.feeRange;
+      const rawMedianFee = block.extras?.medianFee ?? block.medianFee;
       return {
         height: block.height,
-        medianFee: block.extras?.medianFee ?? block.medianFee ?? 50,
+        medianFee: getValidMedianFee(rawMedianFee, feeRangeArr),
         avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
         feeRange: feeRangeArr && feeRangeArr.length >= 2
           ? `${formatFeeRateConfirmed(feeRangeArr[0])}-${formatFeeRateConfirmed(feeRangeArr[feeRangeArr.length - 1])} sat/vB`
@@ -477,6 +499,25 @@ function getBlocksAndMempoolSimple(
   // Helper to format fee rate - always 2 decimal places
   const formatFeeRate = (rate: number): string => {
     return rate.toFixed(2);
+  };
+
+  // Helper to get valid medianFee - falls back to feeRange if medianFee is 0 or missing
+  const getValidMedianFee = (
+    medianFee: number | undefined,
+    feeRangeArr: number[] | undefined
+  ): number => {
+    // If medianFee is valid (non-zero positive), use it
+    if (medianFee && medianFee > 0) {
+      return medianFee;
+    }
+    // Derive from feeRange if available
+    if (feeRangeArr && feeRangeArr.length >= 2) {
+      return (feeRangeArr[0] + feeRangeArr[feeRangeArr.length - 1]) / 2;
+    }
+    if (feeRangeArr && feeRangeArr.length >= 1) {
+      return feeRangeArr[0];
+    }
+    return 50;
   };
 
   const mempoolBlocks: Array<{
@@ -555,9 +596,10 @@ function getBlocksAndMempoolSimple(
     const totalFeesSats = block.extras?.totalFees || 0;
     const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
     const feeRangeArr = block.extras?.feeRange;
+    const rawMedianFee = block.extras?.medianFee ?? block.medianFee;
     return {
       height: block.height,
-      medianFee: block.extras?.medianFee ?? block.medianFee ?? 50,
+      medianFee: getValidMedianFee(rawMedianFee, feeRangeArr),
       avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
       feeRange: feeRangeArr && feeRangeArr.length >= 2
         ? `${formatFeeRate(feeRangeArr[0])}-${formatFeeRate(feeRangeArr[feeRangeArr.length - 1])} sat/vB`

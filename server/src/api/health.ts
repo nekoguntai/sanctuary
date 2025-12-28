@@ -35,6 +35,7 @@ export interface HealthResponse {
     websocket: ComponentHealth;
     sync: ComponentHealth;
     circuitBreakers: ComponentHealth;
+    memory: ComponentHealth;
   };
 }
 
@@ -226,6 +227,45 @@ function checkCircuitBreakers(): ComponentHealth {
   };
 }
 
+// Memory threshold for degraded status (500MB heap usage)
+const MEMORY_THRESHOLD_DEGRADED = 500 * 1024 * 1024; // 500MB
+// Memory threshold for unhealthy status (1GB heap usage)
+const MEMORY_THRESHOLD_UNHEALTHY = 1024 * 1024 * 1024; // 1GB
+
+/**
+ * Check memory usage
+ */
+function checkMemory(): ComponentHealth {
+  const mem = process.memoryUsage();
+  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  const externalMB = Math.round(mem.external / 1024 / 1024);
+
+  let status: HealthStatus = 'healthy';
+  let message: string | undefined;
+
+  if (mem.heapUsed >= MEMORY_THRESHOLD_UNHEALTHY) {
+    status = 'unhealthy';
+    message = `High memory usage: ${heapUsedMB}MB heap`;
+  } else if (mem.heapUsed >= MEMORY_THRESHOLD_DEGRADED) {
+    status = 'degraded';
+    message = `Elevated memory usage: ${heapUsedMB}MB heap`;
+  }
+
+  return {
+    status,
+    message,
+    details: {
+      heapUsed: `${heapUsedMB}MB`,
+      heapTotal: `${heapTotalMB}MB`,
+      rss: `${rssMB}MB`,
+      external: `${externalMB}MB`,
+      heapPercent: `${Math.round((mem.heapUsed / mem.heapTotal) * 100)}%`,
+    },
+  };
+}
+
 /**
  * Determine overall status from component statuses
  */
@@ -261,6 +301,7 @@ router.get('/', async (req: Request, res: Response) => {
     websocket: checkWebSocket(),
     sync: checkSync(),
     circuitBreakers: checkCircuitBreakers(),
+    memory: checkMemory(),
   };
 
   const status = determineOverallStatus(components);

@@ -419,6 +419,7 @@ class ElectrumClient extends EventEmitter {
       this.socket = null;
       this.connected = false;
       this.serverVersion = null; // Clear cached version so next connection fetches fresh info
+      this.scriptHashToAddress.clear(); // Clear address mapping to prevent memory growth
     }
   }
 

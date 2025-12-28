@@ -31,11 +31,17 @@ const AUTH_TIMEOUT_MS = 30000;
 const MAX_WEBSOCKET_CONNECTIONS = parseInt(process.env.MAX_WEBSOCKET_CONNECTIONS || '10000', 10);
 const MAX_WEBSOCKET_PER_USER = parseInt(process.env.MAX_WEBSOCKET_PER_USER || '10', 10);
 
+// Rate limiting to prevent message flooding
+const MAX_MESSAGES_PER_SECOND = parseInt(process.env.MAX_WS_MESSAGES_PER_SECOND || '10', 10);
+const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '100', 10);
+
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
   isAlive: boolean;
   authTimeout?: NodeJS.Timeout;
+  messageCount: number;
+  lastMessageReset: number;
 }
 
 export interface WebSocketMessage {
@@ -90,6 +96,8 @@ export class SanctauryWebSocketServer {
     const client = ws as AuthenticatedWebSocket;
     client.subscriptions = new Set();
     client.isAlive = true;
+    client.messageCount = 0;
+    client.lastMessageReset = Date.now();
 
     // Check total connection limit
     if (this.clients.size >= MAX_WEBSOCKET_CONNECTIONS) {
@@ -227,6 +235,24 @@ export class SanctauryWebSocketServer {
    * Handle incoming message from client
    */
   private handleMessage(client: AuthenticatedWebSocket, data: Buffer) {
+    // Rate limiting: check messages per second
+    const now = Date.now();
+    if (now - client.lastMessageReset >= 1000) {
+      // Reset counter every second
+      client.messageCount = 0;
+      client.lastMessageReset = now;
+    }
+
+    client.messageCount++;
+    if (client.messageCount > MAX_MESSAGES_PER_SECOND) {
+      log.warn('Rate limit exceeded, closing connection', {
+        userId: client.userId,
+        messageCount: client.messageCount,
+      });
+      client.close(1008, 'Rate limit exceeded');
+      return;
+    }
+
     try {
       const message: WebSocketMessage = JSON.parse(data.toString());
 
@@ -331,6 +357,20 @@ export class SanctauryWebSocketServer {
     }
 
     const { channel } = data;
+
+    // Check subscription limit
+    if (client.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CONNECTION) {
+      log.warn('Subscription limit exceeded', {
+        userId: client.userId,
+        subscriptionCount: client.subscriptions.size,
+        channel,
+      });
+      this.sendToClient(client, {
+        type: 'error',
+        data: { message: `Subscription limit of ${MAX_SUBSCRIPTIONS_PER_CONNECTION} exceeded` },
+      });
+      return;
+    }
 
     // Validate subscription based on authentication
     if (channel.startsWith('wallet:') && !client.userId) {

@@ -5,10 +5,12 @@
  * for Bitcoin value conversion and formatting.
  */
 
-import { SATS_PER_BTC, ADDRESS_PATTERNS, AddressType } from '../constants/bitcoin';
+import { SATS_PER_BTC, ADDRESS_PATTERNS } from '../constants/bitcoin';
+import type { AddressType } from '../constants/bitcoin';
 
 // Re-export types and constants for convenience
-export { SATS_PER_BTC, AddressType };
+export { SATS_PER_BTC };
+export type { AddressType };
 
 /**
  * Convert satoshis to BTC

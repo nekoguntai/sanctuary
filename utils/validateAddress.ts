@@ -13,11 +13,12 @@ import {
   detectAddressType,
   isMainnetAddress as sharedIsMainnetAddress,
   isTestnetAddress as sharedIsTestnetAddress,
-  AddressType,
 } from '@shared/utils/bitcoin';
+import type { AddressType } from '@shared/utils/bitcoin';
 
 // Re-export shared utilities with frontend-compatible names
-export { isValidAddressFormat, detectAddressType, AddressType };
+export { isValidAddressFormat, detectAddressType };
+export type { AddressType };
 
 /**
  * Quick format check for Bitcoin address.

@@ -219,8 +219,11 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 ## Features
 
 - **Multi-wallet support** — Manage multiple wallets (single-sig and multisig)
+- **Multi-network support** — Mainnet, testnet, and signet with per-network Electrum connections
+- **Network tabs** — Filter wallets by network with visual indicators
 - **Hardware wallet integration** — Connect Ledger and Trezor devices directly
 - **QR code scanning** — Import device xpubs via camera (Keystone, Passport, ColdCard Q)
+- **QR code signing** — Sign PSBTs on air-gapped devices and scan back via camera
 - **Real-time sync** — Monitor transactions and balances via Electrum or your own Bitcoin node
 - **Address management** — Receive/change address tracking with labels
 - **UTXO control** — Coin selection for privacy-conscious transactions
@@ -578,11 +581,17 @@ For systems where you can't or don't want to run Docker:
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (or run `./scripts/setup.sh` to generate one automatically):
 
 ```bash
-# Server port (default: 8080)
-FRONTEND_PORT=8080
+# HTTPS port (default: 8443) - main application
+HTTPS_PORT=8443
+
+# HTTP port for redirect (default: 8080)
+HTTP_PORT=8080
+
+# Gateway port for mobile apps (default: 4000)
+GATEWAY_PORT=4000
 
 # JWT secret for session tokens (generate a random string, min 32 chars)
 JWT_SECRET=your-secret-key-here
@@ -590,19 +599,19 @@ JWT_SECRET=your-secret-key-here
 # Encryption key for sensitive data like node passwords (generate a random string, min 32 chars)
 ENCRYPTION_KEY=your-encryption-key-here
 
-# Database (default works out of box)
-DATABASE_URL=postgresql://sanctuary:sanctuary@postgres:5432/sanctuary
+# Gateway secret for mobile API authentication (generate a random string, min 32 chars)
+GATEWAY_SECRET=your-gateway-secret-here
 
-# Bitcoin network: mainnet, testnet, or regtest
+# Database password
+POSTGRES_PASSWORD=your-database-password
+
+# Bitcoin network: mainnet, testnet, signet, or regtest
 BITCOIN_NETWORK=mainnet
 
 # Electrum server (optional - uses public servers by default)
 ELECTRUM_HOST=your-electrum-server.com
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=true
-
-# Block explorer URL for transaction links
-EXPLORER_URL=https://mempool.space
 
 # Logging level (debug, info, warn, error)
 LOG_LEVEL=info

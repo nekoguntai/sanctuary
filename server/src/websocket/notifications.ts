@@ -255,6 +255,7 @@ export class NotificationService {
         type: 'confirmation',
         walletId,
         data: {
+          walletId,  // Include walletId in data for client identification
           txid,
           confirmations: transaction.confirmations,
         },
@@ -299,6 +300,7 @@ export class NotificationService {
       type: 'transaction',
       walletId: notification.walletId,
       data: {
+        walletId: notification.walletId,  // Include walletId in data for client identification
         txid: notification.txid,
         type: notification.type,
         amount: notification.amount,
@@ -322,6 +324,7 @@ export class NotificationService {
       type: 'balance',
       walletId: update.walletId,
       data: {
+        walletId: update.walletId,  // Include walletId in data for client identification
         balance: update.balance,
         unconfirmed: update.unconfirmed,
         change: update.change,
@@ -447,6 +450,7 @@ export class NotificationService {
       type: 'confirmation',
       walletId,
       data: {
+        walletId,  // Include walletId in data for client identification
         txid: update.txid,
         confirmations: update.confirmations,
         previousConfirmations: update.previousConfirmations,
@@ -484,6 +488,7 @@ export class NotificationService {
       walletId,
       data: {
         ...status,
+        walletId,  // Include walletId in data so clients can identify which wallet
         timestamp: new Date(),
       },
     };

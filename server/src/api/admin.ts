@@ -1227,7 +1227,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       });
     }
 
-    log.info('[ADMIN] Settings updated:', Object.keys(updates));
+    log.info('[ADMIN] Settings updated', { keys: Object.keys(updates) });
 
     // Audit log
     await auditService.logFromRequest(req, AuditAction.SYSTEM_SETTING_UPDATE, AuditCategory.SYSTEM, {

@@ -200,7 +200,7 @@ export class SanctauryWebSocketServer {
 
     // Setup error handler
     client.on('error', (error) => {
-      log.error('WebSocket error:', error);
+      log.error('WebSocket error', { error });
       this.handleDisconnect(client);
     });
 
@@ -741,7 +741,7 @@ export class GatewayWebSocketServer {
 
     // Handle errors
     client.on('error', (error) => {
-      log.error('Gateway WebSocket error:', error);
+      log.error('Gateway WebSocket error', { error });
     });
   }
 

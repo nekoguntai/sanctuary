@@ -35,6 +35,10 @@ const MAX_WEBSOCKET_PER_USER = parseInt(process.env.MAX_WEBSOCKET_PER_USER || '1
 const MAX_MESSAGES_PER_SECOND = parseInt(process.env.MAX_WS_MESSAGES_PER_SECOND || '10', 10);
 const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '100', 10);
 
+// Grace period for initial connection setup (auth + subscriptions)
+const RATE_LIMIT_GRACE_PERIOD_MS = 5000; // 5 seconds grace period after connection
+const GRACE_PERIOD_MESSAGE_LIMIT = 50; // Allow up to 50 messages during grace period
+
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
@@ -42,6 +46,8 @@ export interface AuthenticatedWebSocket extends WebSocket {
   authTimeout?: NodeJS.Timeout;
   messageCount: number;
   lastMessageReset: number;
+  connectionTime: number; // Timestamp when connection was established
+  totalMessageCount: number; // Total messages since connection (for grace period tracking)
 }
 
 export interface WebSocketMessage {
@@ -98,6 +104,8 @@ export class SanctauryWebSocketServer {
     client.isAlive = true;
     client.messageCount = 0;
     client.lastMessageReset = Date.now();
+    client.connectionTime = Date.now();
+    client.totalMessageCount = 0;
 
     // Check total connection limit
     if (this.clients.size >= MAX_WEBSOCKET_CONNECTIONS) {
@@ -235,22 +243,39 @@ export class SanctauryWebSocketServer {
    * Handle incoming message from client
    */
   private handleMessage(client: AuthenticatedWebSocket, data: Buffer) {
-    // Rate limiting: check messages per second
     const now = Date.now();
-    if (now - client.lastMessageReset >= 1000) {
-      // Reset counter every second
-      client.messageCount = 0;
-      client.lastMessageReset = now;
-    }
+    client.totalMessageCount++;
 
-    client.messageCount++;
-    if (client.messageCount > MAX_MESSAGES_PER_SECOND) {
-      log.warn('Rate limit exceeded, closing connection', {
-        userId: client.userId,
-        messageCount: client.messageCount,
-      });
-      client.close(1008, 'Rate limit exceeded');
-      return;
+    // Check if we're still in the grace period (allows initial auth + subscription burst)
+    const inGracePeriod = (now - client.connectionTime) < RATE_LIMIT_GRACE_PERIOD_MS;
+
+    if (inGracePeriod) {
+      // During grace period, only check total message limit (more lenient)
+      if (client.totalMessageCount > GRACE_PERIOD_MESSAGE_LIMIT) {
+        log.warn('Grace period message limit exceeded, closing connection', {
+          userId: client.userId,
+          totalMessageCount: client.totalMessageCount,
+        });
+        client.close(1008, 'Rate limit exceeded');
+        return;
+      }
+    } else {
+      // After grace period, enforce strict per-second rate limiting
+      if (now - client.lastMessageReset >= 1000) {
+        // Reset counter every second
+        client.messageCount = 0;
+        client.lastMessageReset = now;
+      }
+
+      client.messageCount++;
+      if (client.messageCount > MAX_MESSAGES_PER_SECOND) {
+        log.warn('Rate limit exceeded, closing connection', {
+          userId: client.userId,
+          messageCount: client.messageCount,
+        });
+        client.close(1008, 'Rate limit exceeded');
+        return;
+      }
     }
 
     try {

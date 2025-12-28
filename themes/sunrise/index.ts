@@ -61,17 +61,17 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#402505',
       },
 
-      // Warning colors (Sunrise pink/rose)
+      // Warning colors (Warm amber/orange for sent transactions)
       warning: {
-        50: '#fff5f7',
-        100: '#ffe0e8',
-        200: '#ffc7d6',
-        500: '#e85d8c',   // Rose pink
-        600: '#d4426f',
-        700: '#b0315a',
-        800: '#8c294a',
-        900: '#6b223c',
-        950: '#3a101f',
+        50: '#fffbeb',
+        100: '#fef3c7',
+        200: '#fde68a',
+        500: '#f59e0b',   // Amber
+        600: '#d97706',
+        700: '#b45309',
+        800: '#92400e',
+        900: '#78350f',
+        950: '#451a03',
       },
     },
 
@@ -119,17 +119,17 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#fef9ec',
       },
 
-      // Warning colors (Pastel rose/pink)
+      // Warning colors (Pastel amber/gold for sent transactions)
       warning: {
-        50: '#2a1a20',
-        100: '#3d2730',
-        200: '#5c3848',
-        500: '#d4668a',   // Soft rose
-        600: '#e88aa8',
-        700: '#f2adc2',
-        800: '#f8cfd9',
-        900: '#fce8ee',
-        950: '#fef5f7',
+        50: '#2a2010',
+        100: '#3d3018',
+        200: '#5c4820',
+        500: '#d4a030',   // Soft amber
+        600: '#e8b84a',
+        700: '#f2cc70',
+        800: '#f8dfa0',
+        900: '#fcf0d0',
+        950: '#fef8eb',
       },
     },
   },

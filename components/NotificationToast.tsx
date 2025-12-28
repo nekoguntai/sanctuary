@@ -38,7 +38,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getIcon = () => {
-    // Transaction colors: receive=primary/blue, sent=rose/red, consolidation=warning/amber
+    // Transaction colors: receive=primary, sent=warning (theme-aware), consolidation=warning
     switch (notification.type) {
       case 'transaction':
         if (notification.data?.type === 'received') {
@@ -46,7 +46,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
         } else if (notification.data?.type === 'consolidation') {
           return <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />;
         } else {
-          return <ArrowUpRight className="w-5 h-5 text-rose-600 dark:text-rose-400" />;
+          // Sent transactions use theme's warning color
+          return <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />;
         }
       case 'balance':
         return <TrendingUp className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
@@ -64,7 +65,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getColors = () => {
-    // Transaction colors: receive=primary/blue, sent=rose/red, consolidation=warning/amber
+    // Transaction colors: receive=primary, sent=warning (theme-aware), consolidation=warning
     switch (notification.type) {
       case 'transaction':
         if (notification.data?.type === 'received') {
@@ -72,7 +73,8 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
         } else if (notification.data?.type === 'consolidation') {
           return 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
         } else {
-          return 'bg-rose-50 dark:bg-rose-950/80 border-rose-300 dark:border-rose-700';
+          // Sent transactions use theme's warning color
+          return 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
         }
       case 'balance':
         return 'surface-secondary border-primary-200 dark:border-primary-700';

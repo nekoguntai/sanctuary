@@ -75,19 +75,11 @@
 import { requestContext } from './requestContext';
 import { safeError, redactObject } from './redact';
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-}
+// Import shared types from consolidated module
+import { LogLevel, LOG_LEVEL_MAP, Logger } from '../../../shared/types/logger';
 
-const LOG_LEVEL_MAP: Record<string, LogLevel> = {
-  debug: LogLevel.DEBUG,
-  info: LogLevel.INFO,
-  warn: LogLevel.WARN,
-  error: LogLevel.ERROR,
-};
+// Re-export shared types for backward compatibility
+export { LogLevel, Logger };
 
 // Get log level from environment, default to INFO
 const getLogLevel = (): LogLevel => {
@@ -224,15 +216,9 @@ const log = (
   );
 };
 
-/**
- * Logger interface returned by createLogger
- */
-export interface Logger {
-  debug: (message: string, context?: Record<string, any>) => void;
-  info: (message: string, context?: Record<string, any>) => void;
-  warn: (message: string, context?: Record<string, any>) => void;
-  error: (message: string, context?: Record<string, any>) => void;
-}
+// Logger interface imported from shared types above
+// Note: Server implementation uses Record<string, any> internally for flexibility
+// but exports the stricter shared interface for type safety
 
 /**
  * Create a logger instance with a specific prefix/module name

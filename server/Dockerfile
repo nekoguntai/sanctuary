@@ -11,8 +11,8 @@ WORKDIR /app
 RUN apk add --no-cache openssl
 
 # Copy package files first (better layer caching)
-COPY package*.json ./
-COPY prisma ./prisma/
+COPY server/package*.json ./
+COPY server/prisma ./prisma/
 
 # Install all dependencies (including dev for building)
 RUN npm ci
@@ -29,15 +29,18 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/prisma ./prisma
 
+# Copy shared directory first (needed for imports)
+COPY shared ../shared
+
 # Copy only source files needed for build (better cache invalidation)
-COPY tsconfig.json ./
-COPY src ./src
+COPY server/tsconfig.json ./
+COPY server/src ./src
 
 # Build TypeScript (main app)
 RUN npm run build
 
 # Compile seed script separately
-COPY prisma/seed.ts ./prisma/
+COPY server/prisma/seed.ts ./prisma/
 RUN npx tsc prisma/seed.ts --outDir dist/prisma --esModuleInterop --skipLibCheck --resolveJsonModule
 
 # Prune dev dependencies for production

@@ -35,7 +35,13 @@ import { Request, Response, NextFunction } from 'express';
 import { createLogger } from '../utils/logger';
 import { config } from '../config';
 import { AuthenticatedRequest } from './auth';
-import crypto from 'crypto';
+
+// Import shared request utilities
+import {
+  generateRequestId,
+  extractClientIp,
+  sanitizePath,
+} from '../../../shared/utils/request';
 
 const log = createLogger('REQUEST');
 
@@ -85,31 +91,12 @@ async function sendToBackendAudit(
 }
 
 /**
- * Generate a short unique request ID
- */
-function generateRequestId(): string {
-  return crypto.randomBytes(8).toString('hex');
-}
-
-/**
- * Extract client IP, handling proxies
+ * Extract client IP from request
+ * Uses shared utility with Express request types
  */
 function getClientIp(req: Request): string {
-  // Check for forwarded IP (if behind proxy/load balancer)
   const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const ips = (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',');
-    return ips[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || 'unknown';
-}
-
-/**
- * Sanitize path to avoid log injection
- */
-function sanitizePath(path: string): string {
-  // Remove any control characters and limit length
-  return path.replace(/[\x00-\x1f\x7f]/g, '').substring(0, 200);
+  return extractClientIp(forwarded, req.ip || req.socket.remoteAddress);
 }
 
 /**

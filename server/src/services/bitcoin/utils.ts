@@ -1,31 +1,33 @@
 /**
- * Bitcoin Utilities
+ * Bitcoin Utilities (Server)
  *
  * Helper functions for Bitcoin operations like address validation,
  * unit conversion, and transaction building.
+ *
+ * Re-exports shared utilities and adds server-specific functions
+ * that require bitcoinjs-lib for cryptographic operations.
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { INPUT_VBYTES, OUTPUT_VBYTES, OVERHEAD_VBYTES } from './constants';
 
+// Import and re-export shared utilities
+import {
+  satsToBTC,
+  btcToSats,
+  formatSats as sharedFormatSats,
+  formatBTC as sharedFormatBTC,
+  SATS_PER_BTC,
+  NetworkType,
+  AddressType,
+} from '../../../../shared';
+
+export { satsToBTC, btcToSats, SATS_PER_BTC, NetworkType, AddressType };
+
 // Initialize ECC library for Taproot/P2TR support
 // This is required by bitcoinjs-lib v6+ for bech32m address validation
 bitcoin.initEccLib(ecc);
-
-/**
- * Convert satoshis to BTC
- */
-export function satsToBTC(sats: number): number {
-  return sats / 100000000;
-}
-
-/**
- * Convert BTC to satoshis
- */
-export function btcToSats(btc: number): number {
-  return Math.round(btc * 100000000);
-}
 
 /**
  * Validate Bitcoin address
@@ -106,19 +108,16 @@ export function calculateFee(sizeVBytes: number, feeRate: number): number {
 
 /**
  * Format satoshis for display
+ * Re-exports shared utility
  */
-export function formatSats(sats: number, decimals: number = 0): string {
-  return sats.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
+export const formatSats = sharedFormatSats;
 
 /**
  * Format BTC for display
+ * Re-exports shared utility (without trim feature for backward compatibility)
  */
 export function formatBTC(btc: number, decimals: number = 8): string {
-  return btc.toFixed(decimals);
+  return sharedFormatBTC(btc, decimals, false);
 }
 
 /**

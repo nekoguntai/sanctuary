@@ -1,10 +1,8 @@
-# Dependencies - installed fresh in container
+# Dependencies - installed fresh in container (root level)
 node_modules
-server/node_modules
 
-# Build outputs
+# Build outputs (frontend only, backend/gateway handled below)
 dist
-server/dist
 
 # Git
 .git
@@ -46,8 +44,20 @@ Thumbs.db
 # Umbrel package (not needed in container)
 sanctuary/
 
-# Backend server (built separately)
-server/
-
 # Docker compose files
 docker-compose*.yml
+
+# Build outputs (not source)
+server/dist
+server/node_modules
+gateway/dist
+gateway/node_modules
+ai-proxy/dist
+ai-proxy/node_modules
+
+# Test files (not needed in production builds)
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+**/coverage
+**/.nyc_output

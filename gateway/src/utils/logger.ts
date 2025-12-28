@@ -4,46 +4,44 @@
 
 import { config } from '../config';
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+// Import shared types from consolidated module
+import { LogLevel, LOG_LEVEL_MAP, Logger } from '../../../shared/types/logger';
 
-const LOG_LEVELS: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
+// Re-export for backward compatibility
+export { LogLevel, Logger };
 
-const currentLevel = LOG_LEVELS[config.logLevel as LogLevel] ?? LOG_LEVELS.info;
+// Get current log level from config
+const currentLevel = LOG_LEVEL_MAP[config.logLevel] ?? LogLevel.INFO;
 
 function formatTimestamp(): string {
   return new Date().toISOString();
 }
 
 function shouldLog(level: LogLevel): boolean {
-  return LOG_LEVELS[level] >= currentLevel;
+  return level >= currentLevel;
 }
 
-export function createLogger(module: string) {
+export function createLogger(module: string): Logger {
   const prefix = `[${module}]`;
 
   return {
     debug: (message: string, meta?: Record<string, unknown>) => {
-      if (shouldLog('debug')) {
+      if (shouldLog(LogLevel.DEBUG)) {
         console.log(`[${formatTimestamp()}] DEBUG ${prefix} ${message}`, meta ? JSON.stringify(meta) : '');
       }
     },
     info: (message: string, meta?: Record<string, unknown>) => {
-      if (shouldLog('info')) {
+      if (shouldLog(LogLevel.INFO)) {
         console.log(`[${formatTimestamp()}] INFO  ${prefix} ${message}`, meta ? JSON.stringify(meta) : '');
       }
     },
     warn: (message: string, meta?: Record<string, unknown>) => {
-      if (shouldLog('warn')) {
+      if (shouldLog(LogLevel.WARN)) {
         console.warn(`[${formatTimestamp()}] WARN  ${prefix} ${message}`, meta ? JSON.stringify(meta) : '');
       }
     },
     error: (message: string, meta?: Record<string, unknown>) => {
-      if (shouldLog('error')) {
+      if (shouldLog(LogLevel.ERROR)) {
         console.error(`[${formatTimestamp()}] ERROR ${prefix} ${message}`, meta ? JSON.stringify(meta) : '');
       }
     },

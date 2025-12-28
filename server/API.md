@@ -878,12 +878,38 @@ GET /api/v1/wallets/123/transactions?limit=20&offset=40
 
 ---
 
-## WebSocket (Planned)
+## WebSocket
 
-Real-time transaction updates via WebSocket will be available at:
+Real-time updates are available via WebSocket at:
 
 ```
-ws://localhost:3001/ws
+wss://localhost:8443/ws
 ```
 
-This feature is not yet implemented.
+### Authentication
+
+After connecting, authenticate with your JWT token:
+
+```json
+{ "type": "auth", "token": "your-jwt-token" }
+```
+
+### Subscriptions
+
+Subscribe to wallet events:
+
+```json
+{ "type": "subscribe", "channel": "wallet", "walletId": "uuid" }
+```
+
+### Events
+
+The server broadcasts the following events:
+
+| Event | Description |
+|-------|-------------|
+| `transaction` | New transaction detected |
+| `balance` | Wallet balance updated |
+| `confirmation` | Transaction confirmation count changed |
+| `sync` | Wallet sync status changed |
+| `newBlock` | New block detected |

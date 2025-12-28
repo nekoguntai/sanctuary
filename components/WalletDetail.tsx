@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN } from '../types';
+import { satsToBTC, btcToSats, formatBTC } from '@shared/utils/bitcoin';
 import * as walletsApi from '../src/api/wallets';
 import * as transactionsApi from '../src/api/transactions';
 import * as labelsApi from '../src/api/labels';
@@ -528,7 +529,7 @@ export const WalletDetail: React.FC = () => {
       setPayjoinLoading(true);
       try {
         const result = await payjoinApi.getPayjoinUri(receiveAddressForPayjoin.id, {
-          amount: receiveAmount ? Math.round(parseFloat(receiveAmount) * 100000000) : undefined,
+          amount: receiveAmount ? btcToSats(parseFloat(receiveAmount)) : undefined,
         });
         if (!cancelled) {
           setPayjoinUri(result.uri);
@@ -597,7 +598,7 @@ export const WalletDetail: React.FC = () => {
       addNotification({
         type: 'transaction',
         title,
-        message: `${prefix}${(Math.abs(data.amount) / 100000000).toFixed(8)} BTC in ${wallet?.name || 'wallet'}`,
+        message: `${prefix}${formatBTC(satsToBTC(Math.abs(data.amount)), 8, false)} BTC in ${wallet?.name || 'wallet'}`,
         duration: 10000,
         data,
       });

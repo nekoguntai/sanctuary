@@ -38,6 +38,13 @@
 import { Logger } from './logger';
 import { ApiError } from '../src/api/client';
 
+// Import shared error utilities
+import {
+  extractErrorMessage as sharedExtractErrorMessage,
+  isAbortError as sharedIsAbortError,
+  isNetworkError as sharedIsNetworkError,
+} from '@shared/utils/errors';
+
 /**
  * Options for error handling
  */
@@ -60,25 +67,20 @@ export interface ErrorHandlerOptions {
 
 /**
  * Extract a user-friendly error message from an unknown error
+ * Extended version that also handles ApiError
  *
  * @param error - The error object (can be Error, ApiError, string, or unknown)
  * @param fallbackMessage - Message to use if extraction fails
  * @returns User-friendly error message string
  */
 export function extractErrorMessage(error: unknown, fallbackMessage = 'An unexpected error occurred'): string {
+  // Handle ApiError first (frontend-specific)
   if (error instanceof ApiError) {
     return error.message;
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  return fallbackMessage;
+  // Fall back to shared implementation
+  return sharedExtractErrorMessage(error, fallbackMessage);
 }
 
 /**
@@ -127,29 +129,15 @@ export function logError(
 
 /**
  * Check if an error is an AbortError (from fetch abort)
- *
- * @param error - The error to check
- * @returns true if the error is an AbortError
+ * Re-exports shared utility
  */
-export function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
+export const isAbortError = sharedIsAbortError;
 
 /**
  * Check if an error is a network error
- *
- * @param error - The error to check
- * @returns true if the error appears to be network-related
+ * Re-exports shared utility
  */
-export function isNetworkError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    return message.includes('network') ||
-           message.includes('fetch') ||
-           message.includes('connection');
-  }
-  return false;
-}
+export const isNetworkError = sharedIsNetworkError;
 
 /**
  * Check if an error is a 404 Not Found error

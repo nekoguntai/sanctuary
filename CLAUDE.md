@@ -31,12 +31,17 @@ docker compose logs -f backend
 ## Project Structure
 
 - `server/` - Backend API (Express + Prisma)
+- `gateway/` - Mobile API gateway (Express)
+- `shared/` - Shared code across frontend, backend, and gateway
+  - `types/` - Shared TypeScript types (logger, websocket, bitcoin)
+  - `constants/` - Shared constants (bitcoin patterns)
+  - `utils/` - Shared utilities (bitcoin conversion, error handling)
 - `components/` - React frontend components
 - `src/` - Frontend source (api clients, types)
 - `services/` - Frontend services (hardware wallets)
 - `contexts/` - React contexts
 - `hooks/` - React hooks
-- `utils/` - Shared utilities
+- `utils/` - Frontend utilities
 
 ## Key Files
 

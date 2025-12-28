@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Wallet, Transaction, WalletType, WalletNetwork } from '../types';
 import { NetworkTabs, TabNetwork } from './NetworkTabs';
+import { satsToBTC, formatBTC } from '@shared/utils/bitcoin';
 
 // Local fee estimate type for dashboard display
 interface DashboardFeeEstimate {
@@ -327,7 +328,7 @@ export const Dashboard: React.FC = () => {
     addNotification({
       type: 'transaction',
       title,
-      message: `${prefix}${(Math.abs(data.amount) / 100000000).toFixed(8)} BTC • ${data.confirmations} confirmations`,
+      message: `${prefix}${formatBTC(satsToBTC(Math.abs(data.amount)), 8, false)} BTC • ${data.confirmations} confirmations`,
       duration: 10000,
       data,
     });
@@ -351,7 +352,7 @@ export const Dashboard: React.FC = () => {
       addNotification({
         type: 'balance',
         title: 'Balance Updated',
-        message: `${data.change > 0 ? '+' : ''}${(data.change / 100000000).toFixed(8)} BTC`,
+        message: `${data.change > 0 ? '+' : ''}${formatBTC(satsToBTC(data.change), 8, false)} BTC`,
         duration: 8000,
         data,
       });

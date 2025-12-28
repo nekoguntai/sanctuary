@@ -16,7 +16,9 @@
  */
 
 import { AsyncLocalStorage } from 'async_hooks';
-import { randomUUID } from 'crypto';
+
+// Import shared request utilities
+import { generateRequestId } from '../../../shared/utils/request';
 
 export interface RequestContextData {
   /** Unique request correlation ID for tracing */
@@ -89,11 +91,9 @@ export const requestContext = {
 
   /**
    * Generate a new request ID
+   * Uses shared utility for consistency across services
    */
-  generateRequestId(): string {
-    // Short format: 8 characters from UUID for readability in logs
-    return randomUUID().split('-')[0];
-  },
+  generateRequestId,
 };
 
 export default requestContext;

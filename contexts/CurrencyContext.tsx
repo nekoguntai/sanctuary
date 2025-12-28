@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useUser } from './UserContext';
 import * as priceApi from '../src/api/price';
 import { createLogger } from '../utils/logger';
+import { satsToBTC, formatBTC } from '@shared/utils/bitcoin';
 
 const log = createLogger('Currency');
 
@@ -120,7 +121,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
 
   const getFiatValue = (sats: number): number | null => {
     if (btcPrice === null) return null;
-    return (sats / 100000000) * btcPrice;
+    return satsToBTC(sats) * btcPrice;
   };
 
   // Format fiat price - returns "-----" if price not yet loaded
@@ -136,9 +137,8 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     if (useSats) {
       return `${sats.toLocaleString()} sats`;
     } else {
-      // Trim trailing zeros from BTC display
-      const btcValue = (sats / 100_000_000).toFixed(8).replace(/\.?0+$/, '');
-      return `${btcValue} BTC`;
+      // Format as BTC with trailing zeros trimmed
+      return `${formatBTC(satsToBTC(sats))} BTC`;
     }
   };
 

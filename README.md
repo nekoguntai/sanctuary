@@ -1145,6 +1145,10 @@ sanctuary/
 ├── components/        # React components
 ├── contexts/          # React context providers
 ├── hooks/             # Custom React hooks
+├── shared/            # Shared code across frontend, backend, gateway
+│   ├── types/         # Logger, WebSocket, Bitcoin type definitions
+│   ├── constants/     # Bitcoin constants (SATS_PER_BTC, address patterns)
+│   └── utils/         # Shared utilities (conversions, error handling)
 ├── server/            # Backend Node.js application
 │   ├── src/
 │   │   ├── api/       # REST API routes

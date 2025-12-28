@@ -7,14 +7,17 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY gateway/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
+# Copy shared directory first (needed for imports)
+COPY shared ../shared
+
 # Copy source
-COPY tsconfig.json ./
-COPY src ./src
+COPY gateway/tsconfig.json ./
+COPY gateway/src ./src
 
 # Build TypeScript
 RUN npm run build

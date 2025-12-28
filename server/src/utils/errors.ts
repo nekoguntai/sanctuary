@@ -1,13 +1,25 @@
 /**
- * Centralized Error Handling Utilities
+ * Centralized Error Handling Utilities (Server)
  *
  * Provides consistent error handling across the API,
  * including Prisma-specific error handling.
+ *
+ * Re-exports shared utilities and adds server-specific handlers.
  */
 
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { createLogger } from './logger';
+
+// Import and re-export shared error utilities
+import {
+  extractErrorMessage,
+  isAbortError,
+  isNetworkError,
+  isTimeoutError,
+} from '../../../shared/utils/errors';
+
+export { extractErrorMessage, isAbortError, isNetworkError, isTimeoutError };
 
 const log = createLogger('ErrorHandler');
 
@@ -36,16 +48,9 @@ export function isPrismaValidationError(error: unknown): error is Prisma.PrismaC
 
 /**
  * Get error message from unknown error type
+ * Alias for extractErrorMessage for backward compatibility
  */
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  return 'An unexpected error occurred';
-}
+export const getErrorMessage = extractErrorMessage;
 
 /**
  * Handle Prisma-specific errors and return appropriate HTTP response

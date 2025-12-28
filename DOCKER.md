@@ -5,18 +5,23 @@ This guide explains how to deploy Sanctuary using Docker and Docker Compose.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Docker Network                           │
-│                                                              │
-│  ┌──────────────┐   ┌──────────────┐   ┌─────────────────┐  │
-│  │   Frontend   │   │   Backend    │   │    PostgreSQL   │  │
-│  │   (nginx)    │──▶│   (node)     │──▶│                 │  │
-│  │    :80       │   │    :3001     │   │     :5432       │  │
-│  └──────────────┘   └──────────────┘   └─────────────────┘  │
-│         │                                      │             │
-│         ▼                                      ▼             │
-│    [exposed]                              [volume]           │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                          Docker Network                                │
+│                                                                        │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐              │
+│  │   Frontend   │   │   Backend    │   │   Gateway    │              │
+│  │   (nginx)    │──▶│   (node)     │◀──│   (node)     │              │
+│  │    :443      │   │    :3001     │   │    :4000     │              │
+│  └──────────────┘   └──────────────┘   └──────────────┘              │
+│         │                  │                  │                       │
+│         │                  ▼                  │                       │
+│         │           ┌─────────────────┐       │                       │
+│         │           │    PostgreSQL   │       │                       │
+│         │           │     :5432       │       │                       │
+│         │           └─────────────────┘       │                       │
+│         ▼                  ▼                  ▼                       │
+│    [exposed]          [volume]          [mobile API]                  │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -43,8 +48,11 @@ nano .env
 ### 3. Build and Run
 
 ```bash
-# Build and start all services
-docker compose up -d --build
+# Build and start all services (recommended)
+./start.sh
+
+# Or rebuild all containers
+./start.sh --rebuild
 
 # Watch the logs
 docker compose logs -f
@@ -53,20 +61,29 @@ docker compose logs -f
 docker compose ps
 ```
 
+> **Note**: Always use `./start.sh` for starting Sanctuary. This ensures proper environment setup and certificate generation.
+
 ### 4. Access the Application
 
-- **Frontend**: http://localhost (or your configured port)
-- **API Health Check**: http://localhost/api/v1/health
+- **Frontend**: https://localhost:8443 (or your configured HTTPS_PORT)
+- **API Health Check**: https://localhost:8443/api/v1/health
+- **Gateway (Mobile API)**: http://localhost:4000
 
 ## Commands
 
 ### Start/Stop
 
 ```bash
-# Start services
-docker compose up -d
+# Start services (recommended)
+./start.sh
+
+# Start with AI features
+./start.sh --with-ai
 
 # Stop services
+./start.sh --stop
+
+# Or using docker compose directly
 docker compose down
 
 # Stop and remove volumes (CAUTION: deletes database!)
@@ -104,7 +121,10 @@ cat backup.sql | docker compose exec -T postgres psql -U sanctuary sanctuary
 ### Rebuild Services
 
 ```bash
-# Rebuild all services
+# Rebuild all services (recommended)
+./start.sh --rebuild
+
+# Or using docker compose directly
 docker compose build --no-cache
 
 # Rebuild specific service
@@ -184,7 +204,9 @@ docker compose up -d --build
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FRONTEND_PORT` | `80` | Port to expose the frontend |
+| `HTTPS_PORT` | `443` | HTTPS port to expose (use 8443 for non-root) |
+| `HTTP_PORT` | `80` | HTTP redirect port |
+| `GATEWAY_PORT` | `4000` | Mobile API gateway port |
 | `POSTGRES_USER` | `sanctuary` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | - | PostgreSQL password (required) |
 | `POSTGRES_DB` | `sanctuary` | PostgreSQL database name |

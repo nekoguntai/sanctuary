@@ -50,26 +50,12 @@
  * ================================================================================
  */
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-}
+// Import shared types from consolidated module
+import { LogLevel, LOG_LEVEL_MAP, LOG_LEVEL_NAMES, Logger } from '@shared/types/logger';
 
-const LOG_LEVEL_MAP: Record<string, LogLevel> = {
-  debug: LogLevel.DEBUG,
-  info: LogLevel.INFO,
-  warn: LogLevel.WARN,
-  error: LogLevel.ERROR,
-};
-
-const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
-  [LogLevel.DEBUG]: 'DEBUG',
-  [LogLevel.INFO]: 'INFO',
-  [LogLevel.WARN]: 'WARN',
-  [LogLevel.ERROR]: 'ERROR',
-};
+// Re-export for backward compatibility
+export { LogLevel };
+export type { Logger };
 
 /**
  * Detect if we're in development mode
@@ -169,15 +155,7 @@ const logMessage = (
   }
 };
 
-/**
- * Logger interface
- */
-export interface Logger {
-  debug: (message: string, context?: Record<string, unknown>) => void;
-  info: (message: string, context?: Record<string, unknown>) => void;
-  warn: (message: string, context?: Record<string, unknown>) => void;
-  error: (message: string, context?: Record<string, unknown>) => void;
-}
+// Logger interface imported from shared types above
 
 /**
  * Create a logger instance with a specific prefix/module name

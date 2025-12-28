@@ -17,6 +17,7 @@ import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin
 import { reloadElectrumServers } from '../services/bitcoin/electrumPool';
 import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
+import { getAllCacheStats } from '../utils/cache';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
 
 // Domain routers (extracted for maintainability)
@@ -2171,6 +2172,41 @@ router.post('/tor-container/stop', authenticate, requireAdmin, async (req: Reque
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to stop Tor container',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/admin/metrics/cache
+ * Get cache statistics for monitoring
+ */
+router.get('/metrics/cache', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const cacheStats = getAllCacheStats();
+    const totals = cacheStats.reduce(
+      (acc, cache) => ({
+        hits: acc.hits + cache.hits,
+        misses: acc.misses + cache.misses,
+        size: acc.size + cache.size,
+      }),
+      { hits: 0, misses: 0, size: 0 }
+    );
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      caches: cacheStats,
+      totals: {
+        ...totals,
+        hitRate: (totals.hits + totals.misses) > 0
+          ? ((totals.hits / (totals.hits + totals.misses)) * 100).toFixed(1) + '%'
+          : 'N/A',
+      },
+    });
+  } catch (error) {
+    log.error('[ADMIN] Get cache metrics failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get cache metrics',
     });
   }
 });

@@ -156,6 +156,21 @@ export const priceCache = new ApplicationCache<{ price: number; change24h?: numb
   name: 'price',
 });
 
+/**
+ * Cache for wallet balance history
+ * Key: walletId:timeframe (e.g., 'uuid:1d', 'uuid:7d', 'uuid:30d')
+ * Value: balance history data points
+ * TTL: 10 seconds (short TTL since balance changes frequently)
+ */
+export const balanceHistoryCache = new ApplicationCache<{
+  currentBalance: number;
+  dataPoints: Array<{ timestamp: string; balance: number }>;
+}>({
+  ttlMs: 10000,
+  maxItems: 500,
+  name: 'balance-history',
+});
+
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
@@ -184,6 +199,7 @@ export async function getOrCompute<T extends object>(
  */
 export function invalidateWalletCaches(walletId: string): void {
   walletBalanceCache.invalidate(walletId);
+  balanceHistoryCache.invalidatePattern(walletId);
   log.debug(`[CACHE] Invalidated caches for wallet ${walletId}`);
 }
 
@@ -196,5 +212,6 @@ export function getAllCacheStats(): Array<{ name: string; size: number; hits: nu
     feeEstimateCache.getStats(),
     blockHeightCache.getStats(),
     priceCache.getStats(),
+    balanceHistoryCache.getStats(),
   ];
 }

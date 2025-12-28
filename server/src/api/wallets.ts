@@ -11,6 +11,7 @@ import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { balanceHistoryCache } from '../utils/cache';
 
 const router = Router();
 const log = createLogger('WALLETS');
@@ -207,6 +208,16 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
     const walletId = req.walletId!;
     const timeframe = (req.query.timeframe as string) || '1M';
 
+    // Check cache first
+    const cacheKey = `${walletId}:${timeframe}`;
+    const cached = balanceHistoryCache.get(cacheKey);
+    if (cached) {
+      return res.json({
+        timeframe,
+        ...cached,
+      });
+    }
+
     // Calculate date range
     const now = Date.now();
     const day = 86400000;
@@ -248,7 +259,7 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
 
     // Build response
     const data = sampled.map(tx => ({
-      timestamp: tx.blockTime?.toISOString(),
+      timestamp: tx.blockTime?.toISOString() || '',
       balance: Number(tx.balanceAfter || 0),
     }));
 
@@ -260,10 +271,16 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
       });
     }
 
-    res.json({
-      timeframe,
+    // Cache the result
+    const result = {
       currentBalance: balance,
       dataPoints: data,
+    };
+    balanceHistoryCache.set(cacheKey, result);
+
+    res.json({
+      timeframe,
+      ...result,
     });
   } catch (error: any) {
     log.error('Get balance history error', { error });

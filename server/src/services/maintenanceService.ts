@@ -188,6 +188,7 @@ class MaintenanceService {
       this.cleanupAuditLogs(),
       this.cleanupPriceData(),
       this.cleanupFeeEstimates(),
+      this.cleanupExpiredRefreshTokens(),
       this.checkDiskUsage(),
     ]);
 
@@ -331,6 +332,56 @@ class MaintenanceService {
   }
 
   /**
+   * Clean up expired refresh tokens
+   */
+  async cleanupExpiredRefreshTokens(): Promise<number> {
+    const now = new Date();
+
+    try {
+      const result = await prisma.refreshToken.deleteMany({
+        where: {
+          expiresAt: { lt: now },
+        },
+      });
+
+      if (result.count > 0) {
+        log.info('Expired refresh token cleanup completed', {
+          deleted: result.count,
+        });
+      }
+
+      return result.count;
+    } catch (error) {
+      log.error('Expired refresh token cleanup failed', { error: String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up orphaned draft transactions (wallet no longer exists)
+   */
+  async cleanupOrphanedDrafts(): Promise<number> {
+    try {
+      // Delete drafts where wallet no longer exists using raw SQL for efficiency
+      const result = await prisma.$executeRaw`
+        DELETE FROM "DraftTransaction"
+        WHERE "walletId" NOT IN (SELECT id FROM "Wallet")
+      `;
+
+      if (result > 0) {
+        log.info('Orphaned draft cleanup completed', {
+          deleted: result,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      log.error('Orphaned draft cleanup failed', { error: String(error) });
+      throw error;
+    }
+  }
+
+  /**
    * Check Docker volume disk usage and warn if threshold exceeded
    */
   async checkDiskUsage(): Promise<void> {
@@ -436,9 +487,14 @@ class MaintenanceService {
     const startTime = Date.now();
 
     try {
-      // Run VACUUM ANALYZE on all tables
+      // Run VACUUM ANALYZE with timeout protection (5 minute limit)
       log.info('Running VACUUM ANALYZE on database');
-      await prisma.$executeRawUnsafe('VACUUM ANALYZE;');
+      await prisma.$executeRawUnsafe(`SET statement_timeout = '300000';`);
+      try {
+        await prisma.$executeRawUnsafe('VACUUM ANALYZE;');
+      } finally {
+        await prisma.$executeRawUnsafe(`SET statement_timeout = '0';`);
+      }
 
       // Run REINDEX on heavily-updated tables
       const heavyTables = ['audit_logs', 'transactions', 'utxos'];
@@ -519,13 +575,17 @@ class MaintenanceService {
         });
       }
 
+      // Clean up orphaned drafts (wallet no longer exists)
+      const orphanedDrafts = await this.cleanupOrphanedDrafts();
+
       // Log to audit for tracking
       await auditService.log({
         username: 'system',
         action: 'maintenance.monthly_stale_cleanup',
         category: AuditCategory.SYSTEM,
         details: {
-          stalePushDevices: stalePushDevicesResult.count
+          stalePushDevices: stalePushDevicesResult.count,
+          orphanedDrafts,
         },
         success: true,
       });

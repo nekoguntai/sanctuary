@@ -167,6 +167,12 @@ export const DeviceList: React.FC = () => {
     return acc;
   }, {} as Record<HardwareDevice, DeviceWithWallets[]>);
 
+  // Get display name for device type (looks up model name from slug)
+  const getDeviceDisplayName = (type: string): string => {
+    const model = deviceModels.find(m => m.slug === type);
+    return model ? model.name : type || 'Unknown Device';
+  };
+
   if (loading) return <div className="p-8 text-center text-sanctuary-400">Loading devices...</div>;
 
   // Empty state
@@ -350,7 +356,7 @@ export const DeviceList: React.FC = () => {
 
                       {/* Type */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{device.type}</span>
+                        <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{getDeviceDisplayName(device.type)}</span>
                       </td>
 
                       {/* Fingerprint */}
@@ -439,7 +445,7 @@ export const DeviceList: React.FC = () => {
                           <div className="p-2 bg-white dark:bg-sanctuary-700 rounded-lg shadow-sm text-sanctuary-600 dark:text-sanctuary-300">
                              {getDeviceIcon(deviceType, "w-6 h-6")}
                           </div>
-                          <h3 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{type}</h3>
+                          <h3 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{getDeviceDisplayName(type)}</h3>
                        </div>
                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300">
                           {groupDevices.length}

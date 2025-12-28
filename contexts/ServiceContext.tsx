@@ -17,7 +17,7 @@
  */
 
 import React, { createContext, useContext, useMemo, ReactNode } from 'react';
-import { apiClient as defaultApiClient } from '../src/api/client';
+import defaultApiClient from '../src/api/client';
 import { websocketClient as defaultWebSocketClient, WebSocketClient } from '../services/websocket';
 
 // Define minimal interfaces for the services
@@ -113,58 +113,6 @@ export function useApiClient(): ApiClientInterface {
 export function useWebSocketClient(): WebSocketClientInterface {
   const { websocketClient } = useServices();
   return websocketClient;
-}
-
-/**
- * Create mock services for testing
- */
-export function createMockServices(overrides?: Partial<Services>): Services {
-  const mockApiClient: ApiClientInterface = {
-    get: jest.fn().mockResolvedValue({}),
-    post: jest.fn().mockResolvedValue({}),
-    put: jest.fn().mockResolvedValue({}),
-    delete: jest.fn().mockResolvedValue({}),
-    getToken: jest.fn().mockReturnValue('mock-token'),
-    setToken: jest.fn(),
-    clearToken: jest.fn(),
-  };
-
-  const mockWebSocketClient: WebSocketClientInterface = {
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    subscribe: jest.fn(),
-    unsubscribe: jest.fn(),
-    on: jest.fn().mockReturnValue(() => {}),
-    off: jest.fn(),
-    onConnectionChange: jest.fn().mockReturnValue(() => {}),
-    isConnected: jest.fn().mockReturnValue(true),
-  };
-
-  return {
-    apiClient: overrides?.apiClient ?? mockApiClient,
-    websocketClient: overrides?.websocketClient ?? mockWebSocketClient,
-  };
-}
-
-/**
- * Test wrapper component with mock services
- */
-export function TestServiceProvider({
-  children,
-  services,
-}: {
-  children: ReactNode;
-  services?: Partial<Services>;
-}) {
-  const mockServices = createMockServices(services);
-  return (
-    <ServiceProvider
-      apiClient={mockServices.apiClient}
-      websocketClient={mockServices.websocketClient}
-    >
-      {children}
-    </ServiceProvider>
-  );
 }
 
 export default ServiceContext;

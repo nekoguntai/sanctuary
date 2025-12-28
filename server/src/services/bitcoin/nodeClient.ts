@@ -229,13 +229,15 @@ export async function getNodeClient(network: 'mainnet' | 'testnet' | 'signet' | 
   let client: NodeClientInterface;
 
   if (networkConfig.mode === 'pool') {
-    // Pool mode - use multi-server connection pool for this network
+    // Pool mode - use dedicated subscription connection from the pool
+    // This connection is long-lived and doesn't need to be released
     try {
       const pool = await getElectrumPoolForNetwork(network);
-      const handle = await pool.acquire({ purpose: 'nodeClient', network });
 
-      // Return the client directly - pool handles connection lifecycle
-      client = handle.client;
+      // Use getSubscriptionConnection() for long-lived cached clients
+      // This returns a dedicated connection that stays active for the pool's lifetime
+      // Do NOT use pool.acquire() here - that requires release() which we can't do with caching
+      client = await pool.getSubscriptionConnection();
       log.info(`Using Electrum connection pool for ${network}`);
     } catch (error) {
       // Fall back to singleton if pool fails

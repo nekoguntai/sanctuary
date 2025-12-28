@@ -254,7 +254,7 @@ const QueuedSummaryBlock: React.FC<{
           <div className="text-center">
             {!compact && <div className="text-[10px] uppercase font-bold text-white dark:text-warning-900 mb-0.5">Median Fee</div>}
             <div className={`${compact ? 'text-base' : 'text-xl'} font-black leading-none text-white dark:text-warning-900`}>
-              {Math.round(summary.averageFee)}
+              {summary.averageFee < 1 ? summary.averageFee.toFixed(1) : Math.round(summary.averageFee)}
             </div>
             <div className={`${compact ? 'text-[9px]' : 'text-[10px]'} font-bold text-white dark:text-warning-900`}>sat/vB</div>
           </div>

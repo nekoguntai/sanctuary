@@ -64,7 +64,8 @@ describe('StartupManager', () => {
 
       const results = await startAllServices(services);
 
-      expect(results[0].duration).toBeGreaterThanOrEqual(50);
+      // Allow slight timing variance in CI environments (49ms vs 50ms)
+      expect(results[0].duration).toBeGreaterThanOrEqual(45);
     });
 
     it('should handle non-critical service failures gracefully', async () => {

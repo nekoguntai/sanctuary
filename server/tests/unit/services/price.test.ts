@@ -23,7 +23,7 @@ jest.mock('../../../src/utils/logger', () => ({
 
 import PriceService, { getPriceService } from '../../../src/services/price/index';
 import { supportedCurrencies } from '../../../src/services/price/providers';
-import { circuitBreakerRegistry } from '../../../src/utils/circuitBreaker';
+import { circuitBreakerRegistry } from '../../../src/services/circuitBreaker';
 
 describe('Price Service', () => {
   let priceService: PriceService;

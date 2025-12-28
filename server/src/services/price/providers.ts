@@ -6,7 +6,7 @@
  */
 
 import axios from 'axios';
-import { createCircuitBreaker, CircuitBreakerError } from '../../utils/circuitBreaker';
+import { createCircuitBreaker, CircuitOpenError } from '../circuitBreaker';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('PRICE');
@@ -20,39 +20,42 @@ export interface PriceData {
 }
 
 // Create circuit breakers for each provider
-const mempoolCircuit = createCircuitBreaker({
+const mempoolCircuit = createCircuitBreaker<PriceData>({
   name: 'price-mempool',
   failureThreshold: 3,
-  resetTimeout: 60000, // 1 minute
-  requestTimeout: 5000,
+  recoveryTimeout: 60000, // 1 minute
 });
 
-const coingeckoCircuit = createCircuitBreaker({
+const coingeckoCircuit = createCircuitBreaker<PriceData>({
   name: 'price-coingecko',
   failureThreshold: 3,
-  resetTimeout: 60000,
-  requestTimeout: 5000,
+  recoveryTimeout: 60000,
 });
 
-const krakenCircuit = createCircuitBreaker({
+const krakenCircuit = createCircuitBreaker<PriceData>({
   name: 'price-kraken',
   failureThreshold: 3,
-  resetTimeout: 60000,
-  requestTimeout: 5000,
+  recoveryTimeout: 60000,
 });
 
-const coinbaseCircuit = createCircuitBreaker({
+const coinbaseCircuit = createCircuitBreaker<PriceData>({
   name: 'price-coinbase',
   failureThreshold: 3,
-  resetTimeout: 60000,
-  requestTimeout: 5000,
+  recoveryTimeout: 60000,
 });
 
-const binanceCircuit = createCircuitBreaker({
+const binanceCircuit = createCircuitBreaker<PriceData>({
   name: 'price-binance',
   failureThreshold: 3,
-  resetTimeout: 60000,
-  requestTimeout: 5000,
+  recoveryTimeout: 60000,
+});
+
+// Separate circuit for market chart (returns different type)
+type MarketChartData = Array<{ timestamp: Date; price: number }>;
+const marketChartCircuit = createCircuitBreaker<MarketChartData>({
+  name: 'price-coingecko-chart',
+  failureThreshold: 3,
+  recoveryTimeout: 60000,
 });
 
 /**
@@ -230,11 +233,11 @@ export const providers = {
  */
 export function getPriceCircuitStatus(): Array<{ name: string; state: string; available: boolean }> {
   return [
-    { name: 'mempool', state: mempoolCircuit.getState(), available: mempoolCircuit.isAvailable() },
-    { name: 'coingecko', state: coingeckoCircuit.getState(), available: coingeckoCircuit.isAvailable() },
-    { name: 'kraken', state: krakenCircuit.getState(), available: krakenCircuit.isAvailable() },
-    { name: 'coinbase', state: coinbaseCircuit.getState(), available: coinbaseCircuit.isAvailable() },
-    { name: 'binance', state: binanceCircuit.getState(), available: binanceCircuit.isAvailable() },
+    { name: 'mempool', state: mempoolCircuit.getHealth().state, available: mempoolCircuit.isAllowingRequests() },
+    { name: 'coingecko', state: coingeckoCircuit.getHealth().state, available: coingeckoCircuit.isAllowingRequests() },
+    { name: 'kraken', state: krakenCircuit.getHealth().state, available: krakenCircuit.isAllowingRequests() },
+    { name: 'coinbase', state: coinbaseCircuit.getHealth().state, available: coinbaseCircuit.isAllowingRequests() },
+    { name: 'binance', state: binanceCircuit.getHealth().state, available: binanceCircuit.isAllowingRequests() },
   ];
 }
 
@@ -289,7 +292,7 @@ export async function fetchCoinGeckoMarketChart(
   days: number,
   currency: string = 'USD'
 ): Promise<Array<{ timestamp: Date; price: number }>> {
-  return coingeckoCircuit.execute(async () => {
+  return marketChartCircuit.execute(async () => {
     const currencyLower = currency.toLowerCase();
 
     const response = await axios.get(
@@ -350,7 +353,7 @@ export async function fetchPriceWithFallback(currency: string = 'USD'): Promise<
       const result = await provider(currency);
       return result;
     } catch (error) {
-      const errorMsg = error instanceof CircuitBreakerError
+      const errorMsg = error instanceof CircuitOpenError
         ? `${providerName}: circuit open`
         : `${providerName}: ${(error as Error).message}`;
       errors.push(errorMsg);

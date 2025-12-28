@@ -253,6 +253,23 @@ class CircuitBreakerRegistry {
     if (openCount > 0) return 'degraded';
     return 'healthy';
   }
+
+  /**
+   * Reset all registered circuit breakers to closed state
+   */
+  resetAll(): void {
+    for (const breaker of this.breakers.values()) {
+      breaker.reset();
+    }
+  }
+
+  /**
+   * Clear all registered circuit breakers
+   * Use with caution - mainly for testing
+   */
+  clear(): void {
+    this.breakers.clear();
+  }
 }
 
 export const circuitBreakerRegistry = new CircuitBreakerRegistry();

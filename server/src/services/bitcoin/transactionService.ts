@@ -305,7 +305,7 @@ export async function createTransaction(
     throw new Error('Wallet not found');
   }
 
-  console.log('[TransactionService] createTransaction - walletId:', walletId, 'scriptType:', wallet.scriptType);
+  log.debug('createTransaction', { walletId, scriptType: wallet.scriptType });
 
   // Validate recipient address
   const network = wallet.network === 'testnet' ? 'testnet' : 'mainnet';
@@ -1142,7 +1142,7 @@ export async function broadcastAndSave(
       amount: BigInt(metadata.amount),
     }]).catch(err => {
       // Log but don't fail the broadcast
-      console.warn(`[TRANSACTION] Failed to send notifications: ${err}`);
+      log.warn('Failed to send notifications', { error: String(err) });
     });
   });
 

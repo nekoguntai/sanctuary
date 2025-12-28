@@ -6,13 +6,21 @@
  * - Logs request start and completion with duration
  * - Makes request context available throughout the request lifecycle
  * - Sets X-Request-ID response header for client correlation
+ * - Automatically redacts sensitive data in debug body logging
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { requestContext } from '../utils/requestContext';
 import { createLogger } from '../utils/logger';
+import { redactObject } from '../utils/redact';
 
 const log = createLogger('HTTP');
+
+/**
+ * Enable request body logging for debugging (disabled by default)
+ * Set LOG_REQUEST_BODY=true to enable (bodies are redacted automatically)
+ */
+const LOG_REQUEST_BODY = process.env.LOG_REQUEST_BODY === 'true';
 
 /**
  * Paths to exclude from detailed logging (health checks, etc.)
@@ -59,11 +67,18 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     // Log request start (skip for excluded paths)
     if (!isExcluded) {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-      log.info(`${req.method} ${req.path}`, {
+      const logData: Record<string, unknown> = {
         requestId,
         ip: clientIp,
         userAgent: req.headers['user-agent']?.substring(0, 50),
-      });
+      };
+
+      // Optionally log request body for debugging (always redacted)
+      if (LOG_REQUEST_BODY && req.body && Object.keys(req.body).length > 0) {
+        logData.body = redactObject(req.body);
+      }
+
+      log.info(`${req.method} ${req.path}`, logData);
     }
 
     // Capture response finish for duration logging

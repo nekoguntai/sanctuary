@@ -73,7 +73,7 @@
  */
 
 import { requestContext } from './requestContext';
-import { safeError } from './redact';
+import { safeError, redactObject } from './redact';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -142,13 +142,36 @@ const safeStringify = (obj: any): string => {
 };
 
 /**
+ * Prepare context object for logging:
+ * - Convert Error objects to safe format (no stack in production)
+ * - Redact sensitive fields (passwords, tokens, secrets, etc.)
+ */
+const prepareContext = (context?: Record<string, any>): Record<string, any> | undefined => {
+  if (!context || Object.keys(context).length === 0) return undefined;
+
+  // First pass: convert Error objects to safe format
+  const withSafeErrors: Record<string, any> = {};
+  for (const [key, value] of Object.entries(context)) {
+    if (value instanceof Error) {
+      withSafeErrors[key] = safeError(value);
+    } else {
+      withSafeErrors[key] = value;
+    }
+  }
+
+  // Second pass: redact sensitive fields
+  return redactObject(withSafeErrors) as Record<string, any>;
+};
+
+/**
  * Format context object as key=value pairs
  * Objects are JSON stringified, primitives are converted to strings
  */
 const formatContext = (context?: Record<string, any>): string => {
-  if (!context || Object.keys(context).length === 0) return '';
+  const prepared = prepareContext(context);
+  if (!prepared || Object.keys(prepared).length === 0) return '';
 
-  const formatted = Object.entries(context)
+  const formatted = Object.entries(prepared)
     .map(([key, value]) => {
       if (value === undefined || value === null) {
         return `${key}=null`;

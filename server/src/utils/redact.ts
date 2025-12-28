@@ -104,7 +104,7 @@ export function redact(value: unknown, showPresence: boolean = true): string {
 }
 
 /**
- * Redact sensitive fields from an object (shallow)
+ * Redact sensitive fields from an object (with circular reference handling)
  *
  * @param obj - Object to redact
  * @param additionalFields - Additional field names to redact
@@ -116,11 +116,18 @@ export function redact(value: unknown, showPresence: boolean = true): string {
  */
 export function redactObject<T extends Record<string, unknown>>(
   obj: T,
-  additionalFields: string[] = []
+  additionalFields: string[] = [],
+  seen: WeakSet<object> = new WeakSet()
 ): Record<string, unknown> {
   if (!obj || typeof obj !== 'object') {
     return obj;
   }
+
+  // Handle circular references
+  if (seen.has(obj)) {
+    return { '[Circular]': true };
+  }
+  seen.add(obj);
 
   const result: Record<string, unknown> = {};
   const additionalSet = new Set(additionalFields.map((f) => f.toLowerCase()));
@@ -132,7 +139,7 @@ export function redactObject<T extends Record<string, unknown>>(
       result[key] = redact(value);
     } else if (value && typeof value === 'object' && !Array.isArray(value)) {
       // Recursively redact nested objects
-      result[key] = redactObject(value as Record<string, unknown>, additionalFields);
+      result[key] = redactObject(value as Record<string, unknown>, additionalFields, seen);
     } else {
       result[key] = value;
     }

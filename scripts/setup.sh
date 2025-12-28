@@ -102,7 +102,7 @@ GATEWAY_PORT=4000
 # OPTIONAL - Bitcoin Network
 # ============================================
 
-# Options: mainnet, testnet, regtest
+# Options: mainnet, testnet, signet, regtest
 BITCOIN_NETWORK=mainnet
 
 # ============================================

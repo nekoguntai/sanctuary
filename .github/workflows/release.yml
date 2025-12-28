@@ -300,3 +300,11 @@ jobs:
 
           gh release edit "v$VERSION" --notes-file /tmp/release_body.md
           echo "Updated release notes"
+
+      - name: Mark release as latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build-and-push.outputs.version }}
+        run: |
+          gh release edit "v$VERSION" --latest
+          echo "Marked v$VERSION as latest release"

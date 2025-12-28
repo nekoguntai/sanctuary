@@ -105,16 +105,15 @@ describe('Blockchain Service', () => {
         { tx_hash: txHash, height: 800000 },
       ]);
 
-      // Mock transaction details
-      mockElectrumClient.getTransaction.mockResolvedValue(
-        createMockTransaction({
-          txid: txHash,
-          blockheight: 800000,
-          confirmations: 10,
-          inputs: [{ txid: 'b'.repeat(64), vout: 0, value: 0.002, address: 'external-address' }],
-          outputs: [{ value: 0.001, address: testAddress }],
-        })
-      );
+      // Mock transaction details using batch API (syncAddress uses getTransactionsBatch)
+      const mockTx = createMockTransaction({
+        txid: txHash,
+        blockheight: 800000,
+        confirmations: 10,
+        inputs: [{ txid: 'b'.repeat(64), vout: 0, value: 0.002, address: 'external-address' }],
+        outputs: [{ value: 0.001, address: testAddress }],
+      });
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txHash, mockTx]]));
 
       // Mock no existing transaction
       mockPrismaClient.transaction.findFirst.mockResolvedValue(null);

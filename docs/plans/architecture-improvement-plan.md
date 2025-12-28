@@ -222,7 +222,7 @@ import { z } from 'zod';
 
 const configSchema = z.object({
   server: z.object({
-    port: z.number().default(3456),
+    port: z.number().default(3001),
     // ...
   }),
   // ...
@@ -235,7 +235,7 @@ export function loadConfig(): AppConfig {
 
   const rawConfig = {
     server: {
-      port: parseInt(process.env.PORT || '3456'),
+      port: parseInt(process.env.PORT || '3001'),
       // ...
     },
     // ...

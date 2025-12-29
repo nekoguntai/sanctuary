@@ -502,8 +502,8 @@ export const Dashboard: React.FC = () => {
                {!isMainnet && (
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-800 text-testnet-200'
-                        : 'bg-signet-800 text-signet-200'
+                        ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800'
+                        : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800'
                   }`}>
                      {selectedNetwork.toUpperCase()}
                   </span>
@@ -583,8 +583,8 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate('/settings/node')}
                   className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-800 dark:bg-testnet-800 text-testnet-300 dark:text-testnet-300 hover:bg-testnet-700 dark:hover:bg-testnet-700'
-                        : 'bg-signet-800 dark:bg-signet-800 text-signet-300 dark:text-signet-300 hover:bg-signet-700 dark:hover:bg-signet-700'
+                        ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800 hover:bg-testnet-700 dark:hover:bg-testnet-200'
+                        : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800 hover:bg-signet-700 dark:hover:bg-signet-200'
                   }`}
                >
                   Configure Node
@@ -680,10 +680,10 @@ export const Dashboard: React.FC = () => {
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-mainnet-800 text-mainnet-200'
+                  ? 'bg-mainnet-800 dark:bg-mainnet-100 text-mainnet-200 dark:text-mainnet-800'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-testnet-800 text-testnet-200'
-                  : 'bg-signet-800 text-signet-200'
+                  ? 'bg-testnet-800 dark:bg-testnet-100 text-testnet-200 dark:text-testnet-800'
+                  : 'bg-signet-800 dark:bg-signet-100 text-signet-200 dark:text-signet-800'
               }`}>
                 {selectedNetwork.toUpperCase()}
               </span>

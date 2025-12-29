@@ -53,7 +53,7 @@ describe('NetworkTabs', () => {
 
       const testnetButton = screen.getByText('Testnet').closest('button');
       // The selected tab should have the active background color class
-      expect(testnetButton).toHaveClass('bg-testnet-600');
+      expect(testnetButton).toHaveClass('bg-testnet-800');
     });
 
     it('should call onNetworkChange when a different network is clicked', () => {
@@ -119,14 +119,14 @@ describe('NetworkTabs', () => {
       render(<NetworkTabs {...defaultProps} selectedNetwork="mainnet" />);
 
       const mainnetButton = screen.getByText('Mainnet').closest('button');
-      expect(mainnetButton).toHaveClass('border-mainnet-500');
+      expect(mainnetButton).toHaveClass('border-mainnet-600');
     });
 
     it('should use testnet colors for testnet when selected', () => {
       render(<NetworkTabs {...defaultProps} selectedNetwork="testnet" />);
 
       const testnetButton = screen.getByText('Testnet').closest('button');
-      expect(testnetButton).toHaveClass('border-testnet-500');
+      expect(testnetButton).toHaveClass('border-testnet-600');
     });
 
     it('should use signet colors for signet when selected', () => {
@@ -139,7 +139,7 @@ describe('NetworkTabs', () => {
       );
 
       const signetButton = screen.getByText('Signet').closest('button');
-      expect(signetButton).toHaveClass('border-signet-500');
+      expect(signetButton).toHaveClass('border-signet-600');
     });
   });
 });

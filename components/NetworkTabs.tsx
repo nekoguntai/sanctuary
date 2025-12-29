@@ -23,27 +23,27 @@ interface NetworkConfig {
 const networkConfigs: Record<TabNetwork, NetworkConfig> = {
   mainnet: {
     label: 'Mainnet',
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-    borderColor: 'border-emerald-200 dark:border-emerald-800',
-    activeColor: 'text-emerald-700 dark:text-emerald-300',
-    activeBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+    color: 'text-emerald-700 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-900/30',
+    borderColor: 'border-emerald-500 dark:border-emerald-500',
+    activeColor: 'text-white dark:text-white',
+    activeBg: 'bg-emerald-600 dark:bg-emerald-600',
   },
   testnet: {
     label: 'Testnet',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-    activeColor: 'text-amber-700 dark:text-amber-300',
-    activeBg: 'bg-amber-100 dark:bg-amber-900/40',
+    color: 'text-amber-700 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/30',
+    borderColor: 'border-amber-500 dark:border-amber-500',
+    activeColor: 'text-white dark:text-white',
+    activeBg: 'bg-amber-600 dark:bg-amber-600',
   },
   signet: {
     label: 'Signet',
-    color: 'text-purple-600 dark:text-purple-400',
-    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    activeColor: 'text-purple-700 dark:text-purple-300',
-    activeBg: 'bg-purple-100 dark:bg-purple-900/40',
+    color: 'text-purple-700 dark:text-purple-400',
+    bgColor: 'bg-purple-50 dark:bg-purple-900/30',
+    borderColor: 'border-purple-500 dark:border-purple-500',
+    activeColor: 'text-white dark:text-white',
+    activeBg: 'bg-purple-600 dark:bg-purple-600',
   },
 };
 
@@ -82,9 +82,9 @@ export const NetworkTabs: React.FC<NetworkTabsProps> = ({
               <span className={`
                 px-1.5 py-0.5 rounded-md text-xs font-semibold
                 ${isSelected
-                  ? 'bg-white/50 dark:bg-black/20'
+                  ? 'bg-white/30 text-white'
                   : isEmpty
-                    ? 'bg-sanctuary-100 dark:bg-sanctuary-800'
+                    ? 'bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-500 dark:text-sanctuary-400'
                     : 'bg-white/50 dark:bg-white/10'
                 }
               `}>

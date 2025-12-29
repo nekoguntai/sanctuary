@@ -500,10 +500,10 @@ export const Dashboard: React.FC = () => {
                   {selectedNetwork === 'mainnet' ? 'Bitcoin' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Network Status
                </h4>
                {!isMainnet && (
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-purple-600 text-white'
                   }`}>
                      {selectedNetwork.toUpperCase()}
                   </span>
@@ -678,12 +678,12 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                  ? 'bg-emerald-600 text-white'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                  : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-purple-600 text-white'
               }`}>
                 {selectedNetwork.toUpperCase()}
               </span>

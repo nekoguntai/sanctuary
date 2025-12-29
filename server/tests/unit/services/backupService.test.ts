@@ -145,7 +145,7 @@ describe('BackupService', () => {
       const result = await backupService.validateBackup(backup);
 
       expect(result.valid).toBe(false);
-      expect(result.issues.some((i) => i.includes('newer than current'))).toBe(true);
+      expect(result.issues.some((i) => i.includes('too far ahead'))).toBe(true);
     });
 
     it('should reject backup without any users', async () => {

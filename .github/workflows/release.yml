@@ -208,7 +208,8 @@ jobs:
           docker manifest push ${IMAGE}:v${VERSION}
           docker manifest push ${IMAGE}:latest
 
-          DIGEST=$(docker manifest inspect ${IMAGE}:v${VERSION} -v | jq -r '.Descriptor.digest')
+          # Get digest from the pushed manifest (use docker buildx imagetools for proper digest)
+          DIGEST=$(docker buildx imagetools inspect ${IMAGE}:v${VERSION} --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Create backend manifest
@@ -228,7 +229,8 @@ jobs:
           docker manifest push ${IMAGE}:v${VERSION}
           docker manifest push ${IMAGE}:latest
 
-          DIGEST=$(docker manifest inspect ${IMAGE}:v${VERSION} -v | jq -r '.Descriptor.digest')
+          # Get digest from the pushed manifest
+          DIGEST=$(docker buildx imagetools inspect ${IMAGE}:v${VERSION} --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
   update-umbrel:
@@ -349,7 +351,7 @@ jobs:
           <details>
           <summary><strong>Umbrel Installation</strong> (alternative method)</summary>
 
-          > **Note:** Umbrel serves apps over HTTP, so WebUSB hardware wallet connections will not work. Use the Quick Install method above for full hardware wallet support.
+          > **Note:** Umbrel serves apps over HTTP, so WebUSB hardware wallet connections and QR code webcam scanning will not work. Use the Quick Install method above for full feature support.
 
           1. Open the App Store in your Umbrel
           2. Click the **...** menu and select **Community App Stores**

@@ -583,8 +583,8 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate('/settings/node')}
                   className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-700 dark:text-testnet-200 hover:bg-testnet-200 dark:hover:bg-testnet-900/50'
-                        : 'bg-signet-100 dark:bg-signet-900/30 text-signet-700 dark:text-signet-200 hover:bg-signet-200 dark:hover:bg-signet-900/50'
+                        ? 'bg-testnet-800 dark:bg-testnet-800 text-testnet-300 dark:text-testnet-300 hover:bg-testnet-700 dark:hover:bg-testnet-700'
+                        : 'bg-signet-800 dark:bg-signet-800 text-signet-300 dark:text-signet-300 hover:bg-signet-700 dark:hover:bg-signet-700'
                   }`}
                >
                   Configure Node

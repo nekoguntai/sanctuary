@@ -2,7 +2,7 @@ name: Release
 
 on:
   release:
-    types: [created]  # Triggers on draft creation too - we publish after validation
+    types: [published]  # Triggers when release is published
   workflow_dispatch:
     inputs:
       version:
@@ -28,12 +28,40 @@ jobs:
         run: echo "Release workflow skipped for push events"
 
   # ============================================
+  # Verify Release is a Pre-release (Release Candidate)
+  # ============================================
+  verify-prerelease:
+    name: Verify Pre-release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Check that release is a pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
+          VERSION="${{ github.event.release.tag_name }}"
+
+          if [ "$IS_PRERELEASE" != "true" ]; then
+            echo "::error::Release $VERSION was published as a full release, not a pre-release."
+            echo "::error::Please create releases as pre-releases (release candidates) first."
+            echo "::error::After validation passes, the workflow will automatically convert it to a full release."
+            echo ""
+            echo "To fix: Delete this release and recreate it with 'Set as a pre-release' checked."
+            exit 1
+          fi
+
+          echo "✓ Release $VERSION is a pre-release (release candidate)"
+          echo "  It will be converted to a full release after validation passes."
+
+  # ============================================
   # Wait for Install Tests to Pass
   # ============================================
   wait-for-install-tests:
     name: Wait for Install Tests
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: verify-prerelease
+    if: always() && (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && (needs.verify-prerelease.result == 'success' || needs.verify-prerelease.result == 'skipped')
     steps:
       - name: Wait for Install Tests workflow
         env:
@@ -377,19 +405,17 @@ jobs:
           gh release edit "v$VERSION" --notes-file /tmp/release_body.md
           echo "Updated release notes"
 
-      - name: Publish release and mark as latest
+      - name: Convert pre-release to full release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.create-manifests.outputs.version }}
         run: |
-          # Check if release is still a draft
-          IS_DRAFT=$(gh api repos/${{ github.repository }}/releases/tags/v$VERSION --jq '.draft')
+          echo "All validation passed! Converting pre-release to full release..."
 
-          if [ "$IS_DRAFT" = "true" ]; then
-            echo "Publishing draft release v$VERSION..."
-            gh release edit "v$VERSION" --draft=false
-          fi
+          # Remove pre-release flag (converts release candidate to full release)
+          gh release edit "v$VERSION" --prerelease=false
 
           # Mark as latest
           gh release edit "v$VERSION" --latest
-          echo "Published and marked v$VERSION as latest release"
+
+          echo "✓ v$VERSION is now a full release and marked as latest"

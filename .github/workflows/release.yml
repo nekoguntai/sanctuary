@@ -2,7 +2,7 @@ name: Release
 
 on:
   release:
-    types: [published]
+    types: [created]  # Triggers on draft creation too - we publish after validation
   workflow_dispatch:
     inputs:
       version:
@@ -375,10 +375,19 @@ jobs:
           gh release edit "v$VERSION" --notes-file /tmp/release_body.md
           echo "Updated release notes"
 
-      - name: Mark release as latest
+      - name: Publish release and mark as latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.create-manifests.outputs.version }}
         run: |
+          # Check if release is still a draft
+          IS_DRAFT=$(gh api repos/${{ github.repository }}/releases/tags/v$VERSION --jq '.draft')
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Publishing draft release v$VERSION..."
+            gh release edit "v$VERSION" --draft=false
+          fi
+
+          # Mark as latest
           gh release edit "v$VERSION" --latest
-          echo "Marked v$VERSION as latest release"
+          echo "Published and marked v$VERSION as latest release"

@@ -102,19 +102,19 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#082f49',
       },
 
-      // Testnet colors (Rose pink - matches sunrise warning palette)
+      // Testnet colors (Amber)
       testnet: {
-        50: '#fff5f7',
-        100: '#ffe0e8',
-        200: '#ffc7d6',
-        300: '#ffadc4',
-        400: '#f282a4',
-        500: '#e85d8c',
-        600: '#d4426f',
-        700: '#b0315a',
-        800: '#8c294a',
-        900: '#6b223c',
-        950: '#3a101f',
+        50: '#fffbeb',
+        100: '#fef3c7',
+        200: '#fde68a',
+        300: '#fcd34d',
+        400: '#fbbf24',
+        500: '#f59e0b',
+        600: '#d97706',
+        700: '#b45309',
+        800: '#92400e',
+        900: '#78350f',
+        950: '#451a03',
       },
 
       // Signet colors (Purple - same as Sanctuary)
@@ -218,19 +218,19 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#f0f9ff',
       },
 
-      // Testnet colors (Rose pink - matches sunrise warning palette, inverted)
+      // Testnet colors (Amber, inverted for dark mode)
       testnet: {
-        50: '#2a1a20',
-        100: '#3d2730',
-        200: '#5c3848',
-        300: '#8c4a60',
-        400: '#b85878',
-        500: '#d4668a',
-        600: '#e88aa8',
-        700: '#f2adc2',
-        800: '#f8cfd9',
-        900: '#fce8ee',
-        950: '#fef5f7',
+        50: '#451a03',
+        100: '#78350f',
+        200: '#92400e',
+        300: '#b45309',
+        400: '#d97706',
+        500: '#f59e0b',
+        600: '#fbbf24',
+        700: '#fcd34d',
+        800: '#fde68a',
+        900: '#fef3c7',
+        950: '#fffbeb',
       },
 
       // Signet colors (Purple - inverted)

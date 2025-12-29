@@ -41,28 +41,28 @@ const PRESET_SERVERS: Record<NetworkType, Array<{ name: string; host: string; po
   ],
 };
 
-// Network color schemes
+// Network color schemes (theme-aware)
 const NETWORK_COLORS: Record<NetworkType, { bg: string; border: string; text: string; accent: string; badge: string }> = {
   mainnet: {
-    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
-    border: 'border-emerald-200 dark:border-emerald-800',
-    text: 'text-emerald-700 dark:text-emerald-300',
-    accent: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
-    badge: 'bg-emerald-500',
+    bg: 'bg-mainnet-50 dark:bg-mainnet-900/20',
+    border: 'border-mainnet-200 dark:border-mainnet-800',
+    text: 'text-mainnet-700 dark:text-mainnet-100',
+    accent: 'bg-mainnet-100 dark:bg-mainnet-900/30 text-mainnet-600 dark:text-mainnet-200',
+    badge: 'bg-mainnet-500',
   },
   testnet: {
-    bg: 'bg-amber-50 dark:bg-amber-900/20',
-    border: 'border-amber-200 dark:border-amber-800',
-    text: 'text-amber-700 dark:text-amber-300',
-    accent: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
-    badge: 'bg-amber-500',
+    bg: 'bg-testnet-50 dark:bg-testnet-900/20',
+    border: 'border-testnet-200 dark:border-testnet-800',
+    text: 'text-testnet-700 dark:text-testnet-100',
+    accent: 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-600 dark:text-testnet-200',
+    badge: 'bg-testnet-500',
   },
   signet: {
-    bg: 'bg-purple-50 dark:bg-purple-900/20',
-    border: 'border-purple-200 dark:border-purple-800',
-    text: 'text-purple-700 dark:text-purple-300',
-    accent: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
-    badge: 'bg-purple-500',
+    bg: 'bg-signet-50 dark:bg-signet-900/20',
+    border: 'border-signet-200 dark:border-signet-800',
+    text: 'text-signet-700 dark:text-signet-100',
+    accent: 'bg-signet-100 dark:bg-signet-900/30 text-signet-600 dark:text-signet-200',
+    badge: 'bg-signet-500',
   },
 };
 

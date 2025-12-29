@@ -1102,7 +1102,11 @@ export const ImportWallet: React.FC = () => {
                   onClick={() => setNetwork(net)}
                   className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                     network === net
-                      ? 'border-primary-600 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-900/20 dark:text-primary-400'
+                      ? net === 'mainnet'
+                        ? 'border-mainnet-500 bg-mainnet-50 text-mainnet-700 dark:border-mainnet-500 dark:bg-mainnet-900/20 dark:text-mainnet-200'
+                        : net === 'testnet'
+                        ? 'border-testnet-500 bg-testnet-50 text-testnet-700 dark:border-testnet-500 dark:bg-testnet-900/20 dark:text-testnet-200'
+                        : 'border-sanctuary-600 bg-sanctuary-50 text-sanctuary-700 dark:border-sanctuary-400 dark:bg-sanctuary-900/20 dark:text-sanctuary-400'
                       : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
                   }`}
                 >

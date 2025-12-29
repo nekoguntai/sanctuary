@@ -76,6 +76,58 @@ export const oceanTheme: ThemeDefinition = {
         900: '#78350f',
         950: '#451a03',
       },
+
+      // Sent colors (Violet)
+      sent: {
+        50: '#f5f3ff',
+        100: '#ede9fe',
+        200: '#ddd6fe',
+        500: '#8b5cf6',
+        600: '#7c3aed',
+        700: '#6d28d9',
+        800: '#5b21b6',
+        900: '#4c1d95',
+        950: '#2e1065',
+      },
+
+      // Mainnet colors (Ocean teal)
+      mainnet: {
+        50: '#f0fdfa',
+        100: '#ccfbf1',
+        200: '#99f6e4',
+        500: '#14b8a6',
+        600: '#0d9488',
+        700: '#0f766e',
+        800: '#115e59',
+        900: '#134e4a',
+        950: '#042f2e',
+      },
+
+      // Testnet colors (Amber)
+      testnet: {
+        50: '#fffbeb',
+        100: '#fef3c7',
+        200: '#fde68a',
+        500: '#f59e0b',
+        600: '#d97706',
+        700: '#b45309',
+        800: '#92400e',
+        900: '#78350f',
+        950: '#451a03',
+      },
+
+      // Signet colors (Purple)
+      signet: {
+        50: '#faf5ff',
+        100: '#f3e8ff',
+        200: '#e9d5ff',
+        500: '#a855f7',
+        600: '#9333ea',
+        700: '#7e22ce',
+        800: '#6b21a8',
+        900: '#581c87',
+        950: '#3b0764',
+      },
     },
 
     dark: {
@@ -133,6 +185,58 @@ export const oceanTheme: ThemeDefinition = {
         800: '#fef3c7',
         900: '#fffbeb',
         950: '#fefce8',
+      },
+
+      // Sent colors (Violet - inverted)
+      sent: {
+        50: '#2e1065',
+        100: '#4c1d95',
+        200: '#5b21b6',
+        500: '#8b5cf6',
+        600: '#a78bfa',
+        700: '#c4b5fd',
+        800: '#ddd6fe',
+        900: '#ede9fe',
+        950: '#f5f3ff',
+      },
+
+      // Mainnet colors (Ocean teal - inverted)
+      mainnet: {
+        50: '#042f2e',
+        100: '#134e4a',
+        200: '#115e59',
+        500: '#2dd4bf',
+        600: '#5eead4',
+        700: '#99f6e4',
+        800: '#ccfbf1',
+        900: '#f0fdfa',
+        950: '#f0fdf4',
+      },
+
+      // Testnet colors (Amber - inverted)
+      testnet: {
+        50: '#451a03',
+        100: '#78350f',
+        200: '#92400e',
+        500: '#f59e0b',
+        600: '#fbbf24',
+        700: '#fcd34d',
+        800: '#fde68a',
+        900: '#fef3c7',
+        950: '#fffbeb',
+      },
+
+      // Signet colors (Purple - inverted)
+      signet: {
+        50: '#3b0764',
+        100: '#581c87',
+        200: '#6b21a8',
+        500: '#a855f7',
+        600: '#c084fc',
+        700: '#d8b4fe',
+        800: '#e9d5ff',
+        900: '#f3e8ff',
+        950: '#faf5ff',
       },
     },
   },

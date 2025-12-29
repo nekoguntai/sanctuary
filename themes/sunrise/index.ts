@@ -61,17 +61,75 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#402505',
       },
 
-      // Warning colors (Warm amber/orange for sent transactions)
+      // Warning colors (Rose pink for pending/sent)
       warning: {
+        50: '#fff5f7',
+        100: '#ffe0e8',
+        200: '#ffc7d6',
+        500: '#e85d8c',   // Rose pink
+        600: '#d4426f',
+        700: '#b0315a',
+        800: '#8c294a',
+        900: '#6b223c',
+        950: '#3a101f',
+      },
+
+      // Sent colors (Sunset violet/purple for sent transactions)
+      sent: {
+        50: '#faf5ff',
+        100: '#f3e8ff',
+        200: '#e9d5ff',
+        500: '#a855f7',   // Purple
+        600: '#9333ea',
+        700: '#7e22ce',
+        800: '#6b21a8',
+        900: '#581c87',
+        950: '#3b0764',
+      },
+
+      // Mainnet colors (Sky blue for sunrise theme)
+      mainnet: {
+        50: '#f0f9ff',
+        100: '#e0f2fe',
+        200: '#bae6fd',
+        300: '#7dd3fc',
+        400: '#38bdf8',
+        500: '#0ea5e9',
+        600: '#0284c7',
+        700: '#0369a1',
+        800: '#075985',
+        900: '#0c4a6e',
+        950: '#082f49',
+      },
+
+      // Testnet colors (Amber - same as Sanctuary)
+      testnet: {
         50: '#fffbeb',
         100: '#fef3c7',
         200: '#fde68a',
-        500: '#f59e0b',   // Amber
+        300: '#fcd34d',
+        400: '#fbbf24',
+        500: '#f59e0b',
         600: '#d97706',
         700: '#b45309',
         800: '#92400e',
         900: '#78350f',
         950: '#451a03',
+      },
+
+      // Signet colors (Purple - same as Sanctuary)
+      signet: {
+        50: '#faf5ff',
+        100: '#f3e8ff',
+        200: '#e9d5ff',
+        300: '#d8b4fe',
+        400: '#c084fc',
+        500: '#a855f7',
+        600: '#9333ea',
+        700: '#7e22ce',
+        800: '#6b21a8',
+        900: '#581c87',
+        950: '#3b0764',
       },
     },
 
@@ -119,17 +177,75 @@ export const sunriseTheme: ThemeDefinition = {
         950: '#fef9ec',
       },
 
-      // Warning colors (Pastel amber/gold for sent transactions)
+      // Warning colors (Soft rose for pending/sent)
       warning: {
-        50: '#2a2010',
-        100: '#3d3018',
-        200: '#5c4820',
-        500: '#d4a030',   // Soft amber
-        600: '#e8b84a',
-        700: '#f2cc70',
-        800: '#f8dfa0',
-        900: '#fcf0d0',
-        950: '#fef8eb',
+        50: '#2a1a20',
+        100: '#3d2730',
+        200: '#5c3848',
+        500: '#d4668a',   // Soft rose
+        600: '#e88aa8',
+        700: '#f2adc2',
+        800: '#f8cfd9',
+        900: '#fce8ee',
+        950: '#fef5f7',
+      },
+
+      // Sent colors (Pastel violet for sent transactions)
+      sent: {
+        50: '#2a1f30',
+        100: '#3d2d48',
+        200: '#5c4268',
+        500: '#b88be8',   // Soft pastel violet
+        600: '#caa8f2',
+        700: '#dcc4f8',
+        800: '#eddcfc',
+        900: '#f6eefe',
+        950: '#fbf7ff',
+      },
+
+      // Mainnet colors (Sky blue - inverted for dark mode)
+      mainnet: {
+        50: '#082f49',
+        100: '#0c4a6e',
+        200: '#075985',
+        300: '#0369a1',
+        400: '#0284c7',
+        500: '#0ea5e9',
+        600: '#38bdf8',
+        700: '#7dd3fc',
+        800: '#bae6fd',
+        900: '#e0f2fe',
+        950: '#f0f9ff',
+      },
+
+      // Testnet colors (Amber - inverted)
+      testnet: {
+        50: '#451a03',
+        100: '#78350f',
+        200: '#92400e',
+        300: '#b45309',
+        400: '#d97706',
+        500: '#f59e0b',
+        600: '#fbbf24',
+        700: '#fcd34d',
+        800: '#fde68a',
+        900: '#fef3c7',
+        950: '#fffbeb',
+      },
+
+      // Signet colors (Purple - inverted)
+      signet: {
+        50: '#3b0764',
+        100: '#581c87',
+        200: '#6b21a8',
+        300: '#7e22ce',
+        400: '#9333ea',
+        500: '#a855f7',
+        600: '#c084fc',
+        700: '#d8b4fe',
+        800: '#e9d5ff',
+        900: '#f3e8ff',
+        950: '#faf5ff',
       },
     },
   },

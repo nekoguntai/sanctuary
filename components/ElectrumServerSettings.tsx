@@ -52,7 +52,7 @@ const HealthHistoryBlocks: React.FC<HealthHistoryBlocksProps> = ({ history, maxB
             key={`${check.timestamp}-${index}`}
             className={`w-2 h-2 rounded-sm cursor-help transition-transform hover:scale-125 ${
               check.success
-                ? 'bg-emerald-500 dark:bg-emerald-400'
+                ? 'bg-success-500 dark:bg-success-400'
                 : 'bg-rose-500 dark:bg-rose-400'
             }`}
             title={tooltipText}
@@ -314,10 +314,10 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
               className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 selectedNetwork === network
                   ? network === 'mainnet'
-                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm'
+                    ? 'bg-mainnet-100 dark:bg-mainnet-900/30 text-mainnet-700 dark:text-mainnet-100 shadow-sm'
                     : network === 'testnet'
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 shadow-sm'
-                    : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 shadow-sm'
+                    ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-700 dark:text-testnet-100 shadow-sm'
+                    : 'bg-signet-100 dark:bg-signet-900/30 text-signet-700 dark:text-signet-100 shadow-sm'
                   : 'text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700'
               }`}
             >
@@ -327,10 +327,10 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                   <span className={`text-xs px-1.5 py-0.5 rounded ${
                     selectedNetwork === network
                       ? network === 'mainnet'
-                        ? 'bg-emerald-200 dark:bg-emerald-800/50'
+                        ? 'bg-mainnet-200 dark:bg-mainnet-800/50'
                         : network === 'testnet'
-                        ? 'bg-amber-200 dark:bg-amber-800/50'
-                        : 'bg-purple-200 dark:bg-purple-800/50'
+                        ? 'bg-testnet-200 dark:bg-testnet-800/50'
+                        : 'bg-signet-200 dark:bg-signet-800/50'
                       : 'bg-sanctuary-200 dark:bg-sanctuary-700'
                   }`}>
                     {healthyCount}/{serverCount}
@@ -345,26 +345,26 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
       {/* Network Info Banner */}
       <div className={`p-4 rounded-xl border ${
         selectedNetwork === 'mainnet'
-          ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
+          ? 'bg-mainnet-50 dark:bg-mainnet-900/10 border-mainnet-200 dark:border-mainnet-800'
           : selectedNetwork === 'testnet'
-          ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'
-          : 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800'
+          ? 'bg-testnet-50 dark:bg-testnet-900/10 border-testnet-200 dark:border-testnet-800'
+          : 'bg-signet-50 dark:bg-signet-900/10 border-signet-200 dark:border-signet-800'
       }`}>
         <div className="flex items-start space-x-3">
           <Globe className={`w-5 h-5 mt-0.5 ${
             selectedNetwork === 'mainnet'
-              ? 'text-emerald-600 dark:text-emerald-400'
+              ? 'text-mainnet-600 dark:text-mainnet-200'
               : selectedNetwork === 'testnet'
-              ? 'text-amber-600 dark:text-amber-400'
-              : 'text-purple-600 dark:text-purple-400'
+              ? 'text-testnet-600 dark:text-testnet-200'
+              : 'text-signet-600 dark:text-signet-200'
           }`} />
           <div className="flex-1">
             <h4 className={`text-sm font-medium mb-1 ${
               selectedNetwork === 'mainnet'
-                ? 'text-emerald-900 dark:text-emerald-100'
+                ? 'text-mainnet-900 dark:text-mainnet-50'
                 : selectedNetwork === 'testnet'
-                ? 'text-amber-900 dark:text-amber-100'
-                : 'text-purple-900 dark:text-purple-100'
+                ? 'text-testnet-900 dark:text-testnet-50'
+                : 'text-signet-900 dark:text-signet-50'
             }`}>
               {selectedNetwork === 'mainnet' && 'Bitcoin Mainnet'}
               {selectedNetwork === 'testnet' && 'Bitcoin Testnet'}
@@ -372,10 +372,10 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
             </h4>
             <p className={`text-xs ${
               selectedNetwork === 'mainnet'
-                ? 'text-emerald-700 dark:text-emerald-300'
+                ? 'text-mainnet-700 dark:text-mainnet-200'
                 : selectedNetwork === 'testnet'
-                ? 'text-amber-700 dark:text-amber-300'
-                : 'text-purple-700 dark:text-purple-300'
+                ? 'text-testnet-700 dark:text-testnet-200'
+                : 'text-signet-700 dark:text-signet-200'
             }`}>
               {selectedNetwork === 'mainnet' && 'Production network with real Bitcoin. Use trusted servers only.'}
               {selectedNetwork === 'testnet' && 'Test network with worthless test coins. Safe for development and testing.'}
@@ -555,7 +555,7 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                     </span>
                   )}
                   {serverTestStatus[server.id] === 'success' && (
-                    <span className="flex items-center space-x-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded text-[10px] font-medium">
+                    <span className="flex items-center space-x-1 px-2 py-0.5 bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300 rounded text-[10px] font-medium">
                       <CheckCircle className="w-3 h-3" />
                       <span>Connected</span>
                     </span>
@@ -584,7 +584,7 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                     title={server.enabled ? 'Disable' : 'Enable'}
                   >
                     {server.enabled ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                     ) : (
                       <XCircle className="w-3.5 h-3.5 text-sanctuary-400" />
                     )}

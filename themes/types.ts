@@ -38,6 +38,18 @@ export interface ThemeColors {
 
   // Warning color scale (warning-50 through warning-950)
   warning: ColorScale;
+
+  // Sent color scale (sent-50 through sent-950) - for sent transactions
+  sent?: ColorScale;
+
+  // Mainnet color scale (mainnet-50 through mainnet-950) - for mainnet network indicator
+  mainnet?: ColorScale;
+
+  // Testnet color scale (testnet-50 through testnet-950) - for testnet network indicator
+  testnet?: ColorScale;
+
+  // Signet color scale (signet-50 through signet-950) - for signet network indicator
+  signet?: ColorScale;
 }
 
 /**

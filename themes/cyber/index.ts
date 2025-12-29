@@ -51,6 +51,58 @@ export const cyberTheme: ThemeDefinition = {
       warning: {
         500: '#ec4899',
       },
+
+      // Sent colors (Neon violet)
+      sent: {
+        50: '#f5f3ff',
+        100: '#ede9fe',
+        200: '#ddd6fe',
+        500: '#8b5cf6',
+        600: '#7c3aed',
+        700: '#6d28d9',
+        800: '#5b21b6',
+        900: '#4c1d95',
+        950: '#2e1065',
+      },
+
+      // Mainnet colors (Neon cyan for cyber)
+      mainnet: {
+        50: '#ecfeff',
+        100: '#cffafe',
+        200: '#a5f3fc',
+        500: '#06b6d4',
+        600: '#0891b2',
+        700: '#0e7490',
+        800: '#155e75',
+        900: '#164e63',
+        950: '#083344',
+      },
+
+      // Testnet colors (Amber)
+      testnet: {
+        50: '#fffbeb',
+        100: '#fef3c7',
+        200: '#fde68a',
+        500: '#f59e0b',
+        600: '#d97706',
+        700: '#b45309',
+        800: '#92400e',
+        900: '#78350f',
+        950: '#451a03',
+      },
+
+      // Signet colors (Hot pink for cyber)
+      signet: {
+        50: '#fdf2f8',
+        100: '#fce7f3',
+        200: '#fbcfe8',
+        500: '#ec4899',
+        600: '#db2777',
+        700: '#be185d',
+        800: '#9d174d',
+        900: '#831843',
+        950: '#500724',
+      },
     },
 
     dark: {
@@ -85,6 +137,58 @@ export const cyberTheme: ThemeDefinition = {
       // Warning colors (Hot pink)
       warning: {
         500: '#ec4899',
+      },
+
+      // Sent colors (Neon violet - inverted)
+      sent: {
+        50: '#2e1065',
+        100: '#4c1d95',
+        200: '#5b21b6',
+        500: '#8b5cf6',
+        600: '#a78bfa',
+        700: '#c4b5fd',
+        800: '#ddd6fe',
+        900: '#ede9fe',
+        950: '#f5f3ff',
+      },
+
+      // Mainnet colors (Neon cyan - inverted)
+      mainnet: {
+        50: '#083344',
+        100: '#164e63',
+        200: '#155e75',
+        500: '#06b6d4',
+        600: '#22d3ee',
+        700: '#67e8f9',
+        800: '#a5f3fc',
+        900: '#cffafe',
+        950: '#ecfeff',
+      },
+
+      // Testnet colors (Amber - inverted)
+      testnet: {
+        50: '#451a03',
+        100: '#78350f',
+        200: '#92400e',
+        500: '#f59e0b',
+        600: '#fbbf24',
+        700: '#fcd34d',
+        800: '#fde68a',
+        900: '#fef3c7',
+        950: '#fffbeb',
+      },
+
+      // Signet colors (Hot pink - inverted)
+      signet: {
+        50: '#500724',
+        100: '#831843',
+        200: '#9d174d',
+        500: '#ec4899',
+        600: '#f472b6',
+        700: '#f9a8d4',
+        800: '#fbcfe8',
+        900: '#fce7f3',
+        950: '#fdf2f8',
       },
     },
   },

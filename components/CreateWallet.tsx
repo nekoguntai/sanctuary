@@ -213,10 +213,10 @@ export const CreateWallet: React.FC = () => {
                             className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                                 network === net
                                     ? net === 'mainnet'
-                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-900/20 dark:text-emerald-400'
+                                        ? 'border-mainnet-500 bg-mainnet-50 text-mainnet-700 dark:border-mainnet-500 dark:bg-mainnet-900/20 dark:text-mainnet-200'
                                         : net === 'testnet'
-                                        ? 'border-amber-600 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/20 dark:text-amber-400'
-                                        : 'border-purple-600 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/20 dark:text-purple-400'
+                                        ? 'border-testnet-500 bg-testnet-50 text-testnet-700 dark:border-testnet-500 dark:bg-testnet-900/20 dark:text-testnet-200'
+                                        : 'border-signet-500 bg-signet-50 text-signet-700 dark:border-signet-500 dark:bg-signet-900/20 dark:text-signet-200'
                                     : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
                             }`}
                         >
@@ -227,8 +227,8 @@ export const CreateWallet: React.FC = () => {
                 {network !== 'mainnet' && (
                     <div className={`mt-2 p-3 rounded-lg border text-xs ${
                         network === 'testnet'
-                            ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
-                            : 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300'
+                            ? 'bg-testnet-50 dark:bg-testnet-900/10 border-testnet-300 dark:border-testnet-600 text-testnet-700 dark:text-testnet-200'
+                            : 'bg-signet-50 dark:bg-signet-900/10 border-signet-300 dark:border-signet-600 text-signet-700 dark:text-signet-200'
                     }`}>
                         <strong>Warning:</strong> This wallet will operate on {network}. {network === 'testnet' ? 'Testnet coins have no real-world value.' : 'Signet is a controlled testing network.'}
                     </div>
@@ -308,10 +308,10 @@ export const CreateWallet: React.FC = () => {
                      <dd className="text-sm font-medium">
                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                              network === 'mainnet'
-                                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                 ? 'bg-mainnet-100 text-mainnet-700 dark:bg-mainnet-900/30 dark:text-mainnet-200'
                                  : network === 'testnet'
-                                 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                 : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                 ? 'bg-testnet-100 text-testnet-700 dark:bg-testnet-900/30 dark:text-testnet-200'
+                                 : 'bg-signet-100 text-signet-700 dark:bg-signet-900/30 dark:text-signet-200'
                          }`}>
                              {network.charAt(0).toUpperCase() + network.slice(1)}
                          </span>
@@ -335,7 +335,7 @@ export const CreateWallet: React.FC = () => {
                              const dev = availableDevices.find(d => d.id === id);
                              return (
                                  <div key={id} className="flex items-center">
-                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></span>
+                                     <span className="w-1.5 h-1.5 rounded-full bg-success-500 mr-2"></span>
                                      {dev?.label} ({dev?.type})
                                  </div>
                              );
@@ -360,8 +360,8 @@ export const CreateWallet: React.FC = () => {
             <div className="flex space-x-2">
                 {[1, 2, 3, 4].map(s => (
                     <div 
-                        key={s} 
-                        className={`h-2 rounded-full transition-all duration-300 ${s === step ? 'w-8 bg-sanctuary-800 dark:bg-sanctuary-200' : s < step ? 'w-2 bg-emerald-500' : 'w-2 bg-sanctuary-200 dark:bg-sanctuary-800'}`}
+                        key={s}
+                        className={`h-2 rounded-full transition-all duration-300 ${s === step ? 'w-8 bg-sanctuary-800 dark:bg-sanctuary-200' : s < step ? 'w-2 bg-success-500' : 'w-2 bg-sanctuary-200 dark:bg-sanctuary-800'}`}
                     />
                 ))}
             </div>
@@ -391,11 +391,11 @@ export const CreateWallet: React.FC = () => {
                         Next Step <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                 ) : (
-                    <Button 
-                        size="lg" 
-                        onClick={handleCreate} 
+                    <Button
+                        size="lg"
+                        onClick={handleCreate}
                         isLoading={isSubmitting}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                        className="bg-success-600 hover:bg-success-700 text-white dark:bg-success-600 dark:hover:bg-success-700"
                     >
                         <Check className="w-4 h-4 mr-2" /> Construct Wallet
                     </Button>

@@ -38,16 +38,16 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getIcon = () => {
-    // Transaction colors: receive=primary, sent=warning (theme-aware), consolidation=warning
+    // Transaction colors: receive=primary, sent=sent (theme-aware), consolidation=sent
     switch (notification.type) {
       case 'transaction':
         if (notification.data?.type === 'received') {
           return <ArrowDownLeft className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
         } else if (notification.data?.type === 'consolidation') {
-          return <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />;
+          return <ArrowUpRight className="w-5 h-5 text-sent-600 dark:text-sent-400" />;
         } else {
-          // Sent transactions use theme's warning color
-          return <ArrowUpRight className="w-5 h-5 text-warning-600 dark:text-warning-400" />;
+          // Sent transactions use theme-aware sent color
+          return <ArrowUpRight className="w-5 h-5 text-sent-600 dark:text-sent-400" />;
         }
       case 'balance':
         return <TrendingUp className="w-5 h-5 text-primary-600 dark:text-primary-400" />;
@@ -65,16 +65,16 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
   };
 
   const getColors = () => {
-    // Transaction colors: receive=primary, sent=warning (theme-aware), consolidation=warning
+    // Transaction colors: receive=primary, sent=sent (theme-aware), consolidation=sent
     switch (notification.type) {
       case 'transaction':
         if (notification.data?.type === 'received') {
           return 'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-700';
         } else if (notification.data?.type === 'consolidation') {
-          return 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
+          return 'bg-sent-50 dark:bg-sent-900/30 border-sent-200 dark:border-sent-700';
         } else {
-          // Sent transactions use theme's warning color
-          return 'bg-warning-50 dark:bg-warning-900/30 border-warning-200 dark:border-warning-700';
+          // Sent transactions use theme-aware sent color
+          return 'bg-sent-50 dark:bg-sent-900/30 border-sent-200 dark:border-sent-700';
         }
       case 'balance':
         return 'surface-secondary border-primary-200 dark:border-primary-700';

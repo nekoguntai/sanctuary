@@ -23,27 +23,27 @@ interface NetworkConfig {
 const networkConfigs: Record<TabNetwork, NetworkConfig> = {
   mainnet: {
     label: 'Mainnet',
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-    borderColor: 'border-emerald-200 dark:border-emerald-800',
-    activeColor: 'text-emerald-700 dark:text-emerald-300',
-    activeBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+    color: 'text-sanctuary-500 dark:text-sanctuary-400',  // Muted when not selected
+    bgColor: 'bg-mainnet-50 dark:bg-mainnet-900/30',
+    borderColor: 'border-mainnet-300 dark:border-mainnet-500',
+    activeColor: 'text-mainnet-800 dark:text-white',  // High contrast when selected
+    activeBg: 'bg-mainnet-100 dark:bg-mainnet-700',   // Solid bg in dark mode
   },
   testnet: {
     label: 'Testnet',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-    activeColor: 'text-amber-700 dark:text-amber-300',
-    activeBg: 'bg-amber-100 dark:bg-amber-900/40',
+    color: 'text-sanctuary-500 dark:text-sanctuary-400',
+    bgColor: 'bg-testnet-50 dark:bg-testnet-900/30',
+    borderColor: 'border-testnet-300 dark:border-testnet-500',
+    activeColor: 'text-testnet-800 dark:text-white',
+    activeBg: 'bg-testnet-100 dark:bg-testnet-700',
   },
   signet: {
     label: 'Signet',
-    color: 'text-purple-600 dark:text-purple-400',
-    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    activeColor: 'text-purple-700 dark:text-purple-300',
-    activeBg: 'bg-purple-100 dark:bg-purple-900/40',
+    color: 'text-sanctuary-500 dark:text-sanctuary-400',
+    bgColor: 'bg-signet-50 dark:bg-signet-900/30',
+    borderColor: 'border-signet-300 dark:border-signet-500',
+    activeColor: 'text-signet-800 dark:text-white',
+    activeBg: 'bg-signet-100 dark:bg-signet-700',
   },
 };
 
@@ -72,9 +72,10 @@ export const NetworkTabs: React.FC<NetworkTabsProps> = ({
               border-2
               ${isSelected
                 ? `${config.activeBg} ${config.activeColor} ${config.borderColor} shadow-sm`
-                : `bg-transparent ${isEmpty ? 'text-sanctuary-400 dark:text-sanctuary-600 border-sanctuary-200 dark:border-sanctuary-800' : `${config.color} border-transparent hover:${config.bgColor}`}`
+                : isEmpty
+                  ? 'bg-transparent text-sanctuary-400 dark:text-sanctuary-600 border-sanctuary-200 dark:border-sanctuary-800'
+                  : `bg-transparent ${config.color} ${config.borderColor} hover:${config.bgColor}`
               }
-              ${!isSelected && !isEmpty && 'hover:border-sanctuary-300 dark:hover:border-sanctuary-700'}
             `}
           >
             <span className="flex items-center space-x-2">

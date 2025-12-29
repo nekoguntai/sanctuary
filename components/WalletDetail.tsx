@@ -1312,9 +1312,9 @@ export const WalletDetail: React.FC = () => {
              {wallet.network && wallet.network !== 'mainnet' && (
                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${
                  wallet.network === 'testnet'
-                   ? 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20'
+                   ? 'bg-testnet-100 text-testnet-800 border-testnet-200 dark:bg-testnet-500/10 dark:text-testnet-100 dark:border-testnet-500/30'
                    : wallet.network === 'signet'
-                   ? 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-500/20'
+                   ? 'bg-signet-100 text-signet-800 border-signet-200 dark:bg-signet-500/10 dark:text-signet-100 dark:border-signet-500/30'
                    : 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20'
                }`}>
                  {wallet.network}

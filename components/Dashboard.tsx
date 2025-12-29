@@ -500,10 +500,10 @@ export const Dashboard: React.FC = () => {
                   {selectedNetwork === 'mainnet' ? 'Bitcoin' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Network Status
                </h4>
                {!isMainnet && (
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-600 dark:text-testnet-200'
-                        : 'bg-signet-100 dark:bg-signet-900/30 text-signet-600 dark:text-signet-200'
+                        ? 'bg-warning-600 text-white'
+                        : 'bg-purple-600 text-white'
                   }`}>
                      {selectedNetwork.toUpperCase()}
                   </span>
@@ -564,13 +564,13 @@ export const Dashboard: React.FC = () => {
             <div className="flex flex-col items-center justify-center py-12 text-center">
                <div className={`p-4 rounded-2xl mb-4 ${
                   selectedNetwork === 'testnet'
-                     ? 'bg-testnet-100 dark:bg-testnet-900/20'
-                     : 'bg-signet-100 dark:bg-signet-900/20'
+                     ? 'bg-amber-100 dark:bg-amber-900/20'
+                     : 'bg-purple-100 dark:bg-purple-900/20'
                }`}>
                   <Bitcoin className={`w-10 h-10 ${
                      selectedNetwork === 'testnet'
-                        ? 'text-testnet-500 dark:text-testnet-200'
-                        : 'text-signet-500 dark:text-signet-200'
+                        ? 'text-amber-500 dark:text-amber-400'
+                        : 'text-purple-500 dark:text-purple-400'
                   }`} />
                </div>
                <h4 className="text-lg font-medium text-sanctuary-700 dark:text-sanctuary-300 mb-2">
@@ -583,8 +583,8 @@ export const Dashboard: React.FC = () => {
                   onClick={() => navigate('/settings/node')}
                   className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-700 dark:text-testnet-200 hover:bg-testnet-200 dark:hover:bg-testnet-900/50'
-                        : 'bg-signet-100 dark:bg-signet-900/30 text-signet-700 dark:text-signet-200 hover:bg-signet-200 dark:hover:bg-signet-900/50'
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50'
+                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
                   }`}
                >
                   Configure Node
@@ -678,12 +678,12 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-mainnet-100 dark:bg-mainnet-900/30 text-mainnet-600 dark:text-mainnet-200'
+                  ? 'bg-success-600 text-white'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-600 dark:text-testnet-200'
-                  : 'bg-signet-100 dark:bg-signet-900/30 text-signet-600 dark:text-signet-200'
+                  ? 'bg-warning-600 text-white'
+                  : 'bg-purple-600 text-white'
               }`}>
                 {selectedNetwork.toUpperCase()}
               </span>
@@ -763,8 +763,8 @@ export const Dashboard: React.FC = () => {
                                   !server.lastHealthCheck
                                     ? 'bg-sanctuary-400' // Not yet checked
                                     : server.isHealthy
-                                      ? 'bg-success-500' // Healthy
-                                      : 'bg-warning-500'   // Unhealthy
+                                      ? 'bg-emerald-500' // Healthy
+                                      : 'bg-amber-500'   // Unhealthy
                                 }`} />
                                 <span className="text-sanctuary-500 truncate max-w-[100px]">{server.label}</span>
                                 <span className="text-sanctuary-400 ml-1">

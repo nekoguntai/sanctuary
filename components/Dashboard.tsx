@@ -23,7 +23,7 @@ import { useWebSocket, useWebSocketEvent } from '../hooks/useWebSocket';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
-import { useWallets, useRecentTransactions, useInvalidateAllWallets, useBalanceHistory, usePendingTransactions } from '../hooks/queries/useWallets';
+import { useWallets, useRecentTransactions, useInvalidateAllWallets, useUpdateWalletSyncStatus, useBalanceHistory, usePendingTransactions } from '../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
 
 const log = createLogger('Dashboard');
@@ -173,6 +173,7 @@ export const Dashboard: React.FC = () => {
   const { addNotification } = useNotifications();
   const { playEventSound } = useNotificationSound();
   const invalidateAllWallets = useInvalidateAllWallets();
+  const updateWalletSyncStatus = useUpdateWalletSyncStatus();
 
   // React Query hooks for data fetching
   const { data: apiWallets, isLoading: walletsLoading } = useWallets();
@@ -200,9 +201,11 @@ export const Dashboard: React.FC = () => {
     syncInProgress: w.syncInProgress,
   })), [safeApiWallets]);
 
-  // Filter wallets by selected network
+  // Filter wallets by selected network and sort by balance (highest first)
   const filteredWallets = useMemo(() =>
-    wallets.filter(w => w.network === selectedNetwork),
+    wallets
+      .filter(w => w.network === selectedNetwork)
+      .sort((a, b) => b.balance - a.balance),
     [wallets, selectedNetwork]
   );
 
@@ -304,6 +307,32 @@ export const Dashboard: React.FC = () => {
       });
     }
   }, [wallets, subscribeWallet]);
+
+  // Refetch wallet data when window becomes visible (handles missed WS events)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refetch wallet data to get current sync status
+        invalidateAllWallets();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [invalidateAllWallets]);
+
+  // Refetch wallet data when WebSocket reconnects (handles missed events during disconnection)
+  useEffect(() => {
+    if (wsConnected) {
+      // Small delay to ensure subscriptions are complete
+      const timer = setTimeout(() => {
+        invalidateAllWallets();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [wsConnected, invalidateAllWallets]);
 
   // Subscribe to global block/mempool channel for real-time updates
   useEffect(() => {
@@ -409,12 +438,12 @@ export const Dashboard: React.FC = () => {
     const { data } = event;
     const walletId = data.walletId;
 
-    // Update syncInProgress status in real-time by invalidating queries
-    // This ensures all windows see the same sync status
+    // Directly update the cache for immediate UI response
+    // This is more reliable than invalidating + refetching
     if (walletId) {
-      invalidateAllWallets();
+      updateWalletSyncStatus(walletId, data.inProgress, data.status);
     }
-  }, [invalidateAllWallets]);
+  }, [updateWalletSyncStatus]);
 
   // Calculate total balance for filtered wallets (network-specific)
   const totalBalance = filteredWallets.reduce((acc, w) => acc + w.balance, 0);

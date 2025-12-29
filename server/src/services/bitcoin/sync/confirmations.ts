@@ -11,6 +11,7 @@ import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../../constants';
 import { getNodeClient } from '../nodeClient';
 import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
 import { walletLog } from '../../../websocket/notifications';
+import { recalculateWalletBalances } from '../utils/balanceCalculation';
 
 const log = createLogger('CONFIRMATIONS');
 
@@ -333,6 +334,10 @@ export async function populateMissingTransactionFields(walletId: string): Promis
             // Sanity check: fee should be positive and less than 1 BTC
             if (feeSats > 0 && feeSats < 100000000) {
               updates.fee = BigInt(feeSats);
+              // For consolidation transactions, amount should equal -fee
+              if (isConsolidationTx && tx.amount === BigInt(0)) {
+                updates.amount = BigInt(-feeSats);
+              }
               feesPopulated++;
             } else {
               log.warn(`Invalid fee from Electrum for tx ${tx.txid}: ${txDetails.fee} BTC`);
@@ -378,6 +383,10 @@ export async function populateMissingTransactionFields(walletId: string): Promis
               const fee = totalInputValue - totalOutputValue;
               if (fee > 0 && fee < 100000000) { // Sanity check: fee should be less than 1 BTC
                 updates.fee = BigInt(fee);
+                // For consolidation transactions, amount should equal -fee
+                if (isConsolidationTx && tx.amount === BigInt(0)) {
+                  updates.amount = BigInt(-fee);
+                }
                 feesPopulated++;
               }
             }
@@ -528,6 +537,13 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     );
     updated = pendingUpdates.length;
     walletLog(walletId, 'info', 'POPULATE', `Saved ${updated} transaction updates`);
+
+    // Recalculate running balances if any amounts were updated
+    const hasAmountUpdates = pendingUpdates.some(u => u.data.amount !== undefined);
+    if (hasAmountUpdates) {
+      walletLog(walletId, 'info', 'POPULATE', 'Recalculating running balances...');
+      await recalculateWalletBalances(walletId);
+    }
   } else {
     walletLog(walletId, 'info', 'POPULATE', 'No transaction updates needed');
   }

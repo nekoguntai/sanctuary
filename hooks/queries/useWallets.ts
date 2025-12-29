@@ -270,6 +270,42 @@ export function useInvalidateAllWallets() {
 }
 
 /**
+ * Helper to directly update wallet sync status in cache
+ * This provides immediate UI update without waiting for refetch
+ */
+export function useUpdateWalletSyncStatus() {
+  const queryClient = useQueryClient();
+
+  return useCallback((walletId: string, syncInProgress: boolean, lastSyncStatus?: string) => {
+    // Update the wallet list cache
+    queryClient.setQueryData(walletKeys.lists(), (oldData: walletsApi.WalletResponse[] | undefined) => {
+      if (!oldData) return oldData;
+      return oldData.map(wallet =>
+        wallet.id === walletId
+          ? {
+              ...wallet,
+              syncInProgress,
+              ...(lastSyncStatus && { lastSyncStatus }),
+              ...(!syncInProgress && { lastSyncedAt: new Date().toISOString() }),
+            }
+          : wallet
+      );
+    });
+
+    // Also update the individual wallet cache if it exists
+    queryClient.setQueryData(walletKeys.detail(walletId), (oldData: walletsApi.WalletResponse | undefined) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        syncInProgress,
+        ...(lastSyncStatus && { lastSyncStatus }),
+        ...(!syncInProgress && { lastSyncedAt: new Date().toISOString() }),
+      };
+    });
+  }, [queryClient]);
+}
+
+/**
  * Hook to fetch devices for a wallet
  * Fetches all devices and filters to those associated with the wallet
  */

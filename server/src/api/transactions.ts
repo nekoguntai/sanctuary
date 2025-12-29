@@ -152,8 +152,10 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
         totalSent += amount < 0 ? -amount : amount;
       } else if (tx.type === 'consolidation') {
         consolidationCount++;
-        // Consolidation fee is the cost
-        totalFees += fee;
+        // Consolidation fee is the cost (only add if positive/valid)
+        if (fee > 0) {
+          totalFees += fee;
+        }
       }
 
       // Add fees from sent transactions

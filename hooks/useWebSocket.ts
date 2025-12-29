@@ -324,8 +324,9 @@ export const useWebSocketQueryInvalidation = () => {
   useEffect(() => {
     if (!connected) return;
 
-    // Subscribe to blocks channel for new block notifications
+    // Subscribe to global channels
     subscribe('blocks');
+    subscribe('sync:all');
 
     // Import queryClient lazily
     let queryClient: import('@tanstack/react-query').QueryClient | null = null;
@@ -362,17 +363,61 @@ export const useWebSocketQueryInvalidation = () => {
       queryClient.invalidateQueries({ queryKey: ['wallets'] });
     };
 
+    // Handle sync events - directly update wallet cache for immediate UI response
+    // This ensures all pages (Dashboard, WalletList, WalletDetail) see sync status changes
+    const handleSyncEvent = (event: WebSocketEvent) => {
+      if (!queryClient) return;
+      if (event.event !== 'sync') return;
+
+      const { walletId, inProgress, status } = event.data as {
+        walletId: string;
+        inProgress: boolean;
+        status?: string;
+      };
+
+      if (!walletId) return;
+
+      // Directly update wallet list cache
+      queryClient.setQueryData(['wallets', 'list'], (oldData: any[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map((wallet: any) =>
+          wallet.id === walletId
+            ? {
+                ...wallet,
+                syncInProgress: inProgress,
+                ...(status && { lastSyncStatus: status }),
+                ...(!inProgress && { lastSyncedAt: new Date().toISOString() }),
+              }
+            : wallet
+        );
+      });
+
+      // Also update individual wallet cache if it exists
+      queryClient.setQueryData(['wallets', 'detail', walletId], (oldData: any | undefined) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          syncInProgress: inProgress,
+          ...(status && { lastSyncStatus: status }),
+          ...(!inProgress && { lastSyncedAt: new Date().toISOString() }),
+        };
+      });
+    };
+
     websocketClient.on('transaction', handleTransactionEvent);
     websocketClient.on('confirmation', handleTransactionEvent);
     websocketClient.on('balance', handleTransactionEvent);
     websocketClient.on('newBlock', handleNewBlock);
+    websocketClient.on('sync', handleSyncEvent);
 
     return () => {
       unsubscribe('blocks');
+      unsubscribe('sync:all');
       websocketClient.off('transaction', handleTransactionEvent);
       websocketClient.off('confirmation', handleTransactionEvent);
       websocketClient.off('balance', handleTransactionEvent);
       websocketClient.off('newBlock', handleNewBlock);
+      websocketClient.off('sync', handleSyncEvent);
     };
   }, [connected, subscribe, unsubscribe]);
 };

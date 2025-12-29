@@ -295,7 +295,14 @@ export class BackupService {
     if (meta.schemaVersion === undefined) {
       issues.push('Missing schema version');
     } else if (meta.schemaVersion > currentSchemaVersion) {
-      issues.push(`Backup schema version (${meta.schemaVersion}) is newer than current (${currentSchemaVersion}). Cannot restore from future version.`);
+      // Allow restoring from slightly newer schema versions with a warning
+      // This can happen when migrations are consolidated during development
+      const versionDiff = meta.schemaVersion - currentSchemaVersion;
+      if (versionDiff <= 10) {
+        warnings.push(`Backup schema version (${meta.schemaVersion}) is newer than current (${currentSchemaVersion}). Proceeding with caution - some fields may be ignored.`);
+      } else {
+        issues.push(`Backup schema version (${meta.schemaVersion}) is too far ahead of current (${currentSchemaVersion}). Cannot restore from future version.`);
+      }
     }
 
     // Data validation

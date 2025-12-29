@@ -552,6 +552,11 @@ export class SanctauryWebSocketServer {
       channels.push('system');
     }
 
+    // Sync events go to global channel for cross-page cache updates
+    if (event.type === 'sync') {
+      channels.push('sync:all');
+    }
+
     // Wallet-specific channels
     if (event.walletId) {
       channels.push(`wallet:${event.walletId}`);

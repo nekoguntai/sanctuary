@@ -682,6 +682,21 @@ export const WalletDetail: React.FC = () => {
     fetchData();
   }, [id, user]);
 
+  // Refetch wallet data when window becomes visible (handles missed WS events)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && id && user) {
+        // Refresh data to get current sync status
+        fetchData(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [id, user]);
+
   const fetchData = async (isRefresh = false) => {
     if (!id || !user) return;
 

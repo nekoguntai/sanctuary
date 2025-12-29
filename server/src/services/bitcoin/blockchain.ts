@@ -135,6 +135,7 @@ export async function syncAddress(addressId: string): Promise<{
       // Need to check previous outputs referenced by inputs
       let isSent = false;
       let totalSentFromWallet = 0;
+      let hasCompleteInputData = true; // Track if we have all input values for fee calculation
 
       for (const input of inputs) {
         // Skip coinbase inputs
@@ -161,8 +162,11 @@ export async function syncAddress(addressId: string): Promise<{
 
         if (inputAddr && walletAddressSet.has(inputAddr)) {
           isSent = true;
-          if (inputValue) {
+          if (inputValue !== undefined && inputValue > 0) {
             totalSentFromWallet += Math.round(inputValue * 100000000);
+          } else {
+            // Missing input value - can't calculate accurate fee
+            hasCompleteInputData = false;
           }
         }
       }
@@ -224,8 +228,10 @@ export async function syncAddress(addressId: string): Promise<{
           }
         }
 
-        // Calculate fee: inputs - all outputs
-        const fee = totalSentFromWallet - totalToExternal - totalToWallet;
+        // Calculate fee: inputs - all outputs (only valid if we have complete input data)
+        const fee = hasCompleteInputData ? totalSentFromWallet - totalToExternal - totalToWallet : null;
+        // Ensure fee is never negative (sanity check)
+        const validFee = fee !== null && fee >= 0 ? fee : null;
 
         if (totalToExternal > 0) {
           // Regular send to external address
@@ -235,7 +241,7 @@ export async function syncAddress(addressId: string): Promise<{
 
           if (!existingSentTx) {
             // Amount is negative (funds leaving wallet = amount sent + fee)
-            const sentAmount = -(totalToExternal + fee);
+            const sentAmount = -(totalToExternal + (validFee ?? 0));
             await prisma.transaction.create({
               data: {
                 txid: item.tx_hash,
@@ -243,7 +249,7 @@ export async function syncAddress(addressId: string): Promise<{
                 addressId: addressRecord.id,
                 type: 'sent',
                 amount: BigInt(sentAmount),
-                fee: BigInt(fee),
+                fee: validFee !== null ? BigInt(validFee) : null,
                 confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
                 blockHeight: item.height > 0 ? item.height : null,
                 blockTime,
@@ -260,14 +266,15 @@ export async function syncAddress(addressId: string): Promise<{
 
           if (!existingConsolidationTx) {
             // Amount is negative fee (only fee is lost in consolidation)
+            // If fee is unknown, amount is 0 (will be recalculated on resync with verbose data)
             await prisma.transaction.create({
               data: {
                 txid: item.tx_hash,
                 walletId: addressRecord.walletId,
                 addressId: addressRecord.id,
                 type: 'consolidation',
-                amount: BigInt(-fee),
-                fee: BigInt(fee),
+                amount: validFee !== null ? BigInt(-validFee) : BigInt(0),
+                fee: validFee !== null ? BigInt(validFee) : null,
                 confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
                 blockHeight: item.height > 0 ? item.height : null,
                 blockTime,
@@ -748,11 +755,13 @@ export async function syncWallet(walletId: string): Promise<{
         // First, check if wallet sent funds (any wallet address in inputs)
         // This is needed to detect consolidations BEFORE creating received records
         let isSent = false;
+        let hasVerboseInputs = false; // Track if server provides prevout info
         for (const input of inputs) {
           if (input.coinbase) continue;
 
           let inputAddr: string | undefined;
           if (input.prevout && input.prevout.scriptPubKey) {
+            hasVerboseInputs = true;
             inputAddr = input.prevout.scriptPubKey.address ||
               (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
           } else if (input.txid && input.vout !== undefined) {
@@ -782,7 +791,9 @@ export async function syncWallet(walletId: string): Promise<{
 
           if (inputAddr && walletAddressSet.has(inputAddr)) {
             isSent = true;
-            break;
+            // For verbose servers, we can break early since we already have all input data
+            if (hasVerboseInputs) break;
+            // For non-verbose servers, continue to ensure all prev txs are cached for fee calculation
           }
         }
 
@@ -826,7 +837,9 @@ export async function syncWallet(walletId: string): Promise<{
         }
 
         // Calculate fee (only meaningful for sent/consolidation transactions)
-        const fee = isSent && totalInputs > 0 ? totalInputs - totalOutputs : null;
+        // Fee must be non-negative; negative indicates incomplete input data
+        const calculatedFee = isSent && totalInputs > 0 ? totalInputs - totalOutputs : null;
+        const fee = calculatedFee !== null && calculatedFee >= 0 ? calculatedFee : null;
 
         // Determine transaction type and create appropriate record
         // Priority: consolidation > sent > received

@@ -23,19 +23,19 @@ interface NetworkConfig {
 const networkConfigs: Record<TabNetwork, NetworkConfig> = {
   mainnet: {
     label: 'Mainnet',
-    color: 'text-emerald-700 dark:text-emerald-400',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/30',
-    borderColor: 'border-emerald-500 dark:border-emerald-500',
+    color: 'text-success-700 dark:text-success-600',
+    bgColor: 'bg-success-50 dark:bg-success-900/30',
+    borderColor: 'border-success-500 dark:border-success-500',
     activeColor: 'text-white dark:text-white',
-    activeBg: 'bg-emerald-600 dark:bg-emerald-600',
+    activeBg: 'bg-success-600 dark:bg-success-600',
   },
   testnet: {
     label: 'Testnet',
-    color: 'text-amber-700 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/30',
-    borderColor: 'border-amber-500 dark:border-amber-500',
+    color: 'text-warning-700 dark:text-warning-600',
+    bgColor: 'bg-warning-50 dark:bg-warning-900/30',
+    borderColor: 'border-warning-500 dark:border-warning-500',
     activeColor: 'text-white dark:text-white',
-    activeBg: 'bg-amber-600 dark:bg-amber-600',
+    activeBg: 'bg-warning-600 dark:bg-warning-600',
   },
   signet: {
     label: 'Signet',

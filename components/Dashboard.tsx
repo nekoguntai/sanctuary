@@ -502,7 +502,7 @@ export const Dashboard: React.FC = () => {
                {!isMainnet && (
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-amber-600 text-white'
+                        ? 'bg-warning-600 text-white'
                         : 'bg-purple-600 text-white'
                   }`}>
                      {selectedNetwork.toUpperCase()}
@@ -680,9 +680,9 @@ export const Dashboard: React.FC = () => {
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-success-600 text-white'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-amber-600 text-white'
+                  ? 'bg-warning-600 text-white'
                   : 'bg-purple-600 text-white'
               }`}>
                 {selectedNetwork.toUpperCase()}

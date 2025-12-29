@@ -87,18 +87,41 @@ jobs:
       ref: ${{ github.sha }}
       version: ${{ github.event.release.tag_name || inputs.version }}
 
-  build-and-push:
-    name: Build and Push Docker Images
-    runs-on: ubuntu-latest
+  # ============================================
+  # Build Docker Images (per-architecture)
+  # ============================================
+  build-images:
+    name: Build ${{ matrix.image }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     needs: release-candidate
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
-      contents: write
+      contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Frontend builds
+          - image: frontend
+            platform: linux/amd64
+            runner: ubuntu-latest
+            dockerfile: ./Dockerfile
+          - image: frontend
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: ./Dockerfile
+          # Backend builds
+          - image: backend
+            platform: linux/amd64
+            runner: ubuntu-latest
+            dockerfile: ./server/Dockerfile
+          - image: backend
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            dockerfile: ./server/Dockerfile
     outputs:
       version: ${{ steps.version.outputs.version }}
-      frontend_digest: ${{ steps.frontend.outputs.digest }}
-      backend_digest: ${{ steps.backend.outputs.digest }}
 
     steps:
       - name: Checkout repository
@@ -109,15 +132,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+            VERSION="${VERSION#v}"
           else
             VERSION="${{ inputs.version }}"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -129,37 +148,92 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Frontend
-        id: frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:v${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Extract platform suffix
+        id: platform
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          echo "suffix=${PLATFORM//\//-}" >> $GITHUB_OUTPUT
 
-      - name: Build and push Backend
-        id: backend
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./server/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:v${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:v${{ steps.version.outputs.version }}-${{ steps.platform.outputs.suffix }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.platform.outputs.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.platform.outputs.suffix }}
+          provenance: false
+
+  # ============================================
+  # Create Multi-Arch Manifests
+  # ============================================
+  create-manifests:
+    name: Create Multi-Arch Manifests
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      packages: write
+    outputs:
+      version: ${{ needs.build-images.outputs.version }}
+      frontend_digest: ${{ steps.frontend.outputs.digest }}
+      backend_digest: ${{ steps.backend.outputs.digest }}
+
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create frontend manifest
+        id: frontend
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend"
+
+          docker manifest create ${IMAGE}:v${VERSION} \
+            ${IMAGE}:v${VERSION}-linux-amd64 \
+            ${IMAGE}:v${VERSION}-linux-arm64
+
+          docker manifest create ${IMAGE}:latest \
+            ${IMAGE}:v${VERSION}-linux-amd64 \
+            ${IMAGE}:v${VERSION}-linux-arm64
+
+          docker manifest push ${IMAGE}:v${VERSION}
+          docker manifest push ${IMAGE}:latest
+
+          DIGEST=$(docker manifest inspect ${IMAGE}:v${VERSION} -v | jq -r '.Descriptor.digest')
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+
+      - name: Create backend manifest
+        id: backend
+        run: |
+          VERSION="${{ needs.build-images.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend"
+
+          docker manifest create ${IMAGE}:v${VERSION} \
+            ${IMAGE}:v${VERSION}-linux-amd64 \
+            ${IMAGE}:v${VERSION}-linux-arm64
+
+          docker manifest create ${IMAGE}:latest \
+            ${IMAGE}:v${VERSION}-linux-amd64 \
+            ${IMAGE}:v${VERSION}-linux-arm64
+
+          docker manifest push ${IMAGE}:v${VERSION}
+          docker manifest push ${IMAGE}:latest
+
+          DIGEST=$(docker manifest inspect ${IMAGE}:v${VERSION} -v | jq -r '.Descriptor.digest')
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
   update-umbrel:
     name: Update Umbrel Package
-    needs: build-and-push
+    needs: create-manifests
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
@@ -174,9 +248,9 @@ jobs:
 
       - name: Update Umbrel package files
         run: |
-          VERSION="${{ needs.build-and-push.outputs.version }}"
-          FRONTEND_DIGEST="${{ needs.build-and-push.outputs.frontend_digest }}"
-          BACKEND_DIGEST="${{ needs.build-and-push.outputs.backend_digest }}"
+          VERSION="${{ needs.create-manifests.outputs.version }}"
+          FRONTEND_DIGEST="${{ needs.create-manifests.outputs.frontend_digest }}"
+          BACKEND_DIGEST="${{ needs.create-manifests.outputs.backend_digest }}"
 
           echo "Updating Umbrel package to v$VERSION"
           echo "Frontend digest: $FRONTEND_DIGEST"
@@ -203,7 +277,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add sanctuary/
-          git diff --staged --quiet || git commit -m "Update Umbrel package to v${{ needs.build-and-push.outputs.version }}
+          git diff --staged --quiet || git commit -m "Update Umbrel package to v${{ needs.create-manifests.outputs.version }}
 
           - Updated Docker image tags with SHA256 digests
           - Updated release notes
@@ -213,7 +287,7 @@ jobs:
 
   update-release:
     name: Update Release Notes
-    needs: [build-and-push, update-umbrel]
+    needs: [create-manifests, update-umbrel]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
@@ -226,7 +300,7 @@ jobs:
       - name: Update release notes with install instructions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.build-and-push.outputs.version }}
+          VERSION: ${{ needs.create-manifests.outputs.version }}
           RELEASE_ID: ${{ github.event.release.id }}
         run: |
           # Get existing release body
@@ -304,7 +378,7 @@ jobs:
       - name: Mark release as latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.build-and-push.outputs.version }}
+          VERSION: ${{ needs.create-manifests.outputs.version }}
         run: |
           gh release edit "v$VERSION" --latest
           echo "Marked v$VERSION as latest release"

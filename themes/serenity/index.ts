@@ -83,17 +83,19 @@ export const serenityTheme: ThemeDefinition = {
         950: '#2e1065',
       },
 
-      // Mainnet colors (Tropical turquoise to match serenity)
+      // Mainnet colors (Sky blue)
       mainnet: {
-        50: '#f0fdfa',
-        100: '#ccfbf1',
-        200: '#99f6e4',
-        500: '#14b8a6',
-        600: '#0d9488',
-        700: '#0f766e',
-        800: '#115e59',
-        900: '#134e4a',
-        950: '#042f2e',
+        50: '#f0f9ff',
+        100: '#e0f2fe',
+        200: '#bae6fd',
+        300: '#7dd3fc',
+        400: '#38bdf8',
+        500: '#0ea5e9',
+        600: '#0284c7',
+        700: '#0369a1',
+        800: '#075985',
+        900: '#0c4a6e',
+        950: '#082f49',
       },
 
       // Testnet colors (Amber)
@@ -193,17 +195,19 @@ export const serenityTheme: ThemeDefinition = {
         950: '#f5f3ff',
       },
 
-      // Mainnet colors (Cosmic cyan - inverted)
+      // Mainnet colors (Sky blue - inverted)
       mainnet: {
-        50: '#042f2e',
-        100: '#134e4a',
-        200: '#115e59',
-        500: '#2dd4bf',
-        600: '#5eead4',
-        700: '#99f6e4',
-        800: '#ccfbf1',
-        900: '#f0fdfa',
-        950: '#f0fdf4',
+        50: '#082f49',
+        100: '#0c4a6e',
+        200: '#075985',
+        300: '#0369a1',
+        400: '#0284c7',
+        500: '#0ea5e9',
+        600: '#38bdf8',
+        700: '#7dd3fc',
+        800: '#bae6fd',
+        900: '#e0f2fe',
+        950: '#f0f9ff',
       },
 
       // Testnet colors (Amber - inverted)

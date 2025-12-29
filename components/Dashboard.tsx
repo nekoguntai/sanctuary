@@ -500,10 +500,10 @@ export const Dashboard: React.FC = () => {
                   {selectedNetwork === 'mainnet' ? 'Bitcoin' : selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} Network Status
                </h4>
                {!isMainnet && (
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                      selectedNetwork === 'testnet'
-                        ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-600 dark:text-testnet-200'
-                        : 'bg-signet-100 dark:bg-signet-900/30 text-signet-600 dark:text-signet-200'
+                        ? 'bg-testnet-500 text-white'
+                        : 'bg-signet-500 text-white'
                   }`}>
                      {selectedNetwork.toUpperCase()}
                   </span>
@@ -678,12 +678,12 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase">Node Status</h4>
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 selectedNetwork === 'mainnet'
-                  ? 'bg-mainnet-100 dark:bg-mainnet-900/30 text-mainnet-600 dark:text-mainnet-200'
+                  ? 'bg-mainnet-500 text-white'
                   : selectedNetwork === 'testnet'
-                  ? 'bg-testnet-100 dark:bg-testnet-900/30 text-testnet-600 dark:text-testnet-200'
-                  : 'bg-signet-100 dark:bg-signet-900/30 text-signet-600 dark:text-signet-200'
+                  ? 'bg-testnet-500 text-white'
+                  : 'bg-signet-500 text-white'
               }`}>
                 {selectedNetwork.toUpperCase()}
               </span>

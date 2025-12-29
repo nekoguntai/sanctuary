@@ -25,25 +25,25 @@ const networkConfigs: Record<TabNetwork, NetworkConfig> = {
     label: 'Mainnet',
     color: 'text-sanctuary-500 dark:text-sanctuary-400',  // Muted when not selected
     bgColor: 'bg-mainnet-50 dark:bg-mainnet-900/30',
-    borderColor: 'border-mainnet-300 dark:border-mainnet-500',
-    activeColor: 'text-mainnet-800 dark:text-white',  // High contrast when selected
-    activeBg: 'bg-mainnet-100 dark:bg-mainnet-700',   // Solid bg in dark mode
+    borderColor: 'border-mainnet-500 dark:border-mainnet-400',
+    activeColor: 'text-white',  // White text for contrast on colored bg
+    activeBg: 'bg-mainnet-500 dark:bg-mainnet-500',
   },
   testnet: {
     label: 'Testnet',
     color: 'text-sanctuary-500 dark:text-sanctuary-400',
     bgColor: 'bg-testnet-50 dark:bg-testnet-900/30',
-    borderColor: 'border-testnet-300 dark:border-testnet-500',
-    activeColor: 'text-testnet-800 dark:text-white',
-    activeBg: 'bg-testnet-100 dark:bg-testnet-700',
+    borderColor: 'border-testnet-500 dark:border-testnet-400',
+    activeColor: 'text-white',
+    activeBg: 'bg-testnet-500 dark:bg-testnet-500',
   },
   signet: {
     label: 'Signet',
     color: 'text-sanctuary-500 dark:text-sanctuary-400',
     bgColor: 'bg-signet-50 dark:bg-signet-900/30',
-    borderColor: 'border-signet-300 dark:border-signet-500',
-    activeColor: 'text-signet-800 dark:text-white',
-    activeBg: 'bg-signet-100 dark:bg-signet-700',
+    borderColor: 'border-signet-500 dark:border-signet-400',
+    activeColor: 'text-white',
+    activeBg: 'bg-signet-500 dark:bg-signet-500',
   },
 };
 
@@ -83,9 +83,9 @@ export const NetworkTabs: React.FC<NetworkTabsProps> = ({
               <span className={`
                 px-1.5 py-0.5 rounded-md text-xs font-semibold
                 ${isSelected
-                  ? 'bg-white/50 dark:bg-black/20'
+                  ? 'bg-white/30 text-white'
                   : isEmpty
-                    ? 'bg-sanctuary-100 dark:bg-sanctuary-800'
+                    ? 'bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-500 dark:text-sanctuary-400'
                     : 'bg-white/50 dark:bg-white/10'
                 }
               `}>

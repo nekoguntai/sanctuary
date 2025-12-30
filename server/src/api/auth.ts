@@ -530,7 +530,11 @@ router.patch('/me/preferences', authenticate, async (req: Request, res: Response
       select: {
         id: true,
         username: true,
+        email: true,
+        isAdmin: true,
         preferences: true,
+        twoFactorEnabled: true,
+        createdAt: true,
       },
     });
 

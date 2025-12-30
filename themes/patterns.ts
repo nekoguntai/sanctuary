@@ -65,10 +65,10 @@ export const globalPatterns: BackgroundPattern[] = [
     // Defined in index.html CSS
   },
   {
-    id: 'triangles',
-    name: 'Triangles',
-    description: 'Geometric triangle tessellation',
-    // Defined in index.html CSS
+    id: 'butterfly-garden',
+    name: 'Butterfly Garden',
+    description: 'Colorful butterflies fluttering among flowers',
+    animated: true,
   },
   {
     id: 'stars',
@@ -77,34 +77,34 @@ export const globalPatterns: BackgroundPattern[] = [
     // Defined in index.html CSS
   },
   {
-    id: 'aurora',
-    name: 'Aurora',
-    description: 'Flowing aurora gradient mesh',
-    // Defined in index.html CSS
+    id: 'aurora-waves',
+    name: 'Aurora Waves',
+    description: 'Flowing aurora borealis with shimmering bands',
+    animated: true,
   },
   {
-    id: 'dots',
-    name: 'Polka Dots',
-    description: 'Regular dot grid pattern',
-    // Defined in index.html CSS
+    id: 'dandelion-wishes',
+    name: 'Dandelion Wishes',
+    description: 'Fluffy dandelion seeds floating on the breeze',
+    animated: true,
   },
   {
-    id: 'cross',
-    name: 'Crosshatch',
-    description: 'Subtle cross-stitch texture',
-    // Defined in index.html CSS
+    id: 'clover-field',
+    name: 'Clover Field',
+    description: 'Lucky clovers swaying with visiting ladybugs',
+    animated: true,
   },
   {
-    id: 'mountains',
-    name: 'Mountains',
-    description: 'Layered mountain silhouettes',
-    // Defined in index.html CSS
+    id: 'misty-valley',
+    name: 'Misty Valley',
+    description: 'Layered mountains with drifting mist and soft light',
+    animated: true,
   },
   {
-    id: 'noise',
-    name: 'Noise',
-    description: 'Subtle grainy texture',
-    // Defined in index.html CSS
+    id: 'gentle-waves',
+    name: 'Gentle Waves',
+    description: 'Soft flowing ocean waves with sparkles',
+    animated: true,
   },
   // ============================================================================
   // ANIMATED PATTERNS (Canvas-based)
@@ -197,6 +197,167 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'northern-lights',
     name: 'Northern Lights',
     description: 'Flowing aurora bands with shifting colors',
+    animated: true,
+  },
+  // Sumi-e (ink wash) animations
+  {
+    id: 'koi-shadows',
+    name: 'Koi Shadows',
+    description: 'Graceful koi fish rendered as ink brush strokes',
+    animated: true,
+  },
+  {
+    id: 'bamboo-sway',
+    name: 'Bamboo Sway',
+    description: 'Bamboo stalks gently swaying in the breeze',
+    animated: true,
+  },
+  // Zen & nature animations
+  {
+    id: 'lotus-bloom',
+    name: 'Lotus Bloom',
+    description: 'Soft lotus flowers slowly opening and closing',
+    animated: true,
+  },
+  {
+    id: 'floating-lanterns',
+    name: 'Floating Lanterns',
+    description: 'Paper lanterns gently rising like sky lanterns',
+    animated: true,
+  },
+  {
+    id: 'moonlit-clouds',
+    name: 'Moonlit Clouds',
+    description: 'Soft clouds drifting with subtle moonlight glow',
+    animated: true,
+  },
+  {
+    id: 'tide-pools',
+    name: 'Tide Pools',
+    description: 'Gentle water ripples with subtle reflections',
+    animated: true,
+  },
+  {
+    id: 'morning-dew',
+    name: 'Morning Dew',
+    description: 'Dewdrops catching light with prismatic effects',
+    animated: true,
+  },
+  {
+    id: 'paper-cranes',
+    name: 'Paper Cranes',
+    description: 'Origami cranes gently floating and rotating',
+    animated: true,
+  },
+  // Fun animations
+  {
+    id: 'cat-chase',
+    name: 'Cat Chase',
+    description: 'A detailed cat (bird\'s eye view) stalking, pouncing, and resting',
+    animated: true,
+  },
+  {
+    id: 'train-station',
+    name: 'Train Station',
+    description: 'Japanese trains arriving and departing with passengers',
+    animated: true,
+  },
+  // Landscape animations
+  {
+    id: 'serene-meadows',
+    name: 'Serene Meadows',
+    description: 'Peaceful rolling hills with trees, flowers, and drifting mist',
+    animated: true,
+  },
+  {
+    id: 'still-ponds',
+    name: 'Still Ponds',
+    description: 'Serene pond with lily pads, koi fish, and dragonflies',
+    animated: true,
+  },
+  {
+    id: 'desert-dunes',
+    name: 'Desert Dunes',
+    description: 'Rolling sand dunes with cacti and warm desert atmosphere',
+    animated: true,
+  },
+  {
+    id: 'mountain-mist',
+    name: 'Mountain Mist',
+    description: 'Layered mountains with drifting mist and pine trees',
+    animated: true,
+  },
+  {
+    id: 'duckling-parade',
+    name: 'Duckling Parade',
+    description: 'Adorable mother duck with ducklings following in a line',
+    animated: true,
+  },
+  {
+    id: 'bunny-meadow',
+    name: 'Bunny Meadow',
+    description: 'Fluffy bunnies hopping around a flower meadow',
+    animated: true,
+  },
+  {
+    id: 'coral-reef',
+    name: 'Coral Reef',
+    description: 'Vibrant underwater scene with colorful fish and coral',
+    animated: true,
+  },
+  {
+    id: 'stargazing',
+    name: 'Stargazing',
+    description: 'Peaceful night sky with twinkling stars and shooting stars',
+    animated: true,
+  },
+  // New serene animations
+  {
+    id: 'lavender-fields',
+    name: 'Lavender Fields',
+    description: 'Rolling lavender fields swaying in the breeze with butterflies',
+    animated: true,
+  },
+  {
+    id: 'wisteria-arbor',
+    name: 'Wisteria Arbor',
+    description: 'Cascading wisteria flowers with gentle swaying',
+    animated: true,
+  },
+  {
+    id: 'zen-sand-garden',
+    name: 'Zen Sand Garden',
+    description: 'Peaceful raked sand patterns with moss-covered stones',
+    animated: true,
+  },
+  {
+    id: 'crystal-cavern',
+    name: 'Crystal Cavern',
+    description: 'Sparkling crystal formations in a mystical cave',
+    animated: true,
+  },
+  {
+    id: 'sunset-sailing',
+    name: 'Sunset Sailing',
+    description: 'Sailboats gliding peacefully on calm water at sunset',
+    animated: true,
+  },
+  {
+    id: 'sleeping-kittens',
+    name: 'Sleeping Kittens',
+    description: 'Adorable curled-up kittens breathing gently',
+    animated: true,
+  },
+  {
+    id: 'baby-dragon',
+    name: 'Baby Dragon',
+    description: 'Cute dragon with shimmering scales in a treasure nest',
+    animated: true,
+  },
+  {
+    id: 'raindrop-window',
+    name: 'Raindrop Window',
+    description: 'Raindrops rolling down a window with bokeh lights',
     animated: true,
   },
 ];

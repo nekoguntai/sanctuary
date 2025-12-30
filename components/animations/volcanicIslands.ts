@@ -76,7 +76,7 @@ export function useVolcanicIslands(
     const width = canvas.width;
     const height = canvas.height;
     const horizonY = height * 0.55;
-    const volcanoX = width * 0.7;
+    const volcanoX = width * 0.85;
     const volcanoY = horizonY - height * 0.15;
 
     // Initialize stars
@@ -121,54 +121,100 @@ export function useVolcanicIslands(
     particlesRef.current = [];
 
     const drawVolcano = (ctx: CanvasRenderingContext2D, x: number, baseY: number) => {
-      // Volcano mountain silhouette
-      ctx.beginPath();
-      ctx.moveTo(x - 80, baseY + 60);
-      ctx.lineTo(x - 20, baseY - 40);
-      ctx.lineTo(x, baseY - 50); // Peak
-      ctx.lineTo(x + 20, baseY - 40);
-      ctx.lineTo(x + 80, baseY + 60);
-      ctx.closePath();
-
-      ctx.fillStyle = darkMode ? '#1a0a0a' : '#2a1510';
-      ctx.fill();
-
-      // Volcanic glow at crater
       const glowIntensity = 0.6 + Math.sin(glowPulseRef.current) * 0.3;
-      const craterGlow = ctx.createRadialGradient(
-        x,
-        baseY - 45,
-        5,
-        x,
-        baseY - 45,
-        60
-      );
-      craterGlow.addColorStop(0, `rgba(255, 100, 0, ${glowIntensity * 0.8})`);
-      craterGlow.addColorStop(0.3, `rgba(255, 50, 0, ${glowIntensity * 0.4})`);
-      craterGlow.addColorStop(0.6, `rgba(200, 30, 0, ${glowIntensity * 0.2})`);
-      craterGlow.addColorStop(1, 'rgba(100, 0, 0, 0)');
 
-      ctx.beginPath();
-      ctx.arc(x, baseY - 45, 60, 0, Math.PI * 2);
-      ctx.fillStyle = craterGlow;
-      ctx.fill();
-
-      // Sky glow behind volcano
+      // Sky glow behind volcano (draw first, behind everything)
       const skyGlow = ctx.createRadialGradient(
         x,
-        baseY - 30,
-        20,
+        baseY - 80,
+        30,
         x,
-        baseY - 30,
-        150
+        baseY - 80,
+        250
       );
-      skyGlow.addColorStop(0, `rgba(255, 80, 0, ${glowIntensity * 0.15})`);
-      skyGlow.addColorStop(0.5, `rgba(200, 40, 0, ${glowIntensity * 0.08})`);
+      skyGlow.addColorStop(0, `rgba(255, 80, 0, ${glowIntensity * 0.2})`);
+      skyGlow.addColorStop(0.4, `rgba(200, 40, 0, ${glowIntensity * 0.1})`);
       skyGlow.addColorStop(1, 'rgba(100, 20, 0, 0)');
 
       ctx.beginPath();
-      ctx.arc(x, baseY - 30, 150, 0, Math.PI * 2);
+      ctx.arc(x, baseY - 80, 250, 0, Math.PI * 2);
       ctx.fillStyle = skyGlow;
+      ctx.fill();
+
+      // Calculate offset to align volcano base with horizon
+      const baseOffset = 160; // How far down the base extends from baseY
+
+      // Volcano mountain silhouette - much larger and more dramatic
+      ctx.beginPath();
+      ctx.moveTo(x - 180, baseY + baseOffset);
+      // Left slope with slight ridge
+      ctx.lineTo(x - 120, baseY + 60);
+      ctx.lineTo(x - 100, baseY + 70);
+      ctx.lineTo(x - 50, baseY - 20);
+      // Crater rim
+      ctx.lineTo(x - 25, baseY - 40);
+      ctx.lineTo(x - 15, baseY - 30); // Crater dip
+      ctx.lineTo(x + 15, baseY - 30); // Crater dip
+      ctx.lineTo(x + 25, baseY - 40);
+      // Right slope
+      ctx.lineTo(x + 50, baseY - 20);
+      ctx.lineTo(x + 100, baseY + 70);
+      ctx.lineTo(x + 120, baseY + 60);
+      ctx.lineTo(x + 180, baseY + baseOffset);
+      ctx.closePath();
+
+      // Medium darkness for good contrast
+      ctx.fillStyle = darkMode ? '#151010' : '#201510';
+      ctx.fill();
+
+      // Add subtle highlight on left slope for depth
+      ctx.beginPath();
+      ctx.moveTo(x - 180, baseY + baseOffset);
+      ctx.lineTo(x - 120, baseY + 60);
+      ctx.lineTo(x - 100, baseY + 70);
+      ctx.lineTo(x - 50, baseY - 20);
+      ctx.lineTo(x - 25, baseY - 40);
+      ctx.lineTo(x - 180, baseY + baseOffset);
+      ctx.closePath();
+      ctx.fillStyle = darkMode ? 'rgba(50, 30, 25, 0.4)' : 'rgba(70, 40, 30, 0.3)';
+      ctx.fill();
+
+      // Volcanic glow at crater - larger
+      const craterGlow = ctx.createRadialGradient(
+        x,
+        baseY - 25,
+        8,
+        x,
+        baseY - 25,
+        80
+      );
+      craterGlow.addColorStop(0, `rgba(255, 120, 20, ${glowIntensity * 0.9})`);
+      craterGlow.addColorStop(0.2, `rgba(255, 80, 0, ${glowIntensity * 0.6})`);
+      craterGlow.addColorStop(0.5, `rgba(255, 50, 0, ${glowIntensity * 0.3})`);
+      craterGlow.addColorStop(0.7, `rgba(200, 30, 0, ${glowIntensity * 0.15})`);
+      craterGlow.addColorStop(1, 'rgba(100, 0, 0, 0)');
+
+      ctx.beginPath();
+      ctx.arc(x, baseY - 25, 80, 0, Math.PI * 2);
+      ctx.fillStyle = craterGlow;
+      ctx.fill();
+
+      // Lava glow inside crater
+      const lavaGlow = ctx.createRadialGradient(
+        x,
+        baseY - 28,
+        0,
+        x,
+        baseY - 28,
+        20
+      );
+      lavaGlow.addColorStop(0, `rgba(255, 200, 100, ${glowIntensity})`);
+      lavaGlow.addColorStop(0.5, `rgba(255, 150, 50, ${glowIntensity * 0.7})`);
+      lavaGlow.addColorStop(1, `rgba(255, 100, 0, ${glowIntensity * 0.3})`);
+
+      ctx.beginPath();
+      ctx.arc(x, baseY - 28, 20, 0, Math.PI * 2);
+      ctx.fillStyle = lavaGlow;
       ctx.fill();
     };
 
@@ -326,7 +372,7 @@ export function useVolcanicIslands(
       if (Math.random() < 0.1) {
         particlesRef.current.push({
           x: volcanoX + (Math.random() - 0.5) * 20,
-          y: volcanoY - 50,
+          y: volcanoY - 30,
           size: 1.5 + Math.random() * 2,
           speedY: -0.5 - Math.random() * 1,
           speedX: (Math.random() - 0.5) * 0.8,

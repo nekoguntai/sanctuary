@@ -66,7 +66,7 @@ export function useEclipse(
 
     const width = canvas.width;
     const height = canvas.height;
-    const sunX = width * 0.5;
+    const sunX = width * 0.7;
     const sunY = height * 0.4;
     const sunRadius = Math.min(width, height) * 0.12;
 

@@ -2,7 +2,7 @@
  * Tidal Patterns Animation
  *
  * Sand ripples with water flowing over them,
- * shells scattered, gentle tide advancing and receding.
+ * gentle tide advancing and receding.
  */
 
 import { useEffect, useRef } from 'react';
@@ -12,15 +12,6 @@ interface SandRipple {
   amplitude: number;
   frequency: number;
   phase: number;
-}
-
-interface Shell {
-  x: number;
-  y: number;
-  type: 'spiral' | 'clam' | 'scallop' | 'starfish';
-  size: number;
-  rotation: number;
-  color: string;
 }
 
 interface WaterFoam {
@@ -45,7 +36,6 @@ export function useTidalPatterns(
   enabled: boolean
 ) {
   const ripplesRef = useRef<SandRipple[]>([]);
-  const shellsRef = useRef<Shell[]>([]);
   const foamRef = useRef<WaterFoam[]>([]);
   const sparklesRef = useRef<Sparkle[]>([]);
   const animationRef = useRef<number>();
@@ -83,105 +73,8 @@ export function useTidalPatterns(
       });
     }
 
-    // Initialize shells
-    shellsRef.current = [];
-    const shellTypes: Shell['type'][] = ['spiral', 'clam', 'scallop', 'starfish'];
-    const shellColors = darkMode
-      ? ['#d4c4b0', '#c9b89a', '#e0d5c5', '#c5b5a0', '#ddd0c0']
-      : ['#f5ebe0', '#ede0d0', '#fff8f0', '#e8ddd0', '#f0e8e0'];
-
-    for (let i = 0; i < 12; i++) {
-      shellsRef.current.push({
-        x: Math.random() * width,
-        y: height * 0.3 + Math.random() * height * 0.6,
-        type: shellTypes[Math.floor(Math.random() * shellTypes.length)],
-        size: 8 + Math.random() * 12,
-        rotation: Math.random() * Math.PI * 2,
-        color: shellColors[Math.floor(Math.random() * shellColors.length)],
-      });
-    }
-
     foamRef.current = [];
     sparklesRef.current = [];
-
-    const drawShell = (ctx: CanvasRenderingContext2D, shell: Shell) => {
-      ctx.save();
-      ctx.translate(shell.x, shell.y);
-      ctx.rotate(shell.rotation);
-
-      ctx.fillStyle = shell.color;
-      ctx.strokeStyle = darkMode ? '#a09080' : '#c0b0a0';
-      ctx.lineWidth = 1;
-
-      switch (shell.type) {
-        case 'spiral':
-          // Snail shell spiral
-          ctx.beginPath();
-          for (let i = 0; i < 3 * Math.PI; i += 0.1) {
-            const r = (shell.size / 3) * (i / Math.PI);
-            const x = r * Math.cos(i);
-            const y = r * Math.sin(i);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(0, 0, shell.size * 0.4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          break;
-
-        case 'clam':
-          // Clam shell (two halves)
-          ctx.beginPath();
-          ctx.ellipse(0, 0, shell.size, shell.size * 0.6, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          // Ridges
-          for (let i = 0; i < 5; i++) {
-            const r = shell.size * (0.3 + i * 0.15);
-            ctx.beginPath();
-            ctx.arc(0, 0, r, -Math.PI * 0.8, Math.PI * 0.8);
-            ctx.stroke();
-          }
-          break;
-
-        case 'scallop':
-          // Scallop shell with ridges
-          ctx.beginPath();
-          for (let i = 0; i <= 8; i++) {
-            const angle = (i / 8) * Math.PI - Math.PI / 2;
-            const r = shell.size * (0.8 + Math.sin(i * Math.PI) * 0.2);
-            const x = r * Math.cos(angle);
-            const y = r * Math.sin(angle) + shell.size * 0.3;
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          break;
-
-        case 'starfish':
-          // Five-pointed starfish
-          ctx.beginPath();
-          for (let i = 0; i < 10; i++) {
-            const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
-            const r = i % 2 === 0 ? shell.size : shell.size * 0.4;
-            const x = r * Math.cos(angle);
-            const y = r * Math.sin(angle);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.closePath();
-          ctx.fillStyle = darkMode ? '#d4a080' : '#f0c0a0';
-          ctx.fill();
-          ctx.stroke();
-          break;
-      }
-
-      ctx.restore();
-    };
 
     const animate = () => {
       const currentWidth = canvas.width;
@@ -233,16 +126,6 @@ export function useTidalPatterns(
           : 'rgba(180, 160, 140, 0.35)';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-      });
-
-      // Draw shells (partially visible under water)
-      shellsRef.current.forEach((shell) => {
-        const isUnderwater = shell.y < tideY;
-        if (isUnderwater) {
-          ctx.globalAlpha = 0.6;
-        }
-        drawShell(ctx, shell);
-        ctx.globalAlpha = 1;
       });
 
       // Water overlay

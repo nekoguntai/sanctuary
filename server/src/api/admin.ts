@@ -130,9 +130,20 @@ router.get('/node-config', authenticate, requireAdmin, async (req: Request, res:
  */
 router.put('/node-config', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { type, host, port, useSsl, allowSelfSignedCert, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing, proxyEnabled, proxyHost, proxyPort, proxyUsername, proxyPassword } = req.body;
+    const {
+      type, host, port, useSsl, allowSelfSignedCert, user, password, explorerUrl, feeEstimatorUrl, mempoolEstimator,
+      poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing,
+      proxyEnabled, proxyHost, proxyPort, proxyUsername, proxyPassword,
+      // Per-network settings
+      mainnetMode, mainnetSingletonHost, mainnetSingletonPort, mainnetSingletonSsl,
+      mainnetPoolMin, mainnetPoolMax, mainnetPoolLoadBalancing,
+      testnetEnabled, testnetMode, testnetSingletonHost, testnetSingletonPort, testnetSingletonSsl,
+      testnetPoolMin, testnetPoolMax, testnetPoolLoadBalancing,
+      signetEnabled, signetMode, signetSingletonHost, signetSingletonPort, signetSingletonSsl,
+      signetPoolMin, signetPoolMax, signetPoolLoadBalancing,
+    } = req.body;
     // Log non-sensitive fields only (password excluded)
-    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, allowSelfSignedCert, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing, proxyEnabled, proxyHost, proxyPort });
+    log.info('[ADMIN] PUT /node-config', { type, host, port, useSsl, allowSelfSignedCert, hasPassword: !!password, mempoolEstimator, poolEnabled, poolMinConnections, poolMaxConnections, poolLoadBalancing, proxyEnabled, proxyHost, proxyPort, mainnetMode, testnetEnabled, testnetMode, signetEnabled, signetMode });
 
     // Validation
     if (!type || !host || !port) {
@@ -188,6 +199,32 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           proxyPort: proxyPort ? parseInt(proxyPort.toString(), 10) : null,
           proxyUsername: proxyUsername || null,
           proxyPassword: proxyPassword ? encrypt(proxyPassword) : null,
+          // Per-network settings - Mainnet
+          mainnetMode: mainnetMode || 'pool',
+          mainnetSingletonHost: mainnetSingletonHost || 'electrum.blockstream.info',
+          mainnetSingletonPort: mainnetSingletonPort ? parseInt(mainnetSingletonPort.toString(), 10) : 50002,
+          mainnetSingletonSsl: mainnetSingletonSsl ?? true,
+          mainnetPoolMin: mainnetPoolMin ? parseInt(mainnetPoolMin.toString(), 10) : 1,
+          mainnetPoolMax: mainnetPoolMax ? parseInt(mainnetPoolMax.toString(), 10) : 5,
+          mainnetPoolLoadBalancing: mainnetPoolLoadBalancing || 'round_robin',
+          // Per-network settings - Testnet
+          testnetEnabled: testnetEnabled ?? false,
+          testnetMode: testnetMode || 'singleton',
+          testnetSingletonHost: testnetSingletonHost || 'electrum.blockstream.info',
+          testnetSingletonPort: testnetSingletonPort ? parseInt(testnetSingletonPort.toString(), 10) : 60002,
+          testnetSingletonSsl: testnetSingletonSsl ?? true,
+          testnetPoolMin: testnetPoolMin ? parseInt(testnetPoolMin.toString(), 10) : 1,
+          testnetPoolMax: testnetPoolMax ? parseInt(testnetPoolMax.toString(), 10) : 3,
+          testnetPoolLoadBalancing: testnetPoolLoadBalancing || 'round_robin',
+          // Per-network settings - Signet
+          signetEnabled: signetEnabled ?? false,
+          signetMode: signetMode || 'singleton',
+          signetSingletonHost: signetSingletonHost || 'electrum.mutinynet.com',
+          signetSingletonPort: signetSingletonPort ? parseInt(signetSingletonPort.toString(), 10) : 50002,
+          signetSingletonSsl: signetSingletonSsl ?? true,
+          signetPoolMin: signetPoolMin ? parseInt(signetPoolMin.toString(), 10) : 1,
+          signetPoolMax: signetPoolMax ? parseInt(signetPoolMax.toString(), 10) : 3,
+          signetPoolLoadBalancing: signetPoolLoadBalancing || 'round_robin',
           updatedAt: new Date(),
         },
       });
@@ -214,6 +251,32 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           proxyPort: proxyPort ? parseInt(proxyPort.toString(), 10) : null,
           proxyUsername: proxyUsername || null,
           proxyPassword: proxyPassword ? encrypt(proxyPassword) : null,
+          // Per-network settings - Mainnet
+          mainnetMode: mainnetMode || 'pool',
+          mainnetSingletonHost: mainnetSingletonHost || 'electrum.blockstream.info',
+          mainnetSingletonPort: mainnetSingletonPort ? parseInt(mainnetSingletonPort.toString(), 10) : 50002,
+          mainnetSingletonSsl: mainnetSingletonSsl ?? true,
+          mainnetPoolMin: mainnetPoolMin ? parseInt(mainnetPoolMin.toString(), 10) : 1,
+          mainnetPoolMax: mainnetPoolMax ? parseInt(mainnetPoolMax.toString(), 10) : 5,
+          mainnetPoolLoadBalancing: mainnetPoolLoadBalancing || 'round_robin',
+          // Per-network settings - Testnet
+          testnetEnabled: testnetEnabled ?? false,
+          testnetMode: testnetMode || 'singleton',
+          testnetSingletonHost: testnetSingletonHost || 'electrum.blockstream.info',
+          testnetSingletonPort: testnetSingletonPort ? parseInt(testnetSingletonPort.toString(), 10) : 60002,
+          testnetSingletonSsl: testnetSingletonSsl ?? true,
+          testnetPoolMin: testnetPoolMin ? parseInt(testnetPoolMin.toString(), 10) : 1,
+          testnetPoolMax: testnetPoolMax ? parseInt(testnetPoolMax.toString(), 10) : 3,
+          testnetPoolLoadBalancing: testnetPoolLoadBalancing || 'round_robin',
+          // Per-network settings - Signet
+          signetEnabled: signetEnabled ?? false,
+          signetMode: signetMode || 'singleton',
+          signetSingletonHost: signetSingletonHost || 'electrum.mutinynet.com',
+          signetSingletonPort: signetSingletonPort ? parseInt(signetSingletonPort.toString(), 10) : 50002,
+          signetSingletonSsl: signetSingletonSsl ?? true,
+          signetPoolMin: signetPoolMin ? parseInt(signetPoolMin.toString(), 10) : 1,
+          signetPoolMax: signetPoolMax ? parseInt(signetPoolMax.toString(), 10) : 3,
+          signetPoolLoadBalancing: signetPoolLoadBalancing || 'round_robin',
           isDefault: true,
         },
       });
@@ -242,6 +305,30 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
       poolMinConnections: nodeConfig.poolMinConnections,
       poolMaxConnections: nodeConfig.poolMaxConnections,
       poolLoadBalancing: nodeConfig.poolLoadBalancing || 'round_robin',
+      // Per-network settings
+      mainnetMode: nodeConfig.mainnetMode,
+      mainnetSingletonHost: nodeConfig.mainnetSingletonHost,
+      mainnetSingletonPort: nodeConfig.mainnetSingletonPort,
+      mainnetSingletonSsl: nodeConfig.mainnetSingletonSsl,
+      mainnetPoolMin: nodeConfig.mainnetPoolMin,
+      mainnetPoolMax: nodeConfig.mainnetPoolMax,
+      mainnetPoolLoadBalancing: nodeConfig.mainnetPoolLoadBalancing,
+      testnetEnabled: nodeConfig.testnetEnabled,
+      testnetMode: nodeConfig.testnetMode,
+      testnetSingletonHost: nodeConfig.testnetSingletonHost,
+      testnetSingletonPort: nodeConfig.testnetSingletonPort,
+      testnetSingletonSsl: nodeConfig.testnetSingletonSsl,
+      testnetPoolMin: nodeConfig.testnetPoolMin,
+      testnetPoolMax: nodeConfig.testnetPoolMax,
+      testnetPoolLoadBalancing: nodeConfig.testnetPoolLoadBalancing,
+      signetEnabled: nodeConfig.signetEnabled,
+      signetMode: nodeConfig.signetMode,
+      signetSingletonHost: nodeConfig.signetSingletonHost,
+      signetSingletonPort: nodeConfig.signetSingletonPort,
+      signetSingletonSsl: nodeConfig.signetSingletonSsl,
+      signetPoolMin: nodeConfig.signetPoolMin,
+      signetPoolMax: nodeConfig.signetPoolMax,
+      signetPoolLoadBalancing: nodeConfig.signetPoolLoadBalancing,
       message: 'Node configuration updated successfully. Backend will reconnect on next request.',
     });
   } catch (error) {

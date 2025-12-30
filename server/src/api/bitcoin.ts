@@ -9,7 +9,7 @@ import { authenticate } from '../middleware/auth';
 import * as blockchain from '../services/bitcoin/blockchain';
 import * as utils from '../services/bitcoin/utils';
 import { getElectrumClient } from '../services/bitcoin/electrum';
-import { getElectrumPool, getPoolConfig, isPoolEnabled } from '../services/bitcoin/electrumPool';
+import { getElectrumPoolAsync, getPoolConfig, isPoolEnabled } from '../services/bitcoin/electrumPool';
 import * as mempool from '../services/bitcoin/mempool';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
@@ -32,14 +32,17 @@ router.get('/status', async (req: Request, res: Response) => {
     let version: { server: string; protocol: string } | null = null;
     let blockHeight: number | undefined;
     let poolStats = null;
-    let effectiveMin = nodeConfig?.poolMinConnections;
-    let effectiveMax = nodeConfig?.poolMaxConnections;
+    // Use per-network settings if available, otherwise fall back to legacy pool settings
+    let effectiveMin = nodeConfig?.mainnetPoolMin ?? nodeConfig?.poolMinConnections;
+    let effectiveMax = nodeConfig?.mainnetPoolMax ?? nodeConfig?.poolMaxConnections;
     let poolHandle: any = null;
 
     // Try to use pool first if enabled and initialized
-    if (nodeConfig?.type === 'electrum' && nodeConfig.poolEnabled) {
+    // Check both legacy poolEnabled flag and per-network mainnetMode
+    const usePool = nodeConfig?.poolEnabled || nodeConfig?.mainnetMode === 'pool';
+    if (nodeConfig?.type === 'electrum' && usePool) {
       try {
-        const pool = getElectrumPool();
+        const pool = await getElectrumPoolAsync();
         if (pool.isPoolInitialized()) {
           poolStats = pool.getPoolStats();
           effectiveMin = pool.getEffectiveMinConnections();

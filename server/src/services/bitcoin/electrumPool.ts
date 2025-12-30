@@ -1782,6 +1782,9 @@ export async function getElectrumPoolForNetwork(network: NetworkType): Promise<E
       pool.setServers(servers);
     }
 
+    // Initialize the pool (creates minimum connections)
+    await pool.initialize();
+
     // Store in registry
     networkPools.set(network, pool);
 
@@ -1917,7 +1920,10 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
       });
     }
 
-    log.info('Electrum pool created', {
+    // Initialize the pool (creates minimum connections)
+    await poolInstance.initialize();
+
+    log.info('Electrum pool initialized', {
       enabled: poolInstance['config'].enabled,
       minConnections: poolInstance['config'].minConnections,
       maxConnections: poolInstance['config'].maxConnections,

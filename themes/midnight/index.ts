@@ -3,7 +3,7 @@
  *
  * Sophisticated dark theme with silver/platinum accents.
  * Deep indigo and charcoal backgrounds with cool metallic highlights.
- * Rose accents provide elegant warmth against the cool palette.
+ * Lavender accents harmonize with the cool indigo palette.
  * Perfect for users who prefer darker interfaces with elegant contrast.
  *
  * Light mode: Cool silver/platinum with deep accents
@@ -66,17 +66,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#083344',
       },
 
-      // Warning colors (Soft Gold for elegant warmth)
+      // Warning colors (Lavender - harmonizes with indigo)
       warning: {
-        50: '#fefce8',   // Yellow-50
-        100: '#fef9c3',  // Yellow-100
-        200: '#fef08a',  // Yellow-200
-        500: '#ca8a04',  // Yellow-600: Soft gold (main)
-        600: '#a16207',  // Yellow-700
-        700: '#854d0e',  // Yellow-800
-        800: '#713f12',  // Yellow-900
-        900: '#422006',  // Yellow-950
-        950: '#2a1503',  // Darker gold
+        50: '#f5f3ff',   // Violet-50
+        100: '#ede9fe',  // Violet-100
+        200: '#ddd6fe',  // Violet-200
+        500: '#a78bfa',  // Violet-400: Lavender (main)
+        600: '#8b5cf6',  // Violet-500
+        700: '#7c3aed',  // Violet-600
+        800: '#6d28d9',  // Violet-700
+        900: '#5b21b6',  // Violet-800
+        950: '#4c1d95',  // Violet-900
       },
 
       // Sent colors (Violet)
@@ -97,6 +97,8 @@ export const midnightTheme: ThemeDefinition = {
         50: '#ecfeff',
         100: '#cffafe',
         200: '#a5f3fc',
+        300: '#67e8f9',
+        400: '#22d3ee',
         500: '#06b6d4',
         600: '#0891b2',
         700: '#0e7490',
@@ -105,17 +107,19 @@ export const midnightTheme: ThemeDefinition = {
         950: '#083344',
       },
 
-      // Testnet colors (Soft Gold)
+      // Testnet colors (Lavender)
       testnet: {
-        50: '#fefce8',   // Yellow-50
-        100: '#fef9c3',  // Yellow-100
-        200: '#fef08a',  // Yellow-200
-        500: '#ca8a04',  // Yellow-600
-        600: '#a16207',  // Yellow-700
-        700: '#854d0e',  // Yellow-800
-        800: '#713f12',  // Yellow-900
-        900: '#422006',  // Yellow-950
-        950: '#2a1503',  // Darker gold
+        50: '#f5f3ff',   // Violet-50
+        100: '#ede9fe',  // Violet-100
+        200: '#ddd6fe',  // Violet-200
+        300: '#c4b5fd',  // Violet-300
+        400: '#a78bfa',  // Violet-400
+        500: '#a78bfa',  // Violet-400 (same as 400 for lavender emphasis)
+        600: '#8b5cf6',  // Violet-500
+        700: '#7c3aed',  // Violet-600
+        800: '#6d28d9',  // Violet-700
+        900: '#5b21b6',  // Violet-800
+        950: '#4c1d95',  // Violet-900
       },
 
       // Signet colors (Purple)
@@ -123,6 +127,8 @@ export const midnightTheme: ThemeDefinition = {
         50: '#faf5ff',
         100: '#f3e8ff',
         200: '#e9d5ff',
+        300: '#d8b4fe',
+        400: '#c084fc',
         500: '#a855f7',
         600: '#9333ea',
         700: '#7e22ce',
@@ -176,17 +182,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#f0fdff',
       },
 
-      // Warning colors (Soft Gold for elegant warmth)
+      // Warning colors (Lavender - inverted for dark mode)
       warning: {
-        50: '#2a1503',   // Darkest gold
-        100: '#422006',  // Yellow-950
-        200: '#713f12',  // Yellow-900
-        500: '#eab308',  // Yellow-500: Bright gold
-        600: '#facc15',  // Yellow-400
-        700: '#fde047',  // Yellow-300
-        800: '#fef08a',  // Yellow-200
-        900: '#fef9c3',  // Yellow-100
-        950: '#fefce8',  // Yellow-50
+        50: '#4c1d95',   // Violet-900
+        100: '#5b21b6',  // Violet-800
+        200: '#6d28d9',  // Violet-700
+        500: '#a78bfa',  // Violet-400: Lavender (main)
+        600: '#c4b5fd',  // Violet-300
+        700: '#ddd6fe',  // Violet-200
+        800: '#ede9fe',  // Violet-100
+        900: '#f5f3ff',  // Violet-50
+        950: '#faf5ff',  // Lightest
       },
 
       // Sent colors (Violet - inverted)
@@ -207,6 +213,8 @@ export const midnightTheme: ThemeDefinition = {
         50: '#083344',
         100: '#164e63',
         200: '#155e75',
+        300: '#0e7490',
+        400: '#0891b2',
         500: '#06b6d4',
         600: '#22d3ee',
         700: '#67e8f9',
@@ -215,17 +223,19 @@ export const midnightTheme: ThemeDefinition = {
         950: '#ecfeff',
       },
 
-      // Testnet colors (Soft Gold - inverted)
+      // Testnet colors (Lavender - inverted)
       testnet: {
-        50: '#2a1503',   // Darkest gold
-        100: '#422006',  // Yellow-950
-        200: '#713f12',  // Yellow-900
-        500: '#ca8a04',  // Yellow-600
-        600: '#eab308',  // Yellow-500
-        700: '#facc15',  // Yellow-400
-        800: '#fef08a',  // Yellow-200
-        900: '#fef9c3',  // Yellow-100
-        950: '#fefce8',  // Yellow-50
+        50: '#4c1d95',   // Violet-900
+        100: '#5b21b6',  // Violet-800
+        200: '#6d28d9',  // Violet-700
+        300: '#7c3aed',  // Violet-600
+        400: '#8b5cf6',  // Violet-500
+        500: '#a78bfa',  // Violet-400
+        600: '#c4b5fd',  // Violet-300
+        700: '#ddd6fe',  // Violet-200
+        800: '#ede9fe',  // Violet-100
+        900: '#f5f3ff',  // Violet-50
+        950: '#faf5ff',  // Lightest
       },
 
       // Signet colors (Purple - inverted)
@@ -233,6 +243,8 @@ export const midnightTheme: ThemeDefinition = {
         50: '#3b0764',
         100: '#581c87',
         200: '#6b21a8',
+        300: '#7e22ce',
+        400: '#9333ea',
         500: '#a855f7',
         600: '#c084fc',
         700: '#d8b4fe',

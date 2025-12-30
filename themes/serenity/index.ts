@@ -59,15 +59,15 @@ export const serenityTheme: ThemeDefinition = {
         800: '#166534',
       },
 
-      // Warning colors (Sunset coral/orange)
+      // Warning colors (Soft coral/seashell)
       warning: {
-        50: '#fff7ed',
-        100: '#ffedd5',
-        200: '#fed7aa',
-        500: '#f97316',  // Sunset orange
-        600: '#ea580c',
-        700: '#c2410c',
-        800: '#9a3412',
+        50: '#fef5f3',   // Pale shell white
+        100: '#fde8e4',  // Light shell pink
+        200: '#fbd5cd',  // Soft blush
+        500: '#e8a598',  // Seashell coral
+        600: '#d4897a',  // Warm coral
+        700: '#b86b5c',  // Terracotta
+        800: '#965244',  // Deep shell
       },
 
       // Sent colors (Violet)

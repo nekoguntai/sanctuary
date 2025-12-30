@@ -23,8 +23,11 @@ import { forestTheme } from './forest';
 import { cyberTheme } from './cyber';
 import { sunriseTheme } from './sunrise';
 import { oceanTheme } from './ocean';
-import { nordicTheme } from './sunset';
+import { sakuraTheme } from './sunset';
 import { midnightTheme } from './midnight';
+import { bambooTheme } from './bamboo';
+import { copperTheme } from './copper';
+import { desertTheme } from './desert';
 
 // Register all themes
 themeRegistry.registerMany([
@@ -34,8 +37,11 @@ themeRegistry.registerMany([
   cyberTheme,
   sunriseTheme,
   oceanTheme,
-  nordicTheme,
+  sakuraTheme,
   midnightTheme,
+  bambooTheme,
+  copperTheme,
+  desertTheme,
 ]);
 
 // Register global patterns

@@ -90,43 +90,49 @@ export const oceanTheme: ThemeDefinition = {
         950: '#2e1065',
       },
 
-      // Mainnet colors (Ocean teal)
+      // Mainnet colors (Deep navy blue - stable deep waters)
       mainnet: {
+        50: '#eff6ff',
+        100: '#dbeafe',
+        200: '#bfdbfe',
+        300: '#93c5fd',
+        400: '#60a5fa',
+        500: '#1e3a8a',  // Deep navy blue
+        600: '#1e40af',
+        700: '#1d4ed8',
+        800: '#172554',
+        900: '#0f172a',
+        950: '#0a0f1a',
+      },
+
+      // Testnet colors (Seafoam - shallow experimental waters)
+      testnet: {
         50: '#f0fdfa',
         100: '#ccfbf1',
         200: '#99f6e4',
-        500: '#14b8a6',
-        600: '#0d9488',
-        700: '#0f766e',
-        800: '#115e59',
-        900: '#134e4a',
+        300: '#5eead4',
+        400: '#2dd4bf',
+        500: '#5eead4',  // Seafoam
+        600: '#14b8a6',
+        700: '#0d9488',
+        800: '#0f766e',
+        900: '#115e59',
         950: '#042f2e',
       },
 
-      // Testnet colors (Amber)
-      testnet: {
-        50: '#fffbeb',
-        100: '#fef3c7',
-        200: '#fde68a',
-        500: '#f59e0b',
-        600: '#d97706',
-        700: '#b45309',
-        800: '#92400e',
-        900: '#78350f',
-        950: '#451a03',
-      },
-
-      // Signet colors (Purple)
+      // Signet colors (Sandy gold - beach/shore)
       signet: {
-        50: '#faf5ff',
-        100: '#f3e8ff',
-        200: '#e9d5ff',
-        500: '#a855f7',
-        600: '#9333ea',
-        700: '#7e22ce',
-        800: '#6b21a8',
-        900: '#581c87',
-        950: '#3b0764',
+        50: '#fefaed',
+        100: '#faf0d0',
+        200: '#f5e0a0',
+        300: '#eecb6a',
+        400: '#e5b440',
+        500: '#d4a574',  // Sandy gold
+        600: '#b88c4a',
+        700: '#9a7038',
+        800: '#7d5930',
+        900: '#674a2a',
+        950: '#3a2814',
       },
     },
 
@@ -174,17 +180,17 @@ export const oceanTheme: ThemeDefinition = {
         950: '#f0fdf4',
       },
 
-      // Warning colors (Warm amber)
+      // Warning colors (Bioluminescent - deep sea glow)
       warning: {
-        50: '#451a03',
-        100: '#78350f',
-        200: '#92400e',
-        500: '#fbbf24',  // Brighter amber for dark mode
-        600: '#fcd34d',
-        700: '#fde68a',
-        800: '#fef3c7',
-        900: '#fffbeb',
-        950: '#fefce8',
+        50: '#1a2e1a',
+        100: '#2a4a2a',
+        200: '#3d6a3d',
+        500: '#a8e6a0',  // Bioluminescent green-yellow
+        600: '#bdedb6',
+        700: '#d0f4cb',
+        800: '#e3fae0',
+        900: '#f2fdf0',
+        950: '#f8fef7',
       },
 
       // Sent colors (Violet - inverted)
@@ -200,43 +206,49 @@ export const oceanTheme: ThemeDefinition = {
         950: '#f5f3ff',
       },
 
-      // Mainnet colors (Ocean teal - inverted)
+      // Mainnet colors (Deep navy blue - inverted for dark)
       mainnet: {
-        50: '#042f2e',
-        100: '#134e4a',
-        200: '#115e59',
-        500: '#2dd4bf',
-        600: '#5eead4',
-        700: '#99f6e4',
-        800: '#ccfbf1',
-        900: '#f0fdfa',
-        950: '#f0fdf4',
+        50: '#0a0f1a',
+        100: '#0f172a',
+        200: '#172554',
+        300: '#1e3a8a',
+        400: '#1e40af',
+        500: '#3b82f6',  // Brighter navy for dark mode
+        600: '#60a5fa',
+        700: '#93c5fd',
+        800: '#bfdbfe',
+        900: '#dbeafe',
+        950: '#eff6ff',
       },
 
-      // Testnet colors (Amber - inverted)
+      // Testnet colors (Seafoam - inverted for dark)
       testnet: {
-        50: '#451a03',
-        100: '#78350f',
-        200: '#92400e',
-        500: '#f59e0b',
-        600: '#fbbf24',
-        700: '#fcd34d',
-        800: '#fde68a',
-        900: '#fef3c7',
-        950: '#fffbeb',
+        50: '#042f2e',
+        100: '#115e59',
+        200: '#0f766e',
+        300: '#0d9488',
+        400: '#14b8a6',
+        500: '#5eead4',  // Bright seafoam
+        600: '#99f6e4',
+        700: '#ccfbf1',
+        800: '#e0fef8',
+        900: '#f0fdfa',
+        950: '#f7fefc',
       },
 
-      // Signet colors (Purple - inverted)
+      // Signet colors (Sandy gold - inverted for dark)
       signet: {
-        50: '#3b0764',
-        100: '#581c87',
-        200: '#6b21a8',
-        500: '#a855f7',
-        600: '#c084fc',
-        700: '#d8b4fe',
-        800: '#e9d5ff',
-        900: '#f3e8ff',
-        950: '#faf5ff',
+        50: '#3a2814',
+        100: '#674a2a',
+        200: '#7d5930',
+        300: '#9a7038',
+        400: '#b88c4a',
+        500: '#e5b440',  // Brighter sandy gold
+        600: '#eecb6a',
+        700: '#f5e0a0',
+        800: '#faf0d0',
+        900: '#fefaed',
+        950: '#fffdf5',
       },
     },
   },

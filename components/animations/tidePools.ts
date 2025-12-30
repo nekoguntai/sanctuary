@@ -53,7 +53,7 @@ export function useTidePools(
       radius: 0,
       maxRadius: 40 + Math.random() * 60,
       speed: 0.3 + Math.random() * 0.3,
-      opacity: 0.08 + Math.random() * 0.06,
+      opacity: 0.15 + Math.random() * 0.1,
       colorScheme: Math.floor(Math.random() * 3),
     });
 
@@ -84,21 +84,21 @@ export function useTidePools(
         if (r > 0) {
           ctx.beginPath();
           ctx.arc(ripple.x, ripple.y, r, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${ripple.opacity * opacityMultiplier * fadeOut * (1 - i * 0.3)})`;
-          ctx.lineWidth = 2 - i * 0.5;
+          ctx.strokeStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${ripple.opacity * opacityMultiplier * fadeOut * (1 - i * 0.25)})`;
+          ctx.lineWidth = 2.5 - i * 0.5;
           ctx.stroke();
         }
       }
 
-      // Subtle caustic highlight
+      // Caustic highlight
       if (ripple.radius > 10) {
         const highlightAngle = timeRef.current * 0.5 + ripple.x * 0.01;
         const hx = ripple.x + Math.cos(highlightAngle) * ripple.radius * 0.3;
         const hy = ripple.y + Math.sin(highlightAngle) * ripple.radius * 0.3;
 
         ctx.beginPath();
-        ctx.arc(hx, hy, 3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${ripple.opacity * opacityMultiplier * fadeOut * 0.3})`;
+        ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${ripple.opacity * opacityMultiplier * fadeOut * 0.5})`;
         ctx.fill();
       }
 

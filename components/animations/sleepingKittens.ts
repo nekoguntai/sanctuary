@@ -92,14 +92,14 @@ export function useSleepingKittens(
         { main: '#D4C4E8', pattern: '#C4B4D8' }, // Lavender
       ];
 
-      // Create cushions first
+      // Create cushions in lower right area
       cushionsRef.current = [];
       const cushionCount = 2 + Math.floor(Math.random() * 2);
       for (let i = 0; i < cushionCount; i++) {
         const cushColor = cushionColors[Math.floor(Math.random() * cushionColors.length)];
         cushionsRef.current.push({
-          x: width * 0.15 + (i / cushionCount) * width * 0.6 + Math.random() * 100,
-          y: height * 0.5 + Math.random() * height * 0.2,
+          x: width * 0.55 + (i / cushionCount) * width * 0.3 + Math.random() * 60,
+          y: height * 0.65 + Math.random() * height * 0.15,
           width: 120 + Math.random() * 60,
           height: 40 + Math.random() * 30,
           color: cushColor.main,
@@ -138,12 +138,12 @@ export function useSleepingKittens(
         }
       });
 
-      // Create floating dust motes in sunbeam
+      // Create floating dust motes in sunbeam (shifted to lower right)
       dustRef.current = [];
       for (let i = 0; i < 20; i++) {
         dustRef.current.push({
-          x: width * 0.3 + Math.random() * width * 0.4,
-          y: Math.random() * height * 0.7,
+          x: width * 0.5 + Math.random() * width * 0.4,
+          y: height * 0.3 + Math.random() * height * 0.5,
           size: 1 + Math.random() * 2,
           phase: Math.random() * Math.PI * 2,
           speed: 0.001 + Math.random() * 0.002,
@@ -166,11 +166,11 @@ export function useSleepingKittens(
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Warm sunbeam
+      // Warm sunbeam (shifted to lower right)
       const beamGradient = ctx.createLinearGradient(
-        canvas.width * 0.3,
+        canvas.width * 0.5,
         0,
-        canvas.width * 0.7,
+        canvas.width * 0.9,
         canvas.height
       );
       if (darkMode) {
@@ -182,10 +182,10 @@ export function useSleepingKittens(
       }
       ctx.fillStyle = beamGradient;
       ctx.beginPath();
-      ctx.moveTo(canvas.width * 0.3, 0);
-      ctx.lineTo(canvas.width * 0.5, 0);
-      ctx.lineTo(canvas.width * 0.8, canvas.height);
-      ctx.lineTo(canvas.width * 0.4, canvas.height);
+      ctx.moveTo(canvas.width * 0.5, 0);
+      ctx.lineTo(canvas.width * 0.7, 0);
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.lineTo(canvas.width * 0.6, canvas.height);
       ctx.closePath();
       ctx.fill();
     };
@@ -409,7 +409,7 @@ export function useSleepingKittens(
         // Reset if off screen
         if (mote.y < 0 || mote.x < 0 || mote.x > canvas.width) {
           mote.y = canvas.height * 0.8;
-          mote.x = canvas.width * 0.3 + Math.random() * canvas.width * 0.4;
+          mote.x = canvas.width * 0.5 + Math.random() * canvas.width * 0.4;
         }
       });
     };

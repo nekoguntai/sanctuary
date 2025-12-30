@@ -39,12 +39,18 @@ interface Ripple {
   opacity: number;
 }
 
+interface GrassBlade {
+  heightMult: number;
+  swayMult: number;
+}
+
 interface Grass {
   x: number;
   y: number;
   height: number;
   blades: number;
   swayPhase: number;
+  bladeData: GrassBlade[];
 }
 
 interface Butterfly {
@@ -157,17 +163,26 @@ export function useDucklingParade(
         });
       }
 
-      // Create grass patches on edges
+      // Create grass patches on edges with pre-generated blade data
       grassPatches = [];
       const grassCount = Math.floor(width / 80);
       for (let i = 0; i < grassCount; i++) {
         const side = Math.random() < 0.5 ? 0 : 1;
+        const bladeCount = 5 + Math.floor(Math.random() * 5);
+        const bladeData: GrassBlade[] = [];
+        for (let b = 0; b < bladeCount; b++) {
+          bladeData.push({
+            heightMult: 0.7 + Math.random() * 0.3,
+            swayMult: 0.8 + Math.random() * 0.4,
+          });
+        }
         grassPatches.push({
           x: side === 0 ? Math.random() * width * 0.2 : width * 0.8 + Math.random() * width * 0.2,
           y: height * 0.3 + Math.random() * height * 0.6,
           height: 20 + Math.random() * 30,
-          blades: 5 + Math.floor(Math.random() * 5),
+          blades: bladeCount,
           swayPhase: Math.random() * Math.PI * 2,
+          bladeData,
         });
       }
 
@@ -215,15 +230,17 @@ export function useDucklingParade(
     };
 
     const drawGrass = (ctx: CanvasRenderingContext2D, grass: Grass) => {
-      const sway = Math.sin(timeRef * 0.002 + grass.swayPhase) * 5;
+      // Reduced sway for more graceful movement
+      const sway = Math.sin(timeRef * 0.0008 + grass.swayPhase) * 2;
 
       ctx.save();
       ctx.translate(grass.x, grass.y);
 
       for (let i = 0; i < grass.blades; i++) {
+        const blade = grass.bladeData[i];
         const bladeX = (i - grass.blades / 2) * 4;
-        const bladeHeight = grass.height * (0.7 + Math.random() * 0.3);
-        const bladeSway = sway * (0.8 + Math.random() * 0.4);
+        const bladeHeight = grass.height * blade.heightMult;
+        const bladeSway = sway * blade.swayMult;
 
         const grassGradient = ctx.createLinearGradient(0, 0, 0, -bladeHeight);
         if (darkMode) {

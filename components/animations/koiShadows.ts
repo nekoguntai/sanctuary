@@ -45,7 +45,7 @@ export function useKoiShadows(
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    koiRef.current = Array.from({ length: 4 }, (_, i) => ({
+    koiRef.current = Array.from({ length: 7 }, (_, i) => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       size: 35 + Math.random() * 20,

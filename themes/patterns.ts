@@ -89,12 +89,6 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'clover-field',
-    name: 'Clover Field',
-    description: 'Lucky clovers swaying with visiting ladybugs',
-    animated: true,
-  },
-  {
     id: 'misty-valley',
     name: 'Misty Valley',
     description: 'Layered mountains with drifting mist and soft light',
@@ -237,18 +231,6 @@ export const globalPatterns: BackgroundPattern[] = [
     description: 'Gentle water ripples with subtle reflections',
     animated: true,
   },
-  {
-    id: 'morning-dew',
-    name: 'Morning Dew',
-    description: 'Dewdrops catching light with prismatic effects',
-    animated: true,
-  },
-  {
-    id: 'paper-cranes',
-    name: 'Paper Cranes',
-    description: 'Origami cranes gently floating and rotating',
-    animated: true,
-  },
   // Fun animations
   {
     id: 'train-station',
@@ -325,12 +307,6 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'crystal-cavern',
-    name: 'Crystal Cavern',
-    description: 'Sparkling crystal formations in a mystical cave',
-    animated: true,
-  },
-  {
     id: 'sunset-sailing',
     name: 'Sunset Sailing',
     description: 'Sailboats gliding peacefully on calm water at sunset',
@@ -340,12 +316,6 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'sleeping-kittens',
     name: 'Sleeping Kittens',
     description: 'Adorable curled-up kittens breathing gently',
-    animated: true,
-  },
-  {
-    id: 'baby-dragon',
-    name: 'Baby Dragon',
-    description: 'Cute dragon with shimmering scales in a treasure nest',
     animated: true,
   },
   {
@@ -365,6 +335,12 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'wind-chimes',
     name: 'Wind Chimes',
     description: 'Delicate hanging wind chimes with gentle swaying motion',
+    animated: true,
+  },
+  {
+    id: 'soap-bubbles',
+    name: 'Soap Bubbles',
+    description: 'Gentle iridescent soap bubbles floating upward',
     animated: true,
   },
 ];

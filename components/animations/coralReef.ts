@@ -29,16 +29,6 @@ interface Fish {
   depth: number;
 }
 
-interface SeaPlant {
-  x: number;
-  y: number;
-  height: number;
-  segments: number;
-  color: string;
-  swayPhase: number;
-  swaySpeed: number;
-}
-
 interface Bubble {
   x: number;
   y: number;
@@ -90,7 +80,6 @@ export function useCoralReef(
     let animationId: number;
     let corals: Coral[] = [];
     let fish: Fish[] = [];
-    let seaPlants: SeaPlant[] = [];
     let bubbles: Bubble[] = [];
     let lightRays: LightRay[] = [];
     let starfish: Starfish[] = [];
@@ -150,23 +139,6 @@ export function useCoralReef(
           direction: 1,
           tailPhase: Math.random() * Math.PI * 2,
           depth: 0.4 + Math.random() * 0.6,
-        });
-      }
-
-      // Create sea plants
-      seaPlants = [];
-      const plantCount = Math.floor(width / 80);
-      const plantColors = ['#228B22', '#32CD32', '#3CB371', '#2E8B57', '#98FB98'];
-
-      for (let i = 0; i < plantCount; i++) {
-        seaPlants.push({
-          x: getRandomSidePosition(width),
-          y: height,
-          height: 60 + Math.random() * 100,
-          segments: 5 + Math.floor(Math.random() * 5),
-          color: plantColors[Math.floor(Math.random() * plantColors.length)],
-          swayPhase: Math.random() * Math.PI * 2,
-          swaySpeed: 0.5 + Math.random() * 0.5,
         });
       }
 
@@ -532,36 +504,6 @@ export function useCoralReef(
       ctx.restore();
     };
 
-    const drawSeaPlant = (ctx: CanvasRenderingContext2D, plant: SeaPlant) => {
-      ctx.save();
-      ctx.translate(plant.x, plant.y);
-
-      const segmentHeight = plant.height / plant.segments;
-
-      for (let blade = 0; blade < 3; blade++) {
-        const bladeOffset = (blade - 1) * 10;
-
-        ctx.strokeStyle = plant.color;
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(bladeOffset, 0);
-
-        let x = bladeOffset;
-        let y = 0;
-
-        for (let i = 0; i < plant.segments; i++) {
-          const sway = Math.sin(timeRef * 0.002 * plant.swaySpeed + plant.swayPhase + i * 0.5) * 15;
-          x += sway / plant.segments;
-          y -= segmentHeight;
-          ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      }
-
-      ctx.restore();
-    };
-
     const drawBubble = (ctx: CanvasRenderingContext2D, bubble: Bubble) => {
       const wobble = Math.sin(timeRef * 0.05 + bubble.wobble) * 2;
 
@@ -715,9 +657,6 @@ export function useCoralReef(
         }
         drawLightRay(ctx, ray, height);
       });
-
-      // Draw sea plants
-      seaPlants.forEach(plant => drawSeaPlant(ctx, plant));
 
       // Draw corals
       corals.forEach(coral => drawCoral(ctx, coral));

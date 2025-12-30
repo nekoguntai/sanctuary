@@ -64,15 +64,6 @@ interface Dragonfly {
   state: 'flying' | 'hovering';
 }
 
-interface WaterPlant {
-  x: number;
-  y: number;
-  height: number;
-  segments: number;
-  swayPhase: number;
-  swaySpeed: number;
-  type: 'reed' | 'cattail' | 'grass';
-}
 
 export function useStillPonds(
   canvasRef: RefObject<HTMLCanvasElement>,
@@ -94,7 +85,6 @@ export function useStillPonds(
     let ripples: Ripple[] = [];
     let koiFish: KoiFish[] = [];
     let dragonflies: Dragonfly[] = [];
-    let waterPlants: WaterPlant[] = [];
     let timeRef = 0;
 
     const resize = () => {
@@ -186,22 +176,6 @@ export function useStillPonds(
           color: ['#4169E1', '#20B2AA', '#9370DB', '#3CB371'][Math.floor(Math.random() * 4)],
           hoverTime: 0,
           state: 'hovering',
-        });
-      }
-
-      // Create water plants on edges
-      waterPlants = [];
-      const plantCount = Math.floor(width / 120);
-      for (let i = 0; i < plantCount; i++) {
-        const edge = Math.random() < 0.5 ? 0 : 1;
-        waterPlants.push({
-          x: edge === 0 ? Math.random() * width * 0.12 : width * 0.88 + Math.random() * width * 0.12,
-          y: height,
-          height: 80 + Math.random() * 120,
-          segments: 4 + Math.floor(Math.random() * 4),
-          swayPhase: Math.random() * Math.PI * 2,
-          swaySpeed: 0.3 + Math.random() * 0.3,
-          type: ['reed', 'cattail', 'grass'][Math.floor(Math.random() * 3)] as WaterPlant['type'],
         });
       }
 
@@ -331,7 +305,7 @@ export function useStillPonds(
 
       const size = fish.size;
       // Smooth, slow tail movement
-      const tailWag = Math.sin(timeRef * 0.003 + fish.tailPhase) * 0.25;
+      const tailWag = Math.sin(timeRef * 0.003 + fish.tailPhase) * 0.2;
 
       let bodyColor: string, spotColor: string;
       switch (fish.color) {
@@ -353,85 +327,102 @@ export function useStillPonds(
           break;
       }
 
-      // Shadow
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.08 * fish.depth})`;
+      // Shadow (offset for overhead view)
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.1 * fish.depth})`;
       ctx.beginPath();
-      ctx.ellipse(0, 5, size * 0.7, size * 0.3, 0, 0, Math.PI * 2);
+      ctx.ellipse(3, 3, size * 0.55, size * 0.25, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Tail - smooth flowing curves
+      // Tail fin (overhead view - fan shape)
       ctx.fillStyle = bodyColor;
+      ctx.globalAlpha *= 0.8;
       ctx.beginPath();
-      ctx.moveTo(-size * 0.5, 0);
-      ctx.bezierCurveTo(
-        -size * 0.7, tailWag * size * 0.3,
-        -size * 0.9, tailWag * size * 0.5,
-        -size * 1.1, tailWag * size * 0.6 - size * 0.25
+      ctx.moveTo(-size * 0.45, 0);
+      ctx.quadraticCurveTo(
+        -size * 0.7, tailWag * size - size * 0.2,
+        -size * 0.95, tailWag * size - size * 0.3
       );
-      ctx.bezierCurveTo(
-        -size * 0.85, tailWag * size * 0.2,
-        -size * 0.85, tailWag * size * 0.2,
-        -size * 1.1, tailWag * size * 0.6 + size * 0.25
+      ctx.quadraticCurveTo(
+        -size * 0.75, tailWag * size * 0.5,
+        -size * 0.95, tailWag * size + size * 0.3
       );
-      ctx.bezierCurveTo(
-        -size * 0.9, tailWag * size * 0.5,
-        -size * 0.7, tailWag * size * 0.3,
-        -size * 0.5, 0
+      ctx.quadraticCurveTo(
+        -size * 0.7, tailWag * size + size * 0.2,
+        -size * 0.45, 0
       );
       ctx.fill();
+      ctx.globalAlpha = 0.5 + fish.depth * 0.5;
 
-      // Body
+      // Body (overhead - wider oval)
       const bodyGradient = ctx.createRadialGradient(
-        size * 0.15, -size * 0.08, 0,
-        0, 0, size * 0.75
+        size * 0.1, 0, 0,
+        0, 0, size * 0.6
       );
-      bodyGradient.addColorStop(0, '#FFFFFF');
-      bodyGradient.addColorStop(0.25, bodyColor);
-      bodyGradient.addColorStop(1, bodyColor);
+      bodyGradient.addColorStop(0, bodyColor);
+      bodyGradient.addColorStop(0.6, bodyColor);
+      bodyGradient.addColorStop(1, darkMode ? '#333' : '#666');
 
       ctx.fillStyle = bodyGradient;
       ctx.beginPath();
-      ctx.ellipse(0, 0, size * 0.65, size * 0.32, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, size * 0.55, size * 0.25, 0, 0, Math.PI * 2);
       ctx.fill();
+
+      // Dorsal stripe (darker line down center of back)
+      ctx.strokeStyle = `rgba(0, 0, 0, 0.15)`;
+      ctx.lineWidth = size * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(size * 0.35, 0);
+      ctx.lineTo(-size * 0.3, 0);
+      ctx.stroke();
 
       // Pre-generated spots (no flickering)
       if (fish.spots.length > 0) {
         ctx.fillStyle = spotColor;
         fish.spots.forEach(spot => {
           ctx.beginPath();
-          ctx.arc(spot.x, spot.y, spot.size, 0, Math.PI * 2);
+          ctx.arc(spot.x, spot.y * 0.7, spot.size, 0, Math.PI * 2);
           ctx.fill();
         });
       }
 
-      // Dorsal fin
+      // Pectoral fins (overhead - angled out from body)
+      const finWave = Math.sin(timeRef * 0.002 + fish.tailPhase) * 0.15;
       ctx.fillStyle = bodyColor;
-      ctx.globalAlpha *= 0.85;
+      ctx.globalAlpha *= 0.7;
+
+      // Left fin
       ctx.beginPath();
-      ctx.moveTo(size * 0.1, -size * 0.32);
-      ctx.quadraticCurveTo(0, -size * 0.55, -size * 0.15, -size * 0.32);
-      ctx.closePath();
+      ctx.ellipse(size * 0.05, -size * 0.25, size * 0.15, size * 0.06, -Math.PI * 0.3 - finWave, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Right fin
+      ctx.beginPath();
+      ctx.ellipse(size * 0.05, size * 0.25, size * 0.15, size * 0.06, Math.PI * 0.3 + finWave, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 0.5 + fish.depth * 0.5;
 
-      // Pectoral fins
-      const finWave = Math.sin(timeRef * 0.002 + fish.tailPhase) * 0.1;
+      // Head (slightly wider front)
+      ctx.fillStyle = bodyColor;
       ctx.beginPath();
-      ctx.ellipse(size * 0.15, size * 0.22, size * 0.18, size * 0.07, Math.PI * 0.15 + finWave, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(size * 0.15, -size * 0.22, size * 0.18, size * 0.07, -Math.PI * 0.15 - finWave, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.35, 0, size * 0.22, size * 0.18, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Eye
+      // Eyes (both visible from overhead)
       ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.arc(size * 0.38, -size * 0.04, size * 0.055, 0, Math.PI * 2);
+      ctx.arc(size * 0.38, -size * 0.1, size * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(size * 0.38, size * 0.1, size * 0.04, 0, Math.PI * 2);
       ctx.fill();
 
+      // Eye highlights
       ctx.fillStyle = '#FFFFFF';
       ctx.beginPath();
-      ctx.arc(size * 0.4, -size * 0.055, size * 0.018, 0, Math.PI * 2);
+      ctx.arc(size * 0.39, -size * 0.11, size * 0.015, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(size * 0.39, size * 0.09, size * 0.015, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -522,81 +513,6 @@ export function useStillPonds(
       ctx.restore();
     };
 
-    const drawWaterPlant = (ctx: CanvasRenderingContext2D, plant: WaterPlant) => {
-      ctx.save();
-      ctx.translate(plant.x, plant.y);
-
-      const sway = Math.sin(timeRef * 0.0005 * plant.swaySpeed + plant.swayPhase) * 8;
-
-      if (plant.type === 'reed' || plant.type === 'cattail') {
-        ctx.strokeStyle = darkMode ? '#2d4a3a' : '#4a6741';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-
-        let currentX = 0;
-        let currentY = 0;
-        const segmentHeight = plant.height / plant.segments;
-
-        for (let i = 0; i < plant.segments; i++) {
-          const swayAmount = sway * (i / plant.segments);
-          currentX += swayAmount / plant.segments;
-          currentY -= segmentHeight;
-          ctx.lineTo(currentX, currentY);
-        }
-        ctx.stroke();
-
-        if (plant.type === 'cattail') {
-          ctx.fillStyle = darkMode ? '#4a3a2a' : '#8B4513';
-          ctx.beginPath();
-          ctx.ellipse(currentX, currentY - 15, 6, 20, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.fillStyle = darkMode ? '#1e3a2a' : '#3a5a31';
-        for (let i = 1; i < plant.segments; i++) {
-          const leafY = -segmentHeight * i;
-          const leafSway = sway * (i / plant.segments);
-          const leafDir = i % 2 === 0 ? 1 : -1;
-
-          ctx.beginPath();
-          ctx.moveTo(leafSway * (i / plant.segments), leafY);
-          ctx.quadraticCurveTo(
-            leafDir * 20 + leafSway,
-            leafY - 20,
-            leafDir * 30 + leafSway * 1.5,
-            leafY - 10
-          );
-          ctx.quadraticCurveTo(
-            leafDir * 20 + leafSway,
-            leafY - 5,
-            leafSway * (i / plant.segments),
-            leafY
-          );
-          ctx.fill();
-        }
-      } else {
-        for (let i = 0; i < 5; i++) {
-          const grassSway = sway * (0.8 + i * 0.05);
-          const grassHeight = plant.height * (0.6 + i * 0.08);
-          const grassX = (i - 2) * 5;
-
-          ctx.strokeStyle = darkMode ? '#2d4a3a' : '#4a6741';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(grassX, 0);
-          ctx.quadraticCurveTo(
-            grassX + grassSway * 0.5,
-            -grassHeight * 0.5,
-            grassX + grassSway,
-            -grassHeight
-          );
-          ctx.stroke();
-        }
-      }
-
-      ctx.restore();
-    };
 
     const drawRipple = (ctx: CanvasRenderingContext2D, ripple: Ripple) => {
       ctx.strokeStyle = darkMode
@@ -699,9 +615,6 @@ export function useStillPonds(
         pad.rotation += pad.rotationSpeed;
         drawLilyPad(ctx, pad);
       });
-
-      // Plants
-      waterPlants.forEach(plant => drawWaterPlant(ctx, plant));
 
       // Dragonflies
       dragonflies.forEach(df => {

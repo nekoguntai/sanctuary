@@ -30,8 +30,6 @@ import {
   useFloatingLanterns,
   useMoonlitClouds,
   useTidePools,
-  useMorningDew,
-  usePaperCranes,
   useTrainStation,
   useSereneMeadows,
   useStillPonds,
@@ -45,21 +43,19 @@ import {
   useLavenderFields,
   useWisteriaArbor,
   useZenSandGarden,
-  useCrystalCavern,
   useSunsetSailing,
   useSleepingKittens,
-  useBabyDragon,
   useRaindropWindow,
   // Replacement animations
   useButterflyGarden,
   useDandelionWishes,
-  useCloverField,
   useMistyValley,
   useGentleWaves,
   useAuroraWaves,
   // Additional serene animations
   useJellyfishDrift,
   useWindChimes,
+  useSoapBubbles,
 } from './animations';
 
 interface AnimatedBackgroundProps {
@@ -93,8 +89,6 @@ export const ANIMATED_PATTERNS = [
   'floating-lanterns',
   'moonlit-clouds',
   'tide-pools',
-  'morning-dew',
-  'paper-cranes',
   // Fun animations
   'train-station',
   // Landscape animations
@@ -113,21 +107,19 @@ export const ANIMATED_PATTERNS = [
   'lavender-fields',
   'wisteria-arbor',
   'zen-sand-garden',
-  'crystal-cavern',
   'sunset-sailing',
   'sleeping-kittens',
-  'baby-dragon',
   'raindrop-window',
   // Replacement animations (replacing static patterns)
   'butterfly-garden',
   'dandelion-wishes',
-  'clover-field',
   'misty-valley',
   'gentle-waves',
   'aurora-waves',
   // Additional serene animations
   'jellyfish-drift',
   'wind-chimes',
+  'soap-bubbles',
 ] as const;
 
 export type AnimatedPatternId = typeof ANIMATED_PATTERNS[number];
@@ -169,8 +161,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useFloatingLanterns(canvasRef, darkMode, opacity, pattern === 'floating-lanterns');
   useMoonlitClouds(canvasRef, darkMode, opacity, pattern === 'moonlit-clouds');
   useTidePools(canvasRef, darkMode, opacity, pattern === 'tide-pools');
-  useMorningDew(canvasRef, darkMode, opacity, pattern === 'morning-dew');
-  usePaperCranes(canvasRef, darkMode, opacity, pattern === 'paper-cranes');
   // Fun animations
   useTrainStation(canvasRef, darkMode, opacity, pattern === 'train-station');
   // Landscape animations
@@ -189,21 +179,19 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useLavenderFields(canvasRef, darkMode, opacity, pattern === 'lavender-fields');
   useWisteriaArbor(canvasRef, darkMode, opacity, pattern === 'wisteria-arbor');
   useZenSandGarden(canvasRef, darkMode, opacity, pattern === 'zen-sand-garden');
-  useCrystalCavern(canvasRef, darkMode, opacity, pattern === 'crystal-cavern');
   useSunsetSailing(canvasRef, darkMode, opacity, pattern === 'sunset-sailing');
   useSleepingKittens(canvasRef, darkMode, opacity, pattern === 'sleeping-kittens');
-  useBabyDragon(canvasRef, darkMode, opacity, pattern === 'baby-dragon');
   useRaindropWindow(canvasRef, darkMode, opacity, pattern === 'raindrop-window');
   // Replacement animations
   useButterflyGarden(canvasRef, darkMode, opacity, pattern === 'butterfly-garden');
   useDandelionWishes(canvasRef, darkMode, opacity, pattern === 'dandelion-wishes');
-  useCloverField(canvasRef, darkMode, opacity, pattern === 'clover-field');
   useMistyValley(canvasRef, darkMode, opacity, pattern === 'misty-valley');
   useGentleWaves(canvasRef, darkMode, opacity, pattern === 'gentle-waves');
   useAuroraWaves(canvasRef, darkMode, opacity, pattern === 'aurora-waves');
   // Additional serene animations
   useJellyfishDrift(canvasRef, darkMode, opacity, pattern === 'jellyfish-drift');
   useWindChimes(canvasRef, darkMode, opacity, pattern === 'wind-chimes');
+  useSoapBubbles(canvasRef, darkMode, opacity, pattern === 'soap-bubbles');
 
   if (!isAnimated) {
     return null;

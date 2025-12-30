@@ -15,6 +15,7 @@ interface Block {
   settled: boolean;
   settleTime: number;
   column: number;
+  hueShift: number; // Color variation
 }
 
 export function useStackingBlocks(
@@ -28,7 +29,7 @@ export function useStackingBlocks(
   const timeRef = useRef<number>(0);
   const columnHeightsRef = useRef<number[]>([]);
 
-  const createBlock = useCallback((canvas: HTMLCanvasElement, column: number, columnHeights: number[]): Block => {
+  const createBlock = useCallback((canvas: HTMLCanvasElement, column: number, columnHeights: number[], time: number): Block => {
     const size = 25 + Math.random() * 15;
     const targetY = canvas.height - columnHeights[column] - size / 2;
 
@@ -42,6 +43,7 @@ export function useStackingBlocks(
       settled: false,
       settleTime: 0,
       column,
+      hueShift: (time * 0.5 + Math.random() * 20) % 40 - 20, // Subtle color variation over time
     };
   }, []);
 
@@ -59,14 +61,19 @@ export function useStackingBlocks(
     const s = block.size;
     let alpha = block.opacity * opacityMultiplier;
 
+    // 10 minute duration (600 seconds) - fade starts at 570s, complete by 600s
     if (block.settled) {
       const fadeTime = time - block.settleTime;
-      alpha *= Math.max(0, 1 - fadeTime / 25);
+      if (fadeTime > 570) {
+        alpha *= Math.max(0, 1 - (fadeTime - 570) / 30);
+      }
     }
 
+    // Apply hue shift for color variation
+    const hueOffset = block.hueShift;
     const baseColor = isDark
-      ? { r: 180, g: 140, b: 40 }
-      : { r: 160, g: 120, b: 30 };
+      ? { r: 180 + hueOffset, g: 140 + hueOffset * 0.5, b: 40 }
+      : { r: 160 + hueOffset, g: 120 + hueOffset * 0.5, b: 30 };
 
     // Top face
     ctx.fillStyle = `rgba(${baseColor.r + 40}, ${baseColor.g + 30}, ${baseColor.b + 20}, ${alpha})`;
@@ -129,10 +136,10 @@ export function useStackingBlocks(
     blocksRef.current = [];
     for (let i = 0; i < 3; i++) {
       const col = Math.floor(Math.random() * columnCount);
-      const block = createBlock(canvas, col, columnHeightsRef.current);
+      const block = createBlock(canvas, col, columnHeightsRef.current, 0);
       block.y = block.targetY;
       block.settled = true;
-      block.settleTime = -5;
+      block.settleTime = 0;
       columnHeightsRef.current[col] += block.size;
       blocksRef.current.push(block);
     }
@@ -150,7 +157,7 @@ export function useStackingBlocks(
       if (timeRef.current - lastBlockTime > 2 + Math.random() * 3) {
         const col = Math.floor(Math.random() * columnHeightsRef.current.length);
         if (columnHeightsRef.current[col] < canvas.height * 0.6) {
-          blocksRef.current.push(createBlock(canvas, col, columnHeightsRef.current));
+          blocksRef.current.push(createBlock(canvas, col, columnHeightsRef.current, timeRef.current));
           lastBlockTime = timeRef.current;
         }
       }
@@ -166,9 +173,10 @@ export function useStackingBlocks(
           }
         }
 
+        // 10 minute duration (600 seconds)
         if (block.settled) {
           const fadeTime = timeRef.current - block.settleTime;
-          if (fadeTime > 30) {
+          if (fadeTime > 600) {
             columnHeightsRef.current[block.column] = Math.max(
               0,
               columnHeightsRef.current[block.column] - block.size

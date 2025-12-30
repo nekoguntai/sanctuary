@@ -15,6 +15,16 @@ interface Cloud {
   puffs: Array<{ x: number; y: number; r: number }>;
 }
 
+interface ShootingStar {
+  x: number;
+  y: number;
+  angle: number;
+  speed: number;
+  length: number;
+  life: number;
+  maxLife: number;
+}
+
 export function useMoonlitClouds(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   darkMode: boolean,
@@ -22,6 +32,7 @@ export function useMoonlitClouds(
   active: boolean
 ) {
   const cloudsRef = useRef<Cloud[]>([]);
+  const shootingStarsRef = useRef<ShootingStar[]>([]);
   const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef<number>(0);
 
@@ -102,6 +113,39 @@ export function useMoonlitClouds(
       ctx.restore();
     };
 
+    const drawShootingStar = (ss: ShootingStar) => {
+      const lifeRatio = ss.life / ss.maxLife;
+      const opacityMultiplier = opacity / 50;
+
+      ctx.save();
+      ctx.translate(ss.x, ss.y);
+      ctx.rotate(ss.angle);
+
+      // Trail gradient
+      const trailGradient = ctx.createLinearGradient(-ss.length, 0, 0, 0);
+      trailGradient.addColorStop(0, 'transparent');
+      trailGradient.addColorStop(0.3, `rgba(255, 255, 255, ${lifeRatio * 0.3 * opacityMultiplier})`);
+      trailGradient.addColorStop(1, `rgba(255, 255, 255, ${lifeRatio * opacityMultiplier})`);
+
+      ctx.strokeStyle = trailGradient;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-ss.length, 0);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+
+      // Head glow
+      const headGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+      headGlow.addColorStop(0, `rgba(255, 255, 255, ${lifeRatio * opacityMultiplier})`);
+      headGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = headGlow;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
     const animate = () => {
       if (!canvas || !ctx) return;
 
@@ -116,6 +160,30 @@ export function useMoonlitClouds(
         }
 
         drawCloud(cloud);
+      });
+
+      // Occasionally spawn shooting stars
+      if (Math.random() < 0.0015) {
+        const startX = Math.random() * canvas.width;
+        const startY = Math.random() * canvas.height * 0.4;
+        shootingStarsRef.current.push({
+          x: startX,
+          y: startY,
+          angle: Math.PI * 0.15 + Math.random() * Math.PI * 0.2,
+          speed: 5 + Math.random() * 5,
+          length: 40 + Math.random() * 80,
+          life: 50,
+          maxLife: 50,
+        });
+      }
+
+      // Update and draw shooting stars
+      shootingStarsRef.current = shootingStarsRef.current.filter(ss => {
+        ss.x += Math.cos(ss.angle) * ss.speed;
+        ss.y += Math.sin(ss.angle) * ss.speed;
+        ss.life--;
+        drawShootingStar(ss);
+        return ss.life > 0;
       });
 
       animationRef.current = requestAnimationFrame(animate);

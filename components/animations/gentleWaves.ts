@@ -142,15 +142,41 @@ export function useGentleWaves(
       ctx.beginPath();
       ctx.moveTo(0, canvas.height);
 
-      for (let x = 0; x <= canvas.width; x += 5) {
-        const y =
-          wave.yOffset +
-          Math.sin(x * wave.frequency + time * wave.speed + wave.phase) * wave.amplitude +
-          Math.sin(x * wave.frequency * 0.5 + time * wave.speed * 0.7 + wave.phase * 2) * wave.amplitude * 0.5;
-        ctx.lineTo(x, y);
+      // Calculate wave points with multiple harmonics for fluid motion
+      const points: { x: number; y: number }[] = [];
+      const step = 3; // Smaller steps for smoother curves
+
+      for (let x = 0; x <= canvas.width + step; x += step) {
+        // Primary wave
+        const primary = Math.sin(x * wave.frequency + time * wave.speed + wave.phase) * wave.amplitude;
+        // Secondary harmonic (slower, longer wavelength)
+        const secondary = Math.sin(x * wave.frequency * 0.5 + time * wave.speed * 0.6 + wave.phase * 1.3) * wave.amplitude * 0.4;
+        // Tertiary harmonic (faster ripples)
+        const tertiary = Math.sin(x * wave.frequency * 2.3 + time * wave.speed * 1.4 + wave.phase * 0.7) * wave.amplitude * 0.15;
+        // Slow drift for organic feel
+        const drift = Math.sin(x * wave.frequency * 0.2 + time * wave.speed * 0.3) * wave.amplitude * 0.2;
+
+        const y = wave.yOffset + primary + secondary + tertiary + drift;
+        points.push({ x, y });
       }
 
+      // Draw using quadratic curves for fluid appearance
+      ctx.moveTo(0, points[0].y);
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const curr = points[i];
+        const next = points[i + 1];
+        // Control point at midpoint for smooth curves
+        const cpX = (curr.x + next.x) / 2;
+        const cpY = (curr.y + next.y) / 2;
+        ctx.quadraticCurveTo(curr.x, curr.y, cpX, cpY);
+      }
+
+      // Complete the last segment
+      const last = points[points.length - 1];
+      ctx.lineTo(last.x, last.y);
       ctx.lineTo(canvas.width, canvas.height);
+      ctx.lineTo(0, canvas.height);
       ctx.closePath();
       ctx.fillStyle = wave.color;
       ctx.fill();

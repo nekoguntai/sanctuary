@@ -168,18 +168,22 @@ export function useStargazing(
         constellations.push(leftConstellation);
       }
 
-      // Right side constellation (Big Dipper-like)
+      // Right side constellation (Big Dipper / Ursa Major)
+      // Accurate shape: 4 bowl stars + 3 handle stars
       if (width > 600) {
         const rightConstellation: Constellation = {
           stars: [
-            { x: width * 0.85, y: height * 0.1 },
-            { x: width * 0.88, y: height * 0.12 },
-            { x: width * 0.91, y: height * 0.15 },
-            { x: width * 0.92, y: height * 0.2 },
-            { x: width * 0.9, y: height * 0.25 },
-            { x: width * 0.87, y: height * 0.23 },
-            { x: width * 0.87, y: height * 0.18 },
+            // Handle stars (curved line from bowl)
+            { x: width * 0.95, y: height * 0.08 },  // Alkaid (end of handle)
+            { x: width * 0.92, y: height * 0.11 },  // Mizar
+            { x: width * 0.89, y: height * 0.13 },  // Alioth
+            // Bowl stars (trapezoid shape)
+            { x: width * 0.86, y: height * 0.15 },  // Megrez (connects to handle)
+            { x: width * 0.83, y: height * 0.18 },  // Phecda (bottom-left of bowl)
+            { x: width * 0.85, y: height * 0.22 },  // Merak (bottom-right of bowl)
+            { x: width * 0.88, y: height * 0.19 },  // Dubhe (top-right of bowl)
           ],
+          // Handle curve + bowl rectangle
           connections: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 3]],
         };
         constellations.push(rightConstellation);

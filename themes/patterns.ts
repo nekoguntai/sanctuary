@@ -77,12 +77,6 @@ export const globalPatterns: BackgroundPattern[] = [
     // Defined in index.html CSS
   },
   {
-    id: 'aurora-waves',
-    name: 'Aurora Waves',
-    description: 'Flowing aurora borealis with shimmering bands',
-    animated: true,
-  },
-  {
     id: 'dandelion-wishes',
     name: 'Dandelion Wishes',
     description: 'Fluffy dandelion seeds floating on the breeze',
@@ -276,12 +270,6 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'coral-reef',
-    name: 'Coral Reef',
-    description: 'Vibrant underwater scene with colorful fish and coral',
-    animated: true,
-  },
-  {
     id: 'stargazing',
     name: 'Stargazing',
     description: 'Peaceful night sky with twinkling stars and shooting stars',
@@ -295,12 +283,6 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'wisteria-arbor',
-    name: 'Wisteria Arbor',
-    description: 'Cascading wisteria flowers with gentle swaying',
-    animated: true,
-  },
-  {
     id: 'zen-sand-garden',
     name: 'Zen Sand Garden',
     description: 'Peaceful raked sand patterns with moss-covered stones',
@@ -310,12 +292,6 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'sunset-sailing',
     name: 'Sunset Sailing',
     description: 'Sailboats gliding peacefully on calm water at sunset',
-    animated: true,
-  },
-  {
-    id: 'sleeping-kittens',
-    name: 'Sleeping Kittens',
-    description: 'Adorable curled-up kittens breathing gently',
     animated: true,
   },
   {
@@ -332,9 +308,67 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'soap-bubbles',
-    name: 'Soap Bubbles',
-    description: 'Gentle iridescent soap bubbles floating upward',
+    id: 'jellyfish-drift',
+    name: 'Jellyfish Drift',
+    description: 'Graceful bioluminescent jellyfish floating through deep ocean',
+    animated: true,
+  },
+  {
+    id: 'sakura-redux',
+    name: 'Sakura Redux',
+    description: 'Cherry blossom petals that collect at the bottom over 10 minutes',
+    animated: true,
+  },
+  {
+    id: 'satoshi-symbol',
+    name: 'Satoshi Symbol',
+    description: 'Floating satoshi symbols with subtle glow and particle effects',
+    animated: true,
+  },
+  {
+    id: 'fireworks',
+    name: 'Fireworks',
+    description: 'Colorful fireworks bursting in the night sky',
+    animated: true,
+  },
+  // Spring/Weather themed
+  {
+    id: 'spring-rain',
+    name: 'Spring Rain',
+    description: 'Gentle rainfall with occasional rainbow glimpses',
+    animated: true,
+  },
+  // Bitcoin themed
+  {
+    id: 'lightning-network',
+    name: 'Lightning Network',
+    description: 'Electric bolts connecting nodes in the payment network',
+    animated: true,
+  },
+  {
+    id: 'mempool-flow',
+    name: 'Mempool Flow',
+    description: 'Transactions flowing like water through channels',
+    animated: true,
+  },
+  {
+    id: 'hash-storm',
+    name: 'Hash Storm',
+    description: 'Cryptographic characters swirling like a data tornado',
+    animated: true,
+  },
+  // Winter themed
+  {
+    id: 'ice-crystals',
+    name: 'Ice Crystals',
+    description: 'Frost patterns forming and dissolving',
+    animated: true,
+  },
+  // Fall themed
+  {
+    id: 'autumn-wind',
+    name: 'Autumn Wind',
+    description: 'Swirling gusts carrying fallen leaves',
     animated: true,
   },
 ];

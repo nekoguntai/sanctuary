@@ -30,22 +30,28 @@ export { useStillPonds } from './stillPonds';
 export { useDesertDunes } from './desertDunes';
 export { useDucklingParade } from './ducklingParade';
 export { useBunnyMeadow } from './bunnyMeadow';
-export { useCoralReef } from './coralReef';
 export { useStargazing } from './stargazing';
 export { useMountainMist } from './mountainMist';
 // New serene animations
 export { useLavenderFields } from './lavenderFields';
-export { useWisteriaArbor } from './wisteriaArbor';
 export { useZenSandGarden } from './zenSandGarden';
 export { useSunsetSailing } from './sunsetSailing';
-export { useSleepingKittens } from './sleepingKittens';
 export { useRaindropWindow } from './raindropWindow';
 // Replacement animations (replacing static patterns)
 export { useButterflyGarden } from './butterflyGarden';
 export { useDandelionWishes } from './dandelionWishes';
 export { useMistyValley } from './mistyValley';
 export { useGentleWaves } from './gentleWaves';
-export { useAuroraWaves } from './auroraWaves';
 // Additional serene animations
+export { useJellyfishDrift } from './jellyfishDrift';
 export { useWindChimes } from './windChimes';
-export { useSoapBubbles } from './soapBubbles';
+export { useSakuraRedux } from './sakuraRedux';
+export { useSatoshiSymbol } from './satoshiSymbol';
+export { useFireworks } from './fireworks';
+// New animations
+export { useSpringRain } from './springRain';
+export { useLightningNetwork } from './lightningNetwork';
+export { useMempoolFlow } from './mempoolFlow';
+export { useHashStorm } from './hashStorm';
+export { useIceCrystals } from './iceCrystals';
+export { useAutumnWind } from './autumnWind';

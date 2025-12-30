@@ -56,11 +56,19 @@ interface Grass {
 interface Butterfly {
   x: number;
   y: number;
-  targetX: number;
-  targetY: number;
+  vx: number;
+  vy: number;
   wingPhase: number;
   color: string;
   size: number;
+  // Erratic flight parameters
+  flutterPhase: number;
+  flutterSpeed: number;
+  turnTimer: number;
+  turnInterval: number;
+  hoverTimer: number;
+  isHovering: boolean;
+  baseSpeed: number;
 }
 
 export function useDucklingParade(
@@ -189,14 +197,23 @@ export function useDucklingParade(
       // Create butterflies
       butterflies = [];
       for (let i = 0; i < 3; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const baseSpeed = 0.8 + Math.random() * 0.6;
         butterflies.push({
           x: Math.random() * width,
           y: Math.random() * height * 0.5,
-          targetX: Math.random() * width,
-          targetY: Math.random() * height * 0.5,
+          vx: Math.cos(angle) * baseSpeed,
+          vy: Math.sin(angle) * baseSpeed,
           wingPhase: Math.random() * Math.PI * 2,
           color: ['#FFB6C1', '#87CEEB', '#DDA0DD', '#F0E68C'][Math.floor(Math.random() * 4)],
           size: 8 + Math.random() * 6,
+          flutterPhase: Math.random() * Math.PI * 2,
+          flutterSpeed: 0.15 + Math.random() * 0.1,
+          turnTimer: 0,
+          turnInterval: 30 + Math.floor(Math.random() * 60),
+          hoverTimer: 0,
+          isHovering: false,
+          baseSpeed,
         });
       }
 
@@ -565,12 +582,16 @@ export function useDucklingParade(
         const target = family.ducks[i - 1];
         const followDist = 25 + duckling.followIndex * 3;
 
-        const dx = target.x - family.direction * followDist - duckling.x;
-        const dy = target.y + Math.sin(timeRef * 0.02 + i) * 5 - duckling.y;
+        // Calculate where the duckling should be (behind the target in the parade direction)
+        const targetPosX = target.x - family.direction * followDist;
+        const dx = targetPosX - duckling.x;
+        const dy = target.y + Math.sin(timeRef * 0.02 + i) * 3 - duckling.y;
 
-        duckling.x += dx * 0.05;
-        duckling.y += dy * 0.05;
-        duckling.waddle += 0.12;
+        // Smooth following - clamp movement to prevent overshooting
+        const moveSpeed = Math.min(Math.abs(dx) * 0.08, 2.0);
+        duckling.x += Math.sign(dx) * moveSpeed;
+        duckling.y += dy * 0.04;
+        duckling.waddle += 0.1;
 
         // Update blinking
         duckling.blinkTimer--;
@@ -609,16 +630,64 @@ export function useDucklingParade(
     };
 
     const updateButterfly = (bf: Butterfly, width: number, height: number) => {
-      const dx = bf.targetX - bf.x;
-      const dy = bf.targetY - bf.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Update flutter phase for bobbing motion
+      bf.flutterPhase += bf.flutterSpeed;
+      bf.turnTimer++;
 
-      if (dist < 20) {
-        bf.targetX = Math.random() * width;
-        bf.targetY = Math.random() * height * 0.5;
+      // Handle hovering behavior (occasional pause)
+      if (bf.isHovering) {
+        bf.hoverTimer++;
+        if (bf.hoverTimer > 40 + Math.random() * 30) {
+          bf.isHovering = false;
+          bf.hoverTimer = 0;
+          // Pick new random direction after hover
+          const angle = Math.random() * Math.PI * 2;
+          bf.vx = Math.cos(angle) * bf.baseSpeed;
+          bf.vy = Math.sin(angle) * bf.baseSpeed;
+        }
+        // Subtle drift while hovering
+        bf.x += Math.sin(bf.flutterPhase * 2) * 0.3;
+        bf.y += Math.cos(bf.flutterPhase * 1.5) * 0.2;
       } else {
-        bf.x += (dx / dist) * 1.5;
-        bf.y += (dy / dist) * 1.5;
+        // Random chance to start hovering
+        if (Math.random() < 0.003) {
+          bf.isHovering = true;
+          bf.hoverTimer = 0;
+        }
+
+        // Frequent erratic direction changes (like real butterflies)
+        if (bf.turnTimer >= bf.turnInterval) {
+          bf.turnTimer = 0;
+          bf.turnInterval = 20 + Math.floor(Math.random() * 50);
+
+          // Add random turn angle (butterflies don't fly straight)
+          const turnAngle = (Math.random() - 0.5) * Math.PI * 0.8;
+          const currentAngle = Math.atan2(bf.vy, bf.vx);
+          const newAngle = currentAngle + turnAngle;
+          const speed = bf.baseSpeed * (0.7 + Math.random() * 0.6);
+          bf.vx = Math.cos(newAngle) * speed;
+          bf.vy = Math.sin(newAngle) * speed;
+        }
+
+        // Add constant flutter/bobbing (vertical oscillation while flying)
+        const flutter = Math.sin(bf.flutterPhase * 3) * 0.8;
+        const sideFlutter = Math.cos(bf.flutterPhase * 2.3) * 0.4;
+
+        bf.x += bf.vx + sideFlutter;
+        bf.y += bf.vy + flutter;
+      }
+
+      // Screen boundary handling - gentle curves back into view
+      const margin = 50;
+      if (bf.x < margin) {
+        bf.vx = Math.abs(bf.vx) * 0.8 + 0.3;
+      } else if (bf.x > width - margin) {
+        bf.vx = -Math.abs(bf.vx) * 0.8 - 0.3;
+      }
+      if (bf.y < margin) {
+        bf.vy = Math.abs(bf.vy) * 0.8 + 0.2;
+      } else if (bf.y > height * 0.6) {
+        bf.vy = -Math.abs(bf.vy) * 0.8 - 0.2;
       }
     };
 

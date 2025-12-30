@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sanctuary Logo - "The Sanctuary Stack"
+  Layers of security forming a secure foundation.
+  Geometric, minimalist, resembling a vault or stack of coins/servers.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="256" height="256" fill="none" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Top layer - apex -->
+  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+  <!-- Bottom layer -->
+  <path d="M2 17l10 5 10-5" />
+  <!-- Middle layer -->
+  <path d="M2 12l10 5 10-5" />
+  <!-- Central secure element -->
+  <circle cx="12" cy="12" r="1" fill="#000000" fill-opacity="0.5" />
+</svg>

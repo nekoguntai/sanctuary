@@ -277,8 +277,8 @@ export function useBambooSway(
       const colors = colorSchemes[stalk.colorScheme];
       const stalkColor = `rgba(${colors.stalk[0]}, ${colors.stalk[1]}, ${colors.stalk[2]}, ${stalk.opacity * opacityMultiplier})`;
 
-      const sway = Math.sin(timeRef.current * stalk.swaySpeed + stalk.swayPhase);
-      const secondarySway = Math.sin(timeRef.current * stalk.swaySpeed * 1.4 + stalk.swayPhase + 1);
+      const sway = Math.sin(timeRef.current * stalk.swaySpeed + stalk.swayPhase) * 1.8;
+      const secondarySway = Math.sin(timeRef.current * stalk.swaySpeed * 1.4 + stalk.swayPhase + 1) * 1.5;
 
       let prevX = stalk.x;
       let prevY = stalk.baseY;

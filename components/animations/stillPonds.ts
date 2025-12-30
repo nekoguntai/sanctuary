@@ -46,6 +46,8 @@ interface KoiFish {
   angle: number;
   targetAngle: number;
   tailPhase: number;
+  bodyPhase: number; // For body wave animation
+  turnSpeed: number;
   color: 'orange' | 'white' | 'gold' | 'red';
   pattern: 'solid' | 'spotted' | 'calico';
   spots: Spot[];
@@ -107,10 +109,15 @@ export function useStillPonds(
       const spots: Spot[] = [];
       const count = pattern === 'calico' ? 5 : 3;
       for (let i = 0; i < count; i++) {
+        // Place spots within the main body area only
+        // x: from head area to mid-body (avoiding tail)
+        // y: within the narrower sleek body width
+        const spotX = size * 0.2 - Math.random() * size * 0.5; // From 0.2 to -0.3 of size
+        const spotY = (Math.random() - 0.5) * size * 0.22; // Narrower vertical range
         spots.push({
-          x: (Math.random() - 0.3) * size * 0.8,
-          y: (Math.random() - 0.5) * size * 0.4,
-          size: size * 0.08 + Math.random() * size * 0.08,
+          x: spotX,
+          y: spotY,
+          size: size * 0.06 + Math.random() * size * 0.05, // Smaller spots
         });
       }
       return spots;
@@ -137,12 +144,12 @@ export function useStillPonds(
         });
       }
 
-      // Create koi fish with pre-generated spots
+      // Create koi fish with pre-generated spots (larger to scale with lily pads)
       koiFish = [];
       const fishCount = Math.floor(width / 300);
       for (let i = 0; i < fishCount; i++) {
         const startX = getRandomSidePosition(width);
-        const size = 25 + Math.random() * 20;
+        const size = 80 + Math.random() * 60; // 2x bigger koi fish
         const pattern = ['solid', 'spotted', 'calico'][Math.floor(Math.random() * 3)] as KoiFish['pattern'];
         const angle = Math.random() * Math.PI * 2;
         koiFish.push({
@@ -155,6 +162,8 @@ export function useStillPonds(
           angle,
           targetAngle: angle,
           tailPhase: Math.random() * Math.PI * 2,
+          bodyPhase: Math.random() * Math.PI * 2,
+          turnSpeed: 0.008 + Math.random() * 0.015,
           color: ['orange', 'white', 'gold', 'red'][Math.floor(Math.random() * 4)] as KoiFish['color'],
           pattern,
           spots: generateSpots(size, pattern),
@@ -173,7 +182,7 @@ export function useStillPonds(
           targetY: Math.random() * height * 0.5,
           wingPhase: Math.random() * Math.PI * 2,
           size: 15 + Math.random() * 10,
-          color: ['#4169E1', '#20B2AA', '#9370DB', '#3CB371'][Math.floor(Math.random() * 4)],
+          color: ['#DC143C', '#FF6347', '#FFD700', '#FF4500', '#FF1493'][Math.floor(Math.random() * 5)], // Bright contrasting colors
           hoverTime: 0,
           state: 'hovering',
         });
@@ -304,8 +313,8 @@ export function useStillPonds(
       ctx.globalAlpha = 0.5 + fish.depth * 0.5;
 
       const size = fish.size;
-      // Smooth, slow tail movement
-      const tailWag = Math.sin(timeRef * 0.003 + fish.tailPhase) * 0.2;
+      // Body wave for natural swimming motion
+      const bodyWave = Math.sin(fish.bodyPhase) * 2;
 
       let bodyColor: string, spotColor: string;
       switch (fish.color) {
@@ -327,36 +336,34 @@ export function useStillPonds(
           break;
       }
 
-      // Shadow (offset for overhead view)
+      // Shadow (offset for overhead view - sleeker shape)
       ctx.fillStyle = `rgba(0, 0, 0, ${0.1 * fish.depth})`;
       ctx.beginPath();
-      ctx.ellipse(3, 3, size * 0.55, size * 0.25, 0, 0, Math.PI * 2);
+      ctx.ellipse(3, 3, size * 0.6, size * 0.16, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Tail fin (overhead view - fan shape)
-      ctx.fillStyle = bodyColor;
-      ctx.globalAlpha *= 0.8;
+      // Tail fin (matching koi shadows style - flowing bezier with wave animation)
+      const tailWave = Math.sin(fish.tailPhase) * size * 0.15;
+      const tailWave2 = Math.sin(fish.tailPhase + 0.5) * size * 0.1;
+
       ctx.beginPath();
-      ctx.moveTo(-size * 0.45, 0);
-      ctx.quadraticCurveTo(
-        -size * 0.7, tailWag * size - size * 0.2,
-        -size * 0.95, tailWag * size - size * 0.3
-      );
-      ctx.quadraticCurveTo(
-        -size * 0.75, tailWag * size * 0.5,
-        -size * 0.95, tailWag * size + size * 0.3
-      );
-      ctx.quadraticCurveTo(
-        -size * 0.7, tailWag * size + size * 0.2,
-        -size * 0.45, 0
-      );
-      ctx.fill();
-      ctx.globalAlpha = 0.5 + fish.depth * 0.5;
+      ctx.moveTo(-size * 0.5, 0);
+      ctx.bezierCurveTo(-size * 0.7, -size * 0.05 + tailWave * 0.3, -size * 0.9, tailWave * 0.6, -size * 1.1, tailWave + tailWave2 * 0.5);
+      ctx.bezierCurveTo(-size * 1.15, tailWave * 0.5, -size * 1.15, -tailWave * 0.5, -size * 1.1, -tailWave - tailWave2 * 0.5);
+      ctx.bezierCurveTo(-size * 0.9, -tailWave * 0.6, -size * 0.7, size * 0.05 - tailWave * 0.3, -size * 0.5, 0);
+      ctx.closePath();
 
-      // Body (overhead - wider oval)
+      const tailGradient = ctx.createLinearGradient(-size * 0.5, 0, -size * 1.1, 0);
+      tailGradient.addColorStop(0, bodyColor);
+      tailGradient.addColorStop(0.5, bodyColor);
+      tailGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = tailGradient;
+      ctx.fill();
+
+      // Body (overhead - sleeker, longer shape with body wave for natural swimming)
       const bodyGradient = ctx.createRadialGradient(
         size * 0.1, 0, 0,
-        0, 0, size * 0.6
+        0, 0, size * 0.65
       );
       bodyGradient.addColorStop(0, bodyColor);
       bodyGradient.addColorStop(0.6, bodyColor);
@@ -364,7 +371,13 @@ export function useStillPonds(
 
       ctx.fillStyle = bodyGradient;
       ctx.beginPath();
-      ctx.ellipse(0, 0, size * 0.55, size * 0.25, 0, 0, Math.PI * 2);
+      // Head to tail with body wave undulation - sleeker proportions
+      ctx.moveTo(size * 0.55, 0);
+      ctx.bezierCurveTo(size * 0.45, -size * 0.14 + bodyWave * 0.15, size * 0.15, -size * 0.18 + bodyWave * 0.3, -size * 0.15, -size * 0.14 + bodyWave * 0.45);
+      ctx.bezierCurveTo(-size * 0.4, -size * 0.08 + bodyWave * 0.6, -size * 0.58, bodyWave * 0.8, -size * 0.6, 0);
+      ctx.bezierCurveTo(-size * 0.58, -bodyWave * 0.8, -size * 0.4, size * 0.08 - bodyWave * 0.6, -size * 0.15, size * 0.14 - bodyWave * 0.45);
+      ctx.bezierCurveTo(size * 0.15, size * 0.18 - bodyWave * 0.3, size * 0.45, size * 0.14 - bodyWave * 0.15, size * 0.55, 0);
+      ctx.closePath();
       ctx.fill();
 
       // Dorsal stripe (darker line down center of back)
@@ -375,54 +388,60 @@ export function useStillPonds(
       ctx.lineTo(-size * 0.3, 0);
       ctx.stroke();
 
-      // Pre-generated spots (no flickering)
+      // Pre-generated spots (no flickering) - positioned within body
       if (fish.spots.length > 0) {
         ctx.fillStyle = spotColor;
         fish.spots.forEach(spot => {
           ctx.beginPath();
-          ctx.arc(spot.x, spot.y * 0.7, spot.size, 0, Math.PI * 2);
+          ctx.arc(spot.x, spot.y, spot.size, 0, Math.PI * 2);
           ctx.fill();
         });
       }
 
-      // Pectoral fins (overhead - angled out from body)
-      const finWave = Math.sin(timeRef * 0.002 + fish.tailPhase) * 0.15;
+      // Pectoral fins (overhead - extend outward from sides of sleeker body)
+      const finWave = Math.sin(fish.tailPhase * 0.7) * 2.5;
       ctx.fillStyle = bodyColor;
       ctx.globalAlpha *= 0.7;
 
-      // Left fin
+      // Left pectoral fin - drawn as curved shape extending outward (sleeker)
       ctx.beginPath();
-      ctx.ellipse(size * 0.05, -size * 0.25, size * 0.15, size * 0.06, -Math.PI * 0.3 - finWave, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.2, -size * 0.12);
+      ctx.bezierCurveTo(size * 0.3, -size * 0.25 - finWave * 0.4, size * 0.12, -size * 0.35 - finWave * 0.8, -size * 0.02, -size * 0.26 - finWave * 0.25);
+      ctx.bezierCurveTo(size * 0.06, -size * 0.2, size * 0.14, -size * 0.14, size * 0.2, -size * 0.12);
+      ctx.closePath();
       ctx.fill();
 
-      // Right fin
+      // Right pectoral fin - drawn as curved shape extending outward (sleeker)
       ctx.beginPath();
-      ctx.ellipse(size * 0.05, size * 0.25, size * 0.15, size * 0.06, Math.PI * 0.3 + finWave, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.2, size * 0.12);
+      ctx.bezierCurveTo(size * 0.3, size * 0.25 + finWave * 0.4, size * 0.12, size * 0.35 + finWave * 0.8, -size * 0.02, size * 0.26 + finWave * 0.25);
+      ctx.bezierCurveTo(size * 0.06, size * 0.2, size * 0.14, size * 0.14, size * 0.2, size * 0.12);
+      ctx.closePath();
       ctx.fill();
       ctx.globalAlpha = 0.5 + fish.depth * 0.5;
 
-      // Head (slightly wider front)
+      // Head (sleeker, more pointed)
       ctx.fillStyle = bodyColor;
       ctx.beginPath();
-      ctx.ellipse(size * 0.35, 0, size * 0.22, size * 0.18, 0, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.4, 0, size * 0.2, size * 0.12, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Eyes (both visible from overhead)
+      // Eyes (both visible from overhead - adjusted for sleeker head)
       ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.arc(size * 0.38, -size * 0.1, size * 0.04, 0, Math.PI * 2);
+      ctx.arc(size * 0.42, -size * 0.07, size * 0.035, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(size * 0.38, size * 0.1, size * 0.04, 0, Math.PI * 2);
+      ctx.arc(size * 0.42, size * 0.07, size * 0.035, 0, Math.PI * 2);
       ctx.fill();
 
       // Eye highlights
       ctx.fillStyle = '#FFFFFF';
       ctx.beginPath();
-      ctx.arc(size * 0.39, -size * 0.11, size * 0.015, 0, Math.PI * 2);
+      ctx.arc(size * 0.43, -size * 0.075, size * 0.012, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(size * 0.39, size * 0.09, size * 0.015, 0, Math.PI * 2);
+      ctx.arc(size * 0.43, size * 0.065, size * 0.012, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -433,81 +452,116 @@ export function useStillPonds(
       ctx.translate(dragonfly.x, dragonfly.y);
 
       const size = dragonfly.size;
-      const wingFlap = Math.sin(timeRef * 0.015 + dragonfly.wingPhase);
+      // Wing shimmer effect from flapping
+      const wingFlap = Math.sin(timeRef * 0.15 + dragonfly.wingPhase);
+      const wingOpacity = 0.3 + Math.abs(wingFlap) * 0.15;
 
       const dx = dragonfly.targetX - dragonfly.x;
       const dy = dragonfly.targetY - dragonfly.y;
       const angle = Math.atan2(dy, dx);
       ctx.rotate(angle);
 
-      ctx.fillStyle = 'rgba(200, 220, 255, 0.35)';
-      ctx.strokeStyle = 'rgba(100, 150, 200, 0.5)';
-      ctx.lineWidth = 0.5;
+      // Simple symmetrical dragonfly - top view
+      // Wings extend perpendicular to body (sideways) - iridescent shimmer
+      const iridescence = Math.sin(timeRef * 0.1 + dragonfly.wingPhase) * 20;
+      ctx.fillStyle = `rgba(${220 + iridescence}, ${235 + iridescence}, 255, ${wingOpacity + 0.15})`;
+      ctx.strokeStyle = `rgba(180, 200, 230, ${wingOpacity + 0.25})`;
+      ctx.lineWidth = 0.6;
 
-      const wingAngle = wingFlap * 0.25;
+      // Wing dimensions - elongated ovals extending sideways
+      const wingLength = size * 0.8;
+      const wingWidth = size * 0.15;
 
-      // Wings
-      ctx.save();
-      ctx.rotate(wingAngle);
+      // Forewings (front pair) - extend perpendicular, slightly forward
+      // Upper left forewing
       ctx.beginPath();
-      ctx.ellipse(-size * 0.3, -size * 0.8, size * 0.15, size * 0.6, -Math.PI * 0.2, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.08, -wingLength * 0.5, wingWidth, wingLength * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.restore();
 
-      ctx.save();
-      ctx.rotate(-wingAngle);
+      // Upper right forewing
       ctx.beginPath();
-      ctx.ellipse(-size * 0.3, size * 0.8, size * 0.15, size * 0.6, Math.PI * 0.2, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.08, wingLength * 0.5, wingWidth, wingLength * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.restore();
 
-      ctx.save();
-      ctx.rotate(wingAngle * 0.8);
+      // Hindwings (back pair) - extend perpendicular, slightly behind, slightly wider
+      const hindWingLength = size * 0.75;
+      const hindWingWidth = size * 0.18;
+
+      // Upper left hindwing
       ctx.beginPath();
-      ctx.ellipse(-size * 0.5, -size * 0.5, size * 0.1, size * 0.4, -Math.PI * 0.3, 0, Math.PI * 2);
+      ctx.ellipse(-size * 0.08, -hindWingLength * 0.5, hindWingWidth, hindWingLength * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.restore();
 
-      ctx.save();
-      ctx.rotate(-wingAngle * 0.8);
+      // Upper right hindwing
       ctx.beginPath();
-      ctx.ellipse(-size * 0.5, size * 0.5, size * 0.1, size * 0.4, Math.PI * 0.3, 0, Math.PI * 2);
+      ctx.ellipse(-size * 0.08, hindWingLength * 0.5, hindWingWidth, hindWingLength * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.restore();
 
-      // Body
-      const bodyGradient = ctx.createLinearGradient(-size, 0, size * 0.5, 0);
+      // Wing veins - simple center line through each wing
+      ctx.strokeStyle = `rgba(120, 160, 210, ${wingOpacity * 0.7})`;
+      ctx.lineWidth = 0.4;
+      // Forewing veins
+      ctx.beginPath();
+      ctx.moveTo(size * 0.08, -size * 0.1);
+      ctx.lineTo(size * 0.08, -wingLength);
+      ctx.moveTo(size * 0.08, size * 0.1);
+      ctx.lineTo(size * 0.08, wingLength);
+      ctx.stroke();
+      // Hindwing veins
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.08, -size * 0.1);
+      ctx.lineTo(-size * 0.08, -hindWingLength);
+      ctx.moveTo(-size * 0.08, size * 0.1);
+      ctx.lineTo(-size * 0.08, hindWingLength);
+      ctx.stroke();
+
+      // Body - long thin abdomen extending backward
+      const bodyGradient = ctx.createLinearGradient(-size * 1.0, 0, size * 0.25, 0);
       bodyGradient.addColorStop(0, dragonfly.color);
+      bodyGradient.addColorStop(0.8, dragonfly.color);
       bodyGradient.addColorStop(1, '#000000');
       ctx.fillStyle = bodyGradient;
 
-      for (let i = 0; i < 6; i++) {
-        const segX = -size * 0.2 - i * size * 0.2;
-        const segSize = size * 0.08 * (1 - i * 0.1);
+      // Abdomen - long thin tail (8 segments tapering)
+      for (let i = 0; i < 8; i++) {
+        const segX = -size * 0.12 - i * size * 0.11;
+        const segRadius = size * 0.035 * (1 - i * 0.08);
         ctx.beginPath();
-        ctx.ellipse(segX, 0, segSize * 1.5, segSize, 0, 0, Math.PI * 2);
+        ctx.arc(segX, 0, Math.max(segRadius, size * 0.015), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      ctx.beginPath();
-      ctx.ellipse(0, 0, size * 0.15, size * 0.12, 0, 0, Math.PI * 2);
-      ctx.fill();
-
+      // Thorax (compact middle section where wings attach)
       ctx.fillStyle = dragonfly.color;
       ctx.beginPath();
-      ctx.arc(size * 0.2, 0, size * 0.1, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, size * 0.1, size * 0.08, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#2F4F4F';
+      // Head - large with prominent compound eyes
       ctx.beginPath();
-      ctx.arc(size * 0.25, -size * 0.05, size * 0.06, 0, Math.PI * 2);
+      ctx.arc(size * 0.15, 0, size * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Compound eyes (large, prominent from overhead)
+      ctx.fillStyle = darkMode ? 'rgba(40, 60, 70, 0.9)' : 'rgba(30, 50, 60, 0.9)';
+      ctx.beginPath();
+      ctx.ellipse(size * 0.18, -size * 0.05, size * 0.05, size * 0.04, -0.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(size * 0.25, size * 0.05, size * 0.06, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.18, size * 0.05, size * 0.05, size * 0.04, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye highlights
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.beginPath();
+      ctx.arc(size * 0.2, -size * 0.06, size * 0.015, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(size * 0.2, size * 0.04, size * 0.015, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -525,6 +579,10 @@ export function useStillPonds(
     };
 
     const updateFish = (fish: KoiFish) => {
+      // Animate body and tail phases
+      fish.tailPhase += 0.06;
+      fish.bodyPhase += 0.03;
+
       const dx = fish.targetX - fish.x;
       const dy = fish.targetY - fish.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -532,20 +590,20 @@ export function useStillPonds(
       if (dist < 30) {
         fish.targetX = getRandomSidePosition(canvas.width);
         fish.targetY = Math.random() * canvas.height;
-      } else {
-        // Smooth movement with easing
-        fish.x += (dx / dist) * fish.speed;
-        fish.y += (dy / dist) * fish.speed;
-
-        // Smooth angle transition
-        fish.targetAngle = Math.atan2(dy, dx);
-        const angleDiff = fish.targetAngle - fish.angle;
-        // Normalize angle difference
-        const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-        fish.angle += normalizedDiff * 0.03; // Smooth turning
       }
 
-      fish.tailPhase += 0.02;
+      // Update target angle toward destination
+      fish.targetAngle = Math.atan2(dy, dx);
+
+      // Smooth angle transition using turnSpeed (like koiShadows)
+      const angleDiff = fish.targetAngle - fish.angle;
+      const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+      fish.angle += normalizedDiff * fish.turnSpeed;
+
+      // Move in direction of current angle with slight speed variation based on body phase
+      const speedVar = 1 + Math.sin(fish.bodyPhase * 0.5) * 0.1;
+      fish.x += Math.cos(fish.angle) * fish.speed * speedVar;
+      fish.y += Math.sin(fish.angle) * fish.speed * speedVar;
     };
 
     const updateDragonfly = (df: Dragonfly) => {

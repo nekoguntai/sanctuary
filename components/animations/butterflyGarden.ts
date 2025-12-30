@@ -14,10 +14,19 @@ interface Butterfly {
   vy: number;
   size: number;
   wingPhase: number;
+  wingSpeed: number;
   hue: number;
   pattern: number;
   targetX: number;
   targetY: number;
+  restTimer: number;
+  bodyAngle: number;
+  flutterOffset: number;
+  // Additional properties for more random flight
+  wanderPhase: number;
+  wanderSpeed: number;
+  zigzagPhase: number;
+  directionChangeTimer: number;
 }
 
 interface Flower {
@@ -85,10 +94,19 @@ export function useButterflyGarden(
           vy: 0,
           size: 12 + Math.random() * 10,
           wingPhase: Math.random() * Math.PI * 2,
+          wingSpeed: 0.10 + Math.random() * 0.05, // Slower wing flapping
           hue: [280, 30, 180, 320, 50][Math.floor(Math.random() * 5)],
           pattern: Math.floor(Math.random() * 3),
           targetX: Math.random() * width,
           targetY: height * 0.2 + Math.random() * height * 0.5,
+          restTimer: 0,
+          bodyAngle: 0,
+          flutterOffset: Math.random() * Math.PI * 2,
+          // Random wandering properties for more erratic flight
+          wanderPhase: Math.random() * Math.PI * 2,
+          wanderSpeed: 0.002 + Math.random() * 0.003,
+          zigzagPhase: Math.random() * Math.PI * 2,
+          directionChangeTimer: 30 + Math.random() * 60,
         });
       }
     };
@@ -149,82 +167,273 @@ export function useButterflyGarden(
     };
 
     const drawButterfly = (butterfly: Butterfly, time: number) => {
-      // Update movement
-      const dx = butterfly.targetX - butterfly.x;
-      const dy = butterfly.targetY - butterfly.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Handle resting state
+      if (butterfly.restTimer > 0) {
+        butterfly.restTimer--;
+        butterfly.wingPhase += butterfly.wingSpeed * 0.12; // Slow wing movement when resting
+      } else {
+        // Update wandering phases
+        butterfly.wanderPhase += butterfly.wanderSpeed;
+        butterfly.zigzagPhase += 0.015 + Math.random() * 0.01;
 
-      if (dist < 30) {
-        butterfly.targetX = Math.random() * canvas.width;
-        butterfly.targetY = canvas.height * 0.2 + Math.random() * canvas.height * 0.5;
+        // Direction change timer for more erratic movement
+        butterfly.directionChangeTimer--;
+        if (butterfly.directionChangeTimer <= 0) {
+          butterfly.directionChangeTimer = 40 + Math.random() * 80;
+          // Random direction shift
+          butterfly.targetX += (Math.random() - 0.5) * 150;
+          butterfly.targetY += (Math.random() - 0.5) * 100;
+          // Keep in bounds
+          butterfly.targetX = Math.max(50, Math.min(canvas.width - 50, butterfly.targetX));
+          butterfly.targetY = Math.max(canvas.height * 0.1, Math.min(canvas.height * 0.7, butterfly.targetY));
+        }
+
+        // Update movement with more organic, erratic flight
+        const dx = butterfly.targetX - butterfly.x;
+        const dy = butterfly.targetY - butterfly.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 30) {
+          // Pick new target, sometimes near a flower
+          if (Math.random() < 0.5 && flowersRef.current.length > 0) {
+            const flower = flowersRef.current[Math.floor(Math.random() * flowersRef.current.length)];
+            butterfly.targetX = flower.x + (Math.random() - 0.5) * 60;
+            butterfly.targetY = flower.y - flower.stemHeight - 20 + Math.random() * 40;
+            butterfly.restTimer = 80 + Math.random() * 160; // Rest on flower longer
+          } else {
+            butterfly.targetX = Math.random() * canvas.width;
+            butterfly.targetY = canvas.height * 0.15 + Math.random() * canvas.height * 0.5;
+          }
+        }
+
+        // Much slower, more curved flight path - reduced acceleration
+        const accel = 0.0003; // Much slower acceleration
+        butterfly.vx += dx * accel;
+        butterfly.vy += dy * accel;
+
+        // Add complex oscillation for erratic, random-looking flight
+        // Multiple overlapping sine waves create unpredictable motion
+        const wanderX = Math.sin(butterfly.wanderPhase) * 0.04
+          + Math.sin(butterfly.wanderPhase * 2.3 + 1.5) * 0.025
+          + Math.sin(butterfly.zigzagPhase * 1.7) * 0.03;
+        const wanderY = Math.cos(butterfly.wanderPhase * 0.8) * 0.035
+          + Math.sin(butterfly.zigzagPhase + 0.8) * 0.025
+          + Math.cos(butterfly.wanderPhase * 1.4 + 2.1) * 0.02;
+
+        butterfly.vx += wanderX;
+        butterfly.vy += wanderY;
+
+        // Stronger damping for slower overall movement
+        butterfly.vx *= 0.93;
+        butterfly.vy *= 0.93;
+
+        // Clamp maximum velocity
+        const maxSpeed = 0.8;
+        const speed = Math.sqrt(butterfly.vx * butterfly.vx + butterfly.vy * butterfly.vy);
+        if (speed > maxSpeed) {
+          butterfly.vx = (butterfly.vx / speed) * maxSpeed;
+          butterfly.vy = (butterfly.vy / speed) * maxSpeed;
+        }
+
+        // Apply velocity with gentle bobbing
+        butterfly.x += butterfly.vx;
+        butterfly.y += butterfly.vy + Math.sin(time * 0.002 + butterfly.wingPhase) * 0.25;
+
+        // Smooth body angle based on movement direction
+        if (speed > 0.1) {
+          const targetAngle = Math.atan2(butterfly.vy, butterfly.vx);
+          butterfly.bodyAngle += (targetAngle - butterfly.bodyAngle) * 0.06;
+        }
+
+        butterfly.wingPhase += butterfly.wingSpeed;
       }
-
-      butterfly.vx += dx * 0.0003;
-      butterfly.vy += dy * 0.0003;
-      butterfly.vx *= 0.98;
-      butterfly.vy *= 0.98;
-      butterfly.x += butterfly.vx;
-      butterfly.y += butterfly.vy + Math.sin(time * 0.003 + butterfly.wingPhase) * 0.3;
-
-      butterfly.wingPhase += 0.12;
 
       ctx.save();
       ctx.translate(butterfly.x, butterfly.y);
 
-      const wingFlap = Math.sin(butterfly.wingPhase) * 0.7;
+      // Subtle body rotation based on flight direction
+      const bodyTilt = butterfly.restTimer > 0 ? 0 : Math.sin(butterfly.bodyAngle) * 0.15;
+      ctx.rotate(bodyTilt);
+
+      // More natural wing flapping - faster on upstroke, slower on downstroke
+      const wingCycle = butterfly.wingPhase % (Math.PI * 2);
+      const wingFlap = wingCycle < Math.PI
+        ? Math.sin(wingCycle) * 0.85  // Downstroke
+        : Math.sin(wingCycle) * 0.6;   // Upstroke (less dramatic)
+
       const size = butterfly.size;
 
       // Wings
       const wingColor = darkMode
-        ? `hsl(${butterfly.hue}, 50%, 45%)`
-        : `hsl(${butterfly.hue}, 70%, 60%)`;
+        ? `hsl(${butterfly.hue}, 55%, 48%)`
+        : `hsl(${butterfly.hue}, 75%, 62%)`;
+      const wingColorDark = darkMode
+        ? `hsl(${butterfly.hue}, 45%, 35%)`
+        : `hsl(${butterfly.hue}, 65%, 45%)`;
 
-      // Left wing
+      // Forewing (upper) - Left
       ctx.save();
       ctx.scale(1, Math.cos(wingFlap));
       ctx.beginPath();
-      ctx.ellipse(-size * 0.5, 0, size * 0.8, size * 0.5, -0.2, 0, Math.PI * 2);
+      ctx.moveTo(-size * 0.08, 0);
+      ctx.bezierCurveTo(
+        -size * 0.4, -size * 0.3,
+        -size * 0.9, -size * 0.2,
+        -size * 0.85, size * 0.15
+      );
+      ctx.bezierCurveTo(
+        -size * 0.5, size * 0.25,
+        -size * 0.2, size * 0.1,
+        -size * 0.08, 0
+      );
       ctx.fillStyle = wingColor;
       ctx.fill();
+      // Wing edge
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
       // Wing pattern
       if (butterfly.pattern === 0) {
         ctx.beginPath();
-        ctx.arc(-size * 0.5, -size * 0.1, size * 0.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.arc(-size * 0.45, -size * 0.05, size * 0.15, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-size * 0.65, size * 0.08, size * 0.1, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fill();
+      } else if (butterfly.pattern === 1) {
+        ctx.beginPath();
+        ctx.arc(-size * 0.5, 0, size * 0.12, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
         ctx.fill();
       }
       ctx.restore();
 
-      // Right wing
+      // Hindwing (lower) - Left
+      ctx.save();
+      ctx.scale(1, Math.cos(wingFlap * 0.9)); // Slightly different phase
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.08, size * 0.1);
+      ctx.bezierCurveTo(
+        -size * 0.35, size * 0.15,
+        -size * 0.55, size * 0.4,
+        -size * 0.4, size * 0.55
+      );
+      ctx.bezierCurveTo(
+        -size * 0.2, size * 0.5,
+        -size * 0.1, size * 0.3,
+        -size * 0.08, size * 0.1
+      );
+      ctx.fillStyle = wingColor;
+      ctx.fill();
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+
+      // Forewing (upper) - Right
       ctx.save();
       ctx.scale(1, Math.cos(wingFlap));
       ctx.beginPath();
-      ctx.ellipse(size * 0.5, 0, size * 0.8, size * 0.5, 0.2, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.08, 0);
+      ctx.bezierCurveTo(
+        size * 0.4, -size * 0.3,
+        size * 0.9, -size * 0.2,
+        size * 0.85, size * 0.15
+      );
+      ctx.bezierCurveTo(
+        size * 0.5, size * 0.25,
+        size * 0.2, size * 0.1,
+        size * 0.08, 0
+      );
       ctx.fillStyle = wingColor;
       ctx.fill();
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
       if (butterfly.pattern === 0) {
         ctx.beginPath();
-        ctx.arc(size * 0.5, -size * 0.1, size * 0.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.arc(size * 0.45, -size * 0.05, size * 0.15, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(size * 0.65, size * 0.08, size * 0.1, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fill();
+      } else if (butterfly.pattern === 1) {
+        ctx.beginPath();
+        ctx.arc(size * 0.5, 0, size * 0.12, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
         ctx.fill();
       }
+      ctx.restore();
+
+      // Hindwing (lower) - Right
+      ctx.save();
+      ctx.scale(1, Math.cos(wingFlap * 0.9));
+      ctx.beginPath();
+      ctx.moveTo(size * 0.08, size * 0.1);
+      ctx.bezierCurveTo(
+        size * 0.35, size * 0.15,
+        size * 0.55, size * 0.4,
+        size * 0.4, size * 0.55
+      );
+      ctx.bezierCurveTo(
+        size * 0.2, size * 0.5,
+        size * 0.1, size * 0.3,
+        size * 0.08, size * 0.1
+      );
+      ctx.fillStyle = wingColor;
+      ctx.fill();
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
       ctx.restore();
 
       // Body
       ctx.beginPath();
-      ctx.ellipse(0, 0, size * 0.1, size * 0.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, size * 0.15, size * 0.08, size * 0.35, 0, 0, Math.PI * 2);
       ctx.fillStyle = darkMode ? '#2a2a2a' : '#333';
       ctx.fill();
 
-      // Antennae
+      // Thorax
       ctx.beginPath();
-      ctx.moveTo(0, -size * 0.3);
-      ctx.quadraticCurveTo(-size * 0.2, -size * 0.6, -size * 0.15, -size * 0.7);
-      ctx.moveTo(0, -size * 0.3);
-      ctx.quadraticCurveTo(size * 0.2, -size * 0.6, size * 0.15, -size * 0.7);
+      ctx.ellipse(0, 0, size * 0.1, size * 0.12, 0, 0, Math.PI * 2);
+      ctx.fillStyle = darkMode ? '#3a3a3a' : '#444';
+      ctx.fill();
+
+      // Head
+      ctx.beginPath();
+      ctx.arc(0, -size * 0.18, size * 0.08, 0, Math.PI * 2);
+      ctx.fillStyle = darkMode ? '#2a2a2a' : '#333';
+      ctx.fill();
+
+      // Antennae with curl
+      const antennaWave = Math.sin(time * 0.008 + butterfly.flutterOffset) * 0.1;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.03, -size * 0.25);
+      ctx.bezierCurveTo(
+        -size * 0.15, -size * 0.45,
+        -size * 0.2 + antennaWave * size, -size * 0.55,
+        -size * 0.12, -size * 0.6
+      );
+      ctx.moveTo(size * 0.03, -size * 0.25);
+      ctx.bezierCurveTo(
+        size * 0.15, -size * 0.45,
+        size * 0.2 - antennaWave * size, -size * 0.55,
+        size * 0.12, -size * 0.6
+      );
       ctx.strokeStyle = darkMode ? '#3a3a3a' : '#444';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
+
+      // Antenna tips
+      ctx.beginPath();
+      ctx.arc(-size * 0.12, -size * 0.6, size * 0.025, 0, Math.PI * 2);
+      ctx.arc(size * 0.12, -size * 0.6, size * 0.025, 0, Math.PI * 2);
+      ctx.fillStyle = darkMode ? '#3a3a3a' : '#444';
+      ctx.fill();
 
       ctx.restore();
     };

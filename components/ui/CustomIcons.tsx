@@ -6,6 +6,20 @@ interface IconProps {
   className?: string;
 }
 
+// --- Sats/Satoshi Symbol Icon ---
+// Inspired by the Japanese kanji 丰 (bountiful): 3 horizontal lines with 2 vertical stems
+export const SatsIcon: React.FC<IconProps> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {/* Three horizontal lines */}
+    <line x1="6" y1="7" x2="18" y2="7" />
+    <line x1="6" y1="12" x2="18" y2="12" />
+    <line x1="6" y1="17" x2="18" y2="17" />
+    {/* Two vertical stems extending above and below */}
+    <line x1="9" y1="4" x2="9" y2="20" />
+    <line x1="15" y1="4" x2="15" y2="20" />
+  </svg>
+);
+
 // --- App Logo ---
 // "Sanctuary Stack": Layers of security forming a secure foundation.
 // Geometric, minimalist, and resembling a vault or a stack of coins/servers.

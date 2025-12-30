@@ -129,6 +129,30 @@ export function useZenSandGarden(
       nextRippleRef.current = 2000 + Math.random() * 3000;
     };
 
+    // Helper to check if a point is within a stone's circular rake zone
+    const isInStoneZone = (px: number, py: number): boolean => {
+      for (const stone of stonesRef.current) {
+        // Calculate the exclusion zone radius (where concentric circles are drawn)
+        const maxRadius = Math.max(stone.width, stone.height) * 3;
+        // Transform point to stone's coordinate system (accounting for rotation)
+        const cos = Math.cos(-stone.rotation);
+        const sin = Math.sin(-stone.rotation);
+        const dx = px - stone.x;
+        const dy = py - stone.y;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+        // Check if inside the elliptical zone (with some margin for the inner stone)
+        const normalizedDist = Math.sqrt(
+          (localX * localX) / (maxRadius * maxRadius) +
+          (localY * localY) / ((maxRadius * 0.7) * (maxRadius * 0.7))
+        );
+        if (normalizedDist < 1) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const drawSand = (time: number) => {
       const width = canvas.width;
       const height = canvas.height;
@@ -146,31 +170,9 @@ export function useZenSandGarden(
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
-      // Draw rake lines
-      ctx.strokeStyle = darkMode ? 'rgba(60, 60, 50, 0.4)' : 'rgba(180, 170, 150, 0.5)';
-      ctx.lineWidth = 1;
-
-      const waveOffset = Math.sin(time * 0.0002) * 5;
-
-      for (let y = 20; y < height; y += 12) {
-        ctx.beginPath();
-        rakePatternRef.current.forEach((point, index) => {
-          const curveOffset = point.curve + Math.sin(y * 0.05 + point.x * 0.01) * 8 + waveOffset;
-          const px = point.x;
-          const py = y + curveOffset;
-
-          if (index === 0) {
-            ctx.moveTo(px, py);
-          } else {
-            ctx.lineTo(px, py);
-          }
-        });
-        ctx.stroke();
-      }
-
-      // Draw concentric circles around stones
+      // First draw concentric circles around stones (so they're the "base" pattern in those areas)
       stonesRef.current.forEach((stone) => {
-        ctx.strokeStyle = darkMode ? 'rgba(60, 60, 50, 0.3)' : 'rgba(180, 170, 150, 0.4)';
+        ctx.strokeStyle = darkMode ? 'rgba(60, 60, 50, 0.35)' : 'rgba(180, 170, 150, 0.45)';
         ctx.lineWidth = 1;
 
         const maxRadius = Math.max(stone.width, stone.height) * 3;
@@ -188,6 +190,51 @@ export function useZenSandGarden(
           ctx.stroke();
         }
       });
+
+      // Draw rake lines - but skip segments that would be inside stone zones
+      ctx.strokeStyle = darkMode ? 'rgba(60, 60, 50, 0.4)' : 'rgba(180, 170, 150, 0.5)';
+      ctx.lineWidth = 1;
+
+      const waveOffset = Math.sin(time * 0.0002) * 5;
+
+      for (let y = 20; y < height; y += 12) {
+        let isDrawing = false;
+        let lastInZone = false;
+
+        rakePatternRef.current.forEach((point, index) => {
+          const curveOffset = point.curve + Math.sin(y * 0.05 + point.x * 0.01) * 8 + waveOffset;
+          const px = point.x;
+          const py = y + curveOffset;
+
+          const inZone = isInStoneZone(px, py);
+
+          if (inZone) {
+            // If we were drawing, end the current stroke
+            if (isDrawing) {
+              ctx.stroke();
+              isDrawing = false;
+            }
+            lastInZone = true;
+          } else {
+            // Not in a stone zone
+            if (lastInZone || index === 0) {
+              // Just exited a zone or starting fresh - begin new path
+              ctx.beginPath();
+              ctx.moveTo(px, py);
+              isDrawing = true;
+            } else if (isDrawing) {
+              // Continue the line
+              ctx.lineTo(px, py);
+            }
+            lastInZone = false;
+          }
+        });
+
+        // Finish any remaining stroke
+        if (isDrawing) {
+          ctx.stroke();
+        }
+      }
     };
 
     const drawRipples = () => {

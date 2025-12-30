@@ -24,7 +24,7 @@ export function useDigitalRain(
   const dropsRef = useRef<RainDrop[]>([]);
   const animationRef = useRef<number | undefined>(undefined);
 
-  const chars = '01₿SATOSHI'.split('');
+  const chars = '01₿₿₿SATOSHI'.split('');
 
   const createDrop = useCallback((canvas: HTMLCanvasElement, startFromTop = true): RainDrop => {
     const length = 5 + Math.floor(Math.random() * 15);
@@ -34,7 +34,7 @@ export function useDigitalRain(
       speed: 0.5 + Math.random() * 1,
       chars: Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]),
       charIndex: 0,
-      opacity: 0.08 + Math.random() * 0.12,
+      opacity: 0.15 + Math.random() * 0.2,
       length,
     };
   }, [chars]);
@@ -67,7 +67,7 @@ export function useDigitalRain(
 
       const opacityMultiplier = opacity / 50;
 
-      ctx.font = '11px monospace';
+      ctx.font = '14px monospace';
 
       dropsRef.current.forEach((drop, index) => {
         for (let i = 0; i < drop.length; i++) {
@@ -78,13 +78,14 @@ export function useDigitalRain(
           const alpha = drop.opacity * fadeRatio * opacityMultiplier;
 
           if (i === 0) {
+            // Lead character is brighter
             ctx.fillStyle = darkMode
-              ? `rgba(140, 160, 140, ${alpha * 1.2})`
-              : `rgba(100, 120, 100, ${alpha * 1.2})`;
+              ? `rgba(180, 220, 180, ${alpha * 1.5})`
+              : `rgba(60, 140, 60, ${alpha * 1.5})`;
           } else {
             ctx.fillStyle = darkMode
-              ? `rgba(120, 140, 120, ${alpha})`
-              : `rgba(80, 100, 80, ${alpha})`;
+              ? `rgba(140, 180, 140, ${alpha})`
+              : `rgba(50, 120, 50, ${alpha})`;
           }
 
           ctx.fillText(drop.chars[i], drop.x, charY);

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers, Sparkles, Shield, Bitcoin, Circle, Binary, Network, Flower2, Snowflake, Box, Calendar, Sun, Leaf, CloudSnow } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers, Sparkles, Shield, Bitcoin, Circle, Binary, Network, Flower2, Snowflake, Box, Calendar, Sun, Leaf, CloudSnow, Bug, Droplets, Flame, CloudRain, Fish, TreePine, Flower, Lamp, Cloud, Shell, Train, Mountain, Bird, Rabbit, Star, Sailboat, Wind, Haze, Bell, PartyPopper, Moon, TreeDeciduous, Palette as PaletteIcon, Zap, Activity, Hash } from 'lucide-react';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
-import { SanctuaryLogo } from './ui/CustomIcons';
+import { SanctuaryLogo, SatsIcon } from './ui/CustomIcons';
 import { ThemeOption, BackgroundOption, SeasonalBackgrounds } from '../types';
 import { Season } from '../themes';
 import { themeRegistry } from '../themes';
@@ -531,6 +531,7 @@ const AppearanceTab: React.FC = () => {
   }));
 
   const bgIconMap: Record<string, any> = {
+    // Static patterns
     minimal: Minus,
     zen: ImageIcon,
     sanctuary: SanctuaryLogo,
@@ -539,6 +540,9 @@ const AppearanceTab: React.FC = () => {
     lines: Minus,
     circuit: Server,
     topography: Globe,
+    hexagons: Network,
+    stars: Star,
+    // Bitcoin-themed animations
     'sakura-petals': Flower2,
     'floating-shields': Shield,
     'bitcoin-particles': Bitcoin,
@@ -546,7 +550,58 @@ const AppearanceTab: React.FC = () => {
     'digital-rain': Binary,
     'constellation': Network,
     'sanctuary-logo': SanctuaryLogo,
+    'satoshi-symbol': SatsIcon,
+    // Weather & nature animations
     'snowfall': Snowflake,
+    'fireflies': Bug,
+    'ink-drops': Droplets,
+    'rippling-water': Waves,
+    'falling-leaves': Leaf,
+    'embers-rising': Flame,
+    'gentle-rain': CloudRain,
+    'northern-lights': Sparkles,
+    // Sumi-e (ink wash) animations
+    'koi-shadows': Fish,
+    'bamboo-sway': TreePine,
+    // Zen & nature animations
+    'lotus-bloom': Flower,
+    'floating-lanterns': Lamp,
+    'moonlit-clouds': Cloud,
+    'tide-pools': Shell,
+    // Fun animations
+    'train-station': Train,
+    'fireworks': PartyPopper,
+    // Landscape animations
+    'serene-meadows': TreeDeciduous,
+    'still-ponds': Droplets,
+    'desert-dunes': Sun,
+    'mountain-mist': Mountain,
+    'misty-valley': Haze,
+    // Cute animals
+    'duckling-parade': Bird,
+    'bunny-meadow': Rabbit,
+    // Night sky
+    'stargazing': Star,
+    // Serene animations
+    'lavender-fields': Flower,
+    'zen-sand-garden': Circle,
+    'sunset-sailing': Sailboat,
+    'raindrop-window': CloudRain,
+    // Nature animations
+    'butterfly-garden': Bug,
+    'dandelion-wishes': Wind,
+    'gentle-waves': Waves,
+    // Additional serene animations
+    'jellyfish-drift': Shell,
+    'wind-chimes': Bell,
+    'sakura-redux': Flower2,
+    // New animations
+    'spring-rain': CloudRain,
+    'lightning-network': Zap,
+    'mempool-flow': Activity,
+    'hash-storm': Hash,
+    'ice-crystals': Snowflake,
+    'autumn-wind': Wind,
   };
 
   // Season icons for the time-based section

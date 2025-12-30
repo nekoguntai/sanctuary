@@ -194,7 +194,7 @@ export function useRaindropWindow(
 
       // Draw trail
       drop.trail.forEach((point, index) => {
-        const trailOpacity = (index / drop.trail.length) * 0.3;
+        const trailOpacity = (index / drop.trail.length) * 0.18;
         ctx.beginPath();
         ctx.arc(point.x, point.y, point.size, 0, Math.PI * 2);
         ctx.fillStyle = darkMode
@@ -233,13 +233,13 @@ export function useRaindropWindow(
         drop.size
       );
       if (darkMode) {
-        dropGradient.addColorStop(0, 'rgba(180, 200, 230, 0.8)');
-        dropGradient.addColorStop(0.5, 'rgba(140, 160, 200, 0.5)');
-        dropGradient.addColorStop(1, 'rgba(100, 120, 160, 0.3)');
+        dropGradient.addColorStop(0, 'rgba(180, 200, 230, 0.35)');
+        dropGradient.addColorStop(0.5, 'rgba(140, 160, 200, 0.2)');
+        dropGradient.addColorStop(1, 'rgba(100, 120, 160, 0.08)');
       } else {
-        dropGradient.addColorStop(0, 'rgba(220, 235, 250, 0.9)');
-        dropGradient.addColorStop(0.5, 'rgba(180, 200, 230, 0.6)');
-        dropGradient.addColorStop(1, 'rgba(140, 160, 200, 0.3)');
+        dropGradient.addColorStop(0, 'rgba(220, 235, 250, 0.4)');
+        dropGradient.addColorStop(0.5, 'rgba(180, 200, 230, 0.22)');
+        dropGradient.addColorStop(1, 'rgba(140, 160, 200, 0.08)');
       }
 
       // Elongated drop shape
@@ -251,7 +251,7 @@ export function useRaindropWindow(
       // Highlight
       ctx.beginPath();
       ctx.arc(-drop.size * 0.3, -drop.size * 0.3, drop.size * 0.25, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.fill();
 
       ctx.restore();

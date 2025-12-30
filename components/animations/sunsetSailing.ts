@@ -140,6 +140,7 @@ export function useSunsetSailing(
           puffs,
         });
       }
+
     };
 
     const drawSky = () => {
@@ -165,23 +166,9 @@ export function useSunsetSailing(
     const drawSun = () => {
       const sunX = canvas.width * 0.7;
       const sunY = canvas.height * 0.35;
-      const sunRadius = 50;
+      const sunRadius = 40;
 
-      // Sun glow
-      const glowGradient = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius * 3);
-      if (darkMode) {
-        glowGradient.addColorStop(0, 'rgba(200, 180, 160, 0.4)');
-        glowGradient.addColorStop(0.5, 'rgba(180, 160, 140, 0.1)');
-        glowGradient.addColorStop(1, 'transparent');
-      } else {
-        glowGradient.addColorStop(0, 'rgba(255, 200, 100, 0.6)');
-        glowGradient.addColorStop(0.5, 'rgba(255, 150, 50, 0.2)');
-        glowGradient.addColorStop(1, 'transparent');
-      }
-      ctx.fillStyle = glowGradient;
-      ctx.fillRect(sunX - sunRadius * 3, sunY - sunRadius * 3, sunRadius * 6, sunRadius * 6);
-
-      // Sun disc
+      // Sun disc only (no glow)
       ctx.beginPath();
       ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
       const sunGradient = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius);

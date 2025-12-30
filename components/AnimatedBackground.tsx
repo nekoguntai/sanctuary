@@ -36,25 +36,31 @@ import {
   useDesertDunes,
   useDucklingParade,
   useBunnyMeadow,
-  useCoralReef,
   useStargazing,
   useMountainMist,
   // New serene animations
   useLavenderFields,
-  useWisteriaArbor,
   useZenSandGarden,
   useSunsetSailing,
-  useSleepingKittens,
   useRaindropWindow,
   // Replacement animations
   useButterflyGarden,
   useDandelionWishes,
   useMistyValley,
   useGentleWaves,
-  useAuroraWaves,
   // Additional serene animations
+  useJellyfishDrift,
   useWindChimes,
-  useSoapBubbles,
+  useSakuraRedux,
+  useSatoshiSymbol,
+  useFireworks,
+  // New animations
+  useSpringRain,
+  useLightningNetwork,
+  useMempoolFlow,
+  useHashStorm,
+  useIceCrystals,
+  useAutumnWind,
 } from './animations';
 
 interface AnimatedBackgroundProps {
@@ -98,26 +104,31 @@ export const ANIMATED_PATTERNS = [
   // Cute animals
   'duckling-parade',
   'bunny-meadow',
-  // Underwater
-  'coral-reef',
   // Night sky
   'stargazing',
   // New serene animations
   'lavender-fields',
-  'wisteria-arbor',
   'zen-sand-garden',
   'sunset-sailing',
-  'sleeping-kittens',
   'raindrop-window',
   // Replacement animations (replacing static patterns)
   'butterfly-garden',
   'dandelion-wishes',
   'misty-valley',
   'gentle-waves',
-  'aurora-waves',
   // Additional serene animations
+  'jellyfish-drift',
   'wind-chimes',
-  'soap-bubbles',
+  'sakura-redux',
+  'satoshi-symbol',
+  'fireworks',
+  // New animations
+  'spring-rain',
+  'lightning-network',
+  'mempool-flow',
+  'hash-storm',
+  'ice-crystals',
+  'autumn-wind',
 ] as const;
 
 export type AnimatedPatternId = typeof ANIMATED_PATTERNS[number];
@@ -169,26 +180,31 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   // Cute animals
   useDucklingParade(canvasRef, darkMode, opacity, pattern === 'duckling-parade');
   useBunnyMeadow(canvasRef, darkMode, opacity, pattern === 'bunny-meadow');
-  // Underwater
-  useCoralReef(canvasRef, darkMode, opacity, pattern === 'coral-reef');
   // Night sky
   useStargazing(canvasRef, darkMode, opacity, pattern === 'stargazing');
   // New serene animations
   useLavenderFields(canvasRef, darkMode, opacity, pattern === 'lavender-fields');
-  useWisteriaArbor(canvasRef, darkMode, opacity, pattern === 'wisteria-arbor');
   useZenSandGarden(canvasRef, darkMode, opacity, pattern === 'zen-sand-garden');
   useSunsetSailing(canvasRef, darkMode, opacity, pattern === 'sunset-sailing');
-  useSleepingKittens(canvasRef, darkMode, opacity, pattern === 'sleeping-kittens');
   useRaindropWindow(canvasRef, darkMode, opacity, pattern === 'raindrop-window');
   // Replacement animations
   useButterflyGarden(canvasRef, darkMode, opacity, pattern === 'butterfly-garden');
   useDandelionWishes(canvasRef, darkMode, opacity, pattern === 'dandelion-wishes');
   useMistyValley(canvasRef, darkMode, opacity, pattern === 'misty-valley');
   useGentleWaves(canvasRef, darkMode, opacity, pattern === 'gentle-waves');
-  useAuroraWaves(canvasRef, darkMode, opacity, pattern === 'aurora-waves');
   // Additional serene animations
+  useJellyfishDrift(canvasRef, darkMode, opacity, pattern === 'jellyfish-drift');
   useWindChimes(canvasRef, darkMode, opacity, pattern === 'wind-chimes');
-  useSoapBubbles(canvasRef, darkMode, opacity, pattern === 'soap-bubbles');
+  useSakuraRedux(canvasRef, darkMode, opacity, pattern === 'sakura-redux');
+  useSatoshiSymbol(canvasRef, darkMode, opacity, pattern === 'satoshi-symbol');
+  useFireworks(canvasRef, darkMode, opacity, pattern === 'fireworks');
+  // New animations
+  useSpringRain(canvasRef, darkMode, opacity, pattern === 'spring-rain');
+  useLightningNetwork(canvasRef, darkMode, opacity, pattern === 'lightning-network');
+  useMempoolFlow(canvasRef, darkMode, opacity, pattern === 'mempool-flow');
+  useHashStorm(canvasRef, darkMode, opacity, pattern === 'hash-storm');
+  useIceCrystals(canvasRef, darkMode, opacity, pattern === 'ice-crystals');
+  useAutumnWind(canvasRef, darkMode, opacity, pattern === 'autumn-wind');
 
   if (!isAnimated) {
     return null;

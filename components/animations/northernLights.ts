@@ -49,7 +49,7 @@ export function useNorthernLights(
       phase: Math.random() * Math.PI * 2,
       speed: 0.1 + Math.random() * 0.2,
       colorShift: Math.random() * Math.PI * 2,
-      opacity: 0.05 + Math.random() * 0.05,
+      opacity: 0.12 + Math.random() * 0.08,
       height: 80 + Math.random() * 120,
     }));
 
@@ -64,9 +64,10 @@ export function useNorthernLights(
       bandsRef.current.forEach((band) => {
         const colorPhase = timeRef.current * 0.1 + band.colorShift;
 
-        const r = darkMode ? 80 + Math.sin(colorPhase) * 40 : 60 + Math.sin(colorPhase) * 30;
-        const g = darkMode ? 180 + Math.sin(colorPhase + 1) * 50 : 150 + Math.sin(colorPhase + 1) * 40;
-        const b = darkMode ? 200 + Math.sin(colorPhase + 2) * 40 : 180 + Math.sin(colorPhase + 2) * 30;
+        // More vibrant colors with better saturation
+        const r = darkMode ? 100 + Math.sin(colorPhase) * 80 : 80 + Math.sin(colorPhase) * 60;
+        const g = darkMode ? 220 + Math.sin(colorPhase + 1) * 35 : 200 + Math.sin(colorPhase + 1) * 55;
+        const b = darkMode ? 180 + Math.sin(colorPhase + 2) * 75 : 160 + Math.sin(colorPhase + 2) * 70;
 
         ctx.beginPath();
 

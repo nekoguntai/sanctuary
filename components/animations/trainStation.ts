@@ -82,9 +82,9 @@ export function useTrainStation(
         { body: [70, 60, 80], skin: [200, 170, 150] },
       ];
 
-  const createTrain = useCallback((canvas: HTMLCanvasElement): Train => {
+  const createTrain = useCallback((canvas: HTMLCanvasElement, forcePlatform?: number): Train => {
     const direction = Math.random() < 0.5 ? 1 : -1;
-    const platformIndex = Math.floor(Math.random() * 2);
+    const platformIndex = forcePlatform !== undefined ? forcePlatform : Math.floor(Math.random() * 2);
 
     return {
       x: direction > 0 ? -400 : canvas.width + 400,
@@ -149,8 +149,11 @@ export function useTrainStation(
         }
       });
 
-      // Create initial train
-      trainsRef.current = [createTrain(canvas)];
+      // Create initial trains - one on each platform
+      trainsRef.current = [
+        createTrain(canvas, 0),
+        createTrain(canvas, 1),
+      ];
     };
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
@@ -377,9 +380,15 @@ export function useTrainStation(
         drawTrain(train, opacityMultiplier);
       });
 
-      // Spawn new trains occasionally
-      if (trainsRef.current.length < 2 && Math.random() < 0.002) {
-        trainsRef.current.push(createTrain(canvas));
+      // Spawn new trains - ensure each platform has a train
+      const platform0HasTrain = trainsRef.current.some(t => Math.abs(t.y - canvas.height * 0.4) < 20);
+      const platform1HasTrain = trainsRef.current.some(t => Math.abs(t.y - canvas.height * 0.65) < 20);
+
+      if (!platform0HasTrain && Math.random() < 0.008) {
+        trainsRef.current.push(createTrain(canvas, 0));
+      }
+      if (!platform1HasTrain && Math.random() < 0.008) {
+        trainsRef.current.push(createTrain(canvas, 1));
       }
 
       // Update and draw passengers

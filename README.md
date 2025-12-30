@@ -61,7 +61,7 @@
   - [Environment Variables](#environment-variables)
   - [Logging](#logging)
   - [Enabling HTTPS](#enabling-https)
-  - [Connecting to Your Own Bitcoin Node](#connecting-to-your-own-bitcoin-node)
+  - [Connecting to Your Own Electrum Server](#connecting-to-your-own-electrum-server)
   - [Hardware Wallet Setup](#hardware-wallet-setup)
 - [Usage](#usage)
   - [Importing a Wallet](#importing-a-wallet)
@@ -288,7 +288,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
           ▼                                     ▼
 ┌───────────────────┐              ┌─────────────────────────────┐
 │   Mobile Apps     │              │   Bitcoin Network Access     │
-│  (iOS / Android)  │              │  (Electrum / Bitcoin Node)   │
+│  (iOS / Android)  │              │      (Electrum Server)       │
 │                   │              └─────────────────────────────┘
 │  ┌─────┐ ┌─────┐  │
 │  │ iOS │ │ And │  │
@@ -363,7 +363,7 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 
 Optional:
 - Hardware wallet (Ledger, Trezor, Coldcard, etc.)
-- Bitcoin Core or Electrum server for self-sovereign blockchain access
+- Electrum server for self-sovereign blockchain access (Fulcrum, electrs, ElectrumX)
 
 ## Installation
 
@@ -691,39 +691,25 @@ For production deployments with a domain name, replace the certificates in `dock
 - `fullchain.pem` — Your certificate chain
 - `privkey.pem` — Your private key
 
-### Connecting to Your Own Bitcoin Node
+### Connecting to Your Own Electrum Server
 
-For maximum privacy, connect Sanctuary to your own Bitcoin/Electrum infrastructure.
+For maximum privacy, connect Sanctuary to your own Electrum server infrastructure.
 
-> **Recommendation:** Use an Electrum server (Fulcrum, ElectrumX, or electrs) rather than Bitcoin Core RPC directly. Electrum servers maintain an address index optimized for wallet queries, providing significantly faster sync times and lower resource usage. Bitcoin Core's `scantxoutset` command works but is slower and not designed for frequent wallet operations.
-
-**Option 1: Electrum Server (Recommended)**
+**Electrum Server (SSL)**
 ```bash
 ELECTRUM_HOST=192.168.1.100
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=true
 ```
 
-**Option 2: Fulcrum/ElectrumX**
+**Fulcrum/ElectrumX (Local)**
 ```bash
 ELECTRUM_HOST=fulcrum.local
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=false
 ```
 
-**Option 3: Bitcoin Core RPC**
-
-Bitcoin Core RPC is supported but not recommended for regular use. Configure via the Admin panel under Node Config.
-
-```
-Type: bitcoind
-Host: 192.168.1.100
-Port: 8332
-Username: your-rpc-user
-Password: your-rpc-password
-```
-
-Note: Bitcoin Core requires the wallet to have `txindex=1` enabled or uses `scantxoutset` which rescans the UTXO set on each query.
+Supported Electrum server implementations: [Fulcrum](https://github.com/cculianu/Fulcrum), [electrs](https://github.com/romanz/electrs), [ElectrumX](https://github.com/spesmilo/electrumx).
 
 ### Hardware Wallet Setup
 

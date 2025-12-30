@@ -69,7 +69,8 @@ import {
   useTidalPatterns,
   useEclipse,
   usePaperBoats,
-  useWisteria,
+  usePaperAirplanes,
+  useThunderstorm,
 } from './animations';
 
 interface AnimatedBackgroundProps {
@@ -146,7 +147,8 @@ export const ANIMATED_PATTERNS = [
   'tidal-patterns',
   'eclipse',
   'paper-boats',
-  'wisteria',
+  'paper-airplanes',
+  'thunderstorm',
 ] as const;
 
 export type AnimatedPatternId = typeof ANIMATED_PATTERNS[number];
@@ -231,7 +233,8 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useTidalPatterns(canvasRef, darkMode, opacity, pattern === 'tidal-patterns');
   useEclipse(canvasRef, darkMode, opacity, pattern === 'eclipse');
   usePaperBoats(canvasRef, darkMode, opacity, pattern === 'paper-boats');
-  useWisteria(canvasRef, darkMode, opacity, pattern === 'wisteria');
+  usePaperAirplanes(canvasRef, darkMode, opacity, pattern === 'paper-airplanes');
+  useThunderstorm(canvasRef, darkMode, opacity, pattern === 'thunderstorm');
 
   if (!isAnimated) {
     return null;

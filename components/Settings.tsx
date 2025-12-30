@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers, Sparkles, Shield, Bitcoin, Circle, Binary, Network, Flower2, Snowflake, Box, Calendar, Sun, Leaf, CloudSnow, Bug, Droplets, Flame, CloudRain, Fish, TreePine, Flower, Lamp, Cloud, Shell, Train, Mountain, Bird, Rabbit, Star, Sailboat, Wind, Haze, Bell, PartyPopper, Moon, TreeDeciduous, Palette as PaletteIcon, Hash, Droplet, Heart, Share2 } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers, Sparkles, Shield, Bitcoin, Circle, Binary, Network, Flower2, Snowflake, Box, Calendar, Sun, Leaf, CloudSnow, Bug, Droplets, Flame, CloudRain, Fish, TreePine, Flower, Lamp, Cloud, Shell, Train, Mountain, Bird, Rabbit, Star, Sailboat, Wind, Haze, Bell, PartyPopper, Moon, TreeDeciduous, Palette as PaletteIcon, Hash, Droplet, Heart, Share2, Zap } from 'lucide-react';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
 import { SanctuaryLogo, SatsIcon } from './ui/CustomIcons';
@@ -610,7 +610,8 @@ const AppearanceTab: React.FC = () => {
     'tidal-patterns': Shell,
     'eclipse': Moon,
     'paper-boats': Sailboat,
-    'wisteria': Flower,
+    'paper-airplanes': Send,
+    'thunderstorm': Zap,
   };
 
   // Season icons for the time-based section

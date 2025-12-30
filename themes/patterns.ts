@@ -409,9 +409,15 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'wisteria',
-    name: 'Wisteria',
-    description: 'Cascading purple wisteria flowers swaying in the breeze',
+    id: 'paper-airplanes',
+    name: 'Paper Airplanes',
+    description: 'Delicate paper airplanes gliding through a soft sky with gentle loops',
+    animated: true,
+  },
+  {
+    id: 'thunderstorm',
+    name: 'Thunderstorm',
+    description: 'Dark rolling clouds with dramatic lightning flashes and heavy rain',
     animated: true,
   },
 ];

@@ -63,4 +63,5 @@ export { useVolcanicIslands } from './volcanicIslands';
 export { useTidalPatterns } from './tidalPatterns';
 export { useEclipse } from './eclipse';
 export { usePaperBoats } from './paperBoats';
-export { useWisteria } from './wisteria';
+export { usePaperAirplanes } from './paperAirplanes';
+export { useThunderstorm } from './thunderstorm';

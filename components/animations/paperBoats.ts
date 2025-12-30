@@ -2,7 +2,7 @@
  * Paper Boats Animation
  *
  * Tiny paper boats floating on a gentle stream
- * with fallen petals, creating a serene scene.
+ * with organic riverbanks and realistic flowing water.
  */
 
 import { useEffect, useRef } from 'react';
@@ -19,19 +19,6 @@ interface PaperBoat {
   rotationSpeed: number;
 }
 
-interface Petal {
-  x: number;
-  y: number;
-  size: number;
-  color: string;
-  rotation: number;
-  rotationSpeed: number;
-  speedX: number;
-  speedY: number;
-  sway: number;
-  swaySpeed: number;
-}
-
 interface Ripple {
   x: number;
   y: number;
@@ -40,11 +27,22 @@ interface Ripple {
   opacity: number;
 }
 
-interface StreamLine {
-  y: number;
+interface WaterLayer {
+  yOffset: number;
   phase: number;
   speed: number;
   amplitude: number;
+  frequency: number;
+  opacity: number;
+}
+
+interface Caustic {
+  x: number;
+  y: number;
+  size: number;
+  phase: number;
+  speed: number;
+  opacity: number;
 }
 
 export function usePaperBoats(
@@ -54,11 +52,13 @@ export function usePaperBoats(
   enabled: boolean
 ) {
   const boatsRef = useRef<PaperBoat[]>([]);
-  const petalsRef = useRef<Petal[]>([]);
   const ripplesRef = useRef<Ripple[]>([]);
-  const streamLinesRef = useRef<StreamLine[]>([]);
+  const waterLayersRef = useRef<WaterLayer[]>([]);
+  const causticsRef = useRef<Caustic[]>([]);
   const animationRef = useRef<number>();
   const timeRef = useRef(0);
+  // Store bank curves for consistent rendering
+  const bankCurvesRef = useRef<{ top: number[]; bottom: number[] }>({ top: [], bottom: [] });
 
   useEffect(() => {
     if (!enabled) return;
@@ -72,6 +72,37 @@ export function usePaperBoats(
     const resizeCanvas = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      // Regenerate bank curves on resize
+      generateBankCurves(canvas.width, canvas.height);
+    };
+
+    const generateBankCurves = (w: number, h: number) => {
+      const topBank: number[] = [];
+      const bottomBank: number[] = [];
+      const segments = Math.ceil(w / 20) + 1;
+
+      // Generate organic curves using layered sine waves
+      for (let i = 0; i < segments; i++) {
+        const x = (i / (segments - 1)) * w;
+
+        // Multiple frequencies for natural look
+        const topOffset =
+          Math.sin(x * 0.003) * 40 +
+          Math.sin(x * 0.008 + 1.5) * 20 +
+          Math.sin(x * 0.015 + 3) * 10 +
+          Math.sin(x * 0.025) * 5;
+
+        const bottomOffset =
+          Math.sin(x * 0.004 + 2) * 35 +
+          Math.sin(x * 0.009 + 0.8) * 18 +
+          Math.sin(x * 0.018 + 1.2) * 8 +
+          Math.sin(x * 0.022 + 4) * 4;
+
+        topBank.push(h * 0.22 + topOffset);
+        bottomBank.push(h * 0.82 + bottomOffset);
+      }
+
+      bankCurvesRef.current = { top: topBank, bottom: bottomBank };
     };
 
     resizeCanvas();
@@ -80,24 +111,34 @@ export function usePaperBoats(
     const width = canvas.width;
     const height = canvas.height;
 
-    // Boat colors (pastel)
+    // Boat colors (cream/white paper tones)
     const boatColors = darkMode
-      ? ['#e8d5c4', '#d4c4b8', '#c8b8a8', '#f0e0d0', '#ddd0c0']
-      : ['#fff8f0', '#fff0e8', '#ffe8e0', '#fff0f8', '#f8f0ff'];
+      ? ['#e8e0d8', '#ddd5cc', '#e0d8d0', '#d8d0c8', '#f0e8e0']
+      : ['#ffffff', '#fff8f0', '#fffaf5', '#f8f8ff', '#fff5f0'];
 
-    // Petal colors
-    const petalColors = darkMode
-      ? ['#d4a0a0', '#c8a0b0', '#d0a8a8', '#c0a0a8', '#d8b0b0']
-      : ['#ffb8b8', '#ffc0c8', '#ffd0d0', '#ffc8d8', '#ffe0e0'];
-
-    // Initialize stream flow lines
-    streamLinesRef.current = [];
-    for (let i = 0; i < 8; i++) {
-      streamLinesRef.current.push({
-        y: height * 0.2 + (height * 0.6 / 8) * i,
+    // Initialize multiple water layers for depth
+    waterLayersRef.current = [];
+    for (let i = 0; i < 6; i++) {
+      waterLayersRef.current.push({
+        yOffset: i * 0.15,
         phase: Math.random() * Math.PI * 2,
-        speed: 0.02 + Math.random() * 0.01,
-        amplitude: 3 + Math.random() * 4,
+        speed: 0.008 + i * 0.003,
+        amplitude: 2 + i * 0.8,
+        frequency: 0.015 - i * 0.002,
+        opacity: 0.15 - i * 0.02,
+      });
+    }
+
+    // Initialize caustic light patterns
+    causticsRef.current = [];
+    for (let i = 0; i < 12; i++) {
+      causticsRef.current.push({
+        x: Math.random() * width,
+        y: height * 0.25 + Math.random() * height * 0.5,
+        size: 30 + Math.random() * 60,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.02 + Math.random() * 0.02,
+        opacity: 0.03 + Math.random() * 0.04,
       });
     }
 
@@ -106,109 +147,111 @@ export function usePaperBoats(
     for (let i = 0; i < 4; i++) {
       boatsRef.current.push({
         x: Math.random() * width,
-        y: height * 0.3 + Math.random() * height * 0.4,
-        size: 20 + Math.random() * 15,
+        y: height * 0.35 + Math.random() * height * 0.35,
+        size: 20 + Math.random() * 12,
         color: boatColors[Math.floor(Math.random() * boatColors.length)],
         bobPhase: Math.random() * Math.PI * 2,
-        bobSpeed: 0.03 + Math.random() * 0.02,
-        speedX: 0.3 + Math.random() * 0.3,
-        rotation: (Math.random() - 0.5) * 0.2,
-        rotationSpeed: (Math.random() - 0.5) * 0.01,
-      });
-    }
-
-    // Initialize petals
-    petalsRef.current = [];
-    for (let i = 0; i < 15; i++) {
-      petalsRef.current.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        size: 4 + Math.random() * 6,
-        color: petalColors[Math.floor(Math.random() * petalColors.length)],
-        rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.05,
-        speedX: 0.2 + Math.random() * 0.3,
-        speedY: 0.1 + Math.random() * 0.2,
-        sway: Math.random() * Math.PI * 2,
-        swaySpeed: 0.02 + Math.random() * 0.02,
+        bobSpeed: 0.018 + Math.random() * 0.012,
+        speedX: 0.2 + Math.random() * 0.2,
+        rotation: (Math.random() - 0.5) * 0.1,
+        rotationSpeed: (Math.random() - 0.5) * 0.003,
       });
     }
 
     ripplesRef.current = [];
 
     const drawPaperBoat = (ctx: CanvasRenderingContext2D, boat: PaperBoat) => {
-      const bob = Math.sin(boat.bobPhase) * 2;
+      const bob = Math.sin(boat.bobPhase) * 2.5;
+      const tilt = Math.sin(boat.bobPhase * 0.7) * 0.03;
 
       ctx.save();
       ctx.translate(boat.x, boat.y + bob);
-      ctx.rotate(boat.rotation);
+      ctx.rotate(boat.rotation + tilt);
 
       const s = boat.size;
 
-      // Boat hull
+      // Simple water reflection
+      ctx.globalAlpha = 0.15;
+      ctx.save();
+      ctx.scale(1, -0.25);
+      ctx.translate(0, -s * 3.5);
+      drawBoatShape(ctx, s, boat.color);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+
+      // The boat
+      drawBoatShape(ctx, s, boat.color);
+
+      ctx.restore();
+    };
+
+    const drawBoatShape = (
+      ctx: CanvasRenderingContext2D,
+      s: number,
+      color: string
+    ) => {
+      // Hull - simple curved bottom
       ctx.beginPath();
       ctx.moveTo(-s * 0.5, 0);
-      ctx.lineTo(-s * 0.3, s * 0.3);
-      ctx.lineTo(s * 0.3, s * 0.3);
-      ctx.lineTo(s * 0.5, 0);
+      ctx.quadraticCurveTo(-s * 0.4, s * 0.28, 0, s * 0.32);
+      ctx.quadraticCurveTo(s * 0.4, s * 0.28, s * 0.5, 0);
+      ctx.lineTo(s * 0.35, -s * 0.08);
+      ctx.lineTo(-s * 0.35, -s * 0.08);
       ctx.closePath();
 
-      ctx.fillStyle = boat.color;
+      // Gradient for paper texture
+      const hullGrad = ctx.createLinearGradient(-s * 0.5, 0, s * 0.5, s * 0.3);
+      hullGrad.addColorStop(0, color);
+      hullGrad.addColorStop(0.5, darkMode ? '#f0e8e0' : '#ffffff');
+      hullGrad.addColorStop(1, color);
+      ctx.fillStyle = hullGrad;
       ctx.fill();
-      ctx.strokeStyle = darkMode ? '#a09080' : '#d0c0b0';
-      ctx.lineWidth = 1;
+
+      ctx.strokeStyle = darkMode ? 'rgba(120, 100, 80, 0.4)' : 'rgba(200, 180, 160, 0.5)';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
 
-      // Boat sail (triangular)
+      // Sail
       ctx.beginPath();
-      ctx.moveTo(0, s * 0.25);
-      ctx.lineTo(0, -s * 0.5);
-      ctx.lineTo(s * 0.3, s * 0.1);
+      ctx.moveTo(0, s * 0.1);
+      ctx.lineTo(0, -s * 0.55);
+      ctx.lineTo(s * 0.28, s * 0.02);
       ctx.closePath();
 
-      ctx.fillStyle = boat.color;
+      const sailGrad = ctx.createLinearGradient(0, -s * 0.5, s * 0.25, 0);
+      sailGrad.addColorStop(0, darkMode ? '#f5f0e8' : '#ffffff');
+      sailGrad.addColorStop(1, color);
+      ctx.fillStyle = sailGrad;
       ctx.fill();
       ctx.stroke();
 
       // Mast
       ctx.beginPath();
-      ctx.moveTo(0, s * 0.25);
-      ctx.lineTo(0, -s * 0.5);
-      ctx.strokeStyle = darkMode ? '#806050' : '#a08070';
-      ctx.lineWidth = 1.5;
+      ctx.moveTo(0, s * 0.15);
+      ctx.lineTo(0, -s * 0.55);
+      ctx.strokeStyle = darkMode ? 'rgba(100, 80, 60, 0.6)' : 'rgba(160, 140, 120, 0.5)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // Fold lines for paper effect
+      // Fold line on hull
       ctx.beginPath();
-      ctx.moveTo(-s * 0.4, s * 0.05);
-      ctx.lineTo(0, s * 0.25);
-      ctx.lineTo(s * 0.4, s * 0.05);
-      ctx.strokeStyle = darkMode ? 'rgba(100, 80, 60, 0.3)' : 'rgba(180, 160, 140, 0.4)';
+      ctx.moveTo(-s * 0.3, s * 0.05);
+      ctx.quadraticCurveTo(0, s * 0.2, s * 0.3, s * 0.05);
+      ctx.strokeStyle = darkMode ? 'rgba(100, 80, 60, 0.25)' : 'rgba(180, 160, 140, 0.3)';
       ctx.lineWidth = 0.5;
       ctx.stroke();
-
-      ctx.restore();
     };
 
-    const drawPetal = (ctx: CanvasRenderingContext2D, petal: Petal) => {
-      ctx.save();
-      ctx.translate(petal.x, petal.y);
-      ctx.rotate(petal.rotation);
+    const getBankY = (x: number, bank: number[], w: number): number => {
+      const segments = bank.length - 1;
+      const segmentWidth = w / segments;
+      const segmentIndex = Math.min(Math.floor(x / segmentWidth), segments - 1);
+      const t = (x - segmentIndex * segmentWidth) / segmentWidth;
 
-      // Petal shape (ellipse with pointed end)
-      ctx.beginPath();
-      ctx.ellipse(0, 0, petal.size, petal.size * 0.5, 0, 0, Math.PI * 2);
-      ctx.fillStyle = petal.color;
-      ctx.fill();
-
-      // Subtle gradient
-      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, petal.size);
-      grad.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
-      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      ctx.restore();
+      // Smooth interpolation
+      const y0 = bank[Math.max(0, segmentIndex)];
+      const y1 = bank[Math.min(segments, segmentIndex + 1)];
+      return y0 + (y1 - y0) * t;
     };
 
     const animate = () => {
@@ -217,101 +260,220 @@ export function usePaperBoats(
       ctx.clearRect(0, 0, currentWidth, currentHeight);
       timeRef.current += 0.016;
 
-      // Sky/background gradient
-      const bgGradient = ctx.createLinearGradient(0, 0, 0, currentHeight);
+      const { top: topBank, bottom: bottomBank } = bankCurvesRef.current;
+
+      // Sky gradient
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, currentHeight);
       if (darkMode) {
-        bgGradient.addColorStop(0, '#1a2030');
-        bgGradient.addColorStop(0.3, '#202838');
-        bgGradient.addColorStop(0.7, '#253040');
-        bgGradient.addColorStop(1, '#1a2530');
+        skyGradient.addColorStop(0, '#1a1f2a');
+        skyGradient.addColorStop(0.5, '#1e2535');
+        skyGradient.addColorStop(1, '#1a2030');
       } else {
-        bgGradient.addColorStop(0, '#e8f0f8');
-        bgGradient.addColorStop(0.3, '#d8e8f0');
-        bgGradient.addColorStop(0.7, '#c8e0f0');
-        bgGradient.addColorStop(1, '#b8d8e8');
+        skyGradient.addColorStop(0, '#e0eef8');
+        skyGradient.addColorStop(0.5, '#d0e5f5');
+        skyGradient.addColorStop(1, '#c5ddf0');
       }
-      ctx.fillStyle = bgGradient;
+      ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, currentWidth, currentHeight);
 
-      // Stream water area
-      const streamTop = currentHeight * 0.2;
-      const streamBottom = currentHeight * 0.85;
-
-      const waterGradient = ctx.createLinearGradient(0, streamTop, 0, streamBottom);
-      if (darkMode) {
-        waterGradient.addColorStop(0, 'rgba(40, 60, 80, 0.6)');
-        waterGradient.addColorStop(0.5, 'rgba(50, 70, 90, 0.7)');
-        waterGradient.addColorStop(1, 'rgba(40, 60, 80, 0.6)');
-      } else {
-        waterGradient.addColorStop(0, 'rgba(160, 200, 220, 0.5)');
-        waterGradient.addColorStop(0.5, 'rgba(140, 190, 220, 0.6)');
-        waterGradient.addColorStop(1, 'rgba(150, 195, 215, 0.5)');
+      // Draw top bank (earth/grass area)
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      for (let i = 0; i < topBank.length; i++) {
+        const x = (i / (topBank.length - 1)) * currentWidth;
+        ctx.lineTo(x, topBank[i]);
       }
-      ctx.fillStyle = waterGradient;
-      ctx.fillRect(0, streamTop, currentWidth, streamBottom - streamTop);
+      ctx.lineTo(currentWidth, 0);
+      ctx.closePath();
+      ctx.fillStyle = darkMode ? '#1a2818' : '#7aa870';
+      ctx.fill();
 
-      // Draw stream flow lines
-      streamLinesRef.current.forEach((line) => {
-        line.phase += line.speed;
+      // Top bank edge (darker grass/shadow)
+      ctx.beginPath();
+      for (let i = 0; i < topBank.length; i++) {
+        const x = (i / (topBank.length - 1)) * currentWidth;
+        if (i === 0) ctx.moveTo(x, topBank[i]);
+        else ctx.lineTo(x, topBank[i]);
+      }
+      ctx.lineTo(currentWidth, topBank[topBank.length - 1] + 15);
+      for (let i = topBank.length - 1; i >= 0; i--) {
+        const x = (i / (topBank.length - 1)) * currentWidth;
+        ctx.lineTo(x, topBank[i] + 15);
+      }
+      ctx.closePath();
+      ctx.fillStyle = darkMode ? '#121a10' : '#5a8850';
+      ctx.fill();
+
+      // Draw bottom bank
+      ctx.beginPath();
+      ctx.moveTo(0, currentHeight);
+      for (let i = 0; i < bottomBank.length; i++) {
+        const x = (i / (bottomBank.length - 1)) * currentWidth;
+        ctx.lineTo(x, bottomBank[i]);
+      }
+      ctx.lineTo(currentWidth, currentHeight);
+      ctx.closePath();
+      ctx.fillStyle = darkMode ? '#1a2818' : '#7aa870';
+      ctx.fill();
+
+      // Bottom bank edge
+      ctx.beginPath();
+      for (let i = 0; i < bottomBank.length; i++) {
+        const x = (i / (bottomBank.length - 1)) * currentWidth;
+        if (i === 0) ctx.moveTo(x, bottomBank[i]);
+        else ctx.lineTo(x, bottomBank[i]);
+      }
+      ctx.lineTo(currentWidth, bottomBank[bottomBank.length - 1] - 12);
+      for (let i = bottomBank.length - 1; i >= 0; i--) {
+        const x = (i / (bottomBank.length - 1)) * currentWidth;
+        ctx.lineTo(x, bottomBank[i] - 12);
+      }
+      ctx.closePath();
+      ctx.fillStyle = darkMode ? '#121a10' : '#5a8850';
+      ctx.fill();
+
+      // Water base with depth gradient
+      ctx.beginPath();
+      for (let i = 0; i < topBank.length; i++) {
+        const x = (i / (topBank.length - 1)) * currentWidth;
+        if (i === 0) ctx.moveTo(x, topBank[i]);
+        else ctx.lineTo(x, topBank[i]);
+      }
+      for (let i = bottomBank.length - 1; i >= 0; i--) {
+        const x = (i / (bottomBank.length - 1)) * currentWidth;
+        ctx.lineTo(x, bottomBank[i]);
+      }
+      ctx.closePath();
+
+      const waterGrad = ctx.createLinearGradient(0, currentHeight * 0.2, 0, currentHeight * 0.8);
+      if (darkMode) {
+        waterGrad.addColorStop(0, '#1e3040');
+        waterGrad.addColorStop(0.3, '#253848');
+        waterGrad.addColorStop(0.7, '#2a4050');
+        waterGrad.addColorStop(1, '#203545');
+      } else {
+        waterGrad.addColorStop(0, '#88b8d0');
+        waterGrad.addColorStop(0.3, '#7ab0c8');
+        waterGrad.addColorStop(0.7, '#70a8c0');
+        waterGrad.addColorStop(1, '#80b0c8');
+      }
+      ctx.fillStyle = waterGrad;
+      ctx.fill();
+
+      // Caustic light patterns (underwater light refraction)
+      causticsRef.current.forEach((caustic) => {
+        caustic.phase += caustic.speed;
+        const pulse = 0.7 + Math.sin(caustic.phase) * 0.3;
+
+        const topY = getBankY(caustic.x, topBank, currentWidth);
+        const bottomY = getBankY(caustic.x, bottomBank, currentWidth);
+
+        // Only draw if within water area
+        if (caustic.y > topY && caustic.y < bottomY) {
+          const gradient = ctx.createRadialGradient(
+            caustic.x,
+            caustic.y,
+            0,
+            caustic.x,
+            caustic.y,
+            caustic.size * pulse
+          );
+
+          if (darkMode) {
+            gradient.addColorStop(0, `rgba(100, 140, 180, ${caustic.opacity * pulse})`);
+            gradient.addColorStop(0.5, `rgba(80, 120, 160, ${caustic.opacity * 0.5 * pulse})`);
+            gradient.addColorStop(1, 'rgba(60, 100, 140, 0)');
+          } else {
+            gradient.addColorStop(0, `rgba(255, 255, 240, ${caustic.opacity * pulse})`);
+            gradient.addColorStop(0.5, `rgba(240, 250, 255, ${caustic.opacity * 0.5 * pulse})`);
+            gradient.addColorStop(1, 'rgba(220, 240, 255, 0)');
+          }
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(caustic.x, caustic.y, caustic.size * pulse, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Slowly drift caustics
+        caustic.x += 0.15;
+        if (caustic.x > currentWidth + caustic.size) {
+          caustic.x = -caustic.size;
+          caustic.y = currentHeight * 0.25 + Math.random() * currentHeight * 0.5;
+        }
+      });
+
+      // Water flow layers (creates depth and movement)
+      waterLayersRef.current.forEach((layer) => {
+        layer.phase += layer.speed;
 
         ctx.beginPath();
-        ctx.moveTo(0, line.y);
+        const baseY = currentHeight * (0.3 + layer.yOffset * 0.4);
 
-        for (let x = 0; x <= currentWidth; x += 10) {
-          const y = line.y + Math.sin(x * 0.01 + line.phase) * line.amplitude;
-          ctx.lineTo(x, y);
+        for (let x = 0; x <= currentWidth; x += 8) {
+          const topY = getBankY(x, topBank, currentWidth);
+          const bottomY = getBankY(x, bottomBank, currentWidth);
+          const waterHeight = bottomY - topY;
+
+          const y =
+            topY +
+            waterHeight * (0.2 + layer.yOffset * 0.6) +
+            Math.sin(x * layer.frequency + layer.phase) * layer.amplitude +
+            Math.sin(x * layer.frequency * 2.3 + layer.phase * 1.5) * layer.amplitude * 0.4;
+
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         }
 
         ctx.strokeStyle = darkMode
-          ? 'rgba(80, 100, 120, 0.25)'
-          : 'rgba(180, 210, 230, 0.35)';
-        ctx.lineWidth = 1;
+          ? `rgba(100, 150, 180, ${layer.opacity})`
+          : `rgba(255, 255, 255, ${layer.opacity * 1.5})`;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       });
+
+      // Subtle shimmer on water surface
+      for (let i = 0; i < 8; i++) {
+        const shimmerX = ((timeRef.current * 30 + i * 200) % (currentWidth + 100)) - 50;
+        const topY = getBankY(shimmerX, topBank, currentWidth);
+        const shimmerY = topY + 20 + Math.sin(shimmerX * 0.02 + timeRef.current) * 5;
+
+        ctx.beginPath();
+        ctx.moveTo(shimmerX, shimmerY);
+        ctx.lineTo(shimmerX + 15 + Math.random() * 10, shimmerY);
+        ctx.strokeStyle = darkMode
+          ? 'rgba(120, 160, 200, 0.15)'
+          : 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
 
       // Update and draw ripples
       ripplesRef.current = ripplesRef.current.filter((ripple) => {
         ripple.radius += 0.5;
-        ripple.opacity -= 0.015;
+        ripple.opacity -= 0.008;
 
         if (ripple.opacity <= 0) return false;
 
         ctx.beginPath();
         ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
         ctx.strokeStyle = darkMode
-          ? `rgba(100, 130, 160, ${ripple.opacity})`
-          : `rgba(200, 220, 240, ${ripple.opacity})`;
-        ctx.lineWidth = 1;
+          ? `rgba(140, 180, 200, ${ripple.opacity})`
+          : `rgba(255, 255, 255, ${ripple.opacity})`;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
+        // Second ring
+        if (ripple.radius > 8) {
+          ctx.beginPath();
+          ctx.arc(ripple.x, ripple.y, ripple.radius * 0.6, 0, Math.PI * 2);
+          ctx.strokeStyle = darkMode
+            ? `rgba(140, 180, 200, ${ripple.opacity * 0.5})`
+            : `rgba(255, 255, 255, ${ripple.opacity * 0.6})`;
+          ctx.stroke();
+        }
+
         return true;
-      });
-
-      // Update and draw petals (both in water and drifting)
-      petalsRef.current.forEach((petal) => {
-        petal.sway += petal.swaySpeed;
-        petal.x += petal.speedX + Math.sin(petal.sway) * 0.5;
-        petal.y += petal.speedY;
-        petal.rotation += petal.rotationSpeed;
-
-        // Wrap around
-        if (petal.x > currentWidth + 20) {
-          petal.x = -20;
-          petal.y = Math.random() * currentHeight;
-        }
-        if (petal.y > currentHeight + 20) {
-          petal.y = -20;
-          petal.x = Math.random() * currentWidth;
-        }
-
-        // Check if petal is in water (slows down)
-        const inWater = petal.y > streamTop && petal.y < streamBottom;
-        if (inWater) {
-          petal.speedY *= 0.99;
-          petal.speedX = 0.2 + Math.random() * 0.1;
-        }
-
-        drawPetal(ctx, petal);
       });
 
       // Update and draw boats
@@ -320,25 +482,37 @@ export function usePaperBoats(
         boat.x += boat.speedX;
         boat.rotation += boat.rotationSpeed;
 
-        // Clamp rotation
-        if (Math.abs(boat.rotation) > 0.15) {
-          boat.rotationSpeed *= -0.5;
+        // Gentle rotation oscillation
+        if (Math.abs(boat.rotation) > 0.1) {
+          boat.rotationSpeed *= -0.8;
         }
 
-        // Wrap around
-        if (boat.x > currentWidth + 50) {
+        // Keep boats in water area
+        const topY = getBankY(boat.x, topBank, currentWidth);
+        const bottomY = getBankY(boat.x, bottomBank, currentWidth);
+        const waterMid = (topY + bottomY) / 2;
+
+        if (boat.y < topY + 40) boat.y = topY + 40;
+        if (boat.y > bottomY - 30) boat.y = bottomY - 30;
+
+        // Gentle drift toward center
+        boat.y += (waterMid - boat.y) * 0.001;
+
+        if (boat.x > currentWidth + 60) {
           boat.x = -50;
-          boat.y = currentHeight * 0.3 + Math.random() * currentHeight * 0.4;
+          const newTopY = getBankY(0, topBank, currentWidth);
+          const newBottomY = getBankY(0, bottomBank, currentWidth);
+          boat.y = newTopY + 50 + Math.random() * (newBottomY - newTopY - 100);
         }
 
-        // Occasionally spawn ripples from boats
-        if (Math.random() < 0.02) {
+        // Occasional ripples from boat
+        if (Math.random() < 0.012) {
           ripplesRef.current.push({
-            x: boat.x,
-            y: boat.y + boat.size * 0.3,
-            radius: 3,
+            x: boat.x - boat.size * 0.2,
+            y: boat.y + boat.size * 0.35,
+            radius: 2,
             maxRadius: 20,
-            opacity: 0.4,
+            opacity: 0.3,
           });
         }
 
@@ -346,32 +520,49 @@ export function usePaperBoats(
       });
 
       // Limit ripples
-      if (ripplesRef.current.length > 30) {
-        ripplesRef.current = ripplesRef.current.slice(-25);
+      if (ripplesRef.current.length > 25) {
+        ripplesRef.current = ripplesRef.current.slice(-20);
       }
 
-      // Bank/edge decorations (grass-like)
-      const drawBankGrass = (y: number, reverse: boolean) => {
-        ctx.strokeStyle = darkMode ? '#304030' : '#80a080';
-        ctx.lineWidth = 1.5;
+      // Soft grass tufts on banks
+      const drawGrassTufts = (bankCurve: number[], isTop: boolean) => {
+        ctx.strokeStyle = darkMode ? '#2a3820' : '#6a9a60';
+        ctx.lineWidth = 1;
 
-        for (let x = 0; x < currentWidth; x += 15) {
-          const h = 8 + Math.random() * 8;
-          const sway = Math.sin(timeRef.current * 2 + x * 0.1) * 2;
+        for (let x = 0; x < currentWidth; x += 18 + Math.sin(x) * 5) {
+          const bankY = getBankY(x, bankCurve, currentWidth);
+          const tufts = 2 + Math.floor(Math.random() * 2);
 
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          if (reverse) {
-            ctx.quadraticCurveTo(x + sway, y + h * 0.5, x + sway * 0.5, y + h);
-          } else {
-            ctx.quadraticCurveTo(x + sway, y - h * 0.5, x + sway * 0.5, y - h);
+          for (let t = 0; t < tufts; t++) {
+            const offsetX = (t - tufts / 2) * 4;
+            const height = 6 + Math.random() * 8;
+            const sway = Math.sin(timeRef.current * 1.2 + x * 0.05 + t) * 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x + offsetX, bankY);
+
+            if (isTop) {
+              ctx.quadraticCurveTo(
+                x + offsetX + sway,
+                bankY + height * 0.5,
+                x + offsetX + sway * 0.7,
+                bankY + height
+              );
+            } else {
+              ctx.quadraticCurveTo(
+                x + offsetX + sway,
+                bankY - height * 0.5,
+                x + offsetX + sway * 0.7,
+                bankY - height
+              );
+            }
+            ctx.stroke();
           }
-          ctx.stroke();
         }
       };
 
-      drawBankGrass(streamTop, false);
-      drawBankGrass(streamBottom, true);
+      drawGrassTufts(topBank, true);
+      drawGrassTufts(bottomBank, false);
 
       animationRef.current = requestAnimationFrame(animate);
     };

@@ -255,10 +255,10 @@ export function useButterflyGarden(
       const bodyTilt = butterfly.restTimer > 0 ? 0 : Math.sin(butterfly.bodyAngle) * 0.15;
       ctx.rotate(bodyTilt);
 
-      // Wing flap angle - wings rotate up and down from body axis
-      // Range: from nearly vertical (wings up) to flat (wings down)
-      const flapAngle = Math.sin(butterfly.wingPhase) * 0.75; // -0.75 to 0.75 radians (~45 degrees each way)
-      const hindwingFlapAngle = Math.sin(butterfly.wingPhase - 0.2) * 0.7; // Slight delay for hindwings
+      // Wing flap - ROTATION around attachment point (like a hinge)
+      // This is the key: wings pivot at the body, tip swings up/down
+      const flapAngle = Math.sin(butterfly.wingPhase) * 0.9; // ~50 degrees each way
+      const hindwingFlapAngle = Math.sin(butterfly.wingPhase - 0.25) * 0.85; // Slight delay for hindwings
 
       const size = butterfly.size;
 
@@ -273,16 +273,19 @@ export function useButterflyGarden(
         ? `hsl(${butterfly.hue}, 35%, 38%)`
         : `hsl(${butterfly.hue}, 55%, 52%)`;
 
-      // Calculate wing perspective based on flap angle
-      // When wings are up, we see more of the underside
-      const wingScaleY = Math.abs(Math.cos(flapAngle));
-      const hindwingScaleY = Math.abs(Math.cos(hindwingFlapAngle));
-      const showUnderside = flapAngle > 0;
+      // Foreshortening: wings appear thinner when angled up/down
+      // cos(angle) gives 1.0 when flat, smaller when angled
+      const foreshorten = 0.5 + 0.5 * Math.cos(flapAngle * 1.2);
+      const hindwingForeshorten = 0.5 + 0.5 * Math.cos(hindwingFlapAngle * 1.2);
 
-      // Left forewing
+      // Show underside when wings are angled upward
+      const showUnderside = flapAngle > 0.15;
+
+      // Left forewing - ROTATE around attachment point
       ctx.save();
       ctx.translate(-size * 0.08, 0);
-      ctx.transform(1, 0, 0, wingScaleY, 0, -flapAngle * size * 0.3);
+      ctx.rotate(flapAngle); // Positive = wing tip goes UP (for left wing extending to -X)
+      ctx.scale(1, foreshorten); // Foreshortening effect
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.bezierCurveTo(
@@ -320,10 +323,11 @@ export function useButterflyGarden(
       }
       ctx.restore();
 
-      // Left hindwing
+      // Left hindwing - ROTATE around attachment point
       ctx.save();
       ctx.translate(-size * 0.08, size * 0.1);
-      ctx.transform(1, 0, 0, hindwingScaleY, 0, -hindwingFlapAngle * size * 0.25);
+      ctx.rotate(hindwingFlapAngle); // Same direction as left forewing
+      ctx.scale(1, hindwingForeshorten);
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.bezierCurveTo(
@@ -343,10 +347,11 @@ export function useButterflyGarden(
       ctx.stroke();
       ctx.restore();
 
-      // Right forewing
+      // Right forewing - ROTATE opposite direction (mirror of left)
       ctx.save();
       ctx.translate(size * 0.08, 0);
-      ctx.transform(1, 0, 0, wingScaleY, 0, -flapAngle * size * 0.3);
+      ctx.rotate(-flapAngle); // NEGATIVE = wing tip goes UP (for right wing extending to +X)
+      ctx.scale(1, foreshorten);
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.bezierCurveTo(
@@ -383,10 +388,11 @@ export function useButterflyGarden(
       }
       ctx.restore();
 
-      // Right hindwing
+      // Right hindwing - ROTATE opposite direction (mirror of left)
       ctx.save();
       ctx.translate(size * 0.08, size * 0.1);
-      ctx.transform(1, 0, 0, hindwingScaleY, 0, -hindwingFlapAngle * size * 0.25);
+      ctx.rotate(-hindwingFlapAngle); // NEGATIVE to match right forewing
+      ctx.scale(1, hindwingForeshorten);
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.bezierCurveTo(

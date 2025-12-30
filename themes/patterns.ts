@@ -320,9 +320,9 @@ export const globalPatterns: BackgroundPattern[] = [
     animated: true,
   },
   {
-    id: 'satoshi-symbol',
-    name: 'Satoshi Symbol',
-    description: 'Floating satoshi symbols with subtle glow and particle effects',
+    id: 'sats-symbol',
+    name: 'Sats Symbol',
+    description: 'Floating sats symbols with subtle glow and particle effects',
     animated: true,
   },
   {
@@ -350,6 +350,68 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'autumn-wind',
     name: 'Autumn Wind',
     description: 'Swirling gusts carrying fallen leaves',
+    animated: true,
+  },
+  // Abstract animations
+  {
+    id: 'smoke-calligraphy',
+    name: 'Smoke Calligraphy',
+    description: 'Delicate incense smoke wisps curling and dissipating',
+    animated: true,
+  },
+  {
+    id: 'breath',
+    name: 'Breath',
+    description: 'Gentle pulsing shapes that expand and contract like breathing',
+    animated: true,
+  },
+  {
+    id: 'mycelium-network',
+    name: 'Mycelium Network',
+    description: 'Organic branching lines growing and pulsing with energy',
+    animated: true,
+  },
+  {
+    id: 'oil-slick',
+    name: 'Oil Slick',
+    description: 'Iridescent swirling patterns with rainbow interference colors',
+    animated: true,
+  },
+  // New landscape/nature animations
+  {
+    id: 'bioluminescent-beach',
+    name: 'Bioluminescent Beach',
+    description: 'Waves lapping shore with glowing blue bioluminescence under starry sky',
+    animated: true,
+  },
+  {
+    id: 'volcanic-islands',
+    name: 'Volcanic Islands',
+    description: 'Distant volcanic glow with palm silhouettes and rising lava particles',
+    animated: true,
+  },
+  {
+    id: 'tidal-patterns',
+    name: 'Tidal Patterns',
+    description: 'Sand ripples with water flowing over them and scattered shells',
+    animated: true,
+  },
+  {
+    id: 'eclipse',
+    name: 'Eclipse',
+    description: 'Slow-moving solar eclipse with corona effects and appearing stars',
+    animated: true,
+  },
+  {
+    id: 'paper-boats',
+    name: 'Paper Boats',
+    description: 'Tiny paper boats floating on a gentle stream with fallen petals',
+    animated: true,
+  },
+  {
+    id: 'wisteria',
+    name: 'Wisteria',
+    description: 'Cascading purple wisteria flowers swaying in the breeze',
     animated: true,
   },
 ];

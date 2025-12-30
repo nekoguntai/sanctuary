@@ -52,12 +52,24 @@ import {
   useJellyfishDrift,
   useWindChimes,
   useSakuraRedux,
-  useSatoshiSymbol,
+  useSatsSymbol,
   useFireworks,
   // New animations
   useHashStorm,
   useIceCrystals,
   useAutumnWind,
+  // Abstract animations
+  useSmokeCalligraphy,
+  useBreath,
+  useMyceliumNetwork,
+  useOilSlick,
+  // New landscape/nature animations
+  useBioluminescentBeach,
+  useVolcanicIslands,
+  useTidalPatterns,
+  useEclipse,
+  usePaperBoats,
+  useWisteria,
 } from './animations';
 
 interface AnimatedBackgroundProps {
@@ -117,12 +129,24 @@ export const ANIMATED_PATTERNS = [
   'jellyfish-drift',
   'wind-chimes',
   'sakura-redux',
-  'satoshi-symbol',
+  'sats-symbol',
   'fireworks',
   // New animations
   'hash-storm',
   'ice-crystals',
   'autumn-wind',
+  // Abstract animations
+  'smoke-calligraphy',
+  'breath',
+  'mycelium-network',
+  'oil-slick',
+  // New landscape/nature animations
+  'bioluminescent-beach',
+  'volcanic-islands',
+  'tidal-patterns',
+  'eclipse',
+  'paper-boats',
+  'wisteria',
 ] as const;
 
 export type AnimatedPatternId = typeof ANIMATED_PATTERNS[number];
@@ -190,12 +214,24 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useJellyfishDrift(canvasRef, darkMode, opacity, pattern === 'jellyfish-drift');
   useWindChimes(canvasRef, darkMode, opacity, pattern === 'wind-chimes');
   useSakuraRedux(canvasRef, darkMode, opacity, pattern === 'sakura-redux');
-  useSatoshiSymbol(canvasRef, darkMode, opacity, pattern === 'satoshi-symbol');
+  useSatsSymbol(canvasRef, darkMode, opacity, pattern === 'sats-symbol');
   useFireworks(canvasRef, darkMode, opacity, pattern === 'fireworks');
   // New animations
   useHashStorm(canvasRef, darkMode, opacity, pattern === 'hash-storm');
   useIceCrystals(canvasRef, darkMode, opacity, pattern === 'ice-crystals');
   useAutumnWind(canvasRef, darkMode, opacity, pattern === 'autumn-wind');
+  // Abstract animations
+  useSmokeCalligraphy(canvasRef, darkMode, opacity, pattern === 'smoke-calligraphy');
+  useBreath(canvasRef, darkMode, opacity, pattern === 'breath');
+  useMyceliumNetwork(canvasRef, darkMode, opacity, pattern === 'mycelium-network');
+  useOilSlick(canvasRef, darkMode, opacity, pattern === 'oil-slick');
+  // New landscape/nature animations
+  useBioluminescentBeach(canvasRef, darkMode, opacity, pattern === 'bioluminescent-beach');
+  useVolcanicIslands(canvasRef, darkMode, opacity, pattern === 'volcanic-islands');
+  useTidalPatterns(canvasRef, darkMode, opacity, pattern === 'tidal-patterns');
+  useEclipse(canvasRef, darkMode, opacity, pattern === 'eclipse');
+  usePaperBoats(canvasRef, darkMode, opacity, pattern === 'paper-boats');
+  useWisteria(canvasRef, darkMode, opacity, pattern === 'wisteria');
 
   if (!isAnimated) {
     return null;

@@ -23,6 +23,7 @@ interface ShootingStar {
   length: number;
   life: number;
   maxLife: number;
+  isBig?: boolean; // Rare bigger shooting stars
 }
 
 export function useMoonlitClouds(
@@ -116,6 +117,8 @@ export function useMoonlitClouds(
     const drawShootingStar = (ss: ShootingStar) => {
       const lifeRatio = ss.life / ss.maxLife;
       const opacityMultiplier = opacity / 50;
+      const lineWidth = ss.isBig ? 4 : 2;
+      const headRadius = ss.isBig ? 12 : 5;
 
       ctx.save();
       ctx.translate(ss.x, ss.y);
@@ -128,20 +131,46 @@ export function useMoonlitClouds(
       trailGradient.addColorStop(1, `rgba(255, 255, 255, ${lifeRatio * opacityMultiplier})`);
 
       ctx.strokeStyle = trailGradient;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = lineWidth;
       ctx.beginPath();
       ctx.moveTo(-ss.length, 0);
       ctx.lineTo(0, 0);
       ctx.stroke();
 
+      // Big stars get a wider, softer outer glow trail
+      if (ss.isBig) {
+        const outerTrail = ctx.createLinearGradient(-ss.length * 0.7, 0, 0, 0);
+        outerTrail.addColorStop(0, 'transparent');
+        outerTrail.addColorStop(0.5, `rgba(200, 220, 255, ${lifeRatio * 0.15 * opacityMultiplier})`);
+        outerTrail.addColorStop(1, `rgba(200, 220, 255, ${lifeRatio * 0.25 * opacityMultiplier})`);
+        ctx.strokeStyle = outerTrail;
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.moveTo(-ss.length * 0.7, 0);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+      }
+
       // Head glow
-      const headGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+      const headGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
       headGlow.addColorStop(0, `rgba(255, 255, 255, ${lifeRatio * opacityMultiplier})`);
+      headGlow.addColorStop(0.4, `rgba(220, 240, 255, ${lifeRatio * 0.7 * opacityMultiplier})`);
       headGlow.addColorStop(1, 'transparent');
       ctx.fillStyle = headGlow;
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
       ctx.fill();
+
+      // Big stars get an extra outer halo
+      if (ss.isBig) {
+        const halo = ctx.createRadialGradient(0, 0, headRadius * 0.5, 0, 0, headRadius * 2.5);
+        halo.addColorStop(0, `rgba(200, 220, 255, ${lifeRatio * 0.3 * opacityMultiplier})`);
+        halo.addColorStop(1, 'transparent');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, headRadius * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.restore();
     };
@@ -174,6 +203,22 @@ export function useMoonlitClouds(
           length: 40 + Math.random() * 80,
           life: 50,
           maxLife: 50,
+        });
+      }
+
+      // Very rarely spawn a big shooting star (about 10x rarer)
+      if (Math.random() < 0.00015) {
+        const startX = Math.random() * canvas.width;
+        const startY = Math.random() * canvas.height * 0.3;
+        shootingStarsRef.current.push({
+          x: startX,
+          y: startY,
+          angle: Math.PI * 0.15 + Math.random() * Math.PI * 0.15,
+          speed: 8 + Math.random() * 6, // Faster
+          length: 150 + Math.random() * 100, // Much longer trail
+          life: 70,
+          maxLife: 70, // Lasts longer
+          isBig: true,
         });
       }
 

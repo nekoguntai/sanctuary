@@ -69,13 +69,45 @@ export function useZenSandGarden(
       const width = canvas.width;
       const height = canvas.height;
 
-      // Create stones
+      // Create stones with collision detection to prevent overlapping zones
       stonesRef.current = [];
       const stoneCount = 3 + Math.floor(Math.random() * 3);
 
       for (let i = 0; i < stoneCount; i++) {
         const stoneWidth = 40 + Math.random() * 60;
         const stoneHeight = 30 + Math.random() * 40;
+        const zoneRadius = Math.max(stoneWidth, stoneHeight) * 3;
+
+        // Try to find a position that doesn't overlap with existing stones' zones
+        let x = 0, y = 0;
+        let attempts = 0;
+        const maxAttempts = 50;
+
+        do {
+          x = width * 0.15 + Math.random() * width * 0.7;
+          y = height * 0.25 + Math.random() * height * 0.5;
+          attempts++;
+
+          // Check distance from all existing stones
+          let tooClose = false;
+          for (const existing of stonesRef.current) {
+            const existingZoneRadius = Math.max(existing.width, existing.height) * 3;
+            const minDist = zoneRadius + existingZoneRadius + 20; // Extra margin
+            const dx = x - existing.x;
+            const dy = y - existing.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < minDist) {
+              tooClose = true;
+              break;
+            }
+          }
+          if (!tooClose) break;
+        } while (attempts < maxAttempts);
+
+        // Skip this stone if we couldn't find a valid position
+        if (attempts >= maxAttempts && stonesRef.current.length > 0) {
+          continue;
+        }
 
         // Generate moss patches
         const mossPatches: { x: number; y: number; size: number }[] = [];
@@ -92,8 +124,8 @@ export function useZenSandGarden(
 
         const grayValue = 80 + Math.floor(Math.random() * 60);
         stonesRef.current.push({
-          x: width * 0.2 + Math.random() * width * 0.6,
-          y: height * 0.3 + Math.random() * height * 0.4,
+          x,
+          y,
           width: stoneWidth,
           height: stoneHeight,
           rotation: (Math.random() - 0.5) * 0.3,

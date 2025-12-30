@@ -27,6 +27,7 @@ interface ShootingStar {
   length: number;
   life: number;
   maxLife: number;
+  isBig?: boolean; // Rare bigger shooting stars
 }
 
 interface Constellation {
@@ -220,18 +221,18 @@ export function useStargazing(
         }
       }
 
-      // Create fireflies on sides
+      // Create fireflies at tree level (near ground)
       fireflies = [];
       const fireflyCount = Math.floor(width / 150);
       for (let i = 0; i < fireflyCount; i++) {
         const x = getRandomSidePosition(width);
         fireflies.push({
           x,
-          y: height * 0.6 + Math.random() * height * 0.3,
+          y: height * 0.85 + Math.random() * height * 0.1, // Near ground/trees
           glowPhase: Math.random() * Math.PI * 2,
           targetX: getRandomSidePosition(width),
-          targetY: height * 0.6 + Math.random() * height * 0.3,
-          size: 2 + Math.random() * 2,
+          targetY: height * 0.85 + Math.random() * height * 0.1,
+          size: 0.8 + Math.random() * 0.7, // Much smaller
         });
       }
 
@@ -356,6 +357,8 @@ export function useStargazing(
 
     const drawShootingStar = (ctx: CanvasRenderingContext2D, ss: ShootingStar) => {
       const lifeRatio = ss.life / ss.maxLife;
+      const lineWidth = ss.isBig ? 4 : 2;
+      const headRadius = ss.isBig ? 12 : 5;
 
       ctx.save();
       ctx.translate(ss.x, ss.y);
@@ -368,20 +371,46 @@ export function useStargazing(
       trailGradient.addColorStop(1, `rgba(255, 255, 255, ${lifeRatio})`);
 
       ctx.strokeStyle = trailGradient;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = lineWidth;
       ctx.beginPath();
       ctx.moveTo(-ss.length, 0);
       ctx.lineTo(0, 0);
       ctx.stroke();
 
+      // Big stars get a wider, softer outer glow trail
+      if (ss.isBig) {
+        const outerTrail = ctx.createLinearGradient(-ss.length * 0.7, 0, 0, 0);
+        outerTrail.addColorStop(0, 'transparent');
+        outerTrail.addColorStop(0.5, `rgba(200, 220, 255, ${lifeRatio * 0.15})`);
+        outerTrail.addColorStop(1, `rgba(200, 220, 255, ${lifeRatio * 0.25})`);
+        ctx.strokeStyle = outerTrail;
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.moveTo(-ss.length * 0.7, 0);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+      }
+
       // Head glow
-      const headGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+      const headGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
       headGlow.addColorStop(0, `rgba(255, 255, 255, ${lifeRatio})`);
+      headGlow.addColorStop(0.4, `rgba(220, 240, 255, ${lifeRatio * 0.7})`);
       headGlow.addColorStop(1, 'transparent');
       ctx.fillStyle = headGlow;
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
       ctx.fill();
+
+      // Big stars get an extra outer halo
+      if (ss.isBig) {
+        const halo = ctx.createRadialGradient(0, 0, headRadius * 0.5, 0, 0, headRadius * 2.5);
+        halo.addColorStop(0, `rgba(200, 220, 255, ${lifeRatio * 0.3})`);
+        halo.addColorStop(1, 'transparent');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, headRadius * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.restore();
     };
@@ -443,23 +472,23 @@ export function useStargazing(
     const drawFirefly = (ctx: CanvasRenderingContext2D, ff: Firefly) => {
       const glow = Math.sin(timeRef * 0.03 + ff.glowPhase) * 0.5 + 0.5;
 
-      if (glow > 0.3) {
-        // Outer glow
+      if (glow > 0.4) { // Higher threshold = less time visible
+        // Smaller, dimmer outer glow
         const glowGradient = ctx.createRadialGradient(
           ff.x, ff.y, 0,
-          ff.x, ff.y, ff.size * 6
+          ff.x, ff.y, ff.size * 4
         );
-        glowGradient.addColorStop(0, `rgba(255, 255, 150, ${glow * 0.8})`);
-        glowGradient.addColorStop(0.3, `rgba(255, 255, 100, ${glow * 0.4})`);
+        glowGradient.addColorStop(0, `rgba(255, 255, 150, ${glow * 0.35})`);
+        glowGradient.addColorStop(0.4, `rgba(255, 255, 100, ${glow * 0.15})`);
         glowGradient.addColorStop(1, 'transparent');
 
         ctx.fillStyle = glowGradient;
         ctx.beginPath();
-        ctx.arc(ff.x, ff.y, ff.size * 6, 0, Math.PI * 2);
+        ctx.arc(ff.x, ff.y, ff.size * 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core
-        ctx.fillStyle = `rgba(255, 255, 200, ${glow})`;
+        // Dimmer core
+        ctx.fillStyle = `rgba(255, 255, 200, ${glow * 0.5})`;
         ctx.beginPath();
         ctx.arc(ff.x, ff.y, ff.size, 0, Math.PI * 2);
         ctx.fill();
@@ -489,10 +518,10 @@ export function useStargazing(
 
       if (dist < 10) {
         ff.targetX = getRandomSidePosition(width);
-        ff.targetY = height * 0.6 + Math.random() * height * 0.3;
+        ff.targetY = height * 0.85 + Math.random() * height * 0.1; // Stay at tree level
       } else {
-        ff.x += (dx / dist) * 0.2;
-        ff.y += (dy / dist) * 0.2 + Math.sin(timeRef * 0.015 + ff.glowPhase) * 0.15;
+        ff.x += (dx / dist) * 0.15; // Slower movement
+        ff.y += (dy / dist) * 0.15 + Math.sin(timeRef * 0.015 + ff.glowPhase) * 0.08;
       }
     };
 
@@ -536,6 +565,22 @@ export function useStargazing(
           length: 50 + Math.random() * 100,
           life: 60,
           maxLife: 60,
+        });
+      }
+
+      // Very rarely spawn a big shooting star (about 10x rarer)
+      if (Math.random() < 0.0001) {
+        const startX = Math.random() * width;
+        const startY = Math.random() * height * 0.3;
+        shootingStars.push({
+          x: startX,
+          y: startY,
+          angle: Math.PI * 0.15 + Math.random() * Math.PI * 0.15,
+          speed: 8 + Math.random() * 6, // Faster
+          length: 150 + Math.random() * 100, // Much longer trail
+          life: 70,
+          maxLife: 70, // Lasts longer
+          isBig: true,
         });
       }
 

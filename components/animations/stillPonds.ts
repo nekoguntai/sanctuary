@@ -107,6 +107,41 @@ export function useStillPonds(
       return Math.random() * width;
     };
 
+    // Calculate the body half-width at a given x position along the fish
+    // The body is tapered: widest at front, narrowing toward tail
+    const getBodyHalfWidthAtX = (x: number, size: number): number => {
+      // Body profile key points (x position -> half-width as fraction of size)
+      // Head area: x = 0.4 -> width ~0.10
+      // Widest: x = 0.25 -> width ~0.16
+      // Mid: x = 0.0 -> width ~0.14
+      // Back: x = -0.2 -> width ~0.11
+      // Rear: x = -0.35 -> width ~0.06
+      const xNorm = x / size;
+
+      if (xNorm > 0.4) return size * 0.08; // Head tip
+      if (xNorm > 0.25) {
+        // Head to widest: interpolate 0.10 -> 0.16
+        const t = (xNorm - 0.25) / 0.15;
+        return size * (0.16 - t * 0.06);
+      }
+      if (xNorm > 0.0) {
+        // Widest to mid: interpolate 0.16 -> 0.14
+        const t = (xNorm - 0.0) / 0.25;
+        return size * (0.14 + t * 0.02);
+      }
+      if (xNorm > -0.2) {
+        // Mid to back: interpolate 0.14 -> 0.11
+        const t = (xNorm - (-0.2)) / 0.2;
+        return size * (0.11 + t * 0.03);
+      }
+      if (xNorm > -0.35) {
+        // Back to rear: interpolate 0.11 -> 0.06
+        const t = (xNorm - (-0.35)) / 0.15;
+        return size * (0.06 + t * 0.05);
+      }
+      return size * 0.04; // Tail area
+    };
+
     const generateSpots = (size: number, pattern: string): Spot[] => {
       if (pattern === 'solid') return [];
       const spots: Spot[] = [];
@@ -114,13 +149,21 @@ export function useStillPonds(
       for (let i = 0; i < count; i++) {
         // Place spots within the main body area only
         // x: from head area to mid-body (avoiding tail)
-        // y: within the narrower sleek body width
         const spotX = size * 0.2 - Math.random() * size * 0.5; // From 0.2 to -0.3 of size
-        const spotY = (Math.random() - 0.5) * size * 0.22; // Narrower vertical range
+        const spotSize = size * 0.05 + Math.random() * size * 0.04; // Slightly smaller spots
+
+        // Calculate maximum y-offset based on body width at this x position
+        // Leave margin for the spot radius so spots don't exceed body edge
+        const bodyHalfWidth = getBodyHalfWidthAtX(spotX, size);
+        const maxYOffset = Math.max(0, bodyHalfWidth - spotSize - size * 0.01); // Small safety margin
+
+        // Generate y within the constrained range
+        const spotY = (Math.random() - 0.5) * 2 * maxYOffset;
+
         spots.push({
           x: spotX,
           y: spotY,
-          size: size * 0.06 + Math.random() * size * 0.05, // Smaller spots
+          size: spotSize,
         });
       }
       return spots;
@@ -653,10 +696,36 @@ export function useStillPonds(
       const dy = fish.targetY - fish.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // Pick new target when close enough
+      // Pick new target when close enough - but bias toward current heading direction
       if (dist < 50) {
-        fish.targetX = getRandomSidePosition(canvas.width);
-        fish.targetY = Math.random() * canvas.height;
+        // Generate a target that's roughly in front of the fish (within ~90 degrees)
+        // This prevents fish from making sharp U-turns
+        const forwardBias = 0.7; // How much to bias toward current direction
+        const randomAngle = fish.angle + (Math.random() - 0.5) * Math.PI * 1.2; // +/- 108 degrees from current heading
+        const targetDist = 150 + Math.random() * 200;
+
+        // Calculate biased target position
+        const biasedX = fish.x + Math.cos(randomAngle) * targetDist;
+        const biasedY = fish.y + Math.sin(randomAngle) * targetDist;
+
+        // Mix with random position for occasional exploration
+        const randomX = getRandomSidePosition(canvas.width);
+        const randomY = Math.random() * canvas.height;
+
+        fish.targetX = biasedX * forwardBias + randomX * (1 - forwardBias);
+        fish.targetY = biasedY * forwardBias + randomY * (1 - forwardBias);
+
+        // Keep target in bounds
+        fish.targetX = Math.max(50, Math.min(canvas.width - 50, fish.targetX));
+        fish.targetY = Math.max(50, Math.min(canvas.height - 50, fish.targetY));
+      }
+
+      // Also occasionally nudge target slightly for natural wandering
+      if (Math.random() < 0.005) {
+        fish.targetX += (Math.random() - 0.5) * 100;
+        fish.targetY += (Math.random() - 0.5) * 80;
+        fish.targetX = Math.max(50, Math.min(canvas.width - 50, fish.targetX));
+        fish.targetY = Math.max(50, Math.min(canvas.height - 50, fish.targetY));
       }
 
       // Calculate desired angle toward target
@@ -668,12 +737,13 @@ export function useStillPonds(
         Math.cos(fish.targetAngle - fish.angle)
       );
 
-      // Apply gradual angular acceleration (momentum-based turning)
-      // Instead of snapping, we accelerate the angular velocity toward the needed turn
-      const angularAcceleration = 0.0008; // How quickly turn rate changes
-      const targetAngularVelocity = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 0.02, fish.maxTurnRate);
+      // Apply very gradual angular acceleration (momentum-based turning)
+      // Reduced acceleration for smoother, more natural turns
+      const angularAcceleration = 0.0004; // Reduced from 0.0008
+      // Target angular velocity is gentler - fish don't try to correct aggressively
+      const targetAngularVelocity = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 0.01, fish.maxTurnRate);
 
-      // Smoothly interpolate angular velocity (creates inertia)
+      // Smoothly interpolate angular velocity with more inertia
       fish.angularVelocity += (targetAngularVelocity - fish.angularVelocity) * angularAcceleration * 60;
 
       // Clamp angular velocity to max turn rate

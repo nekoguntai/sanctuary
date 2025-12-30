@@ -1,11 +1,12 @@
 /**
- * Satoshi Symbol Animation
- * Elegant floating Satoshi (₿) symbols with subtle glow and particle effects
+ * Sats Symbol Animation
+ * Elegant floating Sats symbols with subtle glow and particle effects
+ * Symbol: 3 horizontal lines with 1 vertical line through them
  */
 
 import { useRef, useEffect } from 'react';
 
-interface SatoshiSymbol {
+interface SatsSymbol {
   x: number;
   y: number;
   size: number;
@@ -30,13 +31,13 @@ interface Particle {
   maxLife: number;
 }
 
-export function useSatoshiSymbol(
+export function useSatsSymbol(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   darkMode: boolean,
   opacity: number,
   active: boolean
 ) {
-  const symbolsRef = useRef<SatoshiSymbol[]>([]);
+  const symbolsRef = useRef<SatsSymbol[]>([]);
   const particlesRef = useRef<Particle[]>([]);
   const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef<number>(0);
@@ -75,8 +76,8 @@ export function useSatoshiSymbol(
 
     particlesRef.current = [];
 
-    // Draw the Satoshi symbol (₿)
-    const drawSatoshiSymbol = (symbol: SatoshiSymbol, time: number) => {
+    // Draw the Sats symbol (3 horizontal lines + 1 vertical line)
+    const drawSatsSymbol = (symbol: SatsSymbol, time: number) => {
       ctx.save();
       ctx.translate(symbol.x, symbol.y);
       ctx.rotate(symbol.rotation);
@@ -105,8 +106,7 @@ export function useSatoshiSymbol(
       ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw the Satoshi symbol (丰-inspired: 3 horizontal lines with vertical stems)
-      // The sat symbol inspired by Japanese kanji 丰 meaning "bountiful"
+      // Draw the Sats symbol: 3 horizontal lines with 1 vertical line through them
       ctx.strokeStyle = primaryColor;
       ctx.fillStyle = primaryColor;
       ctx.lineCap = 'round';
@@ -138,23 +138,17 @@ export function useSatoshiSymbol(
       ctx.lineTo(w * 0.5, h * 0.35);
       ctx.stroke();
 
-      // Vertical stem - top (extending up from top line)
+      // Single vertical line through all three horizontals (with extension above/below)
       ctx.beginPath();
-      ctx.moveTo(0, -h * 0.35);
-      ctx.lineTo(0, -h * 0.35 - stemExtend);
-      ctx.stroke();
-
-      // Vertical stem - bottom (extending down from bottom line)
-      ctx.beginPath();
-      ctx.moveTo(0, h * 0.35);
-      ctx.lineTo(0, h * 0.35 + stemExtend);
+      ctx.moveTo(0, -h * 0.35 - stemExtend);  // Top extension
+      ctx.lineTo(0, h * 0.35 + stemExtend);   // Bottom extension
       ctx.stroke();
 
       ctx.restore();
     };
 
     // Spawn particles occasionally
-    const maybeSpawnParticle = (symbol: SatoshiSymbol) => {
+    const maybeSpawnParticle = (symbol: SatsSymbol) => {
       if (Math.random() < 0.02 && particlesRef.current.length < 50) {
         const angle = Math.random() * Math.PI * 2;
         const distance = symbol.size * 0.3;
@@ -211,7 +205,7 @@ export function useSatoshiSymbol(
         if (symbol.x > canvas.width + margin) symbol.x = -margin * 0.5;
 
         maybeSpawnParticle(symbol);
-        drawSatoshiSymbol(symbol, timeRef.current);
+        drawSatsSymbol(symbol, timeRef.current);
       });
 
       // Update and draw particles

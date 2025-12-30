@@ -46,9 +46,21 @@ export { useGentleWaves } from './gentleWaves';
 export { useJellyfishDrift } from './jellyfishDrift';
 export { useWindChimes } from './windChimes';
 export { useSakuraRedux } from './sakuraRedux';
-export { useSatoshiSymbol } from './satoshiSymbol';
+export { useSatsSymbol } from './satsSymbol';
 export { useFireworks } from './fireworks';
 // New animations
 export { useHashStorm } from './hashStorm';
 export { useIceCrystals } from './iceCrystals';
 export { useAutumnWind } from './autumnWind';
+// Abstract animations
+export { useSmokeCalligraphy } from './smokeCalligraphy';
+export { useBreath } from './breath';
+export { useMyceliumNetwork } from './myceliumNetwork';
+export { useOilSlick } from './oilSlick';
+// New landscape/nature animations
+export { useBioluminescentBeach } from './bioluminescentBeach';
+export { useVolcanicIslands } from './volcanicIslands';
+export { useTidalPatterns } from './tidalPatterns';
+export { useEclipse } from './eclipse';
+export { usePaperBoats } from './paperBoats';
+export { useWisteria } from './wisteria';

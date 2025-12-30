@@ -572,40 +572,6 @@ export function useBunnyMeadow(
         ctx.stroke();
       }
 
-      // Whiskers - fanning out sideways from nose, not forward
-      ctx.strokeStyle = darkMode ? '#888' : '#A0A0A0';
-      ctx.lineWidth = 0.5;
-
-      // Upper whiskers (2) - curve upward and slightly back
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.14);
-      ctx.quadraticCurveTo(size * 0.65, -size * 0.18, size * 0.75, -size * 0.22);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.12);
-      ctx.quadraticCurveTo(size * 0.68, -size * 0.13, size * 0.8, -size * 0.15);
-      ctx.stroke();
-
-      // Middle whiskers (2) - go mostly horizontal
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.1);
-      ctx.quadraticCurveTo(size * 0.68, -size * 0.09, size * 0.82, -size * 0.08);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.08);
-      ctx.quadraticCurveTo(size * 0.68, -size * 0.06, size * 0.8, -size * 0.03);
-      ctx.stroke();
-
-      // Lower whiskers (2) - curve downward
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.06);
-      ctx.quadraticCurveTo(size * 0.65, -size * 0.02, size * 0.75, size * 0.02);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(size * 0.52, -size * 0.04);
-      ctx.quadraticCurveTo(size * 0.62, size * 0.02, size * 0.7, size * 0.08);
-      ctx.stroke();
-
       ctx.restore();
     };
 

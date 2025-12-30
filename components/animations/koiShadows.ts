@@ -90,15 +90,31 @@ export function useKoiShadows(
       const colors = getKoiColors(koi.colorScheme, baseOpacity);
 
       const s = koi.size;
-      const bodyWave = Math.sin(koi.bodyPhase) * 2;
 
-      // Main body
+      // Propagating wave - phase delay increases toward tail, amplitude increases
+      const waveAt = (pos: number) => {
+        const phaseDelay = pos * 1.2;
+        const ampScale = pos * pos;
+        return Math.sin(koi.bodyPhase - phaseDelay) * 3 * ampScale;
+      };
+
+      const wave20 = waveAt(0.2);
+      const wave40 = waveAt(0.4);
+      const wave60 = waveAt(0.6);
+      const wave80 = waveAt(0.8);
+      const wave100 = waveAt(1.0);
+
+      // Main body with propagating wave - tapered toward tail
       ctx.beginPath();
       ctx.moveTo(s * 0.9, 0);
-      ctx.bezierCurveTo(s * 0.7, -s * 0.18 + bodyWave * 0.3, s * 0.3, -s * 0.25 + bodyWave * 0.5, -s * 0.1, -s * 0.2 + bodyWave * 0.7);
-      ctx.bezierCurveTo(-s * 0.4, -s * 0.15 + bodyWave, -s * 0.6, -s * 0.08 + bodyWave, -s * 0.75, 0);
-      ctx.bezierCurveTo(-s * 0.6, s * 0.08 + bodyWave, -s * 0.4, s * 0.15 + bodyWave, -s * 0.1, s * 0.2 + bodyWave * 0.7);
-      ctx.bezierCurveTo(s * 0.3, s * 0.25 + bodyWave * 0.5, s * 0.7, s * 0.18 + bodyWave * 0.3, s * 0.9, 0);
+      // Upper contour - widest at front, tapering to narrow caudal peduncle
+      ctx.bezierCurveTo(s * 0.7, -s * 0.14 + wave20 * 0.3, s * 0.4, -s * 0.20 + wave20, s * 0.1, -s * 0.18 + wave40);
+      ctx.bezierCurveTo(-s * 0.15, -s * 0.14 + wave60, -s * 0.4, -s * 0.08 + wave80, -s * 0.65, -s * 0.03 + wave100);
+      // Narrow caudal peduncle
+      ctx.lineTo(-s * 0.65, s * 0.03 + wave100);
+      // Lower contour - mirror
+      ctx.bezierCurveTo(-s * 0.4, s * 0.08 + wave80, -s * 0.15, s * 0.14 + wave60, s * 0.1, s * 0.18 + wave40);
+      ctx.bezierCurveTo(s * 0.4, s * 0.20 + wave20, s * 0.7, s * 0.14 + wave20 * 0.3, s * 0.9, 0);
       ctx.closePath();
 
       const bodyGradient = ctx.createLinearGradient(-s * 0.75, 0, s * 0.9, 0);
@@ -109,43 +125,45 @@ export function useKoiShadows(
       ctx.fillStyle = bodyGradient;
       ctx.fill();
 
-      // Pattern spots
+      // Pattern spots - follow propagating wave
       if (koi.colorScheme !== 4) {
         ctx.beginPath();
-        ctx.ellipse(s * 0.1, -s * 0.05, s * 0.2, s * 0.08, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(s * 0.1, -s * 0.05 + wave40 * 0.5, s * 0.2, s * 0.08, 0.2, 0, Math.PI * 2);
         ctx.fillStyle = colors.spot;
         ctx.fill();
 
         ctx.beginPath();
-        ctx.ellipse(-s * 0.25, s * 0.03, s * 0.15, s * 0.06, -0.1, 0, Math.PI * 2);
+        ctx.ellipse(-s * 0.25, s * 0.03 + wave60 * 0.5, s * 0.15, s * 0.06, -0.1, 0, Math.PI * 2);
         ctx.fillStyle = colors.spot;
         ctx.fill();
       }
 
-      // Tail fin
-      const tailWave = Math.sin(koi.tailPhase) * s * 0.15;
-      const tailWave2 = Math.sin(koi.tailPhase + 0.5) * s * 0.1;
+      // Tail fin - thin overhead view, continues the wave
+      const tailWave = waveAt(1.15);
+      const tailTip = waveAt(1.4);
+      const tailSpread = s * 0.03; // Very thin from overhead
 
       ctx.beginPath();
-      ctx.moveTo(-s * 0.7, 0);
-      ctx.bezierCurveTo(-s * 0.9, -s * 0.05 + tailWave * 0.3, -s * 1.1, tailWave * 0.6, -s * 1.3, tailWave + tailWave2 * 0.5);
-      ctx.bezierCurveTo(-s * 1.35, tailWave * 0.5, -s * 1.35, -tailWave * 0.5, -s * 1.3, -tailWave - tailWave2 * 0.5);
-      ctx.bezierCurveTo(-s * 1.1, -tailWave * 0.6, -s * 0.9, s * 0.05 - tailWave * 0.3, -s * 0.7, 0);
+      ctx.moveTo(-s * 0.63, wave100);
+      // Thin tail that follows the wave
+      ctx.quadraticCurveTo(-s * 0.9, tailWave - tailSpread, -s * 1.15, tailTip - tailSpread);
+      ctx.quadraticCurveTo(-s * 1.2, tailTip, -s * 1.15, tailTip + tailSpread);
+      ctx.quadraticCurveTo(-s * 0.9, tailWave + tailSpread, -s * 0.63, wave100);
       ctx.closePath();
 
-      const tailGradient = ctx.createLinearGradient(-s * 0.7, 0, -s * 1.3, 0);
+      const tailGradient = ctx.createLinearGradient(-s * 0.72, 0, -s * 1.2, 0);
       tailGradient.addColorStop(0, colors.body);
       tailGradient.addColorStop(0.5, colors.accent);
       tailGradient.addColorStop(1, `rgba(0, 0, 0, 0)`);
       ctx.fillStyle = tailGradient;
       ctx.fill();
 
-      // Dorsal fin
-      const dorsalWave = Math.sin(koi.bodyPhase + 1) * 2;
+      // Dorsal fin - follows propagating wave
+      const dorsalWave = waveAt(0.5);
       ctx.beginPath();
-      ctx.moveTo(s * 0.3, -s * 0.2);
-      ctx.bezierCurveTo(s * 0.15, -s * 0.35 + dorsalWave, -s * 0.1, -s * 0.38 + dorsalWave, -s * 0.25, -s * 0.18);
-      ctx.bezierCurveTo(-s * 0.1, -s * 0.22, s * 0.15, -s * 0.22, s * 0.3, -s * 0.2);
+      ctx.moveTo(s * 0.3, -s * 0.2 + wave40);
+      ctx.bezierCurveTo(s * 0.15, -s * 0.35 + dorsalWave, -s * 0.1, -s * 0.38 + wave60, -s * 0.25, -s * 0.18 + wave80);
+      ctx.bezierCurveTo(-s * 0.1, -s * 0.22 + wave60, s * 0.15, -s * 0.22 + wave40, s * 0.3, -s * 0.2 + wave40);
       ctx.closePath();
       ctx.fillStyle = colors.accent;
       ctx.fill();

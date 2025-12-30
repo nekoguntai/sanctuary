@@ -106,7 +106,7 @@ export function useSatoshiSymbol(
       ctx.fill();
 
       // Draw the Satoshi symbol (丰-inspired: 3 horizontal lines with vertical stems)
-      // Inspired by Japanese kanji 丰 meaning "bountiful"
+      // The sat symbol inspired by Japanese kanji 丰 meaning "bountiful"
       ctx.strokeStyle = primaryColor;
       ctx.fillStyle = primaryColor;
       ctx.lineCap = 'round';

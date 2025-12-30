@@ -255,136 +255,151 @@ export function useButterflyGarden(
       const bodyTilt = butterfly.restTimer > 0 ? 0 : Math.sin(butterfly.bodyAngle) * 0.15;
       ctx.rotate(bodyTilt);
 
-      // More natural wing flapping - faster on upstroke, slower on downstroke
-      const wingCycle = butterfly.wingPhase % (Math.PI * 2);
-      const wingFlap = wingCycle < Math.PI
-        ? Math.sin(wingCycle) * 0.85  // Downstroke
-        : Math.sin(wingCycle) * 0.6;   // Upstroke (less dramatic)
+      // Wing flap angle - wings rotate up and down from body axis
+      // Range: from nearly vertical (wings up) to flat (wings down)
+      const flapAngle = Math.sin(butterfly.wingPhase) * 0.75; // -0.75 to 0.75 radians (~45 degrees each way)
+      const hindwingFlapAngle = Math.sin(butterfly.wingPhase - 0.2) * 0.7; // Slight delay for hindwings
 
       const size = butterfly.size;
 
-      // Wings
+      // Wing colors
       const wingColor = darkMode
         ? `hsl(${butterfly.hue}, 55%, 48%)`
         : `hsl(${butterfly.hue}, 75%, 62%)`;
       const wingColorDark = darkMode
         ? `hsl(${butterfly.hue}, 45%, 35%)`
         : `hsl(${butterfly.hue}, 65%, 45%)`;
+      const wingUnderside = darkMode
+        ? `hsl(${butterfly.hue}, 35%, 38%)`
+        : `hsl(${butterfly.hue}, 55%, 52%)`;
 
-      // Forewing (upper) - Left
+      // Calculate wing perspective based on flap angle
+      // When wings are up, we see more of the underside
+      const wingScaleY = Math.abs(Math.cos(flapAngle));
+      const hindwingScaleY = Math.abs(Math.cos(hindwingFlapAngle));
+      const showUnderside = flapAngle > 0;
+
+      // Left forewing
       ctx.save();
-      ctx.scale(1, Math.cos(wingFlap));
+      ctx.translate(-size * 0.08, 0);
+      ctx.transform(1, 0, 0, wingScaleY, 0, -flapAngle * size * 0.3);
       ctx.beginPath();
-      ctx.moveTo(-size * 0.08, 0);
+      ctx.moveTo(0, 0);
       ctx.bezierCurveTo(
-        -size * 0.4, -size * 0.3,
-        -size * 0.9, -size * 0.2,
-        -size * 0.85, size * 0.15
+        -size * 0.35, -size * 0.25,
+        -size * 0.85, -size * 0.15,
+        -size * 0.8, size * 0.1
       );
       ctx.bezierCurveTo(
+        -size * 0.5, size * 0.2,
+        -size * 0.15, size * 0.08,
+        0, 0
+      );
+      ctx.fillStyle = showUnderside ? wingUnderside : wingColor;
+      ctx.fill();
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Wing pattern (only visible on topside)
+      if (!showUnderside) {
+        if (butterfly.pattern === 0) {
+          ctx.beginPath();
+          ctx.arc(-size * 0.4, -size * 0.02, size * 0.12, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(-size * 0.58, size * 0.06, size * 0.08, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.fill();
+        } else if (butterfly.pattern === 1) {
+          ctx.beginPath();
+          ctx.arc(-size * 0.45, 0, size * 0.1, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      // Left hindwing
+      ctx.save();
+      ctx.translate(-size * 0.08, size * 0.1);
+      ctx.transform(1, 0, 0, hindwingScaleY, 0, -hindwingFlapAngle * size * 0.25);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(
+        -size * 0.3, size * 0.05,
         -size * 0.5, size * 0.25,
-        -size * 0.2, size * 0.1,
-        -size * 0.08, 0
+        -size * 0.35, size * 0.4
       );
-      ctx.fillStyle = wingColor;
+      ctx.bezierCurveTo(
+        -size * 0.15, size * 0.35,
+        -size * 0.05, size * 0.18,
+        0, 0
+      );
+      ctx.fillStyle = showUnderside ? wingUnderside : wingColor;
       ctx.fill();
-      // Wing edge
       ctx.strokeStyle = wingColorDark;
       ctx.lineWidth = 1;
       ctx.stroke();
-      // Wing pattern
-      if (butterfly.pattern === 0) {
-        ctx.beginPath();
-        ctx.arc(-size * 0.45, -size * 0.05, size * 0.15, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(-size * 0.65, size * 0.08, size * 0.1, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fill();
-      } else if (butterfly.pattern === 1) {
-        ctx.beginPath();
-        ctx.arc(-size * 0.5, 0, size * 0.12, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
-        ctx.fill();
+      ctx.restore();
+
+      // Right forewing
+      ctx.save();
+      ctx.translate(size * 0.08, 0);
+      ctx.transform(1, 0, 0, wingScaleY, 0, -flapAngle * size * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(
+        size * 0.35, -size * 0.25,
+        size * 0.85, -size * 0.15,
+        size * 0.8, size * 0.1
+      );
+      ctx.bezierCurveTo(
+        size * 0.5, size * 0.2,
+        size * 0.15, size * 0.08,
+        0, 0
+      );
+      ctx.fillStyle = showUnderside ? wingUnderside : wingColor;
+      ctx.fill();
+      ctx.strokeStyle = wingColorDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (!showUnderside) {
+        if (butterfly.pattern === 0) {
+          ctx.beginPath();
+          ctx.arc(size * 0.4, -size * 0.02, size * 0.12, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(size * 0.58, size * 0.06, size * 0.08, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.fill();
+        } else if (butterfly.pattern === 1) {
+          ctx.beginPath();
+          ctx.arc(size * 0.45, 0, size * 0.1, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
+          ctx.fill();
+        }
       }
       ctx.restore();
 
-      // Hindwing (lower) - Left
+      // Right hindwing
       ctx.save();
-      ctx.scale(1, Math.cos(wingFlap * 0.9)); // Slightly different phase
+      ctx.translate(size * 0.08, size * 0.1);
+      ctx.transform(1, 0, 0, hindwingScaleY, 0, -hindwingFlapAngle * size * 0.25);
       ctx.beginPath();
-      ctx.moveTo(-size * 0.08, size * 0.1);
+      ctx.moveTo(0, 0);
       ctx.bezierCurveTo(
-        -size * 0.35, size * 0.15,
-        -size * 0.55, size * 0.4,
-        -size * 0.4, size * 0.55
-      );
-      ctx.bezierCurveTo(
-        -size * 0.2, size * 0.5,
-        -size * 0.1, size * 0.3,
-        -size * 0.08, size * 0.1
-      );
-      ctx.fillStyle = wingColor;
-      ctx.fill();
-      ctx.strokeStyle = wingColorDark;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-
-      // Forewing (upper) - Right
-      ctx.save();
-      ctx.scale(1, Math.cos(wingFlap));
-      ctx.beginPath();
-      ctx.moveTo(size * 0.08, 0);
-      ctx.bezierCurveTo(
-        size * 0.4, -size * 0.3,
-        size * 0.9, -size * 0.2,
-        size * 0.85, size * 0.15
-      );
-      ctx.bezierCurveTo(
+        size * 0.3, size * 0.05,
         size * 0.5, size * 0.25,
-        size * 0.2, size * 0.1,
-        size * 0.08, 0
-      );
-      ctx.fillStyle = wingColor;
-      ctx.fill();
-      ctx.strokeStyle = wingColorDark;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      if (butterfly.pattern === 0) {
-        ctx.beginPath();
-        ctx.arc(size * 0.45, -size * 0.05, size * 0.15, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(size * 0.65, size * 0.08, size * 0.1, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fill();
-      } else if (butterfly.pattern === 1) {
-        ctx.beginPath();
-        ctx.arc(size * 0.5, 0, size * 0.12, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${(butterfly.hue + 180) % 360}, 60%, 50%, 0.5)`;
-        ctx.fill();
-      }
-      ctx.restore();
-
-      // Hindwing (lower) - Right
-      ctx.save();
-      ctx.scale(1, Math.cos(wingFlap * 0.9));
-      ctx.beginPath();
-      ctx.moveTo(size * 0.08, size * 0.1);
-      ctx.bezierCurveTo(
-        size * 0.35, size * 0.15,
-        size * 0.55, size * 0.4,
-        size * 0.4, size * 0.55
+        size * 0.35, size * 0.4
       );
       ctx.bezierCurveTo(
-        size * 0.2, size * 0.5,
-        size * 0.1, size * 0.3,
-        size * 0.08, size * 0.1
+        size * 0.15, size * 0.35,
+        size * 0.05, size * 0.18,
+        0, 0
       );
-      ctx.fillStyle = wingColor;
+      ctx.fillStyle = showUnderside ? wingUnderside : wingColor;
       ctx.fill();
       ctx.strokeStyle = wingColorDark;
       ctx.lineWidth = 1;

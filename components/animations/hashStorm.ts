@@ -1,7 +1,7 @@
 /**
  * Hash Storm Animation
- * Cryptographic characters swirling like a data tornado.
- * Hexadecimal characters and hash fragments spinning in a vortex.
+ * Cryptographic characters radiating outward from a central core.
+ * Hexadecimal characters expand and fade as they travel outward.
  */
 
 import { useEffect, useRef } from 'react';
@@ -12,23 +12,11 @@ interface HashChar {
   char: string;
   angle: number;
   radius: number;
-  targetRadius: number;
   speed: number;
-  verticalSpeed: number;
-  opacity: number;
+  angularSpeed: number;
   size: number;
   rotation: number;
   rotationSpeed: number;
-  layer: number;
-}
-
-interface DataStream {
-  chars: string;
-  x: number;
-  y: number;
-  targetY: number;
-  opacity: number;
-  speed: number;
 }
 
 export function useHashStorm(
@@ -38,10 +26,10 @@ export function useHashStorm(
   active: boolean
 ): void {
   const charsRef = useRef<HashChar[]>([]);
-  const streamsRef = useRef<DataStream[]>([]);
   const animationRef = useRef<number>(0);
   const timeRef = useRef<number>(0);
   const centerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const maxRadiusRef = useRef<number>(0);
 
   useEffect(() => {
     if (!active) return;
@@ -58,30 +46,29 @@ export function useHashStorm(
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      // Center positioned to the right side of the screen
       centerRef.current = {
-        x: canvas.width / 2,
+        x: canvas.width * 0.75,
         y: canvas.height / 2,
       };
+      // Max radius is the distance to the corners
+      maxRadiusRef.current = Math.sqrt(
+        Math.pow(canvas.width / 2, 2) + Math.pow(canvas.height / 2, 2)
+      ) * 1.2;
       initializeChars();
     };
 
     const initializeChars = () => {
       charsRef.current = [];
-      streamsRef.current = [];
-
-      const charCount = Math.floor((canvas.width * canvas.height) / 8000);
-
+      // Start with characters at various radii
+      const charCount = Math.floor((canvas.width * canvas.height) / 6000);
       for (let i = 0; i < charCount; i++) {
-        charsRef.current.push(createChar(true));
+        charsRef.current.push(createChar(Math.random() * maxRadiusRef.current * 0.8));
       }
     };
 
-    const createChar = (randomPosition = false): HashChar => {
+    const createChar = (startRadius = 0): HashChar => {
       const angle = Math.random() * Math.PI * 2;
-      const maxRadius = Math.min(canvas.width, canvas.height) * 0.45;
-      const radius = randomPosition
-        ? Math.random() * maxRadius
-        : maxRadius + 50;
 
       // Mix of hex chars and occasional hash-related strings
       let char: string;
@@ -92,63 +79,48 @@ export function useHashStorm(
       }
 
       return {
-        x: centerRef.current.x + Math.cos(angle) * radius,
-        y: centerRef.current.y + Math.sin(angle) * radius,
+        x: centerRef.current.x,
+        y: centerRef.current.y,
         char,
         angle,
-        radius,
-        targetRadius: 20 + Math.random() * (maxRadius - 40),
-        speed: 0.01 + Math.random() * 0.02,
-        verticalSpeed: (Math.random() - 0.5) * 0.5,
-        opacity: 0.3 + Math.random() * 0.5,
+        radius: startRadius,
+        speed: 0.3 + Math.random() * 0.5, // Outward speed
+        angularSpeed: (Math.random() - 0.5) * 0.01, // Slight spiral
         size: 10 + Math.random() * 14,
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.05,
-        layer: Math.random(),
+        rotationSpeed: (Math.random() - 0.5) * 0.03,
       };
     };
 
-    const createStream = (): DataStream => {
-      const hashLength = 8 + Math.floor(Math.random() * 16);
-      let chars = '';
-      for (let i = 0; i < hashLength; i++) {
-        chars += hexChars[Math.floor(Math.random() * hexChars.length)];
-      }
+    const drawChar = (hashChar: HashChar, opacityMult: number) => {
+      const maxRadius = maxRadiusRef.current;
+      // Fade out as it goes further from center
+      const distanceRatio = hashChar.radius / maxRadius;
+      const alpha = Math.max(0, (1 - distanceRatio) * 0.8) * opacityMult;
 
-      return {
-        chars,
-        x: Math.random() * canvas.width,
-        y: -20,
-        targetY: canvas.height + 20,
-        opacity: 0.2 + Math.random() * 0.3,
-        speed: 2 + Math.random() * 4,
-      };
-    };
+      if (alpha <= 0) return;
 
-    const drawChar = (hashChar: HashChar, opacityMult: number, time: number) => {
       ctx.save();
       ctx.translate(hashChar.x, hashChar.y);
       ctx.rotate(hashChar.rotation);
 
-      const alpha = hashChar.opacity * opacityMult;
+      // Glow effect for chars closer to center
+      const glowIntensity = Math.max(0, 1 - distanceRatio * 1.5);
 
-      // Glow effect for closer chars (smaller radius)
-      const maxRadius = Math.min(canvas.width, canvas.height) * 0.45;
-      const glowIntensity = 1 - (hashChar.radius / maxRadius);
-
-      if (glowIntensity > 0.3) {
+      if (glowIntensity > 0.2) {
         const glowColor = darkMode
-          ? `rgba(0, 255, 150, ${alpha * glowIntensity * 0.5})`
-          : `rgba(0, 200, 100, ${alpha * glowIntensity * 0.5})`;
+          ? `rgba(0, 255, 150, ${alpha * glowIntensity * 0.6})`
+          : `rgba(0, 200, 100, ${alpha * glowIntensity * 0.6})`;
 
         ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 10 * glowIntensity;
+        ctx.shadowBlur = 15 * glowIntensity;
       }
 
-      // Character color based on depth
+      // Character color - brighter near center
+      const brightness = 1 - distanceRatio * 0.5;
       const baseColor = darkMode
-        ? { r: 0, g: 200 + Math.floor(55 * glowIntensity), b: 100 + Math.floor(100 * glowIntensity) }
-        : { r: 0, g: 150 + Math.floor(50 * glowIntensity), b: 80 + Math.floor(70 * glowIntensity) };
+        ? { r: 0, g: Math.floor(180 + 75 * brightness), b: Math.floor(80 + 120 * brightness) }
+        : { r: 0, g: Math.floor(120 + 80 * brightness), b: Math.floor(60 + 90 * brightness) };
 
       ctx.fillStyle = `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${alpha})`;
       ctx.font = `${hashChar.size}px monospace`;
@@ -159,66 +131,43 @@ export function useHashStorm(
       ctx.restore();
     };
 
-    const drawStream = (stream: DataStream, opacityMult: number) => {
-      const alpha = stream.opacity * opacityMult;
-      const charSpacing = 14;
-
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-
-      for (let i = 0; i < stream.chars.length; i++) {
-        const charY = stream.y + i * charSpacing;
-        const fadeStart = stream.y;
-        const fadeEnd = stream.y + stream.chars.length * charSpacing;
-        const charAlpha = alpha * (1 - Math.abs((charY - (fadeStart + fadeEnd) / 2) / ((fadeEnd - fadeStart) / 2)));
-
-        const color = darkMode
-          ? `rgba(0, 255, 150, ${Math.max(0, charAlpha)})`
-          : `rgba(0, 200, 100, ${Math.max(0, charAlpha)})`;
-
-        ctx.fillStyle = color;
-        ctx.fillText(stream.chars[i], stream.x, charY);
-      }
-    };
-
-    const drawVortexCore = (opacityMult: number, time: number) => {
+    const drawCore = (opacityMult: number, time: number) => {
       const cx = centerRef.current.x;
       const cy = centerRef.current.y;
-      const coreRadius = 30;
+      const coreRadius = 40;
 
       // Pulsing core
-      const pulse = Math.sin(time * 0.005) * 0.2 + 0.8;
+      const pulse = Math.sin(time * 0.004) * 0.15 + 0.85;
 
-      // Core glow
-      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius * 3 * pulse);
+      // Core glow - larger radius
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius * 4 * pulse);
       const coreColor = darkMode
         ? { r: 0, g: 255, b: 150 }
         : { r: 0, g: 200, b: 100 };
 
-      gradient.addColorStop(0, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.8 * opacityMult})`);
-      gradient.addColorStop(0.3, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.4 * opacityMult})`);
-      gradient.addColorStop(0.7, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.1 * opacityMult})`);
+      gradient.addColorStop(0, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.9 * opacityMult})`);
+      gradient.addColorStop(0.2, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.5 * opacityMult})`);
+      gradient.addColorStop(0.5, `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.15 * opacityMult})`);
       gradient.addColorStop(1, 'rgba(0, 255, 150, 0)');
 
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreRadius * 3 * pulse, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreRadius * 4 * pulse, 0, Math.PI * 2);
       ctx.fill();
 
-      // Inner core
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * opacityMult})`;
+      // Inner bright core
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.95 * opacityMult})`;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreRadius * 0.3 * pulse, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreRadius * 0.25 * pulse, 0, Math.PI * 2);
       ctx.fill();
 
       // Rotating hash ring
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(time * 0.002);
+      ctx.rotate(time * 0.0015);
 
-      const ringText = 'SHA256';
-      ctx.font = '10px monospace';
-      ctx.fillStyle = `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.6 * opacityMult})`;
+      const ringText = 'SHA256•BTC•HASH•';
+      ctx.font = '11px monospace';
 
       for (let i = 0; i < ringText.length; i++) {
         const charAngle = (i / ringText.length) * Math.PI * 2;
@@ -228,6 +177,7 @@ export function useHashStorm(
         ctx.save();
         ctx.translate(charX, charY);
         ctx.rotate(charAngle + Math.PI / 2);
+        ctx.fillStyle = `rgba(${coreColor.r}, ${coreColor.g}, ${coreColor.b}, ${0.7 * opacityMult})`;
         ctx.fillText(ringText[i], 0, 0);
         ctx.restore();
       }
@@ -242,61 +192,37 @@ export function useHashStorm(
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const opacityMult = opacity / 50;
 
-      // Occasionally add data streams
-      if (Math.random() < 0.03) {
-        streamsRef.current.push(createStream());
+      // Spawn new characters from center
+      if (Math.random() < 0.15) {
+        charsRef.current.push(createChar(20 + Math.random() * 30));
       }
 
-      // Draw and update streams (background layer)
-      streamsRef.current = streamsRef.current.filter((stream) => {
-        stream.y += stream.speed;
+      // Update and draw characters
+      charsRef.current = charsRef.current.filter((hashChar) => {
+        // Move outward
+        hashChar.radius += hashChar.speed;
 
-        if (stream.y > canvas.height + 100) return false;
-
-        drawStream(stream, opacityMult);
-        return true;
-      });
-
-      // Sort chars by layer for depth effect
-      charsRef.current.sort((a, b) => a.layer - b.layer);
-
-      // Update and draw swirling characters
-      charsRef.current.forEach((hashChar, index) => {
-        // Spiral inward
-        hashChar.radius += (hashChar.targetRadius - hashChar.radius) * 0.01;
-
-        // When reaching target, set new target or reset
-        if (Math.abs(hashChar.radius - hashChar.targetRadius) < 5) {
-          if (hashChar.targetRadius < 50) {
-            // Reset to outer edge
-            charsRef.current[index] = createChar(false);
-            return;
-          } else {
-            // Move closer to center
-            hashChar.targetRadius = Math.max(20, hashChar.targetRadius - 30 - Math.random() * 50);
-          }
-        }
-
-        // Rotate around center - faster when closer
-        const speedMultiplier = 1 + (1 - hashChar.radius / (Math.min(canvas.width, canvas.height) * 0.45)) * 2;
-        hashChar.angle += hashChar.speed * speedMultiplier;
+        // Slight spiral
+        hashChar.angle += hashChar.angularSpeed;
 
         // Calculate position
         hashChar.x = centerRef.current.x + Math.cos(hashChar.angle) * hashChar.radius;
-        hashChar.y = centerRef.current.y + Math.sin(hashChar.angle) * hashChar.radius + hashChar.verticalSpeed;
+        hashChar.y = centerRef.current.y + Math.sin(hashChar.angle) * hashChar.radius;
 
         // Self rotation
         hashChar.rotation += hashChar.rotationSpeed;
 
-        // Brightness increases toward center
-        const maxRadius = Math.min(canvas.width, canvas.height) * 0.45;
-        hashChar.opacity = 0.3 + (1 - hashChar.radius / maxRadius) * 0.5;
+        // Remove if too far out
+        if (hashChar.radius > maxRadiusRef.current) {
+          return false;
+        }
 
-        drawChar(hashChar, opacityMult, time);
+        drawChar(hashChar, opacityMult);
+        return true;
       });
 
-      // Draw vortex core on top
-      drawVortexCore(opacityMult, time);
+      // Draw core on top
+      drawCore(opacityMult, time);
 
       animationRef.current = requestAnimationFrame(animate);
     };

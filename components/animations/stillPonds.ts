@@ -43,11 +43,14 @@ interface KoiFish {
   targetY: number;
   size: number;
   speed: number;
+  baseSpeed: number;
   angle: number;
   targetAngle: number;
+  angularVelocity: number; // Current turning rate (momentum)
   tailPhase: number;
+  tailAmplitude: number; // Dynamic amplitude based on swimming
   bodyPhase: number; // For body wave animation
-  turnSpeed: number;
+  maxTurnRate: number; // Maximum turning speed (varies by fish)
   color: 'orange' | 'white' | 'gold' | 'red';
   pattern: 'solid' | 'spotted' | 'calico';
   spots: Spot[];
@@ -152,18 +155,22 @@ export function useStillPonds(
         const size = 80 + Math.random() * 60; // 2x bigger koi fish
         const pattern = ['solid', 'spotted', 'calico'][Math.floor(Math.random() * 3)] as KoiFish['pattern'];
         const angle = Math.random() * Math.PI * 2;
+        const baseSpeed = 0.3 + Math.random() * 0.25;
         koiFish.push({
           x: startX,
           y: Math.random() * height,
           targetX: getRandomSidePosition(width),
           targetY: Math.random() * height,
           size,
-          speed: 0.2 + Math.random() * 0.2,
+          speed: baseSpeed,
+          baseSpeed,
           angle,
           targetAngle: angle,
+          angularVelocity: 0,
           tailPhase: Math.random() * Math.PI * 2,
+          tailAmplitude: 1.0,
           bodyPhase: Math.random() * Math.PI * 2,
-          turnSpeed: 0.008 + Math.random() * 0.015,
+          maxTurnRate: 0.012 + Math.random() * 0.008, // Gentle max turn rate
           color: ['orange', 'white', 'gold', 'red'][Math.floor(Math.random() * 4)] as KoiFish['color'],
           pattern,
           spots: generateSpots(size, pattern),
@@ -313,8 +320,6 @@ export function useStillPonds(
       ctx.globalAlpha = 0.5 + fish.depth * 0.5;
 
       const size = fish.size;
-      // Body wave for natural swimming motion
-      const bodyWave = Math.sin(fish.bodyPhase) * 2;
 
       let bodyColor: string, spotColor: string;
       switch (fish.color) {
@@ -336,31 +341,35 @@ export function useStillPonds(
           break;
       }
 
-      // Shadow (offset for overhead view - sleeker shape)
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.1 * fish.depth})`;
+      // Shadow (tapered teardrop shape for overhead view)
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.08 * fish.depth})`;
       ctx.beginPath();
-      ctx.ellipse(3, 3, size * 0.6, size * 0.16, 0, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.55 + 3, 3);
+      ctx.bezierCurveTo(size * 0.25 + 3, -size * 0.14 + 3, -size * 0.2 + 3, -size * 0.08 + 3, -size * 0.45 + 3, 3);
+      ctx.bezierCurveTo(-size * 0.2 + 3, size * 0.08 + 3, size * 0.25 + 3, size * 0.14 + 3, size * 0.55 + 3, 3);
       ctx.fill();
 
-      // Tail fin (matching koi shadows style - flowing bezier with wave animation)
-      const tailWave = Math.sin(fish.tailPhase) * size * 0.15;
-      const tailWave2 = Math.sin(fish.tailPhase + 0.5) * size * 0.1;
+      // Propagating wave - phase increases toward tail (wave travels head to tail)
+      // Each segment has progressively delayed phase, amplitude increases toward tail
+      const wavePhase = fish.bodyPhase;
+      const amp = fish.tailAmplitude;
 
-      ctx.beginPath();
-      ctx.moveTo(-size * 0.5, 0);
-      ctx.bezierCurveTo(-size * 0.7, -size * 0.05 + tailWave * 0.3, -size * 0.9, tailWave * 0.6, -size * 1.1, tailWave + tailWave2 * 0.5);
-      ctx.bezierCurveTo(-size * 1.15, tailWave * 0.5, -size * 1.15, -tailWave * 0.5, -size * 1.1, -tailWave - tailWave2 * 0.5);
-      ctx.bezierCurveTo(-size * 0.9, -tailWave * 0.6, -size * 0.7, size * 0.05 - tailWave * 0.3, -size * 0.5, 0);
-      ctx.closePath();
+      // Calculate wave at different body positions (phase delay + amplitude increase)
+      // Positions: 0 = head, 1 = tail base
+      const waveAt = (pos: number) => {
+        const phaseDelay = pos * 1.2; // Wave propagates with delay
+        const ampScale = pos * pos; // Amplitude increases quadratically toward tail
+        return Math.sin(wavePhase - phaseDelay) * 4 * amp * ampScale;
+      };
 
-      const tailGradient = ctx.createLinearGradient(-size * 0.5, 0, -size * 1.1, 0);
-      tailGradient.addColorStop(0, bodyColor);
-      tailGradient.addColorStop(0.5, bodyColor);
-      tailGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = tailGradient;
-      ctx.fill();
+      // Body wave at key points along the fish
+      const wave20 = waveAt(0.2);  // Front body
+      const wave40 = waveAt(0.4);  // Mid-front
+      const wave60 = waveAt(0.6);  // Mid-back
+      const wave80 = waveAt(0.8);  // Rear body
+      const wave100 = waveAt(1.0); // Tail base
 
-      // Body (overhead - sleeker, longer shape with body wave for natural swimming)
+      // Main body - wave applied with propagating phase
       const bodyGradient = ctx.createRadialGradient(
         size * 0.1, 0, 0,
         0, 0, size * 0.65
@@ -371,29 +380,90 @@ export function useStillPonds(
 
       ctx.fillStyle = bodyGradient;
       ctx.beginPath();
-      // Head to tail with body wave undulation - sleeker proportions
+      // Head (pointed snout)
       ctx.moveTo(size * 0.55, 0);
-      ctx.bezierCurveTo(size * 0.45, -size * 0.14 + bodyWave * 0.15, size * 0.15, -size * 0.18 + bodyWave * 0.3, -size * 0.15, -size * 0.14 + bodyWave * 0.45);
-      ctx.bezierCurveTo(-size * 0.4, -size * 0.08 + bodyWave * 0.6, -size * 0.58, bodyWave * 0.8, -size * 0.6, 0);
-      ctx.bezierCurveTo(-size * 0.58, -bodyWave * 0.8, -size * 0.4, size * 0.08 - bodyWave * 0.6, -size * 0.15, size * 0.14 - bodyWave * 0.45);
-      ctx.bezierCurveTo(size * 0.15, size * 0.18 - bodyWave * 0.3, size * 0.45, size * 0.14 - bodyWave * 0.15, size * 0.55, 0);
+      // Upper body contour - widest at front, tapering toward tail
+      ctx.bezierCurveTo(
+        size * 0.45, -size * 0.10 + wave20 * 0.3,   // Head curves out
+        size * 0.25, -size * 0.16 + wave20,         // Widest point (front body)
+        size * 0.0, -size * 0.14 + wave40           // Still wide at mid-front
+      );
+      ctx.bezierCurveTo(
+        -size * 0.2, -size * 0.11 + wave60,         // Starting to taper
+        -size * 0.35, -size * 0.06 + wave80,        // Noticeably narrower
+        -size * 0.48, -size * 0.025 + wave100       // Narrow caudal peduncle
+      );
+      // Caudal peduncle (narrow tail stalk)
+      ctx.lineTo(-size * 0.48, size * 0.025 + wave100);
+      // Lower body contour (mirror) - tapering from tail to widest point
+      ctx.bezierCurveTo(
+        -size * 0.35, size * 0.06 + wave80,         // Narrower rear
+        -size * 0.2, size * 0.11 + wave60,          // Widening
+        size * 0.0, size * 0.14 + wave40            // Wide mid-front
+      );
+      ctx.bezierCurveTo(
+        size * 0.25, size * 0.16 + wave20,          // Widest point
+        size * 0.45, size * 0.10 + wave20 * 0.3,    // Head curves in
+        size * 0.55, 0                               // Back to snout
+      );
       ctx.closePath();
       ctx.fill();
 
-      // Dorsal stripe (darker line down center of back)
-      ctx.strokeStyle = `rgba(0, 0, 0, 0.15)`;
-      ctx.lineWidth = size * 0.06;
+      // Tail fin - overhead view: thin forked shape, not fanned out
+      // The tail is like two thin lobes that angle slightly outward
+      const tailWave = waveAt(1.15); // Continue the wave into the tail
+      const tailTip = waveAt(1.4);   // Tail tip has most displacement
+      const tailSpread = size * 0.04; // Very slight spread from overhead
+
       ctx.beginPath();
-      ctx.moveTo(size * 0.35, 0);
-      ctx.lineTo(-size * 0.3, 0);
+      // Start from tail base (where body ends)
+      ctx.moveTo(-size * 0.48, wave100);
+
+      // Upper lobe of tail - thin line with slight curve
+      ctx.quadraticCurveTo(
+        -size * 0.7, tailWave - tailSpread * 0.5,
+        -size * 0.9, tailTip - tailSpread
+      );
+      // Tail tip curves slightly
+      ctx.quadraticCurveTo(
+        -size * 0.95, tailTip,
+        -size * 0.9, tailTip + tailSpread
+      );
+      // Lower lobe back to base
+      ctx.quadraticCurveTo(
+        -size * 0.7, tailWave + tailSpread * 0.5,
+        -size * 0.48, wave100
+      );
+      ctx.closePath();
+
+      const tailGradient = ctx.createLinearGradient(-size * 0.48, 0, -size * 0.9, 0);
+      tailGradient.addColorStop(0, bodyColor);
+      tailGradient.addColorStop(0.6, bodyColor);
+      tailGradient.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+      ctx.fillStyle = tailGradient;
+      ctx.fill();
+
+      // Dorsal stripe (darker line down center, follows propagating wave)
+      ctx.strokeStyle = `rgba(0, 0, 0, 0.12)`;
+      ctx.lineWidth = size * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(size * 0.35, wave20 * 0.5);
+      ctx.bezierCurveTo(
+        size * 0.1, wave40,
+        -size * 0.15, wave60,
+        -size * 0.35, wave80
+      );
       ctx.stroke();
 
-      // Pre-generated spots (no flickering) - positioned within body
+      // Pre-generated spots - follow propagating wave based on position
       if (fish.spots.length > 0) {
         ctx.fillStyle = spotColor;
         fish.spots.forEach(spot => {
+          // Calculate position ratio (0 at head, 1 at tail base)
+          const positionRatio = Math.max(0, Math.min(1, (size * 0.3 - spot.x) / (size * 0.8)));
+          const spotWaveOffset = waveAt(positionRatio);
           ctx.beginPath();
-          ctx.arc(spot.x, spot.y, spot.size, 0, Math.PI * 2);
+          ctx.arc(spot.x, spot.y + spotWaveOffset, spot.size, 0, Math.PI * 2);
           ctx.fill();
         });
       }
@@ -519,49 +589,49 @@ export function useStillPonds(
       ctx.lineTo(-size * 0.08, hindWingLength);
       ctx.stroke();
 
-      // Body - long thin abdomen extending backward
-      const bodyGradient = ctx.createLinearGradient(-size * 1.0, 0, size * 0.25, 0);
+      // Body - long abdomen extending backward
+      const bodyGradient = ctx.createLinearGradient(-size * 1.4, 0, size * 0.3, 0);
       bodyGradient.addColorStop(0, dragonfly.color);
-      bodyGradient.addColorStop(0.8, dragonfly.color);
+      bodyGradient.addColorStop(0.85, dragonfly.color);
       bodyGradient.addColorStop(1, '#000000');
       ctx.fillStyle = bodyGradient;
 
-      // Abdomen - long thin tail (8 segments tapering)
-      for (let i = 0; i < 8; i++) {
-        const segX = -size * 0.12 - i * size * 0.11;
-        const segRadius = size * 0.035 * (1 - i * 0.08);
+      // Abdomen - longer, thicker tail (10 segments, more gradual taper)
+      for (let i = 0; i < 10; i++) {
+        const segX = -size * 0.15 - i * size * 0.13;
+        const segRadius = size * 0.055 * (1 - i * 0.06);
         ctx.beginPath();
-        ctx.arc(segX, 0, Math.max(segRadius, size * 0.015), 0, Math.PI * 2);
+        ctx.arc(segX, 0, Math.max(segRadius, size * 0.022), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Thorax (compact middle section where wings attach)
+      // Thorax (larger middle section where wings attach)
       ctx.fillStyle = dragonfly.color;
       ctx.beginPath();
-      ctx.ellipse(0, 0, size * 0.1, size * 0.08, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, size * 0.14, size * 0.11, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Head - large with prominent compound eyes
       ctx.beginPath();
-      ctx.arc(size * 0.15, 0, size * 0.07, 0, Math.PI * 2);
+      ctx.arc(size * 0.2, 0, size * 0.09, 0, Math.PI * 2);
       ctx.fill();
 
-      // Compound eyes (large, prominent from overhead)
+      // Compound eyes (large, prominent from overhead - adjusted for larger head)
       ctx.fillStyle = darkMode ? 'rgba(40, 60, 70, 0.9)' : 'rgba(30, 50, 60, 0.9)';
       ctx.beginPath();
-      ctx.ellipse(size * 0.18, -size * 0.05, size * 0.05, size * 0.04, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.24, -size * 0.06, size * 0.06, size * 0.05, -0.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(size * 0.18, size * 0.05, size * 0.05, size * 0.04, 0.2, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.24, size * 0.06, size * 0.06, size * 0.05, 0.2, 0, Math.PI * 2);
       ctx.fill();
 
       // Eye highlights
       ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.beginPath();
-      ctx.arc(size * 0.2, -size * 0.06, size * 0.015, 0, Math.PI * 2);
+      ctx.arc(size * 0.27, -size * 0.07, size * 0.018, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(size * 0.2, size * 0.04, size * 0.015, 0, Math.PI * 2);
+      ctx.arc(size * 0.27, size * 0.05, size * 0.018, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
@@ -579,31 +649,61 @@ export function useStillPonds(
     };
 
     const updateFish = (fish: KoiFish) => {
-      // Animate body and tail phases
-      fish.tailPhase += 0.06;
-      fish.bodyPhase += 0.03;
-
       const dx = fish.targetX - fish.x;
       const dy = fish.targetY - fish.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < 30) {
+      // Pick new target when close enough
+      if (dist < 50) {
         fish.targetX = getRandomSidePosition(canvas.width);
         fish.targetY = Math.random() * canvas.height;
       }
 
-      // Update target angle toward destination
+      // Calculate desired angle toward target
       fish.targetAngle = Math.atan2(dy, dx);
 
-      // Smooth angle transition using turnSpeed (like koiShadows)
-      const angleDiff = fish.targetAngle - fish.angle;
-      const normalizedDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-      fish.angle += normalizedDiff * fish.turnSpeed;
+      // Calculate angle difference (normalized to -PI to PI)
+      const angleDiff = Math.atan2(
+        Math.sin(fish.targetAngle - fish.angle),
+        Math.cos(fish.targetAngle - fish.angle)
+      );
 
-      // Move in direction of current angle with slight speed variation based on body phase
-      const speedVar = 1 + Math.sin(fish.bodyPhase * 0.5) * 0.1;
-      fish.x += Math.cos(fish.angle) * fish.speed * speedVar;
-      fish.y += Math.sin(fish.angle) * fish.speed * speedVar;
+      // Apply gradual angular acceleration (momentum-based turning)
+      // Instead of snapping, we accelerate the angular velocity toward the needed turn
+      const angularAcceleration = 0.0008; // How quickly turn rate changes
+      const targetAngularVelocity = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff) * 0.02, fish.maxTurnRate);
+
+      // Smoothly interpolate angular velocity (creates inertia)
+      fish.angularVelocity += (targetAngularVelocity - fish.angularVelocity) * angularAcceleration * 60;
+
+      // Clamp angular velocity to max turn rate
+      fish.angularVelocity = Math.max(-fish.maxTurnRate, Math.min(fish.maxTurnRate, fish.angularVelocity));
+
+      // Apply angular velocity to angle
+      fish.angle += fish.angularVelocity;
+
+      // Calculate how much the fish is currently turning (for tail animation)
+      const turnIntensity = Math.abs(fish.angularVelocity) / fish.maxTurnRate;
+
+      // Tail beat speed increases with swimming speed, amplitude increases when turning
+      const tailSpeed = 0.08 + fish.speed * 0.15;
+      fish.tailPhase += tailSpeed;
+
+      // Tail amplitude: base + extra when turning (fish sweep tail harder to turn)
+      fish.tailAmplitude = 0.8 + turnIntensity * 0.6;
+
+      // Body wave follows tail but slightly slower
+      fish.bodyPhase += tailSpeed * 0.7;
+
+      // Speed varies slightly with tail beat (fish pulse forward with each stroke)
+      const speedPulse = 1 + Math.sin(fish.tailPhase * 2) * 0.08;
+      // Slow down slightly when turning sharply (more realistic)
+      const turnSlowdown = 1 - turnIntensity * 0.3;
+      fish.speed = fish.baseSpeed * speedPulse * turnSlowdown;
+
+      // Move in direction of current angle
+      fish.x += Math.cos(fish.angle) * fish.speed;
+      fish.y += Math.sin(fish.angle) * fish.speed;
     };
 
     const updateDragonfly = (df: Dragonfly) => {

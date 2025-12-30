@@ -164,6 +164,9 @@ export function useSunsetSailing(
     };
 
     const drawSun = () => {
+      // Only draw sun in dark mode
+      if (!darkMode) return;
+
       const sunX = canvas.width * 0.7;
       const sunY = canvas.height * 0.35;
       const sunRadius = 40;
@@ -172,14 +175,8 @@ export function useSunsetSailing(
       ctx.beginPath();
       ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
       const sunGradient = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius);
-      if (darkMode) {
-        sunGradient.addColorStop(0, '#d4c4b4');
-        sunGradient.addColorStop(1, '#a49484');
-      } else {
-        sunGradient.addColorStop(0, '#fff9c4');
-        sunGradient.addColorStop(0.5, '#ffeb3b');
-        sunGradient.addColorStop(1, '#ff9800');
-      }
+      sunGradient.addColorStop(0, '#d4c4b4');
+      sunGradient.addColorStop(1, '#a49484');
       ctx.fillStyle = sunGradient;
       ctx.fill();
     };
@@ -221,24 +218,21 @@ export function useSunsetSailing(
       ctx.fillStyle = waterGradient;
       ctx.fillRect(0, height * 0.5, width, height * 0.5);
 
-      // Sun reflection
-      const reflectionX = width * 0.7;
-      const reflectionGradient = ctx.createLinearGradient(reflectionX, height * 0.5, reflectionX, height);
+      // Sun reflection - only in dark mode (sun is only drawn in dark mode)
       if (darkMode) {
+        const reflectionX = width * 0.7;
+        const reflectionGradient = ctx.createLinearGradient(reflectionX, height * 0.5, reflectionX, height);
         reflectionGradient.addColorStop(0, 'rgba(200, 180, 160, 0.3)');
         reflectionGradient.addColorStop(1, 'rgba(200, 180, 160, 0.05)');
-      } else {
-        reflectionGradient.addColorStop(0, 'rgba(255, 200, 100, 0.5)');
-        reflectionGradient.addColorStop(1, 'rgba(255, 200, 100, 0.1)');
+        ctx.fillStyle = reflectionGradient;
+        ctx.beginPath();
+        ctx.moveTo(reflectionX - 30, height * 0.5);
+        ctx.lineTo(reflectionX + 30, height * 0.5);
+        ctx.lineTo(reflectionX + 80, height);
+        ctx.lineTo(reflectionX - 80, height);
+        ctx.closePath();
+        ctx.fill();
       }
-      ctx.fillStyle = reflectionGradient;
-      ctx.beginPath();
-      ctx.moveTo(reflectionX - 30, height * 0.5);
-      ctx.lineTo(reflectionX + 30, height * 0.5);
-      ctx.lineTo(reflectionX + 80, height);
-      ctx.lineTo(reflectionX - 80, height);
-      ctx.closePath();
-      ctx.fill();
 
       // Wave highlights
       wavesRef.current.forEach((wave) => {

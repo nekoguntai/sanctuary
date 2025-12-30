@@ -55,9 +55,6 @@ import {
   useSatoshiSymbol,
   useFireworks,
   // New animations
-  useSpringRain,
-  useLightningNetwork,
-  useMempoolFlow,
   useHashStorm,
   useIceCrystals,
   useAutumnWind,
@@ -123,9 +120,6 @@ export const ANIMATED_PATTERNS = [
   'satoshi-symbol',
   'fireworks',
   // New animations
-  'spring-rain',
-  'lightning-network',
-  'mempool-flow',
   'hash-storm',
   'ice-crystals',
   'autumn-wind',
@@ -199,9 +193,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useSatoshiSymbol(canvasRef, darkMode, opacity, pattern === 'satoshi-symbol');
   useFireworks(canvasRef, darkMode, opacity, pattern === 'fireworks');
   // New animations
-  useSpringRain(canvasRef, darkMode, opacity, pattern === 'spring-rain');
-  useLightningNetwork(canvasRef, darkMode, opacity, pattern === 'lightning-network');
-  useMempoolFlow(canvasRef, darkMode, opacity, pattern === 'mempool-flow');
   useHashStorm(canvasRef, darkMode, opacity, pattern === 'hash-storm');
   useIceCrystals(canvasRef, darkMode, opacity, pattern === 'ice-crystals');
   useAutumnWind(canvasRef, darkMode, opacity, pattern === 'autumn-wind');

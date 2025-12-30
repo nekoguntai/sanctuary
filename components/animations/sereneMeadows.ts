@@ -169,7 +169,7 @@ export function useSereneMeadows(
       mistRef.current = Array.from({ length: 4 }, (_, i) => ({
         y: canvas.height * (0.4 + i * 0.12),
         speed: 0.05 + Math.random() * 0.08,
-        opacity: 0.03 + Math.random() * 0.03,
+        opacity: 0.08 + Math.random() * 0.06,
         waveAmplitude: 15 + Math.random() * 20,
         waveFrequency: 0.001 + Math.random() * 0.001,
         phase: Math.random() * Math.PI * 2,
@@ -205,7 +205,7 @@ export function useSereneMeadows(
         y: canvas.height * (0.08 + Math.random() * 0.15),
         width: 80 + Math.random() * 120,
         speed: 0.05 + Math.random() * 0.1,
-        opacity: 0.04 + Math.random() * 0.04,
+        opacity: 0.12 + Math.random() * 0.08,
       }));
     };
 
@@ -222,8 +222,8 @@ export function useSereneMeadows(
 
     const drawSky = (opacityMult: number) => {
       const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
-      gradient.addColorStop(0, `rgba(${skyGradient.top[0]}, ${skyGradient.top[1]}, ${skyGradient.top[2]}, ${0.15 * opacityMult})`);
-      gradient.addColorStop(1, `rgba(${skyGradient.bottom[0]}, ${skyGradient.bottom[1]}, ${skyGradient.bottom[2]}, ${0.08 * opacityMult})`);
+      gradient.addColorStop(0, `rgba(${skyGradient.top[0]}, ${skyGradient.top[1]}, ${skyGradient.top[2]}, ${0.3 * opacityMult})`);
+      gradient.addColorStop(1, `rgba(${skyGradient.bottom[0]}, ${skyGradient.bottom[1]}, ${skyGradient.bottom[2]}, ${0.2 * opacityMult})`);
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
 
@@ -232,8 +232,8 @@ export function useSereneMeadows(
       const sunY = canvas.height * 0.15;
       const sunGradient = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 150);
       const glowColor = darkMode ? [200, 190, 160] : [255, 240, 200];
-      sunGradient.addColorStop(0, `rgba(${glowColor[0]}, ${glowColor[1]}, ${glowColor[2]}, ${0.08 * opacityMult})`);
-      sunGradient.addColorStop(0.5, `rgba(${glowColor[0]}, ${glowColor[1]}, ${glowColor[2]}, ${0.03 * opacityMult})`);
+      sunGradient.addColorStop(0, `rgba(${glowColor[0]}, ${glowColor[1]}, ${glowColor[2]}, ${0.2 * opacityMult})`);
+      sunGradient.addColorStop(0.5, `rgba(${glowColor[0]}, ${glowColor[1]}, ${glowColor[2]}, ${0.08 * opacityMult})`);
       sunGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = sunGradient;
       ctx.beginPath();
@@ -280,7 +280,7 @@ export function useSereneMeadows(
       ctx.beginPath();
       ctx.moveTo(-bird.size, Math.sin(wingAngle) * bird.size * 0.5);
       ctx.quadraticCurveTo(0, -bird.size * 0.2, bird.size, Math.sin(wingAngle) * bird.size * 0.5);
-      ctx.strokeStyle = `rgba(${birdColor[0]}, ${birdColor[1]}, ${birdColor[2]}, ${0.15 * opacityMult})`;
+      ctx.strokeStyle = `rgba(${birdColor[0]}, ${birdColor[1]}, ${birdColor[2]}, ${0.35 * opacityMult})`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -308,9 +308,9 @@ export function useSereneMeadows(
 
       // Gradient fill for depth
       const gradient = ctx.createLinearGradient(0, hill.baseY - hill.amplitude, 0, canvas.height);
-      gradient.addColorStop(0, `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.12 * opacityMult})`);
-      gradient.addColorStop(0.5, `rgba(${colors[0] - 5}, ${colors[1] - 5}, ${colors[2] - 5}, ${0.1 * opacityMult})`);
-      gradient.addColorStop(1, `rgba(${colors[0] - 10}, ${colors[1] - 10}, ${colors[2] - 10}, ${0.08 * opacityMult})`);
+      gradient.addColorStop(0, `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.3 * opacityMult})`);
+      gradient.addColorStop(0.5, `rgba(${colors[0] - 5}, ${colors[1] - 5}, ${colors[2] - 5}, ${0.25 * opacityMult})`);
+      gradient.addColorStop(1, `rgba(${colors[0] - 10}, ${colors[1] - 10}, ${colors[2] - 10}, ${0.2 * opacityMult})`);
       ctx.fillStyle = gradient;
       ctx.fill();
 
@@ -329,7 +329,7 @@ export function useSereneMeadows(
           // Round deciduous tree
           ctx.beginPath();
           ctx.arc(0, -tree.size * 0.6, tree.size * 0.5, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.15 * opacityMult})`;
+          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.35 * opacityMult})`;
           ctx.fill();
 
           // Trunk
@@ -341,13 +341,13 @@ export function useSereneMeadows(
           ctx.lineTo(-tree.size * 0.4, 0);
           ctx.lineTo(tree.size * 0.4, 0);
           ctx.closePath();
-          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.15 * opacityMult})`;
+          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.35 * opacityMult})`;
           ctx.fill();
         } else {
           // Willow tree
           ctx.beginPath();
           ctx.arc(0, -tree.size * 0.4, tree.size * 0.35, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.12 * opacityMult})`;
+          ctx.fillStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.3 * opacityMult})`;
           ctx.fill();
 
           // Drooping branches
@@ -362,7 +362,7 @@ export function useSereneMeadows(
               Math.cos(angle) * tree.size * 0.4 + branchSway,
               tree.size * 0.3
             );
-            ctx.strokeStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.1 * opacityMult})`;
+            ctx.strokeStyle = `rgba(${treeColor[0]}, ${treeColor[1]}, ${treeColor[2]}, ${0.25 * opacityMult})`;
             ctx.lineWidth = 2;
             ctx.stroke();
           }
@@ -406,7 +406,7 @@ export function useSereneMeadows(
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.quadraticCurveTo(sway * 0.5, -flower.size * 1.5, 0, -flower.size * 3);
-      ctx.strokeStyle = `rgba(${stemColor[0]}, ${stemColor[1]}, ${stemColor[2]}, ${0.12 * opacityMult})`;
+      ctx.strokeStyle = `rgba(${stemColor[0]}, ${stemColor[1]}, ${stemColor[2]}, ${0.3 * opacityMult})`;
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -420,14 +420,14 @@ export function useSereneMeadows(
           ctx.rotate((i / 6) * Math.PI * 2);
           ctx.beginPath();
           ctx.ellipse(0, -flower.size * 0.6, flower.size * 0.25, flower.size * 0.5, 0, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.15 * opacityMult})`;
+          ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.35 * opacityMult})`;
           ctx.fill();
           ctx.restore();
         }
         // Center
         ctx.beginPath();
         ctx.arc(0, 0, flower.size * 0.3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 220, 100, ${0.15 * opacityMult})`;
+        ctx.fillStyle = `rgba(255, 220, 100, ${0.4 * opacityMult})`;
         ctx.fill();
       } else if (flower.type === 'tulip') {
         // Tulip shape
@@ -435,14 +435,14 @@ export function useSereneMeadows(
         ctx.moveTo(0, -flower.size);
         ctx.bezierCurveTo(-flower.size * 0.5, -flower.size * 0.5, -flower.size * 0.4, 0, 0, flower.size * 0.2);
         ctx.bezierCurveTo(flower.size * 0.4, 0, flower.size * 0.5, -flower.size * 0.5, 0, -flower.size);
-        ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.15 * opacityMult})`;
+        ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.35 * opacityMult})`;
         ctx.fill();
       } else {
         // Lavender - multiple small dots
         for (let i = 0; i < 5; i++) {
           ctx.beginPath();
           ctx.arc(0, -i * flower.size * 0.4, flower.size * 0.2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.12 * opacityMult})`;
+          ctx.fillStyle = `rgba(${colors[0]}, ${colors[1]}, ${colors[2]}, ${0.3 * opacityMult})`;
           ctx.fill();
         }
       }

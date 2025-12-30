@@ -331,26 +331,7 @@ export const globalPatterns: BackgroundPattern[] = [
     description: 'Colorful fireworks bursting in the night sky',
     animated: true,
   },
-  // Spring/Weather themed
-  {
-    id: 'spring-rain',
-    name: 'Spring Rain',
-    description: 'Gentle rainfall with occasional rainbow glimpses',
-    animated: true,
-  },
   // Bitcoin themed
-  {
-    id: 'lightning-network',
-    name: 'Lightning Network',
-    description: 'Electric bolts connecting nodes in the payment network',
-    animated: true,
-  },
-  {
-    id: 'mempool-flow',
-    name: 'Mempool Flow',
-    description: 'Transactions flowing like water through channels',
-    animated: true,
-  },
   {
     id: 'hash-storm',
     name: 'Hash Storm',

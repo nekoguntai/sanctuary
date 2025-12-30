@@ -14,12 +14,14 @@ interface Leaf {
   size: number;
   rotation: number;
   rotationSpeed: number;
-  type: 'maple' | 'oak' | 'round';
+  type: 'maple' | 'oak' | 'ginkgo' | 'elm';
   color: { r: number; g: number; b: number };
+  colorVariation: number; // Random color shift
   opacity: number;
   tumble: number;
   tumbleSpeed: number;
   windInfluence: number;
+  curlAmount: number; // Slight curl for realism
 }
 
 interface WindGust {
@@ -88,7 +90,7 @@ export function useAutumnWind(
     };
 
     const createLeaf = (randomPos = false): Leaf => {
-      const types: ('maple' | 'oak' | 'round')[] = ['maple', 'oak', 'round'];
+      const types: ('maple' | 'oak' | 'ginkgo' | 'elm')[] = ['maple', 'oak', 'ginkgo', 'elm'];
       const type = types[Math.floor(Math.random() * types.length)];
       const color = autumnColors[Math.floor(Math.random() * autumnColors.length)];
 
@@ -97,28 +99,30 @@ export function useAutumnWind(
         y: randomPos ? Math.random() * canvas.height : Math.random() * canvas.height * 0.5,
         vx: 0.5 + Math.random() * 1,
         vy: 0.2 + Math.random() * 0.5,
-        size: 12 + Math.random() * 18,
+        size: 14 + Math.random() * 16,
         rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.08,
+        rotationSpeed: (Math.random() - 0.5) * 0.06,
         type,
         color,
-        opacity: 0.6 + Math.random() * 0.3,
+        colorVariation: (Math.random() - 0.5) * 30,
+        opacity: 0.7 + Math.random() * 0.25,
         tumble: Math.random() * Math.PI * 2,
-        tumbleSpeed: 0.03 + Math.random() * 0.05,
+        tumbleSpeed: 0.02 + Math.random() * 0.04,
         windInfluence: 0.5 + Math.random() * 0.5,
+        curlAmount: Math.random() * 0.3,
       };
     };
 
     const createGust = (): WindGust => {
       const particles: WindParticle[] = [];
-      const particleCount = 20 + Math.floor(Math.random() * 30);
+      const particleCount = 12 + Math.floor(Math.random() * 15);
 
       for (let i = 0; i < particleCount; i++) {
         particles.push({
           x: Math.random(),
           y: Math.random(),
-          opacity: 0.1 + Math.random() * 0.2,
-          size: 2 + Math.random() * 3,
+          opacity: 0.03 + Math.random() * 0.06,
+          size: 1.5 + Math.random() * 2,
         });
       }
 
@@ -127,69 +131,138 @@ export function useAutumnWind(
         y: Math.random() * canvas.height,
         width: 300 + Math.random() * 200,
         height: 100 + Math.random() * 150,
-        angle: (Math.random() - 0.5) * 0.3,
-        strength: 3 + Math.random() * 4,
+        angle: (Math.random() - 0.5) * 0.2,
+        strength: 2 + Math.random() * 3,
         lifetime: 0,
         maxLifetime: 200 + Math.random() * 100,
         particles,
       };
     };
 
-    const drawMapleLeaf = (ctx: CanvasRenderingContext2D, size: number) => {
+    const drawMapleLeaf = (ctx: CanvasRenderingContext2D, size: number, curl: number) => {
       const s = size * 0.5;
+      const c = 1 - curl * 0.3; // Slight asymmetry from curl
 
       ctx.beginPath();
-      ctx.moveTo(0, -s * 1.2);
+      ctx.moveTo(0, -s * 1.3);
 
-      // Right side lobes
-      ctx.quadraticCurveTo(s * 0.3, -s * 0.9, s * 0.8, -s * 0.8);
-      ctx.quadraticCurveTo(s * 0.5, -s * 0.5, s * 1.1, -s * 0.2);
-      ctx.quadraticCurveTo(s * 0.6, -s * 0.1, s * 0.9, s * 0.4);
-      ctx.quadraticCurveTo(s * 0.4, s * 0.3, s * 0.5, s * 0.8);
-      ctx.quadraticCurveTo(s * 0.2, s * 0.5, 0, s * 1.0);
+      // Right side - 5 pointed lobes with serrations
+      // Top right lobe
+      ctx.lineTo(s * 0.15, -s * 1.1);
+      ctx.lineTo(s * 0.7 * c, -s * 1.0);
+      ctx.lineTo(s * 0.5 * c, -s * 0.75);
+      // Upper right lobe
+      ctx.lineTo(s * 1.0 * c, -s * 0.5);
+      ctx.lineTo(s * 0.65 * c, -s * 0.35);
+      // Middle right lobe
+      ctx.lineTo(s * 0.85 * c, s * 0.1);
+      ctx.lineTo(s * 0.5 * c, s * 0.15);
+      // Lower right lobe
+      ctx.lineTo(s * 0.55 * c, s * 0.6);
+      ctx.lineTo(s * 0.25 * c, s * 0.5);
+      // Stem connection
+      ctx.lineTo(s * 0.08, s * 0.7);
+      ctx.lineTo(0, s * 1.1);
 
-      // Left side lobes (mirror)
-      ctx.quadraticCurveTo(-s * 0.2, s * 0.5, -s * 0.5, s * 0.8);
-      ctx.quadraticCurveTo(-s * 0.4, s * 0.3, -s * 0.9, s * 0.4);
-      ctx.quadraticCurveTo(-s * 0.6, -s * 0.1, -s * 1.1, -s * 0.2);
-      ctx.quadraticCurveTo(-s * 0.5, -s * 0.5, -s * 0.8, -s * 0.8);
-      ctx.quadraticCurveTo(-s * 0.3, -s * 0.9, 0, -s * 1.2);
+      // Left side - mirror with slight variation
+      ctx.lineTo(-s * 0.08, s * 0.7);
+      ctx.lineTo(-s * 0.25, s * 0.5);
+      ctx.lineTo(-s * 0.55, s * 0.6);
+      ctx.lineTo(-s * 0.5, s * 0.15);
+      ctx.lineTo(-s * 0.85, s * 0.1);
+      ctx.lineTo(-s * 0.65, -s * 0.35);
+      ctx.lineTo(-s * 1.0, -s * 0.5);
+      ctx.lineTo(-s * 0.5, -s * 0.75);
+      ctx.lineTo(-s * 0.7, -s * 1.0);
+      ctx.lineTo(-s * 0.15, -s * 1.1);
 
       ctx.closePath();
     };
 
-    const drawOakLeaf = (ctx: CanvasRenderingContext2D, size: number) => {
+    const drawOakLeaf = (ctx: CanvasRenderingContext2D, size: number, curl: number) => {
+      const s = size * 0.5;
+
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 1.0);
+
+      // Right side - rounded lobes characteristic of oak
+      ctx.quadraticCurveTo(s * 0.2, -s * 0.9, s * 0.35, -s * 0.75);
+      ctx.quadraticCurveTo(s * 0.55, -s * 0.8, s * 0.6, -s * 0.55);
+      ctx.quadraticCurveTo(s * 0.45, -s * 0.5, s * 0.35, -s * 0.4);
+      ctx.quadraticCurveTo(s * 0.55, -s * 0.35, s * 0.65, -s * 0.1);
+      ctx.quadraticCurveTo(s * 0.5, -s * 0.05, s * 0.4, s * 0.05);
+      ctx.quadraticCurveTo(s * 0.6, s * 0.15, s * 0.6, s * 0.35);
+      ctx.quadraticCurveTo(s * 0.45, s * 0.4, s * 0.3, s * 0.45);
+      ctx.quadraticCurveTo(s * 0.4, s * 0.6, s * 0.35, s * 0.75);
+      ctx.quadraticCurveTo(s * 0.2, s * 0.7, s * 0.1, s * 0.8);
+      ctx.lineTo(0, s * 1.1);
+
+      // Left side - mirror
+      ctx.lineTo(-s * 0.1, s * 0.8);
+      ctx.quadraticCurveTo(-s * 0.2, s * 0.7, -s * 0.35, s * 0.75);
+      ctx.quadraticCurveTo(-s * 0.4, s * 0.6, -s * 0.3, s * 0.45);
+      ctx.quadraticCurveTo(-s * 0.45, s * 0.4, -s * 0.6, s * 0.35);
+      ctx.quadraticCurveTo(-s * 0.6, s * 0.15, -s * 0.4, s * 0.05);
+      ctx.quadraticCurveTo(-s * 0.5, -s * 0.05, -s * 0.65, -s * 0.1);
+      ctx.quadraticCurveTo(-s * 0.55, -s * 0.35, -s * 0.35, -s * 0.4);
+      ctx.quadraticCurveTo(-s * 0.45, -s * 0.5, -s * 0.6, -s * 0.55);
+      ctx.quadraticCurveTo(-s * 0.55, -s * 0.8, -s * 0.35, -s * 0.75);
+      ctx.quadraticCurveTo(-s * 0.2, -s * 0.9, 0, -s * 1.0);
+
+      ctx.closePath();
+    };
+
+    const drawGinkgoLeaf = (ctx: CanvasRenderingContext2D, size: number, curl: number) => {
+      const s = size * 0.5;
+
+      ctx.beginPath();
+      // Fan-shaped ginkgo leaf with notch
+      ctx.moveTo(0, s * 1.0);
+      // Right edge - gentle curve outward
+      ctx.quadraticCurveTo(s * 0.15, s * 0.3, s * 0.8, -s * 0.5);
+      // Wavy top edge with central notch
+      ctx.quadraticCurveTo(s * 0.9, -s * 0.7, s * 0.6, -s * 0.85);
+      ctx.quadraticCurveTo(s * 0.3, -s * 0.95, s * 0.1, -s * 0.8);
+      // Central notch
+      ctx.lineTo(0, -s * 0.6);
+      ctx.lineTo(-s * 0.1, -s * 0.8);
+      ctx.quadraticCurveTo(-s * 0.3, -s * 0.95, -s * 0.6, -s * 0.85);
+      ctx.quadraticCurveTo(-s * 0.9, -s * 0.7, -s * 0.8, -s * 0.5);
+      // Left edge
+      ctx.quadraticCurveTo(-s * 0.15, s * 0.3, 0, s * 1.0);
+
+      ctx.closePath();
+    };
+
+    const drawElmLeaf = (ctx: CanvasRenderingContext2D, size: number, curl: number) => {
       const s = size * 0.5;
 
       ctx.beginPath();
       ctx.moveTo(0, -s * 1.1);
 
-      // Right side with rounded lobes
-      for (let i = 0; i < 4; i++) {
-        const y = -s * 0.9 + (i * s * 0.5);
-        const x = s * (0.5 + Math.sin(i * 0.8) * 0.3);
-        ctx.quadraticCurveTo(x + s * 0.2, y + s * 0.1, x, y + s * 0.25);
-        ctx.quadraticCurveTo(x - s * 0.1, y + s * 0.35, s * 0.3, y + s * 0.45);
+      // Asymmetric elm leaf with serrated edges
+      // Right side with small serrations
+      const serrationsRight = 6;
+      for (let i = 0; i < serrationsRight; i++) {
+        const t = i / serrationsRight;
+        const y = -s * 1.0 + t * s * 1.8;
+        const baseWidth = Math.sin(t * Math.PI) * s * 0.7;
+        const serration = (i % 2 === 0 ? 0.08 : 0) * s;
+        ctx.lineTo(baseWidth + serration, y);
+      }
+      ctx.lineTo(s * 0.05, s * 0.9);
+      ctx.lineTo(0, s * 1.1);
+
+      // Left side
+      ctx.lineTo(-s * 0.05, s * 0.9);
+      for (let i = serrationsRight - 1; i >= 0; i--) {
+        const t = i / serrationsRight;
+        const y = -s * 1.0 + t * s * 1.8;
+        const baseWidth = Math.sin(t * Math.PI) * s * 0.65;
+        const serration = (i % 2 === 0 ? 0.08 : 0) * s;
+        ctx.lineTo(-(baseWidth + serration), y);
       }
 
-      ctx.lineTo(0, s * 1.0);
-
-      // Left side (mirror)
-      for (let i = 3; i >= 0; i--) {
-        const y = -s * 0.9 + (i * s * 0.5);
-        const x = -s * (0.5 + Math.sin(i * 0.8) * 0.3);
-        ctx.quadraticCurveTo(-s * 0.3, y + s * 0.45, x + s * 0.1, y + s * 0.35);
-        ctx.quadraticCurveTo(x, y + s * 0.25, x - s * 0.2, y + s * 0.1);
-      }
-
-      ctx.closePath();
-    };
-
-    const drawRoundLeaf = (ctx: CanvasRenderingContext2D, size: number) => {
-      const s = size * 0.5;
-
-      ctx.beginPath();
-      ctx.ellipse(0, 0, s * 0.7, s * 1.0, 0, 0, Math.PI * 2);
       ctx.closePath();
     };
 
@@ -200,83 +273,111 @@ export function useAutumnWind(
 
       // 3D tumble effect
       const tumbleFactor = Math.cos(leaf.tumble);
-      ctx.scale(0.3 + Math.abs(tumbleFactor) * 0.7, 1);
+      ctx.scale(0.4 + Math.abs(tumbleFactor) * 0.6, 1);
 
       const alpha = leaf.opacity * opacityMult;
+      const v = leaf.colorVariation;
       const { r, g, b } = leaf.color;
 
       // Draw leaf shape based on type
       switch (leaf.type) {
         case 'maple':
-          drawMapleLeaf(ctx, leaf.size);
+          drawMapleLeaf(ctx, leaf.size, leaf.curlAmount);
           break;
         case 'oak':
-          drawOakLeaf(ctx, leaf.size);
+          drawOakLeaf(ctx, leaf.size, leaf.curlAmount);
           break;
-        case 'round':
-          drawRoundLeaf(ctx, leaf.size);
+        case 'ginkgo':
+          drawGinkgoLeaf(ctx, leaf.size, leaf.curlAmount);
+          break;
+        case 'elm':
+          drawElmLeaf(ctx, leaf.size, leaf.curlAmount);
           break;
       }
 
-      // Fill with gradient
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, leaf.size);
-      gradient.addColorStop(0, `rgba(${r + 30}, ${g + 30}, ${b + 20}, ${alpha})`);
-      gradient.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, ${alpha})`);
-      gradient.addColorStop(1, `rgba(${r - 30}, ${g - 30}, ${b - 20}, ${alpha * 0.8})`);
+      // Fill with natural gradient - variation adds uniqueness
+      const gradient = ctx.createLinearGradient(0, -leaf.size * 0.5, 0, leaf.size * 0.5);
+      gradient.addColorStop(0, `rgba(${Math.min(255, r + 20 + v)}, ${Math.min(255, g + 15 + v * 0.5)}, ${Math.min(255, b + 10)}, ${alpha})`);
+      gradient.addColorStop(0.5, `rgba(${r + v * 0.3}, ${g + v * 0.2}, ${b}, ${alpha})`);
+      gradient.addColorStop(1, `rgba(${Math.max(0, r - 25 + v * 0.2)}, ${Math.max(0, g - 20)}, ${Math.max(0, b - 15)}, ${alpha * 0.9})`);
 
       ctx.fillStyle = gradient;
       ctx.fill();
 
-      // Central vein
-      ctx.strokeStyle = `rgba(${r - 60}, ${g - 50}, ${b - 30}, ${alpha * 0.4})`;
+      // Subtle edge highlight
+      ctx.strokeStyle = `rgba(${Math.min(255, r + 40)}, ${Math.min(255, g + 30)}, ${Math.min(255, b + 20)}, ${alpha * 0.2})`;
       ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(0, -leaf.size * 0.4);
-      ctx.lineTo(0, leaf.size * 0.4);
       ctx.stroke();
+
+      // Central vein - more prominent
+      const veinColor = `rgba(${Math.max(0, r - 50)}, ${Math.max(0, g - 40)}, ${Math.max(0, b - 25)}, ${alpha * 0.5})`;
+      ctx.strokeStyle = veinColor;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(0, -leaf.size * 0.45);
+      ctx.lineTo(0, leaf.size * 0.5);
+      ctx.stroke();
+
+      // Secondary veins for maple and oak
+      if (leaf.type === 'maple' || leaf.type === 'oak') {
+        ctx.lineWidth = 0.4;
+        ctx.strokeStyle = `rgba(${Math.max(0, r - 40)}, ${Math.max(0, g - 30)}, ${Math.max(0, b - 20)}, ${alpha * 0.3})`;
+        // Left veins
+        ctx.beginPath();
+        ctx.moveTo(0, -leaf.size * 0.2);
+        ctx.lineTo(-leaf.size * 0.3, -leaf.size * 0.35);
+        ctx.moveTo(0, leaf.size * 0.1);
+        ctx.lineTo(-leaf.size * 0.25, leaf.size * 0.25);
+        // Right veins
+        ctx.moveTo(0, -leaf.size * 0.2);
+        ctx.lineTo(leaf.size * 0.3, -leaf.size * 0.35);
+        ctx.moveTo(0, leaf.size * 0.1);
+        ctx.lineTo(leaf.size * 0.25, leaf.size * 0.25);
+        ctx.stroke();
+      }
 
       ctx.restore();
     };
 
     const drawGust = (gust: WindGust, opacityMult: number) => {
       const progress = gust.lifetime / gust.maxLifetime;
-      const fadeIn = Math.min(1, progress * 5);
-      const fadeOut = Math.max(0, 1 - (progress - 0.7) * 3.33);
+      const fadeIn = Math.min(1, progress * 6);
+      const fadeOut = Math.max(0, 1 - (progress - 0.75) * 4);
       const gustOpacity = fadeIn * fadeOut;
 
       ctx.save();
       ctx.translate(gust.x, gust.y);
       ctx.rotate(gust.angle);
 
-      // Draw wind particles
+      // Draw subtle wind particles - very faint
       gust.particles.forEach((particle) => {
         const px = particle.x * gust.width;
         const py = (particle.y - 0.5) * gust.height;
-        const alpha = particle.opacity * gustOpacity * opacityMult;
+        const alpha = particle.opacity * gustOpacity * opacityMult * 0.5;
 
         const windColor = darkMode
-          ? `rgba(200, 200, 220, ${alpha})`
-          : `rgba(180, 180, 200, ${alpha})`;
+          ? `rgba(180, 180, 195, ${alpha})`
+          : `rgba(160, 160, 175, ${alpha})`;
 
         ctx.fillStyle = windColor;
         ctx.beginPath();
-        ctx.ellipse(px, py, particle.size * 3, particle.size, 0, 0, Math.PI * 2);
+        ctx.ellipse(px, py, particle.size * 2.5, particle.size * 0.6, 0, 0, Math.PI * 2);
         ctx.fill();
       });
 
-      // Wind streak lines
+      // Very subtle wind streak lines
       ctx.strokeStyle = darkMode
-        ? `rgba(200, 200, 220, ${gustOpacity * 0.1 * opacityMult})`
-        : `rgba(180, 180, 200, ${gustOpacity * 0.1 * opacityMult})`;
-      ctx.lineWidth = 1;
+        ? `rgba(180, 180, 195, ${gustOpacity * 0.04 * opacityMult})`
+        : `rgba(160, 160, 175, ${gustOpacity * 0.04 * opacityMult})`;
+      ctx.lineWidth = 0.5;
 
-      for (let i = 0; i < 5; i++) {
-        const y = (i / 4 - 0.5) * gust.height * 0.8;
+      for (let i = 0; i < 3; i++) {
+        const y = (i / 2 - 0.5) * gust.height * 0.6;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.bezierCurveTo(
-          gust.width * 0.3, y + 10,
-          gust.width * 0.6, y - 10,
+          gust.width * 0.3, y + 6,
+          gust.width * 0.6, y - 6,
           gust.width, y
         );
         ctx.stroke();

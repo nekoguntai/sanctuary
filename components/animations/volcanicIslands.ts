@@ -66,20 +66,15 @@ export function useVolcanicIslands(
     if (!ctx) return;
 
     const resizeCanvas = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    const width = canvas.getBoundingClientRect().width;
-    const height = canvas.getBoundingClientRect().height;
+    const width = canvas.width;
+    const height = canvas.height;
     const horizonY = height * 0.55;
     const volcanoX = width * 0.7;
     const volcanoY = horizonY - height * 0.15;
@@ -220,8 +215,8 @@ export function useVolcanicIslands(
     };
 
     const animate = () => {
-      const currentWidth = canvas.getBoundingClientRect().width;
-      const currentHeight = canvas.getBoundingClientRect().height;
+      const currentWidth = canvas.width;
+      const currentHeight = canvas.height;
       ctx.clearRect(0, 0, currentWidth, currentHeight);
       timeRef.current += 0.016;
       glowPulseRef.current += 0.02;

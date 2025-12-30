@@ -70,20 +70,15 @@ export function usePaperBoats(
     if (!ctx) return;
 
     const resizeCanvas = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     };
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    const width = canvas.getBoundingClientRect().width;
-    const height = canvas.getBoundingClientRect().height;
+    const width = canvas.width;
+    const height = canvas.height;
 
     // Boat colors (pastel)
     const boatColors = darkMode
@@ -217,8 +212,8 @@ export function usePaperBoats(
     };
 
     const animate = () => {
-      const currentWidth = canvas.getBoundingClientRect().width;
-      const currentHeight = canvas.getBoundingClientRect().height;
+      const currentWidth = canvas.width;
+      const currentHeight = canvas.height;
       ctx.clearRect(0, 0, currentWidth, currentHeight);
       timeRef.current += 0.016;
 

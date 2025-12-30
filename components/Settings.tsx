@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCurrency, FiatCurrency } from '../contexts/CurrencyContext';
 import { useUser } from '../contexts/UserContext';
-import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers } from 'lucide-react';
+import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, Minus, Server, Send, Eye, EyeOff, RefreshCw, AlertCircle, ExternalLink, Volume2, Contrast, Layers, Sparkles, Shield, Bitcoin, Circle, Binary, Network, Flower2, Snowflake, Box, Calendar, Sun, Leaf, CloudSnow } from 'lucide-react';
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
@@ -503,23 +503,31 @@ const NotificationSoundSettings: React.FC = () => {
   );
 };
 
-export const Settings: React.FC = () => {
-  const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders, refreshPrice, priceLoading, lastPriceUpdate, btcPrice, currencySymbol } = useCurrency();
+// Tab type definition
+type SettingsTab = 'appearance' | 'display' | 'services' | 'notifications';
+
+// Tab configuration
+const SETTINGS_TABS: { id: SettingsTab; name: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: 'appearance', name: 'Appearance', icon: Palette },
+  { id: 'display', name: 'Display', icon: Monitor },
+  { id: 'services', name: 'Services', icon: Globe },
+  { id: 'notifications', name: 'Notifications', icon: Volume2 },
+];
+
+// Appearance Tab Content
+const AppearanceTab: React.FC = () => {
   const { user, updatePreferences } = useUser();
 
-  // Theme Helpers
   const currentTheme = user?.preferences?.theme || 'sanctuary';
   const currentBg = user?.preferences?.background || 'zen';
   const isDark = user?.preferences?.darkMode || false;
 
-  // Load themes dynamically from theme registry
   const themes = themeRegistry.getAllMetadata().map(theme => ({
     id: theme.id as ThemeOption,
     name: theme.name,
     color: theme.preview?.primaryColor || '#7d7870'
   }));
 
-  // Icon mapping for background patterns
   const bgIconMap: Record<string, any> = {
     minimal: Minus,
     zen: ImageIcon,
@@ -529,301 +537,470 @@ export const Settings: React.FC = () => {
     lines: Minus,
     circuit: Server,
     topography: Globe,
+    'sakura-petals': Flower2,
+    'floating-shields': Shield,
+    'bitcoin-particles': Bitcoin,
+    'stacking-blocks': Box,
+    'digital-rain': Binary,
+    'constellation': Network,
+    'sanctuary-logo': SanctuaryLogo,
+    'snowfall': Snowflake,
   };
 
-  // Load background patterns dynamically from theme registry
-  const backgrounds = themeRegistry.getAllPatterns(currentTheme).map(pattern => ({
-    id: pattern.id as BackgroundOption,
-    name: pattern.name,
-    icon: bgIconMap[pattern.id] || ImageIcon
-  }));
+  // Season icons for the time-based section
+  const seasonIcons: Record<string, any> = {
+    spring: Flower2,
+    summer: Sun,
+    fall: Leaf,
+    winter: CloudSnow,
+  };
+
+  const currentSeason = themeRegistry.getCurrentSeason();
+  const seasonalBackground = themeRegistry.getSeasonalBackground();
+
+  const allPatterns = themeRegistry.getAllPatterns(currentTheme);
+
+  const staticBackgrounds = allPatterns
+    .filter(pattern => !pattern.animated)
+    .map(pattern => ({
+      id: pattern.id as BackgroundOption,
+      name: pattern.name,
+      icon: bgIconMap[pattern.id] || ImageIcon
+    }));
+
+  const animatedBackgrounds = allPatterns
+    .filter(pattern => pattern.animated)
+    .map(pattern => ({
+      id: pattern.id as BackgroundOption,
+      name: pattern.name,
+      icon: bgIconMap[pattern.id] || Sparkles
+    }));
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-fade-in pb-12">
-      <div>
-        <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">System Settings</h2>
-        <p className="text-sanctuary-500">Customize your Sanctuary experience</p>
-      </div>
-
-      {/* Visual Customization */}
+    <div className="space-y-6">
+      {/* Color Theme */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <div className="flex items-center space-x-3">
-             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-               <Palette className="w-5 h-5" />
-             </div>
-             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Personalization</h3>
-          </div>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Color Theme</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Choose a color scheme for your wallet</p>
         </div>
-        
-        <div className="p-6 space-y-6">
-           {/* Color Theme */}
-           <div>
-              <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3 block">Color Theme</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                 {themes.map(theme => (
-                    <button
-                       key={theme.id}
-                       onClick={() => updatePreferences({ theme: theme.id })}
-                       className={`relative p-3 rounded-xl border flex items-center justify-center space-x-2 transition-all ${currentTheme === theme.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'}`}
-                    >
-                       <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.color }}></div>
-                       <span className="text-sm font-medium dark:text-sanctuary-200">{theme.name}</span>
-                       {currentTheme === theme.id && <div className="absolute top-1 right-1 w-2 h-2 bg-primary-600 rounded-full"></div>}
-                    </button>
-                 ))}
-              </div>
-           </div>
-
-           {/* Background Pattern */}
-           <div>
-              <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3 block">Background Pattern</label>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                 {backgrounds.map(bg => (
-                    <button
-                       key={bg.id}
-                       onClick={() => updatePreferences({ background: bg.id })}
-                       className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all h-20 ${currentBg === bg.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'}`}
-                    >
-                       <bg.icon className={`w-5 h-5 mb-2 ${currentBg === bg.id ? 'text-primary-600 dark:text-primary-400' : 'text-sanctuary-400'}`} />
-                       <span className={`text-[10px] font-medium ${currentBg === bg.id ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-500'}`}>{bg.name}</span>
-                    </button>
-                 ))}
-              </div>
-           </div>
-
-           {/* Dark Mode Toggle */}
-           <div className="flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
-              <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Dark Mode</span>
+        <div className="p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {themes.map(theme => (
               <button
-                onClick={() => updatePreferences({ darkMode: !isDark })}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${isDark ? 'bg-primary-600' : 'bg-sanctuary-300'}`}
+                key={theme.id}
+                onClick={() => updatePreferences({ theme: theme.id })}
+                className={`relative p-3 rounded-xl border flex items-center justify-center space-x-2 transition-all ${currentTheme === theme.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'}`}
               >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`} />
+                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.color }}></div>
+                <span className="text-sm font-medium dark:text-sanctuary-200">{theme.name}</span>
+                {currentTheme === theme.id && <div className="absolute top-1 right-1 w-2 h-2 bg-primary-600 rounded-full"></div>}
               </button>
-           </div>
-
-           {/* Background Contrast Slider */}
-           <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
-              <div className="flex items-center justify-between mb-3">
-                 <div className="flex items-center space-x-2">
-                    <Contrast className="w-4 h-4 text-sanctuary-500" />
-                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Contrast</span>
-                 </div>
-                 <span className="text-xs text-sanctuary-500">
-                    {(() => {
-                      const level = user?.preferences?.contrastLevel ?? 0;
-                      if (level === 0) return 'Default';
-                      if (level === -2) return 'Much lighter';
-                      if (level === -1) return 'Lighter';
-                      if (level === 1) return 'Darker';
-                      if (level === 2) return 'Much darker';
-                      return 'Default';
-                    })()}
-                 </span>
-              </div>
-              <div className="flex items-center space-x-3">
-                 <span className="text-xs text-sanctuary-400 w-14 text-right">Lower</span>
-                 <input
-                    type="range"
-                    min="-2"
-                    max="2"
-                    step="1"
-                    value={user?.preferences?.contrastLevel ?? 0}
-                    onChange={(e) => updatePreferences({ contrastLevel: parseInt(e.target.value, 10) })}
-                    className="flex-1 h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                 />
-                 <span className="text-xs text-sanctuary-400 w-14">Higher</span>
-              </div>
-              <p className="text-xs text-sanctuary-500 mt-2">
-                 Adjusts background brightness for better readability.
-                 {isDark ? ' Higher values create a deeper, darker background.' : ' Higher values create a brighter, lighter background.'}
-              </p>
-           </div>
-
-           {/* Pattern Visibility Slider */}
-           <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
-              <div className="flex items-center justify-between mb-3">
-                 <div className="flex items-center space-x-2">
-                    <Layers className="w-4 h-4 text-sanctuary-500" />
-                    <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Pattern Visibility</span>
-                 </div>
-                 <span className="text-xs text-sanctuary-500 font-mono">
-                    {(user?.preferences?.patternOpacity ?? 50) === 0
-                      ? 'Hidden'
-                      : (user?.preferences?.patternOpacity ?? 50) === 50
-                      ? 'Default'
-                      : `${user?.preferences?.patternOpacity ?? 50}%`}
-                 </span>
-              </div>
-              <div className="flex items-center space-x-3">
-                 <span className="text-xs text-sanctuary-400 w-14 text-right">Hidden</span>
-                 <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={user?.preferences?.patternOpacity ?? 50}
-                    onChange={(e) => updatePreferences({ patternOpacity: parseInt(e.target.value, 10) })}
-                    className="flex-1 h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                 />
-                 <span className="text-xs text-sanctuary-400 w-14">Visible</span>
-              </div>
-              <p className="text-xs text-sanctuary-500 mt-2">
-                 Controls how visible the background pattern is. Set to 0 to completely hide the pattern.
-              </p>
-           </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Display Settings */}
+      {/* Background Patterns */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <div className="flex items-center space-x-3">
-             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-               <Monitor className="w-5 h-5" />
-             </div>
-             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Display Preferences</h3>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Patterns</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Select a background pattern for your wallet</p>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* Static */}
+          <div>
+            <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3 block">Static Backgrounds</label>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {staticBackgrounds.map(bg => (
+                <button
+                  key={bg.id}
+                  onClick={() => updatePreferences({ background: bg.id })}
+                  className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all h-20 ${currentBg === bg.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'}`}
+                >
+                  <bg.icon className={`w-5 h-5 mb-2 ${currentBg === bg.id ? 'text-primary-600 dark:text-primary-400' : 'text-sanctuary-400'}`} />
+                  <span className={`text-[10px] font-medium ${currentBg === bg.id ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-500'}`}>{bg.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Animated */}
+          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center space-x-2 mb-3">
+              <Sparkles className="w-4 h-4 text-primary-500" />
+              <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Animated Backgrounds</label>
+            </div>
+            <p className="text-xs text-sanctuary-500 mb-3">Canvas-based animations that bring your wallet to life</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {animatedBackgrounds.map(bg => (
+                <button
+                  key={bg.id}
+                  onClick={() => updatePreferences({ background: bg.id })}
+                  className={`relative p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all h-20 ${currentBg === bg.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500 dark:ring-primary-400' : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'}`}
+                >
+                  <bg.icon className={`w-5 h-5 mb-2 ${currentBg === bg.id ? 'text-primary-600 dark:text-primary-400' : 'text-sanctuary-400'}`} />
+                  <span className={`text-[10px] font-medium ${currentBg === bg.id ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-500'}`}>{bg.name}</span>
+                  <span className="absolute top-1 right-1">
+                    <Sparkles className="w-3 h-3 text-primary-400" />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Time-Based / Seasonal */}
+          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Calendar className="w-4 h-4 text-primary-500" />
+                <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Seasonal Backgrounds</label>
+              </div>
+              {/* Toggle Switch */}
+              <button
+                onClick={() => {
+                  const isCurrentlySeasonal = currentBg === seasonalBackground;
+                  updatePreferences({
+                    background: (isCurrentlySeasonal ? 'minimal' : seasonalBackground) as BackgroundOption
+                  });
+                }}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  currentBg === seasonalBackground
+                    ? 'bg-primary-500'
+                    : 'bg-sanctuary-300 dark:bg-sanctuary-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    currentBg === seasonalBackground ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Current Season Display */}
+            <div className="flex items-center p-3 surface-secondary rounded-xl mb-4">
+              <div className="flex items-center space-x-3">
+                {(() => {
+                  const SeasonIcon = seasonIcons[currentSeason];
+                  return <SeasonIcon className="w-5 h-5 text-primary-500" />;
+                })()}
+                <div>
+                  <div className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    {themeRegistry.getSeasonName()}
+                  </div>
+                  <div className="text-xs text-sanctuary-500">
+                    {animatedBackgrounds.find(b => b.id === seasonalBackground)?.name || seasonalBackground}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Season Preview */}
+            <div className="grid grid-cols-4 gap-2">
+              {(['spring', 'summer', 'fall', 'winter'] as const).map(season => {
+                const SeasonIcon = seasonIcons[season];
+                const isCurrentSeason = season === currentSeason;
+                const seasonBg = season === 'spring' ? 'sakura-petals'
+                  : season === 'summer' ? 'fireflies'
+                  : season === 'fall' ? 'falling-leaves'
+                  : 'snowfall';
+
+                return (
+                  <button
+                    key={season}
+                    onClick={() => updatePreferences({ background: seasonBg as BackgroundOption })}
+                    className={`relative p-2 rounded-xl border flex flex-col items-center justify-center text-center transition-all h-16 ${
+                      isCurrentSeason
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500'
+                        : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'
+                    }`}
+                  >
+                    <SeasonIcon className={`w-4 h-4 mb-1 ${isCurrentSeason ? 'text-primary-600 dark:text-primary-400' : 'text-sanctuary-400'}`} />
+                    <span className={`text-[10px] font-medium capitalize ${isCurrentSeason ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-500'}`}>
+                      {season}
+                    </span>
+                    {isCurrentSeason && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full flex items-center justify-center">
+                        <Check className="w-2 h-2 text-white" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-        
+      </div>
+
+      {/* Visual Settings */}
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Visual Settings</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Adjust appearance settings</p>
+        </div>
         <div className="p-6 space-y-6">
+          {/* Dark Mode Toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Dark Mode</span>
+            <button
+              onClick={() => updatePreferences({ darkMode: !isDark })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${isDark ? 'bg-primary-600' : 'bg-sanctuary-300'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {/* Background Contrast */}
+          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Contrast className="w-4 h-4 text-sanctuary-500" />
+                <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Contrast</span>
+              </div>
+              <span className="text-xs text-sanctuary-500">
+                {(() => {
+                  const level = user?.preferences?.contrastLevel ?? 0;
+                  if (level === 0) return 'Default';
+                  if (level === -2) return 'Much lighter';
+                  if (level === -1) return 'Lighter';
+                  if (level === 1) return 'Darker';
+                  if (level === 2) return 'Much darker';
+                  return 'Default';
+                })()}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="-2"
+              max="2"
+              step="1"
+              value={user?.preferences?.contrastLevel ?? 0}
+              onChange={(e) => updatePreferences({ contrastLevel: parseInt(e.target.value, 10) })}
+              className="w-full h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+            />
+          </div>
+
+          {/* Pattern Visibility */}
+          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-sanctuary-500" />
+                <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Pattern Visibility</span>
+              </div>
+              <span className="text-xs text-sanctuary-500 font-mono">
+                {(user?.preferences?.patternOpacity ?? 50) === 0
+                  ? 'Hidden'
+                  : (user?.preferences?.patternOpacity ?? 50) === 50
+                  ? 'Default'
+                  : `${user?.preferences?.patternOpacity ?? 50}%`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={user?.preferences?.patternOpacity ?? 50}
+              onChange={(e) => updatePreferences({ patternOpacity: parseInt(e.target.value, 10) })}
+              className="w-full h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Display Tab Content
+const DisplayTab: React.FC = () => {
+  const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit } = useCurrency();
+
+  return (
+    <div className="space-y-6">
+      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+        <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Display Preferences</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Configure how amounts are displayed</p>
+        </div>
+        <div className="p-6 space-y-6">
+          {/* Bitcoin Unit */}
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Bitcoin Unit</label>
               <p className="text-sm text-sanctuary-500">Choose between Sats (Integers) or BTC (Decimal).</p>
             </div>
             <div className="flex items-center surface-secondary rounded-lg p-1">
-               <button 
-                  onClick={() => setUnit('sats')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${unit === 'sats' ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
-               >
-                 Sats
-               </button>
-               <button 
-                  onClick={() => setUnit('btc')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${unit === 'btc' ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
-               >
-                 BTC
-               </button>
+              <button
+                onClick={() => setUnit('sats')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${unit === 'sats' ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
+              >
+                Sats
+              </button>
+              <button
+                onClick={() => setUnit('btc')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${unit === 'btc' ? 'bg-white dark:bg-sanctuary-700 text-primary-700 dark:text-primary-300 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
+              >
+                BTC
+              </button>
             </div>
           </div>
 
+          {/* Show Fiat */}
           <div className="flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
             <div className="space-y-1">
               <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Show Fiat Equivalent</label>
               <p className="text-sm text-sanctuary-500">Display {fiatCurrency} value alongside Bitcoin amounts.</p>
             </div>
-            <button 
+            <button
               onClick={toggleShowFiat}
               className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${showFiat ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'}`}
             >
               <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${showFiat ? 'translate-x-7' : 'translate-x-1'}`}>
-                 <DollarSign className={`w-4 h-4 m-1 ${showFiat ? 'text-primary-600' : 'text-sanctuary-400'}`} />
+                <DollarSign className={`w-4 h-4 m-1 ${showFiat ? 'text-primary-600' : 'text-sanctuary-400'}`} />
               </span>
             </button>
           </div>
 
+          {/* Fiat Currency */}
           <div className="flex items-center justify-between pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
-             <div className="space-y-1">
-               <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Fiat Currency</label>
-               <p className="text-sm text-sanctuary-500">Select your local currency.</p>
-             </div>
-             <div className="relative">
-                <select
-                  value={fiatCurrency}
-                  onChange={(e) => setFiatCurrency(e.target.value as FiatCurrency)}
-                  className="appearance-none surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                   <option value="USD">USD ($)</option>
-                   <option value="EUR">EUR (€)</option>
-                   <option value="GBP">GBP (£)</option>
-                   <option value="JPY">JPY (¥)</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-sanctuary-500">
-                   <Globe className="w-4 h-4" />
-                </div>
-             </div>
+            <div className="space-y-1">
+              <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Fiat Currency</label>
+              <p className="text-sm text-sanctuary-500">Select your local currency.</p>
+            </div>
+            <div className="relative">
+              <select
+                value={fiatCurrency}
+                onChange={(e) => setFiatCurrency(e.target.value as FiatCurrency)}
+                className="appearance-none surface-muted border border-sanctuary-200 dark:border-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="JPY">JPY (¥)</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-sanctuary-500">
+                <Globe className="w-4 h-4" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+};
 
-      {/* External Services */}
+// Services Tab Content
+const ServicesTab: React.FC = () => {
+  const { priceProvider, setPriceProvider, availableProviders, refreshPrice, priceLoading, lastPriceUpdate, btcPrice, currencySymbol } = useCurrency();
+
+  return (
+    <div className="space-y-6">
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <div className="flex items-center space-x-3">
-             <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-               <Globe className="w-5 h-5" />
-             </div>
-             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">External Services</h3>
-          </div>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Price Provider</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Configure Bitcoin price data source</p>
         </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-sanctuary-500 mb-1">Provider</label>
+            <select
+              value={priceProvider}
+              onChange={(e) => setPriceProvider(e.target.value)}
+              className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+            >
+              {availableProviders.map(provider => (
+                <option key={provider} value={provider}>
+                  {provider === 'auto' ? 'Auto (Aggregated from all sources)' : provider.charAt(0).toUpperCase() + provider.slice(1)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-sanctuary-400 mt-2">
+              {priceProvider === 'auto'
+                ? 'Using aggregated prices from multiple sources for maximum reliability.'
+                : `Using ${priceProvider} as the exclusive price source.`}
+            </p>
+          </div>
 
-        <div className="p-6 space-y-6">
-          {/* Price Provider Settings */}
-          <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                 <div className="space-y-1">
-                   <label className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Price Provider</label>
-                   <p className="text-xs text-sanctuary-500">Select which service to use for Bitcoin price data.</p>
-                 </div>
-                 <DollarSign className="w-4 h-4 text-sanctuary-400" />
+          <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-sanctuary-500">Current Bitcoin Price</span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={refreshPrice}
+                isLoading={priceLoading}
+              >
+                Refresh Price
+              </Button>
+            </div>
+            <div className="surface-muted rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
+              <div className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-100">
+                {btcPrice !== null
+                  ? `${currencySymbol}${btcPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`
+                  : '-----'}
               </div>
-              <div>
-                 <label className="block text-xs font-medium text-sanctuary-500 mb-1">Provider</label>
-                 <select
-                   value={priceProvider}
-                   onChange={(e) => setPriceProvider(e.target.value)}
-                   className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                 >
-                   {availableProviders.map(provider => (
-                     <option key={provider} value={provider}>
-                       {provider === 'auto' ? 'Auto (Aggregated from all sources)' : provider.charAt(0).toUpperCase() + provider.slice(1)}
-                     </option>
-                   ))}
-                 </select>
-                 <p className="text-xs text-sanctuary-400 mt-2">
-                   {priceProvider === 'auto'
-                     ? 'Using aggregated prices from multiple sources for maximum reliability.'
-                     : `Using ${priceProvider} as the exclusive price source.`}
-                 </p>
-              </div>
-
-              {/* Current Price Display */}
-              <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800 mt-4">
-                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-sanctuary-500">Current Bitcoin Price</span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={refreshPrice}
-                      isLoading={priceLoading}
-                    >
-                      Refresh Price
-                    </Button>
-                 </div>
-                 <div className="surface-muted rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
-                    <div className="text-2xl font-bold text-sanctuary-900 dark:text-sanctuary-100">
-                       {btcPrice !== null
-                         ? `${currencySymbol}${btcPrice.toLocaleString(undefined, {maximumFractionDigits: 0})}`
-                         : '-----'}
-                    </div>
-                    {lastPriceUpdate && (
-                      <div className="text-xs text-sanctuary-400 mt-1">
-                         Last updated: {lastPriceUpdate.toLocaleTimeString()}
-                      </div>
-                    )}
-                 </div>
-              </div>
+              {lastPriceUpdate && (
+                <div className="text-xs text-sanctuary-400 mt-1">
+                  Last updated: {lastPriceUpdate.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+};
 
-      {/* Notification Sounds */}
+// Notifications Tab Content
+const NotificationsTab: React.FC = () => {
+  return (
+    <div className="space-y-6">
       <NotificationSoundSettings />
-
-      {/* Telegram Notifications */}
       <TelegramSettings />
+    </div>
+  );
+};
+
+export const Settings: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+
+  return (
+    <div className="max-w-2xl mx-auto animate-fade-in pb-12">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">System Settings</h2>
+        <p className="text-sanctuary-500">Customize your Sanctuary experience</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className="flex space-x-1 surface-secondary rounded-xl p-1">
+          {SETTINGS_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white dark:bg-sanctuary-800 text-primary-700 dark:text-primary-300 shadow-sm'
+                  : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="space-y-6">
+        {activeTab === 'appearance' && <AppearanceTab />}
+        {activeTab === 'display' && <DisplayTab />}
+        {activeTab === 'services' && <ServicesTab />}
+        {activeTab === 'notifications' && <NotificationsTab />}
+      </div>
     </div>
   );
 };

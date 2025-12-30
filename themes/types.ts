@@ -61,6 +61,7 @@ export interface BackgroundPattern {
   description?: string;
   svgLight?: string;  // SVG pattern for light mode
   svgDark?: string;   // SVG pattern for dark mode (if different)
+  animated?: boolean; // True if this is an animated Canvas-based pattern
 }
 
 /**

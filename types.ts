@@ -79,8 +79,56 @@ export interface HardwareDeviceModel {
 // THEME & UI TYPES
 // ============================================================================
 
-export type ThemeOption = 'sanctuary' | 'serenity' | 'forest' | 'cyber' | 'sunrise';
-export type BackgroundOption = 'minimal' | 'zen' | 'circuit' | 'topography' | 'waves' | 'lines' | 'sanctuary' | 'sanctuary-hero';
+export type ThemeOption =
+  | 'sanctuary'
+  | 'serenity'
+  | 'forest'
+  | 'cyber'
+  | 'sunrise'
+  | 'ocean'
+  | 'sunset'
+  | 'sakura-yoshino'
+  | 'sakura-sumie'
+  | 'midnight'
+  | 'bamboo'
+  | 'copper'
+  | 'desert'
+  | 'seasonal';
+
+export type BackgroundOption =
+  // Static backgrounds
+  | 'minimal'
+  | 'zen'
+  | 'circuit'
+  | 'topography'
+  | 'waves'
+  | 'lines'
+  | 'sanctuary'
+  | 'sanctuary-hero'
+  | 'hexagons'
+  | 'triangles'
+  | 'stars'
+  | 'aurora'
+  | 'dots'
+  | 'cross'
+  | 'mountains'
+  | 'noise'
+  // Animated backgrounds
+  | 'sakura-petals'
+  | 'floating-shields'
+  | 'bitcoin-particles'
+  | 'stacking-blocks'
+  | 'digital-rain'
+  | 'constellation'
+  | 'sanctuary-logo'
+  | 'snowfall'
+  | 'fireflies'
+  | 'ink-drops'
+  | 'rippling-water'
+  | 'falling-leaves'
+  | 'embers-rising'
+  | 'gentle-rain'
+  | 'northern-lights';
 
 // ============================================================================
 // TELEGRAM & NOTIFICATION TYPES

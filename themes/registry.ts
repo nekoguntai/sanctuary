@@ -5,8 +5,9 @@
  * dynamically, making it easy to add new themes without modifying core code.
  */
 
-import type { ThemeDefinition, ThemeMetadata, BackgroundPattern } from './types';
+import type { ThemeDefinition, ThemeMetadata, BackgroundPattern, ThemeColors } from './types';
 import { createLogger } from '../utils/logger';
+import { getCurrentSeason, getSeasonalColors, getSeasonName, getSeasonalBackground, type Season } from './seasonal';
 
 const log = createLogger('ThemeRegistry');
 
@@ -216,7 +217,17 @@ class ThemeRegistry {
       return;
     }
 
-    const colors = theme.colors[mode];
+    // For seasonal theme, dynamically get colors based on current season
+    let colors: ThemeColors;
+    if (themeId === 'seasonal') {
+      const season = getCurrentSeason();
+      const seasonalColors = getSeasonalColors(season);
+      colors = seasonalColors[mode];
+      log.info(`Seasonal theme: applying ${getSeasonName(season)} colors`);
+    } else {
+      colors = theme.colors[mode];
+    }
+
     const root = document.documentElement;
     const isDark = mode === 'dark';
 
@@ -324,6 +335,27 @@ class ThemeRegistry {
         background-image: url("${darkSvg}");
       }
     `;
+  }
+
+  /**
+   * Get the current season (for seasonal theme)
+   */
+  getCurrentSeason(): Season {
+    return getCurrentSeason();
+  }
+
+  /**
+   * Get the recommended background for the current season
+   */
+  getSeasonalBackground(): string {
+    return getSeasonalBackground(getCurrentSeason());
+  }
+
+  /**
+   * Get display name for current season
+   */
+  getSeasonName(): string {
+    return getSeasonName(getCurrentSeason());
   }
 
   /**

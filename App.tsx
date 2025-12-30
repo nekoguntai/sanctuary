@@ -32,6 +32,7 @@ import { QueryProvider } from './providers/QueryProvider';
 import { useWebSocketQueryInvalidation } from './hooks/useWebSocket';
 import * as authApi from './src/api/auth';
 import { createLogger } from './utils/logger';
+import { AnimatedBackground } from './components/AnimatedBackground';
 
 const log = createLogger('App');
 
@@ -76,8 +77,17 @@ const AppRoutes: React.FC = () => {
     updatePreferences({ darkMode: !isDarkMode });
   };
 
+  const backgroundPattern = user?.preferences?.background || 'minimal';
+  const patternOpacity = user?.preferences?.patternOpacity ?? 50;
+
   return (
     <>
+      {/* Animated background for special patterns like sakura-petals */}
+      <AnimatedBackground
+        pattern={backgroundPattern}
+        darkMode={isDarkMode}
+        opacity={patternOpacity}
+      />
       <Layout darkMode={isDarkMode} toggleTheme={toggleTheme} onLogout={logout}>
         <Routes>
           <Route path="/" element={<Dashboard />} />

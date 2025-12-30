@@ -24,10 +24,13 @@ import { cyberTheme } from './cyber';
 import { sunriseTheme } from './sunrise';
 import { oceanTheme } from './ocean';
 import { sakuraTheme } from './sunset';
+import { sakuraYoshinoTheme } from './sakura-yoshino';
+import { sakuraSumieTheme } from './sakura-sumie';
 import { midnightTheme } from './midnight';
 import { bambooTheme } from './bamboo';
 import { copperTheme } from './copper';
 import { desertTheme } from './desert';
+import { seasonalTheme } from './seasonal';
 
 // Register all themes
 themeRegistry.registerMany([
@@ -38,10 +41,13 @@ themeRegistry.registerMany([
   sunriseTheme,
   oceanTheme,
   sakuraTheme,
+  sakuraYoshinoTheme,
+  sakuraSumieTheme,
   midnightTheme,
   bambooTheme,
   copperTheme,
   desertTheme,
+  seasonalTheme,
 ]);
 
 // Register global patterns
@@ -51,6 +57,16 @@ themeRegistry.registerPatterns(globalPatterns);
 export { themeRegistry };
 export { globalPatterns };
 export type { ThemeDefinition, ThemeColors, BackgroundPattern, ThemeMetadata } from './types';
+
+// Re-export seasonal utilities
+export {
+  getCurrentSeason,
+  getSeasonalBackground,
+  getSeasonName,
+  getSeasonalColors,
+  seasonalPalettes,
+  type Season,
+} from './seasonal';
 
 /**
  * Initialize the theme system

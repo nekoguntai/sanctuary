@@ -1,11 +1,10 @@
 /**
  * Sakura Theme
  *
- * Japanese cherry blossom inspired theme with delicate pinks and natural greens.
- * Elegant, calming aesthetic inspired by spring in Japan.
+ * Japanese cherry blossom inspired theme with a zen, serene aesthetic.
  *
- * Light mode: Soft whites with delicate pink blossom accents and spring green touches
- * Dark mode: Deep plum/burgundy backgrounds with soft pink highlights
+ * Light mode: Soft Petal - Muted pastel pinks on warm cream (rice paper)
+ * Dark mode: Yozakura (Evening Sakura) - Deep indigo night with glowing pink petals
  *
  * Author: Sanctuary Wallet Team
  */
@@ -16,239 +15,239 @@ export const sakuraTheme: ThemeDefinition = {
   id: 'sakura',
   name: 'Sakura',
   author: 'Sanctuary Wallet Team',
-  version: '1.0.0',
-  description: 'Delicate cherry blossom pinks with elegant Japanese aesthetics',
+  version: '2.0.0',
+  description: 'Soft pastel petals by day, magical night viewing by evening',
 
   colors: {
     light: {
-      // Background colors (Soft white with warm undertones - rice paper)
+      // Background colors (Warm cream - rice paper aesthetic)
       bg: {
-        50: '#fffcfd',   // Pure white with pink hint
-        100: '#fef7f8',  // Soft blush white
-        200: '#fceef0',  // Pale pink-white
-        300: '#f8dfe3',  // Light blush
-        400: '#e8c4ca',  // Dusty rose
-        500: '#b8949a',  // Muted mauve
-        600: '#8a6b72',  // Deep rose
-        700: '#5c464c',  // Dark plum
-        800: '#3a2c30',  // Deep burgundy
-        900: '#231b1d',  // Near black
-        950: '#120e0f',  // Darkest
+        50: '#fefdfb',   // Warm white
+        100: '#fcf9f4',  // Rice paper
+        200: '#f7f2e8',  // Soft cream
+        300: '#efe6d8',  // Warm parchment
+        400: '#d9cbb8',  // Aged paper
+        500: '#b0a090',  // Weathered
+        600: '#8a7a6a',  // Stone
+        700: '#5c5048',  // Dark stone
+        800: '#3a3230',  // Deep shadow
+        900: '#241f1d',  // Near black
+        950: '#141210',  // Darkest
       },
 
-      // Primary colors (Cherry blossom pink)
+      // Primary colors (Soft Petal pink - muted, pastel)
       primary: {
-        50: '#fff1f3',   // Palest pink
-        100: '#ffe4e8',  // Light petal
-        200: '#fecdd5',  // Soft blossom
-        300: '#fda4b4',  // Pink petal
-        400: '#fb7190',  // Bright sakura
-        500: '#f43f6b',  // Vibrant cherry blossom
-        600: '#e11d52',  // Deep pink
-        700: '#be1244',  // Dark rose
-        800: '#9f1340',  // Burgundy pink
-        900: '#88143c',  // Deep burgundy
-        950: '#4c0519',  // Darkest
+        50: '#fef7f8',   // Barely pink
+        100: '#fceef0',  // Whisper pink
+        200: '#f9dce2',  // Soft blush
+        300: '#f2c4ce',  // Faded petal
+        400: '#e8a4b4',  // Muted sakura
+        500: '#d4899c',  // Soft petal (main)
+        600: '#b86b7e',  // Dusty rose
+        700: '#955462',  // Deep rose
+        800: '#78444f',  // Dark mauve
+        900: '#633940',  // Deep mauve
+        950: '#3a1f24',  // Darkest
       },
 
-      // Success colors (Spring leaf green)
+      // Success colors (Sage green - muted, natural)
       success: {
-        50: '#f3faf3',
-        100: '#e3f5e3',
-        200: '#c8eac9',
-        500: '#5cb85c',  // Fresh leaf green
-        600: '#4a9a4a',
-        700: '#3d7d3d',
-        800: '#346434',
-        900: '#2d522d',
-        950: '#142d14',
+        50: '#f6f8f5',
+        100: '#e8efe6',
+        200: '#d2e0ce',
+        500: '#7a9e72',  // Muted sage
+        600: '#5f8056',
+        700: '#4a6644',
+        800: '#3d5338',
+        900: '#33452f',
+        950: '#1a2518',
       },
 
-      // Warning colors (Persimmon orange - Japanese fruit)
+      // Warning colors (Warm amber - soft, natural)
       warning: {
-        50: '#fff8ed',
-        100: '#ffeed4',
-        200: '#ffd9a8',
-        500: '#f5a524',  // Persimmon orange
-        600: '#e08914',
-        700: '#ba6a10',
-        800: '#955314',
-        900: '#794515',
-        950: '#412108',
+        50: '#fefaf3',
+        100: '#fcf2e0',
+        200: '#f8e2c0',
+        500: '#d4a86a',  // Soft amber
+        600: '#b8894a',
+        700: '#966c38',
+        800: '#7a5630',
+        900: '#65472a',
+        950: '#382514',
       },
 
-      // Sent colors (Wisteria purple)
+      // Sent colors (Muted wisteria)
       sent: {
-        50: '#faf5ff',
-        100: '#f3e8ff',
-        200: '#e9d5ff',
-        500: '#a855f7',  // Wisteria
-        600: '#9333ea',
-        700: '#7e22ce',
-        800: '#6b21a8',
-        900: '#581c87',
-        950: '#3b0764',
+        50: '#f9f7fb',
+        100: '#f0ecf5',
+        200: '#e2d9ec',
+        500: '#9a88b0',  // Soft wisteria
+        600: '#7d6c94',
+        700: '#645578',
+        800: '#514560',
+        900: '#433a4f',
+        950: '#261f2d',
       },
 
-      // Mainnet colors (Sakura pink)
+      // Mainnet colors (Soft petal pink)
       mainnet: {
-        50: '#fff1f3',
-        100: '#ffe4e8',
-        200: '#fecdd5',
-        300: '#fda4b4',
-        400: '#fb7190',
-        500: '#f43f6b',  // Cherry blossom
-        600: '#e11d52',
-        700: '#be1244',
-        800: '#9f1340',
-        900: '#88143c',
-        950: '#4c0519',
+        50: '#fef7f8',
+        100: '#fceef0',
+        200: '#f9dce2',
+        300: '#f2c4ce',
+        400: '#e8a4b4',
+        500: '#d4899c',  // Soft petal
+        600: '#b86b7e',
+        700: '#955462',
+        800: '#78444f',
+        900: '#633940',
+        950: '#3a1f24',
       },
 
-      // Testnet colors (Bamboo green)
+      // Testnet colors (Sage green)
       testnet: {
-        50: '#f0fdf4',
-        100: '#dcfce7',
-        200: '#bbf7d0',
-        300: '#86efac',
-        400: '#4ade80',
-        500: '#22c55e',  // Bamboo green
-        600: '#16a34a',
-        700: '#15803d',
-        800: '#166534',
-        900: '#14532d',
-        950: '#052e16',
+        50: '#f6f8f5',
+        100: '#e8efe6',
+        200: '#d2e0ce',
+        300: '#b5cead',
+        400: '#92b586',
+        500: '#7a9e72',  // Sage
+        600: '#5f8056',
+        700: '#4a6644',
+        800: '#3d5338',
+        900: '#33452f',
+        950: '#1a2518',
       },
 
-      // Signet colors (Wisteria purple)
+      // Signet colors (Soft wisteria)
       signet: {
-        50: '#f5f3ff',
-        100: '#ede9fe',
-        200: '#ddd6fe',
-        300: '#c4b5fd',
-        400: '#a78bfa',
-        500: '#8b5cf6',  // Wisteria
-        600: '#7c3aed',
-        700: '#6d28d9',
-        800: '#5b21b6',
-        900: '#4c1d95',
-        950: '#2e1065',
+        50: '#f9f7fb',
+        100: '#f0ecf5',
+        200: '#e2d9ec',
+        300: '#cec0dc',
+        400: '#b4a2c8',
+        500: '#9a88b0',  // Wisteria
+        600: '#7d6c94',
+        700: '#645578',
+        800: '#514560',
+        900: '#433a4f',
+        950: '#261f2d',
       },
     },
 
     dark: {
-      // Background colors (Deep plum/burgundy - evening sakura viewing)
+      // Background colors (Deep indigo night - Yozakura)
       bg: {
-        50: '#fce8eb',   // Pale pink (for text)
-        100: '#f5d0d6',  // Light blush
-        200: '#e8a8b2',  // Soft rose
-        300: '#d47a8a',  // Muted pink
-        400: '#a85060',  // Dusty rose
-        500: '#7a3a48',  // Deep mauve
-        600: '#542832',  // Dark plum
-        700: '#3a1c24',  // Deep burgundy
-        800: '#281418',  // Night plum
-        900: '#1a0d10',  // Near black
-        950: '#0d0608',  // Deepest shadow
+        50: '#e8e4f0',   // Pale moonlight (for text)
+        100: '#d4cce5',  // Soft twilight
+        200: '#b8acd0',  // Lavender mist
+        300: '#9488b5',  // Dusky purple
+        400: '#6e6090',  // Evening purple
+        500: '#4d4268',  // Deep twilight
+        600: '#362e4a',  // Night indigo
+        700: '#252038',  // Deep night
+        800: '#181428',  // Midnight
+        900: '#0e0b1a',  // Near black
+        950: '#07050d',  // Deepest night
       },
 
-      // Primary colors (Glowing cherry blossom for dark mode)
+      // Primary colors (Glowing pink petals against night sky)
       primary: {
-        50: '#4c0519',   // Deep shadow
-        100: '#88143c',  // Dark burgundy
-        200: '#9f1340',  // Burgundy pink
-        300: '#be1244',  // Dark rose
-        400: '#e11d52',  // Deep pink
-        500: '#f43f6b',  // Vibrant sakura
-        600: '#fb7190',  // Bright petal
-        700: '#fda4b4',  // Soft glow
-        800: '#fecdd5',  // Light glow
-        900: '#ffe4e8',  // Pale glow
-        950: '#fff1f3',  // Brightest
+        50: '#3a1f2a',   // Deep shadow
+        100: '#5c3044',  // Dark mauve
+        200: '#7a4058',  // Rich mauve
+        300: '#a05070',  // Deep rose
+        400: '#c86088',  // Bright rose
+        500: '#e890a8',  // Glowing petal (main)
+        600: '#f0a8bc',  // Soft glow
+        700: '#f5c0ce',  // Light glow
+        800: '#f9d8e0',  // Pale glow
+        900: '#fcecf0',  // Near white
+        950: '#fef7f9',  // Brightest
       },
 
-      // Success colors (Bright spring green for dark mode)
+      // Success colors (Moonlit sage)
       success: {
-        50: '#142d14',
-        100: '#2d522d',
-        200: '#346434',
-        500: '#68d878',  // Glowing leaf
-        600: '#8ae496',
-        700: '#adefb4',
-        800: '#cff7d4',
-        900: '#e8fcea',
-        950: '#f4fef5',
+        50: '#1a2518',
+        100: '#2d3f28',
+        200: '#3d5338',
+        500: '#8cc084',  // Moonlit sage
+        600: '#a8d0a0',
+        700: '#c4e0bc',
+        800: '#dff0d8',
+        900: '#f0f8ec',
+        950: '#f8fcf6',
       },
 
-      // Warning colors (Lantern glow - warm amber)
+      // Warning colors (Lantern amber glow)
       warning: {
-        50: '#412108',
-        100: '#794515',
-        200: '#955314',
-        500: '#fbbf24',  // Paper lantern glow
-        600: '#fcd34d',
-        700: '#fde68a',
-        800: '#fef3c7',
-        900: '#fffbeb',
-        950: '#fffef7',
+        50: '#382514',
+        100: '#5a3c20',
+        200: '#7a5630',
+        500: '#e8b86a',  // Warm lantern glow
+        600: '#f0c888',
+        700: '#f5d8a8',
+        800: '#f9e8c8',
+        900: '#fcf4e4',
+        950: '#fefaf2',
       },
 
-      // Sent colors (Wisteria - inverted)
+      // Sent colors (Glowing wisteria)
       sent: {
-        50: '#3b0764',
-        100: '#581c87',
-        200: '#6b21a8',
-        500: '#a855f7',
-        600: '#c084fc',
-        700: '#d8b4fe',
-        800: '#e9d5ff',
-        900: '#f3e8ff',
-        950: '#faf5ff',
+        50: '#261f2d',
+        100: '#3d3348',
+        200: '#514560',
+        500: '#b8a0cc',  // Glowing wisteria
+        600: '#c8b4da',
+        700: '#d8c8e6',
+        800: '#e8dcf0',
+        900: '#f4f0f8',
+        950: '#faf8fc',
       },
 
-      // Mainnet colors (Sakura pink - inverted for dark)
+      // Mainnet colors (Glowing petal - inverted)
       mainnet: {
-        50: '#4c0519',
-        100: '#88143c',
-        200: '#9f1340',
-        300: '#be1244',
-        400: '#e11d52',
-        500: '#f43f6b',  // Cherry blossom
-        600: '#fb7190',
-        700: '#fda4b4',
-        800: '#fecdd5',
-        900: '#ffe4e8',
-        950: '#fff1f3',
+        50: '#3a1f2a',
+        100: '#5c3044',
+        200: '#7a4058',
+        300: '#a05070',
+        400: '#c86088',
+        500: '#e890a8',  // Glowing petal
+        600: '#f0a8bc',
+        700: '#f5c0ce',
+        800: '#f9d8e0',
+        900: '#fcecf0',
+        950: '#fef7f9',
       },
 
-      // Testnet colors (Bamboo green - inverted)
+      // Testnet colors (Moonlit sage - inverted)
       testnet: {
-        50: '#052e16',
-        100: '#14532d',
-        200: '#166534',
-        300: '#15803d',
-        400: '#16a34a',
-        500: '#4ade80',  // Glowing bamboo
-        600: '#86efac',
-        700: '#bbf7d0',
-        800: '#dcfce7',
-        900: '#f0fdf4',
-        950: '#f7fef9',
+        50: '#1a2518',
+        100: '#2d3f28',
+        200: '#3d5338',
+        300: '#4a6644',
+        400: '#5f8056',
+        500: '#8cc084',  // Moonlit sage
+        600: '#a8d0a0',
+        700: '#c4e0bc',
+        800: '#dff0d8',
+        900: '#f0f8ec',
+        950: '#f8fcf6',
       },
 
-      // Signet colors (Wisteria - inverted)
+      // Signet colors (Glowing wisteria - inverted)
       signet: {
-        50: '#2e1065',
-        100: '#4c1d95',
-        200: '#5b21b6',
-        300: '#6d28d9',
-        400: '#7c3aed',
-        500: '#a78bfa',  // Glowing wisteria
-        600: '#c4b5fd',
-        700: '#ddd6fe',
-        800: '#ede9fe',
-        900: '#f5f3ff',
-        950: '#faf8ff',
+        50: '#261f2d',
+        100: '#3d3348',
+        200: '#514560',
+        300: '#645578',
+        400: '#7d6c94',
+        500: '#b8a0cc',  // Glowing wisteria
+        600: '#c8b4da',
+        700: '#d8c8e6',
+        800: '#e8dcf0',
+        900: '#f4f0f8',
+        950: '#faf8fc',
       },
     },
   },

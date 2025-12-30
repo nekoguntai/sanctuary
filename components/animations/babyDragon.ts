@@ -77,8 +77,8 @@ export function useBabyDragon(
       const width = canvas.width;
       const height = canvas.height;
 
-      // Dragon position (center-ish)
-      const dragonX = width * 0.5;
+      // Dragon position (right side)
+      const dragonX = width * 0.65;
       const dragonY = height * 0.6;
       const dragonSize = Math.min(width, height) * 0.15;
 
@@ -120,10 +120,10 @@ export function useBabyDragon(
     const drawBackground = () => {
       // Cave background
       const gradient = ctx.createRadialGradient(
-        canvas.width * 0.5,
+        canvas.width * 0.65,
         canvas.height * 0.4,
         0,
-        canvas.width * 0.5,
+        canvas.width * 0.65,
         canvas.height * 0.5,
         canvas.width * 0.8
       );
@@ -142,10 +142,10 @@ export function useBabyDragon(
 
       // Warm glow from dragon
       const glowGradient = ctx.createRadialGradient(
-        canvas.width * 0.5,
+        canvas.width * 0.65,
         canvas.height * 0.6,
         0,
-        canvas.width * 0.5,
+        canvas.width * 0.65,
         canvas.height * 0.6,
         canvas.width * 0.3
       );
@@ -157,7 +157,7 @@ export function useBabyDragon(
     };
 
     const drawNest = () => {
-      const nestX = canvas.width * 0.5;
+      const nestX = canvas.width * 0.65;
       const nestY = canvas.height * 0.65;
       const nestWidth = canvas.width * 0.25;
       const nestHeight = canvas.height * 0.08;
@@ -236,7 +236,7 @@ export function useBabyDragon(
     };
 
     const drawDragon = (time: number) => {
-      const dragonX = canvas.width * 0.5;
+      const dragonX = canvas.width * 0.65;
       const dragonY = canvas.height * 0.6;
       const size = Math.min(canvas.width, canvas.height) * 0.15;
       const breathScale = 1 + Math.sin(time * 0.002) * 0.02;
@@ -426,7 +426,7 @@ export function useBabyDragon(
     };
 
     const addSmoke = () => {
-      const dragonX = canvas.width * 0.5;
+      const dragonX = canvas.width * 0.65;
       const dragonY = canvas.height * 0.6;
       const size = Math.min(canvas.width, canvas.height) * 0.15;
 

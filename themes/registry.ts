@@ -346,9 +346,19 @@ class ThemeRegistry {
 
   /**
    * Get the recommended background for the current season
+   * @param userPrefs - Optional user-configured seasonal backgrounds
    */
-  getSeasonalBackground(): string {
-    return getSeasonalBackground(getCurrentSeason());
+  getSeasonalBackground(userPrefs?: { spring?: string; summer?: string; fall?: string; winter?: string }): string {
+    const season = getCurrentSeason();
+    // Check if user has a custom preference for this season
+    if (userPrefs) {
+      const userPref = userPrefs[season];
+      if (userPref) {
+        return userPref;
+      }
+    }
+    // Fall back to default
+    return getSeasonalBackground(season);
   }
 
   /**
@@ -356,6 +366,13 @@ class ThemeRegistry {
    */
   getSeasonName(): string {
     return getSeasonName(getCurrentSeason());
+  }
+
+  /**
+   * Get the default seasonal background for a specific season (no user override)
+   */
+  getDefaultSeasonalBackground(season: Season): string {
+    return getSeasonalBackground(season);
   }
 
   /**

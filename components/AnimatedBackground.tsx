@@ -32,7 +32,6 @@ import {
   useTidePools,
   useMorningDew,
   usePaperCranes,
-  useCatChase,
   useTrainStation,
   useSereneMeadows,
   useStillPonds,
@@ -58,6 +57,9 @@ import {
   useMistyValley,
   useGentleWaves,
   useAuroraWaves,
+  // Additional serene animations
+  useJellyfishDrift,
+  useWindChimes,
 } from './animations';
 
 interface AnimatedBackgroundProps {
@@ -94,7 +96,6 @@ export const ANIMATED_PATTERNS = [
   'morning-dew',
   'paper-cranes',
   // Fun animations
-  'cat-chase',
   'train-station',
   // Landscape animations
   'serene-meadows',
@@ -124,6 +125,9 @@ export const ANIMATED_PATTERNS = [
   'misty-valley',
   'gentle-waves',
   'aurora-waves',
+  // Additional serene animations
+  'jellyfish-drift',
+  'wind-chimes',
 ] as const;
 
 export type AnimatedPatternId = typeof ANIMATED_PATTERNS[number];
@@ -168,7 +172,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useMorningDew(canvasRef, darkMode, opacity, pattern === 'morning-dew');
   usePaperCranes(canvasRef, darkMode, opacity, pattern === 'paper-cranes');
   // Fun animations
-  useCatChase(canvasRef, darkMode, opacity, pattern === 'cat-chase');
   useTrainStation(canvasRef, darkMode, opacity, pattern === 'train-station');
   // Landscape animations
   useSereneMeadows(canvasRef, darkMode, opacity, pattern === 'serene-meadows');
@@ -198,6 +201,9 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useMistyValley(canvasRef, darkMode, opacity, pattern === 'misty-valley');
   useGentleWaves(canvasRef, darkMode, opacity, pattern === 'gentle-waves');
   useAuroraWaves(canvasRef, darkMode, opacity, pattern === 'aurora-waves');
+  // Additional serene animations
+  useJellyfishDrift(canvasRef, darkMode, opacity, pattern === 'jellyfish-drift');
+  useWindChimes(canvasRef, darkMode, opacity, pattern === 'wind-chimes');
 
   if (!isAnimated) {
     return null;

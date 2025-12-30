@@ -26,7 +26,6 @@ export { useMoonlitClouds } from './moonlitClouds';
 export { useTidePools } from './tidePools';
 export { useMorningDew } from './morningDew';
 export { usePaperCranes } from './paperCranes';
-export { useCatChase } from './catChase';
 export { useTrainStation } from './trainStation';
 export { useSereneMeadows } from './sereneMeadows';
 export { useStillPonds } from './stillPonds';
@@ -52,3 +51,6 @@ export { useCloverField } from './cloverField';
 export { useMistyValley } from './mistyValley';
 export { useGentleWaves } from './gentleWaves';
 export { useAuroraWaves } from './auroraWaves';
+// Additional serene animations
+export { useJellyfishDrift } from './jellyfishDrift';
+export { useWindChimes } from './windChimes';

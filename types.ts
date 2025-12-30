@@ -128,7 +128,16 @@ export type BackgroundOption =
   | 'falling-leaves'
   | 'embers-rising'
   | 'gentle-rain'
-  | 'northern-lights';
+  | 'northern-lights'
+  // Sumi-e animations
+  | 'brush-stroke-blossoms'
+  | 'ink-branch'
+  | 'calligraphy-wind'
+  | 'mountain-mist'
+  | 'koi-shadows'
+  | 'bamboo-sway'
+  | 'ink-on-water'
+  | 'enso-circles';
 
 // ============================================================================
 // TELEGRAM & NOTIFICATION TYPES
@@ -184,6 +193,13 @@ export interface ViewSettings {
   [pageKey: string]: PageViewSettings;
 }
 
+export interface SeasonalBackgrounds {
+  spring?: BackgroundOption;
+  summer?: BackgroundOption;
+  fall?: BackgroundOption;
+  winter?: BackgroundOption;
+}
+
 export interface UserPreferences {
   darkMode: boolean;
   unit: 'sats' | 'btc';
@@ -197,6 +213,7 @@ export interface UserPreferences {
   telegram?: TelegramConfig;
   notificationSounds?: NotificationSounds;
   viewSettings?: ViewSettings;
+  seasonalBackgrounds?: SeasonalBackgrounds; // Custom backgrounds for each season
 }
 
 export interface User {

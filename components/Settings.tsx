@@ -5,7 +5,8 @@ import { Monitor, DollarSign, Globe, Palette, Image as ImageIcon, Check, Waves, 
 import { useNotificationSound } from '../hooks/useNotificationSound';
 import { Button } from './ui/Button';
 import { SanctuaryLogo } from './ui/CustomIcons';
-import { ThemeOption, BackgroundOption } from '../types';
+import { ThemeOption, BackgroundOption, SeasonalBackgrounds } from '../types';
+import { Season } from '../themes';
 import { themeRegistry } from '../themes';
 import * as authApi from '../src/api/auth';
 import { ApiError } from '../src/api/client';
@@ -521,6 +522,7 @@ const AppearanceTab: React.FC = () => {
   const currentTheme = user?.preferences?.theme || 'sanctuary';
   const currentBg = user?.preferences?.background || 'zen';
   const isDark = user?.preferences?.darkMode || false;
+  const userSeasonalBgs = user?.preferences?.seasonalBackgrounds;
 
   const themes = themeRegistry.getAllMetadata().map(theme => ({
     id: theme.id as ThemeOption,
@@ -556,7 +558,24 @@ const AppearanceTab: React.FC = () => {
   };
 
   const currentSeason = themeRegistry.getCurrentSeason();
-  const seasonalBackground = themeRegistry.getSeasonalBackground();
+  const seasonalBackground = themeRegistry.getSeasonalBackground(userSeasonalBgs);
+
+  // Get the configured or default background for a specific season
+  const getSeasonBackground = (season: Season): string => {
+    if (userSeasonalBgs?.[season]) {
+      return userSeasonalBgs[season] as string;
+    }
+    return themeRegistry.getDefaultSeasonalBackground(season);
+  };
+
+  // Update a specific season's background
+  const updateSeasonBackground = (season: Season, background: string) => {
+    const newSeasonalBgs: SeasonalBackgrounds = {
+      ...userSeasonalBgs,
+      [season]: background as BackgroundOption,
+    };
+    updatePreferences({ seasonalBackgrounds: newSeasonalBgs });
+  };
 
   const allPatterns = themeRegistry.getAllPatterns(currentTheme);
 
@@ -687,7 +706,7 @@ const AppearanceTab: React.FC = () => {
                 })()}
                 <div>
                   <div className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                    {themeRegistry.getSeasonName()}
+                    Current: {themeRegistry.getSeasonName()}
                   </div>
                   <div className="text-xs text-sanctuary-500">
                     {animatedBackgrounds.find(b => b.id === seasonalBackground)?.name || seasonalBackground}
@@ -696,36 +715,48 @@ const AppearanceTab: React.FC = () => {
               </div>
             </div>
 
-            {/* Season Preview */}
-            <div className="grid grid-cols-4 gap-2">
+            {/* Season Configuration */}
+            <div className="space-y-3">
+              <p className="text-xs text-sanctuary-500 mb-2">Configure which animated background appears for each season:</p>
               {(['spring', 'summer', 'fall', 'winter'] as const).map(season => {
                 const SeasonIcon = seasonIcons[season];
                 const isCurrentSeason = season === currentSeason;
-                const seasonBg = season === 'spring' ? 'sakura-petals'
-                  : season === 'summer' ? 'fireflies'
-                  : season === 'fall' ? 'falling-leaves'
-                  : 'snowfall';
+                const currentSeasonBg = getSeasonBackground(season);
+                const seasonNames: Record<Season, string> = {
+                  spring: 'Spring',
+                  summer: 'Summer',
+                  fall: 'Autumn',
+                  winter: 'Winter',
+                };
 
                 return (
-                  <button
+                  <div
                     key={season}
-                    onClick={() => updatePreferences({ background: seasonBg as BackgroundOption })}
-                    className={`relative p-2 rounded-xl border flex flex-col items-center justify-center text-center transition-all h-16 ${
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
                       isCurrentSeason
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/50 ring-1 ring-primary-500'
-                        : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-primary-300'
+                        ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-900/30'
+                        : 'border-sanctuary-200 dark:border-sanctuary-700'
                     }`}
                   >
-                    <SeasonIcon className={`w-4 h-4 mb-1 ${isCurrentSeason ? 'text-primary-600 dark:text-primary-400' : 'text-sanctuary-400'}`} />
-                    <span className={`text-[10px] font-medium capitalize ${isCurrentSeason ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-500'}`}>
-                      {season}
-                    </span>
-                    {isCurrentSeason && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full flex items-center justify-center">
-                        <Check className="w-2 h-2 text-white" />
+                    <div className="flex items-center space-x-3">
+                      <SeasonIcon className={`w-5 h-5 ${isCurrentSeason ? 'text-primary-500' : 'text-sanctuary-400'}`} />
+                      <span className={`text-sm font-medium ${isCurrentSeason ? 'text-primary-700 dark:text-primary-300' : 'text-sanctuary-700 dark:text-sanctuary-300'}`}>
+                        {seasonNames[season]}
+                        {isCurrentSeason && <span className="ml-2 text-xs text-primary-500">(current)</span>}
                       </span>
-                    )}
-                  </button>
+                    </div>
+                    <select
+                      value={currentSeasonBg}
+                      onChange={(e) => updateSeasonBackground(season, e.target.value)}
+                      className="text-sm bg-transparent border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg px-3 py-1.5 text-sanctuary-700 dark:text-sanctuary-300 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {animatedBackgrounds.map(bg => (
+                        <option key={bg.id} value={bg.id}>
+                          {bg.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 );
               })}
             </div>

@@ -251,12 +251,6 @@ export const globalPatterns: BackgroundPattern[] = [
   },
   // Fun animations
   {
-    id: 'cat-chase',
-    name: 'Cat Chase',
-    description: 'A detailed cat (bird\'s eye view) stalking, pouncing, and resting',
-    animated: true,
-  },
-  {
     id: 'train-station',
     name: 'Train Station',
     description: 'Japanese trains arriving and departing with passengers',
@@ -358,6 +352,19 @@ export const globalPatterns: BackgroundPattern[] = [
     id: 'raindrop-window',
     name: 'Raindrop Window',
     description: 'Raindrops rolling down a window with bokeh lights',
+    animated: true,
+  },
+  // Additional serene animations
+  {
+    id: 'jellyfish-drift',
+    name: 'Jellyfish Drift',
+    description: 'Graceful bioluminescent jellyfish floating through deep ocean',
+    animated: true,
+  },
+  {
+    id: 'wind-chimes',
+    name: 'Wind Chimes',
+    description: 'Delicate hanging wind chimes with gentle swaying motion',
     animated: true,
   },
 ];

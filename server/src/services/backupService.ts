@@ -74,6 +74,7 @@ const TABLE_ORDER = [
   'device',          // FK: userId, modelId
   'wallet',          // FK: groupId
   'pushDevice',      // FK: userId
+  'electrumServer',  // FK: nodeConfigId
 
   // Second-level dependencies
   'walletUser',      // FK: walletId, userId
@@ -87,8 +88,11 @@ const TABLE_ORDER = [
   'uTXO',            // FK: walletId
 
   // Fourth-level dependencies
-  'transactionLabel', // FK: transactionId, labelId
-  'addressLabel',     // FK: addressId, labelId
+  'transactionInput',  // FK: transactionId
+  'transactionOutput', // FK: transactionId
+  'transactionLabel',  // FK: transactionId, labelId
+  'addressLabel',      // FK: addressId, labelId
+  'draftUtxoLock',     // FK: draftId, utxoId
 
   // Independent tables (no FK) - placed last for logical grouping
   'auditLog',         // No FK (userId stored as string for history)
@@ -655,9 +659,13 @@ export class BackupService {
       'nodeConfig': 'node_configs',
       'groupMember': 'group_members',
       'pushDevice': 'push_devices',
+      'electrumServer': 'electrum_servers',
       'walletUser': 'wallet_users',
       'walletDevice': 'wallet_devices',
       'draftTransaction': 'draft_transactions',
+      'draftUtxoLock': 'draft_utxo_locks',
+      'transactionInput': 'transaction_inputs',
+      'transactionOutput': 'transaction_outputs',
       'transactionLabel': 'transaction_labels',
       'addressLabel': 'address_labels',
       'auditLog': 'audit_logs',

@@ -3,6 +3,7 @@
  *
  * Sophisticated dark theme with silver/platinum accents.
  * Deep indigo and charcoal backgrounds with cool metallic highlights.
+ * Rose accents provide elegant warmth against the cool palette.
  * Perfect for users who prefer darker interfaces with elegant contrast.
  *
  * Light mode: Cool silver/platinum with deep accents
@@ -65,17 +66,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#083344',
       },
 
-      // Warning colors (Amber/gold for contrast)
+      // Warning colors (Soft Gold for elegant warmth)
       warning: {
-        50: '#fffbeb',
-        100: '#fef3c7',
-        200: '#fde68a',
-        500: '#f59e0b',  // Amber-500: Warm gold
-        600: '#d97706',
-        700: '#b45309',
-        800: '#92400e',
-        900: '#78350f',
-        950: '#451a03',
+        50: '#fefce8',   // Yellow-50
+        100: '#fef9c3',  // Yellow-100
+        200: '#fef08a',  // Yellow-200
+        500: '#ca8a04',  // Yellow-600: Soft gold (main)
+        600: '#a16207',  // Yellow-700
+        700: '#854d0e',  // Yellow-800
+        800: '#713f12',  // Yellow-900
+        900: '#422006',  // Yellow-950
+        950: '#2a1503',  // Darker gold
       },
 
       // Sent colors (Violet)
@@ -104,17 +105,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#083344',
       },
 
-      // Testnet colors (Amber)
+      // Testnet colors (Soft Gold)
       testnet: {
-        50: '#fffbeb',
-        100: '#fef3c7',
-        200: '#fde68a',
-        500: '#f59e0b',
-        600: '#d97706',
-        700: '#b45309',
-        800: '#92400e',
-        900: '#78350f',
-        950: '#451a03',
+        50: '#fefce8',   // Yellow-50
+        100: '#fef9c3',  // Yellow-100
+        200: '#fef08a',  // Yellow-200
+        500: '#ca8a04',  // Yellow-600
+        600: '#a16207',  // Yellow-700
+        700: '#854d0e',  // Yellow-800
+        800: '#713f12',  // Yellow-900
+        900: '#422006',  // Yellow-950
+        950: '#2a1503',  // Darker gold
       },
 
       // Signet colors (Purple)
@@ -175,17 +176,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#f0fdff',
       },
 
-      // Warning colors (Gold/amber accent for warmth)
+      // Warning colors (Soft Gold for elegant warmth)
       warning: {
-        50: '#422006',
-        100: '#78350f',
-        200: '#92400e',
-        500: '#fbbf24',  // Amber-400: Warm gold
-        600: '#fcd34d',
-        700: '#fde68a',
-        800: '#fef3c7',
-        900: '#fffbeb',
-        950: '#fefce8',
+        50: '#2a1503',   // Darkest gold
+        100: '#422006',  // Yellow-950
+        200: '#713f12',  // Yellow-900
+        500: '#eab308',  // Yellow-500: Bright gold
+        600: '#facc15',  // Yellow-400
+        700: '#fde047',  // Yellow-300
+        800: '#fef08a',  // Yellow-200
+        900: '#fef9c3',  // Yellow-100
+        950: '#fefce8',  // Yellow-50
       },
 
       // Sent colors (Violet - inverted)
@@ -214,17 +215,17 @@ export const midnightTheme: ThemeDefinition = {
         950: '#ecfeff',
       },
 
-      // Testnet colors (Amber - inverted)
+      // Testnet colors (Soft Gold - inverted)
       testnet: {
-        50: '#451a03',
-        100: '#78350f',
-        200: '#92400e',
-        500: '#f59e0b',
-        600: '#fbbf24',
-        700: '#fcd34d',
-        800: '#fde68a',
-        900: '#fef3c7',
-        950: '#fffbeb',
+        50: '#2a1503',   // Darkest gold
+        100: '#422006',  // Yellow-950
+        200: '#713f12',  // Yellow-900
+        500: '#ca8a04',  // Yellow-600
+        600: '#eab308',  // Yellow-500
+        700: '#facc15',  // Yellow-400
+        800: '#fef08a',  // Yellow-200
+        900: '#fef9c3',  // Yellow-100
+        950: '#fefce8',  // Yellow-50
       },
 
       // Signet colors (Purple - inverted)

@@ -159,12 +159,17 @@ After installation, follow these steps to set up your Sanctuary:
 
 ## Umbrel Installation
 
-> **⚠️ Limited Functionality:** Umbrel serves apps over HTTP (not HTTPS), which means **WebUSB hardware wallet connections will not work**. You can still use Sanctuary on Umbrel for:
+> **⚠️ Limited Functionality:** Umbrel serves apps over HTTP (not HTTPS), which means:
+> - **WebUSB hardware wallets will not work** (Ledger, Trezor USB connections require HTTPS)
+> - **QR code camera scanning will not work** (camera access requires HTTPS)
+>
+> You can still use Sanctuary on Umbrel for:
 > - Importing wallets via output descriptors or JSON files
 > - Viewing balances and transaction history
-> - Creating unsigned PSBTs for air-gapped signing (ColdCard, Keystone, etc.)
+> - Creating unsigned PSBTs for air-gapped signing
+> - Importing signed PSBTs via file upload (MicroSD workflow)
 >
-> For full hardware wallet support via USB, use the [Quick Install](#quick-install) method which enables HTTPS.
+> For full functionality including USB hardware wallets and QR camera scanning, use the [Quick Install](#quick-install) method which enables HTTPS.
 
 If you're running [Umbrel](https://umbrel.com/), you can install Sanctuary as a Community App:
 
@@ -234,8 +239,9 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Group permissions** — Organize users into groups with shared wallet access
 - **Admin controls** — Configure public registration and system settings
 - **Dark mode** — Easy on the eyes, day or night
-- **8 color themes** — Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Nordic, Midnight
-- **Background patterns** — 16 patterns with adjustable opacity
+- **14 color themes** — Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Sakura, Midnight, Bamboo, Copper, Desert, and more
+- **Seasonal theme** — Automatically changes colors based on the time of year (spring, summer, autumn, winter)
+- **66 background patterns** — Including 56 animated canvas patterns (sakura petals, fireflies, northern lights, paper airplanes, and more) with adjustable opacity
 - **Contrast control** — Adjust background contrast for accessibility
 - **Two-factor authentication** — Optional TOTP-based 2FA with backup codes
 - **Telegram notifications** — Receive transaction alerts via your own Telegram bot

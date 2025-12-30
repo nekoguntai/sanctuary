@@ -47,6 +47,5 @@ export { useMistyValley } from './mistyValley';
 export { useGentleWaves } from './gentleWaves';
 export { useAuroraWaves } from './auroraWaves';
 // Additional serene animations
-export { useJellyfishDrift } from './jellyfishDrift';
 export { useWindChimes } from './windChimes';
 export { useSoapBubbles } from './soapBubbles';

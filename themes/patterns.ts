@@ -326,12 +326,6 @@ export const globalPatterns: BackgroundPattern[] = [
   },
   // Additional serene animations
   {
-    id: 'jellyfish-drift',
-    name: 'Jellyfish Drift',
-    description: 'Graceful bioluminescent jellyfish floating through deep ocean',
-    animated: true,
-  },
-  {
     id: 'wind-chimes',
     name: 'Wind Chimes',
     description: 'Delicate hanging wind chimes with gentle swaying motion',

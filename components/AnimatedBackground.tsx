@@ -53,7 +53,6 @@ import {
   useGentleWaves,
   useAuroraWaves,
   // Additional serene animations
-  useJellyfishDrift,
   useWindChimes,
   useSoapBubbles,
 } from './animations';
@@ -117,7 +116,6 @@ export const ANIMATED_PATTERNS = [
   'gentle-waves',
   'aurora-waves',
   // Additional serene animations
-  'jellyfish-drift',
   'wind-chimes',
   'soap-bubbles',
 ] as const;
@@ -189,7 +187,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   useGentleWaves(canvasRef, darkMode, opacity, pattern === 'gentle-waves');
   useAuroraWaves(canvasRef, darkMode, opacity, pattern === 'aurora-waves');
   // Additional serene animations
-  useJellyfishDrift(canvasRef, darkMode, opacity, pattern === 'jellyfish-drift');
   useWindChimes(canvasRef, darkMode, opacity, pattern === 'wind-chimes');
   useSoapBubbles(canvasRef, darkMode, opacity, pattern === 'soap-bubbles');
 

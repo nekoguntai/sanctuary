@@ -83,6 +83,21 @@ export const serenityTheme: ThemeDefinition = {
         950: '#2e1065',
       },
 
+      // Shared colors (Teal for shared wallet/device indicators)
+      shared: {
+        50: '#f0fdfa',
+        100: '#ccfbf1',
+        200: '#99f6e4',
+        300: '#5eead4',
+        400: '#2dd4bf',
+        500: '#14b8a6',
+        600: '#0d9488',
+        700: '#0f766e',
+        800: '#115e59',
+        900: '#134e4a',
+        950: '#042f2e',
+      },
+
       // Mainnet colors (Sky blue)
       mainnet: {
         50: '#f0f9ff',
@@ -193,6 +208,21 @@ export const serenityTheme: ThemeDefinition = {
         800: '#ddd6fe',
         900: '#ede9fe',
         950: '#f5f3ff',
+      },
+
+      // Shared colors (Teal - inverted for dark mode)
+      shared: {
+        50: '#042f2e',
+        100: '#134e4a',
+        200: '#115e59',
+        300: '#0f766e',
+        400: '#0d9488',
+        500: '#14b8a6',
+        600: '#2dd4bf',
+        700: '#5eead4',
+        800: '#99f6e4',
+        900: '#ccfbf1',
+        950: '#f0fdfa',
       },
 
       // Mainnet colors (Sky blue - inverted)

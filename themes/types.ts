@@ -42,6 +42,9 @@ export interface ThemeColors {
   // Sent color scale (sent-50 through sent-950) - for sent transactions
   sent?: ColorScale;
 
+  // Shared color scale (shared-50 through shared-950) - for shared wallet/device indicators
+  shared?: ColorScale;
+
   // Mainnet color scale (mainnet-50 through mainnet-950) - for mainnet network indicator
   mainnet?: ColorScale;
 

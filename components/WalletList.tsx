@@ -332,7 +332,7 @@ export const WalletList: React.FC = () => {
                             {isMultisig ? 'Multisig' : 'Single Sig'}
                         </span>
                         {wallet.isShared && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-shared-100 text-shared-800 dark:bg-shared-100 dark:text-shared-700">
                                 <Users className="w-3 h-3" />
                                 Shared
                             </span>
@@ -482,7 +482,7 @@ export const WalletList: React.FC = () => {
                                                 {isMultisig ? `${wallet.quorum} of ${wallet.totalSigners}` : 'Single Sig'}
                                             </span>
                                             {wallet.isShared && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-shared-100 text-shared-800 dark:bg-shared-100 dark:text-shared-700">
                                                     <Users className="w-3 h-3" />
                                                     Shared
                                                 </span>

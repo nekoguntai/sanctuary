@@ -83,6 +83,21 @@ export const forestTheme: ThemeDefinition = {
         950: '#241b30',
       },
 
+      // Shared colors (Teal for shared wallet/device indicators)
+      shared: {
+        50: '#f0fdfa',
+        100: '#ccfbf1',
+        200: '#99f6e4',
+        300: '#5eead4',
+        400: '#2dd4bf',
+        500: '#14b8a6',
+        600: '#0d9488',
+        700: '#0f766e',
+        800: '#115e59',
+        900: '#134e4a',
+        950: '#042f2e',
+      },
+
       // Mainnet colors (Deep evergreen)
       mainnet: {
         50: '#effaf4',
@@ -197,6 +212,21 @@ export const forestTheme: ThemeDefinition = {
         800: '#ddd0ef',
         900: '#eee8f7',
         950: '#f8f5fc',
+      },
+
+      // Shared colors (Teal - inverted for dark mode)
+      shared: {
+        50: '#042f2e',
+        100: '#134e4a',
+        200: '#115e59',
+        300: '#0f766e',
+        400: '#0d9488',
+        500: '#14b8a6',
+        600: '#2dd4bf',
+        700: '#5eead4',
+        800: '#99f6e4',
+        900: '#ccfbf1',
+        950: '#f0fdfa',
       },
 
       // Mainnet colors (Evergreen - inverted for dark)

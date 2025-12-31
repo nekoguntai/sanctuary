@@ -1494,7 +1494,7 @@ export const WalletDetail: React.FC = () => {
              </span>
              {/* Shared indicator */}
              {wallet.isShared && (
-               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-600 text-white dark:bg-violet-900/50 dark:text-violet-200">
+               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-shared-600 text-white dark:bg-shared-100 dark:text-shared-700">
                  <Users className="w-3 h-3" />
                  Shared
                </span>

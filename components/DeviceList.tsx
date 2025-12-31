@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { WalletType, HardwareDevice, HardwareDeviceModel } from '../types';
 import { getDevices, updateDevice, deleteDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
-import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2, ArrowUpDown, ChevronUp, ChevronDown, Users, User } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
 import { useNavigate } from 'react-router-dom';
@@ -13,8 +13,9 @@ const log = createLogger('DeviceList');
 type ViewMode = 'list' | 'grouped';
 type SortField = 'label' | 'type' | 'fingerprint' | 'wallets';
 type SortOrder = 'asc' | 'desc';
+type OwnershipFilter = 'all' | 'owned' | 'shared';
 
-// Extended device type with wallet info from API
+// Extended device type with wallet and sharing info from API
 interface DeviceWithWallets extends ApiDevice {
   wallets?: Array<{
     wallet: {
@@ -24,6 +25,9 @@ interface DeviceWithWallets extends ApiDevice {
       scriptType?: string;
     };
   }>;
+  isOwner?: boolean;
+  userRole?: 'owner' | 'viewer' | null;
+  sharedBy?: string;
 }
 
 export const DeviceList: React.FC = () => {
@@ -47,6 +51,7 @@ export const DeviceList: React.FC = () => {
   // Get sort settings from user preferences
   const sortBy = (user?.preferences?.viewSettings?.devices?.sortBy as SortField) || 'label';
   const sortOrder = (user?.preferences?.viewSettings?.devices?.sortOrder as SortOrder) || 'asc';
+  const ownershipFilter = (user?.preferences?.viewSettings?.devices?.ownershipFilter as OwnershipFilter) || 'all';
 
   const setSortBy = (field: SortField) => {
     // If clicking the same field, toggle order; otherwise set new field with asc
@@ -55,6 +60,15 @@ export const DeviceList: React.FC = () => {
       viewSettings: {
         ...user?.preferences?.viewSettings,
         devices: { ...user?.preferences?.viewSettings?.devices, sortBy: field, sortOrder: newOrder }
+      }
+    });
+  };
+
+  const setOwnershipFilter = (filter: OwnershipFilter) => {
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        devices: { ...user?.preferences?.viewSettings?.devices, ownershipFilter: filter }
       }
     });
   };
@@ -131,11 +145,19 @@ export const DeviceList: React.FC = () => {
     })) || [];
   };
 
-  // Sort devices based on current sort settings
+  // Filter and sort devices based on current settings
   const sortedDevices = useMemo(() => {
     if (!devices.length) return devices;
 
-    return [...devices].sort((a, b) => {
+    // Apply ownership filter
+    let filtered = devices;
+    if (ownershipFilter === 'owned') {
+      filtered = devices.filter(d => d.isOwner === true);
+    } else if (ownershipFilter === 'shared') {
+      filtered = devices.filter(d => d.isOwner === false);
+    }
+
+    return [...filtered].sort((a, b) => {
       let comparison = 0;
 
       switch (sortBy) {
@@ -157,7 +179,11 @@ export const DeviceList: React.FC = () => {
 
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [devices, sortBy, sortOrder]);
+  }, [devices, sortBy, sortOrder, ownershipFilter]);
+
+  // Count owned and shared devices
+  const ownedCount = devices.filter(d => d.isOwner === true).length;
+  const sharedCount = devices.filter(d => d.isOwner === false).length;
 
   // Group devices by Type
   const groupedDevices = devices.reduce((acc, device) => {
@@ -213,6 +239,35 @@ export const DeviceList: React.FC = () => {
           <p className="text-sanctuary-500">Manage your signers and keys</p>
         </div>
         <div className="flex items-center space-x-3">
+            {/* Ownership Filter */}
+            {sharedCount > 0 && (
+              <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+                <button
+                  onClick={() => setOwnershipFilter('all')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors ${ownershipFilter === 'all' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                  title="Show all devices"
+                >
+                  All ({devices.length})
+                </button>
+                <button
+                  onClick={() => setOwnershipFilter('owned')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-1 ${ownershipFilter === 'owned' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                  title="Show owned devices only"
+                >
+                  <User className="w-3 h-3" />
+                  Owned ({ownedCount})
+                </button>
+                <button
+                  onClick={() => setOwnershipFilter('shared')}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors flex items-center gap-1 ${ownershipFilter === 'shared' ? 'surface-secondary text-sanctuary-900 dark:text-sanctuary-100' : 'text-sanctuary-400 hover:text-sanctuary-600'}`}
+                  title="Show shared devices only"
+                >
+                  <Users className="w-3 h-3" />
+                  Shared ({sharedCount})
+                </button>
+              </div>
+            )}
+            {/* View Mode Toggle */}
             <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
                 <button
                     onClick={() => setViewMode('list')}
@@ -345,9 +400,19 @@ export const DeviceList: React.FC = () => {
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-center group">
-                                <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</span>
-                                <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="ml-2 opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                              <div className="flex flex-col">
+                                <div className="flex items-center group">
+                                  <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</span>
+                                  {device.isOwner && (
+                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="ml-2 opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                                  )}
+                                </div>
+                                {!device.isOwner && device.sharedBy && (
+                                  <span className="text-xs text-sanctuary-400 flex items-center gap-1">
+                                    <Users className="w-3 h-3" />
+                                    Shared by {device.sharedBy}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
@@ -388,7 +453,7 @@ export const DeviceList: React.FC = () => {
 
                       {/* Actions */}
                       <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                        {associatedWallets.length === 0 && (
+                        {device.isOwner && associatedWallets.length === 0 && (
                           <div className="relative inline-block">
                             {deleteConfirmId === device.id ? (
                               <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-900/30 p-2 rounded-lg">
@@ -497,18 +562,30 @@ export const DeviceList: React.FC = () => {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center group">
+                                                <div className="flex flex-col">
+                                                  <div className="flex items-center group">
                                                     <span className="font-medium text-sm text-sanctuary-900 dark:text-sanctuary-100 truncate mr-2">{device.label}</span>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
-                                                    {associatedWallets.length === 0 && (
-                                                      <button
-                                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(device.id); }}
-                                                        className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-rose-600 transition-opacity ml-1"
-                                                        title="Delete device"
-                                                      >
-                                                        <Trash2 className="w-3 h-3" />
-                                                      </button>
+                                                    {device.isOwner && (
+                                                      <>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
+                                                        {associatedWallets.length === 0 && (
+                                                          <button
+                                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(device.id); }}
+                                                            className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-rose-600 transition-opacity ml-1"
+                                                            title="Delete device"
+                                                          >
+                                                            <Trash2 className="w-3 h-3" />
+                                                          </button>
+                                                        )}
+                                                      </>
                                                     )}
+                                                  </div>
+                                                  {!device.isOwner && device.sharedBy && (
+                                                    <span className="text-[10px] text-sanctuary-400 flex items-center gap-1">
+                                                      <Users className="w-2.5 h-2.5" />
+                                                      Shared by {device.sharedBy}
+                                                    </span>
+                                                  )}
                                                 </div>
                                             )}
                                             <div className="text-xs font-mono text-sanctuary-500">{device.fingerprint}</div>

@@ -186,6 +186,7 @@ export interface PageViewSettings {
   layout?: string;          // 'grid' | 'table' | 'list' | 'grouped' | etc.
   sortBy?: string;          // Column to sort by (future)
   sortOrder?: 'asc' | 'desc'; // Sort direction (future)
+  ownershipFilter?: 'all' | 'owned' | 'shared'; // For filtering by ownership
 }
 
 // View settings keyed by page name (wallets, devices, transactions, etc.)
@@ -386,6 +387,7 @@ export interface Device {
   xpub?: string; // Optional for backward compat, but typically present
   userId?: string;
   createdAt?: string;
+  updatedAt?: string;
   model?: HardwareDeviceModel;
   wallets?: Array<{
     wallet: {
@@ -395,6 +397,19 @@ export interface Device {
       scriptType?: string;
     };
   }>;
+  // Sharing info (present when fetching accessible devices)
+  isOwner?: boolean;
+  userRole?: DeviceRole;
+  sharedBy?: string; // Username of owner if shared
+  groupId?: string;
+  groupRole?: string;
+}
+
+export type DeviceRole = 'owner' | 'viewer' | null;
+
+export interface DeviceShareInfo {
+  group: { id: string; name: string } | null;
+  users: Array<{ id: string; username: string; role: string }>;
 }
 
 // ============================================================================

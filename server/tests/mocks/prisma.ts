@@ -32,6 +32,7 @@ export const mockPrismaClient = {
   walletUser: createModelMock(),
   walletDevice: createModelMock(),
   device: createModelMock(),
+  deviceUser: createModelMock(),
   address: createModelMock(),
   transaction: createModelMock(),
   uTXO: createModelMock(),

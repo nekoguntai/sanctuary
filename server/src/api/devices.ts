@@ -6,8 +6,17 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireDeviceAccess } from '../middleware/deviceAccess';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import {
+  getUserAccessibleDevices,
+  getDeviceShareInfo,
+  shareDeviceWithUser,
+  removeUserFromDevice,
+  shareDeviceWithGroup,
+  checkDeviceOwnerAccess,
+} from '../services/deviceAccess';
 
 const log = createLogger('DEVICES');
 
@@ -128,30 +137,14 @@ router.use(authenticate);
 
 /**
  * GET /api/v1/devices
- * Get all devices for authenticated user
+ * Get all devices accessible by authenticated user (owned + shared)
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    const devices = await prisma.device.findMany({
-      where: { userId },
-      include: {
-        model: true, // Include hardware device model info
-        wallets: {
-          include: {
-            wallet: {
-              select: {
-                id: true,
-                name: true,
-                type: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Get all devices user has access to (owned + shared via user + shared via group)
+    const devices = await getUserAccessibleDevices(userId);
 
     res.json(devices);
   } catch (error) {
@@ -203,19 +196,33 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
-    const device = await prisma.device.create({
-      data: {
-        userId,
-        type,
-        label,
-        fingerprint,
-        derivationPath,
-        xpub,
-        modelId,
-      },
-      include: {
-        model: true,
-      },
+    // Create device and owner record in a transaction
+    const device = await prisma.$transaction(async (tx) => {
+      const newDevice = await tx.device.create({
+        data: {
+          userId,
+          type,
+          label,
+          fingerprint,
+          derivationPath,
+          xpub,
+          modelId,
+        },
+        include: {
+          model: true,
+        },
+      });
+
+      // Create owner record in DeviceUser
+      await tx.deviceUser.create({
+        data: {
+          deviceId: newDevice.id,
+          userId,
+          role: 'owner',
+        },
+      });
+
+      return newDevice;
     });
 
     res.status(201).json(device);
@@ -230,20 +237,17 @@ router.post('/', async (req: Request, res: Response) => {
 
 /**
  * GET /api/v1/devices/:id
- * Get a specific device by ID
+ * Get a specific device by ID (requires view access)
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requireDeviceAccess('view'), async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
     const { id } = req.params;
+    const deviceRole = req.deviceRole;
 
-    const device = await prisma.device.findFirst({
-      where: {
-        id,
-        userId,
-      },
+    const device = await prisma.device.findUnique({
+      where: { id },
       include: {
-        model: true, // Include hardware device model info
+        model: true,
         wallets: {
           include: {
             wallet: {
@@ -256,6 +260,9 @@ router.get('/:id', async (req: Request, res: Response) => {
             },
           },
         },
+        user: {
+          select: { username: true },
+        },
       },
     });
 
@@ -266,7 +273,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    res.json(device);
+    // Add access info to response
+    const isOwner = deviceRole === 'owner';
+    res.json({
+      ...device,
+      isOwner,
+      userRole: deviceRole,
+      sharedBy: isOwner ? undefined : device.user.username,
+    });
   } catch (error) {
     log.error('Get device error', { error });
     res.status(500).json({
@@ -278,27 +292,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/devices/:id
- * Update a device (label, derivationPath, type, or model)
+ * Update a device (label, derivationPath, type, or model) - owner only
  */
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', requireDeviceAccess('owner'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
     const { label, derivationPath, type, modelSlug } = req.body;
-
-    const device = await prisma.device.findFirst({
-      where: {
-        id,
-        userId,
-      },
-    });
-
-    if (!device) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Device not found',
-      });
-    }
 
     // Build update data
     const updateData: any = {};
@@ -345,18 +345,15 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/devices/:id
- * Remove a device (only if not in use by any wallet)
+ * Remove a device (owner only, and only if not in use by any wallet)
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireDeviceAccess('owner'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { id } = req.params;
 
-    const device = await prisma.device.findFirst({
-      where: {
-        id,
-        userId,
-      },
+    const device = await prisma.device.findUnique({
+      where: { id },
       include: {
         wallets: {
           include: {
@@ -395,12 +392,131 @@ router.delete('/:id', async (req: Request, res: Response) => {
       where: { id },
     });
 
+    log.info('Device deleted', { deviceId: id, userId });
+
     res.status(204).send();
   } catch (error) {
     log.error('Delete device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete device',
+    });
+  }
+});
+
+// ========================================
+// SHARING ENDPOINTS
+// ========================================
+
+/**
+ * GET /api/v1/devices/:id/share
+ * Get sharing info for a device (requires view access)
+ */
+router.get('/:id/share', requireDeviceAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const shareInfo = await getDeviceShareInfo(id);
+
+    res.json(shareInfo);
+  } catch (error) {
+    log.error('Get device share info error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch device sharing info',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/devices/:id/share/user
+ * Share device with a user (owner only)
+ */
+router.post('/:id/share/user', requireDeviceAccess('owner'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const ownerId = req.user!.userId;
+    const { targetUserId } = req.body;
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'targetUserId is required',
+      });
+    }
+
+    const result = await shareDeviceWithUser(id, targetUserId, ownerId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: result.message,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    log.error('Share device with user error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to share device',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/devices/:id/share/user/:targetUserId
+ * Remove a user's access to device (owner only)
+ */
+router.delete('/:id/share/user/:targetUserId', requireDeviceAccess('owner'), async (req: Request, res: Response) => {
+  try {
+    const { id, targetUserId } = req.params;
+    const ownerId = req.user!.userId;
+
+    const result = await removeUserFromDevice(id, targetUserId, ownerId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: result.message,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    log.error('Remove user from device error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to remove user access',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/devices/:id/share/group
+ * Share device with a group or remove group access (owner only)
+ */
+router.post('/:id/share/group', requireDeviceAccess('owner'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const ownerId = req.user!.userId;
+    const { groupId } = req.body; // null to remove group access
+
+    const result = await shareDeviceWithGroup(id, groupId, ownerId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: result.message,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    log.error('Share device with group error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to share device with group',
     });
   }
 });

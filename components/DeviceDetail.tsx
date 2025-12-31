@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel } from '../types';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole } from '../types';
 import { getDevice, updateDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft, ChevronDown } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
+import { DeviceSharing } from './DeviceSharing';
 
 const log = createLogger('DeviceDetail');
 
-// Extended device type with wallet info
+type TabType = 'details' | 'access';
+
+// Extended device type with wallet and sharing info
 interface DeviceWithWallets extends ApiDevice {
   wallets?: Array<{
     wallet: {
@@ -19,6 +22,9 @@ interface DeviceWithWallets extends ApiDevice {
       scriptType?: string;
     };
   }>;
+  isOwner?: boolean;
+  userRole?: DeviceRole;
+  sharedBy?: string;
 }
 
 // Wallet info for display
@@ -40,6 +46,11 @@ export const DeviceDetail: React.FC = () => {
   const [editLabel, setEditLabel] = useState('');
   const [editModelSlug, setEditModelSlug] = useState<string>('');
   const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('details');
+
+  // Derived ownership state
+  const isOwner = device?.isOwner ?? true; // Default to true for backward compat
+  const userRole = device?.userRole ?? 'owner';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -133,10 +144,19 @@ export const DeviceDetail: React.FC = () => {
                                 ) : (
                                     <>
                                         <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">{device.label}</h1>
-                                        <button onClick={() => setIsEditing(true)} className="text-sanctuary-400 hover:text-sanctuary-600 p-1" aria-label="Edit label"><Edit2 className="w-4 h-4" /></button>
+                                        {isOwner && (
+                                          <button onClick={() => setIsEditing(true)} className="text-sanctuary-400 hover:text-sanctuary-600 p-1" aria-label="Edit label"><Edit2 className="w-4 h-4" /></button>
+                                        )}
                                     </>
                                 )}
                             </div>
+                            {/* Shared by indicator */}
+                            {!isOwner && device.sharedBy && (
+                              <span className="text-xs text-sanctuary-400 flex items-center gap-1 mt-1">
+                                <Users className="w-3 h-3" />
+                                Shared by {device.sharedBy}
+                              </span>
+                            )}
                             {isEditing ? (
                                 <div className="mt-2">
                                     <label className="text-xs text-sanctuary-500 uppercase mb-1 block">Device Type</label>
@@ -184,46 +204,84 @@ export const DeviceDetail: React.FC = () => {
             </div>
         </div>
 
-        <div className="space-y-4">
-             <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Associated Wallets</h3>
-             {wallets.length === 0 ? (
-                 <div className="surface-elevated rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                     No wallets are currently using this device.
-                 </div>
-             ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {wallets.map(w => {
-                         const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
-                         const badgeClass = isMultisig
-                            ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-                            : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-                         return (
-                            <div 
-                                key={w.id} 
-                                onClick={() => navigate(`/wallets/${w.id}`)}
-                                className="group cursor-pointer surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
-                            >
-                                <div className="flex items-center justify-between mb-2">
-                                     <div className="flex items-center space-x-3">
-                                         <div className="p-2 surface-secondary rounded-lg text-sanctuary-500">
-                                             {getWalletIcon(w.type, "w-5 h-5")}
-                                         </div>
-                                         <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{w.name}</span>
-                                     </div>
-                                     <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${badgeClass}`}>
-                                         {isMultisig ? 'Multisig' : 'Single Sig'}
-                                     </span>
-                                </div>
-                                <div className="text-sm text-sanctuary-500 pl-10">
-                                    ID: {w.id}
-                                </div>
-                            </div>
-                         );
-                     })}
-                 </div>
-             )}
+        {/* Tab Navigation */}
+        <div className="border-b border-sanctuary-200 dark:border-sanctuary-800">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'details'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
+              }`}
+            >
+              Details
+            </button>
+            <button
+              onClick={() => setActiveTab('access')}
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+                activeTab === 'access'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Access
+            </button>
+          </nav>
         </div>
+
+        {/* Tab Content */}
+        {activeTab === 'details' && (
+          <div className="space-y-4">
+               <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Associated Wallets</h3>
+               {wallets.length === 0 ? (
+                   <div className="surface-elevated rounded-xl p-8 text-center text-sanctuary-400 border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                       No wallets are currently using this device.
+                   </div>
+               ) : (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       {wallets.map(w => {
+                           const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
+                           const badgeClass = isMultisig
+                              ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+                              : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
+
+                           return (
+                              <div
+                                  key={w.id}
+                                  onClick={() => navigate(`/wallets/${w.id}`)}
+                                  className="group cursor-pointer surface-elevated p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-all"
+                              >
+                                  <div className="flex items-center justify-between mb-2">
+                                       <div className="flex items-center space-x-3">
+                                           <div className="p-2 surface-secondary rounded-lg text-sanctuary-500">
+                                               {getWalletIcon(w.type, "w-5 h-5")}
+                                           </div>
+                                           <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">{w.name}</span>
+                                       </div>
+                                       <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${badgeClass}`}>
+                                           {isMultisig ? 'Multisig' : 'Single Sig'}
+                                       </span>
+                                  </div>
+                                  <div className="text-sm text-sanctuary-500 pl-10">
+                                      ID: {w.id}
+                                  </div>
+                              </div>
+                           );
+                       })}
+                   </div>
+               )}
+          </div>
+        )}
+
+        {activeTab === 'access' && (
+          <DeviceSharing
+            deviceId={id!}
+            isOwner={isOwner}
+            userRole={userRole}
+          />
+        )}
     </div>
   );
 };

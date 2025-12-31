@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import { requireWalletAccess } from '../middleware/walletAccess';
 import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
+import { getDevicesToShareForWallet } from '../services/deviceAccess';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import { balanceHistoryCache } from '../utils/cache';
@@ -838,9 +839,13 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
       },
     });
 
+    // Get devices associated with this wallet that the target user doesn't have access to
+    const devicesToShare = await getDevicesToShareForWallet(walletId, targetUserId);
+
     res.status(201).json({
       success: true,
       message: 'User added to wallet',
+      devicesToShare: devicesToShare.length > 0 ? devicesToShare : undefined,
     });
   } catch (error: any) {
     log.error('Share with user error', { error });

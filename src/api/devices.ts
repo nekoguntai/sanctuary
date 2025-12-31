@@ -5,10 +5,10 @@
  */
 
 import apiClient from './client';
-import type { Device, HardwareDeviceModel } from '../types';
+import type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '../types';
 
 // Re-export types for backward compatibility
-export type { Device, HardwareDeviceModel } from '../types';
+export type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '../types';
 
 export interface CreateDeviceRequest {
   type: string;
@@ -98,4 +98,59 @@ export async function getDeviceModel(slug: string): Promise<HardwareDeviceModel>
  */
 export async function getManufacturers(): Promise<string[]> {
   return apiClient.get<string[]>('/devices/manufacturers');
+}
+
+// ========================================
+// DEVICE SHARING
+// ========================================
+
+export interface ShareDeviceWithUserRequest {
+  targetUserId: string;
+}
+
+export interface ShareDeviceWithGroupRequest {
+  groupId: string | null;
+}
+
+export interface ShareDeviceResponse {
+  success: boolean;
+  message: string;
+  groupName?: string | null;
+}
+
+/**
+ * Get sharing info for a device
+ */
+export async function getDeviceShareInfo(deviceId: string): Promise<DeviceShareInfo> {
+  return apiClient.get<DeviceShareInfo>(`/devices/${deviceId}/share`);
+}
+
+/**
+ * Share a device with a user
+ */
+export async function shareDeviceWithUser(
+  deviceId: string,
+  data: ShareDeviceWithUserRequest
+): Promise<ShareDeviceResponse> {
+  return apiClient.post<ShareDeviceResponse>(`/devices/${deviceId}/share/user`, data);
+}
+
+/**
+ * Remove a user's access to a device
+ */
+export async function removeUserFromDevice(
+  deviceId: string,
+  targetUserId: string
+): Promise<ShareDeviceResponse> {
+  return apiClient.delete<ShareDeviceResponse>(`/devices/${deviceId}/share/user/${targetUserId}`);
+}
+
+/**
+ * Share a device with a group or remove group access
+ */
+export async function shareDeviceWithGroup(
+  deviceId: string,
+  data: ShareDeviceWithGroupRequest
+): Promise<ShareDeviceResponse> {
+  return apiClient.post<ShareDeviceResponse>(`/devices/${deviceId}/share/group`, data);
 }

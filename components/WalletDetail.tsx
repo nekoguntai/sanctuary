@@ -9,6 +9,7 @@ import * as devicesApi from '../src/api/devices';
 import * as bitcoinApi from '../src/api/bitcoin';
 import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
+import * as adminApi from '../src/api/admin';
 import * as draftsApi from '../src/api/drafts';
 import * as payjoinApi from '../src/api/payjoin';
 import * as privacyApi from '../src/api/transactions';
@@ -70,7 +71,8 @@ import {
   Pause,
   Play,
   Send,
-  AlertCircle
+  AlertCircle,
+  HardDrive
 } from 'lucide-react';
 import { getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { useUser } from '../contexts/UserContext';
@@ -450,7 +452,15 @@ export const WalletDetail: React.FC = () => {
   const [userSearchResults, setUserSearchResults] = useState<authApi.SearchUser[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [sharingLoading, setSharingLoading] = useState(false);
-  
+
+  // Device sharing prompt state (shown after sharing wallet with user)
+  const [deviceSharePrompt, setDeviceSharePrompt] = useState<{
+    show: boolean;
+    targetUserId: string;
+    targetUsername: string;
+    devices: Array<{ id: string; label: string; fingerprint: string }>;
+  }>({ show: false, targetUserId: '', targetUsername: '', devices: [] });
+
   // Selection State for UTXOs
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
 
@@ -900,11 +910,26 @@ export const WalletDetail: React.FC = () => {
     await Promise.all(fetchPromises);
 
     // Fetch user's groups and wallet sharing info (for Access tab)
+    // Admins can see and assign any group; regular users only see groups they belong to
     try {
-      const userGroups = await authApi.getUserGroups();
-      setGroups(userGroups);
+      if (user?.isAdmin) {
+        // Admins can share with any group
+        const allGroups = await adminApi.getGroups();
+        // Map AdminGroup to UserGroup format
+        const mappedGroups: authApi.UserGroup[] = allGroups.map(g => ({
+          id: g.id,
+          name: g.name,
+          description: g.description || undefined,
+          memberCount: g.members?.length || 0,
+          memberIds: g.members?.map(m => m.userId) || [],
+        }));
+        setGroups(mappedGroups);
+      } else {
+        const userGroups = await authApi.getUserGroups();
+        setGroups(userGroups);
+      }
     } catch (err) {
-      logError(log, err, 'Failed to fetch user groups');
+      logError(log, err, 'Failed to fetch groups');
       // Non-critical - user can still view wallet without groups
     }
 
@@ -1219,10 +1244,27 @@ export const WalletDetail: React.FC = () => {
     if (!id) return;
     try {
       setSharingLoading(true);
-      await walletsApi.shareWalletWithUser(id, { targetUserId, role });
+      const result = await walletsApi.shareWalletWithUser(id, { targetUserId, role });
+
       // Refresh share info
       const shareInfo = await walletsApi.getWalletShareInfo(id);
       setWalletShareInfo(shareInfo);
+
+      // If there are devices to share, show the prompt
+      if (result.devicesToShare && result.devicesToShare.length > 0) {
+        // Find the username from search results or share info
+        const targetUsername = userSearchResults.find(u => u.id === targetUserId)?.username
+          || shareInfo.users.find(u => u.id === targetUserId)?.username
+          || 'this user';
+
+        setDeviceSharePrompt({
+          show: true,
+          targetUserId,
+          targetUsername,
+          devices: result.devicesToShare,
+        });
+      }
+
       setUserSearchQuery('');
       setUserSearchResults([]);
     } catch (err) {
@@ -1231,6 +1273,29 @@ export const WalletDetail: React.FC = () => {
     } finally {
       setSharingLoading(false);
     }
+  };
+
+  const handleShareDevicesWithUser = async () => {
+    if (!deviceSharePrompt.show) return;
+    try {
+      setSharingLoading(true);
+      // Share all devices with the user
+      await Promise.all(
+        deviceSharePrompt.devices.map(device =>
+          devicesApi.shareDeviceWithUser(device.id, { targetUserId: deviceSharePrompt.targetUserId })
+        )
+      );
+      setDeviceSharePrompt({ show: false, targetUserId: '', targetUsername: '', devices: [] });
+    } catch (err) {
+      log.error('Failed to share devices', { error: err });
+      handleError(err, 'Device Share Failed');
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  const dismissDeviceSharePrompt = () => {
+    setDeviceSharePrompt({ show: false, targetUserId: '', targetUsername: '', devices: [] });
   };
 
   const handleRemoveUserAccess = async (targetUserId: string) => {
@@ -2729,6 +2794,60 @@ export const WalletDetail: React.FC = () => {
                     {isCopied(qrModalAddress) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Device Share Prompt Modal */}
+      {deviceSharePrompt.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900/30 mb-4">
+                <HardDrive className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+              </div>
+              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Share Devices?</h3>
+              <p className="text-sm text-sanctuary-500 mb-4">
+                <span className="font-medium text-sanctuary-700 dark:text-sanctuary-300">{deviceSharePrompt.targetUsername}</span> now has access to this wallet.
+                Would you like to also share the following signing devices with them?
+              </p>
+
+              {/* Device List */}
+              <div className="mb-6 space-y-2">
+                {deviceSharePrompt.devices.map(device => (
+                  <div key={device.id} className="flex items-center justify-between p-3 surface-secondary rounded-lg text-left">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg mr-3">
+                        <HardDrive className="w-4 h-4 text-sanctuary-600 dark:text-sanctuary-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{device.label}</p>
+                        <p className="text-xs text-sanctuary-500 font-mono">{device.fingerprint}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex space-x-3">
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={dismissDeviceSharePrompt}
+                  disabled={sharingLoading}
+                >
+                  Skip
+                </Button>
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  onClick={handleShareDevicesWithUser}
+                  disabled={sharingLoading}
+                >
+                  {sharingLoading ? 'Sharing...' : 'Share Devices'}
+                </Button>
               </div>
             </div>
           </div>

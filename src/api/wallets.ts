@@ -202,10 +202,20 @@ export async function shareWalletWithGroup(walletId: string, data: ShareWithGrou
   return apiClient.post(`/wallets/${walletId}/share/group`, data);
 }
 
+export interface ShareWithUserResponse {
+  success: boolean;
+  message: string;
+  devicesToShare?: Array<{
+    id: string;
+    label: string;
+    fingerprint: string;
+  }>;
+}
+
 /**
  * Share wallet with a specific user
  */
-export async function shareWalletWithUser(walletId: string, data: ShareWithUserRequest): Promise<{ success: boolean; message: string }> {
+export async function shareWalletWithUser(walletId: string, data: ShareWithUserRequest): Promise<ShareWithUserResponse> {
   return apiClient.post(`/wallets/${walletId}/share/user`, data);
 }
 

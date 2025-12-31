@@ -556,7 +556,7 @@ export default function AISettings() {
             >
               <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
                 activeTab === tab.id
-                  ? 'bg-primary-600 text-white'
+                  ? 'bg-primary-600 dark:bg-primary-500 text-white dark:text-primary-950'
                   : tab.enabled
                     ? 'bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300'
                     : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400 dark:text-sanctuary-600'
@@ -610,7 +610,7 @@ export default function AISettings() {
                   onClick={handleToggleAI}
                   disabled={isSaving || isStartingContainer}
                   className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
-                    aiEnabled ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
+                    aiEnabled ? 'bg-primary-600 dark:bg-primary-500' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
                   } ${(isSaving || isStartingContainer) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <span

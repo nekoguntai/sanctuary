@@ -10,6 +10,7 @@ import { getWebSocketServer, WebSocketEvent } from './server';
 import { getElectrumClient } from '../services/bitcoin/electrum';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { walletLogBuffer } from '../services/walletLogBuffer';
 
 const log = createLogger('NOTIFY');
 
@@ -498,6 +499,7 @@ export class NotificationService {
 
   /**
    * Broadcast wallet log entry for real-time sync logging
+   * Also stores the entry in the log buffer for later retrieval
    */
   public broadcastWalletLog(walletId: string, entry: Omit<WalletLogEntry, 'id' | 'timestamp'>) {
     const wsServer = getWebSocketServer();
@@ -507,6 +509,9 @@ export class NotificationService {
       timestamp: new Date().toISOString(),
       ...entry,
     };
+
+    // Store in buffer for historical retrieval
+    walletLogBuffer.add(walletId, logEntry);
 
     const event: WebSocketEvent = {
       type: 'log',

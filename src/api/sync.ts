@@ -5,6 +5,7 @@
  */
 
 import apiClient from './client';
+import type { WalletLogEntry } from '../../hooks/useWebSocket';
 
 export interface SyncStatus {
   lastSyncedAt: string | null;
@@ -132,4 +133,17 @@ export async function resyncNetworkWallets(network: NetworkType): Promise<Networ
  */
 export async function getNetworkSyncStatus(network: NetworkType): Promise<NetworkSyncStatus> {
   return apiClient.get<NetworkSyncStatus>(`/sync/network/${network}/status`);
+}
+
+export interface WalletLogsResult {
+  logs: WalletLogEntry[];
+}
+
+/**
+ * Get buffered sync logs for a wallet
+ * Returns the most recent logs stored in memory (up to 200 entries)
+ */
+export async function getWalletLogs(walletId: string): Promise<WalletLogEntry[]> {
+  const result = await apiClient.get<WalletLogsResult>(`/sync/logs/${walletId}`);
+  return result.logs;
 }

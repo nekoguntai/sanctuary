@@ -149,3 +149,24 @@ export const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
  * AI API maximum requests per window
  */
 export const AI_RATE_LIMIT_MAX_REQUESTS = 10;
+
+// ============================================================================
+// WALLET LOG BUFFER CONSTANTS
+// ============================================================================
+
+/**
+ * Maximum log entries stored per wallet in the in-memory buffer
+ * Oldest entries are discarded when this limit is reached (ring buffer)
+ */
+export const WALLET_LOG_MAX_ENTRIES = 200;
+
+/**
+ * Time in milliseconds after which inactive wallet logs are cleaned up
+ * Wallets with no log activity for this duration have their buffers cleared
+ */
+export const WALLET_LOG_INACTIVE_CLEANUP_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Interval in milliseconds between cleanup cycles
+ */
+export const WALLET_LOG_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes

@@ -582,7 +582,7 @@ export const WalletDetail: React.FC = () => {
   const { copy, isCopied } = useCopyToClipboard();
 
   // Wallet logs hook - only enabled when Log tab is active
-  const { logs, isPaused, clearLogs, togglePause } = useWalletLogs(id, {
+  const { logs, isPaused, isLoading: logsLoading, clearLogs, togglePause } = useWalletLogs(id, {
     enabled: activeTab === 'log',
     maxEntries: 500,
   });
@@ -2077,7 +2077,12 @@ export const WalletDetail: React.FC = () => {
                 }
               }}
             >
-              {logs.length === 0 ? (
+              {logsLoading ? (
+                <div className="flex flex-col items-center justify-center h-full text-sanctuary-400">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mb-3" />
+                  <p className="text-sm">Loading logs...</p>
+                </div>
+              ) : logs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-sanctuary-400">
                   <ScrollText className="w-12 h-12 mb-3 opacity-30" />
                   <p className="text-sm">No log entries yet</p>

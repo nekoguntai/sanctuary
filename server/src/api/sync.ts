@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import { getSyncService } from '../services/syncService';
 import { walletRepository, transactionRepository, addressRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
+import { walletLogBuffer } from '../services/walletLogBuffer';
 
 const router = Router();
 const log = createLogger('SYNC_API');
@@ -121,6 +122,38 @@ router.get('/status/:walletId', async (req: Request, res: Response) => {
     res.status(500).json({
       error: 'Internal Server Error',
       message: error.message || 'Failed to get sync status',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/sync/logs/:walletId
+ * Get buffered sync logs for a wallet
+ * Returns the most recent logs stored in memory (up to 200 entries)
+ */
+router.get('/logs/:walletId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { walletId } = req.params;
+
+    // Check user has access to wallet
+    const wallet = await walletRepository.findByIdWithAccess(walletId, userId);
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    const logs = walletLogBuffer.get(walletId);
+
+    res.json({ logs });
+  } catch (error: any) {
+    log.error('[SYNC_API] Get sync logs error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to get sync logs',
     });
   }
 });

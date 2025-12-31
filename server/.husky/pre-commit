@@ -82,6 +82,73 @@ End with one of:
 # Run AI test coverage analysis
 run_test_coverage_agent
 
+# =============================================
+# UI Consistency & Style Analysis
+# =============================================
+# Use Claude to check UI changes fit existing patterns and use shared styles
+
+run_ui_consistency_agent() {
+    # Check if claude is available
+    if ! command -v claude >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Get staged UI files (components, hooks with UI, contexts)
+    UI_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(components/|hooks/|contexts/).*\.tsx$' || true)
+
+    if [ -z "$UI_FILES" ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}🎨 UI Consistency & Style Analysis${NC}"
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Get the diff for context
+    UI_DIFF=$(git diff --cached -- $UI_FILES)
+
+    # Create the prompt for UI consistency analysis
+    PROMPT="PRE-COMMIT UI CONSISTENCY REVIEW
+
+Analyze these UI changes for consistency with our existing codebase patterns.
+
+STAGED UI FILES:
+$UI_FILES
+
+DIFF:
+$UI_DIFF
+
+Our codebase uses:
+- Tailwind CSS with custom 'sanctuary' and 'primary' color palettes
+- Dark mode support via 'dark:' prefix classes
+- Consistent patterns: sanctuary-50 to sanctuary-950, primary-50 to primary-950
+- Surface components and shared UI patterns in components/
+- Common button styles, card layouts, modal patterns
+
+Answer concisely:
+1. Do the changes FIT the existing UI flow and component patterns?
+2. Are there ONE-OFF custom styles that should use existing Tailwind classes or shared components instead?
+3. Are dark mode styles properly implemented (dark: variants)?
+4. Could any new UI be TEMPLATIZED using existing patterns?
+
+End with one of:
+- ✅ RECOMMEND PROCEED - UI changes are consistent
+- ⚠️ SUGGEST REVIEW - minor style inconsistencies found
+- ❌ RECOMMEND STOP - significant UI pattern violations"
+
+    # Run claude with the ui-architect agent
+    echo "$PROMPT" | claude --agent ui-architect --print 2>/dev/null
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Run UI consistency analysis
+run_ui_consistency_agent
+
 # Check for staged files in different areas
 BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)
 FRONTEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src/|components/|hooks/|tests/)' || true)

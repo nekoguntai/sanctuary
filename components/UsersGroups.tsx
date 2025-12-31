@@ -423,7 +423,7 @@ export const UsersGroups: React.FC = () => {
                   onClick={() => setNewIsAdmin(!newIsAdmin)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${newIsAdmin ? 'bg-amber-500' : 'bg-sanctuary-300 dark:bg-sanctuary-700'}`}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${newIsAdmin ? 'translate-x-6' : 'translate-x-1'}`} />
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-sanctuary-100 shadow transition-transform ${newIsAdmin ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
                 <span className="ml-3 text-sm text-sanctuary-700 dark:text-sanctuary-300">Administrator privileges</span>
               </div>
@@ -504,7 +504,7 @@ export const UsersGroups: React.FC = () => {
                   onClick={() => setEditIsAdmin(!editIsAdmin)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${editIsAdmin ? 'bg-amber-500' : 'bg-sanctuary-300 dark:bg-sanctuary-700'}`}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editIsAdmin ? 'translate-x-6' : 'translate-x-1'}`} />
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-sanctuary-100 shadow transition-transform ${editIsAdmin ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
                 <span className="ml-3 text-sm text-sanctuary-700 dark:text-sanctuary-300">Administrator privileges</span>
               </div>

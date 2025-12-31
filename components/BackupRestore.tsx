@@ -27,8 +27,11 @@ import { useAppNotifications } from '../contexts/AppNotificationContext';
 
 const log = createLogger('BackupRestore');
 
+type BackupTab = 'backup' | 'restore';
+
 export const BackupRestore: React.FC = () => {
   const { addNotification } = useAppNotifications();
+  const [activeTab, setActiveTab] = useState<BackupTab>('backup');
 
   // Backup state
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -210,13 +213,40 @@ export const BackupRestore: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-fade-in pb-12">
+    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in pb-12">
       <div>
         <h2 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50">Backup & Restore</h2>
         <p className="text-sanctuary-500">Create database backups and restore from backup files</p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex space-x-1 surface-secondary rounded-xl p-1">
+        <button
+          onClick={() => setActiveTab('backup')}
+          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'backup'
+              ? 'bg-white dark:bg-sanctuary-800 text-primary-700 dark:text-primary-300 shadow-sm'
+              : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+          }`}
+        >
+          <Download className="w-4 h-4" />
+          <span>Backup</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('restore')}
+          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
+            activeTab === 'restore'
+              ? 'bg-white dark:bg-sanctuary-800 text-primary-700 dark:text-primary-300 shadow-sm'
+              : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+          }`}
+        >
+          <Upload className="w-4 h-4" />
+          <span>Restore</span>
+        </button>
+      </div>
+
       {/* Create Backup Section */}
+      {activeTab === 'backup' && (
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
@@ -252,7 +282,7 @@ export const BackupRestore: React.FC = () => {
                 }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-sanctuary-100 shadow transition-transform ${
                     includeCache ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
@@ -309,8 +339,10 @@ export const BackupRestore: React.FC = () => {
           )}
         </div>
       </div>
+      )}
 
       {/* Restore Section */}
+      {activeTab === 'restore' && (
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
           <div className="flex items-center space-x-3">
@@ -490,17 +522,29 @@ export const BackupRestore: React.FC = () => {
           )}
         </div>
       </div>
+      )}
 
       {/* Info Box */}
       <div className="surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-          About Backups
+          {activeTab === 'backup' ? 'About Backups' : 'About Restore'}
         </h4>
         <ul className="text-sm text-sanctuary-600 dark:text-sanctuary-400 space-y-1">
-          <li>• Backups include all users, wallets, transactions, addresses, labels, and settings</li>
-          <li>• Backups from older versions can be restored to newer versions</li>
-          <li>• Passwords are stored as secure hashes and remain protected</li>
-          <li>• Consider creating regular backups before major changes</li>
+          {activeTab === 'backup' ? (
+            <>
+              <li>• Backups include all users, wallets, transactions, addresses, labels, and settings</li>
+              <li>• Backups can be restored to this or another Sanctuary instance</li>
+              <li>• Passwords are stored as secure hashes and remain protected</li>
+              <li>• Consider creating regular backups before major changes</li>
+            </>
+          ) : (
+            <>
+              <li>• Restoring will completely replace all existing data</li>
+              <li>• Backups from older versions can be restored to newer versions</li>
+              <li>• You will be logged out after restore and need to log in again</li>
+              <li>• The restore process cannot be undone - create a backup first</li>
+            </>
+          )}
         </ul>
       </div>
 

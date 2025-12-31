@@ -94,7 +94,7 @@ export const SystemSettings: React.FC = () => {
               } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                className={`inline-block h-6 w-6 transform rounded-full bg-white dark:bg-sanctuary-100 shadow transition-transform ${
                   registrationEnabled ? 'translate-x-7' : 'translate-x-1'
                 }`}
               />

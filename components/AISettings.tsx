@@ -27,7 +27,12 @@ const POPULAR_MODELS = [
   { name: 'llama3.2:1b', description: 'Meta, ultra-fast (1GB)' },
 ];
 
+type AISettingsTab = 'status' | 'settings' | 'models';
+
 export default function AISettings() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<AISettingsTab>('status');
+
   // AI settings state
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiEndpoint, setAiEndpoint] = useState('');
@@ -191,10 +196,10 @@ export default function AISettings() {
     setContainerMessage('');
 
     try {
-      // If enabling AI and bundled container exists but not running, start it
-      if (newValue && containerStatus?.available && containerStatus?.exists && !containerStatus?.running) {
+      // If enabling AI and bundled container is available but not running, start/create it
+      if (newValue && containerStatus?.available && !containerStatus?.running) {
         setIsStartingContainer(true);
-        setContainerMessage('Starting AI container...');
+        setContainerMessage(containerStatus?.exists ? 'Starting AI container...' : 'Creating AI container (this may take a minute)...');
 
         const startResult = await aiApi.startOllamaContainer();
         if (!startResult.success) {
@@ -205,11 +210,11 @@ export default function AISettings() {
         }
 
         // Update container status
-        setContainerStatus(prev => prev ? { ...prev, running: true, status: 'running' } : prev);
+        setContainerStatus(prev => prev ? { ...prev, exists: true, running: true, status: 'running' } : prev);
         setContainerMessage('Container started! Waiting for Ollama to be ready...');
 
-        // Wait a bit for Ollama to initialize
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Wait a bit for Ollama to initialize (longer if we just created it)
+        await new Promise(resolve => setTimeout(resolve, containerStatus?.exists ? 3000 : 5000));
         setIsStartingContainer(false);
       }
 
@@ -251,7 +256,7 @@ export default function AISettings() {
               await adminApi.updateSystemSettings({
                 aiEndpoint: detectResult.endpoint,
               });
-              setContainerMessage('Ollama connected! Pull a model below to get started.');
+              setContainerMessage('Ollama connected! Go to the Models tab to pull a model.');
             }
           }
         } catch (detectError) {
@@ -464,7 +469,7 @@ export default function AISettings() {
             setAiModel(detectResult.models[0]);
             setContainerMessage(`Connected with ${detectResult.models[0]}`);
           } else {
-            setContainerMessage('Connected! Pull a model to get started.');
+            setContainerMessage('Connected! Go to the Models tab to pull a model.');
           }
           setTimeout(loadModels, 500);
         } else {
@@ -509,6 +514,13 @@ export default function AISettings() {
     );
   }
 
+  // Tab configuration - progressive unlocking
+  const tabs: { id: AISettingsTab; label: string; icon: React.ReactNode; enabled: boolean; description: string }[] = [
+    { id: 'status', label: 'Status', icon: <Brain className="w-4 h-4" />, enabled: true, description: 'Enable AI' },
+    { id: 'settings', label: 'Settings', icon: <Server className="w-4 h-4" />, enabled: aiEnabled, description: 'Configure endpoint' },
+    { id: 'models', label: 'Models', icon: <Download className="w-4 h-4" />, enabled: aiEnabled && !!aiEndpoint, description: 'Manage models' },
+  ];
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -526,671 +538,435 @@ export default function AISettings() {
         </div>
       </div>
 
-      {/* Security Notice */}
-      <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-        <div className="flex items-start space-x-3">
-          <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h3 className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-              Isolated AI Architecture
-            </h3>
-            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
-              AI runs in a separate container with no access to private keys, signing operations, or the database.
-              Only sanitized transaction metadata (amounts, dates) is shared with AI. Addresses and transaction IDs are never exposed.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Resource Notice */}
-      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-        <div className="flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200">
-              Resource Requirements
-            </h3>
-            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-              AI models require significant resources. A typical model uses <strong>2-8 GB disk space</strong> and{' '}
-              <strong>4-16 GB RAM</strong> during inference. Model downloads can take several minutes depending on your
-              connection speed. Smaller models (1-3B parameters) work well on most systems.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Enable/Disable Toggle */}
+      {/* Tab Navigation */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-        <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-              <Brain className="w-5 h-5" />
-            </div>
-            <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              AI Features
-            </h2>
-          </div>
+        <div className="flex border-b border-sanctuary-200 dark:border-sanctuary-700">
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              onClick={() => tab.enabled && setActiveTab(tab.id)}
+              disabled={!tab.enabled}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative ${
+                activeTab === tab.id
+                  ? 'text-primary-600 dark:text-primary-400 bg-primary-50/50 dark:bg-primary-900/20'
+                  : tab.enabled
+                    ? 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
+                    : 'text-sanctuary-400 dark:text-sanctuary-600 cursor-not-allowed'
+              }`}
+            >
+              <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                activeTab === tab.id
+                  ? 'bg-primary-600 text-white'
+                  : tab.enabled
+                    ? 'bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300'
+                    : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-400 dark:text-sanctuary-600'
+              }`}>
+                {index + 1}
+              </span>
+              <span className="hidden sm:inline">{tab.label}</span>
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400" />
+              )}
+            </button>
+          ))}
         </div>
 
+        {/* Tab Content */}
         <div className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-start space-x-4">
-              <div className="space-y-1">
-                <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                  Enable AI Features
+          {/* Status Tab */}
+          {activeTab === 'status' && (
+            <div className="space-y-6">
+              {/* Security Notice */}
+              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-start space-x-3">
+                  <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                      Isolated AI Architecture
+                    </h3>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                      AI runs in a separate container with no access to private keys, signing operations, or the database.
+                      Only sanitized transaction metadata is shared with AI. Addresses and transaction IDs are never exposed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Enable/Disable Toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl surface-secondary">
+                <div className="flex items-start space-x-4">
+                  <div className="space-y-1">
+                    <label className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                      Enable AI Features
+                    </label>
+                    <p className="text-sm text-sanctuary-500 max-w-md">
+                      {containerStatus?.available && containerStatus?.exists
+                        ? 'The bundled AI container will start automatically.'
+                        : 'Requires Ollama or another AI backend.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleAI}
+                  disabled={isSaving || isStartingContainer}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                    aiEnabled ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
+                  } ${(isSaving || isStartingContainer) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white dark:bg-sanctuary-200 shadow-md ring-1 ring-black/5 dark:ring-white/10 transition-transform ${
+                      aiEnabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Container status message */}
+              {(containerMessage || isStartingContainer) && (
+                <div className="flex items-center space-x-2 text-sm text-primary-600 dark:text-primary-400">
+                  {isStartingContainer && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{containerMessage}</span>
+                </div>
+              )}
+
+              {/* Bundled Container Status */}
+              {containerStatus?.available && containerStatus?.exists && (
+                <div className="p-4 rounded-xl surface-secondary">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-3 h-3 rounded-full ${containerStatus.running ? 'bg-emerald-500' : 'bg-sanctuary-400'}`} />
+                      <div>
+                        <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                          Bundled Container: {containerStatus.running ? 'Running' : 'Stopped'}
+                        </p>
+                        <p className="text-xs text-sanctuary-500">sanctuary-ollama</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {containerStatus.running ? (
+                        <button
+                          onClick={handleStopContainer}
+                          disabled={isStartingContainer}
+                          className="px-3 py-1.5 text-sm bg-sanctuary-100 dark:bg-sanctuary-700 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-600 text-sanctuary-700 dark:text-sanctuary-300 rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-1"
+                        >
+                          <Square className="w-3 h-3" />
+                          <span>Stop</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleStartContainer}
+                          disabled={isStartingContainer}
+                          className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-1"
+                        >
+                          {isStartingContainer ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                          <span>Start</span>
+                        </button>
+                      )}
+                      <button onClick={refreshContainerStatus} className="p-1.5 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300">
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Status Summary */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg surface-secondary text-center">
+                  <div className={`text-lg font-semibold ${aiEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-400'}`}>
+                    {aiEnabled ? 'ON' : 'OFF'}
+                  </div>
+                  <div className="text-xs text-sanctuary-500">AI Status</div>
+                </div>
+                <div className="p-3 rounded-lg surface-secondary text-center">
+                  <div className={`text-lg font-semibold ${aiEndpoint ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-400'}`}>
+                    {aiEndpoint ? '✓' : '—'}
+                  </div>
+                  <div className="text-xs text-sanctuary-500">Endpoint</div>
+                </div>
+                <div className="p-3 rounded-lg surface-secondary text-center">
+                  <div className={`text-lg font-semibold ${aiModel ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-400'}`}>
+                    {aiModel ? '✓' : '—'}
+                  </div>
+                  <div className="text-xs text-sanctuary-500">Model</div>
+                </div>
+              </div>
+
+              {/* Next Step Hint */}
+              {aiEnabled && (
+                <div className="p-4 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
+                  <p className="text-sm text-primary-700 dark:text-primary-700">
+                    <span className="font-medium">Next:</span> Go to the <button onClick={() => setActiveTab('settings')} className="underline font-medium">Settings</button> tab to configure your AI endpoint.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              {/* Endpoint URL */}
+              <div>
+                <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
+                  AI Endpoint URL
                 </label>
-                <p className="text-sm text-sanctuary-500 max-w-md">
-                  Enable AI-powered transaction labeling and natural language queries.
-                  {containerStatus?.available && containerStatus?.exists
-                    ? ' The bundled AI container will start automatically.'
-                    : ' Requires Ollama or another AI backend.'}
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={aiEndpoint}
+                    onChange={(e) => setAiEndpoint(e.target.value)}
+                    placeholder="http://host.docker.internal:11434"
+                    className="flex-1 px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={handleDetectOllama}
+                    disabled={isDetecting}
+                    className="px-4 py-2 bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2"
+                  >
+                    {isDetecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    <span>Detect</span>
+                  </button>
+                </div>
+                {detectMessage && (
+                  <p className={`text-xs mt-1 ${detectMessage.includes('Found') || detectMessage.includes('Connected') || detectMessage.includes('saved') ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-500'}`}>
+                    {detectMessage}
+                  </p>
+                )}
+              </div>
+
+              {/* Model Selection */}
+              <div>
+                <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
+                  Model
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                    className="w-full px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 flex items-center justify-between"
+                  >
+                    <span className={aiModel ? '' : 'text-sanctuary-400'}>{aiModel || 'Select a model...'}</span>
+                    <div className="flex items-center space-x-2">
+                      {isLoadingModels && <Loader2 className="w-4 h-4 animate-spin text-sanctuary-400" />}
+                      <ChevronDown className="w-4 h-4 text-sanctuary-400" />
+                    </div>
+                  </button>
+                  {showModelDropdown && (
+                    <div className="absolute z-10 w-full mt-1 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg max-h-60 overflow-y-auto">
+                      {availableModels.length > 0 && (
+                        <>
+                          <div className="px-3 py-2 text-xs font-medium text-sanctuary-500 uppercase border-b border-sanctuary-100 dark:border-sanctuary-800">
+                            Installed Models
+                          </div>
+                          {availableModels.map((model) => (
+                            <button
+                              key={model.name}
+                              onClick={() => handleSelectModel(model.name)}
+                              className={`w-full px-3 py-2 text-left hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors ${
+                                aiModel === model.name ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                              }`}
+                            >
+                              <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
+                              <span className="text-xs text-sanctuary-400 ml-2">{formatModelSize(model.size)}</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {availableModels.length === 0 && (
+                        <div className="px-3 py-4 text-center text-sm text-sanctuary-500">
+                          No models installed. Go to Models tab to download one.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-sanctuary-500">Select from installed models</p>
+                  {aiEndpoint && (
+                    <button onClick={loadModels} disabled={isLoadingModels} className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center space-x-1">
+                      <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={isSaving || !aiEndpoint || !aiModel}
+                  className="px-4 py-2 bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  {isSaving ? 'Saving...' : 'Save Configuration'}
+                </button>
+                <button
+                  onClick={handleTestConnection}
+                  disabled={aiStatus === 'checking' || !aiEndpoint || !aiModel}
+                  className="px-4 py-2 border border-sanctuary-300 dark:border-sanctuary-600 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-700 dark:text-sanctuary-300 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  {aiStatus === 'checking' ? 'Testing...' : 'Test Connection'}
+                </button>
+              </div>
+
+              {/* Status Messages */}
+              {saveSuccess && (
+                <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
+                  <Check className="w-4 h-4" />
+                  <span className="text-sm">Configuration saved</span>
+                </div>
+              )}
+              {saveError && (
+                <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm">{saveError}</span>
+                </div>
+              )}
+              {aiStatusMessage && (
+                <div className={`flex items-center space-x-2 ${
+                  aiStatus === 'connected' ? 'text-emerald-600 dark:text-emerald-400' : aiStatus === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-sanctuary-500'
+                }`}>
+                  {aiStatus === 'connected' && <Check className="w-4 h-4" />}
+                  {aiStatus === 'error' && <AlertCircle className="w-4 h-4" />}
+                  {aiStatus === 'checking' && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span className="text-sm">{aiStatusMessage}</span>
+                </div>
+              )}
+
+              {/* Next Step Hint */}
+              {aiEndpoint && !aiModel && (
+                <div className="p-4 rounded-xl bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
+                  <p className="text-sm text-primary-700 dark:text-primary-700">
+                    <span className="font-medium">Next:</span> Go to the <button onClick={() => setActiveTab('models')} className="underline font-medium">Models</button> tab to download a model.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Models Tab */}
+          {activeTab === 'models' && (
+            <div className="space-y-6">
+              {/* Resource Notice */}
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Models use <strong>2-8 GB disk</strong> and <strong>4-16 GB RAM</strong>. Smaller models (1-3B) work on most systems.
+                  </p>
+                </div>
+              </div>
+
+              {/* Pull progress */}
+              {(pullProgress || downloadProgress) && (
+                <div className={`p-3 rounded-lg ${
+                  pullProgress.includes('Successfully') ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                    : pullProgress.includes('Failed') || pullProgress.includes('Error') ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                    : 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                }`}>
+                  {downloadProgress && downloadProgress.status === 'downloading' && downloadProgress.total > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span className="flex items-center space-x-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Downloading {pullModelName}</span>
+                        </span>
+                        <span className="tabular-nums">{downloadProgress.percent}%</span>
+                      </div>
+                      <div className="w-full bg-primary-200/60 dark:bg-sanctuary-800 rounded-full h-2.5 overflow-hidden">
+                        <div className="bg-gradient-to-r from-primary-500 to-primary-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${downloadProgress.percent}%` }} />
+                      </div>
+                      <div className="text-xs tabular-nums">{formatBytes(downloadProgress.completed)} / {formatBytes(downloadProgress.total)}</div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      {isPulling && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <span className="text-sm">{downloadProgress?.status === 'pulling' ? 'Pulling manifest...' : downloadProgress?.status === 'verifying' ? 'Verifying...' : pullProgress}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Popular Models Grid */}
+              <div>
+                <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3">Popular Models</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {POPULAR_MODELS.map((model) => {
+                    const isInstalled = availableModels.some(m => m.name === model.name);
+                    const isPullingThis = isPulling && pullModelName === model.name;
+                    return (
+                      <div key={model.name} className={`p-3 rounded-lg border ${isInstalled ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10' : 'border-sanctuary-200 dark:border-sanctuary-700'}`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
+                              {model.recommended && <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-primary-800 dark:bg-primary-100 text-primary-200 dark:text-primary-800 rounded">Recommended</span>}
+                              {isInstalled && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                            </div>
+                            <p className="text-xs text-sanctuary-500 mt-0.5">{model.description}</p>
+                          </div>
+                          {isInstalled ? (
+                            <button onClick={() => handleDeleteModel(model.name)} disabled={isDeleting} className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
+                              {isDeleting && deleteModelName === model.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                              <span>Delete</span>
+                            </button>
+                          ) : (
+                            <button onClick={() => handlePullModel(model.name)} disabled={isPulling} className="px-3 py-1 text-xs bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
+                              {isPullingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                              <span>Pull</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Model Input */}
+              <div className="pt-4 border-t border-sanctuary-200 dark:border-sanctuary-700">
+                <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Pull Any Model</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={customModelName}
+                    onChange={(e) => setCustomModelName(e.target.value)}
+                    placeholder="e.g., codellama:13b, mixtral:8x7b"
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 placeholder:text-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    disabled={isPulling}
+                  />
+                  <button
+                    onClick={() => { if (customModelName.trim()) { handlePullModel(customModelName.trim()); setCustomModelName(''); } }}
+                    disabled={isPulling || !customModelName.trim()}
+                    className="px-4 py-2 bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white text-sm rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Pull</span>
+                  </button>
+                </div>
+                <p className="text-xs text-sanctuary-500 mt-1">
+                  Browse models at <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">ollama.com/library</a>
                 </p>
               </div>
-            </div>
-            <button
-              onClick={handleToggleAI}
-              disabled={isSaving || isStartingContainer}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
-                aiEnabled ? 'bg-primary-600' : 'bg-sanctuary-300 dark:bg-sanctuary-700'
-              } ${(isSaving || isStartingContainer) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  aiEnabled ? 'translate-x-7' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Container status message */}
-          {(containerMessage || isStartingContainer) && (
-            <div className="mt-4 flex items-center space-x-2 text-sm text-primary-600 dark:text-primary-400">
-              {isStartingContainer && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{containerMessage}</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Bundled Container Status */}
-      {containerStatus?.available && containerStatus?.exists && (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-          <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-                <Server className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                Bundled AI Container
-              </h2>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${containerStatus.running ? 'bg-emerald-500' : 'bg-sanctuary-400'}`} />
-                <div>
-                  <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                    {containerStatus.running ? 'Running' : 'Stopped'}
-                  </p>
-                  <p className="text-xs text-sanctuary-500">
-                    sanctuary-ollama container
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                {containerStatus.running ? (
-                  <button
-                    onClick={handleStopContainer}
-                    disabled={isStartingContainer}
-                    className="px-3 py-1.5 text-sm bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-700 dark:text-sanctuary-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-                  >
-                    <Square className="w-3 h-3" />
-                    <span>Stop</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleStartContainer}
-                    disabled={isStartingContainer}
-                    className="px-3 py-1.5 text-sm bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-                  >
-                    {isStartingContainer ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Play className="w-3 h-3" />
-                    )}
-                    <span>Start</span>
-                  </button>
-                )}
-                <button
-                  onClick={refreshContainerStatus}
-                  className="p-1.5 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
-                  title="Refresh status"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {containerMessage && !isStartingContainer && (
-              <p className="mt-3 text-sm text-primary-600 dark:text-primary-400">{containerMessage}</p>
-            )}
-
-            <p className="mt-3 text-xs text-sanctuary-500">
-              This is the bundled Ollama container. It will auto-start when you enable AI features.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* AI Configuration */}
-      {aiEnabled && (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-          <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-                <Server className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                AI Endpoint Configuration
-              </h2>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-6">
-            {/* Endpoint URL with Detect Button */}
-            <div>
-              <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-                AI Endpoint URL
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={aiEndpoint}
-                  onChange={(e) => setAiEndpoint(e.target.value)}
-                  placeholder="http://host.docker.internal:11434"
-                  className="flex-1 px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <button
-                  onClick={handleDetectOllama}
-                  disabled={isDetecting}
-                  className="px-4 py-2 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-900/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-                >
-                  {isDetecting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Search className="w-4 h-4" />
-                  )}
-                  <span>Detect</span>
-                </button>
-              </div>
-
-              {/* Use Bundled Container button */}
-              {containerStatus?.available && containerStatus?.running && aiEndpoint !== 'http://ollama:11434' && (
-                <button
-                  onClick={async () => {
-                    setDetectMessage('Connecting to bundled container...');
-                    try {
-                      const detectResult = await aiApi.detectOllama();
-                      if (detectResult.found && detectResult.endpoint) {
-                        setAiEndpoint(detectResult.endpoint);
-                        await adminApi.updateSystemSettings({ aiEndpoint: detectResult.endpoint });
-                        if (detectResult.models && detectResult.models.length > 0) {
-                          const firstModel = detectResult.models[0];
-                          setAiModel(firstModel);
-                          await adminApi.updateSystemSettings({ aiModel: firstModel });
-                          setDetectMessage(`Connected with ${firstModel} - saved!`);
-                        } else {
-                          setDetectMessage('Connected! Pull a model to get started.');
-                        }
-                        setTimeout(loadModels, 500);
-                      } else {
-                        setDetectMessage('Could not connect to bundled container.');
-                      }
-                    } catch (error) {
-                      setDetectMessage('Failed to connect.');
-                    }
-                    setTimeout(() => setDetectMessage(''), 5000);
-                  }}
-                  className="mt-2 text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center space-x-1"
-                >
-                  <Server className="w-3 h-3" />
-                  <span>Use Bundled Container</span>
-                </button>
-              )}
-
-              {detectMessage && (
-                <p className={`text-xs mt-1 ${detectMessage.includes('Found') || detectMessage.includes('Connected') || detectMessage.includes('saved') ? 'text-emerald-600 dark:text-emerald-400' : 'text-sanctuary-500'}`}>
-                  {detectMessage}
-                </p>
-              )}
-              <p className="text-xs text-sanctuary-500 mt-1">
-                Click "Detect" to auto-find Ollama, or enter URL manually
-              </p>
-            </div>
-
-            {/* Model Selection */}
-            <div>
-              <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-                Model
-              </label>
-              <div className="relative">
-                <button
-                  onClick={() => setShowModelDropdown(!showModelDropdown)}
-                  className="w-full px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 flex items-center justify-between"
-                >
-                  <span className={aiModel ? '' : 'text-sanctuary-400'}>
-                    {aiModel || 'Select a model...'}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    {isLoadingModels && <Loader2 className="w-4 h-4 animate-spin text-sanctuary-400" />}
-                    <ChevronDown className="w-4 h-4 text-sanctuary-400" />
-                  </div>
-                </button>
-
-                {showModelDropdown && (
-                  <div className="absolute z-10 w-full mt-1 surface-elevated rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 shadow-lg max-h-60 overflow-y-auto">
-                    {/* Available models from Ollama */}
-                    {availableModels.length > 0 && (
-                      <>
-                        <div className="px-3 py-2 text-xs font-medium text-sanctuary-500 uppercase border-b border-sanctuary-100 dark:border-sanctuary-800">
-                          Installed Models
-                        </div>
-                        {availableModels.map((model) => (
-                          <div
-                            key={model.name}
-                            className={`flex items-center justify-between px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors ${
-                              aiModel === model.name ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                            }`}
-                          >
-                            <button
-                              onClick={() => handleSelectModel(model.name)}
-                              className="flex-1 text-left"
-                            >
-                              <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
-                              <span className="text-xs text-sanctuary-400 ml-2">{formatModelSize(model.size)}</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteModel(model.name);
-                              }}
-                              disabled={isDeleting}
-                              className="p-1 text-sanctuary-400 hover:text-rose-500 dark:hover:text-rose-400 disabled:opacity-50"
-                              title="Delete model"
-                            >
-                              {isDeleting && deleteModelName === model.name ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                        ))}
-                      </>
-                    )}
-
-                    {/* Manual input option */}
-                    <div className="px-3 py-2 border-t border-sanctuary-100 dark:border-sanctuary-800">
-                      <input
-                        type="text"
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                        placeholder="Or type model name..."
-                        className="w-full px-2 py-1 text-sm rounded border border-sanctuary-200 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-900 text-sanctuary-900 dark:text-sanctuary-100"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <p className="text-xs text-sanctuary-500">
-                  Select from installed models or type a model name
-                </p>
-                {aiEndpoint && (
-                  <button
-                    onClick={loadModels}
-                    disabled={isLoadingModels}
-                    className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center space-x-1"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleSaveConfig}
-                disabled={isSaving || !aiEndpoint || !aiModel}
-                className="px-4 py-2 bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSaving ? 'Saving...' : 'Save Configuration'}
-              </button>
-
-              <button
-                onClick={handleTestConnection}
-                disabled={aiStatus === 'checking' || !aiEndpoint || !aiModel}
-                className="px-4 py-2 border border-sanctuary-300 dark:border-sanctuary-600 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-700 dark:text-sanctuary-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {aiStatus === 'checking' ? 'Testing...' : 'Test Connection'}
-              </button>
-            </div>
-
-            {/* Status Messages */}
-            {saveSuccess && (
-              <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
-                <Check className="w-4 h-4" />
-                <span className="text-sm">Configuration saved</span>
-              </div>
-            )}
-
-            {saveError && (
-              <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{saveError}</span>
-              </div>
-            )}
-
-            {aiStatusMessage && (
-              <div className={`flex items-center space-x-2 ${
-                aiStatus === 'connected'
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : aiStatus === 'error'
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-sanctuary-500'
-              }`}>
-                {aiStatus === 'connected' && <Check className="w-4 h-4" />}
-                {aiStatus === 'error' && <AlertCircle className="w-4 h-4" />}
-                {aiStatus === 'checking' && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span className="text-sm">{aiStatusMessage}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Download Models Section */}
-      {aiEnabled && aiEndpoint && (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-          <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 surface-secondary rounded-lg text-primary-600 dark:text-primary-500">
-                <Download className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                Download Models
-              </h2>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <p className="text-sm text-sanctuary-500 mb-4">
-              Download popular models directly from Ollama. Models are stored on your host machine.
-            </p>
-
-            {/* Pull progress */}
-            {(pullProgress || downloadProgress) && (
-              <div className={`mb-4 p-3 rounded-lg ${
-                pullProgress.includes('Successfully')
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                  : pullProgress.includes('Failed') || pullProgress.includes('Error')
-                    ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
-                    : 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-              }`}>
-                {/* Show progress bar when downloading */}
-                {downloadProgress && downloadProgress.status === 'downloading' && downloadProgress.total > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm font-medium">
-                      <span className="flex items-center space-x-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Downloading {pullModelName}</span>
-                      </span>
-                      <span className="tabular-nums">{downloadProgress.percent}%</span>
-                    </div>
-                    <div className="w-full bg-primary-200/60 dark:bg-sanctuary-800 rounded-full h-2.5 overflow-hidden ring-1 ring-primary-300/50 dark:ring-primary-700/50">
-                      <div
-                        className="bg-gradient-to-r from-primary-500 to-primary-600 dark:from-primary-400 dark:to-primary-500 h-2.5 rounded-full transition-all duration-300"
-                        style={{ width: `${downloadProgress.percent}%` }}
-                      />
-                    </div>
-                    <div className="text-xs text-primary-600/80 dark:text-primary-300/80 tabular-nums">
-                      {formatBytes(downloadProgress.completed)} / {formatBytes(downloadProgress.total)}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2">
-                    {isPulling && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span className="text-sm">
-                      {downloadProgress?.status === 'pulling' ? 'Pulling manifest...' :
-                       downloadProgress?.status === 'verifying' ? 'Verifying...' :
-                       pullProgress}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {POPULAR_MODELS.map((model) => {
-                const isInstalled = availableModels.some(m => m.name === model.name);
-                const isPullingThis = isPulling && pullModelName === model.name;
-
-                return (
-                  <div
-                    key={model.name}
-                    className={`p-3 rounded-lg border ${
-                      isInstalled
-                        ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10'
-                        : 'border-sanctuary-200 dark:border-sanctuary-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                            {model.name}
-                          </span>
-                          {model.recommended && (
-                            <span className="px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
-                              Recommended
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-sanctuary-500 mt-0.5">{model.description}</p>
-                      </div>
-                      {isInstalled ? (
-                        <button
-                          onClick={() => handleDeleteModel(model.name)}
-                          disabled={isDeleting}
-                          className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-                          title="Delete model to free up space"
-                        >
-                          {isDeleting && deleteModelName === model.name ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3 h-3" />
-                          )}
-                          <span>Delete</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handlePullModel(model.name)}
-                          disabled={isPulling}
-                          className="px-3 py-1 text-xs bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-                        >
-                          {isPullingThis ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Download className="w-3 h-3" />
-                          )}
-                          <span>Pull</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Custom Model Input */}
-            <div className="mt-4 pt-4 border-t border-sanctuary-200 dark:border-sanctuary-700">
-              <label className="block text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-                Pull Any Model
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={customModelName}
-                  onChange={(e) => setCustomModelName(e.target.value)}
-                  placeholder="e.g., codellama:13b, mixtral:8x7b, deepseek-coder:6.7b"
-                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-sanctuary-300 dark:border-sanctuary-600 bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 placeholder:text-sanctuary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  disabled={isPulling}
-                />
-                <button
-                  onClick={() => {
-                    if (customModelName.trim()) {
-                      handlePullModel(customModelName.trim());
-                      setCustomModelName('');
-                    }
-                  }}
-                  disabled={isPulling || !customModelName.trim()}
-                  className="px-4 py-2 bg-primary-600 dark:bg-primary-400 hover:bg-primary-700 dark:hover:bg-primary-300 text-white dark:text-primary-950 text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-                >
-                  {isPulling && pullModelName === customModelName.trim() ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4" />
-                  )}
-                  <span>Pull</span>
-                </button>
-              </div>
-              <p className="text-xs text-sanctuary-500 mt-1">
-                Browse all models at <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">ollama.com/library</a>
-              </p>
-            </div>
-
-            <p className="text-xs text-sanctuary-400 mt-4">
-              First download may take several minutes depending on model size and your internet speed.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Setup Instructions */}
+      {/* AI Features Info - Always visible at bottom */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-        <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-            Quick Setup
-          </h2>
+        <div className="p-4 border-b border-sanctuary-100 dark:border-sanctuary-800">
+          <h2 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">What AI Can Do</h2>
         </div>
-
-        <div className="p-6 space-y-4">
-          {/* Option A: Bundled (Recommended) */}
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                Option A: Bundled AI (Recommended)
-              </h3>
-              <span className="px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded">
-                Easiest
-              </span>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg surface-secondary">
+              <h3 className="text-xs font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-1">Transaction Labeling</h3>
+              <p className="text-xs text-sanctuary-500">AI suggests labels based on amount, direction, and your existing patterns.</p>
             </div>
-
-            {containerStatus?.available && containerStatus?.exists ? (
-              <>
-                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  <div className="flex items-center space-x-2">
-                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-sm text-emerald-800 dark:text-emerald-200">
-                      Bundled AI container is available
-                    </span>
-                  </div>
-                </div>
-                <p className="text-xs text-sanctuary-500">
-                  The container will start automatically when you enable AI above.
-                  Models and endpoint will be configured for you.
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
-                  <div className="text-sanctuary-400"># Start Sanctuary with bundled AI:</div>
-                  <div>./start.sh --stop</div>
-                  <div>./start.sh --with-ai</div>
-                </div>
-                <p className="text-xs text-sanctuary-500">
-                  Run this command once to create the bundled Ollama container.
-                  After that, it will auto-start when you enable AI above.
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 my-4" />
-
-          {/* Option B: External Ollama */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
-              Option B: External Ollama (Advanced)
-            </h3>
-            <p className="text-xs text-sanctuary-500">
-              For GPU acceleration or if you already have Ollama running on your host:
-            </p>
-            <div className="p-3 rounded-lg bg-sanctuary-900 dark:bg-sanctuary-950 font-mono text-sm text-sanctuary-100 overflow-x-auto">
-              <div className="text-sanctuary-400"># Install from ollama.ai, then:</div>
-              <div>OLLAMA_HOST=0.0.0.0 ollama serve</div>
-            </div>
-            <p className="text-xs text-sanctuary-500">
-              Click "Detect" to find it automatically, or enter the endpoint manually.
-            </p>
-          </div>
-
-          <a
-            href="https://github.com/n-narusegawa/sanctuary/blob/main/ai-proxy/README.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1 text-sm text-primary-600 dark:text-primary-400 hover:underline"
-          >
-            <span>View full documentation</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
-
-      {/* Features */}
-      <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-        <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <h2 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
-            AI Features
-          </h2>
-        </div>
-
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl surface-secondary">
-              <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-                Transaction Labeling
-              </h3>
-              <p className="text-xs text-sanctuary-500">
-                AI suggests labels for your transactions based on amount, direction, and your existing labeling patterns.
-                You always review and confirm before applying.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl surface-secondary">
-              <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
-                Natural Language Queries
-              </h3>
-              <p className="text-xs text-sanctuary-500">
-                Ask questions like "Show my largest receives this month" and get filtered results.
-                AI converts your question to a structured query.
-              </p>
+            <div className="p-3 rounded-lg surface-secondary">
+              <h3 className="text-xs font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-1">Natural Language Queries</h3>
+              <p className="text-xs text-sanctuary-500">Ask "Show my largest receives this month" and get filtered results.</p>
             </div>
           </div>
         </div>
@@ -1356,7 +1132,7 @@ export default function AISettings() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end space-x-3 p-4 border-t border-sanctuary-200 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-800/50">
+            <div className="flex items-center justify-end space-x-3 p-4 border-t border-sanctuary-200 dark:border-sanctuary-700 bg-sanctuary-50 dark:bg-sanctuary-800">
               <button
                 onClick={handleCloseEnableModal}
                 className="px-4 py-2 text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 rounded-lg transition-colors"

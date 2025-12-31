@@ -216,7 +216,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
               }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${
+                className={`inline-block h-4 w-4 transform rounded-full bg-white dark:bg-sanctuary-100 shadow transition-transform ${
                   settings.enabled ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />

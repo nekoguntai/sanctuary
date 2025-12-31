@@ -215,6 +215,8 @@ export interface UserPreferences {
   notificationSounds?: NotificationSounds;
   viewSettings?: ViewSettings;
   seasonalBackgrounds?: SeasonalBackgrounds; // Custom backgrounds for each season
+  favoriteBackgrounds?: BackgroundOption[]; // User's favorite backgrounds for quick access
+  favoriteThemes?: ThemeOption[]; // User's favorite color themes
 }
 
 export interface User {

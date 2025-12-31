@@ -92,17 +92,149 @@ export async function getOllamaStatus(): Promise<{
 }
 
 /**
- * Start the Ollama container
+ * Create and start the Ollama container
+ */
+export async function createOllamaContainer(): Promise<{ success: boolean; message: string }> {
+  try {
+    // Check if already exists
+    const status = await getOllamaStatus();
+    if (status.exists) {
+      if (status.running) {
+        return { success: true, message: 'Ollama container is already running' };
+      }
+      // Start existing container
+      return startOllama();
+    }
+
+    log.info('Creating Ollama container...');
+
+    // First, pull the image
+    const pullResponse = await fetch(
+      `${DOCKER_PROXY_URL}/images/create?fromImage=ollama/ollama&tag=latest`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+
+    if (!pullResponse.ok) {
+      const errorText = await pullResponse.text();
+      log.warn('Failed to pull Ollama image', { status: pullResponse.status, error: errorText });
+      return { success: false, message: `Failed to pull Ollama image: ${errorText}` };
+    }
+
+    // Wait for pull to complete (stream response)
+    await pullResponse.text();
+    log.info('Ollama image pulled successfully');
+
+    // Get the project name from existing containers or use default
+    const listResponse = await fetch(`${DOCKER_PROXY_URL}/containers/json?all=true`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const containers = (await listResponse.json()) as ContainerInfo[];
+
+    // Find project name from existing sanctuary containers
+    let projectName = 'sanctuary';
+    const sanctuaryContainer = containers.find(c =>
+      c.Names.some(n => n.includes('-backend-') || n.includes('-frontend-'))
+    );
+    if (sanctuaryContainer) {
+      const name = sanctuaryContainer.Names[0].replace(/^\//, '');
+      const match = name.match(/^(.+?)-(backend|frontend)/);
+      if (match) projectName = match[1];
+    }
+
+    // Get the network name (Docker Compose format: {project}_{network-name})
+    const networkName = `${projectName}_sanctuary-network`;
+    const volumeName = `${projectName}_ollama_data`;
+
+    // Create the container with network alias so it's resolvable as 'ollama'
+    const containerConfig = {
+      Image: 'ollama/ollama:latest',
+      Env: ['OLLAMA_HOST=0.0.0.0'],
+      HostConfig: {
+        RestartPolicy: { Name: 'unless-stopped' },
+        Binds: [`${volumeName}:/root/.ollama`],
+        LogConfig: {
+          Type: 'json-file',
+          Config: {
+            'max-size': '10m',
+            'max-file': '3',
+          },
+        },
+      },
+      NetworkingConfig: {
+        EndpointsConfig: {
+          [networkName]: {
+            Aliases: ['ollama'],
+          },
+        },
+      },
+      Labels: {
+        'com.docker.compose.project': projectName,
+        'com.docker.compose.service': 'ollama',
+      },
+      Healthcheck: {
+        Test: ['CMD', 'ollama', 'list'],
+        Interval: 30000000000, // 30s in nanoseconds
+        Timeout: 10000000000,  // 10s in nanoseconds
+        Retries: 3,
+        StartPeriod: 30000000000, // 30s in nanoseconds
+      },
+    };
+
+    const createResponse = await fetch(
+      `${DOCKER_PROXY_URL}/containers/create?name=${projectName}-ollama-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(containerConfig),
+      }
+    );
+
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      log.warn('Failed to create Ollama container', { status: createResponse.status, error: errorText });
+      return { success: false, message: `Failed to create Ollama container: ${errorText}` };
+    }
+
+    const createResult = (await createResponse.json()) as { Id: string };
+    log.info('Ollama container created', { id: createResult.Id });
+
+    // Start the container
+    const startResponse = await fetch(
+      `${DOCKER_PROXY_URL}/containers/${createResult.Id}/start`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+
+    if (startResponse.status === 204 || startResponse.status === 304) {
+      log.info('Ollama container started');
+      return { success: true, message: 'Ollama container created and started successfully' };
+    }
+
+    const errorText = await startResponse.text();
+    log.warn('Failed to start Ollama container', { status: startResponse.status, error: errorText });
+    return { success: false, message: `Container created but failed to start: ${errorText}` };
+  } catch (error: any) {
+    log.error('Error creating Ollama container', { error });
+    return { success: false, message: error.message || 'Failed to create Ollama container' };
+  }
+}
+
+/**
+ * Start the Ollama container (creates it if it doesn't exist)
  */
 export async function startOllama(): Promise<{ success: boolean; message: string }> {
   try {
     const status = await getOllamaStatus();
 
     if (!status.exists || !status.containerId) {
-      return {
-        success: false,
-        message: 'Ollama container not found. Run "./start.sh --with-ai" first to create it.',
-      };
+      // Try to create and start
+      return createOllamaContainer();
     }
 
     if (status.running) {

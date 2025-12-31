@@ -190,8 +190,9 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
+      // Wait for page to load - when AI is enabled, toggle shows in ON state
       await waitFor(() => {
-        expect(screen.getByText('AI Endpoint Configuration')).toBeInTheDocument();
+        expect(screen.getByText('Enable AI Features')).toBeInTheDocument();
       });
 
       const toggleButtons = screen.getAllByRole('button');
@@ -259,17 +260,36 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
-    it('should show configuration panel when AI is enabled', async () => {
+    // Helper to get tab buttons (they're in a flex container with border-b)
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      // Tab buttons are inside span.hidden.sm:inline
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    it('should show configuration panel when AI is enabled and on Settings tab', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
+      // Wait for component to load
       await waitFor(() => {
-        expect(screen.getByText('AI Endpoint Configuration')).toBeInTheDocument();
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+
+      // Click on Settings tab
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
       });
 
       expect(screen.getByPlaceholderText('http://host.docker.internal:11434')).toBeInTheDocument();
     });
 
-    it('should not show configuration panel when AI is disabled', async () => {
+    it('should not show Settings tab when AI is disabled', async () => {
       mockGetSystemSettings.mockResolvedValue(defaultSettings);
       render(<AISettings />);
 
@@ -277,15 +297,27 @@ describe('AISettings', () => {
         expect(screen.getByText('Enable AI Features')).toBeInTheDocument();
       });
 
-      expect(screen.queryByText('AI Endpoint Configuration')).not.toBeInTheDocument();
+      // Settings tab exists but should be disabled
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeDisabled();
     });
 
     it('should update endpoint input value', async () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
+      // Wait for component to load
       await waitFor(() => {
-        expect(screen.getByText('AI Endpoint Configuration')).toBeInTheDocument();
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+
+      // Click on Settings tab
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
       });
 
       const input = screen.getByPlaceholderText('http://host.docker.internal:11434');
@@ -301,21 +333,38 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue({ ...enabledSettings, aiEndpoint: '' });
     });
 
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToSettingsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
+      });
+    };
+
     it('should show detect button', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Detect')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
+
+      expect(screen.getByText('Detect')).toBeInTheDocument();
     });
 
     it('should detect Ollama and populate endpoint', async () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Detect')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Detect'));
 
@@ -334,9 +383,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Detect')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Detect'));
 
@@ -356,9 +403,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Detect')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Detect'));
 
@@ -372,9 +417,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Detect')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Detect'));
 
@@ -389,12 +432,31 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToSettingsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
+      });
+    };
+
     it('should show model dropdown', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Model')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
+
+      expect(screen.getByText('Model')).toBeInTheDocument();
 
       // The selected model appears in the dropdown button
       await waitFor(() => {
@@ -406,9 +468,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Model')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       // Find the dropdown button by looking for the one with ChevronDown icon
       const modelLabel = screen.getByText('Model');
@@ -428,9 +488,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Model')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       const modelLabel = screen.getByText('Model');
       const modelSection = modelLabel.closest('div');
@@ -449,9 +507,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Model')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       const modelLabel = screen.getByText('Model');
       const modelSection = modelLabel.closest('div');
@@ -470,9 +526,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Refresh')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Refresh'));
 
@@ -487,21 +541,38 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToSettingsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
+      });
+    };
+
     it('should show save button', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Save Configuration')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
+
+      expect(screen.getByText('Save Configuration')).toBeInTheDocument();
     });
 
     it('should save configuration when clicked', async () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Save Configuration')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Save Configuration'));
 
@@ -517,9 +588,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Save Configuration')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Save Configuration'));
 
@@ -533,9 +602,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Save Configuration')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Save Configuration'));
 
@@ -546,11 +613,10 @@ describe('AISettings', () => {
 
     it('should disable save button without endpoint and model', async () => {
       mockGetSystemSettings.mockResolvedValue({ aiEnabled: true, aiEndpoint: '', aiModel: '' });
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Save Configuration')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       expect(screen.getByText('Save Configuration')).toBeDisabled();
     });
@@ -561,21 +627,38 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToSettingsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const settingsTab = getTabButton('Settings');
+      expect(settingsTab).toBeTruthy();
+      await user.click(settingsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
+      });
+    };
+
     it('should show test connection button', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Test Connection')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
+
+      expect(screen.getByText('Test Connection')).toBeInTheDocument();
     });
 
     it('should test connection when clicked', async () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Test Connection')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Test Connection'));
 
@@ -588,9 +671,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Test Connection')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Test Connection'));
 
@@ -604,9 +685,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Test Connection')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Test Connection'));
 
@@ -620,9 +699,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Test Connection')).toBeInTheDocument();
-      });
+      await navigateToSettingsTab(user);
 
       await user.click(screen.getByText('Test Connection'));
 
@@ -637,42 +714,60 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
-    it('should show download models section', async () => {
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToModelsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const modelsTab = getTabButton('Models');
+      expect(modelsTab).toBeTruthy();
+      await user.click(modelsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('Popular Models')).toBeInTheDocument();
+      });
+    };
+
+    it('should show popular models section', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Download Models')).toBeInTheDocument();
-      });
+      await navigateToModelsTab(user);
+
+      expect(screen.getByText('Popular Models')).toBeInTheDocument();
     });
 
     it('should show popular models list', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByText('Download Models')).toBeInTheDocument();
-      });
+      await navigateToModelsTab(user);
 
-      // Popular models appear in the download section
-      await waitFor(() => {
-        expect(screen.getByText('deepseek-r1:7b')).toBeInTheDocument();
-      });
+      // Popular models appear in the models section
+      expect(screen.getByText('deepseek-r1:7b')).toBeInTheDocument();
     });
 
     it('should show delete button for installed models', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        // Installed models show Delete button instead of Pull
-        expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
+
+      // Installed models show Delete button instead of Pull
+      expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
     });
 
     it('should show pull button for non-installed models', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
+
+      expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
     });
 
     it('should pull model when pull button clicked', async () => {
@@ -680,9 +775,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
 
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
@@ -700,9 +793,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
 
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
@@ -717,9 +808,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
 
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
@@ -737,9 +826,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
 
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
@@ -754,9 +841,7 @@ describe('AISettings', () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Pull').length).toBeGreaterThan(0);
-      });
+      await navigateToModelsTab(user);
 
       const pullButtons = screen.getAllByText('Pull');
       await user.click(pullButtons[0]);
@@ -774,21 +859,38 @@ describe('AISettings', () => {
       mockGetSystemSettings.mockResolvedValue(enabledSettings);
     });
 
+    const getTabButton = (name: string) => {
+      const tabs = screen.getAllByText(name);
+      const tabSpan = tabs.find(el => el.classList.contains('hidden'));
+      return tabSpan?.closest('button');
+    };
+
+    const navigateToModelsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => {
+        expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+      });
+      const modelsTab = getTabButton('Models');
+      expect(modelsTab).toBeTruthy();
+      await user.click(modelsTab!);
+      await waitFor(() => {
+        expect(screen.getByText('Popular Models')).toBeInTheDocument();
+      });
+    };
+
     it('should show custom model input', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/codellama/)).toBeInTheDocument();
-      });
+      await navigateToModelsTab(user);
+
+      expect(screen.getByPlaceholderText(/codellama/)).toBeInTheDocument();
     });
 
     it('should pull custom model', async () => {
       const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/codellama/)).toBeInTheDocument();
-      });
+      await navigateToModelsTab(user);
 
       const input = screen.getByPlaceholderText(/codellama/);
       await user.type(input, 'custom-model:latest');
@@ -805,11 +907,10 @@ describe('AISettings', () => {
     });
 
     it('should disable pull button when input is empty', async () => {
+      const user = userEvent.setup();
       render(<AISettings />);
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/codellama/)).toBeInTheDocument();
-      });
+      await navigateToModelsTab(user);
 
       // Find the custom pull section's button - it's next to the input
       const customInput = screen.getByPlaceholderText(/codellama/);
@@ -838,39 +939,12 @@ describe('AISettings', () => {
     });
   });
 
-  describe('Setup Instructions', () => {
-    it('should show quick setup section', async () => {
-      render(<AISettings />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Quick Setup')).toBeInTheDocument();
-      });
-    });
-
-    it('should show installation command', async () => {
-      render(<AISettings />);
-
-      await waitFor(() => {
-        expect(screen.getByText(/ollama serve/)).toBeInTheDocument();
-      });
-    });
-
-    it('should link to documentation', async () => {
-      render(<AISettings />);
-
-      await waitFor(() => {
-        expect(screen.getByText('View full documentation')).toBeInTheDocument();
-      });
-    });
-  });
-
   describe('AI Features Section', () => {
     it('should show AI features description', async () => {
       render(<AISettings />);
 
       await waitFor(() => {
-        // "AI Features" appears twice (toggle section header and features section)
-        expect(screen.getAllByText('AI Features').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getByText('What AI Can Do')).toBeInTheDocument();
       });
     });
 

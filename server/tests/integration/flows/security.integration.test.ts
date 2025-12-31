@@ -566,4 +566,130 @@ describeWithDb('Security Integration Tests', () => {
       expect(response.body.message).toContain('Cannot delete your own account');
     });
   });
+
+  // ==========================================================================
+  // HIGH: Price Cache Admin-Only Endpoints
+  // ==========================================================================
+  describe('HIGH: Price Cache Admin-Only Endpoints', () => {
+    describe('GET /price/cache/stats', () => {
+      it('should reject unauthenticated requests', async () => {
+        await request(app)
+          .get('/api/v1/price/cache/stats')
+          .expect(401);
+      });
+
+      it('should reject non-admin users', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const userToken = await loginTestUser(app, testUser);
+
+        await request(app)
+          .get('/api/v1/price/cache/stats')
+          .set('Authorization', `Bearer ${userToken}`)
+          .expect(403);
+      });
+
+      it('should allow admin users', async () => {
+        const testAdmin = getTestAdmin();
+        await createTestUser(prisma, { ...testAdmin, isAdmin: true });
+        const adminToken = await loginTestUser(app, testAdmin);
+
+        const response = await request(app)
+          .get('/api/v1/price/cache/stats')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+
+        expect(response.body).toBeDefined();
+        expect(typeof response.body.size).toBe('number');
+      });
+    });
+
+    describe('POST /price/cache/clear', () => {
+      it('should reject unauthenticated requests', async () => {
+        await request(app)
+          .post('/api/v1/price/cache/clear')
+          .expect(401);
+      });
+
+      it('should reject non-admin users', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const userToken = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/price/cache/clear')
+          .set('Authorization', `Bearer ${userToken}`)
+          .expect(403);
+      });
+
+      it('should allow admin users to clear cache', async () => {
+        const testAdmin = getTestAdmin();
+        await createTestUser(prisma, { ...testAdmin, isAdmin: true });
+        const adminToken = await loginTestUser(app, testAdmin);
+
+        const response = await request(app)
+          .post('/api/v1/price/cache/clear')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+
+        expect(response.body.message).toContain('cleared');
+      });
+    });
+
+    describe('POST /price/cache/duration', () => {
+      it('should reject unauthenticated requests', async () => {
+        await request(app)
+          .post('/api/v1/price/cache/duration')
+          .send({ duration: 60000 })
+          .expect(401);
+      });
+
+      it('should reject non-admin users', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const userToken = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/price/cache/duration')
+          .set('Authorization', `Bearer ${userToken}`)
+          .send({ duration: 60000 })
+          .expect(403);
+      });
+
+      it('should allow admin users to set cache duration', async () => {
+        const testAdmin = getTestAdmin();
+        await createTestUser(prisma, { ...testAdmin, isAdmin: true });
+        const adminToken = await loginTestUser(app, testAdmin);
+
+        const response = await request(app)
+          .post('/api/v1/price/cache/duration')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ duration: 120000 })
+          .expect(200);
+
+        expect(response.body.message).toContain('updated');
+        expect(response.body.duration).toBe(120000);
+      });
+
+      it('should reject invalid duration values', async () => {
+        const testAdmin = getTestAdmin();
+        await createTestUser(prisma, { ...testAdmin, isAdmin: true });
+        const adminToken = await loginTestUser(app, testAdmin);
+
+        // Negative duration
+        await request(app)
+          .post('/api/v1/price/cache/duration')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ duration: -1000 })
+          .expect(400);
+
+        // Non-number duration
+        await request(app)
+          .post('/api/v1/price/cache/duration')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ duration: 'invalid' })
+          .expect(400);
+      });
+    });
+  });
 });

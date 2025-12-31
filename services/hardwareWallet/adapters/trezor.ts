@@ -24,8 +24,9 @@ const log = createLogger('TrezorAdapter');
 /**
  * Validate and format a satoshi amount for Trezor
  * Handles both number and BigInt types, validates range
+ * @internal Exported for testing
  */
-function validateSatoshiAmount(amount: number | bigint | undefined, context: string): string {
+export function validateSatoshiAmount(amount: number | bigint | undefined, context: string): string {
   if (amount === undefined || amount === null) {
     throw new Error(`${context}: amount is missing`);
   }

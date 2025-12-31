@@ -252,6 +252,26 @@ describe('Address Derivation Service', () => {
 
         expect(result.address).toMatch(/^bcrt1q[a-z0-9]{38,42}$/);
       });
+
+      it('should throw error for invalid network type', () => {
+        // TypeScript would catch this, but runtime check is important for security
+        // Previously this would silently default to mainnet - now throws explicitly
+        expect(() =>
+          deriveAddress(testTpub, 0, {
+            network: 'invalid' as any,
+          })
+        ).toThrow(/Unsupported network.*invalid/);
+      });
+
+      it('should default to mainnet when network is undefined', () => {
+        // When network is undefined, defaults to mainnet via destructuring
+        // Using testnet xpub with mainnet network causes version mismatch
+        expect(() =>
+          deriveAddress(testTpub, 0, {
+            network: undefined as any,
+          })
+        ).toThrow(/Invalid network version/);
+      });
     });
 
     describe('SLIP-132 Format Conversion', () => {

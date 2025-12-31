@@ -17,6 +17,11 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Agent stop flags (set to 1 if agent recommends stopping)
+TEST_COVERAGE_STOP=0
+UI_CONSISTENCY_STOP=0
+ARCHITECTURE_STOP=0
+
 echo "${YELLOW}Running pre-commit checks...${NC}"
 
 # Get the repository root
@@ -72,7 +77,17 @@ End with one of:
 - ❌ RECOMMEND STOP - tests should be updated before committing"
 
     # Run claude with the qa-test-architect agent
-    echo "$PROMPT" | claude --agent qa-test-architect --print 2>/dev/null
+    # Capture output to check for RECOMMEND STOP
+    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent qa-test-architect --print 2>&1) || true
+    echo "$AGENT_OUTPUT"
+
+    # Check if agent recommends stopping
+    if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
+        echo ""
+        echo "${RED}❌ Test coverage agent recommends stopping. Please address the issues above.${NC}"
+        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        TEST_COVERAGE_STOP=1
+    fi
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -139,7 +154,17 @@ End with one of:
 - ❌ RECOMMEND STOP - significant UI pattern violations"
 
     # Run claude with the ui-architect agent
-    echo "$PROMPT" | claude --agent ui-architect --print 2>/dev/null
+    # Capture output to check for RECOMMEND STOP
+    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent ui-architect --print 2>&1) || true
+    echo "$AGENT_OUTPUT"
+
+    # Check if agent recommends stopping
+    if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
+        echo ""
+        echo "${RED}❌ UI consistency agent recommends stopping. Please address the issues above.${NC}"
+        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        UI_CONSISTENCY_STOP=1
+    fi
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -206,7 +231,17 @@ End with one of:
 - ❌ RECOMMEND STOP - significant architectural issues"
 
     # Run claude with the lead-software-architect agent
-    echo "$PROMPT" | claude --agent lead-software-architect --print 2>/dev/null
+    # Capture output to check for RECOMMEND STOP
+    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent lead-software-architect --print 2>&1) || true
+    echo "$AGENT_OUTPUT"
+
+    # Check if agent recommends stopping
+    if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
+        echo ""
+        echo "${RED}❌ Architecture agent recommends stopping. Please address the issues above.${NC}"
+        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        ARCHITECTURE_STOP=1
+    fi
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -215,6 +250,19 @@ End with one of:
 
 # Run architecture analysis
 run_architecture_agent
+
+# Check if any agent recommended stopping
+if [ "$TEST_COVERAGE_STOP" = "1" ] || [ "$UI_CONSISTENCY_STOP" = "1" ] || [ "$ARCHITECTURE_STOP" = "1" ]; then
+    echo ""
+    echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${RED}⛔ COMMIT BLOCKED - One or more agents recommend stopping${NC}"
+    echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "${YELLOW}Please address the issues above before committing.${NC}"
+    echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+    echo ""
+    exit 1
+fi
 
 # Check for staged files in different areas
 BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)

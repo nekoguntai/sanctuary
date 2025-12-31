@@ -238,6 +238,76 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     }
   }
 
+  // PHASE 1.5: Batch fetch previous transactions needed for fee calculation and counterparty address
+  // This fixes an N+1 query problem where we were fetching previous txs one-by-one in the loop
+  const prevTxCache = new Map<string, any>();
+  const requiredPrevTxids = new Set<string>();
+
+  // First pass: collect all previous txids we'll need
+  for (const tx of transactions) {
+    const txDetails = txDetailsCache.get(tx.txid);
+    if (!txDetails) continue;
+
+    const inputs = txDetails.vin || [];
+    const isSentTx = tx.type === 'sent' || tx.type === 'send';
+    const isConsolidationTx = tx.type === 'consolidation';
+    const isReceivedTx = tx.type === 'received' || tx.type === 'receive';
+
+    // Need previous txs for fee calculation (sent/consolidation transactions without prevout data)
+    if (tx.fee === null && (isSentTx || isConsolidationTx) && txDetails.fee == null) {
+      for (const input of inputs) {
+        if (!input.coinbase && !input.prevout && input.txid && input.vout != null) {
+          requiredPrevTxids.add(input.txid);
+        }
+      }
+    }
+
+    // Need previous txs for counterparty address (received transactions without prevout data)
+    if (tx.counterpartyAddress === null && isReceivedTx) {
+      for (const input of inputs) {
+        if (!input.coinbase && !input.prevout && input.txid && input.vout != null) {
+          requiredPrevTxids.add(input.txid);
+        }
+      }
+    }
+  }
+
+  // Batch fetch all required previous transactions
+  if (requiredPrevTxids.size > 0) {
+    walletLog(walletId, 'info', 'POPULATE', `Batch fetching ${requiredPrevTxids.size} previous transactions for fee/address calculation`);
+
+    const prevTxidsList = Array.from(requiredPrevTxids);
+    let prevFetched = 0;
+    let prevFailed = 0;
+
+    for (let i = 0; i < prevTxidsList.length; i += TX_BATCH_SIZE) {
+      const batch = prevTxidsList.slice(i, i + TX_BATCH_SIZE);
+
+      const results = await Promise.all(
+        batch.map(async (txid) => {
+          try {
+            const details = await client.getTransaction(txid, true);
+            return { txid, details };
+          } catch (error) {
+            log.warn(`Failed to fetch previous tx ${txid}`, { error: String(error) });
+            return { txid, details: null };
+          }
+        })
+      );
+
+      for (const result of results) {
+        if (result.details) {
+          prevTxCache.set(result.txid, result.details);
+          prevFetched++;
+        } else {
+          prevFailed++;
+        }
+      }
+    }
+
+    walletLog(walletId, 'info', 'POPULATE', `Previous transactions fetched: ${prevFetched} success, ${prevFailed} failed`);
+  }
+
   // Collect all pending updates
   const pendingUpdates: Array<{ id: string; txid: string; oldConfirmations: number; data: any }> = [];
   let updated = 0;
@@ -366,14 +436,10 @@ export async function populateMissingTransactionFields(walletId: string): Promis
               if (input.prevout && input.prevout.value != null) {
                 totalInputValue += Math.round(input.prevout.value * 100000000);
               } else if (input.txid && input.vout != null) {
-                // Need to fetch the previous transaction to get the value
-                try {
-                  const prevTx = await client.getTransaction(input.txid, true);
-                  if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-                    totalInputValue += Math.round(prevTx.vout[input.vout].value * 100000000);
-                  }
-                } catch (e) {
-                  log.warn(`Could not fetch input tx ${input.txid}`, { error: String(e) });
+                // Use pre-fetched previous transaction from cache
+                const prevTx = prevTxCache.get(input.txid);
+                if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+                  totalInputValue += Math.round(prevTx.vout[input.vout].value * 100000000);
                 }
               }
             }
@@ -414,20 +480,16 @@ export async function populateMissingTransactionFields(walletId: string): Promis
                   break;
                 }
               } else if (input.txid && input.vout != null) {
-                // Fetch the previous transaction to get sender address
-                try {
-                  const prevTx = await client.getTransaction(input.txid, true);
-                  if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
-                    const prevOutput = prevTx.vout[input.vout];
-                    const senderAddr = prevOutput.scriptPubKey?.address ||
-                      (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-                    if (senderAddr) {
-                      updates.counterpartyAddress = senderAddr;
-                      break;
-                    }
+                // Use pre-fetched previous transaction from cache
+                const prevTx = prevTxCache.get(input.txid);
+                if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
+                  const prevOutput = prevTx.vout[input.vout];
+                  const senderAddr = prevOutput.scriptPubKey?.address ||
+                    (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
+                  if (senderAddr) {
+                    updates.counterpartyAddress = senderAddr;
+                    break;
                   }
-                } catch (e) {
-                  log.warn(`Could not fetch input tx for sender address`, { error: String(e) });
                 }
               }
             }

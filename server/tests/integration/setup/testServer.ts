@@ -18,6 +18,7 @@ import bitcoinRoutes from '../../../src/api/bitcoin';
 import adminRoutes from '../../../src/api/admin';
 import syncRoutes from '../../../src/api/sync';
 import draftRoutes from '../../../src/api/drafts';
+import priceRoutes from '../../../src/api/price';
 
 let testApp: Express | null = null;
 
@@ -43,6 +44,7 @@ export function createTestApp(): Express {
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/sync', syncRoutes);
   app.use('/api/v1/drafts', draftRoutes);
+  app.use('/api/v1/price', priceRoutes);
 
   // Health check
   app.get('/health', (_req: Request, res: Response) => {

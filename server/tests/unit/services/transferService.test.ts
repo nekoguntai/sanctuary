@@ -238,8 +238,10 @@ describe('Transfer Service', () => {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
 
-      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
+      // Mock atomic updateMany to succeed
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
 
+      // Mock findUnique for returning the updated transfer
       const updatedTransfer = {
         ...mockTransfer,
         status: 'accepted',
@@ -247,59 +249,71 @@ describe('Transfer Service', () => {
         fromUser: { id: ownerId, username: 'owner' },
         toUser: { id: recipientId, username: 'recipient' },
       };
-      mockPrismaClient.ownershipTransfer.update.mockResolvedValue(updatedTransfer);
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(updatedTransfer);
 
       const result = await acceptTransfer(recipientId, transferId);
 
       expect(result.status).toBe('accepted');
-      expect(mockPrismaClient.ownershipTransfer.update).toHaveBeenCalledWith(
+      expect(mockPrismaClient.ownershipTransfer.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: transferId },
+          where: expect.objectContaining({
+            id: transferId,
+            toUserId: recipientId,
+            status: 'pending',
+          }),
           data: expect.objectContaining({ status: 'accepted' }),
         })
       );
     });
 
     it('should reject accept from non-recipient', async () => {
+      // findUnique for initial validation
       const mockTransfer = {
         id: transferId,
         toUserId: recipientId,
         status: 'pending',
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
-
       mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
 
+      // Throws before updateMany because toUserId check happens first
       await expect(
         acceptTransfer('wrong-user', transferId)
-      ).rejects.toThrow(/recipient/i);
+      ).rejects.toThrow(/only the recipient/i);
     });
 
     it('should reject accept of non-pending transfer', async () => {
+      // updateMany returns 0 because status isn't 'pending'
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      // findUnique shows status is 'accepted'
       const mockTransfer = {
         id: transferId,
         toUserId: recipientId,
         status: 'accepted', // Already accepted
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
-
       mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
 
       await expect(
         acceptTransfer(recipientId, transferId)
-      ).rejects.toThrow(/cannot be accepted/i);
+      ).rejects.toThrow(/already been accepted/i);
     });
 
     it('should reject accept of expired transfer', async () => {
+      // findUnique for initial validation returns expired transfer
       const mockTransfer = {
         id: transferId,
         toUserId: recipientId,
         status: 'pending',
         expiresAt: new Date(Date.now() - 1000), // Expired
       };
-
       mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
 
+      // Mock updateMany for the expiration update
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      // The code detects expiration before attempting atomic update
       await expect(
         acceptTransfer(recipientId, transferId)
       ).rejects.toThrow(/expired/i);
@@ -308,23 +322,20 @@ describe('Transfer Service', () => {
 
   describe('declineTransfer', () => {
     it('should decline pending transfer as recipient', async () => {
+      // Mock atomic updateMany to succeed
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      // Mock findUnique for returning the updated transfer
       const mockTransfer = {
         id: transferId,
         toUserId: recipientId,
-        status: 'pending',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      };
-
-      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
-
-      const updatedTransfer = {
-        ...mockTransfer,
         status: 'declined',
         declineReason: 'Not interested',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         fromUser: { id: ownerId, username: 'owner' },
         toUser: { id: recipientId, username: 'recipient' },
       };
-      mockPrismaClient.ownershipTransfer.update.mockResolvedValue(updatedTransfer);
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
 
       const result = await declineTransfer(recipientId, transferId, 'Not interested');
 
@@ -341,16 +352,20 @@ describe('Transfer Service', () => {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
 
-      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
+      // First findUnique for ownership check
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(mockTransfer)
+        // Second findUnique for returning result
+        .mockResolvedValueOnce({
+          ...mockTransfer,
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          fromUser: { id: ownerId, username: 'owner' },
+          toUser: { id: recipientId, username: 'recipient' },
+        });
 
-      const updatedTransfer = {
-        ...mockTransfer,
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        fromUser: { id: ownerId, username: 'owner' },
-        toUser: { id: recipientId, username: 'recipient' },
-      };
-      mockPrismaClient.ownershipTransfer.update.mockResolvedValue(updatedTransfer);
+      // Mock atomic updateMany to succeed
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await cancelTransfer(ownerId, transferId);
 
@@ -365,16 +380,20 @@ describe('Transfer Service', () => {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       };
 
-      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
+      // First findUnique for ownership check
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(mockTransfer)
+        // Second findUnique for returning result
+        .mockResolvedValueOnce({
+          ...mockTransfer,
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          fromUser: { id: ownerId, username: 'owner' },
+          toUser: { id: recipientId, username: 'recipient' },
+        });
 
-      const updatedTransfer = {
-        ...mockTransfer,
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        fromUser: { id: ownerId, username: 'owner' },
-        toUser: { id: recipientId, username: 'recipient' },
-      };
-      mockPrismaClient.ownershipTransfer.update.mockResolvedValue(updatedTransfer);
+      // Mock atomic updateMany to succeed
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await cancelTransfer(ownerId, transferId);
 
@@ -418,30 +437,34 @@ describe('Transfer Service', () => {
         toUser: { id: recipientId, username: 'recipient' },
       };
 
-      // First findUnique returns the pending transfer, second returns the confirmed one
+      // First findUnique (outside transaction) and final findUnique
       mockPrismaClient.ownershipTransfer.findUnique
-        .mockResolvedValueOnce(mockTransfer)
-        .mockResolvedValueOnce(confirmedTransfer);
+        .mockResolvedValueOnce(mockTransfer)      // Initial validation
+        .mockResolvedValueOnce(confirmedTransfer); // Final result fetch
 
       // Mock the transaction callback execution
+      // The callback receives a transaction client that has the same shape as prisma
       mockPrismaClient.$transaction.mockImplementation(async (callback) => {
-        return callback(mockPrismaClient);
+        // Create a tx mock with findUnique returning accepted status for validation
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: jest.fn().mockResolvedValue(mockTransfer), // In-tx validation
+            update: jest.fn().mockResolvedValue(confirmedTransfer),
+          },
+          walletUser: {
+            findFirst: jest.fn()
+              .mockResolvedValueOnce({ id: 'wu-owner', userId: ownerId, walletId, role: 'owner' })
+              .mockResolvedValueOnce(null), // Recipient doesn't have access yet
+            create: jest.fn().mockResolvedValue({}),
+            update: jest.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(txMock);
       });
 
       // Reset and set ownership check mock - owner still owns during confirm
       mockCheckWalletOwnerAccess.mockReset();
       mockCheckWalletOwnerAccess.mockResolvedValue(true);
-
-      // Mock walletUser operations for executeWalletTransfer
-      // 1. Find current owner's WalletUser
-      mockPrismaClient.walletUser.findFirst
-        .mockResolvedValueOnce({ id: 'wu-owner', userId: ownerId, walletId, role: 'owner' })  // Current owner
-        .mockResolvedValueOnce(null);  // Recipient doesn't have access yet
-
-      // Mock wallet user operations
-      mockPrismaClient.walletUser.create.mockResolvedValue({});
-      mockPrismaClient.walletUser.update.mockResolvedValue({});
-      mockPrismaClient.ownershipTransfer.update.mockResolvedValue(confirmedTransfer);
 
       const result = await confirmTransfer(ownerId, transferId);
 
@@ -568,6 +591,101 @@ describe('Transfer Service', () => {
           data: { status: 'expired' },
         })
       );
+    });
+  });
+
+  describe('Race Condition Protection', () => {
+    it('should use atomic update for acceptTransfer', async () => {
+      // Mock updateMany returning 0 (simulating concurrent update race condition)
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      // When updateMany returns 0, code fetches current status for error message
+      const mockTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'pending', // Still shows pending because of race condition
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      };
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
+
+      // Should throw because atomic update failed (updateMany matched 0 records)
+      await expect(
+        acceptTransfer(recipientId, transferId)
+      ).rejects.toThrow(/cannot be accepted/i);
+    });
+
+    it('should use atomic update for declineTransfer', async () => {
+      // Mock updateMany returning 0 (simulating concurrent update race condition)
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      // When updateMany returns 0, code fetches current status for error message
+      const mockTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      };
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(mockTransfer);
+
+      // Should throw because atomic update failed
+      await expect(
+        declineTransfer(recipientId, transferId)
+      ).rejects.toThrow(/cannot be declined/i);
+    });
+
+    it('should use atomic update for cancelTransfer', async () => {
+      const mockTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      };
+
+      // First findUnique for ownership validation, then for error message
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(mockTransfer)  // Ownership check
+        .mockResolvedValueOnce(mockTransfer); // Error message fetch
+
+      // Mock updateMany returning 0 (simulating concurrent update)
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      // Should throw because atomic update failed
+      await expect(
+        cancelTransfer(ownerId, transferId)
+      ).rejects.toThrow(/cannot be cancelled/i);
+    });
+
+    it('should succeed when atomic update modifies exactly one row', async () => {
+      // Mock updateMany returning 1 (successful atomic update)
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      // Mock the findUnique for refetch after update
+      const acceptedTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        acceptedAt: new Date(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        fromUser: { id: ownerId, username: 'owner' },
+        toUser: { id: recipientId, username: 'recipient' },
+      };
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(acceptedTransfer);
+
+      const result = await acceptTransfer(recipientId, transferId);
+
+      expect(result.status).toBe('accepted');
     });
   });
 });

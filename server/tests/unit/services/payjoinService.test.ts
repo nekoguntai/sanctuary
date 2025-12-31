@@ -606,7 +606,7 @@ describe('Payjoin Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.isPayjoin).toBe(false);
-      expect(result.error).toContain('Invalid Payjoin URL protocol');
+      expect(result.error).toContain('HTTPS');
     });
 
     it('should handle timeout gracefully', async () => {
@@ -701,6 +701,77 @@ describe('Payjoin Service', () => {
       expect(PayjoinErrors.NOT_ENOUGH_MONEY).toBe('not-enough-money');
       expect(PayjoinErrors.ORIGINAL_PSBT_REJECTED).toBe('original-psbt-rejected');
       expect(PayjoinErrors.RECEIVER_ERROR).toBe('receiver-error');
+    });
+  });
+
+  describe('SSRF Protection', () => {
+    const originalPsbt = 'cHNidP8BAFICAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8BrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GgAAAAAAAA==';
+
+    it('should reject localhost URLs', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'https://localhost/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('localhost');
+    });
+
+    it('should reject 127.0.0.1 URLs', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'https://127.0.0.1/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('localhost');
+    });
+
+    it('should reject HTTP URLs (only HTTPS allowed)', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'http://example.com/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('HTTPS');
+    });
+
+    it('should reject ::1 (IPv6 localhost)', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'https://[::1]/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      // IPv6 bracket notation causes URL parsing/resolution to fail
+      expect(result.error).toMatch(/localhost|resolve|hostname/i);
+    });
+
+    it('should reject internal hostnames', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'https://internal/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('internal');
+    });
+
+    it('should reject 0.0.0.0 URLs', async () => {
+      const result = await attemptPayjoinSend(
+        originalPsbt,
+        'https://0.0.0.0/payjoin',
+        [0]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('localhost');
     });
   });
 

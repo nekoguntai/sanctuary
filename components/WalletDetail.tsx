@@ -29,6 +29,8 @@ import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
 import { TransactionExportModal } from './TransactionExportModal';
+import { TransferOwnershipModal } from './TransferOwnershipModal';
+import { PendingTransfersPanel } from './PendingTransfersPanel';
 import { UTXOList } from './UTXOList';
 import { WalletStats } from './WalletStats';
 import { DraftList } from './DraftList';
@@ -442,6 +444,9 @@ export const WalletDetail: React.FC = () => {
   // Delete Modal State
   const [showDelete, setShowDelete] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
+
+  // Transfer Ownership Modal State
+  const [showTransferModal, setShowTransferModal] = useState(false);
   
   // Data for Settings/Access
   const [users, setUsers] = useState<User[]>([]);
@@ -1359,6 +1364,20 @@ export const WalletDetail: React.FC = () => {
       handleError(err, 'Failed to Search Users');
     } finally {
       setSearchingUsers(false);
+    }
+  };
+
+  // Reload wallet data after transfer actions
+  const handleTransferComplete = async () => {
+    if (!id) return;
+    try {
+      const walletData = await walletsApi.getWallet(id);
+      setWallet(walletData);
+      // Also refresh share info
+      const shareInfo = await walletsApi.getWalletShareInfo(id);
+      setWalletShareInfo(shareInfo);
+    } catch (err) {
+      log.error('Failed to reload wallet after transfer', { error: err });
     }
   };
 
@@ -2375,6 +2394,34 @@ export const WalletDetail: React.FC = () => {
                  </div>
                )}
             </div>
+
+            {/* Pending Transfers */}
+            <PendingTransfersPanel
+              resourceType="wallet"
+              resourceId={id!}
+              onTransferComplete={handleTransferComplete}
+            />
+
+            {/* Transfer Ownership Button - only for owners */}
+            {wallet.userRole === 'owner' && (
+              <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">Transfer Ownership</h4>
+                    <p className="text-sm text-sanctuary-500 mt-1">
+                      Transfer this wallet to another user
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowTransferModal(true)}
+                    className="flex items-center px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Transfer Ownership
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2930,6 +2977,20 @@ export const WalletDetail: React.FC = () => {
              </div>
           </div>
         </div>
+      )}
+
+      {/* Transfer Ownership Modal */}
+      {showTransferModal && wallet && (
+        <TransferOwnershipModal
+          resourceType="wallet"
+          resourceId={wallet.id}
+          resourceName={wallet.name}
+          onClose={() => setShowTransferModal(false)}
+          onTransferInitiated={() => {
+            setShowTransferModal(false);
+            handleTransferComplete();
+          }}
+        />
       )}
     </div>
   );

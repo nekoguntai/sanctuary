@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device } from '../types';
 import { getDevice, updateDevice, getDeviceModels } from '../src/api/devices';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
 import { DeviceSharing } from './DeviceSharing';
+import { TransferOwnershipModal } from './TransferOwnershipModal';
+import { PendingTransfersPanel } from './PendingTransfersPanel';
 
 const log = createLogger('DeviceDetail');
 
@@ -32,6 +34,7 @@ export const DeviceDetail: React.FC = () => {
   const [editModelSlug, setEditModelSlug] = useState<string>('');
   const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('details');
+  const [showTransferModal, setShowTransferModal] = useState(false);
 
   // Derived ownership state
   const isOwner = device?.isOwner ?? true; // Default to true for backward compat
@@ -96,6 +99,17 @@ export const DeviceDetail: React.FC = () => {
     setIsEditing(false);
     setEditLabel(device?.label || '');
     setEditModelSlug(device?.model?.slug || '');
+  };
+
+  // Reload device data after transfer actions
+  const handleTransferComplete = async () => {
+    if (!id || !user) return;
+    try {
+      const deviceData = await getDevice(id);
+      setDevice(deviceData);
+    } catch (error) {
+      log.error('Failed to reload device after transfer', { error });
+    }
   };
 
   // Get display name for current device type
@@ -270,10 +284,55 @@ export const DeviceDetail: React.FC = () => {
         )}
 
         {activeTab === 'access' && (
-          <DeviceSharing
-            deviceId={id!}
-            isOwner={isOwner}
-            userRole={userRole}
+          <div className="space-y-6">
+            {/* Pending Transfers */}
+            <PendingTransfersPanel
+              resourceType="device"
+              resourceId={id!}
+              onTransferComplete={handleTransferComplete}
+            />
+
+            {/* Transfer Ownership Button - only for owners */}
+            {isOwner && (
+              <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">Transfer Ownership</h4>
+                    <p className="text-sm text-sanctuary-500 mt-1">
+                      Transfer this device to another user
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowTransferModal(true)}
+                    className="flex items-center px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Transfer Ownership
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Device Sharing */}
+            <DeviceSharing
+              deviceId={id!}
+              isOwner={isOwner}
+              userRole={userRole}
+            />
+          </div>
+        )}
+
+        {/* Transfer Ownership Modal */}
+        {showTransferModal && device && (
+          <TransferOwnershipModal
+            resourceType="device"
+            resourceId={device.id}
+            resourceName={device.label}
+            onClose={() => setShowTransferModal(false)}
+            onTransferInitiated={() => {
+              setShowTransferModal(false);
+              // Could optionally refresh to show the pending transfer
+            }}
           />
         )}
     </div>

@@ -798,3 +798,43 @@ export interface AppState {
   darkMode: boolean;
   activeWalletId: string | null;
 }
+
+// ============================================================================
+// OWNERSHIP TRANSFERS
+// ============================================================================
+
+export type TransferStatus = 'pending' | 'accepted' | 'confirmed' | 'cancelled' | 'declined' | 'expired';
+export type TransferResourceType = 'wallet' | 'device';
+
+export interface Transfer {
+  id: string;
+  resourceType: TransferResourceType;
+  resourceId: string;
+  fromUserId: string;
+  toUserId: string;
+  status: TransferStatus;
+  createdAt: string;
+  updatedAt: string;
+  acceptedAt: string | null;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  expiresAt: string;
+  message: string | null;
+  declineReason: string | null;
+  keepExistingUsers: boolean;
+  fromUser?: { id: string; username: string };
+  toUser?: { id: string; username: string };
+  resourceName?: string;
+}
+
+export interface TransferFilters {
+  role?: 'initiator' | 'recipient' | 'all';
+  status?: TransferStatus | 'active' | 'all';
+  resourceType?: TransferResourceType;
+}
+
+export interface TransferCounts {
+  pendingIncoming: number;
+  awaitingConfirmation: number;
+  total: number;
+}

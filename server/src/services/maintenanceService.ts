@@ -9,6 +9,7 @@
  *   - Price data cleanup (30 days retention)
  *   - Fee estimate cleanup (7 days retention)
  *   - Expired draft transaction cleanup
+ *   - Expired ownership transfer cleanup
  *   - Stale session cleanup
  *   - Docker volume disk usage monitoring
  *   - Weekly PostgreSQL VACUUM ANALYZE and REINDEX
@@ -18,6 +19,7 @@
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import { auditService, AuditAction, AuditCategory } from './auditService';
+import { expireOldTransfers } from './transferService';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -207,6 +209,7 @@ class MaintenanceService {
 
     const results = await Promise.allSettled([
       this.cleanupExpiredDrafts(),
+      this.cleanupExpiredTransfers(),
     ]);
 
     for (const result of results) {
@@ -327,6 +330,35 @@ class MaintenanceService {
       return result.count;
     } catch (error) {
       log.error('Expired draft cleanup failed', { error: String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up expired ownership transfers
+   */
+  async cleanupExpiredTransfers(): Promise<number> {
+    try {
+      const count = await expireOldTransfers();
+
+      if (count > 0) {
+        log.info('Expired ownership transfers cleanup completed', {
+          expired: count,
+        });
+
+        // Log to audit for tracking
+        await auditService.log({
+          username: 'system',
+          action: 'maintenance.transfer_expiry',
+          category: AuditCategory.SYSTEM,
+          details: { expiredCount: count },
+          success: true,
+        });
+      }
+
+      return count;
+    } catch (error) {
+      log.error('Expired ownership transfers cleanup failed', { error: String(error) });
       throw error;
     }
   }
@@ -640,7 +672,7 @@ class MaintenanceService {
   /**
    * Manually trigger cleanup (for admin API or testing)
    */
-  async triggerCleanup(task: 'all' | 'audit' | 'price' | 'fees' | 'drafts' | 'weekly' | 'monthly'): Promise<number> {
+  async triggerCleanup(task: 'all' | 'audit' | 'price' | 'fees' | 'drafts' | 'transfers' | 'weekly' | 'monthly'): Promise<number> {
     switch (task) {
       case 'all':
         await this.runAllCleanups();
@@ -653,6 +685,8 @@ class MaintenanceService {
         return this.cleanupFeeEstimates();
       case 'drafts':
         return this.cleanupExpiredDrafts();
+      case 'transfers':
+        return this.cleanupExpiredTransfers();
       case 'weekly':
         await this.runWeeklyMaintenance();
         return 0;

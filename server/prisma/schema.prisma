@@ -43,6 +43,10 @@ model User {
   refreshTokens     RefreshToken[]
   revokedTokens     RevokedToken[]
 
+  // Ownership transfers
+  transfersInitiated OwnershipTransfer[] @relation("TransfersInitiated")
+  transfersReceived  OwnershipTransfer[] @relation("TransfersReceived")
+
   @@index([isAdmin]) // For admin user lookups
   @@map("users")
 }
@@ -759,4 +763,49 @@ model RevokedToken {
   @@index([expiresAt]) // For cleanup of expired revocations
   @@index([userId]) // For user-specific revocation queries
   @@map("revoked_tokens")
+}
+
+// ========================================
+// OWNERSHIP TRANSFERS
+// ========================================
+
+// Ownership transfer requests for wallets and devices
+// Implements a 3-step flow: initiate → accept → confirm
+model OwnershipTransfer {
+  id String @id @default(uuid())
+
+  // Resource being transferred (extensible to other resource types)
+  resourceType String // 'wallet' | 'device' (extensible)
+  resourceId   String
+
+  // Participants
+  fromUserId String // Current owner initiating transfer
+  toUserId   String // Target recipient
+
+  // State machine: pending → accepted → confirmed (or cancelled/declined/expired)
+  status String @default("pending") // pending, accepted, confirmed, cancelled, declined, expired
+
+  // Timestamps for audit trail
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  acceptedAt  DateTime? // When recipient accepted
+  confirmedAt DateTime? // When owner gave final confirmation
+  cancelledAt DateTime? // When cancelled or declined
+  expiresAt   DateTime // Auto-expire if not completed (default: 7 days)
+
+  // Optional metadata
+  message         String? // Message from owner to recipient
+  declineReason   String? // Reason if recipient declines
+  keepExistingUsers Boolean @default(true) // Keep viewers/signers after transfer
+
+  // Relations
+  fromUser User @relation("TransfersInitiated", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("TransfersReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  // Indexes for efficient queries
+  @@index([fromUserId, status]) // Owner's pending transfers
+  @@index([toUserId, status]) // Recipient's pending transfers
+  @@index([resourceType, resourceId, status]) // Check if resource has pending transfer
+  @@index([status, expiresAt]) // Cleanup expired transfers
+  @@map("ownership_transfers")
 }

@@ -26,6 +26,7 @@ import payjoinRoutes from './api/payjoin';
 import aiRoutes from './api/ai';
 import aiInternalRoutes from './api/ai-internal';
 import healthRoutes from './api/health';
+import transferRoutes from './api/transfers';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
@@ -142,6 +143,7 @@ app.use('/api/v1/node', nodeRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/sync', syncRoutes);
 app.use('/api/v1/push', pushRoutes);
+app.use('/api/v1/transfers', transferRoutes);  // Ownership transfer routes
 app.use('/api/v1/ai', aiRoutes);  // AI-powered features (optional)
 app.use('/internal/ai', aiInternalRoutes);  // Internal AI endpoints (AI container only)
 // These routes are mounted at /api/v1 without a specific path - must come LAST

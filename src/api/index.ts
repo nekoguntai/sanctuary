@@ -18,6 +18,7 @@ export * as sync from './sync';
 export * as twoFactor from './twoFactor';
 export * as payjoin from './payjoin';
 export * as ai from './ai';
+export * as transfers from './transfers';
 
 export { default as apiClient, ApiError } from './client';
 export type { ApiResponse } from './client';
@@ -51,3 +52,4 @@ export type { DraftTransaction, CreateDraftRequest, UpdateDraftRequest } from '.
 export type { AdminUser, CreateUserRequest, UpdateUserRequest, GroupMember } from './admin';
 export type { NodeTestRequest, NodeTestResponse } from './node';
 export type { SyncStatus, SyncResult, QueueResult } from './sync';
+export type { Transfer, TransferFilters, TransferCounts, InitiateTransferRequest } from './transfers';

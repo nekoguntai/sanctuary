@@ -194,7 +194,7 @@ export function SendTransactionProvider({
   const totalOutputAmount = useMemo(() => {
     return state.outputs.reduce((sum, o) => {
       if (o.sendMax) return sum;
-      return sum + (parseInt(o.amount) || 0);
+      return sum + (parseInt(o.amount, 10) || 0);
     }, 0);
   }, [state.outputs]);
 

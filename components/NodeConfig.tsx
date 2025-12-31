@@ -36,7 +36,7 @@ export const NodeConfig: React.FC = () => {
   const [allServers, setAllServers] = useState<ElectrumServer[]>([]);
 
   // Collapsible sections - only one open at a time
-  const [expandedSection, setExpandedSection] = useState<SectionId | null>('networks');
+  const [expandedSection, setExpandedSection] = useState<SectionId | null>(null);
 
   // Network tabs
   const [activeNetworkTab, setActiveNetworkTab] = useState<NetworkTab>('mainnet');
@@ -531,7 +531,6 @@ export const NodeConfig: React.FC = () => {
                     onConfigChange={(updates) => setNodeConfig({ ...nodeConfig, ...updates })}
                     onServersChange={(servers) => handleServersChange(activeNetworkTab, servers)}
                     onTestConnection={handleTestConnection}
-                    embedded={true}
                   />
                 </div>
               </div>
@@ -688,7 +687,7 @@ export const NodeConfig: React.FC = () => {
                             <input
                               type="number"
                               value={nodeConfig.proxyPort || ''}
-                              onChange={(e) => setNodeConfig({ ...nodeConfig, proxyPort: parseInt(e.target.value) || undefined })}
+                              onChange={(e) => setNodeConfig({ ...nodeConfig, proxyPort: parseInt(e.target.value, 10) || undefined })}
                               placeholder="9050"
                               className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                             />

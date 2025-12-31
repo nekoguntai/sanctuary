@@ -274,7 +274,7 @@ export const CreateWallet: React.FC = () => {
                             min="1" 
                             max={selectedDeviceIds.size} 
                             value={quorumM} 
-                            onChange={(e) => setQuorumM(parseInt(e.target.value))}
+                            onChange={(e) => setQuorumM(parseInt(e.target.value, 10))}
                             className="w-full accent-sanctuary-800 dark:accent-sanctuary-200"
                         />
                         <p className="text-xs text-sanctuary-500 mt-2">

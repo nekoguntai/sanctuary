@@ -226,17 +226,15 @@ export async function initiateTransfer(
 
 /**
  * Accept a pending transfer (recipient action)
+ * Uses atomic update with WHERE clause to prevent race conditions
  */
 export async function acceptTransfer(
   recipientId: string,
   transferId: string
 ): Promise<Transfer> {
+  // First check if transfer exists and get details for error messages
   const transfer = await prisma.ownershipTransfer.findUnique({
     where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
   });
 
   if (!transfer) {
@@ -248,28 +246,45 @@ export async function acceptTransfer(
     throw new Error('Only the recipient can accept this transfer');
   }
 
-  // Validation: must be pending
-  if (transfer.status !== 'pending') {
-    throw new Error(`Transfer cannot be accepted (current status: ${transfer.status})`);
-  }
-
-  // Validation: not expired
+  // Check if already expired
   if (isExpired(transfer.expiresAt)) {
-    // Mark as expired
-    await prisma.ownershipTransfer.update({
-      where: { id: transferId },
+    // Mark as expired atomically
+    await prisma.ownershipTransfer.updateMany({
+      where: { id: transferId, status: { in: ['pending', 'accepted'] } },
       data: { status: 'expired' },
     });
     throw new Error('Transfer has expired');
   }
 
-  // Update status
-  const updated = await prisma.ownershipTransfer.update({
-    where: { id: transferId },
+  // Atomic update: only succeeds if status is still 'pending'
+  // This prevents race conditions where two requests both try to accept
+  const result = await prisma.ownershipTransfer.updateMany({
+    where: {
+      id: transferId,
+      toUserId: recipientId,  // Ensure recipient check is also atomic
+      status: 'pending',      // Only update if still pending
+      expiresAt: { gt: new Date() },  // Not expired
+    },
     data: {
       status: 'accepted',
       acceptedAt: new Date(),
     },
+  });
+
+  if (result.count === 0) {
+    // Refresh to get current status for error message
+    const current = await prisma.ownershipTransfer.findUnique({
+      where: { id: transferId },
+    });
+    if (current?.status === 'accepted') {
+      throw new Error('Transfer has already been accepted');
+    }
+    throw new Error(`Transfer cannot be accepted (current status: ${current?.status || 'unknown'})`);
+  }
+
+  // Fetch updated record for return
+  const updated = await prisma.ownershipTransfer.findUnique({
+    where: { id: transferId },
     include: {
       fromUser: { select: { id: true, username: true } },
       toUser: { select: { id: true, username: true } },
@@ -286,6 +301,7 @@ export async function acceptTransfer(
 
 /**
  * Decline a pending transfer (recipient action)
+ * Uses atomic update with WHERE clause to prevent race conditions
  */
 export async function declineTransfer(
   recipientId: string,
@@ -305,19 +321,29 @@ export async function declineTransfer(
     throw new Error('Only the recipient can decline this transfer');
   }
 
-  // Validation: must be pending
-  if (transfer.status !== 'pending') {
-    throw new Error(`Transfer cannot be declined (current status: ${transfer.status})`);
-  }
-
-  // Update status
-  const updated = await prisma.ownershipTransfer.update({
-    where: { id: transferId },
+  // Atomic update: only succeeds if status is still 'pending'
+  const result = await prisma.ownershipTransfer.updateMany({
+    where: {
+      id: transferId,
+      toUserId: recipientId,
+      status: 'pending',
+    },
     data: {
       status: 'declined',
       declineReason: reason || null,
       cancelledAt: new Date(),
     },
+  });
+
+  if (result.count === 0) {
+    const current = await prisma.ownershipTransfer.findUnique({
+      where: { id: transferId },
+    });
+    throw new Error(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
+  }
+
+  const updated = await prisma.ownershipTransfer.findUnique({
+    where: { id: transferId },
     include: {
       fromUser: { select: { id: true, username: true } },
       toUser: { select: { id: true, username: true } },
@@ -336,6 +362,7 @@ export async function declineTransfer(
 /**
  * Cancel a transfer (owner action)
  * Can cancel from pending or accepted state
+ * Uses atomic update with WHERE clause to prevent race conditions
  */
 export async function cancelTransfer(
   ownerId: string,
@@ -354,18 +381,28 @@ export async function cancelTransfer(
     throw new Error('Only the transfer initiator can cancel');
   }
 
-  // Validation: must be pending or accepted
-  if (transfer.status !== 'pending' && transfer.status !== 'accepted') {
-    throw new Error(`Transfer cannot be cancelled (current status: ${transfer.status})`);
-  }
-
-  // Update status
-  const updated = await prisma.ownershipTransfer.update({
-    where: { id: transferId },
+  // Atomic update: only succeeds if status is still cancellable
+  const result = await prisma.ownershipTransfer.updateMany({
+    where: {
+      id: transferId,
+      fromUserId: ownerId,
+      status: { in: ['pending', 'accepted'] },
+    },
     data: {
       status: 'cancelled',
       cancelledAt: new Date(),
     },
+  });
+
+  if (result.count === 0) {
+    const current = await prisma.ownershipTransfer.findUnique({
+      where: { id: transferId },
+    });
+    throw new Error(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
+  }
+
+  const updated = await prisma.ownershipTransfer.findUnique({
+    where: { id: transferId },
     include: {
       fromUser: { select: { id: true, username: true } },
       toUser: { select: { id: true, username: true } },
@@ -383,60 +420,60 @@ export async function cancelTransfer(
 /**
  * Confirm and execute transfer (owner action)
  * This is the final step that actually transfers ownership
+ * Uses serializable transaction to prevent race conditions
  */
 export async function confirmTransfer(
   ownerId: string,
   transferId: string
 ): Promise<Transfer> {
+  // First check basic validations outside transaction for better error messages
   const transfer = await prisma.ownershipTransfer.findUnique({
     where: { id: transferId },
-    include: {
-      fromUser: { select: { id: true, username: true } },
-      toUser: { select: { id: true, username: true } },
-    },
   });
 
   if (!transfer) {
     throw new Error('Transfer not found');
   }
 
-  // Validation: only owner can confirm
   if (transfer.fromUserId !== ownerId) {
     throw new Error('Only the transfer initiator can confirm');
   }
 
-  // Validation: must be accepted
-  if (transfer.status !== 'accepted') {
-    throw new Error(`Transfer cannot be confirmed (current status: ${transfer.status})`);
-  }
-
-  // Validation: not expired
-  if (isExpired(transfer.expiresAt)) {
-    await prisma.ownershipTransfer.update({
+  // Execute everything in a serializable transaction to prevent race conditions
+  // This ensures status check and execution are atomic
+  await prisma.$transaction(async (tx) => {
+    // Re-fetch and validate inside transaction
+    const current = await tx.ownershipTransfer.findUnique({
       where: { id: transferId },
-      data: { status: 'expired' },
     });
-    throw new Error('Transfer has expired');
-  }
 
-  // Validation: owner still owns the resource
-  const stillOwns = await checkResourceOwnership(
-    transfer.resourceType as ResourceType,
-    transfer.resourceId,
-    ownerId
-  );
-  if (!stillOwns) {
-    throw new Error('You no longer own this resource');
-  }
+    if (!current || current.status !== 'accepted') {
+      if (current?.status === 'confirmed') {
+        throw new Error('Transfer has already been completed');
+      }
+      throw new Error(`Transfer cannot be confirmed (current status: ${current?.status || 'unknown'})`);
+    }
 
-  // Execute the transfer in a transaction
-  if (transfer.resourceType === 'wallet') {
-    await executeWalletTransfer(transfer);
-  } else {
-    await executeDeviceTransfer(transfer);
-  }
+    // Check expiration
+    if (isExpired(current.expiresAt)) {
+      await tx.ownershipTransfer.update({
+        where: { id: transferId },
+        data: { status: 'expired' },
+      });
+      throw new Error('Transfer has expired');
+    }
 
-  // Fetch updated transfer
+    // Execute the ownership transfer based on resource type
+    if (current.resourceType === 'wallet') {
+      await executeWalletTransferTx(tx, current);
+    } else {
+      await executeDeviceTransferTx(tx, current);
+    }
+  }, {
+    isolationLevel: 'Serializable',
+  });
+
+  // Fetch updated transfer for return
   const updated = await prisma.ownershipTransfer.findUnique({
     where: { id: transferId },
     include: {
@@ -457,130 +494,146 @@ export async function confirmTransfer(
 }
 
 /**
- * Execute wallet ownership transfer
+ * Execute wallet ownership transfer (uses existing transaction)
  */
-async function executeWalletTransfer(transfer: any): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const walletId = transfer.resourceId;
+async function executeWalletTransferTx(tx: any, transfer: any): Promise<void> {
+  const walletId = transfer.resourceId;
 
-    // 1. Find current owner's WalletUser record
-    const currentOwner = await tx.walletUser.findFirst({
-      where: { walletId, userId: transfer.fromUserId, role: 'owner' },
+  // 1. Find current owner's WalletUser record
+  const currentOwner = await tx.walletUser.findFirst({
+    where: { walletId, userId: transfer.fromUserId, role: 'owner' },
+  });
+
+  if (!currentOwner) {
+    throw new Error('Transfer failed: owner no longer owns this wallet');
+  }
+
+  // 2. Check if recipient already has access
+  const recipientAccess = await tx.walletUser.findFirst({
+    where: { walletId, userId: transfer.toUserId },
+  });
+
+  if (recipientAccess) {
+    // Upgrade existing access to owner
+    await tx.walletUser.update({
+      where: { id: recipientAccess.id },
+      data: { role: 'owner' },
     });
-
-    if (!currentOwner) {
-      throw new Error('Transfer failed: owner no longer owns this wallet');
-    }
-
-    // 2. Check if recipient already has access
-    const recipientAccess = await tx.walletUser.findFirst({
-      where: { walletId, userId: transfer.toUserId },
-    });
-
-    if (recipientAccess) {
-      // Upgrade existing access to owner
-      await tx.walletUser.update({
-        where: { id: recipientAccess.id },
-        data: { role: 'owner' },
-      });
-    } else {
-      // Create new owner access
-      await tx.walletUser.create({
-        data: {
-          walletId,
-          userId: transfer.toUserId,
-          role: 'owner',
-        },
-      });
-    }
-
-    // 3. Handle previous owner based on keepExistingUsers flag
-    if (transfer.keepExistingUsers) {
-      // Downgrade to viewer
-      await tx.walletUser.update({
-        where: { id: currentOwner.id },
-        data: { role: 'viewer' },
-      });
-    } else {
-      // Remove access entirely
-      await tx.walletUser.delete({
-        where: { id: currentOwner.id },
-      });
-    }
-
-    // 4. Update transfer status
-    await tx.ownershipTransfer.update({
-      where: { id: transfer.id },
+  } else {
+    // Create new owner access
+    await tx.walletUser.create({
       data: {
-        status: 'confirmed',
-        confirmedAt: new Date(),
+        walletId,
+        userId: transfer.toUserId,
+        role: 'owner',
       },
     });
+  }
+
+  // 3. Handle previous owner based on keepExistingUsers flag
+  if (transfer.keepExistingUsers) {
+    // Downgrade to viewer
+    await tx.walletUser.update({
+      where: { id: currentOwner.id },
+      data: { role: 'viewer' },
+    });
+  } else {
+    // Remove access entirely
+    await tx.walletUser.delete({
+      where: { id: currentOwner.id },
+    });
+  }
+
+  // 4. Update transfer status
+  await tx.ownershipTransfer.update({
+    where: { id: transfer.id },
+    data: {
+      status: 'confirmed',
+      confirmedAt: new Date(),
+    },
   });
 }
 
 /**
- * Execute device ownership transfer
+ * Execute wallet ownership transfer (standalone with own transaction)
+ * @deprecated Use executeWalletTransferTx with an existing transaction
+ */
+async function executeWalletTransfer(transfer: any): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await executeWalletTransferTx(tx, transfer);
+  });
+}
+
+/**
+ * Execute device ownership transfer (uses existing transaction)
+ */
+async function executeDeviceTransferTx(tx: any, transfer: any): Promise<void> {
+  const deviceId = transfer.resourceId;
+
+  // 1. Find current owner's DeviceUser record
+  const currentOwner = await tx.deviceUser.findFirst({
+    where: { deviceId, userId: transfer.fromUserId, role: 'owner' },
+  });
+
+  if (!currentOwner) {
+    throw new Error('Transfer failed: owner no longer owns this device');
+  }
+
+  // 2. Update Device.userId (legacy field for backward compatibility)
+  await tx.device.update({
+    where: { id: deviceId },
+    data: { userId: transfer.toUserId },
+  });
+
+  // 3. Handle recipient access
+  const recipientAccess = await tx.deviceUser.findFirst({
+    where: { deviceId, userId: transfer.toUserId },
+  });
+
+  if (recipientAccess) {
+    await tx.deviceUser.update({
+      where: { id: recipientAccess.id },
+      data: { role: 'owner' },
+    });
+  } else {
+    await tx.deviceUser.create({
+      data: {
+        deviceId,
+        userId: transfer.toUserId,
+        role: 'owner',
+      },
+    });
+  }
+
+  // 4. Handle previous owner
+  if (transfer.keepExistingUsers) {
+    await tx.deviceUser.update({
+      where: { id: currentOwner.id },
+      data: { role: 'viewer' },
+    });
+  } else {
+    await tx.deviceUser.delete({
+      where: { id: currentOwner.id },
+    });
+  }
+
+  // 5. Update transfer status
+  await tx.ownershipTransfer.update({
+    where: { id: transfer.id },
+    data: {
+      status: 'confirmed',
+      confirmedAt: new Date(),
+    },
+  });
+}
+
+/**
+ * Execute device ownership transfer (standalone with own transaction)
+ * @deprecated Use executeDeviceTransferTx with an existing transaction
  */
 async function executeDeviceTransfer(transfer: any): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const deviceId = transfer.resourceId;
-
-    // 1. Find current owner's DeviceUser record
-    const currentOwner = await tx.deviceUser.findFirst({
-      where: { deviceId, userId: transfer.fromUserId, role: 'owner' },
-    });
-
-    if (!currentOwner) {
-      throw new Error('Transfer failed: owner no longer owns this device');
-    }
-
-    // 2. Update Device.userId (legacy field for backward compatibility)
-    await tx.device.update({
-      where: { id: deviceId },
-      data: { userId: transfer.toUserId },
-    });
-
-    // 3. Handle recipient access
-    const recipientAccess = await tx.deviceUser.findFirst({
-      where: { deviceId, userId: transfer.toUserId },
-    });
-
-    if (recipientAccess) {
-      await tx.deviceUser.update({
-        where: { id: recipientAccess.id },
-        data: { role: 'owner' },
-      });
-    } else {
-      await tx.deviceUser.create({
-        data: {
-          deviceId,
-          userId: transfer.toUserId,
-          role: 'owner',
-        },
-      });
-    }
-
-    // 4. Handle previous owner
-    if (transfer.keepExistingUsers) {
-      await tx.deviceUser.update({
-        where: { id: currentOwner.id },
-        data: { role: 'viewer' },
-      });
-    } else {
-      await tx.deviceUser.delete({
-        where: { id: currentOwner.id },
-      });
-    }
-
-    // 5. Update transfer status
-    await tx.ownershipTransfer.update({
-      where: { id: transfer.id },
-      data: {
-        status: 'confirmed',
-        confirmedAt: new Date(),
-      },
-    });
+    await executeDeviceTransferTx(tx, transfer);
   });
 }
 

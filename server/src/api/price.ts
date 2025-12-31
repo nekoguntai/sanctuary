@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { getPriceService } from '../services/price';
 import { createLogger } from '../utils/logger';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 const log = createLogger('PRICE');
@@ -189,18 +190,19 @@ router.get('/health', async (req: Request, res: Response) => {
 
 /**
  * GET /api/v1/price/cache/stats
- * Get cache statistics
+ * Get cache statistics (admin only)
  */
-router.get('/cache/stats', (req: Request, res: Response) => {
+router.get('/cache/stats', authenticate, requireAdmin, (req: Request, res: Response) => {
   const stats = priceService.getCacheStats();
   res.json(stats);
 });
 
 /**
  * POST /api/v1/price/cache/clear
- * Clear price cache
+ * Clear price cache (admin only)
  */
-router.post('/cache/clear', (req: Request, res: Response) => {
+router.post('/cache/clear', authenticate, requireAdmin, (req: Request, res: Response) => {
+  log.info('Cache cleared by admin', { userId: (req as any).user?.id });
   priceService.clearCache();
   res.json({
     message: 'Cache cleared successfully',
@@ -209,9 +211,9 @@ router.post('/cache/clear', (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/price/cache/duration
- * Set cache duration
+ * Set cache duration (admin only)
  */
-router.post('/cache/duration', (req: Request, res: Response) => {
+router.post('/cache/duration', authenticate, requireAdmin, (req: Request, res: Response) => {
   const { duration } = req.body;
 
   if (typeof duration !== 'number' || duration < 0) {
@@ -221,6 +223,7 @@ router.post('/cache/duration', (req: Request, res: Response) => {
     });
   }
 
+  log.info('Cache duration updated by admin', { userId: (req as any).user?.id, duration });
   priceService.setCacheDuration(duration);
 
   res.json({
@@ -287,7 +290,7 @@ router.get('/history', async (req: Request, res: Response) => {
   try {
     const { days = '30', currency = 'USD' } = req.query;
 
-    const daysNum = parseInt(days as string);
+    const daysNum = parseInt(days as string, 10);
 
     if (isNaN(daysNum) || daysNum < 1 || daysNum > 365) {
       return res.status(400).json({

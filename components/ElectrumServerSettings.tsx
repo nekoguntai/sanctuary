@@ -664,7 +664,7 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
                   type="number"
                   value={newServer.port}
                   onChange={(e) =>
-                    setNewServer({ ...newServer, port: parseInt(e.target.value) || 50002 })
+                    setNewServer({ ...newServer, port: parseInt(e.target.value, 10) || 50002 })
                   }
                   className="w-full px-2 py-1.5 text-xs surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
                 />

@@ -744,7 +744,7 @@ export const ImportWallet: React.FC = () => {
                 max={100}
                 value={accountIndex}
                 onChange={(e) => {
-                  setAccountIndex(Math.max(0, parseInt(e.target.value) || 0));
+                  setAccountIndex(Math.max(0, parseInt(e.target.value, 10) || 0));
                   setXpubData(null); // Clear xpub when account changes
                 }}
                 className="w-32 px-4 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-elevated focus:outline-none focus:ring-2 focus:ring-primary-500"

@@ -191,7 +191,7 @@ export function ReviewStep({
           address: o.address,
           amount: o.sendMax
             ? selectedTotal - (txData?.fee || estimatedFee)
-            : parseInt(o.amount) || 0,
+            : parseInt(o.amount, 10) || 0,
           isChange: false,
           label: getAddressLabel(o.address),
         }));
@@ -376,7 +376,7 @@ export function ReviewStep({
                 </div>
                 <div className="text-right flex-shrink-0">
                   <div className="font-semibold text-sanctuary-900 dark:text-sanctuary-100">
-                    {output.sendMax ? 'MAX' : format(parseInt(output.amount) || 0)}
+                    {output.sendMax ? 'MAX' : format(parseInt(output.amount, 10) || 0)}
                   </div>
                 </div>
               </div>

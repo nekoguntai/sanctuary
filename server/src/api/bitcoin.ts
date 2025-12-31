@@ -195,7 +195,7 @@ router.get('/mempool', async (req: Request, res: Response) => {
  */
 router.get('/blocks/recent', async (req: Request, res: Response) => {
   try {
-    const count = parseInt(req.query.count as string) || 10;
+    const count = parseInt(req.query.count as string, 10) || 10;
     const blocks = await mempool.getRecentBlocks(count);
 
     res.json(blocks);
@@ -452,7 +452,7 @@ router.post('/wallet/:walletId/update-confirmations', authenticate, async (req: 
  */
 router.get('/block/:height', async (req: Request, res: Response) => {
   try {
-    const height = parseInt(req.params.height);
+    const height = parseInt(req.params.height, 10);
 
     if (isNaN(height) || height < 0) {
       return res.status(400).json({

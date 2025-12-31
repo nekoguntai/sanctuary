@@ -572,6 +572,14 @@ export async function createTransaction(
     const derivationPath = addressPathMap.get(utxo.address) || '';
     inputPaths.push(derivationPath);
 
+    // Validate scriptPubKey is present for SegWit transactions
+    if (!isLegacy && (!utxo.scriptPubKey || utxo.scriptPubKey.length === 0)) {
+      throw new Error(
+        `UTXO ${utxo.txid}:${utxo.vout} is missing scriptPubKey data. ` +
+        `Please resync your wallet to fetch missing UTXO data.`
+      );
+    }
+
     // Build base input data
     // Legacy (P2PKH) requires nonWitnessUtxo (full previous tx)
     // SegWit (P2WPKH, P2SH-P2WPKH, P2TR) uses witnessUtxo
@@ -664,13 +672,23 @@ export async function createTransaction(
     }
   }
 
-  // Add recipient output
-  psbt.addOutput({
+  // Build all outputs first, then add in randomized order for privacy
+  // This prevents chain analysis from identifying change by output position
+  interface PendingOutput {
+    address: string;
+    value: number;
+    type: 'recipient' | 'change' | 'decoy';
+  }
+  const pendingOutputs: PendingOutput[] = [];
+
+  // Add recipient output to pending list
+  pendingOutputs.push({
     address: recipient,
     value: effectiveAmount,
+    type: 'recipient',
   });
 
-  // Add change output(s) if needed (skip for sendMax - no change)
+  // Calculate change output(s) if needed (skip for sendMax - no change)
   let changeAddress: string | undefined;
   let decoyOutputsResult: Array<{ address: string; amount: number }> | undefined;
   let actualFee = selection.estimatedFee;
@@ -746,15 +764,16 @@ export async function createTransaction(
         [shuffledAddresses[i], shuffledAddresses[j]] = [shuffledAddresses[j], shuffledAddresses[i]];
       }
 
-      // Add all change outputs
+      // Add all change outputs to pending list
       decoyOutputsResult = [];
       for (let i = 0; i < numChangeOutputs; i++) {
         const addr = shuffledAddresses[i].address;
         const amt = amounts[i];
 
-        psbt.addOutput({
+        pendingOutputs.push({
           address: addr,
           value: amt,
+          type: i === 0 ? 'change' : 'decoy',
         });
 
         decoyOutputsResult.push({ address: addr, amount: amt });
@@ -798,11 +817,27 @@ export async function createTransaction(
         changeAddress = receivingAddress.address;
       }
 
-      psbt.addOutput({
+      pendingOutputs.push({
         address: changeAddress,
         value: actualChangeAmount,
+        type: 'change',
       });
     }
+  }
+
+  // Shuffle outputs for privacy (Fisher-Yates algorithm)
+  // This prevents chain analysis from identifying outputs by position
+  for (let i = pendingOutputs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pendingOutputs[i], pendingOutputs[j]] = [pendingOutputs[j], pendingOutputs[i]];
+  }
+
+  // Add all outputs to PSBT in randomized order
+  for (const output of pendingOutputs) {
+    psbt.addOutput({
+      address: output.address,
+      value: output.value,
+    });
   }
 
   // When decoys are used, don't return changeAmount/changeAddress separately

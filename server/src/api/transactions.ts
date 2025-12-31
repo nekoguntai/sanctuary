@@ -1511,7 +1511,7 @@ router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('vie
 router.get('/transactions/recent', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 10, 50);
 
     // Get all wallet IDs the user has access to
     const accessibleWallets = await prisma.wallet.findMany({
@@ -1692,7 +1692,7 @@ router.get('/transactions/balance-history', async (req: Request, res: Response) 
   try {
     const userId = req.user!.userId;
     const timeframe = (req.query.timeframe as string) || '1W';
-    const totalBalance = parseInt(req.query.totalBalance as string) || 0;
+    const totalBalance = parseInt(req.query.totalBalance as string, 10) || 0;
 
     // Get all wallet IDs the user has access to
     const accessibleWallets = await prisma.wallet.findMany({

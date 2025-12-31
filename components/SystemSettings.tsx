@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Shield, UserPlus, Check, AlertCircle } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { createLogger } from '../utils/logger';
@@ -11,6 +11,16 @@ export const SystemSettings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -39,7 +49,11 @@ export const SystemSettings: React.FC = () => {
       await adminApi.updateSystemSettings({ registrationEnabled: newValue });
       setRegistrationEnabled(newValue);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      // Clear any existing timeout and set new one
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+      successTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       log.error('Failed to update settings', { error });
       setSaveError('Failed to update settings');

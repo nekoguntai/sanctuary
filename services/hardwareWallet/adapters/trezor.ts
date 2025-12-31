@@ -21,6 +21,22 @@ import type {
 
 const log = createLogger('TrezorAdapter');
 
+/**
+ * Validate and format a satoshi amount for Trezor
+ * Handles both number and BigInt types, validates range
+ */
+function validateSatoshiAmount(amount: number | bigint | undefined, context: string): string {
+  if (amount === undefined || amount === null) {
+    throw new Error(`${context}: amount is missing`);
+  }
+  // Handle both number and BigInt types
+  const amountNum = typeof amount === 'bigint' ? Number(amount) : amount;
+  if (!Number.isFinite(amountNum) || amountNum < 0) {
+    throw new Error(`${context}: invalid amount ${amount}`);
+  }
+  return amount.toString();
+}
+
 // Connection state
 interface TrezorConnection {
   initialized: boolean;
@@ -373,7 +389,7 @@ export class TrezorAdapter implements DeviceAdapter {
         };
 
         if (input.witnessUtxo) {
-          trezorInput.amount = input.witnessUtxo.value.toString();
+          trezorInput.amount = validateSatoshiAmount(input.witnessUtxo.value, `Input ${idx}`);
         }
 
         return trezorInput;
@@ -392,7 +408,7 @@ export class TrezorAdapter implements DeviceAdapter {
 
           return {
             address_n: pathToAddressN(psbtOutput.bip32Derivation[0].path),
-            amount: output.value.toString(),
+            amount: validateSatoshiAmount(output.value, `Output ${idx}`),
             script_type: outputScriptType,
           };
         } else {
@@ -403,7 +419,7 @@ export class TrezorAdapter implements DeviceAdapter {
 
           return {
             address,
-            amount: output.value.toString(),
+            amount: validateSatoshiAmount(output.value, `Output ${idx}`),
             script_type: 'PAYTOADDRESS',
           };
         }

@@ -131,7 +131,7 @@ export function OutputsStep() {
   const calculateMaxForOutput = useCallback((index: number) => {
     const otherTotal = state.outputs.reduce((sum, o, i) => {
       if (i === index || o.sendMax) return sum;
-      return sum + (parseInt(o.amount) || 0);
+      return sum + (parseInt(o.amount, 10) || 0);
     }, 0);
 
     return Math.max(0, effectiveAvailable - otherTotal - estimatedFee);
@@ -290,7 +290,7 @@ export function OutputsStep() {
       return output.displayValue;
     }
     if (!output.amount) return '';
-    const sats = parseInt(output.amount);
+    const sats = parseInt(output.amount, 10);
     if (isNaN(sats)) return output.amount;
     return formatDisplayValue(sats);
   }, [formatDisplayValue]);

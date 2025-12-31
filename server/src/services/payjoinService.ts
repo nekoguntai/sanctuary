@@ -10,6 +10,8 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import dns from 'dns';
+import { promisify } from 'util';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
 import {
@@ -24,6 +26,81 @@ import {
 import { getNetwork } from './bitcoin/utils';
 
 const log = createLogger('PAYJOIN');
+
+const dnsLookup = promisify(dns.lookup);
+
+/**
+ * Check if an IP address is private/internal (SSRF protection)
+ */
+function isPrivateIP(ip: string): boolean {
+  // Handle IPv4-mapped IPv6 addresses
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+
+  // IPv6 localhost
+  if (ip === '::1') return true;
+
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(p => isNaN(p))) {
+    // Not a valid IPv4, could be IPv6 - block to be safe
+    return !ip.includes('.'); // Block non-IPv4 except public IPv6
+  }
+
+  return (
+    // Localhost
+    parts[0] === 127 ||
+    // Private Class A (10.0.0.0/8)
+    parts[0] === 10 ||
+    // Private Class B (172.16.0.0/12)
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    // Private Class C (192.168.0.0/16)
+    (parts[0] === 192 && parts[1] === 168) ||
+    // Link-local (169.254.0.0/16)
+    (parts[0] === 169 && parts[1] === 254) ||
+    // Cloud metadata endpoints
+    (parts[0] === 169 && parts[1] === 254 && parts[2] === 169 && parts[3] === 254) ||
+    // Broadcast
+    parts[0] === 0 ||
+    parts[0] === 255
+  );
+}
+
+/**
+ * Validate a Payjoin URL to prevent SSRF attacks
+ */
+async function validatePayjoinUrl(urlString: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const url = new URL(urlString);
+
+    // Only allow HTTPS for security
+    if (url.protocol !== 'https:') {
+      return { valid: false, error: 'Payjoin URL must use HTTPS' };
+    }
+
+    // Block localhost and common internal hostnames
+    const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', 'internal', 'local'];
+    if (blockedHosts.some(h => url.hostname.toLowerCase() === h || url.hostname.toLowerCase().endsWith('.' + h))) {
+      return { valid: false, error: 'Payjoin URL cannot point to localhost or internal hosts' };
+    }
+
+    // Resolve hostname and check for private IPs
+    try {
+      const { address } = await dnsLookup(url.hostname);
+      if (isPrivateIP(address)) {
+        log.warn('Payjoin URL resolved to private IP', { hostname: url.hostname, ip: address });
+        return { valid: false, error: 'Payjoin URL resolved to a private IP address' };
+      }
+    } catch (dnsError) {
+      log.warn('Failed to resolve Payjoin URL hostname', { hostname: url.hostname, error: String(dnsError) });
+      return { valid: false, error: 'Could not resolve Payjoin URL hostname' };
+    }
+
+    return { valid: true };
+  } catch (parseError) {
+    return { valid: false, error: 'Invalid Payjoin URL format' };
+  }
+}
 
 // BIP78 error codes
 export const PayjoinErrors = {
@@ -284,10 +361,15 @@ export async function attemptPayjoinSend(
   try {
     log.info('Attempting Payjoin send', { payjoinUrl });
 
-    // Validate the Payjoin URL
-    const url = new URL(payjoinUrl);
-    if (!url.protocol.startsWith('http')) {
-      throw new Error('Invalid Payjoin URL protocol');
+    // Validate the Payjoin URL (SSRF protection)
+    const urlValidation = await validatePayjoinUrl(payjoinUrl);
+    if (!urlValidation.valid) {
+      log.warn('Payjoin URL validation failed', { payjoinUrl, error: urlValidation.error });
+      return {
+        success: false,
+        isPayjoin: false,
+        error: urlValidation.error || 'Invalid Payjoin URL',
+      };
     }
 
     // POST original PSBT to receiver

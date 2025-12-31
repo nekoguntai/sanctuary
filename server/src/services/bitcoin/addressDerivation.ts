@@ -459,12 +459,15 @@ function deriveMultisigAddress(
  */
 function getNetwork(network: 'mainnet' | 'testnet' | 'regtest'): bitcoin.Network {
   switch (network) {
+    case 'mainnet':
+      return bitcoin.networks.bitcoin;
     case 'testnet':
       return bitcoin.networks.testnet;
     case 'regtest':
       return bitcoin.networks.regtest;
     default:
-      return bitcoin.networks.bitcoin;
+      // Explicit error instead of silent fallback to mainnet
+      throw new Error(`Unsupported network: ${network}. Expected 'mainnet', 'testnet', or 'regtest'.`);
   }
 }
 

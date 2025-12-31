@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Check, AlertCircle, AlertTriangle, Variable, Info } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { createLogger } from '../utils/logger';
@@ -13,6 +13,16 @@ export const Variables: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -48,7 +58,11 @@ export const Variables: React.FC = () => {
         dustThreshold,
       });
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      // Clear any existing timeout and set new one
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+      successTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       log.error('Failed to update settings', { error });
       setSaveError('Failed to update settings');
@@ -107,7 +121,7 @@ export const Variables: React.FC = () => {
                 min="1"
                 max="100"
                 value={confirmationThreshold}
-                onChange={(e) => setConfirmationThreshold(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) => setConfirmationThreshold(Math.max(1, parseInt(e.target.value, 10) || 1))}
                 className="w-24 px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <span className="text-sm text-sanctuary-500">confirmations</span>
@@ -128,7 +142,7 @@ export const Variables: React.FC = () => {
                 min="1"
                 max="100"
                 value={deepConfirmationThreshold}
-                onChange={(e) => setDeepConfirmationThreshold(parseInt(e.target.value) || 1)}
+                onChange={(e) => setDeepConfirmationThreshold(parseInt(e.target.value, 10) || 1)}
                 className="w-24 px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <span className="text-sm text-sanctuary-500">confirmations</span>
@@ -149,7 +163,7 @@ export const Variables: React.FC = () => {
                 min="1"
                 max="10000"
                 value={dustThreshold}
-                onChange={(e) => setDustThreshold(Math.max(1, parseInt(e.target.value) || 546))}
+                onChange={(e) => setDustThreshold(Math.max(1, parseInt(e.target.value, 10) || 546))}
                 className="w-24 px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted text-sanctuary-900 dark:text-sanctuary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <span className="text-sm text-sanctuary-500">satoshis</span>

@@ -419,7 +419,10 @@ export class LedgerAdapter implements DeviceAdapter {
       }
 
       if (missingBip32Derivation) {
-        log.error('PSBT is missing bip32Derivation data - Ledger requires this');
+        throw new Error(
+          'PSBT is missing bip32Derivation data required by Ledger. ' +
+          'Ensure wallet descriptor is properly configured with xpub and fingerprint.'
+        );
       }
 
       // Sign the PSBT

@@ -133,7 +133,7 @@ export function useSendTransactionActions({
           setError(`Output ${i + 1}: Please enter a recipient address`);
           return null;
         }
-        if (!output.sendMax && (!output.amount || parseInt(output.amount) <= 0)) {
+        if (!output.sendMax && (!output.amount || parseInt(output.amount, 10) <= 0)) {
           setError(`Output ${i + 1}: Please enter a valid amount`);
           return null;
         }
@@ -142,7 +142,7 @@ export function useSendTransactionActions({
       // Prepare outputs for API
       const apiOutputs = state.outputs.map(o => ({
         address: o.address,
-        amount: o.sendMax ? 0 : parseInt(o.amount),
+        amount: o.sendMax ? 0 : parseInt(o.amount, 10),
         sendMax: o.sendMax,
       }));
 
@@ -160,7 +160,7 @@ export function useSendTransactionActions({
         // Single output
         const singleResult = await transactionsApi.createTransaction(walletId, {
           recipient: state.outputs[0].address,
-          amount: parseInt(state.outputs[0].amount),
+          amount: parseInt(state.outputs[0].amount, 10),
           feeRate: state.feeRate,
           selectedUtxoIds: state.selectedUTXOs.size > 0 ? Array.from(state.selectedUTXOs) : undefined,
           enableRBF: state.rbfEnabled,
@@ -172,7 +172,7 @@ export function useSendTransactionActions({
         // Create outputs array with just the main recipient (decoys are change, handled separately)
         const mainOutput = {
           address: state.outputs[0].address,
-          amount: singleResult.effectiveAmount || parseInt(state.outputs[0].amount),
+          amount: singleResult.effectiveAmount || parseInt(state.outputs[0].amount, 10),
         };
 
         result = {
@@ -408,13 +408,13 @@ export function useSendTransactionActions({
     try {
       const apiOutputs = state.outputs.map(o => ({
         address: o.address,
-        amount: o.sendMax ? 0 : parseInt(o.amount),
+        amount: o.sendMax ? 0 : parseInt(o.amount, 10),
         sendMax: o.sendMax,
       }));
 
       const effectiveAmount = currentTxData.effectiveAmount ||
         (currentTxData.outputs?.reduce((sum, o) => sum + o.amount, 0) ||
-         parseInt(state.outputs[0].amount));
+         parseInt(state.outputs[0].amount, 10));
 
       const usedUtxoIds = currentTxData.utxos?.map(u => `${u.txid}:${u.vout}`) || [];
 

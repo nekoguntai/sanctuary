@@ -1574,8 +1574,8 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req: Request, res: 
       success: success !== undefined ? success === 'true' : undefined,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
-      limit: Math.min(parseInt(limit as string) || 50, 500),
-      offset: parseInt(offset as string) || 0,
+      limit: Math.min(parseInt(limit as string, 10) || 50, 500),
+      offset: parseInt(offset as string, 10) || 0,
     });
 
     res.json(result);
@@ -1597,7 +1597,7 @@ router.get('/audit-logs', authenticate, requireAdmin, async (req: Request, res: 
  */
 router.get('/audit-logs/stats', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const days = parseInt(req.query.days as string) || 30;
+    const days = parseInt(req.query.days as string, 10) || 30;
     const stats = await auditService.getStats(days);
     res.json(stats);
   } catch (error) {

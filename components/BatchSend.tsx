@@ -48,7 +48,7 @@ export const BatchSend: React.FC = () => {
   };
 
   const calculateTotal = () => {
-    return recipients.reduce((sum, r) => sum + (parseInt(r.amount) || 0), 0);
+    return recipients.reduce((sum, r) => sum + (parseInt(r.amount, 10) || 0), 0);
   };
 
   const calculateIndividualFees = () => {
@@ -65,7 +65,7 @@ export const BatchSend: React.FC = () => {
 
       // Validate recipients
       const validRecipients = recipients.filter(
-        (r) => r.address && r.amount && parseInt(r.amount) > 0
+        (r) => r.address && r.amount && parseInt(r.amount, 10) > 0
       );
 
       if (validRecipients.length === 0) {
@@ -84,7 +84,7 @@ export const BatchSend: React.FC = () => {
       const batchResult = await bitcoinApi.createBatchTransaction({
         recipients: validRecipients.map((r) => ({
           address: r.address,
-          amount: parseInt(r.amount),
+          amount: parseInt(r.amount, 10),
           label: r.label,
         })),
         feeRate,
@@ -200,10 +200,10 @@ export const BatchSend: React.FC = () => {
                   placeholder="0"
                   className="block w-full px-3 py-2 rounded-lg border border-sanctuary-300 dark:border-sanctuary-700 surface-muted text-sm focus:ring-2 focus:ring-sanctuary-500 focus:outline-none"
                 />
-                {recipient.amount && parseInt(recipient.amount) > 0 && (
+                {recipient.amount && parseInt(recipient.amount, 10) > 0 && (
                   <p className="text-xs text-sanctuary-500 mt-1">
                     ≈ {currencySymbol}
-                    {getFiatValue(parseInt(recipient.amount)).toFixed(2)}
+                    {getFiatValue(parseInt(recipient.amount, 10)).toFixed(2)}
                   </p>
                 )}
               </div>

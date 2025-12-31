@@ -22,6 +22,7 @@ export const SatsIcon: React.FC<IconProps> = ({ className }) => (
 // --- App Logo ---
 // "Sanctuary Stack": Layers of security forming a secure foundation.
 // Geometric, minimalist, and resembling a vault or a stack of coins/servers.
+// The circle sits on the TOP diamond layer, not the center.
 export const SanctuaryLogo: React.FC<IconProps> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M12 2L2 7l10 5 10-5-10-5z" />

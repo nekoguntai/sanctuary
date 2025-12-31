@@ -41,11 +41,6 @@ run_test_coverage_agent() {
         return 0
     fi
 
-    # Only run if terminal is interactive
-    if [ ! -t 0 ]; then
-        return 0
-    fi
-
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo "${BLUE}🤖 AI Test Coverage Analysis${NC}"
@@ -80,18 +75,6 @@ After your analysis, end with one of:
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    printf "${YELLOW}Continue with commit? [Y/n] ${NC}"
-    read -r response
-    case "$response" in
-        [nN])
-            echo "${RED}Commit aborted. Update tests and try again.${NC}"
-            exit 1
-            ;;
-        *)
-            echo "${GREEN}Proceeding with commit...${NC}"
-            ;;
-    esac
     echo ""
 }
 

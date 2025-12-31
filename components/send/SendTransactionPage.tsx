@@ -75,6 +75,13 @@ export const SendTransactionPage: React.FC = () => {
         // Fetch wallet data first (critical)
         const apiWallet = await walletsApi.getWallet(id);
 
+        // Check if user has permission to send (viewers cannot send)
+        if (apiWallet.userRole === 'viewer') {
+          log.warn('Viewer attempted to access send page', { walletId: id });
+          navigate(`/wallets/${id}`, { replace: true });
+          return;
+        }
+
         // Convert API wallet to Wallet type
         const walletType = apiWallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
         const formattedWallet: Wallet = {

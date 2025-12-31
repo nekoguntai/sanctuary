@@ -1387,9 +1387,11 @@ export const WalletDetail: React.FC = () => {
              <Button onClick={() => setShowReceive(true)} variant="primary">
                <ArrowDownLeft className="w-4 h-4 mr-2" /> Receive
              </Button>
-             <Button variant="secondary" onClick={() => navigate(`/wallets/${id}/send`)}>
-               <ArrowUpRight className="w-4 h-4 mr-2" /> Send
-             </Button>
+             {wallet.userRole !== 'viewer' && (
+               <Button variant="secondary" onClick={() => navigate(`/wallets/${id}/send`)}>
+                 <ArrowUpRight className="w-4 h-4 mr-2" /> Send
+               </Button>
+             )}
              <Button variant="ghost" onClick={handleSync} disabled={syncing}>
                <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
                {syncing ? 'Syncing...' : 'Sync'}
@@ -1445,7 +1447,7 @@ export const WalletDetail: React.FC = () => {
       {/* Tabs */}
       <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {['tx', 'utxo', 'addresses', 'drafts', 'stats', 'access', 'settings', 'log'].map((tab) => (
+          {['tx', 'utxo', 'addresses', ...(wallet.userRole !== 'viewer' ? ['drafts'] : []), 'stats', ...(wallet.userRole !== 'viewer' ? ['access'] : []), 'settings', 'log'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -1556,10 +1558,10 @@ export const WalletDetail: React.FC = () => {
           <UTXOList
             utxos={utxos}
             onToggleFreeze={handleToggleFreeze}
-            selectable={true}
+            selectable={wallet.userRole !== 'viewer'}
             selectedUtxos={selectedUtxos}
             onToggleSelect={handleToggleSelect}
-            onSendSelected={handleSendSelected}
+            onSendSelected={wallet.userRole !== 'viewer' ? handleSendSelected : undefined}
             privacyData={privacyData}
             privacySummary={privacySummary}
             showPrivacy={showPrivacy}

@@ -93,7 +93,7 @@ describe('README.md Links', () => {
         return `  - #${link}${similar.length > 0 ? ` (did you mean: ${similar.map((s) => `#${s}`).join(', ')}?)` : ''}`;
       });
 
-      fail(`Found ${brokenLinks.length} broken internal link(s):\n${suggestions.join('\n')}`);
+      throw new Error(`Found ${brokenLinks.length} broken internal link(s):\n${suggestions.join('\n')}`);
     }
 
     expect(brokenLinks).toHaveLength(0);

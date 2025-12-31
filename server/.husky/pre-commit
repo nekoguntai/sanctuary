@@ -77,9 +77,11 @@ End with one of:
 - ❌ RECOMMEND STOP - tests should be updated before committing"
 
     # Run claude with the qa-test-architect agent
-    # Capture output to check for RECOMMEND STOP
-    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent qa-test-architect --print 2>&1) || true
-    echo "$AGENT_OUTPUT"
+    # Use a temp file to capture output since --print writes to TTY
+    TEMP_OUTPUT=$(mktemp)
+    echo "$PROMPT" | claude --agent qa-test-architect --print 2>&1 | tee "$TEMP_OUTPUT"
+    AGENT_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
 
     # Check if agent recommends stopping
     if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
@@ -154,9 +156,11 @@ End with one of:
 - ❌ RECOMMEND STOP - significant UI pattern violations"
 
     # Run claude with the ui-architect agent
-    # Capture output to check for RECOMMEND STOP
-    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent ui-architect --print 2>&1) || true
-    echo "$AGENT_OUTPUT"
+    # Use a temp file to capture output since --print writes to TTY
+    TEMP_OUTPUT=$(mktemp)
+    echo "$PROMPT" | claude --agent ui-architect --print 2>&1 | tee "$TEMP_OUTPUT"
+    AGENT_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
 
     # Check if agent recommends stopping
     if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
@@ -231,9 +235,11 @@ End with one of:
 - ❌ RECOMMEND STOP - significant architectural issues"
 
     # Run claude with the lead-software-architect agent
-    # Capture output to check for RECOMMEND STOP
-    AGENT_OUTPUT=$(echo "$PROMPT" | claude --agent lead-software-architect --print 2>&1) || true
-    echo "$AGENT_OUTPUT"
+    # Use a temp file to capture output since --print writes to TTY
+    TEMP_OUTPUT=$(mktemp)
+    echo "$PROMPT" | claude --agent lead-software-architect --print 2>&1 | tee "$TEMP_OUTPUT"
+    AGENT_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
 
     # Check if agent recommends stopping
     if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then

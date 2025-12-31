@@ -50,8 +50,10 @@ run_test_coverage_agent() {
     # Get the diff for context
     DIFF_CONTENT=$(git diff --cached)
 
-    # Create the prompt
-    PROMPT="You are reviewing staged changes before a commit. Analyze whether tests need to be built, updated, or removed.
+    # Create the prompt for test coverage analysis
+    PROMPT="PRE-COMMIT TEST COVERAGE REVIEW
+
+Analyze these staged changes and determine if tests need to be built, updated, or removed.
 
 STAGED FILES:
 $STAGED_FILES
@@ -59,19 +61,18 @@ $STAGED_FILES
 DIFF:
 $DIFF_CONTENT
 
-Please analyze these changes and answer:
+Answer concisely:
 1. Do any NEW tests need to be written? If so, what should they test?
 2. Do any EXISTING tests need to be updated to match the changes?
 3. Should any tests be REMOVED (e.g., testing deleted functionality)?
 
-Be concise and specific. If no test changes are needed, say so clearly.
-After your analysis, end with one of:
+End with one of:
 - ✅ RECOMMEND PROCEED - no test changes needed
 - ⚠️ SUGGEST REVIEW - minor test updates may be helpful
 - ❌ RECOMMEND STOP - tests should be updated before committing"
 
-    # Run claude with the prompt
-    echo "$PROMPT" | claude --print 2>/dev/null
+    # Run claude with the qa-test-architect agent
+    echo "$PROMPT" | claude --agent qa-test-architect --print 2>/dev/null
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

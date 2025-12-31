@@ -91,3 +91,17 @@ See `themes/sanctuary/index.ts` for the full color definitions.
 
 ### Intentional arbitrary text sizes
 The codebase uses `text-[9px]` and `text-[10px]` for compact UI elements like health block counters and badge labels. These are intentional - `text-xs` (12px) would be too large for these tight spaces. Do not "fix" these to use named Tailwind sizes.
+
+## Git Commits & Pre-commit Hooks
+
+The repository has pre-commit hooks that run AI agents to analyze changes:
+- **Test Coverage Analysis** - checks if tests need to be added/updated/removed
+- **UI Consistency & Style Analysis** - validates dark mode, patterns, and style consistency
+- **Architecture & Scalability Analysis** - reviews for scalability, cleanup, and memory issues
+
+**IMPORTANT**: Always run `git commit` with full output visible (not in background) so the agent feedback can be reviewed before pushing. Each agent will end with one of:
+- ✅ **RECOMMEND PROCEED** - no issues found
+- ⚠️ **SUGGEST REVIEW** - minor concerns worth considering
+- ❌ **RECOMMEND STOP** - significant issues that should be addressed
+
+Review the agent recommendations and address any concerns before pushing.

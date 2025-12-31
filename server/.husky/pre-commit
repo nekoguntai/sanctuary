@@ -23,131 +23,80 @@ echo "${YELLOW}Running pre-commit checks...${NC}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # =============================================
-# Test Coverage Check
+# AI Test Coverage Analysis
 # =============================================
-# Check if source files have corresponding test updates
+# Use Claude to analyze if tests need to be added, updated, or removed
 
-check_test_coverage() {
-    # Get staged source files (excluding tests themselves)
-    SOURCE_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | grep -vE '(\.test\.|\.spec\.|/tests/)' || true)
+run_test_coverage_agent() {
+    # Check if claude is available
+    if ! command -v claude >/dev/null 2>&1; then
+        echo "${YELLOW}Claude CLI not found, skipping AI test analysis${NC}"
+        return 0
+    fi
 
-    # Get staged test files
-    TEST_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(\.test\.|\.spec\.|/tests/)' || true)
+    # Get staged files
+    STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' || true)
 
-    if [ -z "$SOURCE_FILES" ]; then
+    if [ -z "$STAGED_FILES" ]; then
+        return 0
+    fi
+
+    # Only run if terminal is interactive
+    if [ ! -t 0 ]; then
         return 0
     fi
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo "${BLUE}📋 Test Coverage Review${NC}"
+    echo "${BLUE}🤖 AI Test Coverage Analysis${NC}"
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-    MISSING_TESTS=""
-    HAS_COMPONENT_CHANGES=false
-    HAS_API_CHANGES=false
-    HAS_UTIL_CHANGES=false
-
-    for file in $SOURCE_FILES; do
-        # Check file type and suggest test location
-        case "$file" in
-            components/*.tsx)
-                HAS_COMPONENT_CHANGES=true
-                base=$(basename "$file" .tsx)
-                expected_test="tests/components/${base}.test.tsx"
-                ;;
-            hooks/*.ts|hooks/*.tsx)
-                base=$(basename "$file" | sed 's/\.tsx\?$//')
-                expected_test="tests/hooks/${base}.test.tsx"
-                ;;
-            src/api/*.ts)
-                HAS_API_CHANGES=true
-                base=$(basename "$file" .ts)
-                expected_test="server/tests/api/${base}.test.ts"
-                ;;
-            server/src/services/*.ts)
-                base=$(basename "$file" .ts)
-                expected_test="server/tests/services/${base}.test.ts"
-                ;;
-            server/src/api/*.ts)
-                HAS_API_CHANGES=true
-                base=$(basename "$file" .ts)
-                expected_test="server/tests/api/${base}.test.ts"
-                ;;
-            utils/*.ts)
-                HAS_UTIL_CHANGES=true
-                base=$(basename "$file" .ts)
-                expected_test="tests/utils/${base}.test.ts"
-                ;;
-            *)
-                expected_test=""
-                ;;
-        esac
-
-        # Check if test file exists and was modified
-        if [ -n "$expected_test" ]; then
-            if [ ! -f "$REPO_ROOT/$expected_test" ]; then
-                MISSING_TESTS="${MISSING_TESTS}  ${YELLOW}⚠${NC}  $file ${RED}(no test file: $expected_test)${NC}\n"
-            elif ! echo "$TEST_FILES" | grep -q "$expected_test"; then
-                MISSING_TESTS="${MISSING_TESTS}  ${YELLOW}?${NC}  $file ${YELLOW}(test exists but not modified)${NC}\n"
-            fi
-        fi
-    done
-
-    # Show summary
     echo ""
-    echo "${BLUE}Source files changed:${NC}"
-    for file in $SOURCE_FILES; do
-        echo "  • $file"
-    done
 
-    if [ -n "$TEST_FILES" ]; then
-        echo ""
-        echo "${GREEN}Test files updated:${NC}"
-        for file in $TEST_FILES; do
-            echo "  ✓ $file"
-        done
-    fi
+    # Get the diff for context
+    DIFF_CONTENT=$(git diff --cached)
 
-    if [ -n "$MISSING_TESTS" ]; then
-        echo ""
-        echo "${YELLOW}Potential test gaps:${NC}"
-        printf "$MISSING_TESTS"
-    fi
+    # Create the prompt
+    PROMPT="You are reviewing staged changes before a commit. Analyze whether tests need to be built, updated, or removed.
+
+STAGED FILES:
+$STAGED_FILES
+
+DIFF:
+$DIFF_CONTENT
+
+Please analyze these changes and answer:
+1. Do any NEW tests need to be written? If so, what should they test?
+2. Do any EXISTING tests need to be updated to match the changes?
+3. Should any tests be REMOVED (e.g., testing deleted functionality)?
+
+Be concise and specific. If no test changes are needed, say so clearly.
+After your analysis, end with one of:
+- ✅ RECOMMEND PROCEED - no test changes needed
+- ⚠️ SUGGEST REVIEW - minor test updates may be helpful
+- ❌ RECOMMEND STOP - tests should be updated before committing"
+
+    # Run claude with the prompt
+    echo "$PROMPT" | claude --print 2>/dev/null
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-    # Interactive prompt (only if terminal is interactive)
-    if [ -t 0 ]; then
-        echo ""
-        echo "${BLUE}Test coverage questions:${NC}"
-        echo "  1. Did you add/update tests for new functionality?"
-        echo "  2. Did you update existing tests if behavior changed?"
-        echo "  3. Should any tests be removed (dead code)?"
-        echo ""
-        printf "${YELLOW}Continue with commit? [Y/n/q] ${NC}"
-        read -r response
-        case "$response" in
-            [nN])
-                echo "${RED}Commit aborted. Please update tests and try again.${NC}"
-                exit 1
-                ;;
-            [qQ])
-                echo "${RED}Commit aborted.${NC}"
-                exit 1
-                ;;
-            *)
-                echo "${GREEN}Proceeding with commit...${NC}"
-                ;;
-        esac
-    fi
-
+    echo ""
+    printf "${YELLOW}Continue with commit? [Y/n] ${NC}"
+    read -r response
+    case "$response" in
+        [nN])
+            echo "${RED}Commit aborted. Update tests and try again.${NC}"
+            exit 1
+            ;;
+        *)
+            echo "${GREEN}Proceeding with commit...${NC}"
+            ;;
+    esac
     echo ""
 }
 
-# Run test coverage check
-check_test_coverage
+# Run AI test coverage analysis
+run_test_coverage_agent
 
 # Check for staged files in different areas
 BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)

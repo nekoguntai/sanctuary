@@ -393,6 +393,13 @@ export async function getDevicesToShareForWallet(
   walletId: string,
   targetUserId: string
 ): Promise<Array<{ id: string; label: string; fingerprint: string }>> {
+  // Batch fetch: get all groups the target user is a member of (avoids N+1 queries)
+  const userGroupMemberships = await prisma.groupMember.findMany({
+    where: { userId: targetUserId },
+    select: { groupId: true },
+  });
+  const userGroupIds = new Set(userGroupMemberships.map((m) => m.groupId));
+
   // Get all devices associated with the wallet
   const walletDevices = await prisma.walletDevice.findMany({
     where: { walletId },
@@ -414,17 +421,8 @@ export async function getDevicesToShareForWallet(
     const device = wd.device;
     const hasDirectAccess = device.users.length > 0;
 
-    // Check group access if no direct access
-    let hasGroupAccess = false;
-    if (!hasDirectAccess && device.groupId) {
-      const groupMember = await prisma.groupMember.findFirst({
-        where: {
-          groupId: device.groupId,
-          userId: targetUserId,
-        },
-      });
-      hasGroupAccess = !!groupMember;
-    }
+    // Check group access using pre-fetched group memberships (no additional queries)
+    const hasGroupAccess = device.groupId ? userGroupIds.has(device.groupId) : false;
 
     if (!hasDirectAccess && !hasGroupAccess) {
       devicesToShare.push({

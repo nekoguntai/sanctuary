@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole } from '../types';
-import { getDevice, updateDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device } from '../types';
+import { getDevice, updateDevice, getDeviceModels } from '../src/api/devices';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
 import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
@@ -11,21 +11,6 @@ import { DeviceSharing } from './DeviceSharing';
 const log = createLogger('DeviceDetail');
 
 type TabType = 'details' | 'access';
-
-// Extended device type with wallet and sharing info
-interface DeviceWithWallets extends ApiDevice {
-  wallets?: Array<{
-    wallet: {
-      id: string;
-      name: string;
-      type: string;
-      scriptType?: string;
-    };
-  }>;
-  isOwner?: boolean;
-  userRole?: DeviceRole;
-  sharedBy?: string;
-}
 
 // Wallet info for display
 interface WalletInfo {
@@ -37,7 +22,7 @@ interface WalletInfo {
 export const DeviceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [device, setDevice] = useState<DeviceWithWallets | null>(null);
+  const [device, setDevice] = useState<Device | null>(null);
   const [wallets, setWallets] = useState<WalletInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
@@ -58,12 +43,21 @@ export const DeviceDetail: React.FC = () => {
       try {
         // Fetch device and available models in parallel
         const [deviceData, models] = await Promise.all([
-          getDevice(id) as Promise<DeviceWithWallets>,
+          getDevice(id),
           getDeviceModels()
         ]);
 
         setDevice(deviceData);
         setDeviceModels(models);
+
+        // Warn if ownership fields are missing (indicates API issue)
+        if (deviceData.isOwner === undefined || deviceData.userRole === undefined) {
+          log.warn('Device ownership fields missing from API response', {
+            deviceId: id,
+            hasIsOwner: deviceData.isOwner !== undefined,
+            hasUserRole: deviceData.userRole !== undefined,
+          });
+        }
 
         // Extract wallet info from device data
         const walletList = deviceData.wallets?.map(w => ({

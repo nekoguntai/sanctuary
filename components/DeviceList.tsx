@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { WalletType, HardwareDevice, HardwareDeviceModel } from '../types';
-import { getDevices, updateDevice, deleteDevice, getDeviceModels, Device as ApiDevice } from '../src/api/devices';
+import { WalletType, HardwareDevice, HardwareDeviceModel, Device } from '../types';
+import { getDevices, updateDevice, deleteDevice, getDeviceModels } from '../src/api/devices';
 import { Edit2, Save, X, HardDrive, Plus, LayoutGrid, List as ListIcon, Trash2, ArrowUpDown, ChevronUp, ChevronDown, Users, User } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
@@ -15,24 +15,9 @@ type SortField = 'label' | 'type' | 'fingerprint' | 'wallets';
 type SortOrder = 'asc' | 'desc';
 type OwnershipFilter = 'all' | 'owned' | 'shared';
 
-// Extended device type with wallet and sharing info from API
-interface DeviceWithWallets extends ApiDevice {
-  wallets?: Array<{
-    wallet: {
-      id: string;
-      name: string;
-      type: string;
-      scriptType?: string;
-    };
-  }>;
-  isOwner?: boolean;
-  userRole?: 'owner' | 'viewer' | null;
-  sharedBy?: string;
-}
-
 export const DeviceList: React.FC = () => {
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<DeviceWithWallets[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const { user, updatePreferences } = useUser();
 
@@ -91,7 +76,7 @@ export const DeviceList: React.FC = () => {
           getDevices(),
           getDeviceModels()
         ]);
-        setDevices(deviceData as DeviceWithWallets[]);
+        setDevices(deviceData);
         setDeviceModels(models);
       } catch (error) {
         log.error('Failed to fetch devices', { error });
@@ -102,14 +87,14 @@ export const DeviceList: React.FC = () => {
     fetchData();
   }, [user]);
 
-  const handleEdit = (device: DeviceWithWallets) => {
+  const handleEdit = (device: Device) => {
     setEditingId(device.id);
     setEditValue(device.label);
     // Use model.slug if available, otherwise empty (model slug is what dropdown uses)
     setEditType(device.model?.slug || '');
   };
 
-  const handleSave = async (device: DeviceWithWallets) => {
+  const handleSave = async (device: Device) => {
     try {
       const updateData: { label?: string; modelSlug?: string } = {};
       if (editValue !== device.label) updateData.label = editValue;
@@ -123,7 +108,7 @@ export const DeviceList: React.FC = () => {
     }
   };
 
-  const handleDelete = async (device: DeviceWithWallets) => {
+  const handleDelete = async (device: Device) => {
     try {
       setDeleteError(null);
       await deleteDevice(device.id);
@@ -137,7 +122,7 @@ export const DeviceList: React.FC = () => {
     }
   };
 
-  const getAssociatedWallets = (device: DeviceWithWallets) => {
+  const getAssociatedWallets = (device: Device) => {
     return device.wallets?.map(w => ({
       id: w.wallet.id,
       name: w.wallet.name,
@@ -191,7 +176,7 @@ export const DeviceList: React.FC = () => {
     if (!acc[type]) acc[type] = [];
     acc[type].push(device);
     return acc;
-  }, {} as Record<HardwareDevice, DeviceWithWallets[]>);
+  }, {} as Record<HardwareDevice, Device[]>);
 
   // Get display name for device type (looks up model name from slug)
   const getDeviceDisplayName = (type: string): string => {
@@ -500,7 +485,7 @@ export const DeviceList: React.FC = () => {
       {/* Grouped View */}
       {viewMode === 'grouped' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-fade-in">
-           {(Object.entries(groupedDevices) as [string, DeviceWithWallets[]][]).map(([type, groupDevices]) => {
+           {(Object.entries(groupedDevices) as [string, Device[]][]).map(([type, groupDevices]) => {
               const deviceType = type as HardwareDevice;
               return (
                 <div key={type} className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden flex flex-col h-full">

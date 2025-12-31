@@ -1279,12 +1279,40 @@ export const WalletDetail: React.FC = () => {
     if (!deviceSharePrompt.show) return;
     try {
       setSharingLoading(true);
-      // Share all devices with the user
-      await Promise.all(
+      // Share all devices with the user using allSettled to handle partial failures
+      const results = await Promise.allSettled(
         deviceSharePrompt.devices.map(device =>
           devicesApi.shareDeviceWithUser(device.id, { targetUserId: deviceSharePrompt.targetUserId })
         )
       );
+
+      // Check for failures
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      const successes = results.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled');
+
+      if (failures.length > 0) {
+        log.warn('Some devices failed to share', {
+          total: results.length,
+          succeeded: successes.length,
+          failed: failures.length,
+          errors: failures.map(f => f.reason?.message || 'Unknown error'),
+        });
+
+        if (successes.length > 0) {
+          // Partial success - show warning
+          addAppNotification({
+            type: 'warning',
+            scope: 'global',
+            severity: 'warning',
+            title: 'Partial Success',
+            message: `Shared ${successes.length} of ${results.length} devices. ${failures.length} failed.`,
+          });
+        } else {
+          // Complete failure
+          handleError(failures[0].reason, 'Device Share Failed');
+        }
+      }
+
       setDeviceSharePrompt({ show: false, targetUserId: '', targetUsername: '', devices: [] });
     } catch (err) {
       log.error('Failed to share devices', { error: err });

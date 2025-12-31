@@ -1447,7 +1447,7 @@ export const WalletDetail: React.FC = () => {
       {/* Tabs */}
       <div className="border-b border-sanctuary-200 dark:border-sanctuary-800 overflow-x-auto scrollbar-hide">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {['tx', 'utxo', 'addresses', ...(wallet.userRole !== 'viewer' ? ['drafts'] : []), 'stats', ...(wallet.userRole !== 'viewer' ? ['access'] : []), 'settings', 'log'].map((tab) => (
+          {['tx', 'utxo', 'addresses', ...(wallet.userRole !== 'viewer' ? ['drafts'] : []), 'stats', ...(wallet.userRole === 'owner' ? ['access'] : []), 'settings', 'log'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}

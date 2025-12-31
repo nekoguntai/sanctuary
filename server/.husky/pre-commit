@@ -149,6 +149,73 @@ End with one of:
 # Run UI consistency analysis
 run_ui_consistency_agent
 
+# =============================================
+# Architecture & Scalability Analysis
+# =============================================
+# Use Claude to validate scalability, extensibility, and cleanup patterns
+
+run_architecture_agent() {
+    # Check if claude is available
+    if ! command -v claude >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Get staged source files (excluding tests)
+    SOURCE_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | grep -vE '(\.test\.|\.spec\.|/tests/)' || true)
+
+    if [ -z "$SOURCE_FILES" ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}🏗️  Architecture & Scalability Analysis${NC}"
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Get the diff for context
+    ARCH_DIFF=$(git diff --cached -- $SOURCE_FILES)
+
+    # Create the prompt for architecture analysis
+    PROMPT="PRE-COMMIT ARCHITECTURE REVIEW
+
+Analyze these changes for scalability, extensibility, and operational robustness.
+
+STAGED SOURCE FILES:
+$SOURCE_FILES
+
+DIFF:
+$ARCH_DIFF
+
+Our codebase requirements:
+- Must run perpetually without memory leaks or resource exhaustion
+- Services should have proper cleanup (intervals, subscriptions, connections)
+- Code should be extensible without modifying core logic
+- Database operations should be transactional where needed
+- WebSocket/event handlers must properly clean up on disconnect
+
+Answer concisely:
+1. SCALABILITY: Are there any patterns that won't scale (N+1 queries, unbounded arrays, blocking operations)?
+2. EXTENSIBILITY: Does the code follow open/closed principle? Can it be extended without modification?
+3. CLEANUP: Are intervals, timeouts, subscriptions, and connections properly cleaned up?
+4. PERPETUAL OPERATION: Any memory leaks, growing caches, or resources that aren't released?
+
+End with one of:
+- ✅ RECOMMEND PROCEED - architecture is sound
+- ⚠️ SUGGEST REVIEW - minor architectural concerns
+- ❌ RECOMMEND STOP - significant architectural issues"
+
+    # Run claude with the lead-software-architect agent
+    echo "$PROMPT" | claude --agent lead-software-architect --print 2>/dev/null
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Run architecture analysis
+run_architecture_agent
+
 # Check for staged files in different areas
 BACKEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/' || true)
 FRONTEND_CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src/|components/|hooks/|tests/)' || true)

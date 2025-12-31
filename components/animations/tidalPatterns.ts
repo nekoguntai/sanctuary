@@ -38,7 +38,7 @@ export function useTidalPatterns(
   const ripplesRef = useRef<SandRipple[]>([]);
   const foamRef = useRef<WaterFoam[]>([]);
   const sparklesRef = useRef<Sparkle[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
   const tidePhaseRef = useRef(0);
 

@@ -50,7 +50,7 @@ export function useThunderstorm(
   const cloudsRef = useRef<Cloud[]>([]);
   const lightningRef = useRef<Lightning | null>(null);
   const ripplesRef = useRef<Ripple[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
   const flashRef = useRef(0);
   const nextLightningRef = useRef(Math.random() * 3 + 2);

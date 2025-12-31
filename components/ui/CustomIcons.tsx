@@ -48,21 +48,28 @@ export const SingleSigIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 );
 
-// "The Vault Mechanism": Represents complex security requiring multiple parts.
+// "Network Nodes": Connected nodes representing distributed trust and multiparty collaboration.
 export const MultiSigIcon: React.FC<IconProps> = ({ className }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    {/* Outer Rim */}
-    <circle cx="12" cy="12" r="10" />
-    {/* Inner Mechanism */}
-    <path d="M12 2v20" opacity="0.2" />
-    <path d="M2 12h20" opacity="0.2" />
-    <circle cx="12" cy="12" r="4" />
-    {/* Locking Pins */}
-    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-    <circle cx="12" cy="7" r="1" />
-    <circle cx="17" cy="12" r="1" />
-    <circle cx="7" cy="12" r="1" />
-    <circle cx="12" cy="17" r="1" />
+    {/* Connection lines between nodes */}
+    <path d="M12 4L4 18" opacity="0.4" />
+    <path d="M12 4L20 18" opacity="0.4" />
+    <path d="M4 18L20 18" opacity="0.4" />
+    {/* Inner connections to center */}
+    <path d="M12 4L12 12" opacity="0.2" />
+    <path d="M4 18L12 12" opacity="0.2" />
+    <path d="M20 18L12 12" opacity="0.2" />
+    {/* Network nodes - outer vertices */}
+    <circle cx="12" cy="4" r="2.5" fill="currentColor" fillOpacity="0.15" />
+    <circle cx="4" cy="18" r="2.5" fill="currentColor" fillOpacity="0.15" />
+    <circle cx="20" cy="18" r="2.5" fill="currentColor" fillOpacity="0.15" />
+    {/* Center node - represents the collaborative result */}
+    <circle cx="12" cy="12" r="2" fill="currentColor" fillOpacity="0.3" />
+    {/* Node cores */}
+    <circle cx="12" cy="4" r="1" fill="currentColor" />
+    <circle cx="4" cy="18" r="1" fill="currentColor" />
+    <circle cx="20" cy="18" r="1" fill="currentColor" />
+    <circle cx="12" cy="12" r="0.8" fill="currentColor" />
   </svg>
 );
 

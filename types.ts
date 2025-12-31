@@ -113,7 +113,7 @@ export type BackgroundOption =
   | 'cross'
   | 'mountains'
   | 'noise'
-  // Animated backgrounds
+  // Bitcoin themed
   | 'sakura-petals'
   | 'floating-shields'
   | 'bitcoin-particles'
@@ -121,15 +121,27 @@ export type BackgroundOption =
   | 'digital-rain'
   | 'constellation'
   | 'sanctuary-logo'
+  | 'sats-symbol'
+  | 'hash-storm'
+  // Weather
   | 'snowfall'
   | 'fireflies'
+  | 'gentle-rain'
+  | 'northern-lights'
+  | 'thunderstorm'
+  | 'ice-crystals'
+  | 'raindrop-window'
+  // Nature
   | 'ink-drops'
   | 'rippling-water'
   | 'falling-leaves'
   | 'embers-rising'
-  | 'gentle-rain'
-  | 'northern-lights'
-  // Sumi-e animations
+  | 'butterfly-garden'
+  | 'dandelion-wishes'
+  | 'lavender-fields'
+  | 'serene-meadows'
+  | 'autumn-wind'
+  // Sumi-e / Zen
   | 'brush-stroke-blossoms'
   | 'ink-branch'
   | 'calligraphy-wind'
@@ -137,7 +149,42 @@ export type BackgroundOption =
   | 'koi-shadows'
   | 'bamboo-sway'
   | 'ink-on-water'
-  | 'enso-circles';
+  | 'enso-circles'
+  | 'zen-sand-garden'
+  | 'smoke-calligraphy'
+  | 'breath'
+  | 'sakura-redux'
+  // Water
+  | 'gentle-waves'
+  | 'tide-pools'
+  | 'bioluminescent-beach'
+  | 'tidal-patterns'
+  | 'jellyfish-drift'
+  // Sky
+  | 'stargazing'
+  | 'moonlit-clouds'
+  | 'eclipse'
+  | 'fireworks'
+  // Landscape
+  | 'misty-valley'
+  | 'desert-dunes'
+  | 'volcanic-islands'
+  | 'still-ponds'
+  // Creatures
+  | 'duckling-parade'
+  | 'bunny-meadow'
+  // Whimsical
+  | 'floating-lanterns'
+  | 'paper-boats'
+  | 'paper-airplanes'
+  | 'wind-chimes'
+  | 'lotus-bloom'
+  | 'sunset-sailing'
+  | 'train-station'
+  // Organic
+  | 'mycelium-network'
+  | 'oil-slick'
+  | 'wisteria';
 
 // ============================================================================
 // TELEGRAM & NOTIFICATION TYPES

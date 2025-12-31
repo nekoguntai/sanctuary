@@ -43,7 +43,7 @@ export function useEclipse(
   const starsRef = useRef<Star[]>([]);
   const coronaRaysRef = useRef<CoronaRay[]>([]);
   const particlesRef = useRef<Particle[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
   const eclipsePhaseRef = useRef(0); // 0 = full sun, 1 = full eclipse, cycles slowly
 

@@ -66,7 +66,7 @@ export function useWisteria(
   const petalsRef = useRef<FallingPetal[]>([]);
   const vinesRef = useRef<Vine[]>([]);
   const particlesRef = useRef<LightParticle[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
 
   useEffect(() => {

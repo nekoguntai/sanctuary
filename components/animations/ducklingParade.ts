@@ -61,6 +61,9 @@ interface Butterfly {
   wingPhase: number;
   color: string;
   size: number;
+  // Target position for flight direction calculation
+  targetX: number;
+  targetY: number;
   // Erratic flight parameters
   flutterPhase: number;
   flutterSpeed: number;
@@ -199,14 +202,18 @@ export function useDucklingParade(
       for (let i = 0; i < 3; i++) {
         const angle = Math.random() * Math.PI * 2;
         const baseSpeed = 0.8 + Math.random() * 0.6;
+        const startX = Math.random() * width;
+        const startY = Math.random() * height * 0.5;
         butterflies.push({
-          x: Math.random() * width,
-          y: Math.random() * height * 0.5,
+          x: startX,
+          y: startY,
           vx: Math.cos(angle) * baseSpeed,
           vy: Math.sin(angle) * baseSpeed,
           wingPhase: Math.random() * Math.PI * 2,
           color: ['#FFB6C1', '#87CEEB', '#DDA0DD', '#F0E68C'][Math.floor(Math.random() * 4)],
           size: 8 + Math.random() * 6,
+          targetX: startX + Math.cos(angle) * 100,
+          targetY: startY + Math.sin(angle) * 100,
           flutterPhase: Math.random() * Math.PI * 2,
           flutterSpeed: 0.15 + Math.random() * 0.1,
           turnTimer: 0,
@@ -644,6 +651,8 @@ export function useDucklingParade(
           const angle = Math.random() * Math.PI * 2;
           bf.vx = Math.cos(angle) * bf.baseSpeed;
           bf.vy = Math.sin(angle) * bf.baseSpeed;
+          bf.targetX = bf.x + Math.cos(angle) * 100;
+          bf.targetY = bf.y + Math.sin(angle) * 100;
         }
         // Subtle drift while hovering
         bf.x += Math.sin(bf.flutterPhase * 2) * 0.3;
@@ -667,6 +676,8 @@ export function useDucklingParade(
           const speed = bf.baseSpeed * (0.7 + Math.random() * 0.6);
           bf.vx = Math.cos(newAngle) * speed;
           bf.vy = Math.sin(newAngle) * speed;
+          bf.targetX = bf.x + Math.cos(newAngle) * 100;
+          bf.targetY = bf.y + Math.sin(newAngle) * 100;
         }
 
         // Add constant flutter/bobbing (vertical oscillation while flying)

@@ -55,7 +55,7 @@ export function usePaperBoats(
   const ripplesRef = useRef<Ripple[]>([]);
   const waterLayersRef = useRef<WaterLayer[]>([]);
   const causticsRef = useRef<Caustic[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
   // Store bank curves for consistent rendering
   const bankCurvesRef = useRef<{ top: number[]; bottom: number[] }>({ top: [], bottom: [] });

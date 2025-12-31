@@ -49,7 +49,7 @@ export function useFloatingLanterns(
   const lanternsRef = useRef<Lantern[]>([]);
   const starsRef = useRef<Star[]>([]);
   const sparksRef = useRef<Spark[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
 
   useEffect(() => {

@@ -52,7 +52,7 @@ export function useVolcanicIslands(
   const palmsRef = useRef<PalmTree[]>([]);
   const wavesRef = useRef<OceanWave[]>([]);
   const starsRef = useRef<Star[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const timeRef = useRef(0);
   const glowPulseRef = useRef(0);
 

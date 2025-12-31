@@ -69,6 +69,8 @@ export const DeviceList: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const fetchData = async () => {
       if (!user) return;
       try {
@@ -76,15 +78,20 @@ export const DeviceList: React.FC = () => {
           getDevices(),
           getDeviceModels()
         ]);
+        if (!mounted) return;
         setDevices(deviceData);
         setDeviceModels(models);
       } catch (error) {
         log.error('Failed to fetch devices', { error });
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
     fetchData();
+
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   const handleEdit = (device: Device) => {

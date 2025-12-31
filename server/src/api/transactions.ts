@@ -463,15 +463,24 @@ router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('
 /**
  * GET /api/v1/transactions/:txid/raw
  * Get raw transaction hex for hardware wallet signing (Trezor needs full prev tx data)
- * First checks database, then fetches from mempool.space if not found
+ * First checks database (with wallet access verification), then fetches from mempool.space if not found
  */
 router.get('/transactions/:txid/raw', async (req: Request, res: Response) => {
   try {
+    const userId = req.user!.userId;
     const { txid } = req.params;
 
-    // First, check if we have it in our database
+    // First, check if we have it in our database WITH wallet access verification
     const transaction = await prisma.transaction.findFirst({
-      where: { txid },
+      where: {
+        txid,
+        wallet: {
+          OR: [
+            { users: { some: { userId } } },
+            { group: { members: { some: { userId } } } },
+          ],
+        },
+      },
       select: { rawTx: true, wallet: { select: { network: true } } },
     });
 
@@ -479,7 +488,8 @@ router.get('/transactions/:txid/raw', async (req: Request, res: Response) => {
       return res.json({ hex: transaction.rawTx });
     }
 
-    // Not in database - fetch from mempool.space
+    // If we found a transaction but no rawTx, or need to fetch externally,
+    // use the network from the found transaction or default to mainnet
     const network = transaction?.wallet?.network || 'mainnet';
     const mempoolBaseUrl = network === 'testnet'
       ? 'https://mempool.space/testnet/api'
@@ -1881,6 +1891,14 @@ router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyn
       });
     }
 
+    const feeRateNum = parseFloat(feeRate);
+    if (isNaN(feeRateNum) || feeRateNum <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'feeRate must be a positive number',
+      });
+    }
+
     const validStrategies = ['privacy', 'efficiency', 'oldest_first', 'largest_first', 'smallest_first'];
     if (!validStrategies.includes(strategy)) {
       return res.status(400).json({
@@ -1893,7 +1911,7 @@ router.post('/wallets/:walletId/utxos/select', requireWalletAccess('view'), asyn
     const result = await selectionService.selectUtxos({
       walletId,
       targetAmount: BigInt(amount),
-      feeRate: parseFloat(feeRate),
+      feeRate: feeRateNum,
       strategy,
       scriptType,
     });
@@ -1933,11 +1951,19 @@ router.post('/wallets/:walletId/utxos/compare-strategies', requireWalletAccess('
       });
     }
 
+    const feeRateNum = parseFloat(feeRate);
+    if (isNaN(feeRateNum) || feeRateNum <= 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'feeRate must be a positive number',
+      });
+    }
+
     const selectionService = await import('../services/utxoSelectionService');
     const results = await selectionService.compareStrategies(
       walletId,
       BigInt(amount),
-      parseFloat(feeRate),
+      feeRateNum,
       scriptType
     );
 

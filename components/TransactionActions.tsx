@@ -36,15 +36,19 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const checkRBFStatus = async () => {
       if (confirmed) {
-        setLoading(false);
+        if (mounted) setLoading(false);
         return;
       }
 
       try {
-        setLoading(true);
+        if (mounted) setLoading(true);
         const result = await bitcoinApi.checkRBF(txid);
+        if (!mounted) return;
+
         setRbfStatus(result);
 
         if (result.replaceable && result.minNewFeeRate) {
@@ -53,11 +57,15 @@ export const TransactionActions: React.FC<TransactionActionsProps> = ({
       } catch (err) {
         log.error('Failed to check RBF status', { error: err });
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     checkRBFStatus();
+
+    return () => {
+      mounted = false;
+    };
   }, [txid, confirmed]);
 
   const handleRBF = async () => {

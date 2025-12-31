@@ -173,9 +173,17 @@ router.post('/test', async (req: Request, res: Response) => {
       });
     }
 
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid port number',
+      });
+    }
+
     const result = await testElectrumConnection({
       host,
-      port: parseInt(port),
+      port: portNum,
       protocol: protocol as 'tcp' | 'ssl',
     });
 

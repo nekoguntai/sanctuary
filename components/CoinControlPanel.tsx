@@ -120,20 +120,27 @@ export const CoinControlPanel: React.FC<CoinControlPanelProps> = ({
 
   // Fetch wallet privacy data when panel expands
   useEffect(() => {
+    let mounted = true;
+
     const fetchPrivacyData = async () => {
       if (isExpanded && !privacyData && !loadingPrivacy) {
         setLoadingPrivacy(true);
         try {
           const data = await transactionsApi.getWalletPrivacy(walletId);
+          if (!mounted) return;
           setPrivacyData(data);
         } catch (err) {
           log.error('Failed to fetch wallet privacy', { error: err });
         } finally {
-          setLoadingPrivacy(false);
+          if (mounted) setLoadingPrivacy(false);
         }
       }
     };
     fetchPrivacyData();
+
+    return () => {
+      mounted = false;
+    };
   }, [isExpanded, walletId, privacyData, loadingPrivacy]);
 
   // Debounced spend analysis when selection changes

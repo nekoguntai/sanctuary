@@ -521,19 +521,25 @@ class MaintenanceService {
     try {
       // Run VACUUM ANALYZE with timeout protection (5 minute limit)
       log.info('Running VACUUM ANALYZE on database');
-      await prisma.$executeRawUnsafe(`SET statement_timeout = '300000';`);
+      await prisma.$executeRaw`SET statement_timeout = '300000'`;
       try {
-        await prisma.$executeRawUnsafe('VACUUM ANALYZE;');
+        await prisma.$executeRaw`VACUUM ANALYZE`;
       } finally {
-        await prisma.$executeRawUnsafe(`SET statement_timeout = '0';`);
+        await prisma.$executeRaw`SET statement_timeout = '0'`;
       }
 
       // Run REINDEX on heavily-updated tables
-      const heavyTables = ['audit_logs', 'transactions', 'utxos'];
-      for (const table of heavyTables) {
-        log.info(`Running REINDEX on table: ${table}`);
-        await prisma.$executeRawUnsafe(`REINDEX TABLE "${table}";`);
-      }
+      // SECURITY: Use individual static queries - no string interpolation
+      log.info('Running REINDEX on table: audit_logs');
+      await prisma.$executeRaw`REINDEX TABLE "audit_logs"`;
+
+      log.info('Running REINDEX on table: transactions');
+      await prisma.$executeRaw`REINDEX TABLE "Transaction"`;
+
+      log.info('Running REINDEX on table: utxos');
+      await prisma.$executeRaw`REINDEX TABLE "UTXO"`;
+
+      const heavyTables = ['audit_logs', 'Transaction', 'UTXO'];
 
       const duration = Date.now() - startTime;
       log.info('Weekly database maintenance completed', {

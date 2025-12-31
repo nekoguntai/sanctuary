@@ -10,6 +10,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import rateLimit from 'express-rate-limit';
 import {
   processPayjoinRequest,
   PayjoinErrors,
@@ -20,6 +21,22 @@ import {
 const log = createLogger('PAYJOIN-API');
 
 const router = Router();
+
+// Rate limiter for unauthenticated BIP78 endpoint
+// Prevents DoS attacks by limiting requests per addressId
+const payjoinRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 10, // 10 requests per minute per IP
+  message: PayjoinErrors.RECEIVER_ERROR,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Rate limit by IP + addressId combination
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const addressId = req.params.addressId || 'unknown';
+    return `${ip}:${addressId}`;
+  },
+});
 
 /**
  * POST /api/v1/payjoin/:addressId
@@ -36,7 +53,7 @@ const router = Router();
  * Body: Original PSBT (text/plain, base64)
  * Returns: Proposal PSBT (text/plain, base64)
  */
-router.post('/:addressId', async (req: Request, res: Response) => {
+router.post('/:addressId', payjoinRateLimiter, async (req: Request, res: Response) => {
   const { addressId } = req.params;
   const { v, minfeerate } = req.query;
 

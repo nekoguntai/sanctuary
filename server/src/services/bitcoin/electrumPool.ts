@@ -1108,12 +1108,14 @@ export class ElectrumPool extends EventEmitter {
       stats.cooldownUntil = null;
     }
 
-    // Gradual recovery
+    // Reset consecutive failures on any success (they're no longer consecutive)
+    stats.consecutiveFailures = 0;
+
+    // Gradual recovery from backoff
     if (stats.consecutiveSuccesses >= this.backoffConfig.recoveryThreshold) {
       if (stats.backoffLevel > 0) {
         stats.backoffLevel = Math.max(0, stats.backoffLevel - 1);
         stats.weight = Math.min(1.0, stats.weight + this.backoffConfig.weightPenalty);
-        stats.consecutiveFailures = 0;
 
         const server = this.servers.find(s => s.id === serverId);
         if (stats.backoffLevel === 0) {
@@ -1391,8 +1393,8 @@ export class ElectrumPool extends EventEmitter {
           serverResult.success++;
           serverResult.latencyMs = latencyMs;
 
-          // Record success for backoff recovery
-          this.recordServerSuccess(conn.serverId);
+          // Note: recordServerSuccess() is called once per server after aggregating all connection results
+          // to avoid interleaving issues with multiple connections per server
 
           // Record to health history (only record once per server per cycle)
           if (serverResult.success === 1) {
@@ -1408,14 +1410,8 @@ export class ElectrumPool extends EventEmitter {
           const serverResult = serverHealthResults.get(conn.serverId)!;
           serverResult.fail++;
 
-          // Determine error type for backoff
-          const errorType: 'timeout' | 'error' | 'disconnect' =
-            errorStr.includes('timeout') || errorStr.includes('Timeout') ? 'timeout' :
-            errorStr.includes('not connected') || errorStr.includes('disconnect') ? 'disconnect' :
-            'error';
-
-          // Record failure for backoff
-          this.recordServerFailure(conn.serverId, errorType);
+          // Note: recordServerFailure() is called once per server after aggregating all connection results
+          // to avoid interleaving issues with multiple connections per server
 
           // Record to health history (only record once per server per cycle - on first failure)
           if (serverResult.fail === 1) {
@@ -1438,15 +1434,19 @@ export class ElectrumPool extends EventEmitter {
       if (stats) {
         stats.lastHealthCheck = new Date();
 
-        // If all connections to this server failed, mark unhealthy
+        // If all connections to this server failed, mark unhealthy and record failure
         if (results.fail > 0 && results.success === 0) {
           stats.isHealthy = false;
+          // Record failure for backoff (once per server per cycle, not per connection)
+          this.recordServerFailure(serverId, 'error');
           // Update database (fire and forget)
           this.updateServerHealthInDb(serverId, false, stats.consecutiveFailures);
           log.warn(`Server ${serverId} marked unhealthy after all connections failed health check`);
         } else if (results.success > 0) {
-          // At least one success - mark healthy
+          // At least one success - mark healthy and record success
           stats.isHealthy = true;
+          // Record success for backoff recovery (once per server per cycle, not per connection)
+          this.recordServerSuccess(serverId);
           this.updateServerHealthInDb(serverId, true, 0);
         }
       }

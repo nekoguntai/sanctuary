@@ -65,6 +65,8 @@ export const SendTransactionPage: React.FC = () => {
 
   // Fetch all required data
   useEffect(() => {
+    let mounted = true;
+
     const fetchData = async () => {
       if (!id || !user) return;
 
@@ -74,6 +76,7 @@ export const SendTransactionPage: React.FC = () => {
       try {
         // Fetch wallet data first (critical)
         const apiWallet = await walletsApi.getWallet(id);
+        if (!mounted) return;
 
         // Check if user has permission to send (viewers cannot send)
         if (apiWallet.userRole === 'viewer') {
@@ -114,6 +117,7 @@ export const SendTransactionPage: React.FC = () => {
           transactionsApi.getAddresses(id).catch(() => []),
           devicesApi.getDevices().catch(() => []),
         ]);
+        if (!mounted) return;
 
         // Format UTXOs
         const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
@@ -296,6 +300,7 @@ export const SendTransactionPage: React.FC = () => {
 
         setLoading(false);
       } catch (err) {
+        if (!mounted) return;
         log.error('Failed to fetch data', { error: err });
         if (err instanceof ApiError) {
           setError(err.message);
@@ -307,6 +312,10 @@ export const SendTransactionPage: React.FC = () => {
     };
 
     fetchData();
+
+    return () => {
+      mounted = false;
+    };
   }, [id, user, draftData, preSelectedUTXOs, showInfo]);
 
   // Cancel handler

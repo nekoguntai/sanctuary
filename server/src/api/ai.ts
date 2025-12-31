@@ -11,7 +11,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
 import { aiService } from '../services/aiService';
 import { createLogger } from '../utils/logger';
 import rateLimit from 'express-rate-limit';
@@ -216,7 +216,7 @@ router.get('/models', authenticate, aiRateLimiter, async (req: Request, res: Res
  * POST /api/v1/ai/pull-model
  * Pull (download) a model from Ollama
  */
-router.post('/pull-model', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
+router.post('/pull-model', authenticate, requireAdmin, aiRateLimiter, async (req: Request, res: Response) => {
   try {
     const { model } = req.body;
 
@@ -250,7 +250,7 @@ router.post('/pull-model', authenticate, aiRateLimiter, async (req: Request, res
  * DELETE /api/v1/ai/delete-model
  * Delete a model from Ollama
  */
-router.delete('/delete-model', authenticate, aiRateLimiter, async (req: Request, res: Response) => {
+router.delete('/delete-model', authenticate, requireAdmin, aiRateLimiter, async (req: Request, res: Response) => {
   try {
     const { model } = req.body;
 

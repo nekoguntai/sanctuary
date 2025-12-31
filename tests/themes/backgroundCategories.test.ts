@@ -107,10 +107,13 @@ describe('Background Categories', () => {
       expect(backgrounds).toEqual([]);
     });
 
-    it('should return empty array for all (handled by UI)', () => {
-      // 'all' category is handled by the UI, not by this function
+    it('should return all backgrounds for all category', () => {
       const backgrounds = getBackgroundsByCategory('all');
-      expect(backgrounds).toEqual([]);
+      // Should return all backgrounds that have categories defined
+      expect(backgrounds.length).toBeGreaterThan(50);
+      expect(backgrounds).toContain('minimal');
+      expect(backgrounds).toContain('sakura-petals');
+      expect(backgrounds).toContain('bitcoin-particles');
     });
 
     it('should return array type', () => {

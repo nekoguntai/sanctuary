@@ -8,7 +8,7 @@ The theme system consists of:
 
 - **Theme Registry** (`registry.ts`) - Manages all registered themes and patterns
 - **Theme Types** (`types.ts`) - TypeScript interfaces for themes
-- **Global Patterns** (`patterns.ts`) - Background patterns available to all themes
+- **Global Patterns** (`patterns.ts`) - Backgrounds available to all themes
 - **Theme Folders** - Each theme lives in its own directory
 
 ## Adding a New Theme
@@ -146,11 +146,11 @@ Your colors are accessible via Tailwind classes:
 </div>
 ```
 
-## Background Patterns
+## Backgrounds
 
-### Global Patterns
+### Global Backgrounds
 
-Global patterns (defined in `patterns.ts`) are available to all themes:
+Global backgrounds (defined in `patterns.ts`) are available to all themes:
 
 - `minimal` - No pattern
 - `zen` - Dot grid

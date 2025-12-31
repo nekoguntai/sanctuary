@@ -753,11 +753,11 @@ const AppearanceTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Background Patterns */}
+      {/* Backgrounds */}
       <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
         <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800">
-          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Background Patterns</h3>
-          <p className="text-sm text-sanctuary-500 mt-1">Select a background pattern for your wallet</p>
+          <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Backgrounds</h3>
+          <p className="text-sm text-sanctuary-500 mt-1">Select a background for your wallet</p>
         </div>
         <div className="p-6 space-y-4">
           {/* Search Bar */}

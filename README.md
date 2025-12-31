@@ -242,7 +242,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Dark mode** — Easy on the eyes, day or night
 - **14 color themes** — Sanctuary, Serenity, Forest, Cyber, Sunrise, Ocean, Sakura, Midnight, Bamboo, Copper, Desert, and more
 - **Seasonal theme** — Automatically changes colors based on the time of year (spring, summer, autumn, winter)
-- **66 background patterns** — Including 56 animated canvas patterns (sakura petals, fireflies, northern lights, paper airplanes, and more) with adjustable opacity
+- **66 backgrounds** — Including 56 animated canvas backgrounds (sakura petals, fireflies, northern lights, paper airplanes, and more) with adjustable opacity
 - **Contrast control** — Adjust background contrast for accessibility
 - **Two-factor authentication** — Optional TOTP-based 2FA with backup codes
 - **Telegram notifications** — Receive transaction alerts via your own Telegram bot

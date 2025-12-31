@@ -157,6 +157,11 @@ export const BACKGROUND_CATEGORIES: Partial<Record<BackgroundOption, BackgroundC
  * Get all backgrounds in a specific category
  */
 export function getBackgroundsByCategory(category: BackgroundCategory): BackgroundOption[] {
+  // 'all' returns every background that has any category defined
+  if (category === 'all') {
+    return Object.keys(BACKGROUND_CATEGORIES) as BackgroundOption[];
+  }
+
   return (Object.entries(BACKGROUND_CATEGORIES) as [BackgroundOption, BackgroundCategory[]][])
     .filter(([_, categories]) => categories.includes(category))
     .map(([id]) => id);

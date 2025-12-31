@@ -62,6 +62,49 @@ describe('Electrum Server API Logic', () => {
       expect(server.port).toBeLessThan(65536);
     });
 
+    describe('port number validation', () => {
+      // Helper function matching the validation in node.ts
+      const isValidPort = (port: string | number): boolean => {
+        const portNum = typeof port === 'number' ? port : parseInt(String(port), 10);
+        return !isNaN(portNum) && portNum > 0 && portNum <= 65535;
+      };
+
+      it('should reject NaN port values', () => {
+        expect(isValidPort('not-a-number')).toBe(false);
+        expect(isValidPort('abc')).toBe(false);
+        expect(isValidPort('')).toBe(false);
+        expect(isValidPort(NaN)).toBe(false);
+      });
+
+      it('should reject zero port', () => {
+        expect(isValidPort(0)).toBe(false);
+        expect(isValidPort('0')).toBe(false);
+      });
+
+      it('should reject negative port numbers', () => {
+        expect(isValidPort(-1)).toBe(false);
+        expect(isValidPort(-100)).toBe(false);
+        expect(isValidPort('-50')).toBe(false);
+      });
+
+      it('should reject port numbers greater than 65535', () => {
+        expect(isValidPort(65536)).toBe(false);
+        expect(isValidPort(70000)).toBe(false);
+        expect(isValidPort('65536')).toBe(false);
+      });
+
+      it('should accept valid port numbers', () => {
+        expect(isValidPort(1)).toBe(true);
+        expect(isValidPort(80)).toBe(true);
+        expect(isValidPort(443)).toBe(true);
+        expect(isValidPort(8080)).toBe(true);
+        expect(isValidPort(50001)).toBe(true);
+        expect(isValidPort(50002)).toBe(true);
+        expect(isValidPort(65535)).toBe(true);
+        expect(isValidPort('50002')).toBe(true);
+      });
+    });
+
     it('should validate useSsl is boolean', () => {
       const server = { useSsl: true };
       expect(typeof server.useSsl).toBe('boolean');

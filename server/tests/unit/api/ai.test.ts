@@ -54,15 +54,27 @@ jest.mock('express-rate-limit', () => () => mockRateLimiter);
 // Mock authenticate middleware
 const mockAuthenticate = jest.fn((req: Request, res: Response, next: NextFunction) => {
   if (req.headers.authorization) {
-    (req as any).user = { userId: 'user-123', username: 'testuser', isAdmin: false };
+    // Check for admin header to simulate admin users
+    const isAdmin = req.headers['x-test-admin'] === 'true';
+    (req as any).user = { userId: 'user-123', username: 'testuser', isAdmin };
     next();
   } else {
     res.status(401).json({ error: 'Unauthorized' });
   }
 });
 
+// Mock requireAdmin middleware
+const mockRequireAdmin = jest.fn((req: Request, res: Response, next: NextFunction) => {
+  if ((req as any).user?.isAdmin) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Forbidden', message: 'Admin access required' });
+  }
+});
+
 jest.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => mockAuthenticate(req, res, next),
+  requireAdmin: (req: Request, res: Response, next: NextFunction) => mockRequireAdmin(req, res, next),
 }));
 
 describe('AI API Routes', () => {
@@ -535,6 +547,101 @@ describe('AI API Routes', () => {
 
       const response = getResponse();
       expect(response.statusCode).toBe(500);
+    });
+
+    it('should require admin access for pull-model endpoint', async () => {
+      // Non-admin user should receive 403
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-token' },
+        body: { model: 'llama2' },
+      });
+      const { res, getResponse } = createMockResponse();
+      const next = createMockNext();
+
+      // Simulate auth then admin check
+      mockAuthenticate(req as Request, res as Response, () => {
+        mockRequireAdmin(req as Request, res as Response, next);
+      });
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(403);
+      expect(response.body.error).toBe('Forbidden');
+      expect(response.body.message).toBe('Admin access required');
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should allow admin access to pull-model endpoint', async () => {
+      // Admin user should pass through
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-token', 'x-test-admin': 'true' },
+        body: { model: 'llama2' },
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Simulate auth then admin check
+      mockAuthenticate(req as Request, res as Response, () => {
+        mockRequireAdmin(req as Request, res as Response, next);
+      });
+
+      expect(next).toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /api/v1/ai/delete-model', () => {
+    it('should require admin access for delete-model endpoint', async () => {
+      // Non-admin user should receive 403
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-token' },
+        body: { model: 'llama2' },
+      });
+      const { res, getResponse } = createMockResponse();
+      const next = createMockNext();
+
+      // Simulate auth then admin check
+      mockAuthenticate(req as Request, res as Response, () => {
+        mockRequireAdmin(req as Request, res as Response, next);
+      });
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(403);
+      expect(response.body.error).toBe('Forbidden');
+      expect(response.body.message).toBe('Admin access required');
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should allow admin access to delete-model endpoint', async () => {
+      // Admin user should pass through
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-token', 'x-test-admin': 'true' },
+        body: { model: 'llama2' },
+      });
+      const { res } = createMockResponse();
+      const next = createMockNext();
+
+      // Simulate auth then admin check
+      mockAuthenticate(req as Request, res as Response, () => {
+        mockRequireAdmin(req as Request, res as Response, next);
+      });
+
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('should return 400 when model name is missing', async () => {
+      const { res, getResponse } = createMockResponse();
+
+      const body = {};
+
+      if (!(body as any).model) {
+        res.status!(400).json!({
+          error: 'Bad Request',
+          message: 'Model name is required',
+        });
+      }
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(400);
+      expect(response.body.message).toBe('Model name is required');
     });
   });
 

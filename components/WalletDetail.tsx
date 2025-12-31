@@ -751,6 +751,7 @@ export const WalletDetail: React.FC = () => {
       id: apiWallet.id,
       name: apiWallet.name,
       type: walletType,
+      network: apiWallet.network,
       balance: apiWallet.balance,
       scriptType: apiWallet.scriptType,
       derivationPath: apiWallet.descriptor || '',
@@ -769,6 +770,9 @@ export const WalletDetail: React.FC = () => {
       lastSyncedAt: apiWallet.lastSyncedAt,
       lastSyncStatus: apiWallet.lastSyncStatus as 'success' | 'failed' | 'partial' | 'retrying' | null,
       syncInProgress: apiWallet.syncInProgress,
+      // Sharing info
+      isShared: apiWallet.isShared,
+      sharedWith: apiWallet.sharedWith,
       // User permissions
       userRole: apiWallet.userRole,
       canEdit: apiWallet.canEdit,
@@ -1478,20 +1482,28 @@ export const WalletDetail: React.FC = () => {
                   <AlertTriangle className="w-3 h-3 mr-1" /> Not Synced
                </span>
              )}
+             {/* Role Badge - your access level */}
+             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+               wallet.userRole === 'owner'
+                 ? 'bg-primary-600 text-white dark:bg-primary-100 dark:text-primary-700'
+                 : wallet.userRole === 'signer'
+                 ? 'bg-warning-600 text-white dark:bg-warning-100 dark:text-warning-700'
+                 : 'bg-sanctuary-500 text-white dark:bg-sanctuary-900 dark:text-sanctuary-200'
+             }`}>
+               {wallet.userRole === 'owner' ? 'Owner' : wallet.userRole === 'signer' ? 'Signer' : 'Viewer'}
+             </span>
+             {/* Shared indicator */}
+             {wallet.isShared && (
+               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-600 text-white dark:bg-violet-900/50 dark:text-violet-200">
+                 <Users className="w-3 h-3" />
+                 Shared
+               </span>
+             )}
           </div>
 
           {/* Row 2: Name + Balance */}
           <div className="flex items-center justify-between gap-4 mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50 tracking-tight truncate">{wallet.name}</h1>
-              <span className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                wallet.userRole === 'owner' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' :
-                wallet.userRole === 'signer' ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300' :
-                'bg-sanctuary-100 text-sanctuary-700 dark:bg-sanctuary-700 dark:text-sanctuary-300'
-              }`}>
-                {wallet.userRole === 'owner' ? 'Owner' : wallet.userRole === 'signer' ? 'Signer' : 'Viewer'}
-              </span>
-            </div>
+            <h1 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50 tracking-tight truncate">{wallet.name}</h1>
             <Amount
               sats={wallet.balance}
               size="lg"

@@ -17,11 +17,49 @@ import {
   Radio,
   MoreHorizontal,
   Settings2,
+  Clock,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('NetworkConnectionCard');
+
+// Health History Blocks Component - shows colored blocks for recent health checks
+interface HealthHistoryBlocksProps {
+  history: bitcoinApi.HealthCheckResult[];
+  maxBlocks?: number;
+}
+
+const HealthHistoryBlocks: React.FC<HealthHistoryBlocksProps> = ({ history, maxBlocks = 10 }) => {
+  if (!history || history.length === 0) {
+    return null;
+  }
+
+  // Take the most recent N blocks (history is most-recent-first from backend)
+  const blocks = history.slice(0, maxBlocks);
+
+  return (
+    <div className="flex items-center space-x-0.5" title={`${history.length} health checks recorded`}>
+      {blocks.map((check, i) => (
+        <div
+          key={i}
+          className={`w-1.5 h-3 rounded-sm transition-colors ${
+            check.success
+              ? 'bg-emerald-400 dark:bg-emerald-500'
+              : 'bg-rose-400 dark:bg-rose-500'
+          }`}
+          title={`${check.success ? 'Healthy' : 'Failed'} - ${new Date(check.timestamp).toLocaleTimeString()}`}
+        />
+      ))}
+      {history.length > maxBlocks && (
+        <span className="text-[9px] text-sanctuary-400 ml-1">
+          +{history.length - maxBlocks}
+        </span>
+      )}
+    </div>
+  );
+};
 
 type NetworkType = 'mainnet' | 'testnet' | 'signet';
 type ConnectionMode = 'singleton' | 'pool';
@@ -74,6 +112,7 @@ interface NetworkConnectionCardProps {
   network: NetworkType;
   config: NodeConfigType;
   servers: ElectrumServer[];
+  poolStats?: bitcoinApi.PoolStats | null; // Pool stats with health history
   onConfigChange: (updates: Partial<NodeConfigType>) => void;
   onServersChange: (servers: ElectrumServer[]) => void;
   onTestConnection: (host: string, port: number, ssl: boolean) => Promise<{ success: boolean; message: string }>;
@@ -84,11 +123,16 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
   network,
   config,
   servers,
+  poolStats,
   onConfigChange,
   onServersChange,
   onTestConnection,
   embedded = false,
 }) => {
+  // Get pool stats for a specific server by ID
+  const getServerPoolStats = (serverId: string): bitcoinApi.ServerStats | undefined => {
+    return poolStats?.servers?.find(s => s.serverId === serverId);
+  };
   const [isExpanded, setIsExpanded] = useState(network === 'mainnet' || embedded);
   const [isAddingServer, setIsAddingServer] = useState(false);
   const [newServer, setNewServer] = useState({ label: '', host: '', port: getDefaultPort(network), useSsl: true });
@@ -1029,39 +1073,64 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                               </div>
                               <span className="text-xs text-sanctuary-500">{server.host}:{server.port}</span>
                               {/* Health History Blocks & Stats */}
-                              <div className="flex items-center space-x-2 mt-1">
-                                {/* Health History Blocks - 10 blocks showing recent health */}
-                                <div className="flex items-center space-x-0.5" title={
-                                  server.lastHealthCheck
-                                    ? `Last check: ${new Date(server.lastHealthCheck).toLocaleTimeString()}${server.healthCheckFails ? ` | ${server.healthCheckFails} consecutive fail${server.healthCheckFails > 1 ? 's' : ''}` : ''}`
-                                    : 'No health checks yet'
-                                }>
-                                  {Array.from({ length: 10 }).map((_, i) => {
-                                    // Calculate health block color based on fail count
-                                    // Most recent blocks (lower index) show current state
-                                    const failCount = server.healthCheckFails ?? 0;
-                                    const isFailedBlock = i < failCount;
-                                    const hasHealthData = server.lastHealthCheck !== null && server.lastHealthCheck !== undefined;
-
-                                    return (
-                                      <div
-                                        key={i}
-                                        className={`w-1.5 h-3 rounded-sm ${
-                                          !hasHealthData ? 'bg-sanctuary-300 dark:bg-sanctuary-600' :
-                                          isFailedBlock ? 'bg-rose-400 dark:bg-rose-500' :
-                                          'bg-emerald-400 dark:bg-emerald-500'
-                                        }`}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                                {/* Last check time */}
-                                {server.lastHealthCheck && (
-                                  <span className="text-[10px] text-sanctuary-400">
-                                    {new Date(server.lastHealthCheck).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                )}
-                              </div>
+                              {(() => {
+                                const serverStats = getServerPoolStats(server.id);
+                                return (
+                                  <div className="flex flex-col space-y-1 mt-1">
+                                    {/* Health History Blocks */}
+                                    {serverStats?.healthHistory && serverStats.healthHistory.length > 0 ? (
+                                      <HealthHistoryBlocks history={serverStats.healthHistory} maxBlocks={10} />
+                                    ) : (
+                                      // Fallback to simple blocks when no history available
+                                      <div className="flex items-center space-x-0.5" title={
+                                        server.lastHealthCheck
+                                          ? `Last check: ${new Date(server.lastHealthCheck).toLocaleTimeString()}`
+                                          : 'No health checks yet'
+                                      }>
+                                        {Array.from({ length: 10 }).map((_, i) => {
+                                          const failCount = server.healthCheckFails ?? 0;
+                                          const isFailedBlock = i < failCount;
+                                          const hasHealthData = server.lastHealthCheck !== null;
+                                          return (
+                                            <div
+                                              key={i}
+                                              className={`w-1.5 h-3 rounded-sm ${
+                                                !hasHealthData ? 'bg-sanctuary-300 dark:bg-sanctuary-600' :
+                                                isFailedBlock ? 'bg-rose-400 dark:bg-rose-500' :
+                                                'bg-emerald-400 dark:bg-emerald-500'
+                                              }`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {/* Stats Row */}
+                                    <div className="flex items-center space-x-2 text-[10px] text-sanctuary-400">
+                                      {server.lastHealthCheck && (
+                                        <span>
+                                          {new Date(server.lastHealthCheck).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      )}
+                                      {serverStats?.consecutiveFailures !== undefined && serverStats.consecutiveFailures > 0 && (
+                                        <span className="text-amber-500">
+                                          {serverStats.consecutiveFailures} fail{serverStats.consecutiveFailures > 1 ? 's' : ''}
+                                        </span>
+                                      )}
+                                      {serverStats?.weight !== undefined && serverStats.weight < 1.0 && (
+                                        <span className="text-amber-500">
+                                          {Math.round(serverStats.weight * 100)}%
+                                        </span>
+                                      )}
+                                      {serverStats?.cooldownUntil && new Date(serverStats.cooldownUntil) > new Date() && (
+                                        <span className="flex items-center space-x-0.5 text-rose-500">
+                                          <Clock className="w-2.5 h-2.5" />
+                                          <span>cooldown</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                           <div className="flex items-center space-x-1">

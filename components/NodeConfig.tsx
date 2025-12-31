@@ -16,6 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
 import { NetworkConnectionCard } from './NetworkConnectionCard';
 
@@ -49,8 +50,24 @@ export const NodeConfig: React.FC = () => {
   const [isTorContainerLoading, setIsTorContainerLoading] = useState(false);
   const [torContainerMessage, setTorContainerMessage] = useState<string>('');
 
+  // Pool stats for health history
+  const [poolStats, setPoolStats] = useState<bitcoinApi.PoolStats | null>(null);
+
   // Show custom proxy fields
   const [showCustomProxy, setShowCustomProxy] = useState(false);
+
+  // Fetch pool stats for health history
+  const fetchPoolStats = async () => {
+    try {
+      const status = await bitcoinApi.getStatus();
+      if (status.pool?.stats) {
+        setPoolStats(status.pool.stats);
+      }
+    } catch (error) {
+      // Silently fail - pool stats are optional enhancement
+      log.debug('Failed to load pool stats', { error });
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -67,6 +84,8 @@ export const NodeConfig: React.FC = () => {
         if (nc?.proxyEnabled && nc.proxyHost !== 'tor') {
           setShowCustomProxy(true);
         }
+        // Also fetch pool stats
+        fetchPoolStats();
       } catch (error) {
         log.error('Failed to load data', { error });
         // Set default node config if API call fails
@@ -508,6 +527,7 @@ export const NodeConfig: React.FC = () => {
                     network={activeNetworkTab}
                     config={nodeConfig}
                     servers={getServersForNetwork(activeNetworkTab)}
+                    poolStats={poolStats}
                     onConfigChange={(updates) => setNodeConfig({ ...nodeConfig, ...updates })}
                     onServersChange={(servers) => handleServersChange(activeNetworkTab, servers)}
                     onTestConnection={handleTestConnection}

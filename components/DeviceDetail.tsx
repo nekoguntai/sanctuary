@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device } from '../types';
-import { getDevice, updateDevice, getDeviceModels } from '../src/api/devices';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo } from '../types';
+import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup } from '../src/api/devices';
+import * as authApi from '../src/api/auth';
+import * as adminApi from '../src/api/admin';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send, User as UserIcon } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
-import { DeviceSharing } from './DeviceSharing';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
 import { PendingTransfersPanel } from './PendingTransfersPanel';
 
@@ -19,6 +20,12 @@ interface WalletInfo {
   id: string;
   name: string;
   type: WalletType | ApiWalletType;
+}
+
+// Group display type
+interface GroupDisplay {
+  id: string;
+  name: string;
 }
 
 export const DeviceDetail: React.FC = () => {
@@ -34,7 +41,17 @@ export const DeviceDetail: React.FC = () => {
   const [editModelSlug, setEditModelSlug] = useState<string>('');
   const [deviceModels, setDeviceModels] = useState<HardwareDeviceModel[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('details');
+  const [accessSubTab, setAccessSubTab] = useState<'ownership' | 'sharing' | 'transfers'>('ownership');
   const [showTransferModal, setShowTransferModal] = useState(false);
+
+  // Sharing state
+  const [deviceShareInfo, setDeviceShareInfo] = useState<DeviceShareInfo | null>(null);
+  const [groups, setGroups] = useState<GroupDisplay[]>([]);
+  const [selectedGroupToAdd, setSelectedGroupToAdd] = useState('');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState<authApi.SearchUser[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [sharingLoading, setSharingLoading] = useState(false);
 
   // Derived ownership state
   const isOwner = device?.isOwner ?? true; // Default to true for backward compat
@@ -101,6 +118,116 @@ export const DeviceDetail: React.FC = () => {
     setEditModelSlug(device?.model?.slug || '');
   };
 
+  // Fetch share info
+  const fetchShareInfo = useCallback(async () => {
+    if (!id) return;
+    try {
+      const info = await getDeviceShareInfo(id);
+      setDeviceShareInfo(info);
+    } catch (err) {
+      log.error('Failed to fetch share info', { err });
+    }
+  }, [id]);
+
+  // Fetch groups
+  const fetchGroups = useCallback(async () => {
+    try {
+      const userGroups = user?.isAdmin
+        ? await adminApi.getGroups()
+        : await authApi.getUserGroups();
+      setGroups(userGroups);
+    } catch (err) {
+      log.error('Failed to fetch groups', { err });
+    }
+  }, [user?.isAdmin]);
+
+  // Fetch sharing data when device is loaded
+  useEffect(() => {
+    if (device && id) {
+      fetchShareInfo();
+      fetchGroups();
+    }
+  }, [device, id, fetchShareInfo, fetchGroups]);
+
+  // User search handler
+  const handleSearchUsers = useCallback(async (query: string) => {
+    setUserSearchQuery(query);
+    if (query.length < 2) {
+      setUserSearchResults([]);
+      return;
+    }
+
+    setSearchingUsers(true);
+    try {
+      const results = await authApi.searchUsers(query);
+      const existingUserIds = new Set(deviceShareInfo?.users.map(u => u.id) || []);
+      setUserSearchResults(results.filter(u => !existingUserIds.has(u.id)));
+    } catch (err) {
+      log.error('Failed to search users', { err });
+    } finally {
+      setSearchingUsers(false);
+    }
+  }, [deviceShareInfo]);
+
+  // Share with user
+  const handleShareWithUser = async (targetUserId: string) => {
+    if (!id) return;
+    setSharingLoading(true);
+    try {
+      await shareDeviceWithUser(id, { targetUserId });
+      await fetchShareInfo();
+      setUserSearchQuery('');
+      setUserSearchResults([]);
+    } catch (err) {
+      log.error('Failed to share with user', { err });
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  // Remove user access
+  const handleRemoveUserAccess = async (targetUserId: string) => {
+    if (!id) return;
+    setSharingLoading(true);
+    try {
+      await removeUserFromDevice(id, targetUserId);
+      await fetchShareInfo();
+    } catch (err) {
+      log.error('Failed to remove user access', { err });
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  // Add group
+  const addGroup = async () => {
+    if (!id || !selectedGroupToAdd) return;
+    setSharingLoading(true);
+    try {
+      await shareDeviceWithGroup(id, { groupId: selectedGroupToAdd });
+      await fetchShareInfo();
+      setSelectedGroupToAdd('');
+    } catch (err) {
+      log.error('Failed to share with group', { err });
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
+  // Remove group
+  const removeGroup = async () => {
+    if (!id) return;
+    setSharingLoading(true);
+    try {
+      await shareDeviceWithGroup(id, { groupId: null });
+      await fetchShareInfo();
+    } catch (err) {
+      log.error('Failed to remove group access', { err });
+    } finally {
+      setSharingLoading(false);
+    }
+  };
+
   // Reload device data after transfer actions
   const handleTransferComplete = async () => {
     if (!id || !user) return;
@@ -152,6 +279,12 @@ export const DeviceDetail: React.FC = () => {
                                 ) : (
                                     <>
                                         <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50">{device.label}</h1>
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                          userRole === 'owner' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' :
+                                          'bg-sanctuary-100 text-sanctuary-700 dark:bg-sanctuary-700 dark:text-sanctuary-300'
+                                        }`}>
+                                          {userRole === 'owner' ? 'Owner' : 'Viewer'}
+                                        </span>
                                         {isOwner && (
                                           <button onClick={() => setIsEditing(true)} className="text-sanctuary-400 hover:text-sanctuary-600 p-1" aria-label="Edit label"><Edit2 className="w-4 h-4" /></button>
                                         )}
@@ -284,41 +417,187 @@ export const DeviceDetail: React.FC = () => {
         )}
 
         {activeTab === 'access' && (
-          <div className="space-y-6">
-            {/* Pending Transfers */}
-            <PendingTransfersPanel
-              resourceType="device"
-              resourceId={id!}
-              onTransferComplete={handleTransferComplete}
-            />
+          <div className="space-y-4">
+            {/* Sub-tabs */}
+            <div className="flex space-x-1 p-1 surface-secondary rounded-lg w-fit">
+              {(['ownership', 'sharing', 'transfers'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setAccessSubTab(tab)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize ${
+                    accessSubTab === tab
+                      ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                      : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
 
-            {/* Transfer Ownership Button - only for owners */}
-            {isOwner && (
-              <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">Transfer Ownership</h4>
-                    <p className="text-sm text-sanctuary-500 mt-1">
-                      Transfer this device to another user
-                    </p>
+            {/* Ownership Sub-tab */}
+            {accessSubTab === 'ownership' && (
+              <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                <div className="flex items-center justify-between p-3 surface-secondary rounded-lg">
+                  <div className="flex items-center">
+                    <div className="h-9 w-9 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-base font-bold text-sanctuary-600 dark:text-sanctuary-300">
+                      {deviceShareInfo?.users.find(u => u.role === 'owner')?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="ml-3">
+                      <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                        {deviceShareInfo?.users.find(u => u.role === 'owner')?.username || user?.username || 'You'}
+                      </p>
+                      <p className="text-xs text-sanctuary-500">Device Owner</p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setShowTransferModal(true)}
-                    className="flex items-center px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Transfer Ownership
-                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => setShowTransferModal(true)}
+                      className="flex items-center px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
+                    >
+                      <Send className="w-4 h-4 mr-1.5" />
+                      Transfer
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Device Sharing */}
-            <DeviceSharing
-              deviceId={id!}
-              isOwner={isOwner}
-              userRole={userRole}
-            />
+            {/* Sharing Sub-tab */}
+            {accessSubTab === 'sharing' && (
+              <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800 space-y-4">
+                {/* Add sharing controls - only for owners */}
+                {isOwner && (
+                  <div className="p-3 surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                    <div className="flex flex-wrap gap-2">
+                      {/* Group sharing */}
+                      {!deviceShareInfo?.group && (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedGroupToAdd}
+                            onChange={(e) => setSelectedGroupToAdd(e.target.value)}
+                            className="text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                          >
+                            <option value="">Add group...</option>
+                            {groups.map(g => (
+                              <option key={g.id} value={g.id}>{g.name}</option>
+                            ))}
+                          </select>
+                          {selectedGroupToAdd && (
+                            <button
+                              onClick={addGroup}
+                              disabled={sharingLoading}
+                              className="text-xs px-2 py-1 rounded bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
+                            >
+                              Add as Viewer
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {/* User sharing */}
+                      <div className="flex-1 min-w-[200px] relative">
+                        <input
+                          type="text"
+                          value={userSearchQuery}
+                          onChange={(e) => handleSearchUsers(e.target.value)}
+                          placeholder="Add user..."
+                          className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                        />
+                        {searchingUsers && (
+                          <div className="absolute right-2 top-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                          </div>
+                        )}
+                        {userSearchResults.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                            {userSearchResults.map(u => (
+                              <div key={u.id} className="px-2 py-1.5 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <div className="h-5 w-5 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                                    {u.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-sm">{u.username}</span>
+                                </div>
+                                <button
+                                  onClick={() => handleShareWithUser(u.id)}
+                                  disabled={sharingLoading}
+                                  className="text-xs px-1.5 py-0.5 rounded bg-sanctuary-200 dark:bg-sanctuary-700 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 disabled:opacity-50"
+                                >
+                                  Add as Viewer
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Current shared access */}
+                <div className="space-y-2">
+                  {/* Group */}
+                  {deviceShareInfo?.group && (
+                    <div className="flex items-center justify-between p-2.5 surface-secondary rounded-lg">
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 text-sanctuary-500 mr-2" />
+                        <span className="text-sm font-medium">{deviceShareInfo.group.name}</span>
+                        <span className="ml-2 text-xs px-1.5 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
+                          Viewer
+                        </span>
+                      </div>
+                      {isOwner && (
+                        <button
+                          onClick={removeGroup}
+                          disabled={sharingLoading}
+                          className="text-xs text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Individual users */}
+                  {deviceShareInfo?.users.filter(u => u.role !== 'owner').map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-2.5 surface-secondary rounded-lg">
+                      <div className="flex items-center">
+                        <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                          {u.username.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium">{u.username}</span>
+                        <span className="ml-2 text-xs text-sanctuary-500 capitalize">{u.role}</span>
+                      </div>
+                      {isOwner && (
+                        <button
+                          onClick={() => handleRemoveUserAccess(u.id)}
+                          disabled={sharingLoading}
+                          className="text-xs text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Empty state */}
+                  {!deviceShareInfo?.group && (!deviceShareInfo?.users || deviceShareInfo.users.filter(u => u.role !== 'owner').length === 0) && (
+                    <div className="text-center py-6 text-sanctuary-400 text-sm">
+                      Not shared with anyone yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Transfers Sub-tab */}
+            {accessSubTab === 'transfers' && (
+              <PendingTransfersPanel
+                resourceType="device"
+                resourceId={id!}
+                onTransferComplete={handleTransferComplete}
+              />
+            )}
           </div>
         )}
 

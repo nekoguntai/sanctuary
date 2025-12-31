@@ -182,7 +182,7 @@ export const WalletList: React.FC = () => {
           </h2>
           <p className="text-sanctuary-500">Manage your {selectedNetwork} wallets and spending accounts</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
             {/* Sort dropdown - shown in grid view */}
             {viewMode === 'grid' && (
               <div className="relative">
@@ -226,51 +226,58 @@ export const WalletList: React.FC = () => {
                     <ListIcon className="w-4 h-4" />
                 </button>
             </div>
-            <Button variant="secondary" onClick={() => navigate('/wallets/import')}>
-                <Upload className="w-4 h-4 mr-2" />
+            {/* Compact Sync Actions */}
+            <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+              <NetworkSyncActions
+                network={selectedNetwork}
+                walletCount={filteredWallets.length}
+                compact={true}
+                onSyncStarted={() => invalidateAllWallets()}
+              />
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => navigate('/wallets/import')}>
+                <Upload className="w-4 h-4 mr-1.5" />
                 Import
             </Button>
-            <Button onClick={() => navigate('/wallets/create')}>
-                <Plus className="w-4 h-4 mr-2" />
+            <Button size="sm" onClick={() => navigate('/wallets/create')}>
+                <Plus className="w-4 h-4 mr-1.5" />
                 Create
             </Button>
         </div>
       </div>
 
-      {/* Stats & Trends Card */}
-      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
-         <div className="flex flex-col md:flex-row gap-8">
+      {/* Stats & Trends Card - Compact */}
+      <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
+         <div className="flex flex-col md:flex-row gap-6">
              <div className="md:w-1/3 flex flex-col justify-between">
                 <div>
-                    <h3 className="text-sm font-medium text-sanctuary-500 uppercase tracking-wide mb-1">Total Balance</h3>
+                    <h3 className="text-xs font-medium text-sanctuary-500 uppercase tracking-wide mb-1">Total Balance</h3>
                     <Amount
                       sats={totalBalance}
-                      size="xl"
+                      size="lg"
                       className="font-bold text-sanctuary-900 dark:text-sanctuary-50"
                     />
-                </div>
-                <div className="mt-6">
-                    <p className="text-xs text-sanctuary-400">
-                        Aggregated across {filteredWallets.length} {selectedNetwork} wallet{filteredWallets.length !== 1 ? 's' : ''}.
+                    <p className="text-xs text-sanctuary-400 mt-2">
+                        {filteredWallets.length} {selectedNetwork} wallet{filteredWallets.length !== 1 ? 's' : ''}
                     </p>
                 </div>
              </div>
-             
+
              <div className="md:w-2/3">
-                 <div className="flex justify-end mb-4">
-                    <div className="flex space-x-1 surface-secondary p-1 rounded-lg">
+                 <div className="flex justify-end mb-2">
+                    <div className="flex space-x-0.5 surface-secondary p-0.5 rounded-lg">
                         {['1D', '1W', '1M', '1Y', 'ALL'].map((tf) => (
                             <button
                             key={tf}
                             onClick={() => setTimeframe(tf as Timeframe)}
-                            className={`px-3 py-1 text-xs font-medium rounded transition-colors ${timeframe === tf ? 'bg-white dark:bg-sanctuary-600 text-sanctuary-900 dark:text-sanctuary-50 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
+                            className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${timeframe === tf ? 'bg-white dark:bg-sanctuary-600 text-sanctuary-900 dark:text-sanctuary-50 shadow-sm' : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'}`}
                             >
                             {tf}
                             </button>
                         ))}
                     </div>
                  </div>
-                 <div className="h-48 w-full">
+                 <div className="h-36 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={chartData}>
                             <defs>
@@ -345,15 +352,29 @@ export const WalletList: React.FC = () => {
                     />
                 </div>
 
-                <div className="flex items-center text-xs text-sanctuary-500 border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-4">
-                    <span className="text-sanctuary-400 capitalize">{wallet.scriptType.replace('_', ' ')}</span>
-                    <span className="mx-2 text-sanctuary-300">•</span>
-                    <span className="text-sanctuary-400">{wallet.deviceCount} device{wallet.deviceCount !== 1 ? 's' : ''}</span>
-                    {wallet.quorum && wallet.totalSigners && (
-                        <>
-                            <span className="mx-2 text-sanctuary-300">•</span>
-                            <span className="text-sanctuary-400">{getQuorumM(wallet.quorum)} of {wallet.totalSigners}</span>
-                        </>
+                <div className="flex items-center justify-between text-xs border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-4">
+                    <div className="flex items-center text-sanctuary-500">
+                      <span className="text-sanctuary-400 capitalize">{wallet.scriptType.replace('_', ' ')}</span>
+                      <span className="mx-2 text-sanctuary-300">•</span>
+                      <span className="text-sanctuary-400">{wallet.deviceCount} device{wallet.deviceCount !== 1 ? 's' : ''}</span>
+                      {wallet.quorum && wallet.totalSigners && (
+                          <>
+                              <span className="mx-2 text-sanctuary-300">•</span>
+                              <span className="text-sanctuary-400">{getQuorumM(wallet.quorum)} of {wallet.totalSigners}</span>
+                          </>
+                      )}
+                    </div>
+                    {/* Sync Status */}
+                    {wallet.syncInProgress ? (
+                      <span title="Syncing"><RefreshCw className="w-3.5 h-3.5 text-primary-500 animate-spin" /></span>
+                    ) : wallet.lastSyncStatus === 'success' ? (
+                      <span title="Synced"><CheckCircle className="w-3.5 h-3.5 text-success-500" /></span>
+                    ) : wallet.lastSyncStatus === 'failed' ? (
+                      <span title="Sync failed"><AlertCircle className="w-3.5 h-3.5 text-rose-500" /></span>
+                    ) : wallet.lastSyncStatus === 'retrying' ? (
+                      <span title="Retrying"><RefreshCw className="w-3.5 h-3.5 text-amber-500" /></span>
+                    ) : (
+                      <span title="Pending sync"><Clock className="w-3.5 h-3.5 text-sanctuary-400" /></span>
                     )}
                 </div>
                 </div>
@@ -518,22 +539,6 @@ export const WalletList: React.FC = () => {
         </div>
       )}
 
-      {/* Network Sync Actions */}
-      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-sanctuary-500 uppercase tracking-wide mb-1">Sync Actions</h3>
-            <p className="text-xs text-sanctuary-400">
-              Sync or resync all {selectedNetwork} wallets
-            </p>
-          </div>
-          <NetworkSyncActions
-            network={selectedNetwork}
-            walletCount={filteredWallets.length}
-            onSyncStarted={() => invalidateAllWallets()}
-          />
-        </div>
       </div>
-    </div>
   );
 };

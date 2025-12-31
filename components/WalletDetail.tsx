@@ -62,6 +62,7 @@ import {
   Check,
   User as UserIcon,
   ChevronDown,
+  ChevronRight,
   X,
   AlertTriangle,
   RefreshCw,
@@ -424,6 +425,9 @@ export const WalletDetail: React.FC = () => {
   const initialTab = (location.state as any)?.activeTab || 'tx';
   const [activeTab, setActiveTab] = useState<'tx' | 'utxo' | 'addresses' | 'drafts' | 'stats' | 'access' | 'settings' | 'log'>(initialTab);
   const [addressSubTab, setAddressSubTab] = useState<'receive' | 'change'>('receive');
+  const [accessSubTab, setAccessSubTab] = useState<'ownership' | 'sharing' | 'transfers'>('ownership');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'devices' | 'notifications' | 'advanced'>('general');
+  const [showDangerZone, setShowDangerZone] = useState(false);
   const [draftsCount, setDraftsCount] = useState(0);
 
   // Update activeTab if navigation state changes
@@ -1423,21 +1427,22 @@ export const WalletDetail: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header Card */}
-      <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-6 opacity-5 dark:opacity-10 pointer-events-none">
-           {getWalletIcon(wallet.type, "w-40 h-40 text-primary-500")}
+      {/* Header Card - Compact */}
+      <div className="surface-elevated rounded-2xl p-4 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 pointer-events-none">
+           {getWalletIcon(wallet.type, "w-32 h-32 text-primary-500")}
         </div>
-        
+
         <div className="relative z-10">
-          <div className="flex flex-wrap gap-2 mb-3">
+          {/* Row 1: Badges */}
+          <div className="flex flex-wrap gap-1.5 mb-2">
              {/* Wallet Type Badge */}
-             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
-               {wallet.type === 'Multi Sig' ? `${getQuorumM(wallet.quorum)} of ${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Signature'}
+             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
+               {wallet.type === 'Multi Sig' ? `${getQuorumM(wallet.quorum)}/${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Sig'}
              </span>
              {/* Network Badge - only show if not mainnet */}
              {wallet.network && wallet.network !== 'mainnet' && (
-               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${
+               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${
                  wallet.network === 'testnet'
                    ? 'bg-testnet-100 text-testnet-800 border-testnet-200 dark:bg-testnet-500/10 dark:text-testnet-100 dark:border-testnet-500/30'
                    : wallet.network === 'signet'
@@ -1447,70 +1452,73 @@ export const WalletDetail: React.FC = () => {
                  {wallet.network}
                </span>
              )}
-             {devices.map(d => (
-                 <span key={d.id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sanctuary-50 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-300 dark:border-sanctuary-700">
-                    {getDeviceIcon(d.type, "w-3 h-3 mr-1")} {d.label}
-                 </span>
-             ))}
-             {ownerUser && (
-                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-600 border border-primary-100 dark:bg-sanctuary-800 dark:text-sanctuary-400 dark:border-sanctuary-700">
-                    <UserIcon className="w-3 h-3 mr-1" /> Owned by {ownerUser.username}
-                 </span>
-             )}
              {/* Sync Status Badge */}
              {wallet.lastSyncStatus === 'retrying' || syncRetryInfo ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20" title={syncRetryInfo?.error || 'Sync failed, retrying...'}>
-                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Sync failed. Retrying {syncRetryInfo?.retryCount || 1} of {syncRetryInfo?.maxRetries || 3}...
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20" title={syncRetryInfo?.error || 'Sync failed, retrying...'}>
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Retrying {syncRetryInfo?.retryCount || 1}/{syncRetryInfo?.maxRetries || 3}
                </span>
              ) : syncing || wallet.syncInProgress ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-400/30">
-                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Syncing...
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-400/30">
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Syncing
                </span>
              ) : wallet.lastSyncStatus === 'success' ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20" title={wallet.lastSyncedAt ? `Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}` : ''}>
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success-100 text-success-700 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20" title={wallet.lastSyncedAt ? `Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}` : ''}>
                   <Check className="w-3 h-3 mr-1" /> Synced
                </span>
              ) : wallet.lastSyncStatus === 'failed' ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" title="Last sync failed">
-                  <AlertTriangle className="w-3 h-3 mr-1" /> Sync Failed
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" title="Last sync failed">
+                  <AlertTriangle className="w-3 h-3 mr-1" /> Failed
                </span>
              ) : wallet.lastSyncedAt ? (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sanctuary-100 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-400 dark:border-sanctuary-700" title={`Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}`}>
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sanctuary-100 text-sanctuary-600 border border-sanctuary-200 dark:bg-sanctuary-800 dark:text-sanctuary-400 dark:border-sanctuary-700" title={`Last synced: ${new Date(wallet.lastSyncedAt).toLocaleString()}`}>
                   <Check className="w-3 h-3 mr-1" /> Cached
                </span>
              ) : (
-               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20" title="Never synced">
+               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-700 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20" title="Never synced">
                   <AlertTriangle className="w-3 h-3 mr-1" /> Not Synced
                </span>
              )}
           </div>
 
-          <h1 className="text-3xl font-light text-sanctuary-900 dark:text-sanctuary-50 tracking-tight">{wallet.name}</h1>
-          
-          <div className="mt-4">
+          {/* Row 2: Name + Balance */}
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-2xl font-light text-sanctuary-900 dark:text-sanctuary-50 tracking-tight truncate">{wallet.name}</h1>
+              <span className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                wallet.userRole === 'owner' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' :
+                wallet.userRole === 'signer' ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300' :
+                'bg-sanctuary-100 text-sanctuary-700 dark:bg-sanctuary-700 dark:text-sanctuary-300'
+              }`}>
+                {wallet.userRole === 'owner' ? 'Owner' : wallet.userRole === 'signer' ? 'Signer' : 'Viewer'}
+              </span>
+            </div>
             <Amount
               sats={wallet.balance}
-              size="xl"
-              className="font-bold text-sanctuary-900 dark:text-sanctuary-50"
+              size="lg"
+              className="flex-shrink-0 font-semibold text-sanctuary-900 dark:text-sanctuary-50"
             />
           </div>
 
-          <div className="mt-6 flex space-x-3">
-             <Button onClick={() => setShowReceive(true)} variant="primary">
-               <ArrowDownLeft className="w-4 h-4 mr-2" /> Receive
-             </Button>
-             {wallet.userRole !== 'viewer' && (
-               <Button variant="secondary" onClick={() => navigate(`/wallets/${id}/send`)}>
-                 <ArrowUpRight className="w-4 h-4 mr-2" /> Send
+          {/* Row 3: Actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex space-x-2">
+               <Button onClick={() => setShowReceive(true)} variant="primary" size="sm">
+                 <ArrowDownLeft className="w-4 h-4 mr-1.5" /> Receive
                </Button>
-             )}
-             <Button variant="ghost" onClick={handleSync} disabled={syncing}>
-               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-               {syncing ? 'Syncing...' : 'Sync'}
-             </Button>
-             <Button variant="ghost" onClick={() => setShowExport(true)}>
-               <Share2 className="w-4 h-4 mr-2" /> Export
-             </Button>
+               {wallet.userRole !== 'viewer' && (
+                 <Button variant="secondary" size="sm" onClick={() => navigate(`/wallets/${id}/send`)}>
+                   <ArrowUpRight className="w-4 h-4 mr-1.5" /> Send
+                 </Button>
+               )}
+            </div>
+            <div className="flex space-x-1">
+               <Button variant="ghost" size="sm" onClick={handleSync} disabled={syncing} title="Sync wallet">
+                 <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+               </Button>
+               <Button variant="ghost" size="sm" onClick={() => setShowExport(true)} title="Export wallet">
+                 <Share2 className="w-4 h-4" />
+               </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -2145,473 +2153,493 @@ export const WalletDetail: React.FC = () => {
         )}
 
         {activeTab === 'access' && (
-          <div className="space-y-6">
-            {/* Your Access Section */}
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <h3 className="text-lg font-medium mb-4 flex items-center">
-                 <Shield className="w-5 h-5 mr-2 text-primary-500" />
-                 Your Access
-               </h3>
-               <div className="flex items-center justify-between p-4 surface-secondary rounded-lg">
+          <div className="space-y-4">
+            {/* Sub-tabs */}
+            <div className="flex space-x-1 p-1 surface-secondary rounded-lg w-fit">
+              {(['ownership', 'sharing', 'transfers'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setAccessSubTab(tab)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors capitalize ${
+                    accessSubTab === tab
+                      ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                      : 'text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Ownership Sub-tab */}
+            {accessSubTab === 'ownership' && (
+              <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                <div className="flex items-center justify-between p-3 surface-secondary rounded-lg">
                   <div className="flex items-center">
-                    <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
-                        {user?.username?.charAt(0).toUpperCase() || 'U'}
+                    <div className="h-9 w-9 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-base font-bold text-sanctuary-600 dark:text-sanctuary-300">
+                      {walletShareInfo?.users.find(u => u.role === 'owner')?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
                     </div>
-                    <div className="ml-4">
-                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                          {user?.username || 'You'}
-                        </p>
-                        <p className="text-xs text-sanctuary-500 capitalize">{wallet.userRole || 'Unknown'} Access</p>
-                    </div>
-                  </div>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                    wallet.userRole === 'owner' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' :
-                    wallet.userRole === 'signer' ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300' :
-                    'bg-sanctuary-100 text-sanctuary-700 dark:bg-sanctuary-700 dark:text-sanctuary-300'
-                  }`}>
-                    {wallet.canEdit ? 'Can Edit' : 'Read Only'}
-                  </span>
-               </div>
-            </div>
-
-            {/* Ownership Section */}
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <h3 className="text-lg font-medium mb-4 flex items-center">
-                 <Shield className="w-5 h-5 mr-2 text-primary-500" />
-                 Ownership
-               </h3>
-               <div className="flex items-center p-4 surface-secondary rounded-lg">
-                  <div className="flex items-center">
-                    <div className="h-10 w-10 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-lg font-bold text-sanctuary-600 dark:text-sanctuary-300">
-                        {walletShareInfo?.users.find(u => u.role === 'owner')?.username?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase() || 'U'}
-                    </div>
-                    <div className="ml-4">
-                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
-                          {walletShareInfo?.users.find(u => u.role === 'owner')?.username || user?.username || 'You'}
-                        </p>
-                        <p className="text-xs text-sanctuary-500">Wallet Creator & Owner</p>
+                    <div className="ml-3">
+                      <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                        {walletShareInfo?.users.find(u => u.role === 'owner')?.username || user?.username || 'You'}
+                      </p>
+                      <p className="text-xs text-sanctuary-500">Wallet Owner</p>
                     </div>
                   </div>
-               </div>
-            </div>
-
-            {/* Group Sharing Section */}
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium flex items-center">
-                        <Users className="w-5 h-5 mr-2 text-primary-500" />
-                        Group Access
-                    </h3>
-               </div>
-
-               {/* Share with Group - only for owners */}
-               {wallet.userRole === 'owner' && !walletShareInfo?.group && (
-                 <div className="mb-6 p-4 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with Group</p>
-                   <div className="flex space-x-2">
-                     <select
-                       value={selectedGroupToAdd}
-                       onChange={(e) => setSelectedGroupToAdd(e.target.value)}
-                       className="flex-1 text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
-                     >
-                       <option value="">Select Group...</option>
-                       {groups.map(g => (
-                         <option key={g.id} value={g.id}>{g.name}</option>
-                       ))}
-                     </select>
-                     <button
-                       onClick={() => addGroup('viewer')}
-                       disabled={!selectedGroupToAdd || sharingLoading}
-                       className="text-xs px-3 py-2 rounded-lg bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
-                     >
-                       Viewer
-                     </button>
-                     <button
-                       onClick={() => addGroup('signer')}
-                       disabled={!selectedGroupToAdd || sharingLoading}
-                       className="text-xs px-3 py-2 rounded-lg bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 transition-colors disabled:opacity-50"
-                     >
-                       Signer
-                     </button>
-                   </div>
-                   {groups.length === 0 && (
-                     <p className="text-xs text-sanctuary-400 mt-2">You are not a member of any groups yet.</p>
-                   )}
-                 </div>
-               )}
-
-               {/* Current Group */}
-               {walletShareInfo?.group ? (
-                 <div className="border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg overflow-hidden">
-                   <div className="surface-secondary px-4 py-3 border-b border-sanctuary-200 dark:border-sanctuary-700 flex justify-between items-center">
-                     <div className="flex items-center">
-                       <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 mr-2">{walletShareInfo.group.name}</span>
-                       {wallet.userRole === 'owner' ? (
-                         <select
-                           value={walletShareInfo.group.role}
-                           onChange={(e) => updateGroupRole(e.target.value as 'viewer' | 'signer')}
-                           disabled={sharingLoading}
-                           className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full border-none cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-900/50 focus:outline-none focus:ring-0"
-                         >
-                           <option value="viewer">Viewer</option>
-                           <option value="signer">Signer</option>
-                         </select>
-                       ) : (
-                         <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full capitalize">
-                           {walletShareInfo.group.role}
-                         </span>
-                       )}
-                     </div>
-                     {wallet.userRole === 'owner' && (
-                       <button
-                         onClick={removeGroup}
-                         disabled={sharingLoading}
-                         className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
-                       >
-                         <Trash2 className="w-3 h-3 mr-1" /> Remove
-                       </button>
-                     )}
-                   </div>
-                   <div className="p-4 bg-sanctuary-50 dark:bg-sanctuary-900">
-                     <p className="text-sm text-sanctuary-500 dark:text-sanctuary-400">
-                       All members of this group have <span className="font-medium capitalize">{walletShareInfo.group.role}</span> access to this wallet.
-                     </p>
-                   </div>
-                 </div>
-               ) : (
-                 <div className="text-center py-4 text-sanctuary-500 text-sm">
-                    Not shared with any group.
-                 </div>
-               )}
-            </div>
-
-            {/* Individual User Sharing Section */}
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium flex items-center">
-                        <UserIcon className="w-5 h-5 mr-2 text-primary-500" />
-                        Individual Access
-                    </h3>
-               </div>
-
-               {/* Search and Add User - only for owners */}
-               {wallet.userRole === 'owner' && (
-                 <div className="mb-6 p-4 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
-                   <p className="text-xs font-medium text-sanctuary-500 uppercase mb-2">Share with User</p>
-                   <div className="relative">
-                     <input
-                       type="text"
-                       value={userSearchQuery}
-                       onChange={(e) => handleSearchUsers(e.target.value)}
-                       placeholder="Search users by username..."
-                       className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-3 py-2"
-                     />
-                     {searchingUsers && (
-                       <div className="absolute right-3 top-2.5">
-                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
-                       </div>
-                     )}
-
-                     {/* Search Results Dropdown */}
-                     {userSearchResults.length > 0 && (
-                       <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                         {userSearchResults.map(u => (
-                           <div
-                             key={u.id}
-                             className="px-3 py-2 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between transition-colors"
-                           >
-                             <div className="flex items-center">
-                               <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
-                                 {u.username.charAt(0).toUpperCase()}
-                               </div>
-                               <span className="text-sm text-sanctuary-700 dark:text-sanctuary-300">{u.username}</span>
-                             </div>
-                             <div className="flex items-center gap-1">
-                               <button
-                                 onClick={() => handleShareWithUser(u.id, 'viewer')}
-                                 disabled={sharingLoading}
-                                 className="text-xs px-2 py-1 rounded bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
-                               >
-                                 Viewer
-                               </button>
-                               <button
-                                 onClick={() => handleShareWithUser(u.id, 'signer')}
-                                 disabled={sharingLoading}
-                                 className="text-xs px-2 py-1 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 transition-colors disabled:opacity-50"
-                               >
-                                 Signer
-                               </button>
-                             </div>
-                           </div>
-                         ))}
-                       </div>
-                     )}
-                   </div>
-                 </div>
-               )}
-
-               {/* Current Users */}
-               {walletShareInfo && walletShareInfo.users.filter(u => u.role !== 'owner').length > 0 ? (
-                 <div className="space-y-2">
-                   {walletShareInfo.users.filter(u => u.role !== 'owner').map(u => (
-                     <div key={u.id} className="flex items-center justify-between p-3 surface-secondary rounded-lg">
-                       <div className="flex items-center">
-                         <div className="h-8 w-8 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-sm font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-3">
-                           {u.username.charAt(0).toUpperCase()}
-                         </div>
-                         <div>
-                           <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{u.username}</p>
-                           {wallet.userRole === 'owner' ? (
-                             <select
-                               value={u.role}
-                               onChange={(e) => handleShareWithUser(u.id, e.target.value as 'viewer' | 'signer')}
-                               disabled={sharingLoading}
-                               className="text-xs bg-transparent border-none p-0 text-sanctuary-500 capitalize cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 focus:outline-none focus:ring-0"
-                             >
-                               <option value="viewer">Viewer</option>
-                               <option value="signer">Signer</option>
-                             </select>
-                           ) : (
-                             <p className="text-xs text-sanctuary-500 capitalize">{u.role}</p>
-                           )}
-                         </div>
-                       </div>
-                       {wallet.userRole === 'owner' && (
-                         <button
-                           onClick={() => handleRemoveUserAccess(u.id)}
-                           disabled={sharingLoading}
-                           className="text-xs text-rose-500 hover:text-rose-700 flex items-center px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
-                         >
-                           <X className="w-3 h-3 mr-1" /> Remove
-                         </button>
-                       )}
-                     </div>
-                   ))}
-                 </div>
-               ) : (
-                 <div className="text-center py-4 text-sanctuary-500 text-sm">
-                    Not shared with any individual users.
-                 </div>
-               )}
-            </div>
-
-            {/* Pending Transfers */}
-            <PendingTransfersPanel
-              resourceType="wallet"
-              resourceId={id!}
-              onTransferComplete={handleTransferComplete}
-            />
-
-            {/* Transfer Ownership Button - only for owners */}
-            {wallet.userRole === 'owner' && (
-              <div className="surface-elevated rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-sanctuary-900 dark:text-sanctuary-100">Transfer Ownership</h4>
-                    <p className="text-sm text-sanctuary-500 mt-1">
-                      Transfer this wallet to another user
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowTransferModal(true)}
-                    className="flex items-center px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Transfer Ownership
-                  </button>
+                  {wallet.userRole === 'owner' && (
+                    <button
+                      onClick={() => setShowTransferModal(true)}
+                      className="flex items-center px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded-lg transition-colors"
+                    >
+                      <Send className="w-4 h-4 mr-1.5" />
+                      Transfer
+                    </button>
+                  )}
                 </div>
               </div>
+            )}
+
+            {/* Sharing Sub-tab */}
+            {accessSubTab === 'sharing' && (
+              <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800 space-y-4">
+                {/* Add sharing controls - only for owners */}
+                {wallet.userRole === 'owner' && (
+                  <div className="p-3 surface-muted rounded-lg border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                    <div className="flex flex-wrap gap-2">
+                      {/* Group sharing */}
+                      {!walletShareInfo?.group && (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={selectedGroupToAdd}
+                            onChange={(e) => setSelectedGroupToAdd(e.target.value)}
+                            className="text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                          >
+                            <option value="">Add group...</option>
+                            {groups.map(g => (
+                              <option key={g.id} value={g.id}>{g.name}</option>
+                            ))}
+                          </select>
+                          {selectedGroupToAdd && (
+                            <>
+                              <button
+                                onClick={() => addGroup('viewer')}
+                                disabled={sharingLoading}
+                                className="text-xs px-2 py-1 rounded bg-sanctuary-200 dark:bg-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-300 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 transition-colors disabled:opacity-50"
+                              >
+                                Viewer
+                              </button>
+                              <button
+                                onClick={() => addGroup('signer')}
+                                disabled={sharingLoading}
+                                className="text-xs px-2 py-1 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 transition-colors disabled:opacity-50"
+                              >
+                                Signer
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {/* User sharing */}
+                      <div className="flex-1 min-w-[200px] relative">
+                        <input
+                          type="text"
+                          value={userSearchQuery}
+                          onChange={(e) => handleSearchUsers(e.target.value)}
+                          placeholder="Add user..."
+                          className="w-full text-sm surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg px-2 py-1.5"
+                        />
+                        {searchingUsers && (
+                          <div className="absolute right-2 top-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent" />
+                          </div>
+                        )}
+                        {userSearchResults.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 surface-elevated border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                            {userSearchResults.map(u => (
+                              <div key={u.id} className="px-2 py-1.5 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 flex items-center justify-between">
+                                <div className="flex items-center">
+                                  <div className="h-5 w-5 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                                    {u.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="text-sm">{u.username}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                  <button onClick={() => handleShareWithUser(u.id, 'viewer')} disabled={sharingLoading} className="text-xs px-1.5 py-0.5 rounded bg-sanctuary-200 dark:bg-sanctuary-700 hover:bg-sanctuary-300 dark:hover:bg-sanctuary-600 disabled:opacity-50">View</button>
+                                  <button onClick={() => handleShareWithUser(u.id, 'signer')} disabled={sharingLoading} className="text-xs px-1.5 py-0.5 rounded bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-300 hover:bg-warning-200 dark:hover:bg-warning-900/50 disabled:opacity-50">Sign</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Current shared access */}
+                <div className="space-y-2">
+                  {/* Group */}
+                  {walletShareInfo?.group && (
+                    <div className="flex items-center justify-between p-2.5 surface-secondary rounded-lg">
+                      <div className="flex items-center">
+                        <Users className="w-4 h-4 text-sanctuary-500 mr-2" />
+                        <span className="text-sm font-medium">{walletShareInfo.group.name}</span>
+                        {wallet.userRole === 'owner' ? (
+                          <select
+                            value={walletShareInfo.group.role}
+                            onChange={(e) => updateGroupRole(e.target.value as 'viewer' | 'signer')}
+                            disabled={sharingLoading}
+                            className="ml-2 text-xs px-1.5 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full border-none cursor-pointer"
+                          >
+                            <option value="viewer">Viewer</option>
+                            <option value="signer">Signer</option>
+                          </select>
+                        ) : (
+                          <span className="ml-2 text-xs px-1.5 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full capitalize">{walletShareInfo.group.role}</span>
+                        )}
+                      </div>
+                      {wallet.userRole === 'owner' && (
+                        <button onClick={removeGroup} disabled={sharingLoading} className="text-xs text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Individual users */}
+                  {walletShareInfo?.users.filter(u => u.role !== 'owner').map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-2.5 surface-secondary rounded-lg">
+                      <div className="flex items-center">
+                        <div className="h-6 w-6 rounded-full bg-sanctuary-200 dark:bg-sanctuary-700 flex items-center justify-center text-xs font-bold text-sanctuary-600 dark:text-sanctuary-300 mr-2">
+                          {u.username.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium">{u.username}</span>
+                        {wallet.userRole === 'owner' ? (
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleShareWithUser(u.id, e.target.value as 'viewer' | 'signer')}
+                            disabled={sharingLoading}
+                            className="ml-2 text-xs bg-transparent border-none p-0 text-sanctuary-500 capitalize cursor-pointer"
+                          >
+                            <option value="viewer">Viewer</option>
+                            <option value="signer">Signer</option>
+                          </select>
+                        ) : (
+                          <span className="ml-2 text-xs text-sanctuary-500 capitalize">{u.role}</span>
+                        )}
+                      </div>
+                      {wallet.userRole === 'owner' && (
+                        <button onClick={() => handleRemoveUserAccess(u.id)} disabled={sharingLoading} className="text-xs text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-50">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Empty state */}
+                  {!walletShareInfo?.group && (!walletShareInfo?.users || walletShareInfo.users.filter(u => u.role !== 'owner').length === 0) && (
+                    <div className="text-center py-6 text-sanctuary-400 text-sm">
+                      Not shared with anyone yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Transfers Sub-tab */}
+            {accessSubTab === 'transfers' && (
+              <PendingTransfersPanel
+                resourceType="wallet"
+                resourceId={id!}
+                onTransferComplete={handleTransferComplete}
+              />
             )}
           </div>
         )}
 
 
         {activeTab === 'settings' && (
-          <div className="max-w-2xl space-y-6">
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <h3 className="text-lg font-medium mb-4">Wallet Configuration</h3>
-               <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                 <div className="sm:col-span-2">
-                   <dt className="text-sm font-medium text-sanctuary-500">Wallet Name</dt>
-                   <dd className="mt-1">
-                     {isEditingName ? (
-                       <div className="flex items-center gap-2">
-                         <input
-                           type="text"
-                           value={editedName}
-                           onChange={(e) => setEditedName(e.target.value)}
-                           className="flex-1 px-3 py-2 text-sm border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                           placeholder="Enter wallet name"
-                           autoFocus
-                           onKeyDown={(e) => {
-                             if (e.key === 'Enter' && editedName.trim()) {
-                               handleUpdateWallet({ name: editedName.trim() });
-                               setIsEditingName(false);
-                             } else if (e.key === 'Escape') {
-                               setIsEditingName(false);
-                               setEditedName(wallet.name);
-                             }
-                           }}
-                         />
-                         <Button
-                           size="sm"
-                           onClick={() => {
-                             if (editedName.trim()) {
-                               handleUpdateWallet({ name: editedName.trim() });
-                               setIsEditingName(false);
-                             }
-                           }}
-                           disabled={!editedName.trim() || editedName.trim() === wallet.name}
-                         >
-                           <Check className="w-4 h-4" />
-                         </Button>
-                         <Button
-                           size="sm"
-                           variant="ghost"
-                           onClick={() => {
-                             setIsEditingName(false);
-                             setEditedName(wallet.name);
-                           }}
-                         >
-                           <X className="w-4 h-4" />
-                         </Button>
-                       </div>
-                     ) : (
-                       <div className="flex items-center justify-between">
-                         <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.name}</span>
-                         {wallet.canEdit !== false && (
-                           <button
-                             onClick={() => {
-                               setEditedName(wallet.name);
-                               setIsEditingName(true);
-                             }}
-                             className="p-1.5 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700"
-                             title="Rename wallet"
-                           >
-                             <Edit2 className="w-4 h-4" />
-                           </button>
-                         )}
-                       </div>
-                     )}
-                   </dd>
-                 </div>
-                 <div>
-                   <dt className="text-sm font-medium text-sanctuary-500">Wallet ID</dt>
-                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.id}</dd>
-                 </div>
-                 <div>
-                   <dt className="text-sm font-medium text-sanctuary-500">Type</dt>
-                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.type}</dd>
-                 </div>
-                 <div>
-                   <dt className="text-sm font-medium text-sanctuary-500">Script Type</dt>
-                   <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">
-                     {wallet.scriptType === 'native_segwit' && 'Native SegWit (BIP84)'}
-                     {wallet.scriptType === 'nested_segwit' && 'Nested SegWit (BIP49)'}
-                     {wallet.scriptType === 'taproot' && 'Taproot (BIP86)'}
-                     {wallet.scriptType === 'legacy' && 'Legacy (BIP44)'}
-                     {!wallet.scriptType && 'Unknown'}
-                   </dd>
-                 </div>
-                 {wallet.descriptor && (
-                   <div>
-                     <dt className="text-sm font-medium text-sanctuary-500">Derivation Path</dt>
-                     <dd className="mt-1 text-sm font-mono text-sanctuary-900 dark:text-sanctuary-100">
-                       {(() => {
-                         // Extract path from descriptor like wpkh([fingerprint/84'/0'/0']xpub...)
-                         const match = wallet.descriptor.match(/\[([a-fA-F0-9]+)\/([^\]]+)\]/);
-                         if (match) {
-                           return `m/${match[2].replace(/h/g, "'")}`;
-                         }
-                         return wallet.derivationPath || 'Unknown';
-                       })()}
-                     </dd>
-                   </div>
-                 )}
-                 {wallet.quorum && (
-                    <div>
-                        <dt className="text-sm font-medium text-sanctuary-500">Quorum</dt>
-                        <dd className="mt-1 text-sm text-sanctuary-900 dark:text-sanctuary-100">{getQuorumM(wallet.quorum)} of {getQuorumN(wallet.quorum, wallet.totalSigners)}</dd>
-                    </div>
-                 )}
-               </dl>
-            </div>
-            
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-               <h3 className="text-lg font-medium mb-4">Hardware Devices</h3>
-               <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
-                   {devices.map(d => (
-                       <li key={d.id} className="py-4 flex justify-between items-center">
-                           <div className="flex items-center space-x-3">
-                               <div className="p-2 rounded-lg surface-secondary">
-                                   {getDeviceIcon(d.type, "w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400")}
-                               </div>
-                               <div>
-                                   <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
-                                   <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
-                                   <p className="text-xs font-mono text-sanctuary-400">{d.derivationPath}</p>
-                               </div>
-                           </div>
-                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">
-                               Active
-                           </span>
-                       </li>
-                   ))}
-               </ul>
+          <div className="max-w-2xl space-y-4">
+            {/* Settings Sub-tabs */}
+            <div className="flex gap-1 p-1 bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg w-fit">
+              <button
+                onClick={() => setSettingsSubTab('general')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  settingsSubTab === 'general'
+                    ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                    : 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200'
+                }`}
+              >
+                General
+              </button>
+              <button
+                onClick={() => setSettingsSubTab('devices')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  settingsSubTab === 'devices'
+                    ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                    : 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200'
+                }`}
+              >
+                Devices
+              </button>
+              <button
+                onClick={() => setSettingsSubTab('notifications')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  settingsSubTab === 'notifications'
+                    ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                    : 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200'
+                }`}
+              >
+                Notifications
+              </button>
+              <button
+                onClick={() => setSettingsSubTab('advanced')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  settingsSubTab === 'advanced'
+                    ? 'bg-white dark:bg-sanctuary-700 text-sanctuary-900 dark:text-sanctuary-100 shadow-sm'
+                    : 'text-sanctuary-600 dark:text-sanctuary-400 hover:text-sanctuary-900 dark:hover:text-sanctuary-200'
+                }`}
+              >
+                Advanced
+              </button>
             </div>
 
-             {/* Labels Management - only show if user can edit */}
-            {wallet.canEdit !== false && (
-              <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-                <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
+            {/* General Sub-tab */}
+            {settingsSubTab === 'general' && (
+              <div className="space-y-4">
+                {/* Wallet Name */}
+                <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                  <h3 className="text-base font-medium mb-3 text-sanctuary-900 dark:text-sanctuary-100">Wallet Name</h3>
+                  {isEditingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="flex-1 px-3 py-2 text-sm border border-sanctuary-300 dark:border-sanctuary-600 rounded-lg bg-white dark:bg-sanctuary-800 text-sanctuary-900 dark:text-sanctuary-100 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="Enter wallet name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && editedName.trim()) {
+                            handleUpdateWallet({ name: editedName.trim() });
+                            setIsEditingName(false);
+                          } else if (e.key === 'Escape') {
+                            setIsEditingName(false);
+                            setEditedName(wallet.name);
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (editedName.trim()) {
+                            handleUpdateWallet({ name: editedName.trim() });
+                            setIsEditingName(false);
+                          }
+                        }}
+                        disabled={!editedName.trim() || editedName.trim() === wallet.name}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setIsEditingName(false);
+                          setEditedName(wallet.name);
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-sanctuary-900 dark:text-sanctuary-100">{wallet.name}</span>
+                      {wallet.canEdit !== false && (
+                        <button
+                          onClick={() => {
+                            setEditedName(wallet.name);
+                            setIsEditingName(true);
+                          }}
+                          className="p-1.5 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300 transition-colors rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700"
+                          title="Rename wallet"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Labels Management - only show if user can edit */}
+                {wallet.canEdit !== false && (
+                  <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                    <LabelManager walletId={wallet.id} onLabelsChange={handleLabelsChange} />
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Sync Options */}
-            <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-              <h3 className="text-lg font-medium mb-4 text-sanctuary-900 dark:text-sanctuary-100">Sync Options</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Sync Now</p>
-                    <p className="text-xs text-sanctuary-500">Fetch latest transactions from the blockchain</p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSync}
-                    disabled={syncing}
-                  >
-                    {syncing ? 'Syncing...' : 'Sync'}
-                  </Button>
-                </div>
-                <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Full Resync</p>
-                      <p className="text-xs text-sanctuary-500">Clear all transactions and re-sync from blockchain. Use if transactions are missing.</p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleFullResync}
-                      disabled={syncing}
-                    >
-                      {syncing ? 'Syncing...' : 'Resync'}
-                    </Button>
-                  </div>
-                </div>
+            {/* Devices Sub-tab */}
+            {settingsSubTab === 'devices' && (
+              <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                <h3 className="text-base font-medium mb-3 text-sanctuary-900 dark:text-sanctuary-100">Hardware Devices</h3>
+                {devices.length > 0 ? (
+                  <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
+                    {devices.map(d => (
+                      <li
+                        key={d.id}
+                        onClick={() => navigate(`/devices/${d.id}`)}
+                        className="py-3 flex justify-between items-center cursor-pointer hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 -mx-2 px-2 rounded-lg transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 rounded-lg surface-secondary">
+                            {getDeviceIcon(d.type, "w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400")}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
+                            <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
+                            <p className="text-xs font-mono text-sanctuary-400">{d.derivationPath}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">
+                            Active
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-sanctuary-400" />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-sanctuary-500">No hardware devices associated with this wallet.</p>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Telegram Notifications */}
-            <WalletTelegramSettings walletId={wallet.id} />
+            {/* Notifications Sub-tab */}
+            {settingsSubTab === 'notifications' && (
+              <WalletTelegramSettings walletId={wallet.id} />
+            )}
 
-            {/* Danger Zone - only show if user is owner */}
-            {wallet.userRole === 'owner' && (
-              <div className="surface-elevated rounded-xl p-6 border border-sanctuary-200 dark:border-sanctuary-800">
-                 <h3 className="text-lg font-medium mb-4 text-zen-vermilion">Danger Zone</h3>
-                 <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Wallet</Button>
+            {/* Advanced Sub-tab */}
+            {settingsSubTab === 'advanced' && (
+              <div className="space-y-4">
+                {/* Technical Details - Compact */}
+                <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                  <h3 className="text-base font-medium mb-3 text-sanctuary-900 dark:text-sanctuary-100">Technical Details</h3>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-center justify-between col-span-2 py-1.5 border-b border-sanctuary-100 dark:border-sanctuary-700">
+                      <span className="text-sanctuary-500">Wallet ID</span>
+                      <span className="font-mono text-xs text-sanctuary-700 dark:text-sanctuary-300 truncate max-w-[200px]" title={wallet.id}>{wallet.id}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-sanctuary-100 dark:border-sanctuary-700">
+                      <span className="text-sanctuary-500">Type</span>
+                      <span className="text-sanctuary-900 dark:text-sanctuary-100">{wallet.type}</span>
+                    </div>
+                    <div className="flex items-center justify-between py-1.5 border-b border-sanctuary-100 dark:border-sanctuary-700">
+                      <span className="text-sanctuary-500">Script</span>
+                      <span className="text-sanctuary-900 dark:text-sanctuary-100">
+                        {wallet.scriptType === 'native_segwit' && 'Native SegWit'}
+                        {wallet.scriptType === 'nested_segwit' && 'Nested SegWit'}
+                        {wallet.scriptType === 'taproot' && 'Taproot'}
+                        {wallet.scriptType === 'legacy' && 'Legacy'}
+                        {!wallet.scriptType && 'Unknown'}
+                      </span>
+                    </div>
+                    {wallet.descriptor && (
+                      <div className="flex items-center justify-between py-1.5 border-b border-sanctuary-100 dark:border-sanctuary-700">
+                        <span className="text-sanctuary-500">Path</span>
+                        <span className="font-mono text-xs text-sanctuary-900 dark:text-sanctuary-100">
+                          {(() => {
+                            const match = wallet.descriptor.match(/\[([a-fA-F0-9]+)\/([^\]]+)\]/);
+                            if (match) {
+                              return `m/${match[2].replace(/h/g, "'")}`;
+                            }
+                            return wallet.derivationPath || 'Unknown';
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                    {wallet.quorum && (
+                      <div className="flex items-center justify-between py-1.5 border-b border-sanctuary-100 dark:border-sanctuary-700">
+                        <span className="text-sanctuary-500">Quorum</span>
+                        <span className="text-sanctuary-900 dark:text-sanctuary-100">{getQuorumM(wallet.quorum)} of {getQuorumN(wallet.quorum, wallet.totalSigners)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sync Options */}
+                <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Sync Options</h3>
+                    {wallet.lastSyncedAt && (
+                      <span className="text-xs text-sanctuary-500">
+                        Last synced {new Date(wallet.lastSyncedAt).toLocaleDateString()} at {new Date(wallet.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Sync Now</p>
+                        <p className="text-xs text-sanctuary-500">Fetch latest transactions</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleSync}
+                        disabled={syncing}
+                      >
+                        {syncing ? 'Syncing...' : 'Sync'}
+                      </Button>
+                    </div>
+                    <div className="border-t border-sanctuary-200 dark:border-sanctuary-700 pt-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Full Resync</p>
+                          <p className="text-xs text-sanctuary-500">Clear and re-sync from blockchain</p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleFullResync}
+                          disabled={syncing}
+                        >
+                          {syncing ? 'Syncing...' : 'Resync'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Danger Zone - only show if user is owner */}
+                {wallet.userRole === 'owner' && (
+                  <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
+                    <button
+                      onClick={() => setShowDangerZone(!showDangerZone)}
+                      className="w-full p-4 flex items-center justify-between text-left hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-zen-vermilion" />
+                        <span className="text-sm font-medium text-zen-vermilion">Danger Zone</span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-sanctuary-400 transition-transform ${showDangerZone ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showDangerZone && (
+                      <div className="p-4 pt-0 border-t border-sanctuary-200 dark:border-sanctuary-700">
+                        <div className="flex items-center justify-between pt-3">
+                          <div>
+                            <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Delete Wallet</p>
+                            <p className="text-xs text-sanctuary-500">This action cannot be undone</p>
+                          </div>
+                          <Button variant="danger" size="sm" onClick={() => setShowDelete(true)}>Delete</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

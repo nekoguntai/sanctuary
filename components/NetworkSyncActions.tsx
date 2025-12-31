@@ -7,6 +7,7 @@ interface NetworkSyncActionsProps {
   network: TabNetwork;
   walletCount: number;
   className?: string;
+  compact?: boolean; // Icon-only mode for header
   onSyncStarted?: () => void;
 }
 
@@ -14,6 +15,7 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
   network,
   walletCount,
   className = '',
+  compact = false,
   onSyncStarted,
 }) => {
   const [syncing, setSyncing] = useState(false);
@@ -74,6 +76,97 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
 
   const isDisabled = walletCount === 0;
 
+  // Compact mode - icon-only buttons for header
+  if (compact) {
+    return (
+      <div className={`flex items-center gap-1 ${className}`}>
+        <button
+          onClick={handleSyncAll}
+          disabled={isDisabled || syncing || resyncing}
+          title={syncing ? 'Syncing...' : `Sync all ${networkLabel} wallets`}
+          className={`
+            p-2 rounded-lg transition-all
+            ${isDisabled
+              ? 'text-sanctuary-400 dark:text-sanctuary-600 cursor-not-allowed'
+              : syncing
+                ? 'text-primary-600 dark:text-primary-400 bg-primary-100 dark:bg-primary-900/30'
+                : 'text-sanctuary-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
+            }
+          `}
+        >
+          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+        </button>
+        <button
+          onClick={() => setShowResyncDialog(true)}
+          disabled={isDisabled || syncing || resyncing}
+          title={resyncing ? 'Resyncing...' : `Full resync all ${networkLabel} wallets`}
+          className={`
+            p-2 rounded-lg transition-all
+            ${isDisabled
+              ? 'text-sanctuary-400 dark:text-sanctuary-600 cursor-not-allowed'
+              : resyncing
+                ? 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30'
+                : 'text-sanctuary-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
+            }
+          `}
+        >
+          <AlertTriangle className={`w-4 h-4 ${resyncing ? 'animate-pulse' : ''}`} />
+        </button>
+
+        {/* Resync Confirmation Dialog */}
+        {showResyncDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white dark:bg-sanctuary-900 rounded-2xl p-6 max-w-md mx-4 shadow-2xl border border-sanctuary-200 dark:border-sanctuary-700">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg mr-3">
+                    <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-100">
+                    Full Resync All {networkLabel} Wallets
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowResyncDialog(false)}
+                  className="p-1 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mb-6 text-sm text-sanctuary-600 dark:text-sanctuary-400 space-y-2">
+                <p>This will:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Clear all transaction history for {walletCount} wallet{walletCount !== 1 ? 's' : ''}</li>
+                  <li>Clear all UTXO data</li>
+                  <li>Reset address derivation tracking</li>
+                  <li>Re-sync everything from the blockchain</li>
+                </ul>
+                <p className="mt-3 text-amber-600 dark:text-amber-400 font-medium">
+                  This may take several minutes.
+                </p>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowResyncDialog(false)}
+                  className="px-4 py-2 text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300 bg-sanctuary-100 dark:bg-sanctuary-800 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResyncAll}
+                  className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                >
+                  Resync All Wallets
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Full mode - text buttons
   return (
     <div className={`${className}`}>
       <div className="flex flex-wrap items-center gap-3">

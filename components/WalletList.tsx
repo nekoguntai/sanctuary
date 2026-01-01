@@ -2,14 +2,15 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { useUser } from '../contexts/UserContext';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useWallets, useBalanceHistory, useInvalidateAllWallets } from '../hooks/queries/useWallets';
+import { useWallets, useBalanceHistory, useInvalidateAllWallets, usePendingTransactions } from '../hooks/queries/useWallets';
+import type { PendingTransaction } from '../types';
 import { NetworkTabs, TabNetwork } from './NetworkTabs';
 import { NetworkSyncActions } from './NetworkSyncActions';
 
@@ -22,7 +23,7 @@ export const WalletList: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { format } = useCurrency();
+  const { format, formatFiat, showFiat } = useCurrency();
   const { user, updatePreferences } = useUser();
   const invalidateAllWallets = useInvalidateAllWallets();
 
@@ -119,6 +120,30 @@ export const WalletList: React.FC = () => {
 
   const totalBalance = filteredWallets.reduce((acc, w) => acc + w.balance, 0);
   const walletIds = filteredWallets.map(w => w.id);
+
+  // Fetch pending transactions for all filtered wallets
+  const { data: pendingTransactions } = usePendingTransactions(walletIds);
+
+  // Calculate net pending balance per wallet (incoming - outgoing)
+  const pendingByWallet = useMemo(() => {
+    const result: Record<string, { net: number; count: number; hasIncoming: boolean; hasOutgoing: boolean }> = {};
+
+    for (const tx of pendingTransactions) {
+      if (!result[tx.walletId]) {
+        result[tx.walletId] = { net: 0, count: 0, hasIncoming: false, hasOutgoing: false };
+      }
+      // Net is positive for incoming, negative for outgoing
+      result[tx.walletId].net += tx.type === 'received' ? tx.amount : -tx.amount;
+      result[tx.walletId].count++;
+      if (tx.type === 'received') {
+        result[tx.walletId].hasIncoming = true;
+      } else {
+        result[tx.walletId].hasOutgoing = true;
+      }
+    }
+
+    return result;
+  }, [pendingTransactions]);
 
   // Fetch real balance history from transactions
   const { data: chartData, isLoading: chartLoading } = useBalanceHistory(walletIds, totalBalance, timeframe);
@@ -345,11 +370,48 @@ export const WalletList: React.FC = () => {
                 </h3>
 
                 <div className="mt-2 mb-4">
-                    <Amount
-                      sats={wallet.balance}
-                      size="lg"
-                      className="font-bold text-sanctuary-900 dark:text-sanctuary-50"
-                    />
+                    {/* BTC balance with inline net pending and type icons */}
+                    <div className="text-lg font-bold text-sanctuary-900 dark:text-sanctuary-50 flex items-center gap-1.5">
+                      <span>{format(wallet.balance)}</span>
+                      {pendingByWallet[wallet.id] && (
+                        <>
+                          {/* Pending type icons */}
+                          <span className="inline-flex items-center gap-0.5">
+                            {pendingByWallet[wallet.id].hasIncoming && (
+                              <span title="Pending received"><ArrowDownLeft className="w-3.5 h-3.5 text-success-500" /></span>
+                            )}
+                            {pendingByWallet[wallet.id].hasOutgoing && (
+                              <span title="Pending sent"><ArrowUpRight className="w-3.5 h-3.5 text-sent-500" /></span>
+                            )}
+                          </span>
+                          {/* Net pending amount */}
+                          {pendingByWallet[wallet.id].net !== 0 && (
+                            <span className={`text-sm font-normal ${
+                              pendingByWallet[wallet.id].net > 0
+                                ? 'text-success-600 dark:text-success-400'
+                                : 'text-sent-600 dark:text-sent-400'
+                            }`}>
+                              ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{format(pendingByWallet[wallet.id].net)})
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {/* Fiat balance with inline net pending */}
+                    {showFiat && formatFiat(wallet.balance) && (
+                      <div className="text-sm text-primary-500 dark:text-primary-400">
+                        {formatFiat(wallet.balance)}
+                        {pendingByWallet[wallet.id] && pendingByWallet[wallet.id].net !== 0 && (
+                          <span className={`ml-1 text-xs ${
+                            pendingByWallet[wallet.id].net > 0
+                              ? 'text-success-600 dark:text-success-400'
+                              : 'text-sent-600 dark:text-sent-400'
+                          }`}>
+                            ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{formatFiat(pendingByWallet[wallet.id].net)})
+                          </span>
+                        )}
+                      </div>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-between text-xs border-t border-sanctuary-100 dark:border-sanctuary-800 pt-3 mt-4">
@@ -431,6 +493,13 @@ export const WalletList: React.FC = () => {
                               className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
                             >
                               Sync
+                            </th>
+                            <th
+                              scope="col"
+                              className="px-3 py-3 text-center text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
+                              title="Pending transactions"
+                            >
+                              Pending
                             </th>
                             <th
                               scope="col"
@@ -527,8 +596,50 @@ export const WalletList: React.FC = () => {
                                             </span>
                                         )}
                                     </td>
+                                    <td className="px-3 py-4 whitespace-nowrap text-center">
+                                        {/* Pending transaction type icons */}
+                                        {pendingByWallet[wallet.id] ? (
+                                          <div className="inline-flex items-center gap-1">
+                                            {pendingByWallet[wallet.id].hasIncoming && (
+                                              <span title="Pending received"><ArrowDownLeft className="w-4 h-4 text-success-500" /></span>
+                                            )}
+                                            {pendingByWallet[wallet.id].hasOutgoing && (
+                                              <span title="Pending sent"><ArrowUpRight className="w-4 h-4 text-sent-500" /></span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-sanctuary-300">—</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        <Amount sats={wallet.balance} size="sm" className="font-bold text-sanctuary-900 dark:text-sanctuary-100 items-end" />
+                                        {/* BTC balance with inline net pending */}
+                                        <div className="text-sm font-bold text-sanctuary-900 dark:text-sanctuary-100">
+                                          {format(wallet.balance)}
+                                          {pendingByWallet[wallet.id] && pendingByWallet[wallet.id].net !== 0 && (
+                                            <span className={`ml-1 text-xs font-normal ${
+                                              pendingByWallet[wallet.id].net > 0
+                                                ? 'text-success-600 dark:text-success-400'
+                                                : 'text-sent-600 dark:text-sent-400'
+                                            }`}>
+                                              ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{format(pendingByWallet[wallet.id].net)})
+                                            </span>
+                                          )}
+                                        </div>
+                                        {/* Fiat balance with inline net pending */}
+                                        {showFiat && formatFiat(wallet.balance) && (
+                                          <div className="text-xs text-primary-500 dark:text-primary-400">
+                                            {formatFiat(wallet.balance)}
+                                            {pendingByWallet[wallet.id] && pendingByWallet[wallet.id].net !== 0 && (
+                                              <span className={`ml-1 text-[10px] ${
+                                                pendingByWallet[wallet.id].net > 0
+                                                  ? 'text-success-600 dark:text-success-400'
+                                                  : 'text-sent-600 dark:text-sent-400'
+                                              }`}>
+                                                ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{formatFiat(pendingByWallet[wallet.id].net)})
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
                                     </td>
                                 </tr>
                             );

@@ -1185,9 +1185,13 @@ describe('useModelDownloadProgress', () => {
 });
 
 describe('useWebSocketQueryInvalidation', () => {
+  // Warm up the dynamic import before tests run to avoid timing issues
+  beforeAll(async () => {
+    await flushPromises();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();  // Reset module cache to ensure fresh dynamic imports
     connectionChangeCallbacks.clear();
     eventCallbacks.clear();
 

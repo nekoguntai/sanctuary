@@ -8,6 +8,7 @@
 // Types
 export * from './types/logger';
 export * from './types/websocket';
+export * from './types/api';
 
 // Constants
 export * from './constants/bitcoin';

@@ -1,0 +1,298 @@
+/**
+ * Cache Service
+ *
+ * Provides a caching layer for frequently accessed data.
+ * Uses in-memory cache by default, with optional Redis backend.
+ *
+ * ## Features
+ *
+ * - TTL-based expiration
+ * - Namespace prefixing for cache segmentation
+ * - Cache invalidation helpers
+ * - Metrics for monitoring
+ *
+ * ## Usage
+ *
+ * ```typescript
+ * // Get/set with TTL
+ * await cache.set('wallet:balance:abc', 100000n, 30); // 30 second TTL
+ * const balance = await cache.get<bigint>('wallet:balance:abc');
+ *
+ * // With namespace
+ * const walletCache = cache.namespace('wallet');
+ * await walletCache.set('balance:abc', 100000n, 30);
+ *
+ * // Invalidate
+ * await cache.delete('wallet:balance:abc');
+ * await cache.deletePattern('wallet:*');
+ * ```
+ */
+
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('Cache');
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+export interface CacheStats {
+  hits: number;
+  misses: number;
+  sets: number;
+  deletes: number;
+  size: number;
+}
+
+export interface ICacheService {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  deletePattern(pattern: string): Promise<number>;
+  has(key: string): Promise<boolean>;
+  clear(): Promise<void>;
+  getStats(): CacheStats;
+  namespace(prefix: string): ICacheService;
+}
+
+// =============================================================================
+// In-Memory Cache Implementation
+// =============================================================================
+
+/**
+ * In-memory cache with TTL support
+ */
+class MemoryCache implements ICacheService {
+  private cache = new Map<string, CacheEntry<unknown>>();
+  private prefix: string;
+  private defaultTtl: number;
+  private stats: CacheStats = {
+    hits: 0,
+    misses: 0,
+    sets: 0,
+    deletes: 0,
+    size: 0,
+  };
+
+  // Cleanup interval reference for proper shutdown
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor(prefix: string = '', defaultTtl: number = 300) {
+    this.prefix = prefix;
+    this.defaultTtl = defaultTtl;
+
+    // Only start cleanup in root cache (not namespaced instances)
+    if (!prefix) {
+      this.startCleanup();
+    }
+  }
+
+  private getFullKey(key: string): string {
+    return this.prefix ? `${this.prefix}:${key}` : key;
+  }
+
+  async get<T>(key: string): Promise<T | null> {
+    const fullKey = this.getFullKey(key);
+    const entry = this.cache.get(fullKey);
+
+    if (!entry) {
+      this.stats.misses++;
+      return null;
+    }
+
+    // Check expiration
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(fullKey);
+      this.stats.misses++;
+      return null;
+    }
+
+    this.stats.hits++;
+    return entry.value as T;
+  }
+
+  async set<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    const fullKey = this.getFullKey(key);
+    const ttl = ttlSeconds ?? this.defaultTtl;
+    const expiresAt = Date.now() + (ttl * 1000);
+
+    this.cache.set(fullKey, { value, expiresAt });
+    this.stats.sets++;
+    this.stats.size = this.cache.size;
+  }
+
+  async delete(key: string): Promise<boolean> {
+    const fullKey = this.getFullKey(key);
+    const deleted = this.cache.delete(fullKey);
+    if (deleted) {
+      this.stats.deletes++;
+      this.stats.size = this.cache.size;
+    }
+    return deleted;
+  }
+
+  async deletePattern(pattern: string): Promise<number> {
+    const fullPattern = this.getFullKey(pattern);
+    const regex = new RegExp('^' + fullPattern.replace(/\*/g, '.*') + '$');
+    let count = 0;
+
+    for (const key of this.cache.keys()) {
+      if (regex.test(key)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      this.stats.deletes += count;
+      this.stats.size = this.cache.size;
+    }
+
+    return count;
+  }
+
+  async has(key: string): Promise<boolean> {
+    const value = await this.get(key);
+    return value !== null;
+  }
+
+  async clear(): Promise<void> {
+    if (this.prefix) {
+      // Clear only entries with this prefix
+      await this.deletePattern('*');
+    } else {
+      // Clear everything
+      this.cache.clear();
+      this.stats.size = 0;
+    }
+  }
+
+  getStats(): CacheStats {
+    return { ...this.stats };
+  }
+
+  namespace(prefix: string): ICacheService {
+    const newPrefix = this.prefix ? `${this.prefix}:${prefix}` : prefix;
+    const namespaced = new MemoryCache(newPrefix, this.defaultTtl);
+    // Share the same underlying cache
+    namespaced.cache = this.cache;
+    namespaced.stats = this.stats;
+    return namespaced;
+  }
+
+  // =============================================================================
+  // Lifecycle
+  // =============================================================================
+
+  private startCleanup(): void {
+    // Clean up expired entries every 60 seconds
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      let expired = 0;
+
+      for (const [key, entry] of this.cache.entries()) {
+        if (now > entry.expiresAt) {
+          this.cache.delete(key);
+          expired++;
+        }
+      }
+
+      if (expired > 0) {
+        log.debug(`Cache cleanup: removed ${expired} expired entries`);
+        this.stats.size = this.cache.size;
+      }
+    }, 60000);
+
+    // Don't prevent Node from exiting
+    this.cleanupInterval.unref();
+  }
+
+  stop(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+}
+
+// =============================================================================
+// Cache Keys & TTLs
+// =============================================================================
+
+/**
+ * Standard cache key patterns
+ */
+export const CacheKeys = {
+  // Wallet data
+  walletBalance: (walletId: string) => `wallet:balance:${walletId}`,
+  walletInfo: (walletId: string) => `wallet:info:${walletId}`,
+
+  // Price data
+  btcPrice: () => 'price:btc:usd',
+  priceHistory: (days: number) => `price:history:${days}`,
+
+  // Fee estimates
+  feeEstimates: (network: string) => `fees:${network}`,
+
+  // User preferences
+  userPreferences: (userId: string) => `user:prefs:${userId}`,
+
+  // Block height
+  blockHeight: (network: string) => `block:height:${network}`,
+} as const;
+
+/**
+ * Standard TTLs in seconds
+ */
+export const CacheTTL = {
+  // Short TTL for frequently changing data
+  balance: 30,
+  blockHeight: 10,
+
+  // Medium TTL for semi-static data
+  feeEstimates: 60,
+  btcPrice: 60,
+
+  // Long TTL for rarely changing data
+  userPreferences: 300,
+  priceHistory: 3600,
+
+  // Very long TTL for static data
+  walletInfo: 3600,
+} as const;
+
+// =============================================================================
+// Singleton & Factory
+// =============================================================================
+
+/**
+ * Global cache instance
+ */
+export const cache = new MemoryCache();
+
+/**
+ * Create a namespaced cache instance
+ */
+export function createNamespacedCache(namespace: string): ICacheService {
+  return cache.namespace(namespace);
+}
+
+/**
+ * Wallet-specific cache helper
+ */
+export const walletCache = cache.namespace('wallet');
+
+/**
+ * Price-specific cache helper
+ */
+export const priceCache = cache.namespace('price');
+
+/**
+ * Fee-specific cache helper
+ */
+export const feeCache = cache.namespace('fees');

@@ -8,7 +8,7 @@
  * This is separate from NotificationContext which handles toast notifications.
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('AppNotification');
@@ -302,7 +302,7 @@ export const AppNotificationProvider: React.FC<{ children: ReactNode }> = ({ chi
       if (scopeId && n.scopeId !== scopeId) return true;
       return false;
     }));
-  }, [notifications]);
+  }, []);
 
   const dismissNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => {
@@ -316,7 +316,8 @@ export const AppNotificationProvider: React.FC<{ children: ReactNode }> = ({ chi
   const openPanel = useCallback(() => setIsPanelOpen(true), []);
   const closePanel = useCallback(() => setIsPanelOpen(false), []);
 
-  const value: AppNotificationContextValue = {
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo<AppNotificationContextValue>(() => ({
     notifications,
     getGlobalNotifications,
     getWalletNotifications,
@@ -338,7 +339,29 @@ export const AppNotificationProvider: React.FC<{ children: ReactNode }> = ({ chi
     togglePanel,
     openPanel,
     closePanel,
-  };
+  }), [
+    notifications,
+    getGlobalNotifications,
+    getWalletNotifications,
+    getDeviceNotifications,
+    getNotificationsByType,
+    getGlobalCount,
+    getWalletCount,
+    getDeviceCount,
+    getTotalCount,
+    hasNotificationType,
+    addNotification,
+    updateNotification,
+    removeNotification,
+    removeNotificationsByType,
+    clearAllNotifications,
+    clearScopedNotifications,
+    dismissNotification,
+    isPanelOpen,
+    togglePanel,
+    openPanel,
+    closePanel,
+  ]);
 
   return (
     <AppNotificationContext.Provider value={value}>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { User, UserPreferences } from '../types';
 import { themeRegistry } from '../themes';
 import * as authApi from '../src/api/auth';
@@ -96,7 +96,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const login = async (username: string, password: string): Promise<LoginResult> => {
+  const login = useCallback(async (username: string, password: string): Promise<LoginResult> => {
     setIsLoading(true);
     setError(null);
 
@@ -119,9 +119,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const verify2FA = async (code: string): Promise<boolean> => {
+  const verify2FA = useCallback(async (code: string): Promise<boolean> => {
     if (!twoFactorPending) {
       setError('No 2FA verification pending');
       return false;
@@ -145,14 +145,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [twoFactorPending]);
 
-  const cancel2FA = () => {
+  const cancel2FA = useCallback(() => {
     setTwoFactorPending(null);
     setError(null);
-  };
+  }, []);
 
-  const register = async (username: string, password: string, email?: string): Promise<boolean> => {
+  const register = useCallback(async (username: string, password: string, email?: string): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
 
@@ -167,54 +167,69 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     authApi.logout();
     setUser(null);
     setError(null);
-  };
+  }, []);
 
-  const updatePreferences = async (newPrefs: Partial<UserPreferences>) => {
-    if (!user || !user.preferences) return;
+  const updatePreferences = useCallback(async (newPrefs: Partial<UserPreferences>) => {
+    setUser(currentUser => {
+      if (!currentUser || !currentUser.preferences) return currentUser;
 
-    const updatedPrefs = { ...user.preferences, ...newPrefs };
-    const updatedUser = { ...user, preferences: updatedPrefs };
+      const updatedPrefs = { ...currentUser.preferences, ...newPrefs };
+      const updatedUser = { ...currentUser, preferences: updatedPrefs };
 
-    setUser(updatedUser); // Optimistic update
+      // Async update in background
+      authApi.updatePreferences(updatedPrefs)
+        .then(apiUser => setUser(apiUser as User))
+        .catch(err => {
+          const message = err instanceof ApiError ? err.message : 'Failed to update preferences';
+          setError(message);
+          // Revert optimistic update on error
+          setUser(currentUser);
+        });
 
-    try {
-      const apiUser = await authApi.updatePreferences(updatedPrefs);
-      setUser(apiUser as User); // Update with server response
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Failed to update preferences';
-      setError(message);
-      // Revert optimistic update on error
-      setUser(user);
-    }
-  };
+      return updatedUser; // Optimistic update
+    });
+  }, []);
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setError(null);
-  };
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo<UserContextType>(() => ({
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    error,
+    twoFactorPending,
+    login,
+    verify2FA,
+    cancel2FA,
+    register,
+    logout,
+    updatePreferences,
+    clearError,
+  }), [
+    user,
+    isLoading,
+    error,
+    twoFactorPending,
+    login,
+    verify2FA,
+    cancel2FA,
+    register,
+    logout,
+    updatePreferences,
+    clearError,
+  ]);
 
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        error,
-        twoFactorPending,
-        login,
-        verify2FA,
-        cancel2FA,
-        register,
-        logout,
-        updatePreferences,
-        clearError,
-      }}
-    >
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );
@@ -224,4 +239,40 @@ export const useUser = () => {
   const context = useContext(UserContext);
   if (!context) throw new Error('useUser must be used within UserProvider');
   return context;
+};
+
+/**
+ * Hook for components that only need authentication status
+ * Reduces re-renders when user preferences change
+ */
+export const useAuth = () => {
+  const { isAuthenticated, isLoading, error, login, logout, register, clearError } = useUser();
+  return { isAuthenticated, isLoading, error, login, logout, register, clearError };
+};
+
+/**
+ * Hook for components that only need the current user object
+ */
+export const useCurrentUser = () => {
+  const { user } = useUser();
+  return user;
+};
+
+/**
+ * Hook for components that need user preferences
+ */
+export const useUserPreferences = () => {
+  const { user, updatePreferences } = useUser();
+  return {
+    preferences: user?.preferences ?? null,
+    updatePreferences,
+  };
+};
+
+/**
+ * Hook for two-factor authentication flow
+ */
+export const useTwoFactor = () => {
+  const { twoFactorPending, verify2FA, cancel2FA } = useUser();
+  return { twoFactorPending, verify2FA, cancel2FA };
 };

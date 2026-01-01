@@ -27,6 +27,7 @@ import aiRoutes from './api/ai';
 import aiInternalRoutes from './api/ai-internal';
 import healthRoutes from './api/health';
 import transferRoutes from './api/transfers';
+import openApiRoutes from './api/openapi';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
@@ -89,8 +90,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Required for some React patterns
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'], // Required for React patterns + Swagger UI CDN
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
       imgSrc: ["'self'", 'data:', 'blob:'],
       connectSrc: ["'self'", 'wss:', 'ws:'],
       fontSrc: ["'self'"],
@@ -151,6 +152,7 @@ app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet pre
 app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
 app.use('/api/v1', draftRoutes);  // Draft routes include wallet prefix
 app.use('/api/v1/payjoin', payjoinRoutes);  // Payjoin (BIP78) routes
+app.use('/api/v1/docs', openApiRoutes);  // OpenAPI/Swagger documentation
 
 // 404 handler
 app.use((req: Request, res: Response) => {

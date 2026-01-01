@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useUser } from './UserContext';
 import * as priceApi from '../src/api/price';
 import { createLogger } from '../utils/logger';
@@ -64,30 +64,30 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
   const unit = (user?.preferences?.unit as BitcoinUnit) ?? localUnit;
   const priceProvider = (user?.preferences?.priceProvider as string) ?? localPriceProvider;
 
-  const setFiatCurrency = (code: FiatCurrency) => {
+  const setFiatCurrency = useCallback((code: FiatCurrency) => {
     if (user) updatePreferences({ fiatCurrency: code });
     else setLocalFiatCurrency(code);
-  };
+  }, [user, updatePreferences]);
 
-  const setUnit = (u: BitcoinUnit) => {
+  const setUnit = useCallback((u: BitcoinUnit) => {
     if (user) updatePreferences({ unit: u });
     else setLocalUnit(u);
-  };
+  }, [user, updatePreferences]);
 
-  const setPriceProvider = (provider: string) => {
+  const setPriceProvider = useCallback((provider: string) => {
     if (user) updatePreferences({ priceProvider: provider });
     else setLocalPriceProvider(provider);
-  };
+  }, [user, updatePreferences]);
 
-  const toggleShowFiat = () => {
+  const toggleShowFiat = useCallback(() => {
     if (user) updatePreferences({ showFiat: !showFiat });
     else setLocalShowFiat(!localShowFiat);
-  };
+  }, [user, updatePreferences, showFiat, localShowFiat]);
 
   const currencySymbol = SYMBOLS[fiatCurrency];
 
   // Fetch live price from API
-  const refreshPrice = async () => {
+  const refreshPrice = useCallback(async () => {
     try {
       setPriceLoading(true);
       setPriceError(null);
@@ -103,7 +103,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     } finally {
       setPriceLoading(false);
     }
-  };
+  }, [fiatCurrency]);
 
   // Set available providers (hardcoded since API requires auth)
   useEffect(() => {
@@ -117,21 +117,21 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     // Refresh price every 60 seconds
     const interval = setInterval(refreshPrice, 60000);
     return () => clearInterval(interval);
-  }, [fiatCurrency]);
+  }, [refreshPrice]);
 
-  const getFiatValue = (sats: number): number | null => {
+  const getFiatValue = useCallback((sats: number): number | null => {
     if (btcPrice === null) return null;
     return satsToBTC(sats) * btcPrice;
-  };
+  }, [btcPrice]);
 
   // Format fiat price - returns "-----" if price not yet loaded
-  const formatFiatPrice = (price: number | null): string => {
+  const formatFiatPrice = useCallback((price: number | null): string => {
     if (price === null) return '-----';
     return `${currencySymbol}${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  }, [currencySymbol]);
 
   // Format BTC/sats value only (no fiat)
-  const format = (sats: number, options?: { forceSats?: boolean }) => {
+  const format = useCallback((sats: number, options?: { forceSats?: boolean }) => {
     const useSats = options?.forceSats || unit === 'sats';
 
     if (useSats) {
@@ -140,39 +140,63 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
       // Format as BTC with trailing zeros trimmed
       return `${formatBTC(satsToBTC(sats))} BTC`;
     }
-  };
+  }, [unit]);
 
   // Format fiat value only (returns null if fiat is disabled or price unavailable)
-  const formatFiat = (sats: number): string | null => {
+  const formatFiat = useCallback((sats: number): string | null => {
     if (!showFiat) return null;
     const fiatVal = getFiatValue(sats);
     if (fiatVal === null) return '-----';
     return `${currencySymbol}${fiatVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  }, [showFiat, getFiatValue, currencySymbol]);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo<CurrencyContextType>(() => ({
+    showFiat,
+    toggleShowFiat,
+    fiatCurrency,
+    setFiatCurrency,
+    unit,
+    setUnit,
+    btcPrice,
+    priceChange24h,
+    currencySymbol,
+    format,
+    formatFiat,
+    getFiatValue,
+    formatFiatPrice,
+    priceLoading,
+    priceError,
+    lastPriceUpdate,
+    refreshPrice,
+    priceProvider,
+    setPriceProvider,
+    availableProviders,
+  }), [
+    showFiat,
+    toggleShowFiat,
+    fiatCurrency,
+    setFiatCurrency,
+    unit,
+    setUnit,
+    btcPrice,
+    priceChange24h,
+    currencySymbol,
+    format,
+    formatFiat,
+    getFiatValue,
+    formatFiatPrice,
+    priceLoading,
+    priceError,
+    lastPriceUpdate,
+    refreshPrice,
+    priceProvider,
+    setPriceProvider,
+    availableProviders,
+  ]);
 
   return (
-    <CurrencyContext.Provider value={{
-      showFiat,
-      toggleShowFiat,
-      fiatCurrency,
-      setFiatCurrency,
-      unit,
-      setUnit,
-      btcPrice,
-      priceChange24h,
-      currencySymbol,
-      format,
-      formatFiat,
-      getFiatValue,
-      formatFiatPrice,
-      priceLoading,
-      priceError,
-      lastPriceUpdate,
-      refreshPrice,
-      priceProvider,
-      setPriceProvider,
-      availableProviders
-    }}>
+    <CurrencyContext.Provider value={value}>
       {children}
     </CurrencyContext.Provider>
   );
@@ -182,4 +206,29 @@ export const useCurrency = () => {
   const context = useContext(CurrencyContext);
   if (!context) throw new Error('useCurrency must be used within CurrencyProvider');
   return context;
+};
+
+/**
+ * Hook for components that only need to format values
+ * Reduces re-renders when price state changes
+ */
+export const useCurrencyFormatter = () => {
+  const { format, formatFiat, getFiatValue, formatFiatPrice, currencySymbol, unit, showFiat } = useCurrency();
+  return { format, formatFiat, getFiatValue, formatFiatPrice, currencySymbol, unit, showFiat };
+};
+
+/**
+ * Hook for components that only need price data
+ */
+export const useBtcPrice = () => {
+  const { btcPrice, priceChange24h, priceLoading, priceError, lastPriceUpdate, refreshPrice } = useCurrency();
+  return { btcPrice, priceChange24h, priceLoading, priceError, lastPriceUpdate, refreshPrice };
+};
+
+/**
+ * Hook for settings that control currency display
+ */
+export const useCurrencySettings = () => {
+  const { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders } = useCurrency();
+  return { showFiat, toggleShowFiat, fiatCurrency, setFiatCurrency, unit, setUnit, priceProvider, setPriceProvider, availableProviders };
 };

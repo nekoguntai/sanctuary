@@ -1,0 +1,73 @@
+{
+  "generic": "エラーが発生しました",
+  "notFound": "リソースが見つかりません",
+  "unauthorized": "認証が必要です",
+  "forbidden": "アクセスが拒否されました",
+  "badRequest": "無効なリクエストです",
+  "conflict": "リソースの競合が発生しました",
+  "tooManyRequests": "リクエストが多すぎます。しばらくしてからお試しください",
+  "internalServer": "内部サーバーエラー",
+  "serviceUnavailable": "サービスは一時的に利用できません",
+  "timeout": "リクエストがタイムアウトしました",
+
+  "auth": {
+    "invalidCredentials": "メールアドレスまたはパスワードが無効です",
+    "accountLocked": "アカウントがロックされています。{{minutes}}分後にもう一度お試しください",
+    "sessionExpired": "セッションの有効期限が切れました。再度ログインしてください",
+    "tokenInvalid": "無効または期限切れのトークンです",
+    "tokenRevoked": "トークンは取り消されました",
+    "emailNotVerified": "メールアドレスを確認してください",
+    "twoFactorRequired": "二要素認証が必要です",
+    "twoFactorInvalid": "無効な二要素認証コードです",
+    "deviceNotTrusted": "このデバイスは信頼されていません",
+    "passwordExpired": "パスワードの有効期限が切れました。リセットしてください"
+  },
+
+  "wallet": {
+    "notFound": "ウォレットが見つかりません",
+    "accessDenied": "このウォレットへのアクセス権がありません",
+    "alreadyExists": "この名前のウォレットは既に存在します",
+    "invalidDescriptor": "無効なウォレット記述子です",
+    "syncFailed": "ウォレットの同期に失敗しました",
+    "broadcastFailed": "トランザクションのブロードキャストに失敗しました",
+    "insufficientFunds": "残高が不足しています",
+    "dustAmount": "金額がダスト閾値未満です",
+    "invalidAddress": "無効なビットコインアドレスです",
+    "invalidNetwork": "アドレスがウォレットのネットワークと一致しません",
+    "feeEstimationFailed": "トランザクション手数料の見積もりに失敗しました",
+    "signingFailed": "トランザクションの署名に失敗しました",
+    "utxoLocked": "1つ以上のUTXOがロックされています"
+  },
+
+  "transaction": {
+    "notFound": "トランザクションが見つかりません",
+    "alreadyBroadcast": "トランザクションは既にブロードキャストされています",
+    "invalidHex": "無効なトランザクション16進数です",
+    "rbfDisabled": "このトランザクションではRBFが有効になっていません",
+    "cpfpNotPossible": "このトランザクションではCPFPは使用できません"
+  },
+
+  "multisig": {
+    "quorumNotMet": "署名が不足しています。{{total}}中{{required}}が必要です",
+    "invalidCosigner": "無効な共同署名者の公開鍵です",
+    "cosignerNotFound": "共同署名者が見つかりません",
+    "alreadySigned": "既にこのトランザクションに署名しています",
+    "invalidPartialSig": "無効な部分署名です"
+  },
+
+  "node": {
+    "connectionFailed": "ノードへの接続に失敗しました",
+    "unreachable": "ノードに到達できません",
+    "syncRequired": "ノードはまだ同期中です",
+    "versionMismatch": "ノードのバージョンが互換性がありません"
+  },
+
+  "validation": {
+    "required": "{{field}}は必須です",
+    "invalid": "{{field}}が無効です",
+    "tooShort": "{{field}}は{{min}}文字以上である必要があります",
+    "tooLong": "{{field}}は{{max}}文字以下である必要があります",
+    "email": "無効なメールアドレスです",
+    "password": "パスワードが要件を満たしていません"
+  }
+}

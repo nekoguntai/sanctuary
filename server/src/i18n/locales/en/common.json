@@ -1,0 +1,81 @@
+{
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Information",
+
+  "yes": "Yes",
+  "no": "No",
+  "ok": "OK",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "create": "Create",
+  "update": "Update",
+  "close": "Close",
+  "back": "Back",
+  "next": "Next",
+  "submit": "Submit",
+  "retry": "Retry",
+
+  "loading": "Loading...",
+  "processing": "Processing...",
+  "saving": "Saving...",
+  "syncing": "Syncing...",
+
+  "wallet": "Wallet",
+  "wallets": "Wallets",
+  "transaction": "Transaction",
+  "transactions": "Transactions",
+  "address": "Address",
+  "addresses": "Addresses",
+  "balance": "Balance",
+  "amount": "Amount",
+  "fee": "Fee",
+  "total": "Total",
+
+  "bitcoin": "Bitcoin",
+  "satoshi": "Satoshi",
+  "sats": "sats",
+  "btc": "BTC",
+
+  "mainnet": "Mainnet",
+  "testnet": "Testnet",
+  "signet": "Signet",
+  "regtest": "Regtest",
+
+  "confirmed": "Confirmed",
+  "unconfirmed": "Unconfirmed",
+  "pending": "Pending",
+  "failed": "Failed",
+
+  "send": "Send",
+  "receive": "Receive",
+  "sign": "Sign",
+  "broadcast": "Broadcast",
+
+  "owner": "Owner",
+  "signer": "Signer",
+  "viewOnly": "View Only",
+
+  "time": {
+    "now": "Just now",
+    "minutesAgo": "{{count}} minute ago",
+    "minutesAgo_plural": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hour ago",
+    "hoursAgo_plural": "{{count}} hours ago",
+    "daysAgo": "{{count}} day ago",
+    "daysAgo_plural": "{{count}} days ago"
+  },
+
+  "pagination": {
+    "page": "Page {{current}} of {{total}}",
+    "showing": "Showing {{from}}-{{to}} of {{total}}",
+    "previous": "Previous",
+    "next": "Next",
+    "first": "First",
+    "last": "Last"
+  }
+}

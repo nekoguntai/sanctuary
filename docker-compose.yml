@@ -28,6 +28,42 @@
 
 services:
   # ============================================
+  # Redis Cache & Pub/Sub
+  # ============================================
+  # Used for distributed caching, cross-instance event bus,
+  # and WebSocket broadcast coordination for horizontal scaling.
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 192M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    mem_swappiness: 0
+    memswap_limit: 192M
+
+  # ============================================
   # PostgreSQL Database
   # ============================================
   postgres:
@@ -80,6 +116,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       # Node.js memory settings (increase heap for large wallet syncs)
       NODE_OPTIONS: "--max-old-space-size=1536"
@@ -99,6 +137,9 @@ services:
       # - connect_timeout=10: connection establishment timeout (seconds)
       # - statement_timeout=30000: query execution timeout (milliseconds)
       DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public&connection_limit=20&pool_timeout=30&connect_timeout=10&statement_timeout=30000
+
+      # Redis for distributed caching and event bus
+      REDIS_URL: redis://redis:6379
 
       # JWT
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -509,6 +550,8 @@ networks:
 # ============================================
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
   ollama_data:
     driver: local

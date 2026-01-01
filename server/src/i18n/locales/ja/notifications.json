@@ -1,0 +1,39 @@
+{
+  "transaction": {
+    "received": "{{amount}} BTCを受け取りました",
+    "receivedFrom": "{{address}}から{{amount}} BTCを受け取りました",
+    "sent": "{{amount}} BTCを送金しました",
+    "sentTo": "{{address}}へ{{amount}} BTCを送金しました",
+    "confirmed": "トランザクションが承認されました（{{confirmations}}承認）",
+    "pending": "トランザクションは承認待ちです",
+    "failed": "トランザクションが失敗しました"
+  },
+
+  "wallet": {
+    "synced": "ウォレットの同期が完了しました",
+    "syncFailed": "ウォレットの同期に失敗しました",
+    "balanceChanged": "残高が変更されました：{{balance}} BTC",
+    "newUtxo": "新しいUTXOを受け取りました"
+  },
+
+  "multisig": {
+    "signatureRequired": "トランザクションに署名が必要です",
+    "signatureReceived": "新しい署名を受け取りました（{{current}}/{{required}}）",
+    "ready": "トランザクションはブロードキャストの準備ができました",
+    "broadcast": "マルチシグトランザクションが正常にブロードキャストされました"
+  },
+
+  "security": {
+    "newDevice": "新しいデバイスがログインしました：{{device}}",
+    "loginAttempt": "{{location}}からのログイン試行に失敗しました",
+    "passwordChanged": "パスワードが変更されました",
+    "twoFactorEnabled": "二要素認証が有効になりました",
+    "twoFactorDisabled": "二要素認証が無効になりました"
+  },
+
+  "system": {
+    "maintenance": "予定されたメンテナンス：{{time}}",
+    "updateAvailable": "新しいバージョンが利用可能です",
+    "backupReminder": "ウォレットのバックアップを忘れずに"
+  }
+}

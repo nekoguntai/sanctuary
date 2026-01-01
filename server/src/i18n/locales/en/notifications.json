@@ -1,0 +1,39 @@
+{
+  "transaction": {
+    "received": "Received {{amount}} BTC",
+    "receivedFrom": "Received {{amount}} BTC from {{address}}",
+    "sent": "Sent {{amount}} BTC",
+    "sentTo": "Sent {{amount}} BTC to {{address}}",
+    "confirmed": "Transaction confirmed ({{confirmations}} confirmations)",
+    "pending": "Transaction pending confirmation",
+    "failed": "Transaction failed"
+  },
+
+  "wallet": {
+    "synced": "Wallet sync complete",
+    "syncFailed": "Wallet sync failed",
+    "balanceChanged": "Balance changed: {{balance}} BTC",
+    "newUtxo": "New UTXO received"
+  },
+
+  "multisig": {
+    "signatureRequired": "Your signature is required for a transaction",
+    "signatureReceived": "New signature received ({{current}}/{{required}})",
+    "ready": "Transaction is ready to broadcast",
+    "broadcast": "Multisig transaction broadcast successfully"
+  },
+
+  "security": {
+    "newDevice": "New device logged in: {{device}}",
+    "loginAttempt": "Failed login attempt from {{location}}",
+    "passwordChanged": "Your password was changed",
+    "twoFactorEnabled": "Two-factor authentication enabled",
+    "twoFactorDisabled": "Two-factor authentication disabled"
+  },
+
+  "system": {
+    "maintenance": "Scheduled maintenance: {{time}}",
+    "updateAvailable": "A new version is available",
+    "backupReminder": "Remember to backup your wallet"
+  }
+}

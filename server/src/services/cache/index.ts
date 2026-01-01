@@ -13,3 +13,5 @@ export {
   type ICacheService,
   type CacheStats,
 } from './cacheService';
+
+export { RedisCache, createRedisCache, createRedisPubSub } from './redisCache';

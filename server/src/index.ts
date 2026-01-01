@@ -34,11 +34,20 @@ import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
+import { apiVersionMiddleware } from './middleware/apiVersion';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
 import { startAllServices, getStartupStatus, isSystemDegraded, type ServiceDefinition } from './services/startupManager';
 import { initializeRevocationService, shutdownRevocationService } from './services/tokenRevocation';
+import { featureFlagService } from './services/featureFlagService';
+import { rateLimitService } from './services/rateLimiting';
+import { jobQueue, maintenanceJobs } from './jobs';
+import { metricsService } from './observability';
+import { metricsMiddleware, metricsHandler } from './middleware/metrics';
+import { i18nMiddleware } from './middleware/i18n';
+import { i18nService } from './i18n/i18nService';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
+import { initializeRedis, shutdownRedis, isRedisConnected } from './infrastructure';
 
 const log = createLogger('SERVER');
 
@@ -116,6 +125,21 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 // Request logging and correlation IDs
 app.use(requestLogger);
 
+// Prometheus metrics collection
+app.use(metricsMiddleware());
+
+// Internationalization (locale detection from Accept-Language header)
+app.use(i18nMiddleware());
+
+// API versioning (supports Accept header, X-API-Version header, query param)
+app.use('/api', apiVersionMiddleware({
+  defaultVersion: 1,
+  currentVersion: 1,
+  minVersion: 1,
+  deprecatedVersions: [],
+  sunsetVersions: [],
+}));
+
 // ========================================
 // ROUTES
 // ========================================
@@ -129,6 +153,9 @@ app.get('/health', (req: Request, res: Response) => {
     environment: config.nodeEnv,
   });
 });
+
+// Prometheus metrics endpoint
+app.get('/metrics', metricsHandler);
 
 // Comprehensive health check with component status
 app.use('/api/v1/health', healthRoutes);
@@ -234,6 +261,50 @@ const backgroundServices: ServiceDefinition[] = [
     // Initialize token revocation service
     initializeRevocationService();
 
+    // Initialize Redis infrastructure (cache, event bus)
+    await initializeRedis();
+
+    // Initialize rate limit service (uses Redis if available)
+    rateLimitService.initialize();
+
+    // Initialize job queue (uses Redis for persistent job storage)
+    await jobQueue.initialize();
+
+    // Register maintenance jobs
+    for (const job of maintenanceJobs) {
+      jobQueue.register(job);
+    }
+
+    // Schedule recurring maintenance jobs if queue is available
+    if (jobQueue.isAvailable()) {
+      // Hourly cleanups
+      await jobQueue.schedule('cleanup:expired-drafts', {}, { cron: '0 * * * *' });
+      await jobQueue.schedule('cleanup:expired-transfers', {}, { cron: '30 * * * *' });
+
+      // Daily cleanups
+      await jobQueue.schedule('cleanup:audit-logs', { retentionDays: 90 }, { cron: '0 2 * * *' });
+      await jobQueue.schedule('cleanup:price-data', { retentionDays: 30 }, { cron: '0 3 * * *' });
+      await jobQueue.schedule('cleanup:fee-estimates', { retentionDays: 7 }, { cron: '0 4 * * *' });
+      await jobQueue.schedule('cleanup:expired-tokens', {}, { cron: '0 5 * * *' });
+
+      // Weekly maintenance (Sunday at 3 AM)
+      await jobQueue.schedule('maintenance:weekly-vacuum', {}, { cron: '0 3 * * 0' });
+
+      // Monthly cleanup (1st of month at 4 AM)
+      await jobQueue.schedule('maintenance:monthly-cleanup', {}, { cron: '0 4 1 * *' });
+
+      log.info('Scheduled recurring maintenance jobs');
+    }
+
+    // Initialize metrics service
+    metricsService.initialize();
+
+    // Initialize i18n service (English, Japanese, Spanish)
+    await i18nService.initialize();
+
+    // Initialize feature flag service (sync env defaults to database)
+    await featureFlagService.initialize();
+
     log.info('Checking database migrations...');
     const migrationResult = await migrationService.runMigrations();
 
@@ -251,6 +322,7 @@ const backgroundServices: ServiceDefinition[] = [
       log.info(`Server: ${config.apiUrl}`);
       log.info(`Client: ${config.clientUrl}`);
       log.info(`Network: ${config.bitcoin.network}`);
+      log.info(`Redis: ${isRedisConnected() ? 'connected' : 'in-memory fallback'}`);
       log.info(`HTTP Server running on port ${config.port}`);
       log.info(`WebSocket Server running on ws://localhost:${config.port}/ws`);
 
@@ -326,6 +398,13 @@ const handleShutdown = async (signal: string) => {
   maintenanceService.stop();
   stopDatabaseHealthCheck();
   shutdownRevocationService();
+  rateLimitService.shutdown();
+
+  // Shutdown job queue
+  await jobQueue.shutdown();
+
+  // Shutdown Redis infrastructure
+  await shutdownRedis();
 
   // Close database connection
   try {

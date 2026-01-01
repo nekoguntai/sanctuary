@@ -86,6 +86,11 @@ function loadConfig(): CombinedConfig {
       url: databaseUrl,
     },
 
+    redis: {
+      url: process.env.REDIS_URL || '',
+      enabled: !!process.env.REDIS_URL,
+    },
+
     security: {
       jwt: {
         secret: jwtSecret,

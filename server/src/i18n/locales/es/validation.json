@@ -1,0 +1,53 @@
+{
+  "required": "{{field}} es requerido",
+  "string": "{{field}} debe ser una cadena de texto",
+  "number": "{{field}} debe ser un número",
+  "boolean": "{{field}} debe ser un booleano",
+  "array": "{{field}} debe ser un arreglo",
+  "object": "{{field}} debe ser un objeto",
+
+  "minLength": "{{field}} debe tener al menos {{min}} caracteres",
+  "maxLength": "{{field}} debe tener como máximo {{max}} caracteres",
+  "length": "{{field}} debe tener exactamente {{length}} caracteres",
+
+  "min": "{{field}} debe ser al menos {{min}}",
+  "max": "{{field}} debe ser como máximo {{max}}",
+  "range": "{{field}} debe estar entre {{min}} y {{max}}",
+  "positive": "{{field}} debe ser un número positivo",
+  "integer": "{{field}} debe ser un número entero",
+
+  "email": "Por favor, ingresa una dirección de correo válida",
+  "url": "Por favor, ingresa una URL válida",
+  "uuid": "Por favor, ingresa un UUID válido",
+  "hex": "Por favor, ingresa una cadena hexadecimal válida",
+
+  "bitcoinAddress": "Por favor, ingresa una dirección de Bitcoin válida",
+  "txid": "Por favor, ingresa un ID de transacción válido",
+  "xpub": "Por favor, ingresa una clave pública extendida válida",
+  "derivationPath": "Por favor, ingresa una ruta de derivación válida",
+
+  "enum": "{{field}} debe ser uno de: {{values}}",
+  "pattern": "El formato de {{field}} es inválido",
+  "custom": "La validación de {{field}} falló",
+
+  "passwordMinLength": "La contraseña debe tener al menos {{min}} caracteres",
+  "passwordUppercase": "La contraseña debe contener al menos una letra mayúscula",
+  "passwordLowercase": "La contraseña debe contener al menos una letra minúscula",
+  "passwordNumber": "La contraseña debe contener al menos un número",
+  "passwordSpecial": "La contraseña debe contener al menos un carácter especial",
+  "passwordNoSpaces": "La contraseña no puede contener espacios",
+  "passwordMismatch": "Las contraseñas no coinciden",
+
+  "usernameLength": "El nombre de usuario debe tener entre {{min}} y {{max}} caracteres",
+  "usernameChars": "El nombre de usuario solo puede contener letras, números y guiones bajos",
+  "usernameReserved": "Este nombre de usuario está reservado",
+
+  "walletNameLength": "El nombre de la billetera debe tener entre {{min}} y {{max}} caracteres",
+  "labelLength": "La etiqueta debe tener como máximo {{max}} caracteres",
+
+  "amountPositive": "El monto debe ser mayor que 0",
+  "amountDust": "El monto está por debajo del umbral de polvo ({{dust}} sats)",
+  "amountMax": "El monto excede el máximo ({{max}})",
+  "feeRateMin": "La tasa de tarifa debe ser al menos {{min}} sat/vB",
+  "feeRateMax": "La tasa de tarifa excede el máximo ({{max}} sat/vB)"
+}

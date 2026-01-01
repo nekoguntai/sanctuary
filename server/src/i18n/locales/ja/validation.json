@@ -1,0 +1,53 @@
+{
+  "required": "{{field}}は必須です",
+  "string": "{{field}}は文字列である必要があります",
+  "number": "{{field}}は数値である必要があります",
+  "boolean": "{{field}}はブール値である必要があります",
+  "array": "{{field}}は配列である必要があります",
+  "object": "{{field}}はオブジェクトである必要があります",
+
+  "minLength": "{{field}}は{{min}}文字以上である必要があります",
+  "maxLength": "{{field}}は{{max}}文字以下である必要があります",
+  "length": "{{field}}は{{length}}文字である必要があります",
+
+  "min": "{{field}}は{{min}}以上である必要があります",
+  "max": "{{field}}は{{max}}以下である必要があります",
+  "range": "{{field}}は{{min}}から{{max}}の間である必要があります",
+  "positive": "{{field}}は正の数である必要があります",
+  "integer": "{{field}}は整数である必要があります",
+
+  "email": "有効なメールアドレスを入力してください",
+  "url": "有効なURLを入力してください",
+  "uuid": "有効なUUIDを入力してください",
+  "hex": "有効な16進数文字列を入力してください",
+
+  "bitcoinAddress": "有効なビットコインアドレスを入力してください",
+  "txid": "有効なトランザクションIDを入力してください",
+  "xpub": "有効な拡張公開鍵を入力してください",
+  "derivationPath": "有効な派生パスを入力してください",
+
+  "enum": "{{field}}は次のいずれかである必要があります：{{values}}",
+  "pattern": "{{field}}の形式が無効です",
+  "custom": "{{field}}の検証に失敗しました",
+
+  "passwordMinLength": "パスワードは{{min}}文字以上である必要があります",
+  "passwordUppercase": "パスワードには大文字を1つ以上含める必要があります",
+  "passwordLowercase": "パスワードには小文字を1つ以上含める必要があります",
+  "passwordNumber": "パスワードには数字を1つ以上含める必要があります",
+  "passwordSpecial": "パスワードには特殊文字を1つ以上含める必要があります",
+  "passwordNoSpaces": "パスワードにスペースを含めることはできません",
+  "passwordMismatch": "パスワードが一致しません",
+
+  "usernameLength": "ユーザー名は{{min}}文字から{{max}}文字である必要があります",
+  "usernameChars": "ユーザー名には文字、数字、アンダースコアのみ使用できます",
+  "usernameReserved": "このユーザー名は予約されています",
+
+  "walletNameLength": "ウォレット名は{{min}}文字から{{max}}文字である必要があります",
+  "labelLength": "ラベルは{{max}}文字以下である必要があります",
+
+  "amountPositive": "金額は0より大きい必要があります",
+  "amountDust": "金額がダスト閾値未満です（{{dust}} sats）",
+  "amountMax": "金額が上限を超えています（{{max}}）",
+  "feeRateMin": "手数料率は{{min}} sat/vB以上である必要があります",
+  "feeRateMax": "手数料率が上限を超えています（{{max}} sat/vB）"
+}

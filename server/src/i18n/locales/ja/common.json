@@ -1,0 +1,81 @@
+{
+  "success": "成功",
+  "error": "エラー",
+  "warning": "警告",
+  "info": "情報",
+
+  "yes": "はい",
+  "no": "いいえ",
+  "ok": "OK",
+  "cancel": "キャンセル",
+  "confirm": "確認",
+  "save": "保存",
+  "delete": "削除",
+  "edit": "編集",
+  "create": "作成",
+  "update": "更新",
+  "close": "閉じる",
+  "back": "戻る",
+  "next": "次へ",
+  "submit": "送信",
+  "retry": "再試行",
+
+  "loading": "読み込み中...",
+  "processing": "処理中...",
+  "saving": "保存中...",
+  "syncing": "同期中...",
+
+  "wallet": "ウォレット",
+  "wallets": "ウォレット",
+  "transaction": "トランザクション",
+  "transactions": "トランザクション",
+  "address": "アドレス",
+  "addresses": "アドレス",
+  "balance": "残高",
+  "amount": "金額",
+  "fee": "手数料",
+  "total": "合計",
+
+  "bitcoin": "ビットコイン",
+  "satoshi": "サトシ",
+  "sats": "sats",
+  "btc": "BTC",
+
+  "mainnet": "メインネット",
+  "testnet": "テストネット",
+  "signet": "Signet",
+  "regtest": "Regtest",
+
+  "confirmed": "承認済み",
+  "unconfirmed": "未承認",
+  "pending": "保留中",
+  "failed": "失敗",
+
+  "send": "送金",
+  "receive": "受取",
+  "sign": "署名",
+  "broadcast": "ブロードキャスト",
+
+  "owner": "オーナー",
+  "signer": "署名者",
+  "viewOnly": "閲覧のみ",
+
+  "time": {
+    "now": "たった今",
+    "minutesAgo": "{{count}}分前",
+    "minutesAgo_plural": "{{count}}分前",
+    "hoursAgo": "{{count}}時間前",
+    "hoursAgo_plural": "{{count}}時間前",
+    "daysAgo": "{{count}}日前",
+    "daysAgo_plural": "{{count}}日前"
+  },
+
+  "pagination": {
+    "page": "{{total}}ページ中{{current}}ページ",
+    "showing": "{{total}}件中{{from}}-{{to}}件を表示",
+    "previous": "前へ",
+    "next": "次へ",
+    "first": "最初",
+    "last": "最後"
+  }
+}

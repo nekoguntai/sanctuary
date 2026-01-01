@@ -1,0 +1,53 @@
+{
+  "required": "{{field}} is required",
+  "string": "{{field}} must be a string",
+  "number": "{{field}} must be a number",
+  "boolean": "{{field}} must be a boolean",
+  "array": "{{field}} must be an array",
+  "object": "{{field}} must be an object",
+
+  "minLength": "{{field}} must be at least {{min}} characters",
+  "maxLength": "{{field}} must be at most {{max}} characters",
+  "length": "{{field}} must be exactly {{length}} characters",
+
+  "min": "{{field}} must be at least {{min}}",
+  "max": "{{field}} must be at most {{max}}",
+  "range": "{{field}} must be between {{min}} and {{max}}",
+  "positive": "{{field}} must be a positive number",
+  "integer": "{{field}} must be an integer",
+
+  "email": "Please enter a valid email address",
+  "url": "Please enter a valid URL",
+  "uuid": "Please enter a valid UUID",
+  "hex": "Please enter a valid hexadecimal string",
+
+  "bitcoinAddress": "Please enter a valid Bitcoin address",
+  "txid": "Please enter a valid transaction ID",
+  "xpub": "Please enter a valid extended public key",
+  "derivationPath": "Please enter a valid derivation path",
+
+  "enum": "{{field}} must be one of: {{values}}",
+  "pattern": "{{field}} format is invalid",
+  "custom": "{{field}} validation failed",
+
+  "passwordMinLength": "Password must be at least {{min}} characters",
+  "passwordUppercase": "Password must contain at least one uppercase letter",
+  "passwordLowercase": "Password must contain at least one lowercase letter",
+  "passwordNumber": "Password must contain at least one number",
+  "passwordSpecial": "Password must contain at least one special character",
+  "passwordNoSpaces": "Password cannot contain spaces",
+  "passwordMismatch": "Passwords do not match",
+
+  "usernameLength": "Username must be between {{min}} and {{max}} characters",
+  "usernameChars": "Username can only contain letters, numbers, and underscores",
+  "usernameReserved": "This username is reserved",
+
+  "walletNameLength": "Wallet name must be between {{min}} and {{max}} characters",
+  "labelLength": "Label must be at most {{max}} characters",
+
+  "amountPositive": "Amount must be greater than 0",
+  "amountDust": "Amount is below dust threshold ({{dust}} sats)",
+  "amountMax": "Amount exceeds maximum ({{max}})",
+  "feeRateMin": "Fee rate must be at least {{min}} sat/vB",
+  "feeRateMax": "Fee rate exceeds maximum ({{max}} sat/vB)"
+}

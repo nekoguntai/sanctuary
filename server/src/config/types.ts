@@ -19,6 +19,11 @@ export interface DatabaseConfig {
   url: string;
 }
 
+export interface RedisConfig {
+  url: string;
+  enabled: boolean;
+}
+
 export interface JwtConfig {
   secret: string;
   expiresIn: string;
@@ -150,6 +155,7 @@ export type FeatureFlagKey = keyof Omit<FeatureFlags, 'experimental'> | `experim
 export interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
+  redis: RedisConfig;
   security: SecurityConfig;
   rateLimit: RateLimitConfig;
   bitcoin: BitcoinConfig;

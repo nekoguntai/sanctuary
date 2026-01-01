@@ -809,3 +809,47 @@ model OwnershipTransfer {
   @@index([status, expiresAt]) // Cleanup expired transfers
   @@map("ownership_transfers")
 }
+
+// ========================================
+// FEATURE FLAGS
+// ========================================
+
+// Persistent feature flags with database override of environment defaults
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g., "aiAssistant", "experimental.taprootAddresses"
+  enabled     Boolean  @default(false)
+  description String? // Human-readable description
+  category    String   @default("general") // general, experimental, admin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Track who last modified (null for system/migration)
+  modifiedBy String?
+
+  auditLogs FeatureFlagAudit[]
+
+  @@index([category])
+  @@index([enabled])
+  @@map("feature_flags")
+}
+
+// Audit trail for feature flag changes
+model FeatureFlagAudit {
+  id            String   @id @default(uuid())
+  featureFlagId String
+  key           String // Denormalized for historical queries
+  previousValue Boolean
+  newValue      Boolean
+  changedBy     String // userId or "system"
+  reason        String? // Optional reason for change
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  featureFlag FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+
+  @@index([featureFlagId])
+  @@index([changedBy])
+  @@index([createdAt])
+  @@map("feature_flag_audit")
+}

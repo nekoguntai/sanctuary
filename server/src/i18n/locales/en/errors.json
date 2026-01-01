@@ -1,0 +1,73 @@
+{
+  "generic": "An error occurred",
+  "notFound": "Resource not found",
+  "unauthorized": "Authentication required",
+  "forbidden": "Access denied",
+  "badRequest": "Invalid request",
+  "conflict": "Resource conflict",
+  "tooManyRequests": "Too many requests. Please try again later",
+  "internalServer": "Internal server error",
+  "serviceUnavailable": "Service temporarily unavailable",
+  "timeout": "Request timed out",
+
+  "auth": {
+    "invalidCredentials": "Invalid email or password",
+    "accountLocked": "Account is locked. Please try again in {{minutes}} minutes",
+    "sessionExpired": "Your session has expired. Please log in again",
+    "tokenInvalid": "Invalid or expired token",
+    "tokenRevoked": "Token has been revoked",
+    "emailNotVerified": "Please verify your email address",
+    "twoFactorRequired": "Two-factor authentication required",
+    "twoFactorInvalid": "Invalid two-factor code",
+    "deviceNotTrusted": "This device is not trusted",
+    "passwordExpired": "Your password has expired. Please reset it"
+  },
+
+  "wallet": {
+    "notFound": "Wallet not found",
+    "accessDenied": "You do not have access to this wallet",
+    "alreadyExists": "A wallet with this name already exists",
+    "invalidDescriptor": "Invalid wallet descriptor",
+    "syncFailed": "Failed to sync wallet",
+    "broadcastFailed": "Failed to broadcast transaction",
+    "insufficientFunds": "Insufficient funds",
+    "dustAmount": "Amount is below dust threshold",
+    "invalidAddress": "Invalid Bitcoin address",
+    "invalidNetwork": "Address does not match wallet network",
+    "feeEstimationFailed": "Failed to estimate transaction fee",
+    "signingFailed": "Transaction signing failed",
+    "utxoLocked": "One or more UTXOs are locked"
+  },
+
+  "transaction": {
+    "notFound": "Transaction not found",
+    "alreadyBroadcast": "Transaction has already been broadcast",
+    "invalidHex": "Invalid transaction hex",
+    "rbfDisabled": "Replace-by-fee is not enabled for this transaction",
+    "cpfpNotPossible": "CPFP is not possible for this transaction"
+  },
+
+  "multisig": {
+    "quorumNotMet": "Not enough signatures. Need {{required}} of {{total}}",
+    "invalidCosigner": "Invalid cosigner public key",
+    "cosignerNotFound": "Cosigner not found",
+    "alreadySigned": "You have already signed this transaction",
+    "invalidPartialSig": "Invalid partial signature"
+  },
+
+  "node": {
+    "connectionFailed": "Failed to connect to node",
+    "unreachable": "Node is unreachable",
+    "syncRequired": "Node is still syncing",
+    "versionMismatch": "Node version is not compatible"
+  },
+
+  "validation": {
+    "required": "{{field}} is required",
+    "invalid": "{{field}} is invalid",
+    "tooShort": "{{field}} must be at least {{min}} characters",
+    "tooLong": "{{field}} must be at most {{max}} characters",
+    "email": "Invalid email address",
+    "password": "Password does not meet requirements"
+  }
+}

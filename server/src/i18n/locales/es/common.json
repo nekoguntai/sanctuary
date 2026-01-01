@@ -1,0 +1,81 @@
+{
+  "success": "Éxito",
+  "error": "Error",
+  "warning": "Advertencia",
+  "info": "Información",
+
+  "yes": "Sí",
+  "no": "No",
+  "ok": "OK",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "save": "Guardar",
+  "delete": "Eliminar",
+  "edit": "Editar",
+  "create": "Crear",
+  "update": "Actualizar",
+  "close": "Cerrar",
+  "back": "Atrás",
+  "next": "Siguiente",
+  "submit": "Enviar",
+  "retry": "Reintentar",
+
+  "loading": "Cargando...",
+  "processing": "Procesando...",
+  "saving": "Guardando...",
+  "syncing": "Sincronizando...",
+
+  "wallet": "Billetera",
+  "wallets": "Billeteras",
+  "transaction": "Transacción",
+  "transactions": "Transacciones",
+  "address": "Dirección",
+  "addresses": "Direcciones",
+  "balance": "Balance",
+  "amount": "Monto",
+  "fee": "Tarifa",
+  "total": "Total",
+
+  "bitcoin": "Bitcoin",
+  "satoshi": "Satoshi",
+  "sats": "sats",
+  "btc": "BTC",
+
+  "mainnet": "Red principal",
+  "testnet": "Red de prueba",
+  "signet": "Signet",
+  "regtest": "Regtest",
+
+  "confirmed": "Confirmado",
+  "unconfirmed": "Sin confirmar",
+  "pending": "Pendiente",
+  "failed": "Fallido",
+
+  "send": "Enviar",
+  "receive": "Recibir",
+  "sign": "Firmar",
+  "broadcast": "Transmitir",
+
+  "owner": "Propietario",
+  "signer": "Firmante",
+  "viewOnly": "Solo lectura",
+
+  "time": {
+    "now": "Ahora mismo",
+    "minutesAgo": "Hace {{count}} minuto",
+    "minutesAgo_plural": "Hace {{count}} minutos",
+    "hoursAgo": "Hace {{count}} hora",
+    "hoursAgo_plural": "Hace {{count}} horas",
+    "daysAgo": "Hace {{count}} día",
+    "daysAgo_plural": "Hace {{count}} días"
+  },
+
+  "pagination": {
+    "page": "Página {{current}} de {{total}}",
+    "showing": "Mostrando {{from}}-{{to}} de {{total}}",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "first": "Primero",
+    "last": "Último"
+  }
+}

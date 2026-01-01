@@ -1,0 +1,73 @@
+{
+  "generic": "Ocurrió un error",
+  "notFound": "Recurso no encontrado",
+  "unauthorized": "Autenticación requerida",
+  "forbidden": "Acceso denegado",
+  "badRequest": "Solicitud inválida",
+  "conflict": "Conflicto de recursos",
+  "tooManyRequests": "Demasiadas solicitudes. Por favor, inténtalo más tarde",
+  "internalServer": "Error interno del servidor",
+  "serviceUnavailable": "Servicio temporalmente no disponible",
+  "timeout": "Tiempo de espera agotado",
+
+  "auth": {
+    "invalidCredentials": "Correo electrónico o contraseña inválidos",
+    "accountLocked": "La cuenta está bloqueada. Inténtalo de nuevo en {{minutes}} minutos",
+    "sessionExpired": "Tu sesión ha expirado. Por favor, inicia sesión de nuevo",
+    "tokenInvalid": "Token inválido o expirado",
+    "tokenRevoked": "El token ha sido revocado",
+    "emailNotVerified": "Por favor, verifica tu correo electrónico",
+    "twoFactorRequired": "Se requiere autenticación de dos factores",
+    "twoFactorInvalid": "Código de dos factores inválido",
+    "deviceNotTrusted": "Este dispositivo no es de confianza",
+    "passwordExpired": "Tu contraseña ha expirado. Por favor, restablécela"
+  },
+
+  "wallet": {
+    "notFound": "Billetera no encontrada",
+    "accessDenied": "No tienes acceso a esta billetera",
+    "alreadyExists": "Ya existe una billetera con este nombre",
+    "invalidDescriptor": "Descriptor de billetera inválido",
+    "syncFailed": "Error al sincronizar la billetera",
+    "broadcastFailed": "Error al transmitir la transacción",
+    "insufficientFunds": "Fondos insuficientes",
+    "dustAmount": "El monto está por debajo del umbral de polvo",
+    "invalidAddress": "Dirección de Bitcoin inválida",
+    "invalidNetwork": "La dirección no coincide con la red de la billetera",
+    "feeEstimationFailed": "Error al estimar la tarifa de transacción",
+    "signingFailed": "Error al firmar la transacción",
+    "utxoLocked": "Una o más UTXOs están bloqueadas"
+  },
+
+  "transaction": {
+    "notFound": "Transacción no encontrada",
+    "alreadyBroadcast": "La transacción ya ha sido transmitida",
+    "invalidHex": "Hexadecimal de transacción inválido",
+    "rbfDisabled": "RBF no está habilitado para esta transacción",
+    "cpfpNotPossible": "CPFP no es posible para esta transacción"
+  },
+
+  "multisig": {
+    "quorumNotMet": "Firmas insuficientes. Se necesitan {{required}} de {{total}}",
+    "invalidCosigner": "Clave pública del cofirmante inválida",
+    "cosignerNotFound": "Cofirmante no encontrado",
+    "alreadySigned": "Ya has firmado esta transacción",
+    "invalidPartialSig": "Firma parcial inválida"
+  },
+
+  "node": {
+    "connectionFailed": "Error al conectar con el nodo",
+    "unreachable": "El nodo es inalcanzable",
+    "syncRequired": "El nodo todavía está sincronizando",
+    "versionMismatch": "La versión del nodo no es compatible"
+  },
+
+  "validation": {
+    "required": "{{field}} es requerido",
+    "invalid": "{{field}} es inválido",
+    "tooShort": "{{field}} debe tener al menos {{min}} caracteres",
+    "tooLong": "{{field}} debe tener como máximo {{max}} caracteres",
+    "email": "Dirección de correo electrónico inválida",
+    "password": "La contraseña no cumple con los requisitos"
+  }
+}

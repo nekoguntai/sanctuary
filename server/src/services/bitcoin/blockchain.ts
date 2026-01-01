@@ -964,6 +964,9 @@ export async function syncWallet(walletId: string): Promise<{
             confirmations,
             blockHeight: item.height > 0 ? item.height : null,
             blockTime,
+            // Set rbfStatus based on confirmation state to prevent cleanup logic from
+            // incorrectly marking confirmed transactions as replaced
+            rbfStatus: confirmations > 0 ? 'confirmed' : 'active',
           });
           existingTxMap.set(`${item.tx_hash}:consolidation`, true);
         } else if (isSent && totalToExternal > 0 && !existingTxMap.has(`${item.tx_hash}:sent`)) {
@@ -980,6 +983,9 @@ export async function syncWallet(walletId: string): Promise<{
             confirmations,
             blockHeight: item.height > 0 ? item.height : null,
             blockTime,
+            // Set rbfStatus based on confirmation state to prevent cleanup logic from
+            // incorrectly marking confirmed transactions as replaced
+            rbfStatus: confirmations > 0 ? 'confirmed' : 'active',
           });
           existingTxMap.set(`${item.tx_hash}:sent`, true);
         } else if (!isSent && isReceived && !existingTxMap.has(`${item.tx_hash}:received`)) {
@@ -1001,6 +1007,9 @@ export async function syncWallet(walletId: string): Promise<{
             confirmations,
             blockHeight: item.height > 0 ? item.height : null,
             blockTime,
+            // Set rbfStatus based on confirmation state to prevent cleanup logic from
+            // incorrectly marking confirmed transactions as replaced
+            rbfStatus: confirmations > 0 ? 'confirmed' : 'active',
           });
           existingTxMap.set(`${item.tx_hash}:received`, true);
         }

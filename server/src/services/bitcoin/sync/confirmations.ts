@@ -81,7 +81,12 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
       updates.map(u =>
         prisma.transaction.update({
           where: { id: u.id },
-          data: { confirmations: u.newConfirmations },
+          data: {
+            confirmations: u.newConfirmations,
+            // When a transaction transitions from 0 to confirmed, update rbfStatus
+            // to 'confirmed' to prevent cleanup logic from incorrectly marking it as replaced
+            ...(u.oldConfirmations === 0 && u.newConfirmations > 0 ? { rbfStatus: 'confirmed' } : {}),
+          },
         })
       )
     );

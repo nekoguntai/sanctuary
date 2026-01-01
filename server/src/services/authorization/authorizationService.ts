@@ -31,8 +31,12 @@
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, UnauthorizedError } from '../../errors';
+import { createNamespacedCache, type ICacheService } from '../cache';
 
 const log = createLogger('Authorization');
+
+// Cache TTL in seconds
+const ROLE_CACHE_TTL = 60; // 1 minute - roles don't change frequently
 
 // =============================================================================
 // Types
@@ -135,6 +139,7 @@ const DEFAULT_POLICIES: Policy[] = [
 
 class AuthorizationService {
   private policies: Map<string, Policy> = new Map();
+  private cache: ICacheService;
 
   constructor() {
     // Load default policies
@@ -142,37 +147,86 @@ class AuthorizationService {
       const key = `${policy.resource}:${policy.action}`;
       this.policies.set(key, policy);
     }
+
+    // Initialize cache namespace
+    this.cache = createNamespacedCache('authz');
+  }
+
+  // =============================================================================
+  // Cache Key Helpers
+  // =============================================================================
+
+  private roleKey(userId: string, resource: ResourceType, resourceId: string): string {
+    return `role:${userId}:${resource}:${resourceId}`;
+  }
+
+  private isAdminKey(userId: string): string {
+    return `admin:${userId}`;
   }
 
   /**
-   * Get the user's role for a specific resource
+   * Get the user's role for a specific resource (with caching)
    */
   async getRole(userId: string, resource: ResourceType, resourceId: string): Promise<Role> {
-    // Check if user is an admin (admins have admin role on everything)
+    // Check cache first
+    const cacheKey = this.roleKey(userId, resource, resourceId);
+    const cached = await this.cache.get<Role>(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
+    // Check if user is an admin (also cached)
+    const isAdmin = await this.isUserAdmin(userId);
+    if (isAdmin) {
+      await this.cache.set(cacheKey, 'admin', ROLE_CACHE_TTL);
+      return 'admin';
+    }
+
+    let role: Role;
+    switch (resource) {
+      case 'wallet':
+        role = await this.getWalletRole(userId, resourceId);
+        break;
+      case 'device':
+        role = await this.getDeviceRole(userId, resourceId);
+        break;
+      case 'group':
+        role = await this.getGroupRole(userId, resourceId);
+        break;
+      case 'user':
+        // Users can only view/edit themselves unless admin
+        role = userId === resourceId ? 'owner' : 'none';
+        break;
+      case 'system':
+        role = 'none'; // Only admins have system access
+        break;
+      default:
+        role = 'none';
+    }
+
+    // Cache the result
+    await this.cache.set(cacheKey, role, ROLE_CACHE_TTL);
+    return role;
+  }
+
+  /**
+   * Check if a user is an admin (cached)
+   */
+  private async isUserAdmin(userId: string): Promise<boolean> {
+    const cacheKey = this.isAdminKey(userId);
+    const cached = await this.cache.get<boolean>(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { isAdmin: true },
     });
 
-    if (user?.isAdmin) {
-      return 'admin';
-    }
-
-    switch (resource) {
-      case 'wallet':
-        return this.getWalletRole(userId, resourceId);
-      case 'device':
-        return this.getDeviceRole(userId, resourceId);
-      case 'group':
-        return this.getGroupRole(userId, resourceId);
-      case 'user':
-        // Users can only view/edit themselves unless admin
-        return userId === resourceId ? 'owner' : 'none';
-      case 'system':
-        return 'none'; // Only admins have system access
-      default:
-        return 'none';
-    }
+    const isAdmin = user?.isAdmin ?? false;
+    await this.cache.set(cacheKey, isAdmin, ROLE_CACHE_TTL);
+    return isAdmin;
   }
 
   /**
@@ -353,6 +407,57 @@ class AuthorizationService {
   }
 
   // =============================================================================
+  // Cache Invalidation
+  // =============================================================================
+
+  /**
+   * Invalidate cached role for a user on a specific resource
+   */
+  async invalidateRole(userId: string, resource: ResourceType, resourceId: string): Promise<void> {
+    const cacheKey = this.roleKey(userId, resource, resourceId);
+    await this.cache.delete(cacheKey);
+    log.debug('Invalidated role cache', { userId, resource, resourceId });
+  }
+
+  /**
+   * Invalidate all cached roles for a user on a resource type
+   */
+  async invalidateUserRoles(userId: string, resource?: ResourceType): Promise<void> {
+    const pattern = resource
+      ? `role:${userId}:${resource}:*`
+      : `role:${userId}:*`;
+    await this.cache.deletePattern(pattern);
+    log.debug('Invalidated user role cache', { userId, resource });
+  }
+
+  /**
+   * Invalidate all cached roles for a resource (e.g., when sharing is modified)
+   */
+  async invalidateResourceRoles(resource: ResourceType, resourceId: string): Promise<void> {
+    const pattern = `role:*:${resource}:${resourceId}`;
+    await this.cache.deletePattern(pattern);
+    log.debug('Invalidated resource role cache', { resource, resourceId });
+  }
+
+  /**
+   * Invalidate admin status cache for a user
+   */
+  async invalidateAdminStatus(userId: string): Promise<void> {
+    await this.cache.delete(this.isAdminKey(userId));
+    // Also invalidate all role caches since admin status affects all roles
+    await this.invalidateUserRoles(userId);
+    log.debug('Invalidated admin status cache', { userId });
+  }
+
+  /**
+   * Clear all authorization caches
+   */
+  async clearCache(): Promise<void> {
+    await this.cache.clear();
+    log.info('Cleared all authorization caches');
+  }
+
+  // =============================================================================
   // Policy Management
   // =============================================================================
 
@@ -376,4 +481,4 @@ class AuthorizationService {
 /**
  * Singleton authorization service instance
  */
-export const authorizationService = new AuthorizationService();
+export const authorizationService: AuthorizationService = new AuthorizationService();

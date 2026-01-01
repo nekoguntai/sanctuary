@@ -121,10 +121,10 @@ export function tracingMiddleware(options: TracingMiddlewareOptions = {}): Reque
     (req as any).__span = span;
 
     // Capture response
-    const originalEnd = res.end;
-    res.end = function(this: Response, ...args: any[]): Response {
+    const originalEnd = res.end.bind(res);
+    res.end = function(this: Response, ...args: unknown[]): Response {
       finishSpan(span, res);
-      return originalEnd.apply(this, args);
+      return originalEnd(...(args as Parameters<typeof originalEnd>));
     };
 
     // Handle errors

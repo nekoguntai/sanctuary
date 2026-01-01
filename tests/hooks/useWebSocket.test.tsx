@@ -54,12 +54,25 @@ vi.mock('../../src/api/client', () => ({
 const mockInvalidateQueries = vi.fn();
 const mockSetQueryData = vi.fn();
 
+// Mock with path relative to the test file
 vi.mock('../../providers/QueryProvider', () => ({
   queryClient: {
     invalidateQueries: (...args: any[]) => mockInvalidateQueries(...args),
     setQueryData: (...args: any[]) => mockSetQueryData(...args),
   },
 }));
+
+// Also mock with path relative to the hook file (for dynamic imports)
+vi.mock('../providers/QueryProvider', () => ({
+  queryClient: {
+    invalidateQueries: (...args: any[]) => mockInvalidateQueries(...args),
+    setQueryData: (...args: any[]) => mockSetQueryData(...args),
+  },
+}));
+
+// Helper to flush pending promises (needed for dynamic imports in useWebSocketQueryInvalidation)
+// Use a longer timeout to ensure dynamic imports fully resolve
+const flushPromises = () => new Promise(resolve => setTimeout(resolve, 50));
 
 // Import hooks after mocks
 import {
@@ -1174,6 +1187,7 @@ describe('useModelDownloadProgress', () => {
 describe('useWebSocketQueryInvalidation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();  // Reset module cache to ensure fresh dynamic imports
     connectionChangeCallbacks.clear();
     eventCallbacks.clear();
 
@@ -1273,10 +1287,14 @@ describe('useWebSocketQueryInvalidation', () => {
 
       renderHook(() => useWebSocketQueryInvalidation());
 
-      // Wait for dynamic import to resolve
+      // Wait for subscriptions and event listeners to be set up
       await waitFor(() => {
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockOn).toHaveBeenCalledWith('transaction', expect.any(Function));
       });
+
+      // Flush promises to ensure dynamic import has resolved
+      await flushPromises();
 
       const transactionEvent = {
         event: 'transaction',
@@ -1302,6 +1320,8 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
       });
 
+      await flushPromises();
+
       const confirmationEvent = {
         event: 'confirmation',
         data: { txid: 'tx456', confirmations: 3 },
@@ -1325,6 +1345,8 @@ describe('useWebSocketQueryInvalidation', () => {
       await waitFor(() => {
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
       });
+
+      await flushPromises();
 
       const balanceEvent = {
         event: 'balance',
@@ -1351,6 +1373,8 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('blocks');
       });
 
+      await flushPromises();
+
       const newBlockEvent = {
         event: 'newBlock',
         data: { height: 800000 },
@@ -1375,6 +1399,8 @@ describe('useWebSocketQueryInvalidation', () => {
       await waitFor(() => {
         expect(mockSubscribe).toHaveBeenCalledWith('blocks');
       });
+
+      await flushPromises();
 
       const otherEvent = {
         event: 'transaction',
@@ -1402,6 +1428,8 @@ describe('useWebSocketQueryInvalidation', () => {
       await waitFor(() => {
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
       });
+
+      await flushPromises();
 
       const syncEvent = {
         event: 'sync',
@@ -1437,6 +1465,8 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
       });
 
+      await flushPromises();
+
       const syncEvent = {
         event: 'sync',
         data: {
@@ -1464,6 +1494,8 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
       });
 
+      await flushPromises();
+
       const otherEvent = {
         event: 'transaction',
         data: { walletId: 'wallet-456' },
@@ -1487,6 +1519,8 @@ describe('useWebSocketQueryInvalidation', () => {
       await waitFor(() => {
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
       });
+
+      await flushPromises();
 
       const syncEvent = {
         event: 'sync',

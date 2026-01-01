@@ -21,6 +21,9 @@
     "test:docker:clean": "docker compose -f docker-compose.test.yml down -v --remove-orphans"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@keystonehq/bc-ur-registry": "^0.6.4",
     "@ledgerhq/hw-app-btc": "^10.13.0",
     "@ledgerhq/hw-transport-webusb": "^6.29.13",

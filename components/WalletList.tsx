@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
-import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ChevronUp, ChevronDown, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Plus, LayoutGrid, List as ListIcon, Wallet as WalletIcon, Upload, Users, ArrowUpDown, RefreshCw, CheckCircle, AlertCircle, Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Button } from './ui/Button';
 import { getWalletIcon } from './ui/CustomIcons';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -13,6 +13,15 @@ import { useWallets, useBalanceHistory, useInvalidateAllWallets, usePendingTrans
 import type { PendingTransaction } from '../types';
 import { NetworkTabs, TabNetwork } from './NetworkTabs';
 import { NetworkSyncActions } from './NetworkSyncActions';
+import { ConfigurableTable } from './ui/ConfigurableTable';
+import { ColumnConfigButton } from './ui/ColumnConfigButton';
+import {
+  WALLET_COLUMNS,
+  DEFAULT_WALLET_COLUMN_ORDER,
+  DEFAULT_WALLET_VISIBLE_COLUMNS,
+  mergeWalletColumnOrder,
+} from './columns/walletColumns';
+import { createWalletCellRenderers, WalletWithPending } from './cells/WalletCells';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
@@ -67,6 +76,47 @@ export const WalletList: React.FC = () => {
       viewSettings: {
         ...user?.preferences?.viewSettings,
         wallets: { ...user?.preferences?.viewSettings?.wallets, sortBy: field, sortOrder: newOrder }
+      }
+    });
+  };
+
+  // Get column configuration from user preferences
+  const columnOrder = useMemo(
+    () => mergeWalletColumnOrder(user?.preferences?.viewSettings?.wallets?.columnOrder),
+    [user?.preferences?.viewSettings?.wallets?.columnOrder]
+  );
+  const visibleColumns = user?.preferences?.viewSettings?.wallets?.visibleColumns || DEFAULT_WALLET_VISIBLE_COLUMNS;
+
+  const handleColumnOrderChange = (newOrder: string[]) => {
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        wallets: { ...user?.preferences?.viewSettings?.wallets, columnOrder: newOrder }
+      }
+    });
+  };
+
+  const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
+    const newVisible = visible
+      ? [...visibleColumns, columnId]
+      : visibleColumns.filter(id => id !== columnId);
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        wallets: { ...user?.preferences?.viewSettings?.wallets, visibleColumns: newVisible }
+      }
+    });
+  };
+
+  const handleColumnReset = () => {
+    updatePreferences({
+      viewSettings: {
+        ...user?.preferences?.viewSettings,
+        wallets: {
+          ...user?.preferences?.viewSettings?.wallets,
+          columnOrder: DEFAULT_WALLET_COLUMN_ORDER,
+          visibleColumns: DEFAULT_WALLET_VISIBLE_COLUMNS
+        }
       }
     });
   };
@@ -144,6 +194,20 @@ export const WalletList: React.FC = () => {
 
     return result;
   }, [pendingTransactions]);
+
+  // Create wallets with pending data for ConfigurableTable
+  const walletsWithPending: WalletWithPending[] = useMemo(() => {
+    return sortedWallets.map(wallet => ({
+      ...wallet,
+      pendingData: pendingByWallet[wallet.id],
+    }));
+  }, [sortedWallets, pendingByWallet]);
+
+  // Create cell renderers with currency formatting
+  const cellRenderers = useMemo(
+    () => createWalletCellRenderers({ format, formatFiat, showFiat }),
+    [format, formatFiat, showFiat]
+  );
 
   // Fetch real balance history from transactions
   const { data: chartData, isLoading: chartLoading } = useBalanceHistory(walletIds, totalBalance, timeframe);
@@ -250,6 +314,19 @@ export const WalletList: React.FC = () => {
                 >
                     <ListIcon className="w-4 h-4" />
                 </button>
+                {/* Column Config - only in table view */}
+                {viewMode === 'table' && (
+                  <ColumnConfigButton
+                    columns={WALLET_COLUMNS}
+                    columnOrder={columnOrder}
+                    visibleColumns={visibleColumns}
+                    onOrderChange={handleColumnOrderChange}
+                    onVisibilityChange={handleColumnVisibilityChange}
+                    onReset={handleColumnReset}
+                    defaultOrder={DEFAULT_WALLET_COLUMN_ORDER}
+                    defaultVisible={DEFAULT_WALLET_VISIBLE_COLUMNS}
+                  />
+                )}
             </div>
             {/* Compact Sync Actions */}
             <div className="flex surface-elevated p-1 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
@@ -447,207 +524,19 @@ export const WalletList: React.FC = () => {
 
       {/* Table View */}
       {viewMode === 'table' && (
-        <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-                    <thead className="surface-muted">
-                        <tr>
-                            <th
-                              scope="col"
-                              onClick={() => setSortBy('name')}
-                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
-                            >
-                              <span className="inline-flex items-center gap-1">
-                                Name
-                                {sortBy === 'name' ? (
-                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                              </span>
-                            </th>
-                            <th
-                              scope="col"
-                              onClick={() => setSortBy('type')}
-                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
-                            >
-                              <span className="inline-flex items-center gap-1">
-                                Type
-                                {sortBy === 'type' ? (
-                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                              </span>
-                            </th>
-                            <th
-                              scope="col"
-                              onClick={() => setSortBy('devices')}
-                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
-                            >
-                              <span className="inline-flex items-center gap-1">
-                                Devices
-                                {sortBy === 'devices' ? (
-                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                              </span>
-                            </th>
-                            <th
-                              scope="col"
-                              className="px-6 py-3 text-left text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
-                            >
-                              Sync
-                            </th>
-                            <th
-                              scope="col"
-                              className="px-3 py-3 text-center text-xs font-medium text-sanctuary-500 uppercase tracking-wider"
-                              title="Pending transactions"
-                            >
-                              Pending
-                            </th>
-                            <th
-                              scope="col"
-                              onClick={() => setSortBy('balance')}
-                              className="px-6 py-3 text-right text-xs font-medium text-sanctuary-500 uppercase tracking-wider cursor-pointer hover:text-sanctuary-700 dark:hover:text-sanctuary-300 select-none"
-                            >
-                              <span className="inline-flex items-center gap-1 justify-end">
-                                Balance
-                                {sortBy === 'balance' ? (
-                                  sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                                ) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
-                              </span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="surface-elevated divide-y divide-sanctuary-200 dark:divide-sanctuary-800">
-                        {sortedWallets.map((wallet) => {
-                            const isMultisig = wallet.type === 'multi_sig';
-                            const badgeClass = isMultisig
-                                ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-                                : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-                            const iconClass = isMultisig
-                                ? 'text-warning-600 dark:text-warning-400'
-                                : 'text-success-600 dark:text-success-400';
-
-                            const walletTypeForIcon = isMultisig ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
-
-                            return (
-                                <tr
-                                   key={wallet.id}
-                                   onClick={() => navigate(`/wallets/${wallet.id}`)}
-                                   className="hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 cursor-pointer transition-colors"
-                                >
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div className="flex-shrink-0 h-8 w-8 rounded-full surface-secondary flex items-center justify-center">
-                                                {getWalletIcon(walletTypeForIcon, `w-4 h-4 ${iconClass}`)}
-                                            </div>
-                                            <div className="ml-4">
-                                                <div className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{wallet.name}</div>
-                                                <div className="text-xs text-sanctuary-500 capitalize">{wallet.scriptType.replace('_', ' ')}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
-                                                {isMultisig ? `${wallet.quorum} of ${wallet.totalSigners}` : 'Single Sig'}
-                                            </span>
-                                            {wallet.isShared && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-shared-100 text-shared-800 dark:bg-shared-100 dark:text-shared-700">
-                                                    <Users className="w-3 h-3" />
-                                                    Shared
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-sanctuary-900 dark:text-sanctuary-100">
-                                            {wallet.deviceCount} device{wallet.deviceCount !== 1 ? 's' : ''}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {wallet.syncInProgress ? (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400">
-                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                                Syncing
-                                            </span>
-                                        ) : wallet.lastSyncStatus === 'success' ? (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-success-600 dark:text-success-400">
-                                                <CheckCircle className="w-3.5 h-3.5" />
-                                                Synced
-                                            </span>
-                                        ) : wallet.lastSyncStatus === 'failed' ? (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400">
-                                                <AlertCircle className="w-3.5 h-3.5" />
-                                                Failed
-                                            </span>
-                                        ) : wallet.lastSyncStatus === 'retrying' ? (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-warning-600 dark:text-warning-400">
-                                                <RefreshCw className="w-3.5 h-3.5" />
-                                                Retrying
-                                            </span>
-                                        ) : wallet.lastSyncStatus === 'partial' ? (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-warning-600 dark:text-warning-400">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                Partial
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-sanctuary-400">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                Pending
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-3 py-4 whitespace-nowrap text-center">
-                                        {/* Pending transaction type icons */}
-                                        {pendingByWallet[wallet.id] ? (
-                                          <div className="inline-flex items-center gap-1">
-                                            {pendingByWallet[wallet.id].hasIncoming && (
-                                              <span title="Pending received"><ArrowDownLeft className="w-4 h-4 text-success-500" /></span>
-                                            )}
-                                            {pendingByWallet[wallet.id].hasOutgoing && (
-                                              <span title="Pending sent"><ArrowUpRight className="w-4 h-4 text-sent-500" /></span>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <span className="text-sanctuary-300">—</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        {/* BTC balance with inline net pending */}
-                                        <div className="text-sm font-bold text-sanctuary-900 dark:text-sanctuary-100">
-                                          {format(wallet.balance)}
-                                          {pendingByWallet[wallet.id] && pendingByWallet[wallet.id].net !== 0 && (
-                                            <span className={`ml-1 text-xs font-normal ${
-                                              pendingByWallet[wallet.id].net > 0
-                                                ? 'text-success-600 dark:text-success-400'
-                                                : 'text-sent-600 dark:text-sent-400'
-                                            }`}>
-                                              ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{format(pendingByWallet[wallet.id].net)})
-                                            </span>
-                                          )}
-                                        </div>
-                                        {/* Fiat balance with inline net pending */}
-                                        {showFiat && formatFiat(wallet.balance) && (
-                                          <div className="text-xs text-primary-500 dark:text-primary-400">
-                                            {formatFiat(wallet.balance)}
-                                            {pendingByWallet[wallet.id] && pendingByWallet[wallet.id].net !== 0 && (
-                                              <span className={`ml-1 text-[10px] ${
-                                                pendingByWallet[wallet.id].net > 0
-                                                  ? 'text-success-600 dark:text-success-400'
-                                                  : 'text-sent-600 dark:text-sent-400'
-                                              }`}>
-                                                ({pendingByWallet[wallet.id].net > 0 ? '+' : ''}{formatFiat(pendingByWallet[wallet.id].net)})
-                                              </span>
-                                            )}
-                                          </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <ConfigurableTable<WalletWithPending>
+          columns={WALLET_COLUMNS}
+          columnOrder={columnOrder}
+          visibleColumns={visibleColumns}
+          data={walletsWithPending}
+          keyExtractor={(wallet) => wallet.id}
+          cellRenderers={cellRenderers}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={(field) => setSortBy(field as SortField)}
+          onRowClick={(wallet) => navigate(`/wallets/${wallet.id}`)}
+          emptyMessage="No wallets found"
+        />
       )}
 
       </div>

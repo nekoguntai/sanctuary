@@ -225,6 +225,33 @@ export interface NotificationSounds {
 }
 
 // ============================================================================
+// TABLE COLUMN CONFIGURATION
+// ============================================================================
+
+/**
+ * Configuration for a table column (used in WalletList, DeviceList, etc.)
+ */
+export interface TableColumnConfig {
+  id: string;
+  label: string;
+  sortable?: boolean;
+  sortKey?: string;
+  defaultVisible?: boolean;
+  required?: boolean;        // Cannot be hidden (e.g., name column)
+  align?: 'left' | 'center' | 'right';
+}
+
+/**
+ * Column IDs for wallet list table
+ */
+export type WalletColumnId = 'name' | 'type' | 'devices' | 'sync' | 'pending' | 'balance';
+
+/**
+ * Column IDs for device list table
+ */
+export type DeviceColumnId = 'label' | 'type' | 'fingerprint' | 'wallets' | 'actions';
+
+// ============================================================================
 // USER & GROUP TYPES
 // ============================================================================
 
@@ -234,6 +261,8 @@ export interface PageViewSettings {
   sortBy?: string;          // Column to sort by (future)
   sortOrder?: 'asc' | 'desc'; // Sort direction (future)
   ownershipFilter?: 'all' | 'owned' | 'shared'; // For filtering by ownership
+  visibleColumns?: string[];  // Column IDs that are visible
+  columnOrder?: string[];     // Column IDs in display order
 }
 
 // View settings keyed by page name (wallets, devices, transactions, etc.)

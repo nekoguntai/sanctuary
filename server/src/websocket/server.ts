@@ -557,6 +557,13 @@ export class SanctauryWebSocketServer {
       channels.push('sync:all');
     }
 
+    // Transaction events go to global channel for cross-page cache updates
+    // This ensures all browser windows receive updates even if wallet-specific
+    // subscriptions failed due to auth race conditions
+    if (event.type === 'transaction' || event.type === 'balance' || event.type === 'confirmation') {
+      channels.push('transactions:all');
+    }
+
     // Wallet-specific channels
     if (event.walletId) {
       channels.push(`wallet:${event.walletId}`);

@@ -85,10 +85,13 @@ export class WebSocketClient {
         // This avoids exposing token in URL query parameters
         if (this.token) {
           this.sendAuthMessage(this.token);
+          // Don't resubscribe here - wait for 'authenticated' response
+          // to avoid race condition where subscriptions are rejected
+          // because auth hasn't completed yet
+        } else {
+          // No token - resubscribe immediately for unauthenticated channels
+          this.resubscribe();
         }
-
-        // Resubscribe to channels
-        this.resubscribe();
 
         // Notify connection listeners
         this.notifyConnectionListeners(true);
@@ -182,6 +185,12 @@ export class WebSocketClient {
 
       case 'authenticated':
         log.debug('Authenticated:', message.data?.success ? 'success' : 'failed');
+        // Now that auth is confirmed, resubscribe to channels
+        // This fixes the race condition where subscriptions were rejected
+        // because they arrived before auth completed
+        if (message.data?.success) {
+          this.resubscribe();
+        }
         break;
 
       case 'subscribed':

@@ -374,6 +374,7 @@ export const useWebSocketQueryInvalidation = () => {
     // Subscribe to global channels
     subscribe('blocks');
     subscribe('sync:all');
+    subscribe('transactions:all');
 
     // Import queryClient lazily
     let queryClient: import('@tanstack/react-query').QueryClient | null = null;
@@ -460,6 +461,7 @@ export const useWebSocketQueryInvalidation = () => {
     return () => {
       unsubscribe('blocks');
       unsubscribe('sync:all');
+      unsubscribe('transactions:all');
       websocketClient.off('transaction', handleTransactionEvent);
       websocketClient.off('confirmation', handleTransactionEvent);
       websocketClient.off('balance', handleTransactionEvent);

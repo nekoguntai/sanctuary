@@ -28,9 +28,9 @@ echo "${YELLOW}Running pre-commit checks...${NC}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # =============================================
-# AI Test Coverage Analysis
+# Test Coverage Analysis
 # =============================================
-# Use Claude to analyze if tests need to be added, updated, or removed
+# Analyze if tests need to be added, updated, or removed
 
 run_test_coverage_agent() {
     # Check if claude is available
@@ -48,7 +48,7 @@ run_test_coverage_agent() {
 
     echo ""
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo "${BLUE}🤖 AI Test Coverage Analysis${NC}"
+    echo "${BLUE}🧪 Test Coverage Analysis${NC}"
     echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 

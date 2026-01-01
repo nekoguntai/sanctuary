@@ -203,9 +203,11 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
     });
 
     // Query unconfirmed transactions (blockHeight is null or 0)
+    // Exclude replaced RBF transactions which are no longer in mempool
     const pendingTxs = await prisma.transaction.findMany({
       where: {
         walletId,
+        rbfStatus: { not: 'replaced' },
         OR: [
           { blockHeight: 0 },
           { blockHeight: null },
@@ -1610,9 +1612,11 @@ router.get('/transactions/pending', async (req: Request, res: Response) => {
     const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
 
     // Fetch pending (unconfirmed) transactions - those with blockHeight of 0 or null
+    // Exclude replaced RBF transactions which are no longer in mempool
     const pendingTransactions = await prisma.transaction.findMany({
       where: {
         walletId: { in: walletIds },
+        rbfStatus: { not: 'replaced' },
         OR: [
           { blockHeight: 0 },
           { blockHeight: null },

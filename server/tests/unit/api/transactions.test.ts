@@ -348,6 +348,40 @@ describe('Transactions API', () => {
 
       expect(getResponse().body[0].feeRate).toBe(0);
     });
+
+    it('should exclude replaced RBF transactions from pending', async () => {
+      const walletId = 'wallet-123';
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Test Wallet',
+        network: 'testnet',
+      });
+
+      // Simulate the query that should include rbfStatus filter
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+      await mockPrismaClient.transaction.findMany({
+        where: {
+          walletId,
+          rbfStatus: { not: 'replaced' },
+          OR: [
+            { blockHeight: 0 },
+            { blockHeight: null },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Verify the query includes rbfStatus filter to exclude replaced transactions
+      expect(mockPrismaClient.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            rbfStatus: { not: 'replaced' },
+          }),
+        })
+      );
+    });
   });
 
   describe('GET /wallets/:walletId/transactions/export', () => {

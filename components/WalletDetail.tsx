@@ -838,6 +838,9 @@ export const WalletDetail: React.FC = () => {
             address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
             blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
             counterpartyAddress: tx.counterpartyAddress || undefined,
+            // RBF tracking
+            rbfStatus: tx.rbfStatus as 'active' | 'replaced' | 'confirmed' | undefined,
+            replacedByTxid: tx.replacedByTxid || undefined,
           }));
           setTransactions(formattedTxs);
           setTxOffset(TX_PAGE_SIZE);
@@ -979,6 +982,9 @@ export const WalletDetail: React.FC = () => {
         address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
         blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
         counterpartyAddress: tx.counterpartyAddress || undefined,
+        // RBF tracking
+        rbfStatus: tx.rbfStatus as 'active' | 'replaced' | 'confirmed' | undefined,
+        replacedByTxid: tx.replacedByTxid || undefined,
       }));
 
       setTransactions(prev => [...prev, ...formattedTxs]);

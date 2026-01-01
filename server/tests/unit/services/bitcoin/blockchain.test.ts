@@ -892,10 +892,19 @@ describe('Blockchain Service', () => {
         new Map([[address, [{ tx_hash: txHash, height: 800000 }]]])
       );
 
-      // Transaction already exists in database
-      mockPrismaClient.transaction.findMany.mockResolvedValue([
-        { id: 'tx-1', txid: txHash, type: 'received' },
-      ]);
+      // Handle different transaction.findMany queries
+      mockPrismaClient.transaction.findMany.mockImplementation(async (args) => {
+        // RBF cleanup: pending transactions with active status
+        if (args?.where?.confirmations === 0 && args?.where?.rbfStatus === 'active') {
+          return [];
+        }
+        // Retroactive RBF linking: replaced transactions without replacedByTxid
+        if (args?.where?.rbfStatus === 'replaced' && args?.where?.replacedByTxid === null) {
+          return [];
+        }
+        // Transaction already exists in database (existing txids query)
+        return [{ id: 'tx-1', txid: txHash, type: 'received' }];
+      });
 
       mockElectrumClient.getTransaction.mockResolvedValue(
         createMockTransaction({
@@ -1520,6 +1529,230 @@ describe('Blockchain Service', () => {
 
       // Should generate 20 receive + 20 change = 40 new addresses
       expect(result.length).toBe(40);
+    });
+  });
+
+  describe('RBF Sync Detection', () => {
+    const walletId = 'test-wallet-id';
+
+    beforeEach(() => {
+      resetPrismaMocks();
+    });
+
+    describe('RBF Cleanup at sync start', () => {
+      it('should mark pending transaction as replaced when confirmed tx shares same input', async () => {
+        const pendingTxid = 'pending_' + 'a'.repeat(56);
+        const confirmedTxid = 'confirmed_' + 'b'.repeat(53);
+        const sharedInputTxid = 'input_' + 'c'.repeat(58);
+        const sharedInputVout = 0;
+
+        // Setup wallet mock
+        mockPrismaClient.wallet.findUnique.mockResolvedValue({
+          id: walletId,
+          network: 'testnet',
+          descriptor: 'wpkh(tpubXXX)',
+        });
+
+        // Mock addresses
+        mockPrismaClient.address.findMany.mockResolvedValue([
+          { address: 'tb1test', derivationPath: "m/84'/0'/0'/0/0", index: 0, used: false },
+        ]);
+
+        // Mock pending transactions with inputs (for RBF cleanup)
+        mockPrismaClient.transaction.findMany.mockImplementation(async (args) => {
+          // First call: pending txs for RBF cleanup
+          if (args?.where?.confirmations === 0 && args?.where?.rbfStatus === 'active') {
+            return [{
+              id: 'pending-tx-id',
+              txid: pendingTxid,
+              inputs: [{ txid: sharedInputTxid, vout: sharedInputVout }],
+            }];
+          }
+          // Call for unlinked replaced txs
+          if (args?.where?.rbfStatus === 'replaced' && args?.where?.replacedByTxid === null) {
+            return [];
+          }
+          return [];
+        });
+
+        // Mock finding confirmed replacement (shares same input)
+        mockPrismaClient.transaction.findFirst.mockImplementation(async (args) => {
+          if (args?.where?.confirmations?.gt === 0) {
+            return { txid: confirmedTxid };
+          }
+          return null;
+        });
+
+        // Track update calls
+        const updateCalls: any[] = [];
+        mockPrismaClient.transaction.update.mockImplementation(async (args) => {
+          updateCalls.push(args);
+          return { id: 'pending-tx-id', txid: pendingTxid, rbfStatus: 'replaced' };
+        });
+
+        // Mock empty address history (no new transactions to process)
+        mockElectrumClient.getAddressHistoryBatch.mockResolvedValue(new Map());
+
+        // Run sync
+        await syncWallet(walletId);
+
+        // Verify the pending transaction was marked as replaced
+        const rbfUpdateCall = updateCalls.find(
+          call => call.data?.rbfStatus === 'replaced' && call.data?.replacedByTxid === confirmedTxid
+        );
+        expect(rbfUpdateCall).toBeDefined();
+        expect(rbfUpdateCall?.where?.id).toBe('pending-tx-id');
+      });
+
+      it('should not mark pending transaction if no confirmed tx shares input', async () => {
+        const pendingTxid = 'pending_' + 'a'.repeat(56);
+
+        mockPrismaClient.wallet.findUnique.mockResolvedValue({
+          id: walletId,
+          network: 'testnet',
+          descriptor: 'wpkh(tpubXXX)',
+        });
+
+        mockPrismaClient.address.findMany.mockResolvedValue([
+          { address: 'tb1test', derivationPath: "m/84'/0'/0'/0/0", index: 0, used: false },
+        ]);
+
+        // Pending transaction with inputs
+        mockPrismaClient.transaction.findMany.mockImplementation(async (args) => {
+          if (args?.where?.confirmations === 0 && args?.where?.rbfStatus === 'active') {
+            return [{
+              id: 'pending-tx-id',
+              txid: pendingTxid,
+              inputs: [{ txid: 'input_txid', vout: 0 }],
+            }];
+          }
+          if (args?.where?.rbfStatus === 'replaced') {
+            return [];
+          }
+          return [];
+        });
+
+        // No confirmed replacement found
+        mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+
+        const updateCalls: any[] = [];
+        mockPrismaClient.transaction.update.mockImplementation(async (args) => {
+          updateCalls.push(args);
+          return args;
+        });
+
+        mockElectrumClient.getAddressHistoryBatch.mockResolvedValue(new Map());
+
+        await syncWallet(walletId);
+
+        // Should not have updated the pending transaction with rbfStatus
+        const rbfUpdateCall = updateCalls.find(call => call.data?.rbfStatus === 'replaced');
+        expect(rbfUpdateCall).toBeUndefined();
+      });
+    });
+
+    describe('Retroactive RBF linking', () => {
+      it('should link replaced transactions that have no replacedByTxid', async () => {
+        const replacedTxid = 'replaced_' + 'a'.repeat(55);
+        const replacementTxid = 'replacement_' + 'b'.repeat(52);
+        const sharedInputTxid = 'input_' + 'c'.repeat(58);
+
+        mockPrismaClient.wallet.findUnique.mockResolvedValue({
+          id: walletId,
+          network: 'testnet',
+          descriptor: 'wpkh(tpubXXX)',
+        });
+
+        mockPrismaClient.address.findMany.mockResolvedValue([
+          { address: 'tb1test', derivationPath: "m/84'/0'/0'/0/0", index: 0, used: false },
+        ]);
+
+        let callCount = 0;
+        mockPrismaClient.transaction.findMany.mockImplementation(async (args) => {
+          // First call: pending txs for RBF cleanup
+          if (args?.where?.confirmations === 0 && args?.where?.rbfStatus === 'active') {
+            return [];
+          }
+          // Second call: unlinked replaced txs (retroactive linking)
+          if (args?.where?.rbfStatus === 'replaced' && args?.where?.replacedByTxid === null) {
+            return [{
+              id: 'unlinked-tx-id',
+              txid: replacedTxid,
+              inputs: [{ txid: sharedInputTxid, vout: 0 }],
+            }];
+          }
+          return [];
+        });
+
+        // Mock finding the replacement transaction
+        mockPrismaClient.transaction.findFirst.mockImplementation(async (args) => {
+          if (args?.where?.confirmations?.gt === 0) {
+            return { txid: replacementTxid };
+          }
+          return null;
+        });
+
+        const updateCalls: any[] = [];
+        mockPrismaClient.transaction.update.mockImplementation(async (args) => {
+          updateCalls.push(args);
+          return args;
+        });
+
+        mockElectrumClient.getAddressHistoryBatch.mockResolvedValue(new Map());
+
+        await syncWallet(walletId);
+
+        // Verify retroactive linking occurred
+        const linkUpdateCall = updateCalls.find(
+          call => call.where?.id === 'unlinked-tx-id' && call.data?.replacedByTxid === replacementTxid
+        );
+        expect(linkUpdateCall).toBeDefined();
+      });
+
+      it('should skip replaced transactions with no inputs', async () => {
+        const replacedTxid = 'replaced_' + 'a'.repeat(55);
+
+        mockPrismaClient.wallet.findUnique.mockResolvedValue({
+          id: walletId,
+          network: 'testnet',
+          descriptor: 'wpkh(tpubXXX)',
+        });
+
+        mockPrismaClient.address.findMany.mockResolvedValue([
+          { address: 'tb1test', derivationPath: "m/84'/0'/0'/0/0", index: 0, used: false },
+        ]);
+
+        mockPrismaClient.transaction.findMany.mockImplementation(async (args) => {
+          if (args?.where?.confirmations === 0) {
+            return [];
+          }
+          if (args?.where?.rbfStatus === 'replaced') {
+            // Replaced transaction with no inputs - can't link
+            return [{
+              id: 'unlinked-tx-id',
+              txid: replacedTxid,
+              inputs: [],
+            }];
+          }
+          return [];
+        });
+
+        const updateCalls: any[] = [];
+        mockPrismaClient.transaction.update.mockImplementation(async (args) => {
+          updateCalls.push(args);
+          return args;
+        });
+
+        mockElectrumClient.getAddressHistoryBatch.mockResolvedValue(new Map());
+
+        await syncWallet(walletId);
+
+        // Should not update transaction without inputs
+        const linkUpdateCall = updateCalls.find(
+          call => call.where?.id === 'unlinked-tx-id' && call.data?.replacedByTxid
+        );
+        expect(linkUpdateCall).toBeUndefined();
+      });
     });
   });
 });

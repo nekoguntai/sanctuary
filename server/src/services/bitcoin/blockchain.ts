@@ -580,6 +580,110 @@ export async function syncWallet(walletId: string): Promise<{
     );
   }
 
+  // RBF Cleanup: Mark pending transactions as replaced if a confirmed tx shares the same inputs
+  // This catches cases the UTXO-based cleanup might miss (e.g., missing UTXO records)
+  const pendingTxsWithInputs = await prisma.transaction.findMany({
+    where: {
+      walletId,
+      confirmations: 0,
+      rbfStatus: 'active',
+      inputs: { some: {} }, // Only transactions that have inputs stored
+    },
+    select: {
+      id: true,
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+
+  for (const pendingTx of pendingTxsWithInputs) {
+    // Check if any confirmed transaction uses the same inputs
+    const confirmedReplacement = await prisma.transaction.findFirst({
+      where: {
+        walletId,
+        confirmations: { gt: 0 },
+        txid: { not: pendingTx.txid },
+        inputs: {
+          some: {
+            OR: pendingTx.inputs.map(i => ({
+              txid: i.txid,
+              vout: i.vout,
+            })),
+          },
+        },
+      },
+      select: { txid: true },
+    });
+
+    if (confirmedReplacement) {
+      await prisma.transaction.update({
+        where: { id: pendingTx.id },
+        data: {
+          rbfStatus: 'replaced',
+          replacedByTxid: confirmedReplacement.txid,
+        },
+      });
+      walletLog(
+        walletId,
+        'info',
+        'RBF',
+        `Cleanup: Marked ${pendingTx.txid.slice(0, 8)}... as replaced by ${confirmedReplacement.txid.slice(0, 8)}...`
+      );
+    }
+  }
+
+  // Retroactive RBF linking: Find replaced transactions without replacedByTxid and try to link them
+  // This repairs orphaned replaced transactions from before the linking logic was added
+  const unlinkedReplacedTxs = await prisma.transaction.findMany({
+    where: {
+      walletId,
+      rbfStatus: 'replaced',
+      replacedByTxid: null,
+    },
+    select: {
+      id: true,
+      txid: true,
+      inputs: { select: { txid: true, vout: true } },
+    },
+  });
+
+  if (unlinkedReplacedTxs.length > 0) {
+    for (const replacedTx of unlinkedReplacedTxs) {
+      if (replacedTx.inputs.length === 0) continue;
+
+      // Find confirmed transaction that shares any input with this replaced transaction
+      const replacementTx = await prisma.transaction.findFirst({
+        where: {
+          walletId,
+          confirmations: { gt: 0 },
+          txid: { not: replacedTx.txid },
+          inputs: {
+            some: {
+              OR: replacedTx.inputs.map(i => ({
+                txid: i.txid,
+                vout: i.vout,
+              })),
+            },
+          },
+        },
+        select: { txid: true },
+      });
+
+      if (replacementTx) {
+        await prisma.transaction.update({
+          where: { id: replacedTx.id },
+          data: { replacedByTxid: replacementTx.txid },
+        });
+        walletLog(
+          walletId,
+          'info',
+          'RBF',
+          `Retroactive link: ${replacedTx.txid.slice(0, 8)}... replaced by ${replacementTx.txid.slice(0, 8)}...`
+        );
+      }
+    }
+  }
+
   // PHASE 1: Batch fetch all address histories using true RPC batching
   walletLog(walletId, 'info', 'SYNC', `Fetching address histories (${addresses.length} addresses)...`);
   log.debug(`[BLOCKCHAIN] Fetching history for ${addresses.length} addresses using batch RPC...`);
@@ -1070,6 +1174,81 @@ export async function syncWallet(walletId: string): Promise<{
               data: txInputsToCreate,
               skipDuplicates: true,
             });
+
+            // RBF Detection: Link confirmed transactions to pending transactions they replace
+            // This works for both app-initiated and external RBF replacements.
+            // Note: This only detects RBF (same inputs), not CPFP (child spends parent's output).
+            // CPFP transactions spend the parent's OUTPUT, not its INPUTS, so they won't
+            // incorrectly trigger this replacement detection.
+            const confirmedTxRecords = createdTxRecords.filter(tx => {
+              const txData = newTransactions.find(t => t.txid === tx.txid);
+              return txData && txData.confirmations > 0;
+            });
+
+            if (confirmedTxRecords.length > 0) {
+              // Get input patterns for confirmed transactions (txid:vout pairs)
+              const confirmedInputPatterns: Array<{ confirmedTxid: string; inputTxid: string; inputVout: number }> = [];
+              for (const txRecord of confirmedTxRecords) {
+                const inputs = txInputsToCreate.filter(i => i.transactionId === txRecord.id);
+                for (const input of inputs) {
+                  confirmedInputPatterns.push({
+                    confirmedTxid: txRecord.txid,
+                    inputTxid: input.txid,
+                    inputVout: input.vout,
+                  });
+                }
+              }
+
+              if (confirmedInputPatterns.length > 0) {
+                // Find pending transactions that share any input with these confirmed transactions
+                const pendingTxsWithMatchingInputs = await prisma.transaction.findMany({
+                  where: {
+                    walletId,
+                    confirmations: 0,
+                    rbfStatus: 'active',
+                    inputs: {
+                      some: {
+                        OR: confirmedInputPatterns.map(p => ({
+                          txid: p.inputTxid,
+                          vout: p.inputVout,
+                        })),
+                      },
+                    },
+                  },
+                  select: {
+                    id: true,
+                    txid: true,
+                    inputs: { select: { txid: true, vout: true } },
+                  },
+                });
+
+                // Link each pending tx to the confirmed tx that replaced it
+                for (const pendingTx of pendingTxsWithMatchingInputs) {
+                  // Find which confirmed tx shares an input with this pending tx
+                  const pendingInputKeys = new Set(pendingTx.inputs.map(i => `${i.txid}:${i.vout}`));
+                  const replacementTxid = confirmedInputPatterns.find(p =>
+                    pendingInputKeys.has(`${p.inputTxid}:${p.inputVout}`)
+                  )?.confirmedTxid;
+
+                  if (replacementTxid && replacementTxid !== pendingTx.txid) {
+                    await prisma.transaction.update({
+                      where: { id: pendingTx.id },
+                      data: {
+                        rbfStatus: 'replaced',
+                        replacedByTxid: replacementTxid,
+                      },
+                    });
+
+                    walletLog(
+                      walletId,
+                      'info',
+                      'RBF',
+                      `Linked pending tx ${pendingTx.txid.slice(0, 8)}... as replaced by confirmed tx ${replacementTxid.slice(0, 8)}...`
+                    );
+                  }
+                }
+              }
+            }
           }
 
           if (txOutputsToCreate.length > 0) {

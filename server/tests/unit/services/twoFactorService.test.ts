@@ -17,6 +17,9 @@ import {
   isBackupCode,
 } from '../../../src/services/twoFactorService';
 
+// Increase timeout for bcrypt-heavy tests (10 backup codes with cost factor 10)
+const BCRYPT_TIMEOUT = 30000;
+
 describe('Two-Factor Authentication Service', () => {
   describe('Secret Generation', () => {
     it('should generate a secret and QR code', async () => {
@@ -120,7 +123,7 @@ describe('Two-Factor Authentication Service', () => {
         expect(entry.hash.startsWith('$2a$') || entry.hash.startsWith('$2b$')).toBe(true);
         expect(entry.used).toBe(false);
       });
-    });
+    }, BCRYPT_TIMEOUT);
 
     it('should produce different hashes for same codes', async () => {
       const codes = ['TESTCODE'];
@@ -141,7 +144,7 @@ describe('Two-Factor Authentication Service', () => {
     beforeEach(async () => {
       codes = generateBackupCodes();
       hashedCodesJson = await hashBackupCodes(codes);
-    });
+    }, BCRYPT_TIMEOUT);
 
     it('should verify valid backup code', async () => {
       const codeToVerify = codes[0];

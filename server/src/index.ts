@@ -5,6 +5,14 @@
  * Handles Bitcoin wallet management, transactions, and user authentication.
  */
 
+// Initialize OpenTelemetry tracing FIRST (before other imports)
+// This must be at the very top to ensure auto-instrumentation works
+import { initializeOpenTelemetry } from './utils/tracing/otel';
+
+// Initialize OTEL synchronously at module load if enabled
+// (actual async initialization happens in startServer)
+const otelPromise = initializeOpenTelemetry();
+
 import express, { Express, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -262,6 +270,9 @@ const backgroundServices: ServiceDefinition[] = [
 // Run database connection and migrations before starting server
 (async () => {
   try {
+    // Wait for OpenTelemetry initialization (if enabled)
+    await otelPromise;
+
     // Connect to database with retry logic
     await connectWithRetry();
 

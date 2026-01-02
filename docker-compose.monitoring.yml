@@ -3,19 +3,58 @@
 # =============================================
 #
 # Optional monitoring services for production deployments.
-# Provides centralized logging, metrics, and alerting.
+# Provides centralized logging, metrics, alerting, and distributed tracing.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #
 # Access:
 #   - Grafana: http://localhost:3000 (admin/sanctuary)
+#   - Prometheus: http://localhost:9090
+#   - Jaeger UI: http://localhost:16686
 #   - Loki: http://localhost:3100 (internal)
 #   - Promtail: Collects logs automatically
 #
 # =============================================
 
 services:
+  # ============================================
+  # Jaeger - Distributed Tracing
+  # ============================================
+  # Collects and visualizes distributed traces.
+  # Receives traces via OTLP protocol from backend.
+  # ============================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: sanctuary-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"    # Jaeger UI
+      - "4317:4317"                          # OTLP gRPC
+      - "4318:4318"                          # OTLP HTTP
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:16686/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
   # ============================================
   # Loki - Log Aggregation
   # ============================================
@@ -144,6 +183,23 @@ services:
   # Pre-configured with Loki datasource and Sanctuary dashboards.
   # Default login: admin / sanctuary
   # ============================================
+  # ============================================
+  # Backend Extension - Enable Tracing
+  # ============================================
+  # Extends the backend service with OpenTelemetry config
+  # when monitoring stack is enabled.
+  # ============================================
+  backend:
+    environment:
+      # OpenTelemetry Tracing Configuration
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_SERVICE_NAME: sanctuary-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http
+    depends_on:
+      jaeger:
+        condition: service_healthy
+
   grafana:
     image: grafana/grafana:10.2.0
     container_name: sanctuary-grafana
@@ -151,6 +207,7 @@ services:
     depends_on:
       - loki
       - prometheus
+      - jaeger
     environment:
       GF_SECURITY_ADMIN_USER: admin
       # Uses GRAFANA_PASSWORD if set, otherwise falls back to ENCRYPTION_KEY
@@ -194,4 +251,6 @@ volumes:
   promtail_positions:
     driver: local
   prometheus_data:
+    driver: local
+  jaeger_data:
     driver: local

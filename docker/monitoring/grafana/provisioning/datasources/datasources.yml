@@ -1,5 +1,5 @@
 # Grafana Datasource Configuration
-# Automatically provisions Loki and Prometheus as datasources
+# Automatically provisions Loki, Prometheus, and Jaeger as datasources
 
 apiVersion: 1
 
@@ -25,3 +25,22 @@ datasources:
     jsonData:
       timeout: 60
       maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: '"traceId":"([a-f0-9]+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        tags: ['service.name']
+      tracesToMetrics:
+        datasourceUid: prometheus

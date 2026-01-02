@@ -157,10 +157,15 @@ export async function revokeRefreshToken(token: string): Promise<boolean> {
  */
 export async function revokeSession(sessionId: string, userId: string): Promise<boolean> {
   try {
-    // Note: sessionRepository.deleteRefreshTokenById doesn't verify userId,
-    // but we need to ensure user can only revoke their own sessions
-    // We should check ownership first, but for simplicity we use the direct method
+    // Verify the session belongs to this user before deleting
+    const token = await sessionRepository.findRefreshTokenById(sessionId);
+    if (!token || token.userId !== userId) {
+      log.debug('Session not found or belongs to another user', { sessionId, userId });
+      return false;
+    }
+
     await sessionRepository.deleteRefreshTokenById(sessionId);
+    log.info('Session revoked', { sessionId, userId });
     return true;
   } catch (error) {
     log.error('Failed to revoke session', { error, sessionId });
@@ -190,9 +195,17 @@ export async function getUserSessions(
   currentTokenHash?: string
 ): Promise<Session[]> {
   try {
-    // Use the repository's getSessionsForUser method
-    // Note: currentTokenHash is actually the token ID in the repository method
-    const sessions = await sessionRepository.getSessionsForUser(userId, currentTokenHash);
+    // Resolve the token hash to get the actual token ID for marking current session
+    let currentTokenId: string | undefined;
+    if (currentTokenHash) {
+      const currentToken = await sessionRepository.findRefreshTokenByHash(currentTokenHash);
+      if (currentToken && currentToken.userId === userId) {
+        currentTokenId = currentToken.id;
+      }
+    }
+
+    // Use the repository's getSessionsForUser method with the resolved token ID
+    const sessions = await sessionRepository.getSessionsForUser(userId, currentTokenId);
 
     return sessions.map(session => ({
       id: session.id,

@@ -41,6 +41,28 @@ export async function findRefreshToken(
 }
 
 /**
+ * Find refresh token by ID
+ */
+export async function findRefreshTokenById(
+  id: string
+): Promise<RefreshToken | null> {
+  return prisma.refreshToken.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Find refresh token by token hash
+ */
+export async function findRefreshTokenByHash(
+  tokenHash: string
+): Promise<RefreshToken | null> {
+  return prisma.refreshToken.findUnique({
+    where: { tokenHash },
+  });
+}
+
+/**
  * Find all refresh tokens for a user
  */
 export async function findRefreshTokensByUserId(
@@ -250,6 +272,8 @@ export async function getSessionsForUser(
 // Export as namespace
 export const sessionRepository = {
   findRefreshToken,
+  findRefreshTokenById,
+  findRefreshTokenByHash,
   findRefreshTokensByUserId,
   findActiveRefreshTokens,
   countActiveSessions,

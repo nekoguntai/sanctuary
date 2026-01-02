@@ -181,9 +181,7 @@ export function useWalletTransactions(
 
 /**
  * Hook to fetch recent transactions across all wallets
- * Aggregates transactions from multiple wallets and sorts by timestamp
- *
- * Uses single useQuery with Promise.all to avoid render loop from useQueries
+ * Uses single API call to /transactions/recent endpoint for efficiency
  */
 export function useRecentTransactions(walletIds: string[], limit: number = 10) {
   // Create stable key from wallet IDs
@@ -193,19 +191,8 @@ export function useRecentTransactions(walletIds: string[], limit: number = 10) {
     queryKey: ['recentTransactions', walletIdsKey, limit],
     queryFn: async () => {
       if (walletIds.length === 0) return [];
-      // Fetch all wallets in parallel, single state update when all complete
-      const results = await Promise.all(
-        walletIds.map((walletId) => transactionsApi.getTransactions(walletId, { limit: 5 }))
-      );
-      // Aggregate and sort
-      return results
-        .flat()
-        .sort((a, b) => {
-          const timeA = a.blockTime ? new Date(a.blockTime).getTime() : Date.now();
-          const timeB = b.blockTime ? new Date(b.blockTime).getTime() : Date.now();
-          return timeB - timeA;
-        })
-        .slice(0, limit);
+      // Single API call - server handles aggregation and sorting
+      return transactionsApi.getRecentTransactions(limit, walletIds);
     },
     enabled: walletIds.length > 0,
     // Don't keep previous data when wallet IDs change - show empty for new networks

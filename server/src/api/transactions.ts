@@ -1521,11 +1521,15 @@ router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('vie
  *
  * Query params:
  * - limit: max transactions to return (default: 10, max: 50)
+ * - walletIds: comma-separated list of wallet IDs to filter (optional)
  */
 router.get('/transactions/recent', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 10, 50);
+    const requestedWalletIds = req.query.walletIds
+      ? (req.query.walletIds as string).split(',').filter(Boolean)
+      : null;
 
     // Get all wallet IDs the user has access to (include network for block height lookups)
     const accessibleWallets = await prisma.wallet.findMany({
@@ -1534,6 +1538,8 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
           { users: { some: { userId } } },
           { group: { members: { some: { userId } } } },
         ],
+        // If specific wallets requested, filter to only those
+        ...(requestedWalletIds && { id: { in: requestedWalletIds } }),
       },
       select: { id: true, name: true, network: true },
     });

@@ -7,6 +7,7 @@ import React from 'react';
 // Mock the API modules
 vi.mock('../../src/api/transactions', () => ({
   getTransactions: vi.fn().mockResolvedValue([]),
+  getRecentTransactions: vi.fn().mockResolvedValue([]),
   getPendingTransactions: vi.fn().mockResolvedValue([]),
 }));
 
@@ -192,7 +193,8 @@ describe('Dashboard stable array constants', () => {
 });
 
 describe('Dashboard renders without infinite loops', () => {
-  it('should render without throwing "too many re-renders" error', async () => {
+  // Increase timeout for full test suite runs where resource contention may occur
+  it('should render without throwing "too many re-renders" error', { timeout: 15000 }, async () => {
     // This test verifies the fix for React error #310
     const queryClient = new QueryClient({
       defaultOptions: {

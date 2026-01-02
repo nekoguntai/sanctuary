@@ -415,7 +415,10 @@ jobs:
           # Remove pre-release flag (converts release candidate to full release)
           gh release edit "v$VERSION" --prerelease=false
 
-          # Mark as latest
-          gh release edit "v$VERSION" --latest
-
-          echo "✓ v$VERSION is now a full release and marked as latest"
+          # Only mark as latest for stable versions (not -rc, -alpha, -beta)
+          if [[ "$VERSION" != *-rc* && "$VERSION" != *-alpha* && "$VERSION" != *-beta* ]]; then
+            gh release edit "v$VERSION" --latest
+            echo "✓ v$VERSION is now a full release and marked as latest"
+          else
+            echo "✓ v$VERSION is now a full release (not marked as latest due to pre-release suffix)"
+          fi

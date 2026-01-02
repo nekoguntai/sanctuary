@@ -308,9 +308,16 @@ export interface RecentTransaction extends Transaction {
 /**
  * Get recent transactions across all wallets the user has access to
  * This is an optimized aggregate endpoint that replaces N separate API calls
+ *
+ * @param limit - Max transactions to return (default: 10)
+ * @param walletIds - Optional array of wallet IDs to filter by (for network filtering)
  */
-export async function getRecentTransactions(limit: number = 10): Promise<RecentTransaction[]> {
-  return apiClient.get<RecentTransaction[]>('/transactions/recent', { limit });
+export async function getRecentTransactions(limit: number = 10, walletIds?: string[]): Promise<RecentTransaction[]> {
+  const params: Record<string, string | number> = { limit };
+  if (walletIds && walletIds.length > 0) {
+    params.walletIds = walletIds.join(',');
+  }
+  return apiClient.get<RecentTransaction[]>('/transactions/recent', params);
 }
 
 /**

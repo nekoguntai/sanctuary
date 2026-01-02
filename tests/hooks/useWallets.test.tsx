@@ -11,6 +11,7 @@ import {
 // Mock the API modules
 vi.mock('../../src/api/transactions', () => ({
   getTransactions: vi.fn(),
+  getRecentTransactions: vi.fn(),
   getPendingTransactions: vi.fn(),
 }));
 
@@ -44,13 +45,14 @@ describe('useWallets hooks memoization', () => {
   });
 
   describe('useRecentTransactions', () => {
-    it('should return stable array reference when data has not changed', async () => {
+    it('should call getRecentTransactions with correct params', async () => {
       const mockTransactions = [
         {
           id: 'tx1',
           txid: 'txid1',
           walletId: 'wallet1',
-          blockTime: '2024-01-01T00:00:00Z',
+          walletName: 'Test Wallet',
+          blockTime: '2024-01-02T00:00:00Z',
           type: 'receive' as const,
           amount: 100000,
           confirmations: 6,
@@ -59,18 +61,19 @@ describe('useWallets hooks memoization', () => {
           id: 'tx2',
           txid: 'txid2',
           walletId: 'wallet1',
-          blockTime: '2024-01-02T00:00:00Z',
+          walletName: 'Test Wallet',
+          blockTime: '2024-01-01T00:00:00Z',
           type: 'sent' as const,
           amount: -50000,
           confirmations: 3,
         },
       ];
 
-      vi.mocked(transactionsApi.getTransactions).mockResolvedValue(mockTransactions);
+      vi.mocked(transactionsApi.getRecentTransactions).mockResolvedValue(mockTransactions);
 
       const wrapper = createWrapper();
-      const { result, rerender } = renderHook(
-        () => useRecentTransactions(['wallet1'], 10),
+      const { result } = renderHook(
+        () => useRecentTransactions(['wallet1', 'wallet2'], 10),
         { wrapper }
       );
 
@@ -78,28 +81,14 @@ describe('useWallets hooks memoization', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      const firstData = result.current.data;
-
-      // Rerender without changing inputs
-      rerender();
-
-      // Data should still be correct after rerender
-      expect(result.current.data.length).toBe(firstData.length);
-      // Refetch should be a function (stability not guaranteed due to useQueries)
-      expect(typeof result.current.refetch).toBe('function');
+      // Verify API called with correct params
+      expect(transactionsApi.getRecentTransactions).toHaveBeenCalledWith(10, ['wallet1', 'wallet2']);
+      expect(result.current.data).toEqual(mockTransactions);
     });
 
-    it('should sort transactions by blockTime descending', async () => {
+    it('should return data from server (server handles sorting)', async () => {
+      // Server returns pre-sorted data
       const mockTransactions = [
-        {
-          id: 'tx1',
-          txid: 'txid1',
-          walletId: 'wallet1',
-          blockTime: '2024-01-01T00:00:00Z',
-          type: 'receive' as const,
-          amount: 100000,
-          confirmations: 6,
-        },
         {
           id: 'tx2',
           txid: 'txid2',
@@ -118,9 +107,18 @@ describe('useWallets hooks memoization', () => {
           amount: 75000,
           confirmations: 6,
         },
+        {
+          id: 'tx1',
+          txid: 'txid1',
+          walletId: 'wallet1',
+          blockTime: '2024-01-01T00:00:00Z',
+          type: 'receive' as const,
+          amount: 100000,
+          confirmations: 6,
+        },
       ];
 
-      vi.mocked(transactionsApi.getTransactions).mockResolvedValue(mockTransactions);
+      vi.mocked(transactionsApi.getRecentTransactions).mockResolvedValue(mockTransactions);
 
       const wrapper = createWrapper();
       const { result } = renderHook(() => useRecentTransactions(['wallet1'], 10), {
@@ -131,24 +129,14 @@ describe('useWallets hooks memoization', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Should be sorted by blockTime descending (newest first)
-      expect(result.current.data[0].id).toBe('tx2'); // Jan 3
-      expect(result.current.data[1].id).toBe('tx3'); // Jan 2
-      expect(result.current.data[2].id).toBe('tx1'); // Jan 1
+      // Data comes from server pre-sorted
+      expect(result.current.data[0].id).toBe('tx2');
+      expect(result.current.data[1].id).toBe('tx3');
+      expect(result.current.data[2].id).toBe('tx1');
     });
 
-    it('should respect limit parameter', async () => {
-      const mockTransactions = Array.from({ length: 20 }, (_, i) => ({
-        id: `tx${i}`,
-        txid: `txid${i}`,
-        walletId: 'wallet1',
-        blockTime: new Date(2024, 0, i + 1).toISOString(),
-        type: 'receive' as const,
-        amount: 10000 * (i + 1),
-        confirmations: 6,
-      }));
-
-      vi.mocked(transactionsApi.getTransactions).mockResolvedValue(mockTransactions);
+    it('should pass limit to server', async () => {
+      vi.mocked(transactionsApi.getRecentTransactions).mockResolvedValue([]);
 
       const wrapper = createWrapper();
       const { result } = renderHook(() => useRecentTransactions(['wallet1'], 5), {
@@ -159,7 +147,8 @@ describe('useWallets hooks memoization', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.data.length).toBeLessThanOrEqual(5);
+      // Verify limit is passed to API
+      expect(transactionsApi.getRecentTransactions).toHaveBeenCalledWith(5, ['wallet1']);
     });
 
     it('should return empty array when no wallets provided', async () => {
@@ -169,7 +158,7 @@ describe('useWallets hooks memoization', () => {
       });
 
       // Should not call API
-      expect(transactionsApi.getTransactions).not.toHaveBeenCalled();
+      expect(transactionsApi.getRecentTransactions).not.toHaveBeenCalled();
       expect(result.current.data).toEqual([]);
     });
   });

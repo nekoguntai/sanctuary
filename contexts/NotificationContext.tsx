@@ -16,12 +16,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Track recently shown transaction notifications to prevent duplicates
   const recentTxidsRef = useRef<Set<string>>(new Set());
+  // Track dedupe cleanup timeouts separately
+  const dedupeTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup all timeouts on unmount
   useEffect(() => {
     return () => {
       timeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
       timeoutsRef.current.clear();
+      dedupeTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      dedupeTimeoutsRef.current.clear();
+      recentTxidsRef.current.clear();
     };
   }, []);
 
@@ -45,9 +50,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       recentTxidsRef.current.add(dedupeKey);
       // Clean up after 30 seconds to allow future notifications for same tx
-      setTimeout(() => {
+      const dedupeTimeout = setTimeout(() => {
         recentTxidsRef.current.delete(dedupeKey);
+        dedupeTimeoutsRef.current.delete(dedupeKey);
       }, 30000);
+      dedupeTimeoutsRef.current.set(dedupeKey, dedupeTimeout);
     }
 
     const id = generateNotificationId();

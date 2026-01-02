@@ -512,6 +512,16 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const [newBlockDetected, setNewBlockDetected] = useState(false);
   const prevBlocksRef = useRef<BlockData[]>([]);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup animation timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Detect new blocks and trigger animation
   useEffect(() => {
@@ -536,8 +546,13 @@ export const BlockVisualizer: React.FC<BlockVisualizerProps> = ({
         setNewBlockDetected(true);
         setIsAnimating(true);
 
+        // Clear any existing animation timeout
+        if (animationTimeoutRef.current) {
+          clearTimeout(animationTimeoutRef.current);
+        }
+
         // After animation completes, update display
-        setTimeout(() => {
+        animationTimeoutRef.current = setTimeout(() => {
           setDisplayBlocks(newBlocks);
           setIsAnimating(false);
           setNewBlockDetected(false);

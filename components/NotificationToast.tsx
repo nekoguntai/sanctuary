@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { X, ArrowDownLeft, ArrowUpRight, CheckCircle, TrendingUp, Activity } from 'lucide-react';
 
 export type NotificationType = 'transaction' | 'balance' | 'confirmation' | 'block' | 'success' | 'error' | 'info';
@@ -19,6 +19,27 @@ interface NotificationToastProps {
 
 export const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onDismiss }) => {
   const [isExiting, setIsExiting] = useState(false);
+  const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup exit timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (exitTimeoutRef.current) {
+        clearTimeout(exitTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    setIsExiting(true);
+    // Clear any existing exit timeout
+    if (exitTimeoutRef.current) {
+      clearTimeout(exitTimeoutRef.current);
+    }
+    exitTimeoutRef.current = setTimeout(() => {
+      onDismiss(notification.id);
+    }, 300); // Match exit animation duration
+  }, [onDismiss, notification.id]);
 
   useEffect(() => {
     if (notification.duration) {
@@ -28,14 +49,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({ notificati
 
       return () => clearTimeout(timer);
     }
-  }, [notification.duration]);
-
-  const handleDismiss = () => {
-    setIsExiting(true);
-    setTimeout(() => {
-      onDismiss(notification.id);
-    }, 300); // Match exit animation duration
-  };
+  }, [notification.duration, handleDismiss]);
 
   const getIcon = () => {
     // Transaction colors: receive=primary, sent=sent (theme-aware), consolidation=sent

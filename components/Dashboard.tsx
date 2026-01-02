@@ -173,7 +173,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // WebSocket integration
-  const { connected: wsConnected, state: wsState, subscribeWallet, subscribe } = useWebSocket();
+  const { connected: wsConnected, state: wsState, subscribeWallet, unsubscribeWallet, subscribe, unsubscribe } = useWebSocket();
   const { addNotification } = useNotifications();
   const { playEventSound } = useNotificationSound();
   const invalidateAllWallets = useInvalidateAllWallets();
@@ -310,7 +310,13 @@ export const Dashboard: React.FC = () => {
         subscribeWallet(wallet.id);
       });
     }
-  }, [wallets, subscribeWallet]);
+    // Cleanup: unsubscribe from all wallets when effect re-runs or component unmounts
+    return () => {
+      wallets.forEach(wallet => {
+        unsubscribeWallet(wallet.id);
+      });
+    };
+  }, [wallets, subscribeWallet, unsubscribeWallet]);
 
   // Refetch wallet data when window becomes visible (handles missed WS events)
   useEffect(() => {
@@ -342,7 +348,11 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     subscribe('blocks');
     subscribe('mempool');
-  }, [subscribe]);
+    return () => {
+      unsubscribe('blocks');
+      unsubscribe('mempool');
+    };
+  }, [subscribe, unsubscribe]);
 
   // Note: Periodic mempool refresh is handled by React Query's refetchInterval
 

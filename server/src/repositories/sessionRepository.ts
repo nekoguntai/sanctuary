@@ -41,7 +41,12 @@ export async function findRefreshToken(
 }
 
 /**
- * Find refresh token by ID
+ * Find refresh token by its database ID
+ *
+ * Used for session management operations like revocation where we need
+ * to verify ownership before deletion.
+ *
+ * @param id - The refresh token's database ID (UUID)
  */
 export async function findRefreshTokenById(
   id: string
@@ -52,7 +57,12 @@ export async function findRefreshTokenById(
 }
 
 /**
- * Find refresh token by token hash
+ * Find refresh token by its SHA256 hash
+ *
+ * Used to resolve a token hash back to its record, primarily for
+ * identifying the current session when listing all user sessions.
+ *
+ * @param tokenHash - SHA256 hash of the raw refresh token
  */
 export async function findRefreshTokenByHash(
   tokenHash: string

@@ -154,6 +154,13 @@ export async function revokeRefreshToken(token: string): Promise<boolean> {
 
 /**
  * Revoke a specific session by its ID
+ *
+ * Security: Enforces ownership - users can only revoke their own sessions.
+ * Returns false if the session doesn't exist or belongs to another user.
+ *
+ * @param sessionId - The refresh token ID (not the token itself)
+ * @param userId - The requesting user's ID for ownership verification
+ * @returns true if revoked, false if not found or unauthorized
  */
 export async function revokeSession(sessionId: string, userId: string): Promise<boolean> {
   try {
@@ -189,6 +196,14 @@ export async function revokeAllUserRefreshTokens(userId: string): Promise<number
 
 /**
  * Get all active sessions for a user
+ *
+ * Returns all non-expired refresh tokens for the user, with each session
+ * marked as `isCurrent: true` if it matches the provided token hash.
+ *
+ * @param userId - The user's ID
+ * @param currentTokenHash - SHA256 hash of the current refresh token (from X-Refresh-Token header)
+ *                          Used to mark which session is the caller's current session
+ * @returns Array of sessions with device info and current session indicator
  */
 export async function getUserSessions(
   userId: string,

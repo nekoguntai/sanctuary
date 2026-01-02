@@ -29,6 +29,7 @@ on:
           - all
           - unit
           - fresh-install
+          - install-script
           - upgrade
           - container-health
           - auth-flow
@@ -203,6 +204,76 @@ jobs:
           echo ""
           echo "=== Migration Logs ==="
           docker compose logs migrate 2>&1 || true
+
+      - name: Cleanup
+        if: always() && github.event.inputs.keep_containers != 'true'
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker system prune -f || true
+
+  # ============================================
+  # Install Script E2E Test
+  # ============================================
+  # This test actually runs install.sh to verify the complete
+  # installation flow works, catching issues like:
+  #   - .env file not created before docker compose
+  #   - Missing --pull never flag for local builds
+  #   - Secret generation issues
+  # ============================================
+  install-script-test:
+    name: Install Script E2E Test
+    runs-on: ubuntu-latest
+    needs: determine-scope
+    if: |
+      needs.determine-scope.outputs.should_run == 'true' &&
+      (needs.determine-scope.outputs.test_suite == 'all' ||
+       needs.determine-scope.outputs.test_suite == 'fresh-install' ||
+       needs.determine-scope.outputs.test_suite == 'release-critical')
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check Docker
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Make test scripts executable
+        run: chmod +x tests/install/unit/*.sh tests/install/e2e/*.sh tests/install/utils/*.sh install.sh
+
+      - name: Run install script test
+        env:
+          HTTPS_PORT: ${{ env.HTTPS_PORT }}
+          HTTP_PORT: ${{ env.HTTP_PORT }}
+        run: |
+          if [ "${{ github.event.inputs.keep_containers }}" == "true" ]; then
+            ./tests/install/e2e/install-script.test.sh --keep-containers --verbose
+          else
+            ./tests/install/e2e/install-script.test.sh --verbose
+          fi
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== Container Status ==="
+          docker compose ps || true
+          echo ""
+          echo "=== .env file contents ==="
+          cat .env 2>/dev/null || echo ".env file not found"
+          echo ""
+          echo "=== Database Logs ==="
+          docker compose logs --tail 100 postgres 2>&1 || true
+          echo ""
+          echo "=== Backend Logs ==="
+          docker compose logs --tail 100 backend 2>&1 || true
+          echo ""
+          echo "=== Frontend Logs ==="
+          docker compose logs --tail 100 frontend 2>&1 || true
 
       - name: Cleanup
         if: always() && github.event.inputs.keep_containers != 'true'
@@ -390,7 +461,7 @@ jobs:
   test-summary:
     name: Install Test Summary
     runs-on: ubuntu-latest
-    needs: [determine-scope, unit-tests, fresh-install-test, container-health-test, auth-flow-test, upgrade-test]
+    needs: [determine-scope, unit-tests, fresh-install-test, install-script-test, container-health-test, auth-flow-test, upgrade-test]
     if: always()
 
     steps:
@@ -445,6 +516,15 @@ jobs:
             echo "- Fresh Install E2E: :x: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # Install script test
+          if [ "${{ needs.install-script-test.result }}" == "success" ]; then
+            echo "- Install Script E2E: :white_check_mark: Passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.install-script-test.result }}" == "skipped" ]; then
+            echo "- Install Script E2E: :arrow_right: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Install Script E2E: :x: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
           # Container health
           if [ "${{ needs.container-health-test.result }}" == "success" ]; then
             echo "- Container Health: :white_check_mark: Passed" >> $GITHUB_STEP_SUMMARY
@@ -484,6 +564,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             if [ "${{ needs.unit-tests.result }}" == "success" ] && \
                [ "${{ needs.fresh-install-test.result }}" == "success" ] && \
+               [ "${{ needs.install-script-test.result }}" == "success" ] && \
                [ "${{ needs.container-health-test.result }}" == "success" ] && \
                [ "${{ needs.auth-flow-test.result }}" == "success" ]; then
               echo ":rocket: **Release validation passed!** Installation has been verified." >> $GITHUB_STEP_SUMMARY
@@ -506,6 +587,11 @@ jobs:
 
           if [ "${{ needs.fresh-install-test.result }}" != "success" ]; then
             echo "::error::Fresh install test failed - release blocked"
+            FAILED=true
+          fi
+
+          if [ "${{ needs.install-script-test.result }}" != "success" ]; then
+            echo "::error::Install script test failed - release blocked"
             FAILED=true
           fi
 

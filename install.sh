@@ -310,6 +310,32 @@ main() {
         echo ""
     fi
 
+    # Save secrets to .env BEFORE starting docker compose
+    # This ensures docker compose can read them and allows manual docker compose commands
+    cat > "$INSTALL_DIR/.env" << ENVEOF
+# Sanctuary Environment Configuration
+# This file is auto-loaded by docker compose
+
+JWT_SECRET=$JWT_SECRET
+ENCRYPTION_KEY=$ENCRYPTION_KEY
+GATEWAY_SECRET=$GATEWAY_SECRET
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+HTTP_PORT=${HTTP_PORT:-8080}
+HTTPS_PORT=${HTTPS_PORT:-8443}
+ENABLE_MONITORING=${ENABLE_MONITORING:-no}
+ENABLE_TOR=${ENABLE_TOR:-no}
+ENVEOF
+
+    echo -e "${GREEN}✓${NC} Saved configuration to .env"
+
+    # Remove old .env.local if it exists (migrated to .env)
+    if [ -f "$INSTALL_DIR/.env.local" ]; then
+        rm -f "$INSTALL_DIR/.env.local"
+        echo -e "${GREEN}✓${NC} Cleaned up old .env.local (migrated to .env)"
+    fi
+
+    echo ""
     echo "Starting Sanctuary..."
     echo -e "${YELLOW}Note: First-time build may take 2-5 minutes. Subsequent starts are much faster.${NC}"
     echo ""
@@ -325,7 +351,7 @@ main() {
         ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         GATEWAY_SECRET="$GATEWAY_SECRET" \
         POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-        docker compose $COMPOSE_FILES up -d --build
+        docker compose $COMPOSE_FILES up -d --build --pull never
 
     # Wait for services to be healthy
     echo ""
@@ -392,29 +418,6 @@ main() {
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-
-    # Save secrets and preferences for future restarts/upgrades
-    # Write to .env (Docker Compose's default file) so docker compose works without start.sh
-    cat > "$INSTALL_DIR/.env" << ENVEOF
-# Sanctuary Environment Configuration
-# This file is auto-loaded by docker compose
-
-JWT_SECRET=$JWT_SECRET
-ENCRYPTION_KEY=$ENCRYPTION_KEY
-GATEWAY_SECRET=$GATEWAY_SECRET
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-
-HTTP_PORT=${HTTP_PORT:-8080}
-HTTPS_PORT=${HTTPS_PORT:-8443}
-ENABLE_MONITORING=${ENABLE_MONITORING:-no}
-ENABLE_TOR=${ENABLE_TOR:-no}
-ENVEOF
-
-    # Remove old .env.local if it exists (migrated to .env)
-    if [ -f "$INSTALL_DIR/.env.local" ]; then
-        rm -f "$INSTALL_DIR/.env.local"
-        echo -e "${GREEN}✓${NC} Cleaned up old .env.local (migrated to .env)"
-    fi
 
     echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env"
     echo ""

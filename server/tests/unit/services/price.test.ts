@@ -161,6 +161,56 @@ describe('Price Service', () => {
       await expect(priceService.getPrice('USD', false)).rejects.toThrow();
     });
 
+    it('should try unhealthy providers when no healthy providers available', async () => {
+      // Simulate circuit breakers being open (all providers initially fail)
+      let callCount = 0;
+      mockedAxios.get.mockImplementation((url: string) => {
+        callCount++;
+        // First few calls fail (during health checks), then succeed
+        if (callCount <= 10) {
+          return Promise.reject(new Error('Provider temporarily unavailable'));
+        }
+        // After circuit breakers trip, providers should still be tried for recovery
+        if (url.includes('coingecko')) {
+          return Promise.resolve({
+            data: { bitcoin: { usd: 50000 } },
+          });
+        }
+        return Promise.reject(new Error('Provider unavailable'));
+      });
+
+      // First call may fail as providers are marked unhealthy
+      try {
+        await priceService.getPrice('USD', false);
+      } catch {
+        // Expected - providers are marked unhealthy
+      }
+
+      // Reset mock to succeed - simulating provider recovery
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('coingecko')) {
+          return Promise.resolve({
+            data: { bitcoin: { usd: 50000 } },
+          });
+        }
+        return Promise.reject(new Error('Provider unavailable'));
+      });
+
+      // Second call should try all providers even if marked unhealthy
+      // This gives circuit breakers a chance to recover
+      const result = await priceService.getPrice('USD', false);
+      expect(result.price).toBe(50000);
+    });
+
+    it('should include provider names in error message when all fail', async () => {
+      // Make all providers fail consistently
+      mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+      await expect(priceService.getPrice('USD', false)).rejects.toThrow(
+        /providers|Provider/i
+      );
+    });
+
     it('should include 24h change from CoinGecko', async () => {
       mockedAxios.get.mockImplementation((url: string) => {
         if (url.includes('coingecko')) {

@@ -106,7 +106,7 @@ className="bg-primary-600 text-white dark:bg-primary-950 dark:text-primary-200"
 See `themes/sanctuary/index.ts` for the full color definitions.
 
 ### Intentional arbitrary text sizes
-The codebase uses `text-[9px]` and `text-[10px]` for compact UI elements like health block counters and badge labels. These are intentional - `text-xs` (12px) would be too large for these tight spaces. Do not "fix" these to use named Tailwind sizes.
+The codebase uses `text-[9px]`, `text-[10px]`, and `text-[11px]` for compact UI elements like health block counters, badge labels, and advanced options labels. These are intentional - `text-xs` (12px) would be too large for these tight spaces. Do not "fix" these to use named Tailwind sizes.
 
 ## Git Commits & Pre-commit Hooks
 

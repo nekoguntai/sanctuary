@@ -273,6 +273,76 @@ describe('transactionReducer', () => {
       expect(newState.outputsValid).toEqual([true, false, true]);
     });
 
+    it('should clear sendMax when manually setting amount via UPDATE_OUTPUT', () => {
+      const state = createInitialState();
+      // First enable sendMax
+      state.outputs = [{ address: 'bc1qtest', amount: '', sendMax: true }];
+
+      // Then set an amount manually
+      const action: TransactionAction = {
+        type: 'UPDATE_OUTPUT',
+        index: 0,
+        field: 'amount',
+        value: '50000',
+      };
+
+      const newState = transactionReducer(state, action);
+
+      expect(newState.outputs[0].amount).toBe('50000');
+      expect(newState.outputs[0].sendMax).toBe(false);
+    });
+
+    it('should not clear sendMax when setting empty amount via UPDATE_OUTPUT', () => {
+      const state = createInitialState();
+      state.outputs = [{ address: 'bc1qtest', amount: '1000', sendMax: true }];
+
+      const action: TransactionAction = {
+        type: 'UPDATE_OUTPUT',
+        index: 0,
+        field: 'amount',
+        value: '',
+      };
+
+      const newState = transactionReducer(state, action);
+
+      expect(newState.outputs[0].amount).toBe('');
+      expect(newState.outputs[0].sendMax).toBe(true);
+    });
+
+    it('should clear sendMax when setting amount via SET_OUTPUT_AMOUNT', () => {
+      const state = createInitialState();
+      state.outputs = [{ address: 'bc1qtest', amount: '', sendMax: true }];
+
+      const action: TransactionAction = {
+        type: 'SET_OUTPUT_AMOUNT',
+        index: 0,
+        amount: '75000',
+        displayValue: '75000',
+      };
+
+      const newState = transactionReducer(state, action);
+
+      expect(newState.outputs[0].amount).toBe('75000');
+      expect(newState.outputs[0].sendMax).toBe(false);
+    });
+
+    it('should not clear sendMax when setting empty amount via SET_OUTPUT_AMOUNT', () => {
+      const state = createInitialState();
+      state.outputs = [{ address: 'bc1qtest', amount: '1000', sendMax: true }];
+
+      const action: TransactionAction = {
+        type: 'SET_OUTPUT_AMOUNT',
+        index: 0,
+        amount: '',
+        displayValue: '',
+      };
+
+      const newState = transactionReducer(state, action);
+
+      expect(newState.outputs[0].amount).toBe('');
+      expect(newState.outputs[0].sendMax).toBe(true);
+    });
+
     it('should set scanning output index', () => {
       const state = createInitialState();
       const action: TransactionAction = { type: 'SET_SCANNING_OUTPUT_INDEX', index: 1 };

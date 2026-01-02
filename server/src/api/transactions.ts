@@ -16,7 +16,7 @@ import * as addressDerivation from '../services/bitcoin/addressDerivation';
 import { auditService, AuditCategory, AuditAction } from '../services/auditService';
 import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
-import { recalculateWalletBalances, getCachedBlockHeight } from '../services/bitcoin/blockchain';
+import { recalculateWalletBalances, getCachedBlockHeight, type Network } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
@@ -49,8 +49,15 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
       req.query.offset as string
     );
 
-    // Get cached block height for dynamic confirmation calculation (no network call)
-    const currentHeight = getCachedBlockHeight();
+    // Get wallet network for network-specific block height cache
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { network: true },
+    });
+    const network = (wallet?.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+
+    // Get cached block height for this network (no network call)
+    const currentHeight = getCachedBlockHeight(network);
 
     const transactions = await prisma.transaction.findMany({
       where: { walletId },
@@ -1515,7 +1522,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 10, 50);
 
-    // Get all wallet IDs the user has access to
+    // Get all wallet IDs the user has access to (include network for block height lookups)
     const accessibleWallets = await prisma.wallet.findMany({
       where: {
         OR: [
@@ -1523,7 +1530,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
           { group: { members: { some: { userId } } } },
         ],
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, network: true },
     });
 
     if (accessibleWallets.length === 0) {
@@ -1532,9 +1539,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
 
     const walletIds = accessibleWallets.map(w => w.id);
     const walletNameMap = new Map(accessibleWallets.map(w => [w.id, w.name]));
-
-    // Get cached block height for dynamic confirmation calculation (no network call)
-    const currentHeight = getCachedBlockHeight();
+    const walletNetworkMap = new Map(accessibleWallets.map(w => [w.id, w.network as Network]));
 
     const transactions = await prisma.transaction.findMany({
       where: {
@@ -1561,6 +1566,9 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
     const serializedTransactions = transactions.map(tx => {
       const blockHeight = bigIntToNumber(tx.blockHeight);
       const rawAmount = bigIntToNumberOrZero(tx.amount);
+      // Get cached block height for this wallet's network (no network call)
+      const network = walletNetworkMap.get(tx.walletId) || 'mainnet';
+      const currentHeight = getCachedBlockHeight(network);
 
       return {
         ...tx,
@@ -1568,7 +1576,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
         fee: bigIntToNumber(tx.fee),
         balanceAfter: bigIntToNumber(tx.balanceAfter),
         blockHeight,
-        // Calculate confirmations dynamically from cached block height
+        // Calculate confirmations dynamically from cached block height for this network
         confirmations: currentHeight > 0 ? calculateConfirmations(blockHeight, currentHeight) : tx.confirmations,
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined,

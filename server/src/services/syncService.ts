@@ -138,8 +138,8 @@ class SyncService {
         this.subscribedToHeaders = true;
         log.info(`[SYNC] Subscribed to block headers, current height: ${currentHeader.height}`);
 
-        // Cache the current block height for fast confirmation calculations
-        setCachedBlockHeight(currentHeader.height);
+        // Cache the current block height for the configured network
+        setCachedBlockHeight(currentHeader.height, getConfig().bitcoin.network);
 
         // Listen for new blocks
         electrumClient.on('newBlock', this.handleNewBlock.bind(this));
@@ -268,11 +268,12 @@ class SyncService {
   private async handleNewBlock(block: { height: number; hex: string }): Promise<void> {
     log.info(`[SYNC] New block received at height ${block.height}`);
 
-    // Update cached block height immediately for fast confirmation calculations
-    setCachedBlockHeight(block.height);
+    // Update cached block height for the configured network
+    const network = getConfig().bitcoin.network;
+    setCachedBlockHeight(block.height, network);
 
     // Emit new block event (handles both event bus and WebSocket)
-    eventService.emitNewBlock('mainnet', block.height, block.hex.slice(0, 64));
+    eventService.emitNewBlock(network, block.height, block.hex.slice(0, 64));
 
     // Immediately update confirmations for all pending transactions
     try {

@@ -9,44 +9,53 @@ import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('BLOCK_HEIGHT');
 
-// Cached block height for fast confirmation calculations
-// Updated whenever getBlockHeight() is called or via setCachedBlockHeight()
-let cachedBlockHeight = 0;
-let cachedBlockHeightTime = 0;
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+
+// Per-network cached block heights for accurate confirmation calculations
+// Each network has its own block height (e.g., mainnet ~880k, testnet ~2.9M)
+const cachedBlockHeights = new Map<Network, { height: number; time: number }>();
 
 /**
- * Get the cached block height (for fast confirmation calculations)
- * Returns 0 if not yet cached
+ * Get the cached block height for a specific network
+ * Returns 0 if not yet cached for this network
+ *
+ * @param network - Bitcoin network (defaults to mainnet for backwards compatibility)
  */
-export function getCachedBlockHeight(): number {
-  return cachedBlockHeight;
+export function getCachedBlockHeight(network: Network = 'mainnet'): number {
+  return cachedBlockHeights.get(network)?.height ?? 0;
 }
 
 /**
- * Set the cached block height (called from sync service when block headers are received)
+ * Set the cached block height for a specific network
+ * Called from sync service when block headers are received
+ *
+ * @param height - Current block height
+ * @param network - Bitcoin network (defaults to mainnet for backwards compatibility)
  */
-export function setCachedBlockHeight(height: number): void {
-  if (height > cachedBlockHeight) {
-    cachedBlockHeight = height;
-    cachedBlockHeightTime = Date.now();
-    log.debug(`Cached block height updated to ${height}`);
+export function setCachedBlockHeight(height: number, network: Network = 'mainnet'): void {
+  const current = cachedBlockHeights.get(network);
+  if (!current || height > current.height) {
+    cachedBlockHeights.set(network, { height, time: Date.now() });
+    log.debug(`Cached block height for ${network} updated to ${height}`);
   }
 }
 
 /**
  * Get current block height from node
+ * Updates the per-network cache on success
  */
-export async function getBlockHeight(network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<number> {
+export async function getBlockHeight(network: Network = 'mainnet'): Promise<number> {
   try {
     const client = await getNodeClient(network);
     const height = await client.getBlockHeight();
-    setCachedBlockHeight(height);
+    setCachedBlockHeight(height, network);
     return height;
   } catch (error) {
-    log.error('Failed to get block height', { error: String(error) });
+    log.error('Failed to get block height', { error: String(error), network });
     // Return cached height if available, otherwise throw
-    if (cachedBlockHeight > 0) {
-      return cachedBlockHeight;
+    const cached = getCachedBlockHeight(network);
+    if (cached > 0) {
+      return cached;
     }
     throw error;
   }

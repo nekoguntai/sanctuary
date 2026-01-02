@@ -18,6 +18,7 @@ import {
   setCachedBlockHeight,
   getBlockHeight,
   getBlockTimestamp,
+  type Network,
 } from './utils/blockHeight';
 import { recalculateWalletBalances } from './utils/balanceCalculation';
 import { ensureGapLimit } from './sync/addressDiscovery';
@@ -39,6 +40,7 @@ export {
   populateMissingTransactionFields,
   type ConfirmationUpdate,
   type PopulateFieldsResult,
+  type Network,
 };
 
 const log = createLogger('BLOCKCHAIN');

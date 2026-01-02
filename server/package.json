@@ -1,6 +1,6 @@
 {
   "name": "sanctuary-server",
-  "version": "0.7.9-rc.2",
+  "version": "0.7.9-rc.4",
   "description": "Backend API server for Sanctuary Bitcoin Wallet",
   "main": "dist/index.js",
   "prisma": {
@@ -43,6 +43,12 @@
   "author": "riannom",
   "license": "MIT",
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.67.3",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.208.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
     "@prisma/client": "^5.7.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",

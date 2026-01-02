@@ -1,0 +1,126 @@
+name: Create Release from Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'           # Matches v0.7.9, v1.0.0, etc.
+      - '!v*.*.*-rc*'      # Exclude release candidates (handled separately)
+      - '!v*.*.*-alpha*'   # Exclude alpha releases
+      - '!v*.*.*-beta*'    # Exclude beta releases
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for changelog
+
+      - name: Get version info
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Get the previous tag for changelog
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "$TAG" | head -1)
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Current tag: $TAG"
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG="${{ steps.version.outputs.prev_tag }}"
+
+          echo "## Changes" > /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "Commits since $PREV_TAG:" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+
+            # Get commit messages between tags
+            git log --pretty=format:"- %s" "$PREV_TAG..$TAG" >> /tmp/changelog.md
+          else
+            echo "Initial release" >> /tmp/changelog.md
+          fi
+
+          echo "" >> /tmp/changelog.md
+          cat /tmp/changelog.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Check if release already exists
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists, skipping creation"
+            exit 0
+          fi
+
+          # Create release notes
+          cat > /tmp/release_notes.md << 'RELEASE_EOF'
+          ## Quick Install
+
+          **Prerequisites:** Docker and Docker Compose
+
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
+          ```
+
+          Or manually:
+
+          ```bash
+          git clone https://github.com/n-narusegawa/sanctuary.git
+          cd sanctuary
+          ./install.sh
+          ```
+
+          Open **https://localhost:8443** and log in with:
+          - **Username:** `admin`
+          - **Password:** `sanctuary`
+
+          > Change these credentials immediately after first login.
+
+          ---
+
+          ## Upgrading
+
+          Your data and configuration will be preserved automatically.
+
+          ```bash
+          cd sanctuary
+          git pull
+          ./install.sh
+          ```
+
+          ---
+
+          RELEASE_EOF
+
+          # Remove leading spaces from heredoc
+          sed -i 's/^          //' /tmp/release_notes.md
+
+          # Append changelog
+          cat /tmp/changelog.md >> /tmp/release_notes.md
+
+          # Create as pre-release first (release.yml will validate and convert to full release)
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release_notes.md \
+            --prerelease
+
+          echo "✓ Created pre-release $TAG"
+          echo "  The release.yml workflow will validate and convert it to a full release."

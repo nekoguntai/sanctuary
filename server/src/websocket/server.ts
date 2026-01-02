@@ -583,6 +583,11 @@ export class SanctauryWebSocketServer {
       channels.push('transactions:all');
     }
 
+    // Log events go to global channel for multi-window sync log visibility
+    if (event.type === 'log') {
+      channels.push('logs:all');
+    }
+
     // Wallet-specific channels
     if (event.walletId) {
       channels.push(`wallet:${event.walletId}`);

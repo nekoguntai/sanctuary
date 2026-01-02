@@ -375,6 +375,7 @@ export const useWebSocketQueryInvalidation = () => {
     subscribe('blocks');
     subscribe('sync:all');
     subscribe('transactions:all');
+    subscribe('logs:all');
 
     const handleTransactionEvent = (event: WebSocketEvent) => {
       const queryClient = getQueryClient();
@@ -459,6 +460,7 @@ export const useWebSocketQueryInvalidation = () => {
       unsubscribe('blocks');
       unsubscribe('sync:all');
       unsubscribe('transactions:all');
+      unsubscribe('logs:all');
       websocketClient.off('transaction', handleTransactionEvent);
       websocketClient.off('confirmation', handleTransactionEvent);
       websocketClient.off('balance', handleTransactionEvent);

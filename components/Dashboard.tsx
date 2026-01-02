@@ -25,6 +25,7 @@ import { useNotificationSound } from '../hooks/useNotificationSound';
 import { createLogger } from '../utils/logger';
 import { useWallets, useRecentTransactions, useInvalidateAllWallets, useUpdateWalletSyncStatus, useBalanceHistory, usePendingTransactions } from '../hooks/queries/useWallets';
 import { useFeeEstimates, useBitcoinStatus, useMempoolData } from '../hooks/queries/useBitcoin';
+import { useDelayedRender } from '../hooks/useDelayedRender';
 
 const log = createLogger('Dashboard');
 
@@ -154,13 +155,9 @@ export const Dashboard: React.FC = () => {
   // Version check state
   const [versionInfo, setVersionInfo] = useState<adminApi.VersionInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [chartReady, setChartReady] = useState(false);
 
   // Delay chart render to avoid Recharts dimension warning during initial layout
-  useEffect(() => {
-    const timer = setTimeout(() => setChartReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
+  const chartReady = useDelayedRender();
 
   // Check for updates on mount
   useEffect(() => {

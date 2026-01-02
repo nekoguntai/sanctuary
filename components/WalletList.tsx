@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
@@ -22,6 +22,7 @@ import {
   mergeWalletColumnOrder,
 } from './columns/walletColumns';
 import { createWalletCellRenderers, WalletWithPending } from './cells/WalletCells';
+import { useDelayedRender } from '../hooks/useDelayedRender';
 
 type ViewMode = 'grid' | 'table';
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
@@ -70,11 +71,7 @@ export const WalletList: React.FC = () => {
   const sortOrder = (user?.preferences?.viewSettings?.wallets?.sortOrder as SortOrder) || 'asc';
 
   // Delay chart render to avoid Recharts dimension warning during initial layout
-  const [chartReady, setChartReady] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setChartReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
+  const chartReady = useDelayedRender();
 
   const setSortBy = (field: SortField) => {
     // If clicking the same field, toggle order; otherwise set new field with asc

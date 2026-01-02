@@ -13,6 +13,7 @@ import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight
 import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
+import { withTimeout } from '../utils/async';
 import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
 import { eventService } from './eventService';
@@ -45,17 +46,6 @@ class SyncTimeoutError extends Error {
   }
 }
 
-/**
- * Wrap a promise with a timeout
- */
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-    ),
-  ]);
-}
 
 interface SyncJob {
   walletId: string;

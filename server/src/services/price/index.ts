@@ -97,14 +97,28 @@ class PriceService {
     }
 
     // Get providers that support this currency
-    const providers = await getProvidersForCurrency(this.registry, currency);
+    const healthyProviders = await getProvidersForCurrency(this.registry, currency);
 
-    if (providers.length === 0) {
+    // Check if ANY provider supports this currency (even if unhealthy)
+    const allProviders = this.registry.getAll().filter(p => p.supportsCurrency(currency));
+
+    if (allProviders.length === 0) {
       throw new Error(`Currency ${currency} is not supported by any provider`);
     }
 
-    // Fetch from all available providers
-    const results = await this.fetchFromProviders(providers, currency);
+    // If no healthy providers, try all providers that support the currency
+    // This gives circuit breakers a chance to recover
+    const providersToTry = healthyProviders.length > 0 ? healthyProviders : allProviders;
+
+    if (healthyProviders.length === 0) {
+      log.warn('No healthy providers, attempting recovery', {
+        currency,
+        unhealthyProviders: allProviders.map(p => p.name)
+      });
+    }
+
+    // Fetch from available providers
+    const results = await this.fetchFromProviders(providersToTry, currency);
 
     if (results.length === 0) {
       // Try stale cache as fallback
@@ -123,7 +137,13 @@ class PriceService {
           change24h: stale.change24h,
         };
       }
-      throw new Error('Failed to fetch price from any provider');
+      log.error('All price providers failed', {
+        currency,
+        triedProviders: providersToTry.map(p => p.name),
+      });
+      throw new Error(
+        `All price providers are unavailable for ${currency}. Providers tried: ${providersToTry.map(p => p.name).join(', ')}`
+      );
     }
 
     // Calculate aggregated price

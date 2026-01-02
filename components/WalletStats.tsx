@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { UTXO, Transaction } from '../types';
 import { Coins, CalendarClock, DollarSign, Clock } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useDelayedRender } from '../hooks/useDelayedRender';
 
 interface WalletStatsProps {
   utxos: UTXO[];
@@ -14,11 +15,7 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
   const { getFiatValue, btcPrice, currencySymbol, fiatCurrency, showFiat, format } = useCurrency();
 
   // Delay chart render to avoid Recharts dimension warning during initial layout
-  const [chartReady, setChartReady] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setChartReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
+  const chartReady = useDelayedRender();
 
   // Calculate Fiat Balance
   const fiatBalance = getFiatValue(balance);

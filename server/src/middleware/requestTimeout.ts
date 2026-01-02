@@ -121,7 +121,7 @@ export function requestTimeout(req: Request, res: Response, next: NextFunction):
     }
   };
 
-  next();
+  wrappedNext();
 }
 
 /**

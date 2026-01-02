@@ -38,8 +38,11 @@ const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
-// Map Prisma actions to operation categories for metrics
-function getOperationType(action: string): string {
+/**
+ * Map Prisma actions to operation categories for metrics
+ * @internal Exported for testing
+ */
+export function getOperationType(action: string): string {
   if (['findUnique', 'findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(action)) {
     return 'select';
   }

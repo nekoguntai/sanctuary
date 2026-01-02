@@ -874,8 +874,11 @@ export class GatewayWebSocketServer {
     // Replace existing gateway connection
     if (this.gateway && this.gateway !== client) {
       log.info('Replacing existing gateway connection');
+      // Decrement before reassigning - close handler won't match after reassignment
+      if (this.gateway.isAuthenticated) {
+        websocketConnections.dec({ type: 'gateway' });
+      }
       this.gateway.close(1000, 'Replaced by new connection');
-      // Don't decrement here - the close handler will do it
     }
     this.gateway = client;
 

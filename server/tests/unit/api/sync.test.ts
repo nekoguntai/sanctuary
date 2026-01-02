@@ -6,12 +6,26 @@
 
 import express from 'express';
 import request from 'supertest';
-import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
-// Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
+// Mock repositories
+const mockWalletRepository = {
+  getIdsByNetwork: jest.fn(),
+  findByNetworkWithSyncStatus: jest.fn(),
+  resetSyncState: jest.fn(),
+};
+
+const mockTransactionRepository = {
+  deleteByWalletId: jest.fn(),
+};
+
+const mockAddressRepository = {
+  resetUsedFlags: jest.fn(),
+};
+
+jest.mock('../../../src/repositories', () => ({
+  walletRepository: mockWalletRepository,
+  transactionRepository: mockTransactionRepository,
+  addressRepository: mockAddressRepository,
 }));
 
 // Mock sync service
@@ -32,6 +46,11 @@ jest.mock('../../../src/middleware/auth', () => ({
   },
 }));
 
+// Mock rate limit middleware - pass through all requests
+jest.mock('../../../src/middleware/rateLimit', () => ({
+  rateLimitByUser: () => (req: express.Request, res: express.Response, next: express.NextFunction) => next(),
+}));
+
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
@@ -40,6 +59,13 @@ jest.mock('../../../src/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
+}));
+
+// Mock wallet log buffer
+jest.mock('../../../src/services/walletLogBuffer', () => ({
+  walletLogBuffer: {
+    get: jest.fn(() => []),
+  },
 }));
 
 // Import after mocks
@@ -55,16 +81,12 @@ describe('Sync API - Network Endpoints', () => {
   });
 
   beforeEach(() => {
-    resetPrismaMocks();
     jest.clearAllMocks();
   });
 
   describe('POST /sync/network/:network', () => {
     it('should queue all mainnet wallets for sync', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
-        { id: 'wallet-1' },
-        { id: 'wallet-2' },
-      ]);
+      mockWalletRepository.getIdsByNetwork.mockResolvedValue(['wallet-1', 'wallet-2']);
 
       const response = await request(app)
         .post('/sync/network/mainnet')
@@ -82,9 +104,7 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should queue testnet wallets for sync', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
-        { id: 'testnet-wallet-1' },
-      ]);
+      mockWalletRepository.getIdsByNetwork.mockResolvedValue(['testnet-wallet-1']);
 
       const response = await request(app)
         .post('/sync/network/testnet')
@@ -96,9 +116,7 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should queue signet wallets for sync', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
-        { id: 'signet-wallet-1' },
-      ]);
+      mockWalletRepository.getIdsByNetwork.mockResolvedValue(['signet-wallet-1']);
 
       const response = await request(app)
         .post('/sync/network/signet')
@@ -109,7 +127,7 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should return empty result when no wallets found', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([]);
+      mockWalletRepository.getIdsByNetwork.mockResolvedValue([]);
 
       const response = await request(app)
         .post('/sync/network/testnet')
@@ -135,9 +153,7 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should default to normal priority', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
-        { id: 'wallet-1' },
-      ]);
+      mockWalletRepository.getIdsByNetwork.mockResolvedValue(['wallet-1']);
 
       await request(app)
         .post('/sync/network/mainnet')
@@ -149,13 +165,13 @@ describe('Sync API - Network Endpoints', () => {
 
   describe('POST /sync/network/:network/resync', () => {
     it('should resync all wallets for a network with confirmation header', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: false },
         { id: 'wallet-2', syncInProgress: false },
       ]);
-      mockPrismaClient.transaction.deleteMany.mockResolvedValue({ count: 50 });
-      mockPrismaClient.address.updateMany.mockResolvedValue({ count: 10 });
-      mockPrismaClient.wallet.update.mockResolvedValue({});
+      mockTransactionRepository.deleteByWalletId.mockResolvedValue(50);
+      mockAddressRepository.resetUsedFlags.mockResolvedValue({ count: 10 });
+      mockWalletRepository.resetSyncState.mockResolvedValue({});
 
       const response = await request(app)
         .post('/sync/network/mainnet/resync')
@@ -182,13 +198,13 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should clear stuck sync flags and resync all wallets', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: true },
         { id: 'wallet-2', syncInProgress: false },
       ]);
-      mockPrismaClient.transaction.deleteMany.mockResolvedValue({ count: 30 });
-      mockPrismaClient.address.updateMany.mockResolvedValue({ count: 5 });
-      mockPrismaClient.wallet.update.mockResolvedValue({});
+      mockTransactionRepository.deleteByWalletId.mockResolvedValue(30);
+      mockAddressRepository.resetUsedFlags.mockResolvedValue({ count: 5 });
+      mockWalletRepository.resetSyncState.mockResolvedValue({});
 
       const response = await request(app)
         .post('/sync/network/testnet/resync')
@@ -212,12 +228,12 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should delete transactions and reset wallet state', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: false },
       ]);
-      mockPrismaClient.transaction.deleteMany.mockResolvedValue({ count: 75 });
-      mockPrismaClient.address.updateMany.mockResolvedValue({ count: 20 });
-      mockPrismaClient.wallet.update.mockResolvedValue({});
+      mockTransactionRepository.deleteByWalletId.mockResolvedValue(75);
+      mockAddressRepository.resetUsedFlags.mockResolvedValue({ count: 20 });
+      mockWalletRepository.resetSyncState.mockResolvedValue({});
 
       await request(app)
         .post('/sync/network/mainnet/resync')
@@ -225,25 +241,13 @@ describe('Sync API - Network Endpoints', () => {
         .send({});
 
       // Verify transactions deleted
-      expect(mockPrismaClient.transaction.deleteMany).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-1' },
-      });
+      expect(mockTransactionRepository.deleteByWalletId).toHaveBeenCalledWith('wallet-1');
 
       // Verify address flags reset
-      expect(mockPrismaClient.address.updateMany).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-1' },
-        data: { used: false },
-      });
+      expect(mockAddressRepository.resetUsedFlags).toHaveBeenCalledWith('wallet-1');
 
       // Verify wallet state reset
-      expect(mockPrismaClient.wallet.update).toHaveBeenCalledWith({
-        where: { id: 'wallet-1' },
-        data: {
-          syncInProgress: false,
-          lastSyncedAt: null,
-          lastSyncStatus: null,
-        },
-      });
+      expect(mockWalletRepository.resetSyncState).toHaveBeenCalledWith('wallet-1');
 
       // Verify queued for high priority sync
       expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
@@ -252,7 +256,7 @@ describe('Sync API - Network Endpoints', () => {
 
   describe('GET /sync/network/:network/status', () => {
     it('should return aggregate sync status for network', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: false, lastSyncStatus: 'success', lastSyncedAt: new Date('2024-01-01') },
         { id: 'wallet-2', syncInProgress: true, lastSyncStatus: null, lastSyncedAt: null },
         { id: 'wallet-3', syncInProgress: false, lastSyncStatus: 'failed', lastSyncedAt: new Date('2024-01-02') },
@@ -274,7 +278,7 @@ describe('Sync API - Network Endpoints', () => {
     });
 
     it('should return empty status when no wallets', async () => {
-      mockPrismaClient.wallet.findMany.mockResolvedValue([]);
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([]);
 
       const response = await request(app)
         .get('/sync/network/testnet/status');

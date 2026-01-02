@@ -1224,6 +1224,7 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('blocks');
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockSubscribe).toHaveBeenCalledWith('logs:all');
       });
     });
 
@@ -1236,6 +1237,7 @@ describe('useWebSocketQueryInvalidation', () => {
       expect(mockSubscribe).not.toHaveBeenCalledWith('blocks');
       expect(mockSubscribe).not.toHaveBeenCalledWith('sync:all');
       expect(mockSubscribe).not.toHaveBeenCalledWith('transactions:all');
+      expect(mockSubscribe).not.toHaveBeenCalledWith('logs:all');
     });
 
     it('should unsubscribe from global channels on unmount', async () => {
@@ -1252,6 +1254,7 @@ describe('useWebSocketQueryInvalidation', () => {
       expect(mockUnsubscribe).toHaveBeenCalledWith('blocks');
       expect(mockUnsubscribe).toHaveBeenCalledWith('sync:all');
       expect(mockUnsubscribe).toHaveBeenCalledWith('transactions:all');
+      expect(mockUnsubscribe).toHaveBeenCalledWith('logs:all');
     });
 
     it('should subscribe when connection is established', async () => {
@@ -1273,6 +1276,7 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('blocks');
         expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockSubscribe).toHaveBeenCalledWith('logs:all');
       });
     });
   });

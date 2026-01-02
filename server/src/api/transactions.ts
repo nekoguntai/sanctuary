@@ -1544,6 +1544,9 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
     const transactions = await prisma.transaction.findMany({
       where: {
         walletId: { in: walletIds },
+        // Exclude replaced RBF transactions which are no longer in mempool
+        // These show as "pending" forever since they'll never confirm
+        rbfStatus: { not: 'replaced' },
       },
       include: {
         address: {

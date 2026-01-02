@@ -18,6 +18,7 @@ import {
 } from './providers';
 import type { IPushProvider, PushMessage, PushPlatform } from './types';
 import { isInvalidTokenError } from './types';
+import { recordPushFailure } from '../deadLetterQueue';
 
 const log = createLogger('PUSH');
 
@@ -110,6 +111,12 @@ class PushService {
         if (isInvalidTokenError(err)) {
           await prisma.pushDevice.delete({ where: { id: device.id } });
           log.info(`Removed invalid ${device.platform} token for user ${userId}`);
+        } else {
+          // Record non-token-related failures in dead letter queue
+          await recordPushFailure(userId, device.token, errorMsg, 1, {
+            platform: device.platform,
+            messageTitle: message.title,
+          });
         }
       }
     }

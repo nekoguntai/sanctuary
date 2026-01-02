@@ -6,6 +6,12 @@
  */
 
 import type { IRateLimiter, RateLimitResult } from './types';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('RATE_LIMIT');
+
+// Maximum number of unique keys to track (prevents memory exhaustion from IP rotation attacks)
+const MAX_WINDOWS = 100000;
 
 interface WindowEntry {
   timestamps: number[];
@@ -36,6 +42,10 @@ export class MemoryRateLimiter implements IRateLimiter {
     // Get or create window
     let entry = this.windows.get(key);
     if (!entry) {
+      // Enforce maximum windows limit to prevent memory exhaustion
+      if (this.windows.size >= MAX_WINDOWS) {
+        this.evictOldestEntry();
+      }
       entry = { timestamps: [], lastCleanup: now };
       this.windows.set(key, entry);
     }
@@ -137,19 +147,45 @@ export class MemoryRateLimiter implements IRateLimiter {
   }
 
   /**
+   * Evict the oldest entry to make room for new ones
+   */
+  private evictOldestEntry(): void {
+    let oldestKey: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [key, entry] of this.windows) {
+      if (entry.lastCleanup < oldestTime) {
+        oldestTime = entry.lastCleanup;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      this.windows.delete(oldestKey);
+      log.debug(`Rate limiter evicted oldest entry (windows: ${this.windows.size})`);
+    }
+  }
+
+  /**
    * Clean up old entries to prevent memory leaks
    */
   private cleanup(): void {
     const now = Date.now();
     const staleThreshold = 5 * 60 * 1000; // 5 minutes
+    let removed = 0;
 
     for (const [key, entry] of this.windows) {
       // Remove entries that haven't been accessed in a while
       if (now - entry.lastCleanup > staleThreshold) {
         if (entry.timestamps.length === 0) {
           this.windows.delete(key);
+          removed++;
         }
       }
+    }
+
+    if (removed > 0) {
+      log.debug(`Rate limiter cleanup: removed ${removed} stale entries (remaining: ${this.windows.size})`);
     }
   }
 

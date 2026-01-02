@@ -21,6 +21,7 @@ NC='\033[0m' # No Color
 TEST_COVERAGE_STOP=0
 UI_CONSISTENCY_STOP=0
 ARCHITECTURE_STOP=0
+STABILITY_STOP=0
 
 echo "${YELLOW}Running pre-commit checks...${NC}"
 
@@ -257,8 +258,89 @@ End with one of:
 # Run architecture analysis
 run_architecture_agent
 
+# =============================================
+# Stability & Perpetual Operation Analysis
+# =============================================
+# Use Claude to validate stability patterns for long-running operation
+
+run_stability_agent() {
+    # Check if claude is available
+    if ! command -v claude >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Get staged server files (services, infrastructure, middleware)
+    STABILITY_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^server/src/(services|infrastructure|middleware|jobs|websocket)/' | grep -E '\.ts$' || true)
+
+    if [ -z "$STABILITY_FILES" ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}🔒 Stability & Perpetual Operation Analysis${NC}"
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Get the diff for context
+    STABILITY_DIFF=$(git diff --cached -- $STABILITY_FILES)
+
+    # Create the prompt for stability analysis
+    PROMPT="PRE-COMMIT STABILITY REVIEW FOR PERPETUAL OPERATION
+
+Analyze these changes for stability issues that could affect 24/7 continuous operation.
+
+STAGED FILES:
+$STABILITY_FILES
+
+DIFF:
+$STABILITY_DIFF
+
+STABILITY REQUIREMENTS:
+- Server must run indefinitely without restarts
+- No memory leaks from unbounded collections (Map, Set, Array)
+- All intervals/timers must be cleared on shutdown
+- External service calls need circuit breakers or retry limits
+- Graceful shutdown must release all resources
+- Rate limiters and caches must have size bounds
+
+Answer concisely:
+1. MEMORY SAFETY: Any unbounded collections, growing Maps/Sets/Arrays, or closure memory leaks?
+2. RESOURCE CLEANUP: Are all intervals, timers, event listeners, and connections properly cleaned up?
+3. FAILURE HANDLING: Do external calls have circuit breakers, timeouts, or retry limits?
+4. SHUTDOWN: Will graceful shutdown properly release all resources?
+5. BOUNDS CHECKING: Do queues, caches, and buffers have size limits?
+
+End with one of:
+- ✅ RECOMMEND PROCEED - no stability issues found
+- ⚠️ SUGGEST REVIEW - minor stability concerns worth checking
+- ❌ RECOMMEND STOP - stability issues that could cause crashes or memory exhaustion"
+
+    # Run claude with the lead-software-architect agent
+    # Output to stderr (visible in terminal) and capture to temp file
+    TEMP_OUTPUT=$(mktemp)
+    echo "$PROMPT" | claude --agent lead-software-architect --print 2>&1 | tee "$TEMP_OUTPUT" >&2
+    AGENT_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
+
+    # Check if agent recommends stopping
+    if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
+        echo ""
+        echo "${RED}❌ Stability agent recommends stopping. Please address the issues above.${NC}"
+        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        STABILITY_STOP=1
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Run stability analysis
+run_stability_agent
+
 # Check if any agent recommended stopping
-if [ "$TEST_COVERAGE_STOP" = "1" ] || [ "$UI_CONSISTENCY_STOP" = "1" ] || [ "$ARCHITECTURE_STOP" = "1" ]; then
+if [ "$TEST_COVERAGE_STOP" = "1" ] || [ "$UI_CONSISTENCY_STOP" = "1" ] || [ "$ARCHITECTURE_STOP" = "1" ] || [ "$STABILITY_STOP" = "1" ]; then
     echo ""
     echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo "${RED}⛔ COMMIT BLOCKED - One or more agents recommend stopping${NC}"

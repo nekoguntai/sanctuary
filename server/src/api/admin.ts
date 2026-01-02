@@ -19,6 +19,7 @@ import { createLogger } from '../utils/logger';
 import { encrypt } from '../utils/encryption';
 import { getAllCacheStats } from '../utils/cache';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
+import { deadLetterQueue, type DeadLetterCategory } from '../services/deadLetterQueue';
 
 // Domain routers (extracted for maintainability)
 import usersRouter from './admin/users';
@@ -2294,6 +2295,99 @@ router.get('/metrics/cache', authenticate, requireAdmin, async (req: Request, re
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get cache metrics',
+    });
+  }
+});
+
+// =============================================================================
+// Dead Letter Queue Endpoints
+// =============================================================================
+
+/**
+ * GET /api/v1/admin/dlq
+ * Get dead letter queue entries and statistics
+ */
+router.get('/dlq', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const category = req.query.category as DeadLetterCategory | undefined;
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+
+    const stats = deadLetterQueue.getStats();
+    const entries = category
+      ? deadLetterQueue.getByCategory(category)
+      : deadLetterQueue.getAll(limit);
+
+    res.json({
+      stats,
+      entries: entries.map((e) => ({
+        ...e,
+        // Truncate long error stacks for API response
+        errorStack: e.errorStack?.substring(0, 500),
+      })),
+    });
+  } catch (error) {
+    log.error('[ADMIN] Get DLQ failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get dead letter queue',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/dlq/:id
+ * Remove a specific dead letter entry
+ */
+router.delete('/dlq/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const removed = await deadLetterQueue.remove(id);
+
+    if (removed) {
+      log.info('[ADMIN] DLQ entry removed', { id, admin: req.user?.username });
+      res.json({ success: true });
+    } else {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Dead letter entry not found',
+      });
+    }
+  } catch (error) {
+    log.error('[ADMIN] Delete DLQ entry failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to delete dead letter entry',
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/dlq/category/:category
+ * Clear all entries for a specific category
+ */
+router.delete('/dlq/category/:category', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const category = req.params.category as DeadLetterCategory;
+    const validCategories: DeadLetterCategory[] = [
+      'sync', 'push', 'telegram', 'notification', 'electrum', 'transaction', 'other',
+    ];
+
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Invalid category. Valid categories: ${validCategories.join(', ')}`,
+      });
+    }
+
+    const count = await deadLetterQueue.clearCategory(category);
+    log.info('[ADMIN] DLQ category cleared', { category, count, admin: req.user?.username });
+
+    res.json({ success: true, removed: count });
+  } catch (error) {
+    log.error('[ADMIN] Clear DLQ category failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to clear dead letter category',
     });
   }
 });

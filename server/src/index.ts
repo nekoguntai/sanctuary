@@ -34,6 +34,7 @@ import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
+import { requestTimeout } from './middleware/requestTimeout';
 import { apiVersionMiddleware } from './middleware/apiVersion';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
@@ -48,6 +49,10 @@ import { i18nMiddleware } from './middleware/i18n';
 import { i18nService } from './i18n/i18nService';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
 import { initializeRedis, shutdownRedis, isRedisConnected } from './infrastructure';
+import { shutdownElectrumPool } from './services/bitcoin/electrumPool';
+import { cache } from './services/cache/cacheService';
+import { walletLogBuffer } from './services/walletLogBuffer';
+import { deadLetterQueue } from './services/deadLetterQueue';
 
 const log = createLogger('SERVER');
 
@@ -124,6 +129,9 @@ app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // Request logging and correlation IDs
 app.use(requestLogger);
+
+// Request timeout protection (prevents hanging requests)
+app.use(requestTimeout);
 
 // Prometheus metrics collection
 app.use(metricsMiddleware());
@@ -267,6 +275,9 @@ const backgroundServices: ServiceDefinition[] = [
     // Initialize rate limit service (uses Redis if available)
     rateLimitService.initialize();
 
+    // Start dead letter queue for tracking persistent failures
+    deadLetterQueue.start();
+
     // Initialize job queue (uses Redis for persistent job storage)
     await jobQueue.initialize();
 
@@ -399,6 +410,21 @@ const handleShutdown = async (signal: string) => {
   stopDatabaseHealthCheck();
   shutdownRevocationService();
   rateLimitService.shutdown();
+
+  // Stop memory caches and buffers
+  cache.stop();
+  walletLogBuffer.stop();
+  deadLetterQueue.stop();
+
+  // Close Electrum connection pool
+  try {
+    await shutdownElectrumPool();
+    log.info('Electrum pool closed');
+  } catch (error) {
+    log.error('Error closing Electrum pool', {
+      error: (error as Error).message,
+    });
+  }
 
   // Shutdown job queue
   await jobQueue.shutdown();

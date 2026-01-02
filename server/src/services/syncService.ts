@@ -16,6 +16,7 @@ import { createLogger } from '../utils/logger';
 import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
 import { eventService } from './eventService';
+import { recordSyncFailure } from './deadLetterQueue';
 
 const log = createLogger('SYNC');
 
@@ -42,6 +43,9 @@ interface SyncJob {
   lastError?: string;
 }
 
+// Maximum sync queue size to prevent unbounded memory growth
+const MAX_QUEUE_SIZE = 1000;
+
 class SyncService {
   private static instance: SyncService;
   private syncQueue: SyncJob[] = [];
@@ -54,6 +58,8 @@ class SyncService {
   private subscribedToHeaders = false;
   // Track which addresses belong to which wallets for real-time notifications
   private addressToWalletMap: Map<string, string> = new Map();
+  // Track pending retry timers for cleanup on shutdown
+  private pendingRetries: Map<string, NodeJS.Timeout> = new Map();
 
   private constructor() {}
 
@@ -354,6 +360,21 @@ class SyncService {
     this.subscribedToHeaders = false;
     this.addressToWalletMap.clear();
 
+    // Cancel all pending retry timers
+    if (this.pendingRetries.size > 0) {
+      log.info(`[SYNC] Cancelling ${this.pendingRetries.size} pending retry timers`);
+      for (const timer of this.pendingRetries.values()) {
+        clearTimeout(timer);
+      }
+      this.pendingRetries.clear();
+    }
+
+    // Clear the sync queue
+    if (this.syncQueue.length > 0) {
+      log.info(`[SYNC] Clearing ${this.syncQueue.length} queued sync jobs`);
+      this.syncQueue.length = 0;
+    }
+
     // Remove event listeners from Electrum client
     const electrumClient = await getElectrumClientIfActive();
     if (electrumClient) {
@@ -410,6 +431,30 @@ class SyncService {
       return;
     }
 
+    // Enforce queue size limit to prevent unbounded memory growth
+    if (this.syncQueue.length >= MAX_QUEUE_SIZE) {
+      // Try to evict a low-priority job
+      const lowPriorityIndex = this.syncQueue.findIndex(j => j.priority === 'low');
+      if (lowPriorityIndex >= 0) {
+        const evicted = this.syncQueue.splice(lowPriorityIndex, 1)[0];
+        log.warn(`[SYNC] Queue full, evicted low-priority wallet ${evicted.walletId}`);
+      } else if (priority === 'low') {
+        // Don't add low-priority if queue is full of higher priority
+        log.warn(`[SYNC] Queue full (${MAX_QUEUE_SIZE}), rejecting low-priority wallet ${walletId}`);
+        return;
+      } else {
+        // Evict oldest normal priority for high priority request
+        const normalIndex = this.syncQueue.findIndex(j => j.priority === 'normal');
+        if (normalIndex >= 0 && priority === 'high') {
+          const evicted = this.syncQueue.splice(normalIndex, 1)[0];
+          log.warn(`[SYNC] Queue full, evicted normal-priority wallet ${evicted.walletId} for high-priority`);
+        } else {
+          log.warn(`[SYNC] Queue full (${MAX_QUEUE_SIZE}), rejecting wallet ${walletId}`);
+          return;
+        }
+      }
+    }
+
     this.syncQueue.push({
       walletId,
       priority,
@@ -417,7 +462,7 @@ class SyncService {
     });
 
     this.sortQueue();
-    log.info(`[SYNC] Queued wallet ${walletId} with ${priority} priority`);
+    log.info(`[SYNC] Queued wallet ${walletId} with ${priority} priority (queue size: ${this.syncQueue.length})`);
 
     // Start processing if not already
     this.processQueue();
@@ -726,12 +771,14 @@ class SyncService {
         this.releaseSyncLock(walletId);
         resolveLock!();
 
-        // Schedule retry with delay
-        setTimeout(() => {
+        // Schedule retry with delay (track timer for cleanup on shutdown)
+        const retryTimer = setTimeout(() => {
+          this.pendingRetries.delete(walletId);
           this.executeSyncJob(walletId, nextRetry).catch(err => {
             log.error(`[SYNC] Retry failed for wallet ${walletId}`, { error: String(err) });
           });
         }, delayMs);
+        this.pendingRetries.set(walletId, retryTimer);
 
         return {
           success: false,
@@ -745,6 +792,11 @@ class SyncService {
       // All retries exhausted - final failure
       log.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
       walletLog(walletId, 'error', 'SYNC', `Sync failed after ${syncConfig.maxRetryAttempts} attempts: ${errorMessage}`);
+
+      // Record in dead letter queue for visibility
+      await recordSyncFailure(walletId, error, syncConfig.maxRetryAttempts, {
+        lastError: errorMessage,
+      });
 
       // Emit sync failed event
       eventService.emitWalletSyncFailed(walletId, errorMessage, syncConfig.maxRetryAttempts);

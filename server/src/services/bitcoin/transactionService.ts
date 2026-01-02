@@ -704,6 +704,14 @@ export async function createTransaction(
     const useDecoys = decoyOutputs?.enabled && decoyOutputs.count >= 2;
     const numChangeOutputs = useDecoys ? Math.min(Math.max(decoyOutputs.count, 2), 4) : 1;
 
+    log.debug('Decoy calculation', {
+      decoyOutputsParam: decoyOutputs,
+      useDecoys,
+      numChangeOutputs,
+      changeAmount: selection.changeAmount,
+      dustThreshold,
+    });
+
     // If using decoys, recalculate fee for extra outputs
     // Each additional P2WPKH output adds ~34 vBytes
     if (useDecoys && numChangeOutputs > 1) {

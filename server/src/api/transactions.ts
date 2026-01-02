@@ -1287,6 +1287,17 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       decoyOutputs,
     } = req.body;
 
+    log.debug('Create transaction request', {
+      walletId,
+      recipient: recipient?.substring(0, 20) + '...',
+      amount,
+      feeRate,
+      sendMax,
+      subtractFees,
+      decoyOutputs,
+      hasSelectedUtxos: !!selectedUtxoIds?.length,
+    });
+
     // Basic validation
     if (!recipient || !amount) {
       return res.status(400).json({
@@ -1341,6 +1352,14 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
         decoyOutputs,
       }
     );
+
+    log.debug('Create transaction response', {
+      fee: txData.fee,
+      changeAmount: txData.changeAmount,
+      effectiveAmount: txData.effectiveAmount,
+      decoyOutputsCount: txData.decoyOutputs?.length || 0,
+      decoyOutputs: txData.decoyOutputs,
+    });
 
     res.json({
       psbtBase64: txData.psbtBase64,

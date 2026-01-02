@@ -192,6 +192,11 @@ export function transactionReducer(
         newOutputs[action.index].amount = '';
       }
 
+      // If manually setting amount, clear sendMax (user is overriding max)
+      if (action.field === 'amount' && action.value && newOutputs[action.index].sendMax) {
+        newOutputs[action.index].sendMax = false;
+      }
+
       return { ...state, outputs: newOutputs };
     }
 
@@ -210,6 +215,8 @@ export function transactionReducer(
         ...newOutputs[action.index],
         amount: action.amount,
         displayValue: action.displayValue,
+        // Clear sendMax when user manually sets an amount
+        sendMax: action.amount ? false : newOutputs[action.index].sendMax,
       };
       return { ...state, outputs: newOutputs };
     }

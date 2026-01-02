@@ -736,6 +736,7 @@ export function OutputsStep() {
                 decoyCount={state.decoyCount}
                 setDecoyCount={handleDecoyCountChange}
                 disabled={false}
+                hideHeader={true}
               />
             </div>
           )}

@@ -15,7 +15,6 @@ import {
   Loader2,
   ChevronRight,
   Radio,
-  MoreHorizontal,
   Settings2,
   Clock,
 } from 'lucide-react';
@@ -138,7 +137,6 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
   const [testMessage, setTestMessage] = useState('');
   const [serverTestStatus, setServerTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [openServerMenu, setOpenServerMenu] = useState<string | null>(null);
 
   const colors = NETWORK_COLORS[network];
   const presets = PRESET_SERVERS[network];
@@ -608,7 +606,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                     </div>
                   </div>
                   {/* Compact Actions */}
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-1 flex-shrink-0">
                     {/* Manual Test Status Icons */}
                     {serverTestStatus[server.id] === 'success' && (
                       <CheckCircle className="w-4 h-4 text-emerald-500" />
@@ -639,55 +637,36 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                         <XCircle className="w-4 h-4 text-sanctuary-400" />
                       )}
                     </button>
-                    {/* Compact Dropdown Menu */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setOpenServerMenu(openServerMenu === server.id ? null : server.id)}
-                        className="p-1.5 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800"
-                        title="More actions"
-                      >
-                        <MoreHorizontal className="w-4 h-4 text-sanctuary-400" />
-                      </button>
-                      {openServerMenu === server.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setOpenServerMenu(null)}
-                          />
-                          <div className="absolute right-0 top-full mt-1 z-20 w-36 py-1 surface-elevated rounded-lg shadow-lg border border-sanctuary-200 dark:border-sanctuary-700">
-                            <button
-                              onClick={() => { handleMoveServer(server.id, 'up'); setOpenServerMenu(null); }}
-                              disabled={index === 0}
-                              className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <ChevronUp className="w-4 h-4" />
-                              <span>Move Up</span>
-                            </button>
-                            <button
-                              onClick={() => { handleMoveServer(server.id, 'down'); setOpenServerMenu(null); }}
-                              disabled={index === servers.length - 1}
-                              className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <ChevronDown className="w-4 h-4" />
-                              <span>Move Down</span>
-                            </button>
-                            <div className="my-1 border-t border-sanctuary-200 dark:border-sanctuary-700" />
-                            <button
-                              onClick={() => { handleDeleteServer(server.id); setOpenServerMenu(null); }}
-                              disabled={serverActionLoading === server.id}
-                              className="w-full px-3 py-2 text-left text-sm flex items-center space-x-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            >
-                              {serverActionLoading === server.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        </>
+                    {/* Priority Controls */}
+                    <button
+                      onClick={() => handleMoveServer(server.id, 'up')}
+                      disabled={index === 0}
+                      className="p-1.5 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move up (higher priority)"
+                    >
+                      <ChevronUp className="w-4 h-4 text-sanctuary-400" />
+                    </button>
+                    <button
+                      onClick={() => handleMoveServer(server.id, 'down')}
+                      disabled={index === servers.length - 1}
+                      className="p-1.5 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move down (lower priority)"
+                    >
+                      <ChevronDown className="w-4 h-4 text-sanctuary-400" />
+                    </button>
+                    {/* Delete */}
+                    <button
+                      onClick={() => handleDeleteServer(server.id)}
+                      disabled={serverActionLoading === server.id}
+                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-sanctuary-400 hover:text-red-500 dark:hover:text-red-400"
+                      title="Delete server"
+                    >
+                      {serverActionLoading === server.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
                       )}
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>

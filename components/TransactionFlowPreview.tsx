@@ -88,8 +88,8 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
       </div>
 
       {/* Flow Visualization */}
-      <div className="p-3">
-        <div className="flex items-stretch gap-2 min-h-[80px]">
+      <div className="p-3 overflow-x-auto">
+        <div className="flex items-stretch gap-2 min-h-[80px] min-w-0">
           {/* Inputs Column */}
           <div className="flex-1 flex flex-col gap-2">
             {inputs.map((input, idx) => (
@@ -100,12 +100,12 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
               >
                 {/* Amount bar with gradient */}
                 <div
-                  className="h-full flex items-center justify-end px-2 min-w-[80px] rounded-l-xl"
+                  className="h-full flex items-center justify-end px-2 min-w-[60px] rounded-l-xl flex-shrink-0"
                   style={{
                     background: `linear-gradient(135deg, ${inputColor} 0%, #15803d 100%)`,
                   }}
                 >
-                  <span className="text-white text-xs font-semibold whitespace-nowrap drop-shadow-sm">
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm">
                     {isEstimate && '~'}{format(input.amount)}
                   </span>
                 </div>
@@ -165,14 +165,14 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                 </div>
                 {/* Amount bar with gradient */}
                 <div
-                  className="h-full flex items-center justify-start px-2 min-w-[80px] rounded-r-xl"
+                  className="h-full flex items-center justify-start px-2 min-w-[60px] rounded-r-xl flex-shrink-0"
                   style={{
                     background: output.isChange
                       ? `linear-gradient(135deg, ${changeColor} 0%, #4b5563 100%)`
                       : `linear-gradient(135deg, ${outputColor} 0%, #7c3aed 100%)`,
                   }}
                 >
-                  <span className="text-white text-xs font-semibold whitespace-nowrap drop-shadow-sm">
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm">
                     {isEstimate && '~'}{format(output.amount)}
                   </span>
                 </div>
@@ -191,12 +191,12 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                   </span>
                 </div>
                 <div
-                  className="h-full flex items-center justify-start px-2 min-w-[80px] rounded-r-xl"
+                  className="h-full flex items-center justify-start px-2 min-w-[60px] rounded-r-xl flex-shrink-0"
                   style={{
                     background: `linear-gradient(135deg, ${feeColor} 0%, #b91c1c 100%)`,
                   }}
                 >
-                  <span className="text-white text-xs font-semibold whitespace-nowrap drop-shadow-sm">
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm">
                     {isEstimate && '~'}{fee.toLocaleString()} sats
                   </span>
                 </div>

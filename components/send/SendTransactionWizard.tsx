@@ -111,6 +111,16 @@ function WizardContent({
   // Effective txData - use draft data or actions data
   const effectiveTxData = state.isDraftMode ? draftInitialTxData : actions.txData;
 
+  // Reset transaction data when navigating away from review step
+  // This ensures the transaction is re-created with updated settings when returning
+  const prevStepRef = React.useRef(currentStep);
+  useEffect(() => {
+    if (prevStepRef.current === 'review' && currentStep !== 'review' && !state.isDraftMode) {
+      actions.reset();
+    }
+    prevStepRef.current = currentStep;
+  }, [currentStep, state.isDraftMode, actions]);
+
   // Auto-create transaction when entering review step (not for draft mode)
   useEffect(() => {
     if (currentStep === 'review' && !state.isDraftMode && !actions.txData && !actions.isCreating && isReadyToSign) {

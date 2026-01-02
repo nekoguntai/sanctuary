@@ -96,6 +96,8 @@ export interface SyncConfig {
   maxConcurrentSyncs: number;            // Max wallets syncing at once (default: 3)
   maxRetryAttempts: number;              // Max retries on failure (default: 3)
   retryDelaysMs: number[];               // Exponential backoff delays
+  maxSyncDurationMs: number;             // Max time for a single wallet sync (default: 30 minutes)
+  transactionBatchSize: number;          // Batch size for transaction updates (default: 100)
 }
 
 /**

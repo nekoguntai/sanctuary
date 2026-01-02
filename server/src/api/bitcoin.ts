@@ -18,6 +18,11 @@ import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } f
 const router = Router();
 const log = createLogger('BITCOIN');
 
+// Simple cache for mempool data to avoid hammering external APIs
+let mempoolCache: { data: any; timestamp: number; } | null = null;
+const MEMPOOL_CACHE_TTL = 15000; // 15 seconds
+const MEMPOOL_STALE_TTL = 300000; // 5 minutes for stale fallback
+
 /**
  * GET /api/v1/bitcoin/status
  * Get Bitcoin network status
@@ -176,12 +181,26 @@ router.get('/fees', async (req: Request, res: Response) => {
  * Get mempool and recent blocks data for visualization
  */
 router.get('/mempool', async (req: Request, res: Response) => {
+  const now = Date.now();
+
+  // Return fresh cache if available
+  if (mempoolCache && (now - mempoolCache.timestamp) < MEMPOOL_CACHE_TTL) {
+    return res.json(mempoolCache.data);
+  }
+
   try {
     const data = await mempool.getBlocksAndMempool();
-
+    mempoolCache = { data, timestamp: now };
     res.json(data);
   } catch (error) {
     log.error('[BITCOIN] Get mempool error', { error: String(error) });
+
+    // Return stale cache if available (better than 500)
+    if (mempoolCache && (now - mempoolCache.timestamp) < MEMPOOL_STALE_TTL) {
+      log.warn('[BITCOIN] Returning stale mempool cache due to fetch failure');
+      return res.json({ ...mempoolCache.data, stale: true });
+    }
+
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch mempool data',

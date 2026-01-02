@@ -87,7 +87,7 @@ export async function getRecentBlocks(count: number = 10): Promise<MempoolBlock[
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/v1/blocks`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     // Return only the requested number of blocks
@@ -105,7 +105,7 @@ export async function getMempoolInfo(): Promise<MempoolInfo> {
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/mempool`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     return response.data;
@@ -126,7 +126,7 @@ export async function getRecommendedFees(): Promise<FeeEstimates> {
     // Try projected blocks first for decimal precision
     try {
       const projectedResponse = await axios.get(`${apiBase}/v1/fees/mempool-blocks`, {
-        timeout: 10000,
+        timeout: 3000,
       });
 
       const blocks: ProjectedMempoolBlock[] = projectedResponse.data;
@@ -162,7 +162,7 @@ export async function getRecommendedFees(): Promise<FeeEstimates> {
 
     // Fallback to recommended endpoint (returns integers)
     const response = await axios.get(`${apiBase}/v1/fees/recommended`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     return {
@@ -185,7 +185,7 @@ export async function getBlock(hash: string): Promise<MempoolBlock> {
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/block/${hash}`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     return response.data;
@@ -202,7 +202,7 @@ export async function getBlockAtHeight(height: number): Promise<string> {
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/block-height/${height}`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     // Returns block hash
@@ -220,7 +220,7 @@ export async function getTipHeight(): Promise<number> {
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/blocks/tip/height`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     return response.data;
@@ -250,7 +250,7 @@ export async function getProjectedMempoolBlocks(): Promise<ProjectedMempoolBlock
   try {
     const apiBase = await getMempoolApiBase();
     const response = await axios.get(`${apiBase}/v1/fees/mempool-blocks`, {
-      timeout: 10000,
+      timeout: 3000,
     });
 
     return response.data;

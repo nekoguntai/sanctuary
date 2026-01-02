@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { UTXO, Transaction } from '../types';
 import { Coins, CalendarClock, DollarSign, Clock } from 'lucide-react';
@@ -12,6 +12,13 @@ interface WalletStatsProps {
 
 export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transactions = [] }) => {
   const { getFiatValue, btcPrice, currencySymbol, fiatCurrency, showFiat, format } = useCurrency();
+
+  // Delay chart render to avoid Recharts dimension warning during initial layout
+  const [chartReady, setChartReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setChartReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Calculate Fiat Balance
   const fiatBalance = getFiatValue(balance);
@@ -204,46 +211,50 @@ export const WalletStats: React.FC<WalletStatsProps> = ({ utxos, balance, transa
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">Accumulation History</h3>
-           <div className="h-64">
-             <ResponsiveContainer width="100%" height="100%">
-               <AreaChart data={accumulationData}>
-                 <defs>
-                   <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                     <stop offset="5%" stopColor="#d4b483" stopOpacity={0.3}/>
-                     <stop offset="95%" stopColor="#d4b483" stopOpacity={0}/>
-                   </linearGradient>
-                 </defs>
-                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
-                 <YAxis hide domain={[0, 'dataMax']} />
-                 <Tooltip
-                  contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => [format(value), 'Balance']}
-                />
-                 <Area type="monotone" dataKey="amount" stroke="#d4b483" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
-               </AreaChart>
-             </ResponsiveContainer>
+           <div className="h-64 min-w-[200px]">
+             {chartReady && (
+               <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
+                 <AreaChart data={accumulationData}>
+                   <defs>
+                     <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                       <stop offset="5%" stopColor="#d4b483" stopOpacity={0.3}/>
+                       <stop offset="95%" stopColor="#d4b483" stopOpacity={0}/>
+                     </linearGradient>
+                   </defs>
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
+                   <YAxis hide domain={[0, 'dataMax']} />
+                   <Tooltip
+                    contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value: number) => [format(value), 'Balance']}
+                  />
+                   <Area type="monotone" dataKey="amount" stroke="#d4b483" strokeWidth={2} fillOpacity={1} fill="url(#colorAmount)" />
+                 </AreaChart>
+               </ResponsiveContainer>
+             )}
            </div>
         </div>
 
         <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800">
            <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-6">UTXO Age Distribution</h3>
-           <div className="h-64">
-             <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={ageData}>
-                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
-                 <YAxis hide />
-                 <Tooltip
-                    cursor={{fill: 'transparent'}}
-                    contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    formatter={(value: number) => [format(value), 'Amount']}
-                 />
-                 <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                    {ageData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#d4b483', '#84a98c', '#57534e', '#a8a29e'][index % 4]} />
-                    ))}
-                 </Bar>
-               </BarChart>
-             </ResponsiveContainer>
+           <div className="h-64 min-w-[200px]">
+             {chartReady && (
+               <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
+                 <BarChart data={ageData}>
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#a8a29e'}} />
+                   <YAxis hide />
+                   <Tooltip
+                      cursor={{fill: 'transparent'}}
+                      contentStyle={{ backgroundColor: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }}
+                      formatter={(value: number) => [format(value), 'Amount']}
+                   />
+                   <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                      {ageData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['#d4b483', '#84a98c', '#57534e', '#a8a29e'][index % 4]} />
+                      ))}
+                   </Bar>
+                 </BarChart>
+               </ResponsiveContainer>
+             )}
            </div>
         </div>
       </div>

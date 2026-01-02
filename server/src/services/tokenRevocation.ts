@@ -8,6 +8,7 @@
  *
  * - Uses jti (JWT ID) claims to uniquely identify tokens
  * - Persisted in PostgreSQL for durability across restarts
+ * - Distributed cache (Redis) for fast lookups across instances
  * - Automatic cleanup of expired entries every 5 minutes
  * - Supports multi-instance deployments
  *
@@ -20,6 +21,8 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { getNamespacedCache } from '../infrastructure/redis';
+import type { ICacheService } from './cache/cacheService';
 
 const log = createLogger('TOKEN_REVOCATION');
 
@@ -27,6 +30,26 @@ const log = createLogger('TOKEN_REVOCATION');
  * Cleanup interval in milliseconds (5 minutes)
  */
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Cache TTL for non-revoked tokens (30 seconds - short for security)
+ */
+const CACHE_TTL_SECONDS = 30;
+
+/**
+ * Cache entry wrapper to distinguish "not revoked" from "cache miss"
+ */
+interface CachedRevocationStatus {
+  revoked: boolean;
+}
+
+/**
+ * Get the token revocation cache instance
+ * Uses Redis when available, falls back to in-memory
+ */
+function getRevocationCache(): ICacheService {
+  return getNamespacedCache('token-revocation');
+}
 
 /**
  * Revoke a token by its jti
@@ -48,6 +71,10 @@ export async function revokeToken(
   }
 
   try {
+    // Clear from distributed cache immediately (mark as revoked)
+    const cache = getRevocationCache();
+    await cache.set<CachedRevocationStatus>(jti, { revoked: true }, CACHE_TTL_SECONDS);
+
     await prisma.revokedToken.upsert({
       where: { jti },
       update: {
@@ -72,6 +99,7 @@ export async function revokeToken(
 
 /**
  * Check if a token is revoked
+ * Uses distributed cache (Redis) for fast lookups across instances
  *
  * @param jti - The JWT ID to check
  * @returns true if the token is revoked, false otherwise
@@ -81,12 +109,34 @@ export async function isTokenRevoked(jti: string): Promise<boolean> {
     return false; // Tokens without jti cannot be revoked
   }
 
+  const cache = getRevocationCache();
+
+  // Check distributed cache first
+  try {
+    const cached = await cache.get<CachedRevocationStatus>(jti);
+    if (cached !== null && typeof cached === 'object' && 'revoked' in cached) {
+      return cached.revoked;
+    }
+  } catch {
+    // Cache miss or error, continue to DB
+  }
+
   try {
     const revoked = await prisma.revokedToken.findUnique({
       where: { jti },
       select: { jti: true },
     });
-    return revoked !== null;
+
+    const isRevoked = revoked !== null;
+
+    // Cache the result in distributed cache
+    try {
+      await cache.set<CachedRevocationStatus>(jti, { revoked: isRevoked }, CACHE_TTL_SECONDS);
+    } catch {
+      // Cache set failed, continue without caching
+    }
+
+    return isRevoked;
   } catch (error) {
     log.error('Failed to check token revocation', { error, jti: jti.substring(0, 8) + '...' });
     // Fail secure - treat as revoked if we can't check

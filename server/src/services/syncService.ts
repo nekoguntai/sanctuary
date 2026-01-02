@@ -21,8 +21,6 @@ import { recordSyncFailure } from './deadLetterQueue';
 const log = createLogger('SYNC');
 
 // Get sync configuration from centralized config
-// NOTE: No overall sync timeout - sync continues as long as progress is being made
-// Individual operations (like transaction fetching) may have their own timeouts
 function getSyncConfig() {
   const config = getConfig();
   return {
@@ -32,7 +30,31 @@ function getSyncConfig() {
     maxConcurrentSyncs: config.sync.maxConcurrentSyncs,
     maxRetryAttempts: config.sync.maxRetryAttempts,
     retryDelaysMs: config.sync.retryDelaysMs,
+    maxSyncDurationMs: config.sync.maxSyncDurationMs,
+    transactionBatchSize: config.sync.transactionBatchSize,
   };
+}
+
+/**
+ * Timeout error class for sync operations
+ */
+class SyncTimeoutError extends Error {
+  constructor(walletId: string, durationMs: number) {
+    super(`Sync timeout: wallet ${walletId} exceeded ${durationMs / 1000}s limit`);
+    this.name = 'SyncTimeoutError';
+  }
+}
+
+/**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    ),
+  ]);
 }
 
 interface SyncJob {
@@ -668,9 +690,13 @@ class SyncService {
       const previousBalances = await this.getWalletBalance(walletId);
       const previousTotal = previousBalances.confirmed + previousBalances.unconfirmed;
 
-      // Execute the sync - no overall timeout since sync writes incrementally
-      // and continues as long as progress is being made
-      const result = await syncWallet(walletId);
+      // Execute the sync with timeout protection
+      // Prevents runaway syncs from blocking other wallets
+      const result = await withTimeout(
+        syncWallet(walletId),
+        syncConfig.maxSyncDurationMs,
+        `Sync timeout: exceeded ${syncConfig.maxSyncDurationMs / 1000}s limit`
+      );
 
       // Populate missing fields for any existing transactions
       walletLog(walletId, 'info', 'SYNC', 'Completing sync (populating transaction details)...');

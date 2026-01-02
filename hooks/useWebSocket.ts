@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { websocketClient, WebSocketEvent, WebSocketEventType } from '../services/websocket';
 import apiClient from '../src/api/client';
 import { getWalletLogs } from '../src/api/sync';
+import { getQueryClient } from '../providers/QueryProvider';
 import type {
   WebSocketTransactionData,
   WebSocketBalanceData,
@@ -365,7 +366,6 @@ export const useModelDownloadProgress = (
  * as fast as Sparrow does.
  */
 export const useWebSocketQueryInvalidation = () => {
-  // Import queryClient dynamically to avoid circular dependencies
   const { connected, subscribe, unsubscribe } = useWebSocket();
 
   useEffect(() => {
@@ -376,13 +376,8 @@ export const useWebSocketQueryInvalidation = () => {
     subscribe('sync:all');
     subscribe('transactions:all');
 
-    // Import queryClient lazily
-    let queryClient: import('@tanstack/react-query').QueryClient | null = null;
-    import('../providers/QueryProvider').then((module) => {
-      queryClient = module.queryClient;
-    });
-
     const handleTransactionEvent = (event: WebSocketEvent) => {
+      const queryClient = getQueryClient();
       if (!queryClient) return;
 
       // Invalidate pending transactions when any transaction event occurs
@@ -401,6 +396,7 @@ export const useWebSocketQueryInvalidation = () => {
 
     // Handle new block events - immediately refresh confirmations
     const handleNewBlock = (event: WebSocketEvent) => {
+      const queryClient = getQueryClient();
       if (!queryClient) return;
       if (event.event !== 'newBlock') return;
 
@@ -414,6 +410,7 @@ export const useWebSocketQueryInvalidation = () => {
     // Handle sync events - directly update wallet cache for immediate UI response
     // This ensures all pages (Dashboard, WalletList, WalletDetail) see sync status changes
     const handleSyncEvent = (event: WebSocketEvent) => {
+      const queryClient = getQueryClient();
       if (!queryClient) return;
       if (event.event !== 'sync') return;
 

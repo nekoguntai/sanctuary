@@ -12,8 +12,34 @@ import { getNodeClient } from '../nodeClient';
 import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
 import { walletLog } from '../../../websocket/notifications';
 import { recalculateWalletBalances } from '../utils/balanceCalculation';
+import { getConfig } from '../../../config';
 
 const log = createLogger('CONFIRMATIONS');
+
+/**
+ * Execute database updates in chunks to avoid long-running transactions
+ * that can cause lock contention. Uses the configured batch size.
+ */
+async function executeInChunks<T>(
+  items: T[],
+  createUpdate: (item: T) => ReturnType<typeof prisma.transaction.update>,
+  walletId?: string
+): Promise<void> {
+  const config = getConfig();
+  const batchSize = config.sync.transactionBatchSize;
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const chunk = items.slice(i, i + batchSize);
+    const chunkNum = Math.floor(i / batchSize) + 1;
+    const totalChunks = Math.ceil(items.length / batchSize);
+
+    if (walletId && totalChunks > 1) {
+      walletLog(walletId, 'debug', 'DB', `Processing batch ${chunkNum}/${totalChunks} (${chunk.length} updates)`);
+    }
+
+    await prisma.$transaction(chunk.map(createUpdate));
+  }
+}
 
 /**
  * Confirmation update result with milestone tracking
@@ -75,20 +101,19 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
     }
   }
 
-  // Batch update using a transaction
+  // Batch update using chunked transactions to avoid long locks
   if (updates.length > 0) {
-    await prisma.$transaction(
-      updates.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: {
-            confirmations: u.newConfirmations,
-            // When a transaction transitions from 0 to confirmed, update rbfStatus
-            // to 'confirmed' to prevent cleanup logic from incorrectly marking it as replaced
-            ...(u.oldConfirmations === 0 && u.newConfirmations > 0 ? { rbfStatus: 'confirmed' } : {}),
-          },
-        })
-      )
+    await executeInChunks(updates, (u) =>
+      prisma.transaction.update({
+        where: { id: u.id },
+        data: {
+          confirmations: u.newConfirmations,
+          // When a transaction transitions from 0 to confirmed, update rbfStatus
+          // to 'confirmed' to prevent cleanup logic from incorrectly marking it as replaced
+          ...(u.oldConfirmations === 0 && u.newConfirmations > 0 ? { rbfStatus: 'confirmed' } : {}),
+        },
+      }),
+      walletId
     );
   }
 
@@ -110,6 +135,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   const client = await getNodeClient();
 
   // Find transactions with missing fields (including fee and counterparty address)
+  // OPTIMIZED: Don't include all wallet addresses - fetch them separately with only needed fields
   const transactions = await prisma.transaction.findMany({
     where: {
       walletId,
@@ -121,14 +147,29 @@ export async function populateMissingTransactionFields(walletId: string): Promis
         { counterpartyAddress: null },
       ],
     },
-    include: {
-      wallet: {
-        include: {
-          addresses: true,
-        },
-      },
+    select: {
+      id: true,
+      txid: true,
+      type: true,
+      amount: true,
+      fee: true,
+      blockHeight: true,
+      blockTime: true,
+      confirmations: true,
+      addressId: true,
+      counterpartyAddress: true,
     },
   });
+
+  // Fetch wallet addresses separately with only needed fields (more memory efficient)
+  const walletAddresses = await prisma.address.findMany({
+    where: { walletId },
+    select: { id: true, address: true },
+  });
+
+  // Attach addresses to a lookup structure for efficient access
+  const walletAddressLookup = new Map(walletAddresses.map(a => [a.address, a.id]));
+  const walletAddressSet = new Set(walletAddresses.map(a => a.address));
 
   if (transactions.length === 0) {
     walletLog(walletId, 'info', 'POPULATE', 'All transaction fields are complete');
@@ -151,16 +192,10 @@ export async function populateMissingTransactionFields(walletId: string): Promis
   // PHASE 0: Get block heights from address history (more reliable than verbose tx for some servers)
   // This handles servers like Blockstream that don't support verbose transaction responses
   const txHeightFromHistory = new Map<string, number>();
-  const addressesForHistory = new Set<string>();
 
-  // Collect addresses that have transactions with missing blockHeight
-  for (const tx of transactions) {
-    if (tx.blockHeight === null && tx.wallet.addresses) {
-      for (const addr of tx.wallet.addresses) {
-        addressesForHistory.add(addr.address);
-      }
-    }
-  }
+  // If any transactions are missing blockHeight, we need to check address history
+  const hasMissingBlockHeight = transactions.some(tx => tx.blockHeight === null);
+  const addressesForHistory = hasMissingBlockHeight ? walletAddressSet : new Set<string>();
 
   // Fetch address histories to get transaction heights
   const HISTORY_BATCH_SIZE = 10;
@@ -501,12 +536,11 @@ export async function populateMissingTransactionFields(walletId: string): Promis
           } else if (isSentTx) {
             // For sent transactions, get the recipient address from outputs
             // Skip change outputs (outputs that go back to our wallet)
-            const walletAddressStrings = tx.wallet.addresses.map(a => a.address);
             for (const output of outputs) {
               const outputAddr = output.scriptPubKey?.address ||
                 (output.scriptPubKey?.addresses && output.scriptPubKey.addresses[0]);
-              // Skip if it's our own address (change output)
-              if (outputAddr && !walletAddressStrings.includes(outputAddr)) {
+              // Skip if it's our own address (change output) - use walletAddressSet for O(1) lookup
+              if (outputAddr && !walletAddressSet.has(outputAddr)) {
                 updates.counterpartyAddress = outputAddr;
                 break;
               }
@@ -518,9 +552,8 @@ export async function populateMissingTransactionFields(walletId: string): Promis
       }
 
       // Populate addressId if missing - find which wallet address was involved
-      const walletAddressStrings = tx.wallet.addresses.map(a => a.address);
-
-      if (tx.addressId === null && tx.wallet.addresses.length > 0) {
+      // Use pre-fetched walletAddressSet and walletAddressLookup for O(1) lookups
+      if (tx.addressId === null && walletAddresses.length > 0) {
         // Check outputs for receive transactions
         if (tx.type === 'received' || tx.type === 'receive') {
           const outputs = txDetails.vout || [];
@@ -532,10 +565,11 @@ export async function populateMissingTransactionFields(walletId: string): Promis
             }
 
             for (const addr of outputAddresses) {
-              if (walletAddressStrings.includes(addr)) {
-                const matchingAddress = tx.wallet.addresses.find(a => a.address === addr);
-                if (matchingAddress) {
-                  updates.addressId = matchingAddress.id;
+              // Use walletAddressSet for O(1) check and walletAddressLookup for O(1) id retrieval
+              if (walletAddressSet.has(addr)) {
+                const addressId = walletAddressLookup.get(addr);
+                if (addressId) {
+                  updates.addressId = addressId;
                   break;
                 }
               }
@@ -552,10 +586,11 @@ export async function populateMissingTransactionFields(walletId: string): Promis
               const inputAddress = input.prevout.scriptPubKey.address ||
                 (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
 
-              if (inputAddress && walletAddressStrings.includes(inputAddress)) {
-                const matchingAddress = tx.wallet.addresses.find(a => a.address === inputAddress);
-                if (matchingAddress) {
-                  updates.addressId = matchingAddress.id;
+              // Use walletAddressSet for O(1) check and walletAddressLookup for O(1) id retrieval
+              if (inputAddress && walletAddressSet.has(inputAddress)) {
+                const addressId = walletAddressLookup.get(inputAddress);
+                if (addressId) {
+                  updates.addressId = addressId;
                   break;
                 }
               }
@@ -590,17 +625,17 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     addressIds: addressIdsPopulated,
   });
 
-  // PHASE 2: Batch apply all updates
+  // PHASE 2: Batch apply all updates in chunks to avoid long locks
   if (pendingUpdates.length > 0) {
     walletLog(walletId, 'info', 'POPULATE', `Saving ${pendingUpdates.length} transaction updates to database...`);
     log.debug(`Applying ${pendingUpdates.length} transaction updates...`);
-    await prisma.$transaction(
-      pendingUpdates.map(u =>
-        prisma.transaction.update({
-          where: { id: u.id },
-          data: u.data,
-        })
-      )
+    await executeInChunks(
+      pendingUpdates,
+      (u) => prisma.transaction.update({
+        where: { id: u.id },
+        data: u.data,
+      }),
+      walletId
     );
     updated = pendingUpdates.length;
     walletLog(walletId, 'info', 'POPULATE', `Saved ${updated} transaction updates`);

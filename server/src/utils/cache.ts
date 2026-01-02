@@ -171,6 +171,44 @@ export const balanceHistoryCache = new ApplicationCache<{
   name: 'balance-history',
 });
 
+/**
+ * Cache for transaction statistics per wallet
+ * Key: walletId
+ * Value: aggregated stats (total sent, received, count, fees, balance)
+ * TTL: 30 seconds (updates with new transactions)
+ */
+export const transactionStatsCache = new ApplicationCache<{
+  totalSent: string;
+  totalReceived: string;
+  transactionCount: number;
+  avgFee: string;
+  totalFees: string;
+  currentBalance: string;
+  _receivedCount: number;
+  _sentCount: number;
+  _consolidationCount: number;
+}>({
+  ttlMs: 30000,
+  maxItems: 500,
+  name: 'transaction-stats',
+});
+
+/**
+ * Cache for wallet sync status
+ * Key: walletId
+ * Value: sync status info
+ * TTL: 5 seconds (short TTL for responsive sync status)
+ */
+export const syncStatusCache = new ApplicationCache<{
+  syncInProgress: boolean;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+}>({
+  ttlMs: 5000,
+  maxItems: 500,
+  name: 'sync-status',
+});
+
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
@@ -200,6 +238,8 @@ export async function getOrCompute<T extends object>(
 export function invalidateWalletCaches(walletId: string): void {
   walletBalanceCache.invalidate(walletId);
   balanceHistoryCache.invalidatePattern(walletId);
+  transactionStatsCache.invalidate(walletId);
+  syncStatusCache.invalidate(walletId);
   log.debug(`[CACHE] Invalidated caches for wallet ${walletId}`);
 }
 
@@ -213,5 +253,7 @@ export function getAllCacheStats(): Array<{ name: string; size: number; hits: nu
     blockHeightCache.getStats(),
     priceCache.getStats(),
     balanceHistoryCache.getStats(),
+    transactionStatsCache.getStats(),
+    syncStatusCache.getStats(),
   ];
 }

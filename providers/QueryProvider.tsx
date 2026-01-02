@@ -37,3 +37,7 @@ export const QueryProvider: React.FC<QueryProviderProps> = ({ children }) => {
 
 // Export the query client for use in invalidation helpers
 export { queryClient };
+
+// Getter function for easier mocking in tests
+// This avoids dynamic import timing issues in test environments
+export const getQueryClient = () => queryClient;

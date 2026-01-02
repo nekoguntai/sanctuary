@@ -28,6 +28,7 @@ export interface AggregatedPrice {
   average: number;
   timestamp: Date;
   cached: boolean;
+  stale?: boolean;
   change24h?: number;
 }
 

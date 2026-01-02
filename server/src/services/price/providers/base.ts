@@ -39,13 +39,13 @@ export abstract class BasePriceProvider implements IPriceProvider {
     this.name = config.name;
     this.priority = config.priority;
     this.supportedCurrencies = config.supportedCurrencies.map(c => c.toUpperCase());
-    this.timeoutMs = config.timeoutMs ?? 5000;
+    this.timeoutMs = config.timeoutMs ?? 2000; // Fast fail for better UX
     this.log = createLogger(`Price:${config.name}`);
 
     this.circuit = createCircuitBreaker<PriceData>({
       name: `price-${config.name}`,
       failureThreshold: config.circuitBreaker?.failureThreshold ?? 3,
-      recoveryTimeout: config.circuitBreaker?.recoveryTimeout ?? 60000,
+      recoveryTimeout: config.circuitBreaker?.recoveryTimeout ?? 30000, // Faster recovery
     });
   }
 

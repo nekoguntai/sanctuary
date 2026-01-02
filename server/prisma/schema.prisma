@@ -128,6 +128,7 @@ model Wallet {
   @@index([groupId])
   @@index([syncInProgress]) // For sync service startup & scheduling
   @@index([lastSyncedAt]) // For stale wallet detection
+  @@index([network, syncInProgress, lastSyncedAt]) // For stale wallet queries by network
   @@map("wallets")
 }
 
@@ -327,6 +328,8 @@ model Transaction {
   @@index([walletId, rbfStatus]) // For filtering replaced transactions
   @@index([replacedByTxid]) // For finding replacement chains
   @@index([replacementForTxid]) // For finding original transactions
+  @@index([rbfStatus, createdAt]) // For RBF cleanup queries
+  @@index([walletId, rbfStatus, createdAt]) // For wallet-specific RBF cleanup
   @@map("transactions")
 }
 
@@ -700,6 +703,8 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId, createdAt]) // For user activity timeline
   @@index([success, createdAt]) // For security monitoring queries
+  @@index([category, createdAt]) // For category-filtered cleanup and reports
+  @@index([userId, category, createdAt]) // For user activity by category
   @@map("audit_logs")
 }
 

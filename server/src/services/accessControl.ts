@@ -8,11 +8,65 @@
 import prisma from '../models/prisma';
 import { NotFoundError, ForbiddenError } from './errors';
 import { createLogger } from '../utils/logger';
+import { getNamespacedCache } from '../infrastructure/redis';
+import type { ICacheService } from './cache/cacheService';
 
 const log = createLogger('ACCESS');
 
 // Roles that can edit wallet data (labels, memos, etc.)
 const EDIT_ROLES = ['owner', 'signer'];
+
+/**
+ * Cache TTL for wallet access checks (30 seconds - short for security)
+ */
+const ACCESS_CACHE_TTL_SECONDS = 30;
+
+/**
+ * Get the access control cache instance
+ * Uses Redis when available, falls back to in-memory
+ */
+function getAccessCache(): ICacheService {
+  return getNamespacedCache('access');
+}
+
+/**
+ * Clear access cache for a specific wallet (call when roles change)
+ */
+export async function invalidateWalletAccessCache(walletId: string): Promise<void> {
+  try {
+    const cache = getAccessCache();
+    await cache.deletePattern(`*:${walletId}`);
+    log.debug('Invalidated access cache for wallet', { walletId: walletId.substring(0, 8) });
+  } catch (error) {
+    log.warn('Failed to invalidate wallet access cache', { walletId, error });
+  }
+}
+
+/**
+ * Clear access cache for a specific user (call when user leaves group, etc.)
+ */
+export async function invalidateUserAccessCache(userId: string): Promise<void> {
+  try {
+    const cache = getAccessCache();
+    await cache.deletePattern(`${userId}:*`);
+    log.debug('Invalidated access cache for user', { userId: userId.substring(0, 8) });
+  } catch (error) {
+    log.warn('Failed to invalidate user access cache', { userId, error });
+  }
+}
+
+/**
+ * Clear entire access cache (for admin operations)
+ */
+export async function clearAccessCache(): Promise<void> {
+  try {
+    const cache = getAccessCache();
+    await cache.clear();
+    log.info('Cleared entire access cache');
+  } catch (error) {
+    log.warn('Failed to clear access cache', { error });
+  }
+}
 
 export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 
@@ -47,33 +101,64 @@ export function buildWalletAccessWhere(userId: string) {
 }
 
 /**
+ * Cache entry wrapper to distinguish "no access" from "cache miss"
+ */
+interface CachedRole {
+  role: WalletRole;
+}
+
+/**
  * Get user's role for a specific wallet
  * Returns the highest privilege role if user has multiple access paths
+ * Uses distributed cache (Redis or in-memory fallback) with 30s TTL
  */
 export async function getUserWalletRole(walletId: string, userId: string): Promise<WalletRole> {
+  const cacheKey = `${userId}:${walletId}`;
+  const cache = getAccessCache();
+
+  // Check cache first
+  try {
+    const cached = await cache.get<CachedRole>(cacheKey);
+    if (cached !== null && typeof cached === 'object' && 'role' in cached) {
+      return cached.role;
+    }
+  } catch {
+    // Cache miss or error, continue to DB
+  }
+
   // Check direct user access first
   const walletUser = await prisma.walletUser.findFirst({
     where: { walletId, userId },
   });
 
+  let role: WalletRole = null;
+
   if (walletUser) {
-    return walletUser.role as WalletRole;
+    role = walletUser.role as WalletRole;
+  } else {
+    // Check group access
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        id: walletId,
+        group: { members: { some: { userId } } },
+      },
+      select: { groupRole: true },
+    });
+
+    if (wallet) {
+      role = wallet.groupRole as WalletRole;
+    }
   }
 
-  // Check group access
-  const wallet = await prisma.wallet.findFirst({
-    where: {
-      id: walletId,
-      group: { members: { some: { userId } } },
-    },
-    select: { groupRole: true },
-  });
-
-  if (wallet) {
-    return wallet.groupRole as WalletRole;
+  // Cache the result (including null for no access)
+  // Wrap in object to distinguish from cache miss
+  try {
+    await cache.set<CachedRole>(cacheKey, { role }, ACCESS_CACHE_TTL_SECONDS);
+  } catch {
+    // Cache set failed, continue without caching
   }
 
-  return null;
+  return role;
 }
 
 /**
@@ -275,6 +360,10 @@ export const accessControlService = {
   checkAddressAccess,
   requireAddressAccess,
   requireAddressEditAccess,
+  // Cache management
+  invalidateWalletAccessCache,
+  invalidateUserAccessCache,
+  clearAccessCache,
 };
 
 export default accessControlService;

@@ -461,9 +461,7 @@ export async function getWalletById(
       addresses: {
         orderBy: { index: 'asc' },
       },
-      utxos: {
-        where: { spent: false },
-      },
+      // Don't load UTXOs - use aggregate query instead
       group: {
         include: {
           members: {
@@ -477,10 +475,15 @@ export async function getWalletById(
 
   if (!wallet) return null;
 
-  const balance = wallet.utxos.reduce(
-    (sum, utxo) => sum + Number(utxo.amount),
-    0
-  );
+  // Use aggregate query for balance (efficient for wallets with many UTXOs)
+  const balanceResult = await prisma.uTXO.aggregate({
+    where: {
+      walletId,
+      spent: false,
+    },
+    _sum: { amount: true },
+  });
+  const balance = Number(balanceResult._sum.amount || 0);
 
   // Determine if wallet is shared
   const userCount = wallet.users.length;
@@ -558,9 +561,7 @@ export async function updateWallet(
     include: {
       devices: true,
       addresses: true,
-      utxos: {
-        where: { spent: false },
-      },
+      // Don't load UTXOs - use aggregate query instead
       group: {
         select: { name: true },
       },
@@ -570,10 +571,15 @@ export async function updateWallet(
     },
   });
 
-  const balance = wallet.utxos.reduce(
-    (sum, utxo) => sum + Number(utxo.amount),
-    0
-  );
+  // Use aggregate query for balance (efficient for wallets with many UTXOs)
+  const balanceResult = await prisma.uTXO.aggregate({
+    where: {
+      walletId,
+      spent: false,
+    },
+    _sum: { amount: true },
+  });
+  const balance = Number(balanceResult._sum.amount || 0);
 
   // Determine if wallet is shared
   const userCount = wallet.users.length;
@@ -729,8 +735,10 @@ export async function generateAddress(
 
 /**
  * Get wallet statistics
+ * OPTIMIZED: Uses aggregate queries instead of loading all data
  */
 export async function getWalletStats(walletId: string, userId: string) {
+  // First verify access
   const wallet = await prisma.wallet.findFirst({
     where: {
       id: walletId,
@@ -739,36 +747,45 @@ export async function getWalletStats(walletId: string, userId: string) {
         { group: { members: { some: { userId } } } },
       ],
     },
-    include: {
-      transactions: true,
-      utxos: { where: { spent: false } },
-      addresses: true,
-    },
+    select: { id: true },
   });
 
   if (!wallet) {
     throw new Error('Wallet not found');
   }
 
-  const balance = wallet.utxos.reduce(
-    (sum, utxo) => sum + Number(utxo.amount),
-    0
-  );
-
-  const received = wallet.transactions
-    .filter((tx) => tx.type === 'received')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  const sent = wallet.transactions
-    .filter((tx) => tx.type === 'sent')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  // Use aggregate queries for all statistics (efficient for wallets with many records)
+  const [balanceResult, receivedResult, sentResult, transactionCount, utxoCount, addressCount] =
+    await Promise.all([
+      // Balance from unspent UTXOs
+      prisma.uTXO.aggregate({
+        where: { walletId, spent: false },
+        _sum: { amount: true },
+      }),
+      // Total received
+      prisma.transaction.aggregate({
+        where: { walletId, type: 'received' },
+        _sum: { amount: true },
+      }),
+      // Total sent
+      prisma.transaction.aggregate({
+        where: { walletId, type: 'sent' },
+        _sum: { amount: true },
+      }),
+      // Transaction count
+      prisma.transaction.count({ where: { walletId } }),
+      // UTXO count (unspent only)
+      prisma.uTXO.count({ where: { walletId, spent: false } }),
+      // Address count
+      prisma.address.count({ where: { walletId } }),
+    ]);
 
   return {
-    balance,
-    received,
-    sent,
-    transactionCount: wallet.transactions.length,
-    utxoCount: wallet.utxos.length,
-    addressCount: wallet.addresses.length,
+    balance: Number(balanceResult._sum.amount || 0),
+    received: Number(receivedResult._sum.amount || 0),
+    sent: Number(sentResult._sum.amount || 0),
+    transactionCount,
+    utxoCount,
+    addressCount,
   };
 }

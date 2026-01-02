@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WalletType, getQuorumM } from '../types';
 import type { Wallet } from '../src/api/wallets';
@@ -68,6 +68,13 @@ export const WalletList: React.FC = () => {
   // Get sort settings from user preferences
   const sortBy = (user?.preferences?.viewSettings?.wallets?.sortBy as SortField) || 'name';
   const sortOrder = (user?.preferences?.viewSettings?.wallets?.sortOrder as SortOrder) || 'asc';
+
+  // Delay chart render to avoid Recharts dimension warning during initial layout
+  const [chartReady, setChartReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setChartReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const setSortBy = (field: SortField) => {
     // If clicking the same field, toggle order; otherwise set new field with asc
@@ -379,23 +386,25 @@ export const WalletList: React.FC = () => {
                         ))}
                     </div>
                  </div>
-                 <div className="h-36 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData}>
-                            <defs>
-                                <linearGradient id="colorOverview" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="var(--color-success-500)" stopOpacity={0.2}/>
-                                    <stop offset="95%" stopColor="var(--color-success-500)" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a39e93'}} />
-                            <Tooltip 
-                                contentStyle={{ backgroundColor: '#1c1c1e', border: 'none', borderRadius: '8px', color: '#fff' }}
-                                itemStyle={{ color: 'var(--color-success-500)' }}
-                            />
-                            <Area type="monotone" dataKey="value" stroke="var(--color-success-500)" strokeWidth={2} fillOpacity={1} fill="url(#colorOverview)" />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                 <div className="h-36 w-full min-w-[200px]">
+                    {chartReady && (
+                      <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
+                          <AreaChart data={chartData}>
+                              <defs>
+                                  <linearGradient id="colorOverview" x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor="var(--color-success-500)" stopOpacity={0.2}/>
+                                      <stop offset="95%" stopColor="var(--color-success-500)" stopOpacity={0}/>
+                                  </linearGradient>
+                              </defs>
+                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a39e93'}} />
+                              <Tooltip
+                                  contentStyle={{ backgroundColor: '#1c1c1e', border: 'none', borderRadius: '8px', color: '#fff' }}
+                                  itemStyle={{ color: 'var(--color-success-500)' }}
+                              />
+                              <Area type="monotone" dataKey="value" stroke="var(--color-success-500)" strokeWidth={2} fillOpacity={1} fill="url(#colorOverview)" />
+                          </AreaChart>
+                      </ResponsiveContainer>
+                    )}
                  </div>
              </div>
          </div>

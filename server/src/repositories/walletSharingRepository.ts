@@ -2,10 +2,12 @@
  * Wallet Sharing Repository
  *
  * Abstracts database operations for wallet access/sharing.
+ * Automatically invalidates access cache when roles change.
  */
 
 import prisma from '../models/prisma';
 import type { WalletUser, GroupMember } from '@prisma/client';
+import { invalidateWalletAccessCache, invalidateUserAccessCache } from '../services/accessControl';
 
 type WalletRole = 'owner' | 'signer' | 'viewer';
 
@@ -29,9 +31,12 @@ export async function addUserToWallet(
   userId: string,
   role: WalletRole
 ): Promise<WalletUser> {
-  return prisma.walletUser.create({
+  const result = await prisma.walletUser.create({
     data: { walletId, userId, role },
   });
+  // Invalidate cache for this wallet (user just gained access)
+  await invalidateWalletAccessCache(walletId);
+  return result;
 }
 
 /**
@@ -41,19 +46,33 @@ export async function updateUserRole(
   walletUserId: string,
   role: WalletRole
 ): Promise<WalletUser> {
-  return prisma.walletUser.update({
+  const result = await prisma.walletUser.update({
     where: { id: walletUserId },
     data: { role },
   });
+  // Invalidate cache for this wallet (role changed)
+  await invalidateWalletAccessCache(result.walletId);
+  return result;
 }
 
 /**
  * Remove user from wallet
  */
 export async function removeUserFromWallet(walletUserId: string): Promise<void> {
+  // Get the wallet/user IDs before deleting for cache invalidation
+  const walletUser = await prisma.walletUser.findUnique({
+    where: { id: walletUserId },
+    select: { walletId: true, userId: true },
+  });
+
   await prisma.walletUser.delete({
     where: { id: walletUserId },
   });
+
+  // Invalidate cache for this wallet (user lost access)
+  if (walletUser) {
+    await invalidateWalletAccessCache(walletUser.walletId);
+  }
 }
 
 /**
@@ -96,6 +115,8 @@ export async function updateWalletGroup(
       groupRole: groupId ? groupRole : 'viewer',
     },
   });
+  // Invalidate cache for this wallet (group access changed)
+  await invalidateWalletAccessCache(walletId);
 }
 
 /**

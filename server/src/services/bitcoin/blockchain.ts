@@ -116,6 +116,20 @@ export async function syncAddress(addressId: string): Promise<{
       log.debug(`[BLOCKCHAIN] Batch fetched ${prevTxIdsNeeded.size} previous transactions for input lookups`);
     }
 
+    // BATCH OPTIMIZATION: Pre-fetch all existing transactions for this wallet to avoid N+1 queries
+    // Instead of 3 individual findFirst queries per history item, do one batch query upfront
+    const existingWalletTxs = await prisma.transaction.findMany({
+      where: {
+        walletId: addressRecord.walletId,
+        txid: { in: historyTxIds },
+      },
+      select: { txid: true, type: true },
+    });
+    // Create lookup map: "txid:type" -> true for O(1) existence checks
+    const existingTxLookup = new Set(
+      existingWalletTxs.map(tx => `${tx.txid}:${tx.type}`)
+    );
+
     // Process each transaction using cached data
     for (const item of history) {
       // Use cached transaction details
@@ -183,10 +197,8 @@ export async function syncAddress(addressId: string): Promise<{
       }
 
       if (isReceived) {
-        // Check if we already recorded this as a received tx
-        const existingReceivedTx = await prisma.transaction.findFirst({
-          where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'received' },
-        });
+        // Check if we already recorded this as a received tx (O(1) lookup from batch query)
+        const existingReceivedTx = existingTxLookup.has(`${item.tx_hash}:received`);
 
         if (!existingReceivedTx) {
           const amount = outputs
@@ -236,10 +248,8 @@ export async function syncAddress(addressId: string): Promise<{
         const validFee = fee !== null && fee >= 0 ? fee : null;
 
         if (totalToExternal > 0) {
-          // Regular send to external address
-          const existingSentTx = await prisma.transaction.findFirst({
-            where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'sent' },
-          });
+          // Regular send to external address (O(1) lookup from batch query)
+          const existingSentTx = existingTxLookup.has(`${item.tx_hash}:sent`);
 
           if (!existingSentTx) {
             // Amount is negative (funds leaving wallet = amount sent + fee)
@@ -261,10 +271,8 @@ export async function syncAddress(addressId: string): Promise<{
             transactionCount++;
           }
         } else if (totalToWallet > 0) {
-          // Consolidation - all outputs go back to wallet
-          const existingConsolidationTx = await prisma.transaction.findFirst({
-            where: { txid: item.tx_hash, walletId: addressRecord.walletId, type: 'consolidation' },
-          });
+          // Consolidation - all outputs go back to wallet (O(1) lookup from batch query)
+          const existingConsolidationTx = existingTxLookup.has(`${item.tx_hash}:consolidation`);
 
           if (!existingConsolidationTx) {
             // Amount is negative fee (only fee is lost in consolidation)
@@ -1234,6 +1242,9 @@ export async function syncWallet(walletId: string): Promise<{
                 });
 
                 // Link each pending tx to the confirmed tx that replaced it
+                // Collect all updates first, then batch execute to avoid N+1 queries
+                const rbfUpdates: Array<{ id: string; txid: string; replacementTxid: string }> = [];
+
                 for (const pendingTx of pendingTxsWithMatchingInputs) {
                   // Find which confirmed tx shares an input with this pending tx
                   const pendingInputKeys = new Set(pendingTx.inputs.map(i => `${i.txid}:${i.vout}`));
@@ -1242,19 +1253,31 @@ export async function syncWallet(walletId: string): Promise<{
                   )?.confirmedTxid;
 
                   if (replacementTxid && replacementTxid !== pendingTx.txid) {
-                    await prisma.transaction.update({
-                      where: { id: pendingTx.id },
-                      data: {
-                        rbfStatus: 'replaced',
-                        replacedByTxid: replacementTxid,
-                      },
-                    });
+                    rbfUpdates.push({ id: pendingTx.id, txid: pendingTx.txid, replacementTxid });
+                  }
+                }
 
+                // Batch execute all RBF updates in a single transaction
+                if (rbfUpdates.length > 0) {
+                  await prisma.$transaction(
+                    rbfUpdates.map(update =>
+                      prisma.transaction.update({
+                        where: { id: update.id },
+                        data: {
+                          rbfStatus: 'replaced',
+                          replacedByTxid: update.replacementTxid,
+                        },
+                      })
+                    )
+                  );
+
+                  // Log all RBF links after batch update
+                  for (const update of rbfUpdates) {
                     walletLog(
                       walletId,
                       'info',
                       'RBF',
-                      `Linked pending tx ${pendingTx.txid.slice(0, 8)}... as replaced by confirmed tx ${replacementTxid.slice(0, 8)}...`
+                      `Linked pending tx ${update.txid.slice(0, 8)}... as replaced by confirmed tx ${update.replacementTxid.slice(0, 8)}...`
                     );
                   }
                 }

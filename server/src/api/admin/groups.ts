@@ -9,6 +9,7 @@ import prisma from '../../models/prisma';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
+import { invalidateUserAccessCache } from '../../services/accessControl';
 
 const router = Router();
 const log = createLogger('ADMIN:GROUPS');
@@ -328,6 +329,9 @@ router.post('/:groupId/members', authenticate, requireAdmin, async (req: Request
       data: { groupId, userId, role: role || 'member' },
     });
 
+    // Invalidate user's access cache (they now have access to group wallets)
+    await invalidateUserAccessCache(userId);
+
     log.info('Member added to group:', { groupId, userId, role: membership.role });
 
     await auditService.logFromRequest(req, AuditAction.GROUP_MEMBER_ADD, AuditCategory.ADMIN, {
@@ -370,6 +374,9 @@ router.delete('/:groupId/members/:userId', authenticate, requireAdmin, async (re
     await prisma.groupMember.delete({
       where: { userId_groupId: { userId, groupId } },
     });
+
+    // Invalidate user's access cache (they lost access to group wallets)
+    await invalidateUserAccessCache(userId);
 
     log.info('Member removed from group:', { groupId, userId });
 

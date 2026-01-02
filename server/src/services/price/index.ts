@@ -107,6 +107,22 @@ class PriceService {
     const results = await this.fetchFromProviders(providers, currency);
 
     if (results.length === 0) {
+      // Try stale cache as fallback
+      const stale = this.getStaleFromCache(cacheKey);
+      if (stale) {
+        log.warn('Using stale cached price due to provider failures', { currency });
+        return {
+          price: stale.price,
+          currency: stale.currency,
+          sources: [stale],
+          median: stale.price,
+          average: stale.price,
+          timestamp: stale.timestamp,
+          cached: true,
+          stale: true,
+          change24h: stale.change24h,
+        };
+      }
       throw new Error('Failed to fetch price from any provider');
     }
 
@@ -424,10 +440,19 @@ class PriceService {
     }
 
     if (cached.expiresAt && new Date() > cached.expiresAt) {
-      this.cache.delete(key);
+      // Don't delete - keep for stale fallback
       return null;
     }
 
+    return cached.data || null;
+  }
+
+  /**
+   * Get stale data from cache (expired but still usable as fallback)
+   */
+  private getStaleFromCache(key: string): PriceData | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
     return cached.data || null;
   }
 

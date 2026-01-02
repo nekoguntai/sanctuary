@@ -51,28 +51,25 @@ vi.mock('../../src/api/client', () => ({
 }));
 
 // Mock queryClient for useWebSocketQueryInvalidation tests
-const mockInvalidateQueries = vi.fn();
-const mockSetQueryData = vi.fn();
+// Use vi.hoisted to ensure these are available when vi.mock factories run
+const { mockInvalidateQueries, mockSetQueryData, mockQueryClient } = vi.hoisted(() => {
+  const mockInvalidateQueries = vi.fn();
+  const mockSetQueryData = vi.fn();
+  const mockQueryClient = {
+    invalidateQueries: (...args: any[]) => mockInvalidateQueries(...args),
+    setQueryData: (...args: any[]) => mockSetQueryData(...args),
+  };
+  return { mockInvalidateQueries, mockSetQueryData, mockQueryClient };
+});
 
 // Mock with path relative to the test file
 vi.mock('../../providers/QueryProvider', () => ({
-  queryClient: {
-    invalidateQueries: (...args: any[]) => mockInvalidateQueries(...args),
-    setQueryData: (...args: any[]) => mockSetQueryData(...args),
-  },
+  queryClient: mockQueryClient,
+  getQueryClient: () => mockQueryClient,
 }));
 
-// Also mock with path relative to the hook file (for dynamic imports)
-vi.mock('../providers/QueryProvider', () => ({
-  queryClient: {
-    invalidateQueries: (...args: any[]) => mockInvalidateQueries(...args),
-    setQueryData: (...args: any[]) => mockSetQueryData(...args),
-  },
-}));
-
-// Helper to flush pending promises (needed for dynamic imports in useWebSocketQueryInvalidation)
-// Use a longer timeout to ensure dynamic imports fully resolve in parallel test runs
-const flushPromises = () => new Promise(resolve => setTimeout(resolve, 300));
+// Helper to flush pending promises (for React state updates)
+const flushPromises = () => new Promise(resolve => setTimeout(resolve, 50));
 
 // Import hooks after mocks
 import {
@@ -1185,11 +1182,6 @@ describe('useModelDownloadProgress', () => {
 });
 
 describe('useWebSocketQueryInvalidation', () => {
-  // Warm up the dynamic import before tests run to avoid timing issues
-  beforeAll(async () => {
-    await flushPromises();
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
     connectionChangeCallbacks.clear();
@@ -1286,9 +1278,7 @@ describe('useWebSocketQueryInvalidation', () => {
   });
 
   describe('Transaction Event Handling', () => {
-    // TODO: This test is flaky when run in full test suite due to dynamic import timing
-    // Works when run individually but fails in parallel due to module caching
-    it.skip('should invalidate queries on transaction event', { timeout: 10000 }, async () => {
+    it('should invalidate queries on transaction event', async () => {
       mockIsConnected.mockReturnValue(true);
 
       renderHook(() => useWebSocketQueryInvalidation());
@@ -1298,10 +1288,6 @@ describe('useWebSocketQueryInvalidation', () => {
         expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
         expect(mockOn).toHaveBeenCalledWith('transaction', expect.any(Function));
       });
-
-      // Flush promises multiple times to ensure dynamic import has resolved in parallel test runs
-      await flushPromises();
-      await flushPromises();
 
       const transactionEvent = {
         event: 'transaction',

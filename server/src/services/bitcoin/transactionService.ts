@@ -18,6 +18,7 @@ import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../co
 import { unlockUtxosForDraft } from '../draftLockService';
 import { createLogger } from '../../utils/logger';
 import { eventService } from '../eventService';
+import { mapWithConcurrency } from '../../utils/async';
 
 const log = createLogger('TRANSACTION');
 
@@ -559,13 +560,16 @@ export async function createTransaction(
   // For legacy wallets, we need to fetch raw transactions for nonWitnessUtxo
   const rawTxCache: Map<string, Buffer> = new Map();
   if (isLegacy) {
-    // Fetch all raw transactions in parallel
+    // Fetch raw transactions with concurrency limit to avoid overwhelming the server
     const uniqueTxids = Array.from(new Set(selection.utxos.map(u => u.txid)));
-    const rawTxPromises = uniqueTxids.map(async (txid: string) => {
-      const rawHex = await getRawTransactionHex(txid);
-      return { txid, rawTx: Buffer.from(rawHex, 'hex') };
-    });
-    const rawTxResults = await Promise.all(rawTxPromises);
+    const rawTxResults = await mapWithConcurrency(
+      uniqueTxids,
+      async (txid: string) => {
+        const rawHex = await getRawTransactionHex(txid);
+        return { txid, rawTx: Buffer.from(rawHex, 'hex') };
+      },
+      5 // Max 5 concurrent requests
+    );
     rawTxResults.forEach(({ txid, rawTx }) => rawTxCache.set(txid, rawTx));
   }
 
@@ -1052,31 +1056,43 @@ export async function broadcastAndSave(
     log.debug(`Stored ${inputData.length} transaction inputs for ${txid}`);
   } else {
     // Fallback: try to get input data from UTXO table if not provided
-    const utxoInputs = await Promise.all(
-      metadata.utxos.map(async (utxo, index) => {
-        const utxoRecord = await prisma.uTXO.findUnique({
-          where: { txid_vout: { txid: utxo.txid, vout: utxo.vout } },
-        });
+    // OPTIMIZED: Batch fetch all UTXOs and addresses to avoid N+1 queries
+    const utxoKeys = metadata.utxos.map(u => ({ txid: u.txid, vout: u.vout }));
 
-        if (utxoRecord) {
-          // Get derivation path from address
-          const addressRecord = await prisma.address.findFirst({
-            where: { address: utxoRecord.address, walletId },
-          });
+    // Batch fetch all required UTXOs
+    const utxoRecords = await prisma.uTXO.findMany({
+      where: {
+        OR: utxoKeys.map(k => ({ txid: k.txid, vout: k.vout })),
+      },
+    });
+    const utxoLookup = new Map(utxoRecords.map(u => [`${u.txid}:${u.vout}`, u]));
 
-          return {
-            transactionId: txRecord.id,
-            inputIndex: index,
-            txid: utxo.txid,
-            vout: utxo.vout,
-            address: utxoRecord.address,
-            amount: utxoRecord.amount,
-            derivationPath: addressRecord?.derivationPath,
-          };
-        }
-        return null;
-      })
-    );
+    // Batch fetch all wallet addresses for derivation paths
+    const utxoAddresses = utxoRecords.map(u => u.address);
+    const addressRecords = await prisma.address.findMany({
+      where: {
+        walletId,
+        address: { in: utxoAddresses },
+      },
+      select: { address: true, derivationPath: true },
+    });
+    const addressPathLookup = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
+
+    // Build input data using lookups (O(1) per input instead of O(n) queries)
+    const utxoInputs = metadata.utxos.map((utxo, index) => {
+      const utxoRecord = utxoLookup.get(`${utxo.txid}:${utxo.vout}`);
+      if (!utxoRecord) return null;
+
+      return {
+        transactionId: txRecord.id,
+        inputIndex: index,
+        txid: utxo.txid,
+        vout: utxo.vout,
+        address: utxoRecord.address,
+        amount: utxoRecord.amount,
+        derivationPath: addressPathLookup.get(utxoRecord.address),
+      };
+    });
 
     const validInputs = utxoInputs.filter(Boolean) as Array<{
       transactionId: string;
@@ -1566,12 +1582,16 @@ export async function createBatchTransaction(
   // For legacy wallets, we need to fetch raw transactions for nonWitnessUtxo
   const rawTxCache: Map<string, Buffer> = new Map();
   if (isLegacy) {
+    // Fetch raw transactions with concurrency limit to avoid overwhelming the server
     const uniqueTxids = [...new Set(utxos.map(u => u.txid))];
-    const rawTxPromises = uniqueTxids.map(async (txid) => {
-      const rawHex = await getRawTransactionHex(txid);
-      return { txid, rawTx: Buffer.from(rawHex, 'hex') };
-    });
-    const rawTxResults = await Promise.all(rawTxPromises);
+    const rawTxResults = await mapWithConcurrency(
+      uniqueTxids,
+      async (txid) => {
+        const rawHex = await getRawTransactionHex(txid);
+        return { txid, rawTx: Buffer.from(rawHex, 'hex') };
+      },
+      5 // Max 5 concurrent requests
+    );
     rawTxResults.forEach(({ txid, rawTx }) => rawTxCache.set(txid, rawTx));
   }
 

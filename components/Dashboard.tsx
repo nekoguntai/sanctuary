@@ -154,6 +154,13 @@ export const Dashboard: React.FC = () => {
   // Version check state
   const [versionInfo, setVersionInfo] = useState<adminApi.VersionInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [chartReady, setChartReady] = useState(false);
+
+  // Delay chart render to avoid Recharts dimension warning during initial layout
+  useEffect(() => {
+    const timer = setTimeout(() => setChartReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Check for updates on mount
   useEffect(() => {
@@ -854,7 +861,7 @@ export const Dashboard: React.FC = () => {
               className="mt-1 font-bold text-sanctuary-900 dark:text-sanctuary-50"
             />
           </div>
-          <div className="flex-1 lg:w-2/3">
+          <div className="flex-1 lg:w-2/3 min-w-[200px]">
             <div className="flex justify-end mb-2">
               <div className="flex space-x-1 surface-secondary p-1 rounded-lg">
                 {['1D', '1W', '1M', '1Y', 'ALL'].map((tf) => (
@@ -872,24 +879,26 @@ export const Dashboard: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className="h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorSats" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-primary-400)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="var(--color-primary-400)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a39e93'}} />
-                  <YAxis hide />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    itemStyle={{ color: 'var(--color-primary-400)' }}
-                  />
-                  <Area type="monotone" dataKey="sats" stroke="var(--color-primary-400)" strokeWidth={2} fillOpacity={1} fill="url(#colorSats)" />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="h-32 min-w-[200px]">
+              {chartReady && (
+                <ResponsiveContainer width="99%" height={120}>
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorSats" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--color-primary-400)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--color-primary-400)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#a39e93'}} />
+                    <YAxis hide />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }}
+                      itemStyle={{ color: 'var(--color-primary-400)' }}
+                    />
+                    <Area type="monotone" dataKey="sats" stroke="var(--color-primary-400)" strokeWidth={2} fillOpacity={1} fill="url(#colorSats)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>

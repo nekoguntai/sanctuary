@@ -29,6 +29,7 @@ import healthRoutes from './api/health';
 import transferRoutes from './api/transfers';
 import openApiRoutes from './api/openapi';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
+import { initializeRedisBridge, shutdownRedisBridge } from './websocket/redisBridge';
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
@@ -273,6 +274,9 @@ const backgroundServices: ServiceDefinition[] = [
     // Initialize Redis infrastructure (cache, event bus)
     await initializeRedis();
 
+    // Initialize Redis WebSocket bridge for cross-instance broadcasting
+    await initializeRedisBridge();
+
     // Initialize cache invalidation (subscribes to event bus)
     initializeCacheInvalidation();
 
@@ -438,6 +442,9 @@ const handleShutdown = async (signal: string) => {
 
   // Shutdown cache invalidation (before Redis shutdown)
   shutdownCacheInvalidation();
+
+  // Shutdown Redis WebSocket bridge
+  await shutdownRedisBridge();
 
   // Shutdown Redis infrastructure
   await shutdownRedis();

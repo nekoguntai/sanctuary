@@ -82,3 +82,10 @@ export {
 
 // Notification service
 export { notificationService } from './notifications';
+
+// Redis bridge for cross-instance WebSocket broadcasting
+export {
+  redisBridge,
+  initializeRedisBridge,
+  shutdownRedisBridge,
+} from './redisBridge';

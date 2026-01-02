@@ -21,6 +21,7 @@ import { createLogger } from '../utils/logger';
 import { checkWalletAccess } from '../services/wallet';
 import config from '../config';
 import type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
+import { redisBridge } from './redisBridge';
 
 const log = createLogger('WS');
 
@@ -509,9 +510,27 @@ export class SanctauryWebSocketServer {
   }
 
   /**
-   * Broadcast event to all subscribers
+   * Broadcast event to all subscribers (local + cross-instance via Redis)
+   *
+   * When running multiple server instances behind a load balancer,
+   * this publishes the event to Redis so other instances can broadcast
+   * to their local clients as well.
    */
   public broadcast(event: WebSocketEvent) {
+    // Publish to Redis for other instances (no-op if Redis unavailable)
+    redisBridge.publishBroadcast(event);
+
+    // Broadcast to local clients on this instance
+    this.localBroadcast(event);
+  }
+
+  /**
+   * Broadcast event to local subscribers only (used by Redis bridge)
+   *
+   * This is the actual broadcast logic that sends to WebSocket clients
+   * connected to this specific server instance.
+   */
+  public localBroadcast(event: WebSocketEvent) {
     const channels = this.getChannelsForEvent(event);
 
     for (const channel of channels) {
@@ -638,6 +657,15 @@ export const initializeWebSocketServer = (): SanctauryWebSocketServer => {
     throw new Error('WebSocket server already initialized');
   }
   wsServer = new SanctauryWebSocketServer();
+
+  // Set up Redis bridge handler for cross-instance broadcasts
+  // When events arrive from other instances via Redis, broadcast locally
+  redisBridge.setBroadcastHandler((event) => {
+    if (wsServer) {
+      wsServer.localBroadcast(event);
+    }
+  });
+
   return wsServer;
 };
 

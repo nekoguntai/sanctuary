@@ -29,6 +29,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { cacheOperationsTotal } from '../../observability/metrics';
 
 const log = createLogger('Cache');
 
@@ -102,6 +103,7 @@ class MemoryCache implements ICacheService {
 
     if (!entry) {
       this.stats.misses++;
+      cacheOperationsTotal.inc({ type: 'get', result: 'miss' });
       return null;
     }
 
@@ -109,10 +111,12 @@ class MemoryCache implements ICacheService {
     if (Date.now() > entry.expiresAt) {
       this.cache.delete(fullKey);
       this.stats.misses++;
+      cacheOperationsTotal.inc({ type: 'get', result: 'miss' });
       return null;
     }
 
     this.stats.hits++;
+    cacheOperationsTotal.inc({ type: 'get', result: 'hit' });
     return entry.value as T;
   }
 
@@ -124,6 +128,7 @@ class MemoryCache implements ICacheService {
     this.cache.set(fullKey, { value, expiresAt });
     this.stats.sets++;
     this.stats.size = this.cache.size;
+    cacheOperationsTotal.inc({ type: 'set', result: 'success' });
   }
 
   async delete(key: string): Promise<boolean> {
@@ -132,6 +137,7 @@ class MemoryCache implements ICacheService {
     if (deleted) {
       this.stats.deletes++;
       this.stats.size = this.cache.size;
+      cacheOperationsTotal.inc({ type: 'delete', result: 'success' });
     }
     return deleted;
   }

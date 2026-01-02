@@ -22,6 +22,7 @@ import { checkWalletAccess } from '../services/wallet';
 import config from '../config';
 import type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
 import { redisBridge } from './redisBridge';
+import { websocketConnections, websocketMessagesTotal } from '../observability/metrics';
 
 const log = createLogger('WS');
 
@@ -172,6 +173,9 @@ export class SanctauryWebSocketServer {
   private completeClientRegistration(client: AuthenticatedWebSocket) {
     this.clients.add(client);
 
+    // Track WebSocket connection metric
+    websocketConnections.inc({ type: 'main' });
+
     // Track per-user connections (only if not already tracked from async auth)
     if (client.userId) {
       if (!this.connectionsPerUser.has(client.userId)) {
@@ -244,6 +248,9 @@ export class SanctauryWebSocketServer {
    * Handle incoming message from client
    */
   private handleMessage(client: AuthenticatedWebSocket, data: Buffer) {
+    // Track incoming WebSocket message metric
+    websocketMessagesTotal.inc({ type: 'main', direction: 'in' });
+
     const now = Date.now();
     client.totalMessageCount++;
 
@@ -477,6 +484,9 @@ export class SanctauryWebSocketServer {
 
     this.clients.delete(client);
 
+    // Track WebSocket disconnection metric
+    websocketConnections.dec({ type: 'main' });
+
     // Remove from per-user connection tracking
     if (client.userId) {
       const userConnections = this.connectionsPerUser.get(client.userId);
@@ -506,6 +516,8 @@ export class SanctauryWebSocketServer {
   private sendToClient(client: AuthenticatedWebSocket, message: any) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
+      // Track outgoing WebSocket message metric
+      websocketMessagesTotal.inc({ type: 'main', direction: 'out' });
     }
   }
 
@@ -780,6 +792,10 @@ export class GatewayWebSocketServer {
       }
       if (this.gateway === client) {
         this.gateway = null;
+        // Track gateway disconnection metric (only if was authenticated)
+        if (client.isAuthenticated) {
+          websocketConnections.dec({ type: 'gateway' });
+        }
         log.warn('Gateway disconnected');
       }
     });
@@ -794,6 +810,9 @@ export class GatewayWebSocketServer {
    * Handle message from gateway
    */
   private handleMessage(client: GatewayWebSocket, data: Buffer) {
+    // Track incoming gateway message metric
+    websocketMessagesTotal.inc({ type: 'gateway', direction: 'in' });
+
     try {
       const message = JSON.parse(data.toString());
 
@@ -856,8 +875,12 @@ export class GatewayWebSocketServer {
     if (this.gateway && this.gateway !== client) {
       log.info('Replacing existing gateway connection');
       this.gateway.close(1000, 'Replaced by new connection');
+      // Don't decrement here - the close handler will do it
     }
     this.gateway = client;
+
+    // Track gateway connection metric
+    websocketConnections.inc({ type: 'gateway' });
 
     this.sendToClient(client, { type: 'auth_success' });
     log.info('Gateway authenticated successfully');
@@ -869,6 +892,8 @@ export class GatewayWebSocketServer {
   private sendToClient(client: GatewayWebSocket, message: unknown) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
+      // Track outgoing gateway message metric
+      websocketMessagesTotal.inc({ type: 'gateway', direction: 'out' });
     }
   }
 

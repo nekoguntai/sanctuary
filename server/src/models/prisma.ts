@@ -21,6 +21,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '../utils/logger';
+import { dbQueryDuration } from '../observability/metrics';
 
 const log = createLogger('DB');
 
@@ -37,11 +38,32 @@ const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
 });
 
-// Add slow query detection middleware
+// Map Prisma actions to operation categories for metrics
+function getOperationType(action: string): string {
+  if (['findUnique', 'findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(action)) {
+    return 'select';
+  }
+  if (['create', 'createMany'].includes(action)) {
+    return 'insert';
+  }
+  if (['update', 'updateMany', 'upsert'].includes(action)) {
+    return 'update';
+  }
+  if (['delete', 'deleteMany'].includes(action)) {
+    return 'delete';
+  }
+  return 'other';
+}
+
+// Add slow query detection and metrics middleware
 prisma.$use(async (params, next) => {
   const before = Date.now();
   const result = await next(params);
   const duration = Date.now() - before;
+
+  // Record query duration metric
+  const operation = getOperationType(params.action || 'unknown');
+  dbQueryDuration.observe({ operation }, duration / 1000);
 
   if (duration > SLOW_QUERY_THRESHOLD_MS) {
     log.warn(`Slow query (${duration}ms): ${params.model}.${params.action}`, {

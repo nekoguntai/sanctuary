@@ -16,6 +16,7 @@
 
 import ElectrumClient from '../electrum';
 import { createLogger } from '../../../utils/logger';
+import { traceExternalCall } from '../../../utils/tracing';
 import type {
   INetworkProvider,
   ProviderConfig,
@@ -117,11 +118,13 @@ export class ElectrumProvider implements INetworkProvider {
   // ===========================================================================
 
   async getAddressBalance(address: string): Promise<AddressBalance> {
-    const balance = await this.client.getAddressBalance(address);
-    return {
-      confirmed: BigInt(balance.confirmed),
-      unconfirmed: BigInt(balance.unconfirmed),
-    };
+    return traceExternalCall('electrum', 'getAddressBalance', async () => {
+      const balance = await this.client.getAddressBalance(address);
+      return {
+        confirmed: BigInt(balance.confirmed),
+        unconfirmed: BigInt(balance.unconfirmed),
+      };
+    });
   }
 
   async getAddressBalances(addresses: string[]): Promise<Map<string, AddressBalance>> {
@@ -146,35 +149,41 @@ export class ElectrumProvider implements INetworkProvider {
   }
 
   async getAddressHistory(address: string): Promise<TransactionHistoryEntry[]> {
-    const history = await this.client.getAddressHistory(address);
-    return history.map(entry => ({
-      txid: entry.tx_hash,
-      height: entry.height,
-    }));
+    return traceExternalCall('electrum', 'getAddressHistory', async () => {
+      const history = await this.client.getAddressHistory(address);
+      return history.map(entry => ({
+        txid: entry.tx_hash,
+        height: entry.height,
+      }));
+    });
   }
 
   async getAddressHistories(addresses: string[]): Promise<Map<string, TransactionHistoryEntry[]>> {
-    const results = await this.client.getAddressHistoryBatch(addresses);
-    const mapped = new Map<string, TransactionHistoryEntry[]>();
+    return traceExternalCall('electrum', 'getAddressHistoryBatch', async () => {
+      const results = await this.client.getAddressHistoryBatch(addresses);
+      const mapped = new Map<string, TransactionHistoryEntry[]>();
 
-    for (const [address, history] of results) {
-      mapped.set(address, history.map(entry => ({
-        txid: entry.tx_hash,
-        height: entry.height,
-      })));
-    }
+      for (const [address, history] of results) {
+        mapped.set(address, history.map(entry => ({
+          txid: entry.tx_hash,
+          height: entry.height,
+        })));
+      }
 
-    return mapped;
+      return mapped;
+    });
   }
 
   async getAddressUTXOs(address: string): Promise<UTXO[]> {
-    const utxos = await this.client.getAddressUTXOs(address);
-    return utxos.map((utxo: { tx_hash: string; tx_pos: number; value: number; height: number }) => ({
-      txid: utxo.tx_hash,
-      vout: utxo.tx_pos,
-      value: BigInt(utxo.value),
-      height: utxo.height,
-    }));
+    return traceExternalCall('electrum', 'getAddressUTXOs', async () => {
+      const utxos = await this.client.getAddressUTXOs(address);
+      return utxos.map((utxo: { tx_hash: string; tx_pos: number; value: number; height: number }) => ({
+        txid: utxo.tx_hash,
+        vout: utxo.tx_pos,
+        value: BigInt(utxo.value),
+        height: utxo.height,
+      }));
+    });
   }
 
   async getAddressUTXOsBatch(addresses: string[]): Promise<Map<string, UTXO[]>> {
@@ -202,39 +211,41 @@ export class ElectrumProvider implements INetworkProvider {
   // ===========================================================================
 
   async getTransaction(txid: string, verbose: boolean = true): Promise<RawTransaction | string> {
-    const tx = await this.client.getTransaction(txid, verbose);
+    return traceExternalCall('electrum', 'getTransaction', async () => {
+      const tx = await this.client.getTransaction(txid, verbose);
 
-    if (!verbose) {
-      return tx; // Returns hex string
-    }
+      if (!verbose) {
+        return tx; // Returns hex string
+      }
 
-    // Map to our interface
-    return {
-      txid: tx.txid,
-      hash: tx.hash || tx.txid,
-      version: tx.version,
-      size: tx.size,
-      vsize: tx.vsize,
-      weight: tx.weight,
-      locktime: tx.locktime,
-      vin: tx.vin.map((input: any) => ({
-        txid: input.txid,
-        vout: input.vout,
-        scriptSig: input.scriptSig?.hex,
-        sequence: input.sequence,
-        witness: input.txinwitness,
-      })),
-      vout: tx.vout.map((output: any) => ({
-        value: BigInt(Math.round(output.value * 100000000)),
-        scriptPubKey: output.scriptPubKey.hex,
-        address: output.scriptPubKey.address,
-      })),
-      hex: tx.hex,
-      blockhash: tx.blockhash,
-      confirmations: tx.confirmations,
-      time: tx.time,
-      blocktime: tx.blocktime,
-    };
+      // Map to our interface
+      return {
+        txid: tx.txid,
+        hash: tx.hash || tx.txid,
+        version: tx.version,
+        size: tx.size,
+        vsize: tx.vsize,
+        weight: tx.weight,
+        locktime: tx.locktime,
+        vin: tx.vin.map((input: any) => ({
+          txid: input.txid,
+          vout: input.vout,
+          scriptSig: input.scriptSig?.hex,
+          sequence: input.sequence,
+          witness: input.txinwitness,
+        })),
+        vout: tx.vout.map((output: any) => ({
+          value: BigInt(Math.round(output.value * 100000000)),
+          scriptPubKey: output.scriptPubKey.hex,
+          address: output.scriptPubKey.address,
+        })),
+        hex: tx.hex,
+        blockhash: tx.blockhash,
+        confirmations: tx.confirmations,
+        time: tx.time,
+        blocktime: tx.blocktime,
+      };
+    });
   }
 
   async getTransactions(txids: string[], verbose: boolean = true): Promise<Map<string, RawTransaction | string>> {
@@ -278,7 +289,9 @@ export class ElectrumProvider implements INetworkProvider {
   }
 
   async broadcastTransaction(hex: string): Promise<string> {
-    return this.client.broadcastTransaction(hex);
+    return traceExternalCall('electrum', 'broadcastTransaction', async () => {
+      return this.client.broadcastTransaction(hex);
+    });
   }
 
   // ===========================================================================
@@ -286,7 +299,9 @@ export class ElectrumProvider implements INetworkProvider {
   // ===========================================================================
 
   async getBlockHeight(): Promise<number> {
-    return this.client.getBlockHeight();
+    return traceExternalCall('electrum', 'getBlockHeight', async () => {
+      return this.client.getBlockHeight();
+    });
   }
 
   async getBlockHeader(height: number): Promise<BlockHeader> {

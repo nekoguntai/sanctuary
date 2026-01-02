@@ -19,6 +19,7 @@ import { getConfig } from '../config';
 import { eventService } from './eventService';
 import { recordSyncFailure } from './deadLetterQueue';
 import { acquireLock, releaseLock, type DistributedLock } from '../infrastructure';
+import { walletSyncsTotal, walletSyncDuration } from '../observability/metrics';
 
 const log = createLogger('SYNC');
 
@@ -739,6 +740,10 @@ class SyncService {
       log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
       walletLog(walletId, 'info', 'SYNC', `Sync complete (${result.transactions} transactions, ${result.utxos} UTXOs)`);
 
+      // Record sync metrics
+      walletSyncsTotal.inc({ status: 'success' });
+      walletSyncDuration.observe({ walletType: 'all' }, duration / 1000);
+
       // Emit wallet synced event (handles both event bus and WebSocket)
       eventService.emitWalletSynced({
         walletId,
@@ -832,6 +837,9 @@ class SyncService {
       // All retries exhausted - final failure
       log.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
       walletLog(walletId, 'error', 'SYNC', `Sync failed after ${syncConfig.maxRetryAttempts} attempts: ${errorMessage}`);
+
+      // Record sync failure metric
+      walletSyncsTotal.inc({ status: 'failure' });
 
       // Record in dead letter queue for visibility
       await recordSyncFailure(walletId, error, syncConfig.maxRetryAttempts, {

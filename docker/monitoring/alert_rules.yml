@@ -1,0 +1,141 @@
+# Sanctuary Alert Rules
+#
+# Prometheus alerting rules for the Sanctuary Bitcoin wallet application.
+# These rules detect common problems and trigger notifications.
+
+groups:
+  - name: sanctuary.http
+    interval: 30s
+    rules:
+      # High error rate (5xx responses)
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(sanctuary_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(sanctuary_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Very high error rate - critical
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(sanctuary_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(sanctuary_http_requests_total[5m])) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical HTTP error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+
+      # High latency (P95 > 2s)
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(sanctuary_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency detected"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+  - name: sanctuary.wallet
+    interval: 30s
+    rules:
+      # Wallet sync failures
+      - alert: WalletSyncFailures
+        expr: |
+          sum(rate(sanctuary_wallet_syncs_total{status="failure"}[10m]))
+          / sum(rate(sanctuary_wallet_syncs_total[10m])) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated wallet sync failure rate"
+          description: "{{ $value | humanizePercentage }} of wallet syncs are failing"
+
+      # Transaction broadcast failures
+      - alert: TransactionBroadcastFailures
+        expr: |
+          sum(rate(sanctuary_transaction_broadcasts_total{status="failure"}[10m]))
+          / sum(rate(sanctuary_transaction_broadcasts_total[10m])) > 0.20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Transaction broadcast failures detected"
+          description: "{{ $value | humanizePercentage }} of broadcasts are failing"
+
+  - name: sanctuary.infrastructure
+    interval: 30s
+    rules:
+      # Electrum pool unhealthy
+      - alert: ElectrumPoolUnhealthy
+        expr: sanctuary_electrum_pool_healthy_connections < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No healthy Electrum connections"
+          description: "All Electrum servers are unavailable"
+
+      # Electrum pool degraded
+      - alert: ElectrumPoolDegraded
+        expr: |
+          sanctuary_electrum_pool_healthy_connections < sanctuary_electrum_pool_size * 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Electrum pool degraded"
+          description: "Less than 50% of Electrum connections are healthy"
+
+      # High database query latency
+      - alert: HighDatabaseLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(sanctuary_db_query_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database query latency"
+          description: "P95 database query time is {{ $value | humanizeDuration }}"
+
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: |
+          sum(rate(sanctuary_cache_operations_total{result="hit"}[10m]))
+          / sum(rate(sanctuary_cache_operations_total{type="get"}[10m])) < 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"
+
+  - name: sanctuary.websocket
+    interval: 30s
+    rules:
+      # WebSocket connection spike
+      - alert: WebSocketConnectionSpike
+        expr: |
+          sanctuary_websocket_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WebSocket connection count"
+          description: "{{ $value }} concurrent WebSocket connections"
+
+      # No WebSocket connections (potential issue)
+      - alert: NoWebSocketConnections
+        expr: sanctuary_websocket_connections == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active WebSocket connections"
+          description: "No clients connected via WebSocket for 10 minutes"

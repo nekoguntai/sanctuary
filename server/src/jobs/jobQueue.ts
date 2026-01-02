@@ -37,6 +37,7 @@
 import { Queue, Worker, Job, QueueEvents, type ConnectionOptions, type JobsOptions } from 'bullmq';
 import { getRedisClient, isRedisConnected } from '../infrastructure';
 import { createLogger } from '../utils/logger';
+import { withSpan } from '../utils/tracing';
 import type { JobDefinition, JobQueueConfig, QueueHealthStatus, ScheduleOptions, JobResult } from './types';
 
 const log = createLogger('JobQueue');
@@ -111,7 +112,13 @@ class JobQueueService {
 
           this.processingJobs++;
           try {
-            return await handler(job);
+            // Wrap job execution in a trace span
+            return await withSpan(`job.${job.name}`, async (span) => {
+              span.setAttribute('job.id', job.id || 'unknown');
+              span.setAttribute('job.name', job.name);
+              span.setAttribute('job.attemptsMade', job.attemptsMade);
+              return await handler(job);
+            });
           } finally {
             this.processingJobs--;
           }

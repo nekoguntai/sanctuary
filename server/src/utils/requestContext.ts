@@ -23,6 +23,8 @@ import { generateRequestId } from '../../../shared/utils/request';
 export interface RequestContextData {
   /** Unique request correlation ID for tracing */
   requestId: string;
+  /** OpenTelemetry trace ID for distributed tracing correlation */
+  traceId?: string;
   /** User ID if authenticated */
   userId?: string;
   /** Username if authenticated */
@@ -67,6 +69,23 @@ export const requestContext = {
    */
   getUserId(): string | undefined {
     return asyncLocalStorage.getStore()?.userId;
+  },
+
+  /**
+   * Get the current trace ID if available
+   */
+  getTraceId(): string | undefined {
+    return asyncLocalStorage.getStore()?.traceId;
+  },
+
+  /**
+   * Set the trace ID (called by tracing middleware)
+   */
+  setTraceId(traceId: string): void {
+    const store = asyncLocalStorage.getStore();
+    if (store) {
+      store.traceId = traceId;
+    }
   },
 
   /**

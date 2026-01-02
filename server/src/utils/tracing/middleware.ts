@@ -120,6 +120,11 @@ export function tracingMiddleware(options: TracingMiddlewareOptions = {}): Reque
     // Store span on request for access in handlers
     (req as any).__span = span;
 
+    // Set traceId in request context for log correlation
+    if (span.context?.traceId) {
+      requestContext.setTraceId(span.context.traceId);
+    }
+
     // Capture response
     const originalEnd = res.end.bind(res);
     res.end = function(this: Response, ...args: unknown[]): Response {

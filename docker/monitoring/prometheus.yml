@@ -15,9 +15,9 @@ global:
 #     - static_configs:
 #         - targets: []
 
-# Rule files (optional - add alert rules if needed)
-# rule_files:
-#   - "alert_rules.yml"
+# Rule files - alert rules for Sanctuary
+rule_files:
+  - "alert_rules.yml"
 
 scrape_configs:
   # Sanctuary Backend API

@@ -198,21 +198,24 @@ const log = (
 
   const timestamp = getTimestamp();
 
-  // Get request ID from context if available
+  // Get request ID and trace ID from context if available
   const reqCtx = requestContext.get();
   const requestId = reqCtx?.requestId;
+  const traceId = reqCtx?.traceId;
   const requestIdStr = requestId ? ` ${colors.dim}[${requestId}]${colors.reset}` : '';
+  const traceIdStr = traceId ? ` ${colors.dim}[trace:${traceId.substring(0, 8)}]${colors.reset}` : '';
 
   // Merge request context into log context
   const enrichedContext = {
     ...context,
     ...(reqCtx?.userId && !context?.userId ? { userId: reqCtx.userId } : {}),
+    ...(traceId && !context?.traceId ? { traceId } : {}),
   };
   const contextStr = formatContext(enrichedContext);
 
-  // Format: [timestamp] LEVEL [PREFIX] [REQ_ID] message context
+  // Format: [timestamp] LEVEL [PREFIX] [REQ_ID] [TRACE_ID] message context
   console.log(
-    `${colors.gray}[${timestamp}]${colors.reset} ${color}${levelName}${colors.reset} ${colors.cyan}[${prefix}]${colors.reset}${requestIdStr} ${message}${contextStr}`
+    `${colors.gray}[${timestamp}]${colors.reset} ${color}${levelName}${colors.reset} ${colors.cyan}[${prefix}]${colors.reset}${requestIdStr}${traceIdStr} ${message}${contextStr}`
   );
 };
 

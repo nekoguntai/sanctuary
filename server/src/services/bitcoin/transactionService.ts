@@ -19,6 +19,7 @@ import { unlockUtxosForDraft } from '../draftLockService';
 import { createLogger } from '../../utils/logger';
 import { eventService } from '../eventService';
 import { mapWithConcurrency } from '../../utils/async';
+import { transactionBroadcastsTotal } from '../../observability/metrics';
 
 const log = createLogger('TRANSACTION');
 
@@ -954,8 +955,13 @@ export async function broadcastAndSave(
   const broadcastResult = await broadcastTransaction(rawTx);
 
   if (!broadcastResult.broadcasted) {
+    // Record broadcast failure metric
+    transactionBroadcastsTotal.inc({ status: 'failure' });
     throw new Error('Failed to broadcast transaction');
   }
+
+  // Record broadcast success metric
+  transactionBroadcastsTotal.inc({ status: 'success' });
 
   // Mark UTXOs as spent
   for (const utxo of metadata.utxos) {

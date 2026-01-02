@@ -33,7 +33,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../models/prisma';
+import { pushDeviceRepository, auditLogRepository } from '../repositories';
 import { authenticate } from '../middleware/auth';
 import { verifyGatewayRequest } from '../middleware/gatewayAuth';
 import { createLogger } from '../utils/logger';
@@ -117,61 +117,22 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
       });
     }
 
-    // Check if token already exists
-    const existing = await prisma.pushDevice.findUnique({
-      where: { token },
+    // Use upsert to handle both new and existing tokens
+    const device = await pushDeviceRepository.upsert({
+      token,
+      userId,
+      platform,
+      deviceName: deviceName || undefined,
     });
 
-    if (existing) {
-      // If same user, just update last used time
-      if (existing.userId === userId) {
-        await prisma.pushDevice.update({
-          where: { id: existing.id },
-          data: {
-            lastUsedAt: new Date(),
-            deviceName: deviceName || existing.deviceName,
-          },
-        });
-        return res.json({
-          success: true,
-          deviceId: existing.id,
-          message: 'Device token updated',
-        });
-      }
-
-      // If different user, reassign token to new user
-      // This handles the case where a device is signed out and signed in with a different account
-      await prisma.pushDevice.update({
-        where: { id: existing.id },
-        data: {
-          userId,
-          lastUsedAt: new Date(),
-          deviceName: deviceName || null,
-        },
-      });
-      log.info(`Reassigned push device ${existing.id} from user ${existing.userId} to ${userId}`);
-      return res.json({
-        success: true,
-        deviceId: existing.id,
-        message: 'Device token reassigned',
-      });
-    }
-
-    // Create new device registration
-    const device = await prisma.pushDevice.create({
-      data: {
-        userId,
-        token,
-        platform,
-        deviceName: deviceName || null,
-      },
-    });
+    const isNew = device.createdAt.getTime() === device.lastUsedAt.getTime();
+    const message = isNew ? 'Device registered for push notifications' : 'Device token updated';
 
     log.info(`Registered ${platform} device for user ${userId}`);
     res.json({
       success: true,
       deviceId: device.id,
-      message: 'Device registered for push notifications',
+      message,
     });
   } catch (error) {
     log.error('Register device error', { error: String(error) });
@@ -198,15 +159,10 @@ router.delete('/unregister', authenticate, async (req: Request, res: Response) =
       });
     }
 
-    // Find and delete the device (only if owned by this user)
-    const device = await prisma.pushDevice.findFirst({
-      where: {
-        token,
-        userId,
-      },
-    });
+    // Find the device by token
+    const device = await pushDeviceRepository.findByToken(token);
 
-    if (!device) {
+    if (!device || device.userId !== userId) {
       // Token not found or not owned by user - still return success
       // This is idempotent behavior for sign-out scenarios
       return res.json({
@@ -215,9 +171,7 @@ router.delete('/unregister', authenticate, async (req: Request, res: Response) =
       });
     }
 
-    await prisma.pushDevice.delete({
-      where: { id: device.id },
-    });
+    await pushDeviceRepository.deleteByToken(token);
 
     log.info(`Unregistered ${device.platform} device for user ${userId}`);
     res.json({
@@ -241,17 +195,7 @@ router.get('/devices', authenticate, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    const devices = await prisma.pushDevice.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        platform: true,
-        deviceName: true,
-        lastUsedAt: true,
-        createdAt: true,
-      },
-      orderBy: { lastUsedAt: 'desc' },
-    });
+    const devices = await pushDeviceRepository.findByUserId(userId);
 
     res.json({
       devices: devices.map((d) => ({
@@ -281,23 +225,16 @@ router.delete('/devices/:id', authenticate, async (req: Request, res: Response) 
     const { id } = req.params;
 
     // Find device (must be owned by user)
-    const device = await prisma.pushDevice.findFirst({
-      where: {
-        id,
-        userId,
-      },
-    });
+    const device = await pushDeviceRepository.findById(id);
 
-    if (!device) {
+    if (!device || device.userId !== userId) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Device not found',
       });
     }
 
-    await prisma.pushDevice.delete({
-      where: { id },
-    });
+    await pushDeviceRepository.deleteById(id);
 
     log.info(`Removed ${device.platform} device ${id} for user ${userId}`);
     res.json({
@@ -328,15 +265,7 @@ router.get('/by-user/:userId', verifyGatewayRequest, async (req: Request, res: R
   try {
     const { userId } = req.params;
 
-    const devices = await prisma.pushDevice.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        token: true,
-        platform: true,
-        userId: true,
-      },
-    });
+    const devices = await pushDeviceRepository.findByUserId(userId);
 
     // Map to gateway's expected format
     res.json(
@@ -370,9 +299,7 @@ router.delete('/device/:deviceId', verifyGatewayRequest, async (req: Request, re
     const { deviceId } = req.params;
 
     // Check if device exists
-    const device = await prisma.pushDevice.findUnique({
-      where: { id: deviceId },
-    });
+    const device = await pushDeviceRepository.findById(deviceId);
 
     if (!device) {
       // Return success even if not found (idempotent behavior)
@@ -383,9 +310,7 @@ router.delete('/device/:deviceId', verifyGatewayRequest, async (req: Request, re
     }
 
     // Delete the device
-    await prisma.pushDevice.delete({
-      where: { id: deviceId },
-    });
+    await pushDeviceRepository.deleteById(deviceId);
 
     log.info(`Gateway removed invalid ${device.platform} token`, {
       deviceId,
@@ -445,25 +370,24 @@ router.post('/gateway-audit', verifyGatewayRequest, async (req: Request, res: Re
       });
     }
 
+    // Determine success based on event type
+    const isFailure = event.includes('FAILED') || event.includes('EXCEEDED') || event.includes('BLOCKED');
+
     // Create audit log entry
-    await prisma.auditLog.create({
-      data: {
-        userId: userId || null,
-        username: username || 'gateway',
-        action: `gateway.${event.toLowerCase()}`,
-        category: category || 'gateway',
-        details: {
-          ...(details || {}),
-          severity: severity || 'info',
-          source: 'gateway',
-        },
-        ipAddress: ip || null,
-        userAgent: userAgent || null,
-        success: !event.includes('FAILED') && !event.includes('EXCEEDED') && !event.includes('BLOCKED'),
-        errorMsg: event.includes('FAILED') || event.includes('EXCEEDED') || event.includes('BLOCKED')
-          ? event
-          : null,
+    await auditLogRepository.create({
+      userId: userId || null,
+      username: username || 'gateway',
+      action: `gateway.${event.toLowerCase()}`,
+      category: (category || 'system') as 'auth' | 'user' | 'wallet' | 'device' | 'admin' | 'system',
+      details: {
+        ...(details || {}),
+        severity: severity || 'info',
+        source: 'gateway',
       },
+      ipAddress: ip || null,
+      userAgent: userAgent || null,
+      success: !isFailure,
+      errorMsg: isFailure ? event : null,
     });
 
     log.debug('Gateway audit event logged', { event, category });

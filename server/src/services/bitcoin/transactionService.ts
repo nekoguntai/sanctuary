@@ -17,6 +17,7 @@ import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { unlockUtxosForDraft } from '../draftLockService';
 import { createLogger } from '../../utils/logger';
+import { eventService } from '../eventService';
 
 const log = createLogger('TRANSACTION');
 
@@ -1179,6 +1180,16 @@ export async function broadcastAndSave(
       // Log but don't fail the broadcast
       log.warn('Failed to send notifications', { error: String(err) });
     });
+  });
+
+  // Emit transaction sent event for real-time updates
+  eventService.emitTransactionSent({
+    walletId,
+    txid,
+    amount: BigInt(metadata.amount),
+    fee: BigInt(metadata.fee),
+    recipients: [{ address: metadata.recipient, amount: BigInt(metadata.amount) }],
+    rawTx,
   });
 
   return {

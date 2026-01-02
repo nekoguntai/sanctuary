@@ -15,7 +15,8 @@
  *   - system: System settings changes
  */
 
-import prisma from '../models/prisma';
+import { auditLogRepository } from '../repositories';
+import type { AuditCategory as RepoAuditCategory } from '../repositories/auditLogRepository';
 import { createLogger } from '../utils/logger';
 import { Request } from 'express';
 
@@ -155,18 +156,16 @@ class AuditService {
    */
   async log(input: AuditLogInput): Promise<void> {
     try {
-      await prisma.auditLog.create({
-        data: {
-          userId: input.userId,
-          username: input.username,
-          action: input.action,
-          category: input.category,
-          details: input.details ?? undefined,
-          ipAddress: input.ipAddress,
-          userAgent: input.userAgent,
-          success: input.success ?? true,
-          errorMsg: input.errorMsg,
-        },
+      await auditLogRepository.create({
+        userId: input.userId,
+        username: input.username,
+        action: input.action,
+        category: input.category as RepoAuditCategory,
+        details: input.details,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        success: input.success ?? true,
+        errorMsg: input.errorMsg,
       });
 
       // Also log to application logger for immediate visibility
@@ -221,7 +220,6 @@ class AuditService {
   }> {
     const {
       userId,
-      username,
       action,
       category,
       success,
@@ -231,88 +229,67 @@ class AuditService {
       offset = 0,
     } = options;
 
-    const where: any = {};
+    const result = await auditLogRepository.findMany(
+      {
+        userId,
+        action,
+        category: category as RepoAuditCategory | undefined,
+        success,
+        startDate,
+        endDate,
+      },
+      { limit, offset }
+    );
 
-    if (userId) where.userId = userId;
-    if (username) where.username = { contains: username, mode: 'insensitive' };
-    if (action) where.action = { contains: action };
-    if (category) where.category = category;
-    if (success !== undefined) where.success = success;
-
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) where.createdAt.gte = startDate;
-      if (endDate) where.createdAt.lte = endDate;
-    }
-
-    const [logs, total] = await Promise.all([
-      prisma.auditLog.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-      prisma.auditLog.count({ where }),
-    ]);
-
-    return { logs, total, limit, offset };
+    return { logs: result.logs, total: result.total, limit, offset };
   }
 
   /**
    * Get recent audit logs for a specific user
    */
   async getForUser(userId: string, limit = 20): Promise<any[]> {
-    return prisma.auditLog.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    return auditLogRepository.findByUserId(userId, { limit });
   }
 
   /**
    * Get failed login attempts (for security monitoring)
    */
   async getFailedLogins(since: Date, limit = 100): Promise<any[]> {
-    return prisma.auditLog.findMany({
-      where: {
+    const result = await auditLogRepository.findMany(
+      {
         action: AuditAction.LOGIN_FAILED,
-        createdAt: { gte: since },
+        startDate: since,
+        success: false,
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+      { limit }
+    );
+    return result.logs;
   }
 
   /**
    * Get all admin actions
    */
   async getAdminActions(limit = 50, offset = 0): Promise<any[]> {
-    return prisma.auditLog.findMany({
-      where: {
-        category: { in: [AuditCategory.ADMIN, AuditCategory.BACKUP, AuditCategory.SYSTEM] },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    });
+    // Use findMany with admin category filter
+    const result = await auditLogRepository.findMany(
+      { category: 'admin' },
+      { limit, offset }
+    );
+    return result.logs;
   }
 
   /**
    * Clean up old audit logs (retention policy)
    */
   async cleanup(olderThan: Date): Promise<number> {
-    const result = await prisma.auditLog.deleteMany({
-      where: {
-        createdAt: { lt: olderThan },
-      },
-    });
+    const count = await auditLogRepository.deleteOlderThan(olderThan);
 
     log.info('Audit log cleanup completed', {
-      deleted: result.count,
+      deleted: count,
       olderThan: olderThan.toISOString(),
     });
 
-    return result.count;
+    return count;
   }
 
   /**
@@ -327,38 +304,20 @@ class AuditService {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const [totalEvents, failedEvents, categoryStats, actionStats] = await Promise.all([
-      prisma.auditLog.count({
-        where: { createdAt: { gte: since } },
-      }),
-      prisma.auditLog.count({
-        where: { createdAt: { gte: since }, success: false },
-      }),
-      prisma.auditLog.groupBy({
-        by: ['category'],
-        where: { createdAt: { gte: since } },
-        _count: true,
-      }),
-      prisma.auditLog.groupBy({
-        by: ['action'],
-        where: { createdAt: { gte: since } },
-        _count: true,
-        orderBy: { _count: { action: 'desc' } },
-        take: 10,
-      }),
+    // Get aggregated stats from repository
+    const [allResult, failedResult, byCategory, byAction] = await Promise.all([
+      auditLogRepository.findMany({ startDate: since }, { limit: 0 }),
+      auditLogRepository.findMany({ startDate: since, success: false }, { limit: 0 }),
+      auditLogRepository.countByCategory(),
+      auditLogRepository.countByAction(),
     ]);
 
-    const byCategory: Record<string, number> = {};
-    for (const stat of categoryStats) {
-      byCategory[stat.category] = stat._count;
-    }
-
-    const byAction: Record<string, number> = {};
-    for (const stat of actionStats) {
-      byAction[stat.action] = stat._count;
-    }
-
-    return { totalEvents, byCategory, byAction, failedEvents };
+    return {
+      totalEvents: allResult.total,
+      byCategory,
+      byAction,
+      failedEvents: failedResult.total,
+    };
   }
 }
 

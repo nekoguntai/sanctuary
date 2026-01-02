@@ -22,14 +22,15 @@ import { auditService, AuditAction, AuditCategory } from './auditService';
 import { expireOldTransfers } from './transferService';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getConfig } from '../config';
 
 const log = createLogger('MAINTENANCE');
 const execAsync = promisify(exec);
 
 /**
- * Maintenance configuration (can be overridden via environment variables)
+ * Maintenance configuration loaded from centralized config
  */
-interface MaintenanceConfig {
+interface MaintenanceServiceConfig {
   // Retention periods in days
   auditLogRetentionDays: number;
   priceDataRetentionDays: number;
@@ -50,23 +51,29 @@ interface MaintenanceConfig {
   diskWarningThresholdPercent: number;
 }
 
-const DEFAULT_CONFIG: MaintenanceConfig = {
-  auditLogRetentionDays: parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '90', 10),
-  priceDataRetentionDays: parseInt(process.env.PRICE_DATA_RETENTION_DAYS || '30', 10),
-  feeEstimateRetentionDays: parseInt(process.env.FEE_ESTIMATE_RETENTION_DAYS || '7', 10),
-  dailyCleanupInterval: 24 * 60 * 60 * 1000, // 24 hours
-  hourlyCleanupInterval: 60 * 60 * 1000, // 1 hour
-  initialDelayMs: 60 * 1000, // 1 minute
-  weeklyMaintenanceInterval: 7 * 24 * 60 * 60 * 1000, // 7 days
-  monthlyMaintenanceInterval: 30 * 24 * 60 * 60 * 1000, // 30 days
-  diskWarningThresholdPercent: parseInt(process.env.DISK_WARNING_THRESHOLD_PERCENT || '80', 10),
-};
+/**
+ * Get maintenance config from centralized config
+ */
+function getMaintenanceConfig(): MaintenanceServiceConfig {
+  const cfg = getConfig();
+  return {
+    auditLogRetentionDays: cfg.maintenance.auditLogRetentionDays,
+    priceDataRetentionDays: cfg.maintenance.priceDataRetentionDays,
+    feeEstimateRetentionDays: cfg.maintenance.feeEstimateRetentionDays,
+    dailyCleanupInterval: cfg.maintenance.dailyCleanupIntervalMs,
+    hourlyCleanupInterval: cfg.maintenance.hourlyCleanupIntervalMs,
+    initialDelayMs: cfg.maintenance.initialDelayMs,
+    weeklyMaintenanceInterval: cfg.maintenance.weeklyMaintenanceIntervalMs,
+    monthlyMaintenanceInterval: cfg.maintenance.monthlyMaintenanceIntervalMs,
+    diskWarningThresholdPercent: cfg.maintenance.diskWarningThresholdPercent,
+  };
+}
 
 /**
  * Maintenance Service class
  */
 class MaintenanceService {
-  private config: MaintenanceConfig;
+  private config: MaintenanceServiceConfig;
   private dailyTimer: NodeJS.Timeout | null = null;
   private hourlyTimer: NodeJS.Timeout | null = null;
   private initialTimer: NodeJS.Timeout | null = null;
@@ -78,8 +85,9 @@ class MaintenanceService {
   private lastWeeklyRun: Date | null = null;
   private lastMonthlyRun: Date | null = null;
 
-  constructor(config: Partial<MaintenanceConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+  constructor(overrides: Partial<MaintenanceServiceConfig> = {}) {
+    // Load from centralized config, allow overrides for testing
+    this.config = { ...getMaintenanceConfig(), ...overrides };
   }
 
   /**

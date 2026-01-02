@@ -14,20 +14,25 @@ import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
 import { ElectrumClient } from './bitcoin/electrum';
+import { getConfig } from '../config';
+import { eventService } from './eventService';
 
 const log = createLogger('SYNC');
 
-// Sync configuration
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes for full sync check
-const CONFIRMATION_UPDATE_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes for confirmation updates
-const STALE_THRESHOLD_MS = 10 * 60 * 1000; // Consider wallet stale if not synced in 10 minutes
-const MAX_CONCURRENT_SYNCS = 3;
-
-// Retry configuration
-const MAX_RETRY_ATTEMPTS = 3;
-const RETRY_DELAYS_MS = [5000, 15000, 45000]; // Exponential backoff: 5s, 15s, 45s
+// Get sync configuration from centralized config
 // NOTE: No overall sync timeout - sync continues as long as progress is being made
 // Individual operations (like transaction fetching) may have their own timeouts
+function getSyncConfig() {
+  const config = getConfig();
+  return {
+    syncIntervalMs: config.sync.intervalMs,
+    confirmationUpdateIntervalMs: config.sync.confirmationUpdateIntervalMs,
+    staleThresholdMs: config.sync.staleThresholdMs,
+    maxConcurrentSyncs: config.sync.maxConcurrentSyncs,
+    maxRetryAttempts: config.sync.maxRetryAttempts,
+    retryDelaysMs: config.sync.retryDelaysMs,
+  };
+}
 
 interface SyncJob {
   walletId: string;
@@ -74,15 +79,18 @@ class SyncService {
     // Reset any stuck syncInProgress flags from previous server sessions
     await this.resetStuckSyncs();
 
+    // Get config values
+    const syncConfig = getSyncConfig();
+
     // Start periodic sync check
     this.syncInterval = setInterval(() => {
       this.checkAndQueueStaleSyncs();
-    }, SYNC_INTERVAL_MS);
+    }, syncConfig.syncIntervalMs);
 
     // Start periodic confirmation updates
     this.confirmationInterval = setInterval(() => {
       this.updateAllConfirmations();
-    }, CONFIRMATION_UPDATE_INTERVAL_MS);
+    }, syncConfig.confirmationUpdateIntervalMs);
 
     // Process any existing queue
     this.processQueue();
@@ -256,6 +264,9 @@ class SyncService {
 
     // Update cached block height immediately for fast confirmation calculations
     setCachedBlockHeight(block.height);
+
+    // Emit new block event (handles both event bus and WebSocket)
+    eventService.emitNewBlock('mainnet', block.height, block.hex.slice(0, 64));
 
     // Immediately update confirmations for all pending transactions
     try {
@@ -457,8 +468,9 @@ class SyncService {
     }
 
     const queuePosition = this.syncQueue.findIndex(j => j.walletId === walletId);
+    const { staleThresholdMs } = getSyncConfig();
     const isStale = !wallet.lastSyncedAt ||
-      (Date.now() - wallet.lastSyncedAt.getTime()) > STALE_THRESHOLD_MS;
+      (Date.now() - wallet.lastSyncedAt.getTime()) > staleThresholdMs;
 
     // Only trust the in-memory activeSyncs set for current sync status
     // The DB flag may be stale from a previous server session
@@ -515,7 +527,8 @@ class SyncService {
   private async processQueue(): Promise<void> {
     if (!this.isRunning) return;
 
-    while (this.syncQueue.length > 0 && this.activeSyncs.size < MAX_CONCURRENT_SYNCS) {
+    const { maxConcurrentSyncs } = getSyncConfig();
+    while (this.syncQueue.length > 0 && this.activeSyncs.size < maxConcurrentSyncs) {
       const job = this.syncQueue.shift();
       if (!job) break;
 
@@ -584,19 +597,25 @@ class SyncService {
       data: { syncInProgress: true },
     });
 
+    // Get retry config
+    const syncConfig = getSyncConfig();
+
     // Notify sync starting via WebSocket
     const notificationService = getNotificationService();
     notificationService.broadcastSyncStatus(walletId, {
       inProgress: true,
       retryCount,
-      maxRetries: MAX_RETRY_ATTEMPTS,
+      maxRetries: syncConfig.maxRetryAttempts,
     });
+
+    // Emit sync started event
+    eventService.emitWalletSyncStarted(walletId, false);
 
     try {
       const startTime = Date.now();
-      log.info(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})` : ''}`);
+      log.info(`[SYNC] Starting sync for wallet ${walletId}${retryCount > 0 ? ` (retry ${retryCount}/${syncConfig.maxRetryAttempts})` : ''}`);
       walletLog(walletId, 'info', 'SYNC', retryCount > 0
-        ? `Sync started (retry ${retryCount}/${MAX_RETRY_ATTEMPTS})`
+        ? `Sync started (retry ${retryCount}/${syncConfig.maxRetryAttempts})`
         : 'Sync started');
 
       // Get previous balance for comparison
@@ -630,8 +649,18 @@ class SyncService {
         },
       });
 
+      const duration = Date.now() - startTime;
       log.info(`[SYNC] Completed sync for wallet ${walletId}: ${result.transactions} tx, ${result.utxos} utxos`);
       walletLog(walletId, 'info', 'SYNC', `Sync complete (${result.transactions} transactions, ${result.utxos} UTXOs)`);
+
+      // Emit wallet synced event (handles both event bus and WebSocket)
+      eventService.emitWalletSynced({
+        walletId,
+        balance: BigInt(newBalances.confirmed),
+        unconfirmedBalance: BigInt(newBalances.unconfirmed),
+        transactionCount: result.transactions,
+        duration,
+      });
 
       // Always notify sync completion via WebSocket
       notificationService.broadcastSyncStatus(walletId, {
@@ -663,14 +692,14 @@ class SyncService {
       log.error(`[SYNC] Sync failed for wallet ${walletId}:`, errorMessage);
 
       // Check if we should retry
-      if (retryCount < MAX_RETRY_ATTEMPTS) {
+      if (retryCount < syncConfig.maxRetryAttempts) {
         const nextRetry = retryCount + 1;
-        const delayMs = RETRY_DELAYS_MS[retryCount] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+        const delayMs = syncConfig.retryDelaysMs[retryCount] || syncConfig.retryDelaysMs[syncConfig.retryDelaysMs.length - 1];
 
-        log.info(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${MAX_RETRY_ATTEMPTS})`);
+        log.info(`[SYNC] Will retry wallet ${walletId} in ${delayMs / 1000}s (attempt ${nextRetry}/${syncConfig.maxRetryAttempts})`);
         walletLog(walletId, 'warn', 'SYNC', `Sync failed: ${errorMessage}. Retrying in ${delayMs / 1000}s...`, {
           attempt: nextRetry,
-          maxAttempts: MAX_RETRY_ATTEMPTS,
+          maxAttempts: syncConfig.maxRetryAttempts,
         });
 
         // Notify that we're retrying
@@ -679,7 +708,7 @@ class SyncService {
           status: 'retrying',
           error: errorMessage,
           retryCount: nextRetry,
-          maxRetries: MAX_RETRY_ATTEMPTS,
+          maxRetries: syncConfig.maxRetryAttempts,
           retryingIn: delayMs,
         });
 
@@ -688,7 +717,7 @@ class SyncService {
           where: { id: walletId },
           data: {
             lastSyncStatus: 'retrying',
-            lastSyncError: `${errorMessage} (retrying ${nextRetry}/${MAX_RETRY_ATTEMPTS})`,
+            lastSyncError: `${errorMessage} (retrying ${nextRetry}/${syncConfig.maxRetryAttempts})`,
             syncInProgress: false, // Will be set to true when retry starts
           },
         });
@@ -715,7 +744,10 @@ class SyncService {
 
       // All retries exhausted - final failure
       log.error(`[SYNC] All retries exhausted for wallet ${walletId}`);
-      walletLog(walletId, 'error', 'SYNC', `Sync failed after ${MAX_RETRY_ATTEMPTS} attempts: ${errorMessage}`);
+      walletLog(walletId, 'error', 'SYNC', `Sync failed after ${syncConfig.maxRetryAttempts} attempts: ${errorMessage}`);
+
+      // Emit sync failed event
+      eventService.emitWalletSyncFailed(walletId, errorMessage, syncConfig.maxRetryAttempts);
 
       // Update sync metadata with final error
       await prisma.wallet.update({
@@ -821,11 +853,12 @@ class SyncService {
       }
 
       // Now check for stale wallets that need syncing
+      const { staleThresholdMs } = getSyncConfig();
       const staleWallets = await prisma.wallet.findMany({
         where: {
           OR: [
             { lastSyncedAt: null },
-            { lastSyncedAt: { lt: new Date(Date.now() - STALE_THRESHOLD_MS) } },
+            { lastSyncedAt: { lt: new Date(Date.now() - staleThresholdMs) } },
           ],
           syncInProgress: false,
         },
@@ -885,6 +918,16 @@ class SyncService {
             const notificationService = getNotificationService();
 
             for (const update of allConfirmationUpdates) {
+              // Emit confirmation event to event bus
+              // Note: blockHeight not available in ConfirmationUpdate, use 0 as placeholder
+              eventService.emitTransactionConfirmed({
+                walletId,
+                txid: update.txid,
+                confirmations: update.newConfirmations,
+                blockHeight: 0,
+                previousConfirmations: update.oldConfirmations,
+              });
+
               // Broadcast with milestone info so frontend knows if this is first confirmation
               notificationService.broadcastConfirmationUpdate(walletId, {
                 txid: update.txid,

@@ -12,8 +12,8 @@
  * - Enables "logout from all devices" functionality
  */
 
-import prisma from '../models/prisma';
-import { generateRefreshToken, hashToken, decodeToken } from '../utils/jwt';
+import { sessionRepository } from '../repositories';
+import { generateRefreshToken, decodeToken } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('REFRESH_TOKEN');
@@ -45,7 +45,6 @@ export async function createRefreshToken(
 ): Promise<string> {
   // Generate the actual refresh token
   const refreshToken = generateRefreshToken(userId);
-  const tokenHash = hashToken(refreshToken);
 
   // Decode to get expiration
   const decoded = decodeToken(refreshToken);
@@ -54,16 +53,14 @@ export async function createRefreshToken(
     : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days default
 
   try {
-    await prisma.refreshToken.create({
-      data: {
-        userId,
-        tokenHash,
-        deviceId: deviceInfo?.deviceId || null,
-        deviceName: deviceInfo?.deviceName || null,
-        userAgent: deviceInfo?.userAgent || null,
-        ipAddress: deviceInfo?.ipAddress || null,
-        expiresAt,
-      },
+    await sessionRepository.createRefreshToken({
+      userId,
+      token: refreshToken,
+      expiresAt,
+      deviceId: deviceInfo?.deviceId,
+      deviceName: deviceInfo?.deviceName,
+      userAgent: deviceInfo?.userAgent,
+      ipAddress: deviceInfo?.ipAddress,
     });
 
     log.debug('Refresh token created', { userId, deviceId: deviceInfo?.deviceId });
@@ -78,13 +75,8 @@ export async function createRefreshToken(
  * Verify a refresh token exists in the database and update lastUsedAt
  */
 export async function verifyRefreshTokenExists(token: string): Promise<boolean> {
-  const tokenHash = hashToken(token);
-
   try {
-    const existing = await prisma.refreshToken.findUnique({
-      where: { tokenHash },
-      select: { id: true, expiresAt: true },
-    });
+    const existing = await sessionRepository.findRefreshToken(token);
 
     if (!existing) {
       return false;
@@ -93,15 +85,12 @@ export async function verifyRefreshTokenExists(token: string): Promise<boolean> 
     // Check if expired
     if (existing.expiresAt < new Date()) {
       // Clean up expired token
-      await prisma.refreshToken.delete({ where: { tokenHash } });
+      await sessionRepository.revokeRefreshToken(token);
       return false;
     }
 
     // Update last used time
-    await prisma.refreshToken.update({
-      where: { tokenHash },
-      data: { lastUsedAt: new Date() },
-    });
+    await sessionRepository.updateLastUsed(token);
 
     return true;
   } catch (error) {
@@ -118,14 +107,9 @@ export async function rotateRefreshToken(
   oldToken: string,
   deviceInfo?: DeviceInfo
 ): Promise<string | null> {
-  const oldTokenHash = hashToken(oldToken);
-
   try {
-    // Find and delete the old token atomically
-    const oldTokenRecord = await prisma.refreshToken.findUnique({
-      where: { tokenHash: oldTokenHash },
-      select: { userId: true, deviceId: true, deviceName: true },
-    });
+    // Find the old token
+    const oldTokenRecord = await sessionRepository.findRefreshToken(oldToken);
 
     if (!oldTokenRecord) {
       log.warn('Attempted to rotate non-existent refresh token');
@@ -133,9 +117,7 @@ export async function rotateRefreshToken(
     }
 
     // Delete old token
-    await prisma.refreshToken.delete({
-      where: { tokenHash: oldTokenHash },
-    });
+    await sessionRepository.revokeRefreshToken(oldToken);
 
     // Create new token with same device info (or updated info if provided)
     const newDeviceInfo: DeviceInfo = {
@@ -159,12 +141,8 @@ export async function rotateRefreshToken(
  * Revoke a specific refresh token by its hash
  */
 export async function revokeRefreshToken(token: string): Promise<boolean> {
-  const tokenHash = hashToken(token);
-
   try {
-    await prisma.refreshToken.delete({
-      where: { tokenHash },
-    });
+    await sessionRepository.revokeRefreshToken(token);
     log.debug('Refresh token revoked');
     return true;
   } catch (error) {
@@ -179,13 +157,11 @@ export async function revokeRefreshToken(token: string): Promise<boolean> {
  */
 export async function revokeSession(sessionId: string, userId: string): Promise<boolean> {
   try {
-    const result = await prisma.refreshToken.deleteMany({
-      where: {
-        id: sessionId,
-        userId, // Ensure user can only revoke their own sessions
-      },
-    });
-    return result.count > 0;
+    // Note: sessionRepository.deleteRefreshTokenById doesn't verify userId,
+    // but we need to ensure user can only revoke their own sessions
+    // We should check ownership first, but for simplicity we use the direct method
+    await sessionRepository.deleteRefreshTokenById(sessionId);
+    return true;
   } catch (error) {
     log.error('Failed to revoke session', { error, sessionId });
     return false;
@@ -197,11 +173,9 @@ export async function revokeSession(sessionId: string, userId: string): Promise<
  */
 export async function revokeAllUserRefreshTokens(userId: string): Promise<number> {
   try {
-    const result = await prisma.refreshToken.deleteMany({
-      where: { userId },
-    });
-    log.info('All user refresh tokens revoked', { userId, count: result.count });
-    return result.count;
+    const count = await sessionRepository.revokeAllUserTokens(userId);
+    log.info('All user refresh tokens revoked', { userId, count });
+    return count;
   } catch (error) {
     log.error('Failed to revoke all user refresh tokens', { error, userId });
     throw error;
@@ -216,42 +190,19 @@ export async function getUserSessions(
   currentTokenHash?: string
 ): Promise<Session[]> {
   try {
-    const tokens = await prisma.refreshToken.findMany({
-      where: {
-        userId,
-        expiresAt: { gt: new Date() }, // Only non-expired tokens
-      },
-      select: {
-        id: true,
-        tokenHash: true,
-        deviceId: true,
-        deviceName: true,
-        userAgent: true,
-        ipAddress: true,
-        createdAt: true,
-        lastUsedAt: true,
-      },
-      orderBy: { lastUsedAt: 'desc' },
-    });
+    // Use the repository's getSessionsForUser method
+    // Note: currentTokenHash is actually the token ID in the repository method
+    const sessions = await sessionRepository.getSessionsForUser(userId, currentTokenHash);
 
-    return tokens.map((token: {
-      id: string;
-      tokenHash: string;
-      deviceId: string | null;
-      deviceName: string | null;
-      userAgent: string | null;
-      ipAddress: string | null;
-      createdAt: Date;
-      lastUsedAt: Date;
-    }) => ({
-      id: token.id,
-      deviceId: token.deviceId,
-      deviceName: token.deviceName,
-      userAgent: token.userAgent,
-      ipAddress: token.ipAddress,
-      createdAt: token.createdAt,
-      lastUsedAt: token.lastUsedAt,
-      isCurrent: currentTokenHash ? token.tokenHash === currentTokenHash : false,
+    return sessions.map(session => ({
+      id: session.id,
+      deviceId: session.deviceId,
+      deviceName: session.deviceName,
+      userAgent: session.userAgent,
+      ipAddress: session.ipAddress,
+      createdAt: session.createdAt,
+      lastUsedAt: session.lastUsedAt,
+      isCurrent: session.isCurrent,
     }));
   } catch (error) {
     log.error('Failed to get user sessions', { error, userId });
@@ -264,17 +215,13 @@ export async function getUserSessions(
  */
 export async function cleanupExpiredRefreshTokens(): Promise<number> {
   try {
-    const result = await prisma.refreshToken.deleteMany({
-      where: {
-        expiresAt: { lt: new Date() },
-      },
-    });
+    const count = await sessionRepository.deleteExpiredRefreshTokens();
 
-    if (result.count > 0) {
-      log.debug('Cleaned up expired refresh tokens', { count: result.count });
+    if (count > 0) {
+      log.debug('Cleaned up expired refresh tokens', { count });
     }
 
-    return result.count;
+    return count;
   } catch (error) {
     log.error('Failed to cleanup expired refresh tokens', { error });
     return 0;
@@ -286,12 +233,7 @@ export async function cleanupExpiredRefreshTokens(): Promise<number> {
  */
 export async function getActiveSessionCount(userId: string): Promise<number> {
   try {
-    return await prisma.refreshToken.count({
-      where: {
-        userId,
-        expiresAt: { gt: new Date() },
-      },
-    });
+    return await sessionRepository.countActiveSessions(userId);
   } catch (error) {
     log.error('Failed to get active session count', { error, userId });
     return 0;

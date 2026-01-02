@@ -10,11 +10,17 @@ import tls from 'tls';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { SocksClient, SocksClientOptions } from 'socks';
-import config from '../../config';
+import config, { getConfig } from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ELECTRUM');
+
+// Get electrum client configuration from centralized config
+function getElectrumClientConfig() {
+  const cfg = getConfig();
+  return cfg.electrumClient;
+}
 
 /**
  * SOCKS5 proxy configuration (for Tor support)
@@ -58,17 +64,17 @@ interface ElectrumConfig {
   batchRequestTimeoutMs?: number; // Optional: batch request timeout (default: 60000ms, higher for Tor)
 }
 
-// Default request timeout (30 seconds)
-const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
-
-// Default batch request timeout (60 seconds)
-const DEFAULT_BATCH_REQUEST_TIMEOUT_MS = 60000;
-
-// Timeout multiplier for Tor connections (Tor adds significant latency)
-const TOR_TIMEOUT_MULTIPLIER = 3;
-
-// Default connection timeout (10 seconds) - fails faster so pool can try other servers
-const DEFAULT_CONNECTION_TIMEOUT_MS = 10000;
+// Timeout defaults are loaded from config but cached for performance
+// These are fallbacks if config isn't available during initial module load
+function getDefaultTimeouts() {
+  const cfg = getElectrumClientConfig();
+  return {
+    requestTimeoutMs: cfg.requestTimeoutMs,
+    batchRequestTimeoutMs: cfg.batchRequestTimeoutMs,
+    connectionTimeoutMs: cfg.connectionTimeoutMs,
+    torTimeoutMultiplier: cfg.torTimeoutMultiplier,
+  };
+}
 
 class ElectrumClient extends EventEmitter {
   private socket: net.Socket | tls.TLSSocket | null = null;
@@ -99,12 +105,15 @@ class ElectrumClient extends EventEmitter {
     this.explicitConfig = explicitConfig || null;
     this.network = explicitConfig?.network ?? 'mainnet'; // Default to mainnet
 
+    // Get timeout defaults from config
+    const defaults = getDefaultTimeouts();
+
     // Calculate timeouts - increase for Tor connections
     const isProxyEnabled = explicitConfig?.proxy?.enabled ?? false;
-    const multiplier = isProxyEnabled ? TOR_TIMEOUT_MULTIPLIER : 1;
+    const multiplier = isProxyEnabled ? defaults.torTimeoutMultiplier : 1;
 
-    this.requestTimeoutMs = (explicitConfig?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) * multiplier;
-    this.batchRequestTimeoutMs = (explicitConfig?.batchRequestTimeoutMs ?? DEFAULT_BATCH_REQUEST_TIMEOUT_MS) * multiplier;
+    this.requestTimeoutMs = (explicitConfig?.requestTimeoutMs ?? defaults.requestTimeoutMs) * multiplier;
+    this.batchRequestTimeoutMs = (explicitConfig?.batchRequestTimeoutMs ?? defaults.batchRequestTimeoutMs) * multiplier;
 
     if (isProxyEnabled) {
       log.debug(`ElectrumClient configured with Tor timeouts: request=${this.requestTimeoutMs}ms, batch=${this.batchRequestTimeoutMs}ms`);
@@ -248,7 +257,8 @@ class ElectrumClient extends EventEmitter {
     }
 
     // Get connection timeout from config or use default
-    const connectionTimeoutMs = this.explicitConfig?.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    const defaults = getDefaultTimeouts();
+    const connectionTimeoutMs = this.explicitConfig?.connectionTimeoutMs ?? defaults.connectionTimeoutMs;
 
     // Now create the connection using a sync Promise executor
     return new Promise((resolve, reject) => {

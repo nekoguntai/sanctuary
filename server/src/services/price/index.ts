@@ -1,13 +1,28 @@
 /**
  * Price Feed Service
  *
- * Aggregates Bitcoin price data from multiple sources with caching
- * and fallback mechanisms for reliability.
+ * Aggregates Bitcoin price data from multiple sources using the
+ * ProviderRegistry pattern with caching and fallback mechanisms.
  */
 
 import { LRUCache } from 'lru-cache';
-import { providers, PriceData, supportedCurrencies } from './providers';
+import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
+import {
+  createPriceProviderRegistry,
+  initializePriceProviders,
+  getAllSupportedCurrencies,
+  getProvidersForCurrency,
+  CoinGeckoPriceProvider,
+} from './providers';
+import type {
+  IPriceProvider,
+  IPriceProviderWithHistory,
+  PriceData,
+  AggregatedPrice,
+  PriceHistoryPoint,
+} from './types';
+import { hasHistoricalSupport } from './types';
 
 const log = createLogger('PRICE');
 
@@ -16,29 +31,42 @@ interface CachedPrice {
   expiresAt?: Date;
   fetchedAt?: Date;
   price?: number;
-  prices?: Array<{ timestamp: Date; price: number }>;
+  prices?: PriceHistoryPoint[];
   provider?: string;
   currency?: string;
   timestamp?: Date;
 }
 
-interface AggregatedPrice {
-  price: number;
-  currency: string;
-  sources: PriceData[];
-  median: number;
-  average: number;
-  timestamp: Date;
-  cached: boolean;
-  change24h?: number;
-}
-
 class PriceService {
-  // LRU cache with max 500 entries to prevent unbounded memory growth
-  // Entries include current prices (~10) and historical prices
   private cache = new LRUCache<string, CachedPrice>({ max: 500 });
   private cacheDuration = 60 * 1000; // 1 minute default
   private cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours for historical data
+  private registry: ProviderRegistry<IPriceProvider>;
+  private initialized = false;
+
+  constructor() {
+    this.registry = createPriceProviderRegistry();
+  }
+
+  /**
+   * Initialize the price service and register all providers
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    await initializePriceProviders(this.registry);
+    this.initialized = true;
+    log.info('Price service initialized with provider registry');
+  }
+
+  /**
+   * Ensure service is initialized
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+  }
 
   /**
    * Get current Bitcoin price with fallback and caching
@@ -47,6 +75,8 @@ class PriceService {
     currency: string = 'USD',
     useCache: boolean = true
   ): Promise<AggregatedPrice> {
+    await this.ensureInitialized();
+
     const cacheKey = `price:${currency.toUpperCase()}`;
 
     // Check cache first
@@ -66,17 +96,15 @@ class PriceService {
       }
     }
 
-    // Determine which providers support this currency
-    const availableProviders = Object.entries(supportedCurrencies)
-      .filter(([_, currencies]) => currencies.includes(currency.toUpperCase()))
-      .map(([provider]) => provider);
+    // Get providers that support this currency
+    const providers = await getProvidersForCurrency(this.registry, currency);
 
-    if (availableProviders.length === 0) {
+    if (providers.length === 0) {
       throw new Error(`Currency ${currency} is not supported by any provider`);
     }
 
     // Fetch from all available providers
-    const results = await this.fetchFromProviders(availableProviders, currency);
+    const results = await this.fetchFromProviders(providers, currency);
 
     if (results.length === 0) {
       throw new Error('Failed to fetch price from any provider');
@@ -87,11 +115,10 @@ class PriceService {
     const average = prices.reduce((sum, p) => sum + p, 0) / prices.length;
     const median = this.calculateMedian(prices);
 
-    // Get 24h change from CoinGecko if available (they provide this data)
+    // Get 24h change from CoinGecko if available
     const coinGeckoSource = results.find(r => r.provider === 'coingecko');
     const change24h = coinGeckoSource?.change24h;
 
-    // Use median as the main price (more resistant to outliers)
     const aggregated: AggregatedPrice = {
       price: median,
       currency: currency.toUpperCase(),
@@ -103,10 +130,9 @@ class PriceService {
       change24h,
     };
 
-    // Cache the result - prefer coingecko (has change24h) or first available
+    // Cache the result
     if (results.length > 0) {
       const sourceToCache = coinGeckoSource || results[0];
-      // Ensure change24h is preserved in cache even if using non-coingecko source
       if (change24h !== undefined && !sourceToCache.change24h) {
         sourceToCache.change24h = change24h;
       }
@@ -120,36 +146,36 @@ class PriceService {
    * Get price from specific provider
    */
   async getPriceFrom(
-    provider: string,
+    providerName: string,
     currency: string = 'USD'
   ): Promise<PriceData> {
-    const providerFn = providers[provider as keyof typeof providers];
+    await this.ensureInitialized();
 
-    if (!providerFn) {
-      throw new Error(`Provider ${provider} not found`);
+    const provider = this.registry.get(providerName);
+
+    if (!provider) {
+      throw new Error(`Provider ${providerName} not found`);
     }
 
-    // Check if provider supports currency
-    const currencies = supportedCurrencies[provider];
-    if (!currencies?.includes(currency.toUpperCase())) {
-      throw new Error(`Provider ${provider} does not support currency ${currency}`);
+    if (!provider.supportsCurrency(currency)) {
+      throw new Error(`Provider ${providerName} does not support currency ${currency}`);
     }
 
-    return providerFn(currency);
+    return provider.getPrice(currency);
   }
 
   /**
    * Fetch price from multiple providers in parallel
    */
   private async fetchFromProviders(
-    providerNames: string[],
+    providers: IPriceProvider[],
     currency: string
   ): Promise<PriceData[]> {
-    const promises = providerNames.map(async (name) => {
+    const promises = providers.map(async (provider) => {
       try {
-        return await this.getPriceFrom(name, currency);
+        return await provider.getPrice(currency);
       } catch (error) {
-        log.error(`Failed to fetch from ${name}`, { error });
+        log.debug(`Failed to fetch from ${provider.name}`, { error: (error as Error).message });
         return null;
       }
     });
@@ -167,7 +193,7 @@ class PriceService {
         const price = await this.getPrice(currency);
         return { currency, price };
       } catch (error) {
-        log.error(`Failed to get price for ${currency}`, { error });
+        log.error(`Failed to get price for ${currency}`, { error: (error as Error).message });
         return null;
       }
     });
@@ -215,12 +241,12 @@ class PriceService {
     currency: string = 'USD',
     date: Date
   ): Promise<number> {
+    await this.ensureInitialized();
+
     try {
-      // Normalize date to start of day
       const normalizedDate = new Date(date);
       normalizedDate.setHours(0, 0, 0, 0);
 
-      // Check cache first
       const cacheKey = `historical_${currency}_${normalizedDate.toISOString()}`;
       const cached = this.cache.get(cacheKey);
 
@@ -229,11 +255,15 @@ class PriceService {
         return cached.price;
       }
 
-      // Fetch historical price from CoinGecko
-      const providers = await import('./providers');
-      const priceData = await providers.fetchCoinGeckoHistoricalPrice(normalizedDate, currency);
+      // Find a provider with historical support
+      const provider = await this.getHistoricalProvider();
 
-      // Cache the result (historical prices don't change, so use longer cache)
+      if (!provider) {
+        throw new Error('No provider available with historical price support');
+      }
+
+      const priceData = await provider.getHistoricalPrice(normalizedDate, currency);
+
       this.cache.set(cacheKey, {
         ...priceData,
         fetchedAt: new Date(),
@@ -254,9 +284,10 @@ class PriceService {
   async getPriceHistory(
     currency: string = 'USD',
     days: number = 30
-  ): Promise<Array<{ timestamp: Date; price: number }>> {
+  ): Promise<PriceHistoryPoint[]> {
+    await this.ensureInitialized();
+
     try {
-      // Check cache first
       const cacheKey = `history_${currency}_${days}d`;
       const cached = this.cache.get(cacheKey);
 
@@ -265,11 +296,14 @@ class PriceService {
         return cached.prices || [];
       }
 
-      // Fetch price history from CoinGecko
-      const providers = await import('./providers');
-      const priceHistory = await providers.fetchCoinGeckoMarketChart(days, currency);
+      const provider = await this.getHistoricalProvider();
 
-      // Cache the result
+      if (!provider) {
+        throw new Error('No provider available with price history support');
+      }
+
+      const priceHistory = await provider.getPriceHistory(days, currency);
+
       this.cache.set(cacheKey, {
         provider: 'coingecko',
         price: priceHistory[priceHistory.length - 1]?.price || 0,
@@ -279,7 +313,7 @@ class PriceService {
         prices: priceHistory,
       });
 
-      log.debug(`Fetched price history from CoinGecko: ${priceHistory.length} data points`);
+      log.debug(`Fetched price history: ${priceHistory.length} data points`);
 
       return priceHistory;
     } catch (error: any) {
@@ -289,12 +323,27 @@ class PriceService {
   }
 
   /**
+   * Get a provider that supports historical data
+   */
+  private async getHistoricalProvider(): Promise<IPriceProviderWithHistory | null> {
+    const providers = this.registry.getAll();
+
+    for (const provider of providers) {
+      if (hasHistoricalSupport(provider)) {
+        const healthy = await provider.healthCheck();
+        if (healthy) {
+          return provider;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get cache statistics
    */
-  getCacheStats(): {
-    size: number;
-    entries: string[];
-  } {
+  getCacheStats(): { size: number; entries: string[] } {
     return {
       size: this.cache.size,
       entries: Array.from(this.cache.keys()),
@@ -319,23 +368,54 @@ class PriceService {
    * Get supported currencies across all providers
    */
   getSupportedCurrencies(): string[] {
-    const allCurrencies = new Set<string>();
-    Object.values(supportedCurrencies).forEach((currencies) => {
-      currencies.forEach((c) => allCurrencies.add(c));
-    });
-    return Array.from(allCurrencies).sort();
+    if (!this.initialized) {
+      // Return default list if not initialized
+      return ['USD', 'EUR', 'GBP', 'CAD', 'CHF', 'AUD', 'JPY', 'CNY', 'KRW', 'INR'];
+    }
+    return getAllSupportedCurrencies(this.registry);
   }
 
   /**
    * Get list of available providers
    */
   getProviders(): string[] {
-    return Object.keys(providers);
+    if (!this.initialized) {
+      return ['mempool', 'coingecko', 'kraken', 'coinbase', 'binance'];
+    }
+    return this.registry.getAll().map(p => p.name);
   }
 
   /**
-   * Private: Get from cache if not expired
+   * Health check - test connectivity to providers
    */
+  async healthCheck(): Promise<{
+    healthy: boolean;
+    providers: Record<string, boolean>;
+  }> {
+    await this.ensureInitialized();
+
+    const health = await this.registry.getHealth();
+    const results: Record<string, boolean> = {};
+
+    for (const status of health.providers) {
+      results[status.name] = status.healthy;
+    }
+
+    return {
+      healthy: health.healthyProviders > 0,
+      providers: results,
+    };
+  }
+
+  /**
+   * Shutdown the service
+   */
+  async shutdown(): Promise<void> {
+    await this.registry.shutdown();
+    this.initialized = false;
+    log.info('Price service shut down');
+  }
+
   private getFromCache(key: string): PriceData | null {
     const cached = this.cache.get(key);
 
@@ -343,7 +423,6 @@ class PriceService {
       return null;
     }
 
-    // Check if expired
     if (cached.expiresAt && new Date() > cached.expiresAt) {
       this.cache.delete(key);
       return null;
@@ -352,17 +431,11 @@ class PriceService {
     return cached.data || null;
   }
 
-  /**
-   * Private: Set cache with expiration
-   */
   private setCache(key: string, data: PriceData): void {
     const expiresAt = new Date(Date.now() + this.cacheDuration);
     this.cache.set(key, { data, expiresAt });
   }
 
-  /**
-   * Private: Calculate median of an array
-   */
   private calculateMedian(values: number[]): number {
     if (values.length === 0) return 0;
 
@@ -374,34 +447,6 @@ class PriceService {
     }
 
     return sorted[middle];
-  }
-
-  /**
-   * Health check - test connectivity to providers
-   */
-  async healthCheck(): Promise<{
-    healthy: boolean;
-    providers: Record<string, boolean>;
-  }> {
-    const providerNames = this.getProviders();
-    const results: Record<string, boolean> = {};
-
-    for (const provider of providerNames) {
-      try {
-        await this.getPriceFrom(provider, 'USD');
-        results[provider] = true;
-      } catch (error) {
-        results[provider] = false;
-      }
-    }
-
-    const healthyCount = Object.values(results).filter(Boolean).length;
-    const healthy = healthyCount > 0;
-
-    return {
-      healthy,
-      providers: results,
-    };
   }
 }
 
@@ -419,4 +464,4 @@ export function getPriceService(): PriceService {
 }
 
 export default PriceService;
-export type { PriceData, AggregatedPrice };
+export type { PriceData, AggregatedPrice, PriceHistoryPoint, IPriceProvider };

@@ -78,6 +78,34 @@ export interface MaintenanceConfig {
   priceDataRetentionDays: number;
   feeEstimateRetentionDays: number;
   diskWarningThresholdPercent: number;
+  // Intervals in milliseconds
+  dailyCleanupIntervalMs: number;
+  hourlyCleanupIntervalMs: number;
+  initialDelayMs: number;
+  weeklyMaintenanceIntervalMs: number;
+  monthlyMaintenanceIntervalMs: number;
+}
+
+/**
+ * Sync service configuration
+ */
+export interface SyncConfig {
+  intervalMs: number;                    // Full sync check interval (default: 5 minutes)
+  confirmationUpdateIntervalMs: number;  // Confirmation update interval (default: 2 minutes)
+  staleThresholdMs: number;              // Consider wallet stale after this time (default: 10 minutes)
+  maxConcurrentSyncs: number;            // Max wallets syncing at once (default: 3)
+  maxRetryAttempts: number;              // Max retries on failure (default: 3)
+  retryDelaysMs: number[];               // Exponential backoff delays
+}
+
+/**
+ * Electrum client configuration
+ */
+export interface ElectrumClientConfig {
+  requestTimeoutMs: number;       // Per-request timeout (default: 30s)
+  batchRequestTimeoutMs: number;  // Batch request timeout (default: 60s)
+  connectionTimeoutMs: number;    // Connection/handshake timeout (default: 10s)
+  torTimeoutMultiplier: number;   // Timeout multiplier for Tor connections (default: 3)
 }
 
 export interface WebSocketConfig {
@@ -162,6 +190,8 @@ export interface AppConfig {
   priceApis: PriceApisConfig;
   ai: AiConfig;
   maintenance: MaintenanceConfig;
+  sync: SyncConfig;
+  electrumClient: ElectrumClientConfig;
   websocket: WebSocketConfig;
   push: PushNotificationConfig;
   docker: DockerConfig;

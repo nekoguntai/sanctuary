@@ -13,8 +13,9 @@
 
 import dotenv from 'dotenv';
 import path from 'path';
-import type { AppConfig, CombinedConfig, LogLevel, NetworkType, ElectrumProtocol } from './types';
+import type { AppConfig, CombinedConfig, LogLevel, NetworkType, ElectrumProtocol, SyncConfig, ElectrumClientConfig } from './types';
 import { loadFeatureFlags } from './features';
+import { assertValidConfig, validateConfigSchema } from './schema';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -121,6 +122,27 @@ function loadConfig(): CombinedConfig {
       priceDataRetentionDays: parseInt(process.env.PRICE_DATA_RETENTION_DAYS || '30', 10),
       feeEstimateRetentionDays: parseInt(process.env.FEE_ESTIMATE_RETENTION_DAYS || '7', 10),
       diskWarningThresholdPercent: parseInt(process.env.DISK_WARNING_THRESHOLD_PERCENT || '80', 10),
+      dailyCleanupIntervalMs: parseInt(process.env.MAINTENANCE_DAILY_INTERVAL_MS || String(24 * 60 * 60 * 1000), 10),
+      hourlyCleanupIntervalMs: parseInt(process.env.MAINTENANCE_HOURLY_INTERVAL_MS || String(60 * 60 * 1000), 10),
+      initialDelayMs: parseInt(process.env.MAINTENANCE_INITIAL_DELAY_MS || String(60 * 1000), 10),
+      weeklyMaintenanceIntervalMs: parseInt(process.env.MAINTENANCE_WEEKLY_INTERVAL_MS || String(7 * 24 * 60 * 60 * 1000), 10),
+      monthlyMaintenanceIntervalMs: parseInt(process.env.MAINTENANCE_MONTHLY_INTERVAL_MS || String(30 * 24 * 60 * 60 * 1000), 10),
+    },
+
+    sync: {
+      intervalMs: parseInt(process.env.SYNC_INTERVAL_MS || String(5 * 60 * 1000), 10),
+      confirmationUpdateIntervalMs: parseInt(process.env.SYNC_CONFIRMATION_INTERVAL_MS || String(2 * 60 * 1000), 10),
+      staleThresholdMs: parseInt(process.env.SYNC_STALE_THRESHOLD_MS || String(10 * 60 * 1000), 10),
+      maxConcurrentSyncs: parseInt(process.env.SYNC_MAX_CONCURRENT || '3', 10),
+      maxRetryAttempts: parseInt(process.env.SYNC_MAX_RETRIES || '3', 10),
+      retryDelaysMs: (process.env.SYNC_RETRY_DELAYS_MS || '5000,15000,45000').split(',').map(s => parseInt(s.trim(), 10)),
+    },
+
+    electrumClient: {
+      requestTimeoutMs: parseInt(process.env.ELECTRUM_REQUEST_TIMEOUT_MS || '30000', 10),
+      batchRequestTimeoutMs: parseInt(process.env.ELECTRUM_BATCH_TIMEOUT_MS || '60000', 10),
+      connectionTimeoutMs: parseInt(process.env.ELECTRUM_CONNECTION_TIMEOUT_MS || '10000', 10),
+      torTimeoutMultiplier: parseInt(process.env.ELECTRUM_TOR_TIMEOUT_MULTIPLIER || '3', 10),
     },
 
     websocket: {
@@ -171,10 +193,14 @@ function loadConfig(): CombinedConfig {
 }
 
 /**
- * Validate configuration for required values
+ * Validate configuration using Zod schema
+ * Provides detailed error messages for invalid configuration
  */
 function validateConfig(config: CombinedConfig): void {
-  // Production-specific validation
+  // Run Zod schema validation
+  assertValidConfig(config);
+
+  // Additional production-specific validation
   if (config.server.nodeEnv === 'production') {
     if (!config.database.url) {
       throw new Error('DATABASE_URL is required in production');
@@ -321,3 +347,6 @@ export default config;
 // Re-export types
 export type { AppConfig, CombinedConfig, FeatureFlags, ExperimentalFeatures, FeatureFlagKey, NetworkType, LogLevel } from './types';
 export { defaultFeatureFlags } from './features';
+
+// Re-export validation utilities
+export { validateConfigSchema, assertValidConfig } from './schema';

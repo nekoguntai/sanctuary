@@ -205,6 +205,50 @@ beforeEach(() => {
 });
 ```
 
+### Mocking Repositories
+
+Use the centralized repository mocks from `tests/mocks/repositories.ts`:
+
+```typescript
+import {
+  mockAuditLogRepository,
+  mockSessionRepository,
+  mockPushDeviceRepository,
+  mockSystemSettingRepository,
+  mockDeviceRepository,
+  resetRepositoryMocks,
+  seedAuditLogs,
+  seedSessions,
+} from '../../mocks/repositories';
+
+// Mock the repositories module
+jest.mock('../../../src/repositories', () => ({
+  auditLogRepository: mockAuditLogRepository,
+  sessionRepository: mockSessionRepository,
+  pushDeviceRepository: mockPushDeviceRepository,
+  systemSettingRepository: mockSystemSettingRepository,
+  deviceRepository: mockDeviceRepository,
+}));
+
+beforeEach(() => {
+  resetRepositoryMocks();
+});
+
+// Seed test data if needed
+beforeEach(() => {
+  seedAuditLogs([
+    { action: 'auth.login', userId: 'test-user', success: true },
+  ]);
+});
+```
+
+Available repository mocks:
+- `mockAuditLogRepository` - Audit log operations (create, findMany, getStats)
+- `mockSessionRepository` - Refresh token/session management
+- `mockPushDeviceRepository` - Push notification device tokens
+- `mockSystemSettingRepository` - System settings key-value store
+- `mockDeviceRepository` - Hardware device management
+
 ### Test Fixtures
 
 Common test data is available in `tests/fixtures/bitcoin.ts`:

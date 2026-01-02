@@ -2,37 +2,21 @@
  * Draft Transaction API Routes
  *
  * API endpoints for managing draft transactions (saved, unsigned/partially signed PSBTs)
+ *
+ * Permissions:
+ * - READ (GET): Any user with wallet access (owner, signer, viewer)
+ * - WRITE (POST, PATCH, DELETE): Only owner or signer roles
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import prisma from '../models/prisma';
-import { createLogger } from '../utils/logger';
-import * as walletService from '../services/wallet';
-import { notifyNewDraft } from '../services/notifications/notificationService';
-import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
-import { lockUtxosForDraft, resolveUtxoIds } from '../services/draftLockService';
+import { draftService } from '../services/draftService';
+import { isServiceError, toHttpError } from '../services/errors';
 import { serializeDraftTransaction, serializeDraftTransactions } from '../utils/serialization';
+import { createLogger } from '../utils/logger';
 
 const router = Router();
 const log = createLogger('DRAFTS');
-
-/**
- * Get draft expiration days from system settings
- */
-async function getDraftExpirationDays(): Promise<number> {
-  try {
-    const setting = await prisma.systemSetting.findUnique({
-      where: { key: 'draftExpirationDays' },
-    });
-    if (setting) {
-      return JSON.parse(setting.value);
-    }
-  } catch (error) {
-    log.warn('[DRAFTS] Failed to get draftExpirationDays from settings', { error: String(error) });
-  }
-  return DEFAULT_DRAFT_EXPIRATION_DAYS;
-}
 
 // All routes require authentication
 router.use(authenticate);
@@ -46,23 +30,14 @@ router.get('/wallets/:walletId/drafts', async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const { walletId } = req.params;
 
-    // Verify user has access to this wallet
-    const wallet = await walletService.getWalletById(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    const drafts = await prisma.draftTransaction.findMany({
-      where: { walletId },
-      orderBy: { createdAt: 'desc' },
-    });
-
+    const drafts = await draftService.getDraftsForWallet(walletId, userId);
     res.json(serializeDraftTransactions(drafts));
   } catch (error) {
-    log.error('[DRAFTS] Get drafts error', { error: String(error) });
+    if (isServiceError(error)) {
+      const { status, body } = toHttpError(error);
+      return res.status(status).json(body);
+    }
+    log.error('Get drafts error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch drafts',
@@ -79,29 +54,14 @@ router.get('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Respo
     const userId = req.user!.userId;
     const { walletId, draftId } = req.params;
 
-    // Verify user has access to this wallet
-    const wallet = await walletService.getWalletById(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    const draft = await prisma.draftTransaction.findFirst({
-      where: { id: draftId, walletId },
-    });
-
-    if (!draft) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Draft not found',
-      });
-    }
-
+    const draft = await draftService.getDraft(walletId, draftId, userId);
     res.json(serializeDraftTransaction(draft));
   } catch (error) {
-    log.error('[DRAFTS] Get draft error', { error: String(error) });
+    if (isServiceError(error)) {
+      const { status, body } = toHttpError(error);
+      return res.status(status).json(body);
+    }
+    log.error('Get draft error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch draft',
@@ -125,11 +85,11 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       enableRBF,
       subtractFees,
       sendMax,
-      outputs, // Multiple outputs support
-      inputs, // Multiple inputs for flow visualization
-      decoyOutputs, // Decoy change outputs for privacy
-      payjoinUrl, // Payjoin endpoint URL
-      isRBF, // RBF replacement transactions skip UTXO locking
+      outputs,
+      inputs,
+      decoyOutputs,
+      payjoinUrl,
+      isRBF,
       label,
       memo,
       psbtBase64,
@@ -142,117 +102,41 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
       inputPaths,
     } = req.body;
 
-    // Verify user has access to this wallet (and is at least a signer)
-    const wallet = await walletService.getWalletById(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Check user role - need at least signer access
-    if (wallet.userRole === 'viewer') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Viewers cannot create draft transactions',
-      });
-    }
-
-    // Validation
-    if (!recipient || amount === undefined || !feeRate || !psbtBase64) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'recipient, amount, feeRate, and psbtBase64 are required',
-      });
-    }
-
-    // Get expiration from system settings
-    const expirationDays = await getDraftExpirationDays();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expirationDays);
-
-    const draft = await prisma.draftTransaction.create({
-      data: {
-        walletId,
-        userId,
-        recipient,
-        amount: BigInt(amount),
-        feeRate,
-        selectedUtxoIds: selectedUtxoIds || [],
-        enableRBF: enableRBF ?? true,
-        subtractFees: subtractFees ?? false,
-        sendMax: sendMax ?? false,
-        outputs: outputs || null,
-        inputs: inputs || null,
-        decoyOutputs: decoyOutputs || null,
-        payjoinUrl: payjoinUrl || null,
-        isRBF: isRBF ?? false,
-        label,
-        memo,
-        psbtBase64,
-        fee: BigInt(fee || 0),
-        totalInput: BigInt(totalInput || 0),
-        totalOutput: BigInt(totalOutput || 0),
-        changeAmount: BigInt(changeAmount || 0),
-        changeAddress,
-        effectiveAmount: BigInt(effectiveAmount || amount),
-        inputPaths: inputPaths || [],
-        status: 'unsigned',
-        signedDeviceIds: [],
-        expiresAt,
-      },
-    });
-
-    // Lock UTXOs for this draft (unless it's an RBF transaction)
-    if (selectedUtxoIds && selectedUtxoIds.length > 0 && !isRBF) {
-      const { found: utxoIds, notFound } = await resolveUtxoIds(walletId, selectedUtxoIds);
-
-      if (notFound.length > 0) {
-        log.warn('[DRAFTS] Some UTXOs not found for locking', { notFound, draftId: draft.id });
-      }
-
-      if (utxoIds.length > 0) {
-        const lockResult = await lockUtxosForDraft(draft.id, utxoIds, { isRBF: false });
-
-        if (!lockResult.success) {
-          // UTXOs are already locked by another draft - delete the draft and return error
-          await prisma.draftTransaction.delete({ where: { id: draft.id } });
-
-          return res.status(409).json({
-            error: 'Conflict',
-            message: 'One or more UTXOs are already locked by another draft transaction',
-            lockedByDraftIds: lockResult.lockedByDraftIds,
-            failedUtxoIds: lockResult.failedUtxoIds,
-          });
-        }
-
-        log.debug('[DRAFTS] Locked UTXOs for draft', {
-          draftId: draft.id,
-          lockedCount: lockResult.lockedCount
-        });
-      }
-    }
-
-    log.info('[DRAFTS] Created draft', { draftId: draft.id, walletId, userId, isRBF: isRBF ?? false });
-
-    // Send notifications to other wallet users (async, don't block response)
-    notifyNewDraft(walletId, {
-      id: draft.id,
-      amount: draft.amount,
-      recipient: draft.recipient,
-      label: draft.label,
-      feeRate: draft.feeRate,
-    }, userId).catch(err => {
-      log.warn('[DRAFTS] Failed to send draft notification', { error: String(err) });
+    const draft = await draftService.createDraft(walletId, userId, {
+      recipient,
+      amount,
+      feeRate,
+      selectedUtxoIds,
+      enableRBF,
+      subtractFees,
+      sendMax,
+      outputs,
+      inputs,
+      decoyOutputs,
+      payjoinUrl,
+      isRBF,
+      label,
+      memo,
+      psbtBase64,
+      fee,
+      totalInput,
+      totalOutput,
+      changeAmount,
+      changeAddress,
+      effectiveAmount,
+      inputPaths,
     });
 
     res.status(201).json(serializeDraftTransaction(draft));
-  } catch (error: any) {
-    log.error('[DRAFTS] Create draft error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: error.message || 'Failed to create draft',
+  } catch (error) {
+    if (isServiceError(error)) {
+      const { status, body } = toHttpError(error);
+      return res.status(status).json(body);
+    }
+    log.error('Create draft error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to create draft',
     });
   }
 });
@@ -265,91 +149,26 @@ router.patch('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Res
   try {
     const userId = req.user!.userId;
     const { walletId, draftId } = req.params;
-    const {
+    const { signedPsbtBase64, signedDeviceId, status, label, memo } = req.body;
+
+    const draft = await draftService.updateDraft(walletId, draftId, userId, {
       signedPsbtBase64,
       signedDeviceId,
       status,
       label,
       memo,
-    } = req.body;
-
-    // Verify user has access to this wallet
-    const wallet = await walletService.getWalletById(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Check user role - need at least signer access for modifying
-    if (wallet.userRole === 'viewer') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Viewers cannot modify draft transactions',
-      });
-    }
-
-    // Get existing draft
-    const existingDraft = await prisma.draftTransaction.findFirst({
-      where: { id: draftId, walletId },
     });
-
-    if (!existingDraft) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Draft not found',
-      });
-    }
-
-    // Build update data
-    const updateData: any = {
-      updatedAt: new Date(),
-    };
-
-    if (signedPsbtBase64 !== undefined) {
-      updateData.signedPsbtBase64 = signedPsbtBase64;
-    }
-
-    if (signedDeviceId) {
-      // Add device to signed list if not already there
-      const currentSigned = existingDraft.signedDeviceIds || [];
-      if (!currentSigned.includes(signedDeviceId)) {
-        updateData.signedDeviceIds = [...currentSigned, signedDeviceId];
-      }
-    }
-
-    if (status !== undefined) {
-      if (!['unsigned', 'partial', 'signed'].includes(status)) {
-        return res.status(400).json({
-          error: 'Bad Request',
-          message: 'Invalid status. Must be unsigned, partial, or signed',
-        });
-      }
-      updateData.status = status;
-    }
-
-    if (label !== undefined) {
-      updateData.label = label;
-    }
-
-    if (memo !== undefined) {
-      updateData.memo = memo;
-    }
-
-    const draft = await prisma.draftTransaction.update({
-      where: { id: draftId },
-      data: updateData,
-    });
-
-    log.info('[DRAFTS] Updated draft', { draftId, walletId, status: draft.status });
 
     res.json(serializeDraftTransaction(draft));
-  } catch (error: any) {
-    log.error('[DRAFTS] Update draft error', { error: String(error) });
-    res.status(400).json({
-      error: 'Bad Request',
-      message: error.message || 'Failed to update draft',
+  } catch (error) {
+    if (isServiceError(error)) {
+      const { status, body } = toHttpError(error);
+      return res.status(status).json(body);
+    }
+    log.error('Update draft error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update draft',
     });
   }
 });
@@ -363,44 +182,14 @@ router.delete('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Re
     const userId = req.user!.userId;
     const { walletId, draftId } = req.params;
 
-    // Verify user has access to this wallet
-    const wallet = await walletService.getWalletById(walletId, userId);
-    if (!wallet) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Wallet not found',
-      });
-    }
-
-    // Get existing draft
-    const existingDraft = await prisma.draftTransaction.findFirst({
-      where: { id: draftId, walletId },
-    });
-
-    if (!existingDraft) {
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'Draft not found',
-      });
-    }
-
-    // Only owner/creator or owner role can delete
-    if (existingDraft.userId !== userId && wallet.userRole !== 'owner') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only the creator or wallet owner can delete drafts',
-      });
-    }
-
-    await prisma.draftTransaction.delete({
-      where: { id: draftId },
-    });
-
-    log.info('[DRAFTS] Deleted draft', { draftId, walletId, userId });
-
+    await draftService.deleteDraft(walletId, draftId, userId);
     res.status(204).send();
   } catch (error) {
-    log.error('[DRAFTS] Delete draft error', { error: String(error) });
+    if (isServiceError(error)) {
+      const { status, body } = toHttpError(error);
+      return res.status(status).json(body);
+    }
+    log.error('Delete draft error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to delete draft',

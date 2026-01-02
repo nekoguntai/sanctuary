@@ -208,6 +208,23 @@ export async function findByIdWithGroup(walletId: string): Promise<(Wallet & { g
   });
 }
 
+/**
+ * Find wallet with devices for export
+ */
+export async function findByIdWithDevices(walletId: string) {
+  return prisma.wallet.findUnique({
+    where: { id: walletId },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+        orderBy: { signerIndex: 'asc' },
+      },
+    },
+  });
+}
+
 // Export all functions as a namespace for convenient importing
 export const walletRepository = {
   findByIdWithAccess,
@@ -223,6 +240,7 @@ export const walletRepository = {
   findById,
   getName,
   findByIdWithGroup,
+  findByIdWithDevices,
 };
 
 export default walletRepository;

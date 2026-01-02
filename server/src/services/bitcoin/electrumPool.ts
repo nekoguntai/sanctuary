@@ -40,6 +40,12 @@ import { ElectrumClient } from './electrum';
 import { createLogger } from '../../utils/logger';
 import prisma from '../../models/prisma';
 import { CircuitBreaker, createCircuitBreaker, circuitBreakerRegistry } from '../circuitBreaker';
+import {
+  updateElectrumPoolMetrics,
+  electrumPoolAcquisitionsTotal,
+  electrumPoolAcquisitionDuration,
+  electrumPoolHealthCheckFailures,
+} from '../../observability/metrics';
 
 const log = createLogger('ELECTRUM_POOL');
 
@@ -281,6 +287,9 @@ export class ElectrumPool extends EventEmitter {
   // Lock to prevent concurrent initialization
   private initializePromise: Promise<void> | null = null;
 
+  // Network identifier (for metrics)
+  private network: NetworkType = 'mainnet';
+
   // Multi-server support
   private servers: ServerConfig[] = [];
   private serverStats: Map<string, {
@@ -443,6 +452,20 @@ export class ElectrumPool extends EventEmitter {
    */
   isProxyEnabled(): boolean {
     return this.proxyConfig?.enabled ?? false;
+  }
+
+  /**
+   * Set the network identifier for this pool (used for metrics)
+   */
+  setNetwork(network: NetworkType): void {
+    this.network = network;
+  }
+
+  /**
+   * Get the network this pool is configured for
+   */
+  getNetwork(): NetworkType {
+    return this.network;
   }
 
   /**
@@ -789,6 +812,10 @@ export class ElectrumPool extends EventEmitter {
     const acquisitionTime = Date.now() - startTime;
     this.stats.totalAcquisitions++;
     this.stats.totalAcquisitionTimeMs += acquisitionTime;
+
+    // Record acquisition metrics
+    electrumPoolAcquisitionsTotal.inc({ network: this.network });
+    electrumPoolAcquisitionDuration.observe({ network: this.network }, acquisitionTime / 1000);
 
     // In single mode, release is a no-op since we always use the same connection
     const release = () => {};
@@ -1325,6 +1352,10 @@ export class ElectrumPool extends EventEmitter {
     this.stats.totalAcquisitions++;
     this.stats.totalAcquisitionTimeMs += acquisitionTime;
 
+    // Record acquisition metrics
+    electrumPoolAcquisitionsTotal.inc({ network: this.network });
+    electrumPoolAcquisitionDuration.observe({ network: this.network }, acquisitionTime / 1000);
+
     const release = () => {
       if (conn.state === 'active' && !conn.isDedicated) {
         conn.state = 'idle';
@@ -1403,6 +1434,7 @@ export class ElectrumPool extends EventEmitter {
         } catch (error) {
           const latencyMs = Date.now() - startTime;
           this.stats.healthCheckFailures++;
+          electrumPoolHealthCheckFailures.inc({ network: this.network });
           const errorStr = String(error);
           log.warn(`Health check failed for connection ${id} (${conn.serverLabel})`, { error: errorStr });
 
@@ -1454,6 +1486,42 @@ export class ElectrumPool extends EventEmitter {
 
     // After checking existing connections, ensure each server has at least one connection
     await this.ensureMinimumConnections();
+
+    // Export metrics to Prometheus
+    this.exportMetrics();
+  }
+
+  /**
+   * Export pool metrics to Prometheus
+   * Called after each health check cycle
+   */
+  private exportMetrics(): void {
+    const poolStats = this.getPoolStats();
+    const circuitHealth = this.circuitBreaker.getHealth();
+
+    // Get circuit breaker state (already lowercase: 'closed' | 'open' | 'half-open')
+    const circuitState = circuitHealth.state;
+
+    updateElectrumPoolMetrics(
+      this.network,
+      {
+        totalConnections: poolStats.totalConnections,
+        activeConnections: poolStats.activeConnections,
+        idleConnections: poolStats.idleConnections,
+        waitingRequests: poolStats.waitingRequests,
+        totalAcquisitions: poolStats.totalAcquisitions,
+        averageAcquisitionTimeMs: poolStats.averageAcquisitionTimeMs,
+        healthCheckFailures: poolStats.healthCheckFailures,
+        servers: poolStats.servers.map(s => ({
+          label: s.label,
+          isHealthy: s.isHealthy,
+          connectionCount: s.connectionCount,
+          backoffLevel: s.backoffLevel,
+          weight: s.weight,
+        })),
+      },
+      circuitState
+    );
   }
 
   /**
@@ -1771,6 +1839,9 @@ export async function getElectrumPoolForNetwork(network: NetworkType): Promise<E
       ...envConfig,
       ...dbConfig,
     });
+
+    // Set the network for metrics
+    pool.setNetwork(network);
 
     // Configure proxy if enabled
     if (proxy) {

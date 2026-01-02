@@ -10,7 +10,14 @@ import { requireWalletAccess } from '../middleware/walletAccess';
 import * as walletService from '../services/wallet';
 import * as walletImport from '../services/walletImport';
 import { getDevicesToShareForWallet } from '../services/deviceAccess';
-import prisma from '../models/prisma';
+import {
+  walletRepository,
+  transactionRepository,
+  addressRepository,
+  utxoRepository,
+  userRepository,
+  walletSharingRepository,
+} from '../repositories';
 import { createLogger } from '../utils/logger';
 import { balanceHistoryCache } from '../utils/cache';
 
@@ -233,25 +240,10 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
     const startDate = new Date(now - (rangeMs[timeframe] || rangeMs['1M']));
 
     // Fetch only relevant transactions with balanceAfter
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        blockTime: { gte: startDate },
-        type: { not: 'consolidation' },
-      },
-      select: {
-        blockTime: true,
-        balanceAfter: true,
-      },
-      orderBy: { blockTime: 'asc' },
-    });
+    const transactions = await transactionRepository.findForBalanceHistory(walletId, startDate);
 
     // Get current balance for end point
-    const currentBalance = await prisma.uTXO.aggregate({
-      where: { walletId, spent: false },
-      _sum: { amount: true },
-    });
-    const balance = Number(currentBalance._sum.amount || 0);
+    const balance = Number(await utxoRepository.getUnspentBalance(walletId));
 
     // Sample to max 100 data points for efficiency
     const maxPoints = 100;
@@ -302,12 +294,9 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
     const walletId = req.walletId!;
 
     // Get wallet name for filename
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { name: true },
-    });
+    const walletName = await walletRepository.getName(walletId);
 
-    if (!wallet) {
+    if (!walletName) {
       return res.status(404).json({
         error: 'Not Found',
         message: 'Wallet not found',
@@ -315,38 +304,10 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
     }
 
     // Get all transactions with labels
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        walletId,
-        OR: [
-          { label: { not: null } },
-          { memo: { not: null } },
-          { transactionLabels: { some: {} } },
-        ],
-      },
-      include: {
-        transactionLabels: {
-          include: {
-            label: true,
-          },
-        },
-      },
-    });
+    const transactions = await transactionRepository.findWithLabels(walletId);
 
     // Get all addresses with labels
-    const addresses = await prisma.address.findMany({
-      where: {
-        walletId,
-        addressLabels: { some: {} },
-      },
-      include: {
-        addressLabels: {
-          include: {
-            label: true,
-          },
-        },
-      },
-    });
+    const addresses = await addressRepository.findWithLabels(walletId);
 
     // Build BIP 329 JSON Lines
     const lines: string[] = [];
@@ -388,7 +349,7 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
     }
 
     // Set response headers for file download
-    const filename = `${wallet.name.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
+    const filename = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
     res.setHeader('Content-Type', 'application/jsonl');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
@@ -412,17 +373,7 @@ router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res:
     const walletId = req.walletId!;
 
     // Get wallet with all related data
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      include: {
-        devices: {
-          include: {
-            device: true,
-          },
-          orderBy: { signerIndex: 'asc' },
-        },
-      },
-    });
+    const wallet = await walletRepository.findByIdWithDevices(walletId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -731,14 +682,9 @@ router.post('/:id/share/group', requireWalletAccess('owner'), async (req: Reques
 
     // If groupId provided, verify user is member of that group
     if (groupId) {
-      const groupMember = await prisma.groupMember.findFirst({
-        where: {
-          groupId,
-          userId,
-        },
-      });
+      const isMember = await walletSharingRepository.isGroupMember(groupId, userId);
 
-      if (!groupMember) {
+      if (!isMember) {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'You must be a member of the group to share with it',
@@ -747,16 +693,7 @@ router.post('/:id/share/group', requireWalletAccess('owner'), async (req: Reques
     }
 
     // Update wallet's group and role
-    const wallet = await prisma.wallet.update({
-      where: { id: walletId },
-      data: {
-        groupId: groupId || null,
-        groupRole: groupId ? role : 'viewer', // Reset to default if removing group
-      },
-      include: {
-        group: true,
-      },
-    });
+    const wallet = await walletSharingRepository.updateWalletGroupWithResult(walletId, groupId || null, role);
 
     res.json({
       success: true,
@@ -797,9 +734,7 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
     }
 
     // Verify target user exists
-    const targetUser = await prisma.user.findUnique({
-      where: { id: targetUserId },
-    });
+    const targetUser = await userRepository.findById(targetUserId);
 
     if (!targetUser) {
       return res.status(404).json({
@@ -809,20 +744,12 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
     }
 
     // Check if user already has access
-    const existingAccess = await prisma.walletUser.findFirst({
-      where: {
-        walletId,
-        userId: targetUserId,
-      },
-    });
+    const existingAccess = await walletSharingRepository.findWalletUser(walletId, targetUserId);
 
     if (existingAccess) {
       // Update role if different
       if (existingAccess.role !== role && existingAccess.role !== 'owner') {
-        await prisma.walletUser.update({
-          where: { id: existingAccess.id },
-          data: { role },
-        });
+        await walletSharingRepository.updateUserRole(existingAccess.id, role);
       }
       return res.json({
         success: true,
@@ -831,13 +758,7 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
     }
 
     // Add user to wallet
-    await prisma.walletUser.create({
-      data: {
-        walletId,
-        userId: targetUserId,
-        role,
-      },
-    });
+    await walletSharingRepository.addUserToWallet(walletId, targetUserId, role);
 
     // Get devices associated with this wallet that the target user doesn't have access to
     const devicesToShare = await getDevicesToShareForWallet(walletId, targetUserId);
@@ -866,12 +787,7 @@ router.delete('/:id/share/user/:targetUserId', requireWalletAccess('owner'), asy
     const { targetUserId } = req.params;
 
     // Can't remove the owner
-    const targetWalletUser = await prisma.walletUser.findFirst({
-      where: {
-        walletId,
-        userId: targetUserId,
-      },
-    });
+    const targetWalletUser = await walletSharingRepository.findWalletUser(walletId, targetUserId);
 
     if (!targetWalletUser) {
       return res.status(404).json({
@@ -887,9 +803,7 @@ router.delete('/:id/share/user/:targetUserId', requireWalletAccess('owner'), asy
       });
     }
 
-    await prisma.walletUser.delete({
-      where: { id: targetWalletUser.id },
-    });
+    await walletSharingRepository.removeUserFromWallet(targetWalletUser.id);
 
     res.json({
       success: true,
@@ -912,22 +826,7 @@ router.get('/:id/share', requireWalletAccess('view'), async (req: Request, res: 
   try {
     const walletId = req.walletId!;
 
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      include: {
-        group: true,
-        users: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const wallet = await walletSharingRepository.getWalletSharingInfo(walletId);
 
     if (!wallet) {
       return res.status(404).json({

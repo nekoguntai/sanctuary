@@ -48,6 +48,22 @@ docker compose logs -f backend
 - `.env` - Environment configuration (auto-loaded by docker compose)
 - `docker-compose.yml` - Main container orchestration
 - `server/prisma/schema.prisma` - Database schema
+- `server/ARCHITECTURE.md` - Server architecture patterns and infrastructure
+
+## Server Architecture
+
+The server uses established patterns documented in `server/ARCHITECTURE.md`. Key patterns:
+
+| Pattern | Location | Purpose |
+|---------|----------|---------|
+| Service Registry | `services/registry.ts` | Dependency injection with mock support |
+| Repository Layer | `repositories/*.ts` | Data access abstraction (never use Prisma directly in routes/services) |
+| Service Errors | `services/errors.ts` | Domain errors that map to HTTP status codes |
+| Distributed Locking | `infrastructure/distributedLock.ts` | Multi-instance coordination |
+| Config Centralization | `config/index.ts` | All settings from environment variables |
+| Async Utilities | `utils/async.ts` | Retry, timeout, concurrency control |
+
+Before recommending architectural improvements, check if the pattern already exists.
 
 ## Theme System & Dark Mode Colors
 

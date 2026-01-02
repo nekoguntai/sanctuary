@@ -48,11 +48,12 @@ import { metricsMiddleware, metricsHandler } from './middleware/metrics';
 import { i18nMiddleware } from './middleware/i18n';
 import { i18nService } from './i18n/i18nService';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
-import { initializeRedis, shutdownRedis, isRedisConnected } from './infrastructure';
+import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock } from './infrastructure';
 import { shutdownElectrumPool } from './services/bitcoin/electrumPool';
 import { cache } from './services/cache/cacheService';
 import { walletLogBuffer } from './services/walletLogBuffer';
 import { deadLetterQueue } from './services/deadLetterQueue';
+import { initializeCacheInvalidation, shutdownCacheInvalidation } from './services/cacheInvalidation';
 
 const log = createLogger('SERVER');
 
@@ -272,6 +273,9 @@ const backgroundServices: ServiceDefinition[] = [
     // Initialize Redis infrastructure (cache, event bus)
     await initializeRedis();
 
+    // Initialize cache invalidation (subscribes to event bus)
+    initializeCacheInvalidation();
+
     // Initialize rate limit service (uses Redis if available)
     rateLimitService.initialize();
 
@@ -428,6 +432,12 @@ const handleShutdown = async (signal: string) => {
 
   // Shutdown job queue
   await jobQueue.shutdown();
+
+  // Shutdown distributed lock infrastructure
+  shutdownDistributedLock();
+
+  // Shutdown cache invalidation (before Redis shutdown)
+  shutdownCacheInvalidation();
 
   // Shutdown Redis infrastructure
   await shutdownRedis();

@@ -15,3 +15,14 @@ export {
   getRedisClient,
   checkRedisHealth,
 } from './redis';
+
+export {
+  acquireLock,
+  releaseLock,
+  extendLock,
+  withLock,
+  isLocked,
+  shutdownDistributedLock,
+  type DistributedLock,
+  type LockOptions,
+} from './distributedLock';

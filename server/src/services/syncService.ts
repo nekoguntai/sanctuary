@@ -18,6 +18,7 @@ import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
 import { eventService } from './eventService';
 import { recordSyncFailure } from './deadLetterQueue';
+import { acquireLock, releaseLock, type DistributedLock } from '../infrastructure';
 
 const log = createLogger('SYNC');
 
@@ -61,9 +62,10 @@ const MAX_QUEUE_SIZE = 1000;
 class SyncService {
   private static instance: SyncService;
   private syncQueue: SyncJob[] = [];
+  // Track active syncs in memory for quick lookup (authoritative state is in distributed lock)
   private activeSyncs: Set<string> = new Set();
-  // Promise-based locks to prevent race conditions between concurrent sync requests
-  private syncLocks: Map<string, Promise<void>> = new Map();
+  // Track distributed locks for active syncs (to release on completion)
+  private activeLocks: Map<string, DistributedLock> = new Map();
   private syncInterval: NodeJS.Timeout | null = null;
   private confirmationInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
@@ -382,6 +384,20 @@ class SyncService {
       this.pendingRetries.clear();
     }
 
+    // Release all active distributed locks
+    if (this.activeLocks.size > 0) {
+      log.info(`[SYNC] Releasing ${this.activeLocks.size} active sync locks`);
+      for (const [walletId, lock] of this.activeLocks.entries()) {
+        try {
+          await releaseLock(lock);
+        } catch (error) {
+          log.warn(`[SYNC] Failed to release lock for wallet ${walletId}`, { error });
+        }
+      }
+      this.activeLocks.clear();
+      this.activeSyncs.clear();
+    }
+
     // Clear the sync queue
     if (this.syncQueue.length > 0) {
       log.info(`[SYNC] Clearing ${this.syncQueue.length} queued sync jobs`);
@@ -598,35 +614,48 @@ class SyncService {
   }
 
   /**
-   * Acquire a lock for a wallet sync to prevent race conditions
+   * Acquire a distributed lock for a wallet sync
+   *
+   * Uses Redis for distributed locking across multiple server instances.
+   * Falls back to in-memory locks when Redis is unavailable.
    */
   private async acquireSyncLock(walletId: string): Promise<boolean> {
-    // If there's an existing lock, wait for it to complete
-    const existingLock = this.syncLocks.get(walletId);
-    if (existingLock) {
-      try {
-        await existingLock;
-      } catch {
-        // Ignore errors from previous sync
-      }
-    }
-
-    // Check again after waiting (another request may have just started)
+    // Quick check if we already have the lock locally
     if (this.activeSyncs.has(walletId)) {
       return false;
     }
 
-    // Acquire the lock
+    const syncConfig = getSyncConfig();
+    // Lock TTL should be slightly longer than max sync duration to prevent premature expiration
+    const lockTtlMs = syncConfig.maxSyncDurationMs + 60000; // +1 minute buffer
+
+    // Try to acquire distributed lock
+    const lock = await acquireLock(`sync:wallet:${walletId}`, {
+      ttlMs: lockTtlMs,
+      waitTimeMs: 0, // Don't wait - if locked, skip
+    });
+
+    if (!lock) {
+      log.debug(`[SYNC] Could not acquire lock for wallet ${walletId} (already syncing)`);
+      return false;
+    }
+
+    // Store lock for later release
+    this.activeLocks.set(walletId, lock);
     this.activeSyncs.add(walletId);
     return true;
   }
 
   /**
-   * Release a wallet sync lock
+   * Release a distributed wallet sync lock
    */
-  private releaseSyncLock(walletId: string): void {
+  private async releaseSyncLock(walletId: string): Promise<void> {
+    const lock = this.activeLocks.get(walletId);
+    if (lock) {
+      await releaseLock(lock);
+      this.activeLocks.delete(walletId);
+    }
     this.activeSyncs.delete(walletId);
-    this.syncLocks.delete(walletId);
   }
 
   /**
@@ -639,15 +668,10 @@ class SyncService {
     utxos: number;
     error?: string;
   }> {
-    // Try to acquire lock - prevents race conditions
+    // Try to acquire distributed lock - prevents race conditions across instances
     if (!await this.acquireSyncLock(walletId)) {
       return { success: false, addresses: 0, transactions: 0, utxos: 0, error: 'Already syncing' };
     }
-
-    // Create a promise that will be resolved when sync completes
-    let resolveLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => { resolveLock = resolve; });
-    this.syncLocks.set(walletId, lockPromise);
 
     // Mark sync in progress
     await prisma.wallet.update({
@@ -784,9 +808,8 @@ class SyncService {
           },
         });
 
-        // Remove from active syncs and release lock so retry can start
-        this.releaseSyncLock(walletId);
-        resolveLock!();
+        // Release distributed lock so retry can acquire it fresh
+        await this.releaseSyncLock(walletId);
 
         // Schedule retry with delay (track timer for cleanup on shutdown)
         const retryTimer = setTimeout(() => {
@@ -847,8 +870,7 @@ class SyncService {
         error: errorMessage,
       };
     } finally {
-      this.releaseSyncLock(walletId);
-      resolveLock!();
+      await this.releaseSyncLock(walletId);
     }
   }
 

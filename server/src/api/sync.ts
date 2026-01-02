@@ -6,6 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { rateLimitByUser } from '../middleware/rateLimit';
 import { getSyncService } from '../services/syncService';
 import { walletRepository, transactionRepository, addressRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
@@ -21,7 +22,7 @@ router.use(authenticate);
  * POST /api/v1/sync/wallet/:walletId
  * Trigger immediate sync for a wallet
  */
-router.post('/wallet/:walletId', async (req: Request, res: Response) => {
+router.post('/wallet/:walletId', rateLimitByUser('sync:trigger'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { walletId } = req.params;
@@ -59,7 +60,7 @@ router.post('/wallet/:walletId', async (req: Request, res: Response) => {
  * POST /api/v1/sync/queue/:walletId
  * Queue a wallet for background sync
  */
-router.post('/queue/:walletId', async (req: Request, res: Response) => {
+router.post('/queue/:walletId', rateLimitByUser('sync:trigger'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { walletId } = req.params;
@@ -162,7 +163,7 @@ router.get('/logs/:walletId', async (req: Request, res: Response) => {
  * POST /api/v1/sync/user
  * Queue all user's wallets for background sync (called on login/page load)
  */
-router.post('/user', async (req: Request, res: Response) => {
+router.post('/user', rateLimitByUser('sync:batch'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { priority = 'normal' } = req.body;
@@ -223,7 +224,7 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
  * Full resync - clears all transactions and re-syncs from blockchain
  * Use this to fix missing transactions (e.g., sent transactions)
  */
-router.post('/resync/:walletId', async (req: Request, res: Response) => {
+router.post('/resync/:walletId', rateLimitByUser('sync:trigger'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { walletId } = req.params;
@@ -275,7 +276,7 @@ router.post('/resync/:walletId', async (req: Request, res: Response) => {
  * POST /api/v1/sync/network/:network
  * Queue all user's wallets for a specific network
  */
-router.post('/network/:network', async (req: Request, res: Response) => {
+router.post('/network/:network', rateLimitByUser('sync:batch'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { network } = req.params;
@@ -327,7 +328,7 @@ router.post('/network/:network', async (req: Request, res: Response) => {
  * Full resync for all user's wallets of a specific network
  * Requires X-Confirm-Resync: true header
  */
-router.post('/network/:network/resync', async (req: Request, res: Response) => {
+router.post('/network/:network/resync', rateLimitByUser('sync:batch'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { network } = req.params;

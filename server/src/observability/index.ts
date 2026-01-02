@@ -26,8 +26,21 @@ export {
   jobProcessingDuration,
   dbQueryDuration,
   dbConnectionPool,
+  // Electrum pool metrics
+  electrumPoolConnections,
+  electrumPoolWaitingRequests,
+  electrumPoolAcquisitionsTotal,
+  electrumPoolAcquisitionDuration,
+  electrumPoolHealthCheckFailures,
+  electrumServerHealth,
+  electrumServerConnections,
+  electrumServerBackoffLevel,
+  electrumServerWeight,
+  electrumCircuitBreakerState,
+  // Helper functions
   normalizePath,
   recordCircuitBreakerState,
   recordCacheOperation,
   updateJobQueueMetrics,
+  updateElectrumPoolMetrics,
 } from './metrics';

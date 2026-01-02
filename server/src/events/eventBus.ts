@@ -30,6 +30,71 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('EventBus');
 
 // =============================================================================
+// Concurrency Limiter
+// =============================================================================
+
+/**
+ * Simple semaphore for limiting concurrent async operations
+ */
+class Semaphore {
+  private permits: number;
+  private waiting: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+
+    // Queue the request
+    return new Promise((resolve) => {
+      this.waiting.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.waiting.shift();
+    if (next) {
+      // Give permit to next waiter
+      next();
+    } else {
+      // Return permit to pool
+      this.permits++;
+    }
+  }
+
+  /**
+   * Execute a function with the semaphore
+   */
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+
+  /**
+   * Get current number of available permits
+   */
+  get available(): number {
+    return this.permits;
+  }
+
+  /**
+   * Get number of waiting requests
+   */
+  get queueLength(): number {
+    return this.waiting.length;
+  }
+}
+
+// =============================================================================
 // Event Type Definitions
 // =============================================================================
 
@@ -234,32 +299,59 @@ export type EventHandler<E extends EventName> = (data: EventTypes[E]) => void | 
 // =============================================================================
 
 /**
+ * Event bus configuration
+ */
+export interface EventBusConfig {
+  // Maximum concurrent handler executions across all events
+  maxConcurrentHandlers: number;
+  // Maximum listeners per event (prevents memory leaks)
+  maxListeners: number;
+}
+
+/**
+ * Default configuration
+ */
+const DEFAULT_CONFIG: EventBusConfig = {
+  maxConcurrentHandlers: 10,
+  maxListeners: 100,
+};
+
+/**
  * Type-safe event bus for internal service communication
  */
 class TypedEventBus {
   private emitter = new EventEmitter();
+  private semaphore: Semaphore;
+  private config: EventBusConfig;
   private metrics = {
     emitted: new Map<string, number>(),
     errors: new Map<string, number>(),
+    throttled: 0,
   };
 
-  constructor() {
+  constructor(config: Partial<EventBusConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.semaphore = new Semaphore(this.config.maxConcurrentHandlers);
     // Increase max listeners to handle many subscribers
-    this.emitter.setMaxListeners(100);
+    this.emitter.setMaxListeners(this.config.maxListeners);
   }
 
   /**
    * Subscribe to an event
    * Returns unsubscribe function
+   * Handlers are executed with concurrency limits to prevent resource exhaustion
    */
   on<E extends EventName>(event: E, handler: EventHandler<E>): () => void {
     const wrappedHandler = async (data: EventTypes[E]) => {
-      try {
-        await handler(data);
-      } catch (error) {
-        log.error(`Error in event handler for ${event}`, { error });
-        this.metrics.errors.set(event, (this.metrics.errors.get(event) || 0) + 1);
-      }
+      // Use semaphore to limit concurrent handler executions
+      await this.semaphore.run(async () => {
+        try {
+          await handler(data);
+        } catch (error) {
+          log.error(`Error in event handler for ${event}`, { error });
+          this.metrics.errors.set(event, (this.metrics.errors.get(event) || 0) + 1);
+        }
+      });
     };
 
     this.emitter.on(event, wrappedHandler);
@@ -272,15 +364,19 @@ class TypedEventBus {
 
   /**
    * Subscribe to an event (one-time)
+   * Handlers are executed with concurrency limits
    */
   once<E extends EventName>(event: E, handler: EventHandler<E>): void {
     const wrappedHandler = async (data: EventTypes[E]) => {
-      try {
-        await handler(data);
-      } catch (error) {
-        log.error(`Error in one-time event handler for ${event}`, { error });
-        this.metrics.errors.set(event, (this.metrics.errors.get(event) || 0) + 1);
-      }
+      // Use semaphore to limit concurrent handler executions
+      await this.semaphore.run(async () => {
+        try {
+          await handler(data);
+        } catch (error) {
+          log.error(`Error in one-time event handler for ${event}`, { error });
+          this.metrics.errors.set(event, (this.metrics.errors.get(event) || 0) + 1);
+        }
+      });
     };
 
     this.emitter.once(event, wrappedHandler);
@@ -331,6 +427,11 @@ class TypedEventBus {
     emitted: Record<string, number>;
     errors: Record<string, number>;
     listenerCounts: Record<string, number>;
+    concurrency: {
+      maxConcurrent: number;
+      available: number;
+      queueLength: number;
+    };
   } {
     const listenerCounts: Record<string, number> = {};
     for (const event of this.emitter.eventNames()) {
@@ -341,6 +442,31 @@ class TypedEventBus {
       emitted: Object.fromEntries(this.metrics.emitted),
       errors: Object.fromEntries(this.metrics.errors),
       listenerCounts,
+      concurrency: {
+        maxConcurrent: this.config.maxConcurrentHandlers,
+        available: this.semaphore.available,
+        queueLength: this.semaphore.queueLength,
+      },
+    };
+  }
+
+  /**
+   * Get current concurrency status
+   */
+  getConcurrencyStatus(): {
+    maxConcurrent: number;
+    available: number;
+    queueLength: number;
+    utilizationPercent: number;
+  } {
+    const available = this.semaphore.available;
+    const max = this.config.maxConcurrentHandlers;
+    const inUse = max - available;
+    return {
+      maxConcurrent: max,
+      available,
+      queueLength: this.semaphore.queueLength,
+      utilizationPercent: Math.round((inUse / max) * 100),
     };
   }
 

@@ -120,6 +120,29 @@ export async function updateWalletGroup(
 }
 
 /**
+ * Update wallet's group assignment and return wallet with group info
+ */
+export async function updateWalletGroupWithResult(
+  walletId: string,
+  groupId: string | null,
+  groupRole: string = 'viewer'
+) {
+  const wallet = await prisma.wallet.update({
+    where: { id: walletId },
+    data: {
+      groupId: groupId || null,
+      groupRole: groupId ? groupRole : 'viewer',
+    },
+    include: {
+      group: true,
+    },
+  });
+  // Invalidate cache for this wallet (group access changed)
+  await invalidateWalletAccessCache(walletId);
+  return wallet;
+}
+
+/**
  * Get wallet with sharing info
  */
 export async function getWalletSharingInfo(walletId: string) {
@@ -132,7 +155,7 @@ export async function getWalletSharingInfo(walletId: string) {
           user: {
             select: {
               id: true,
-              email: true,
+              username: true,
             },
           },
         },
@@ -150,6 +173,7 @@ export const walletSharingRepository = {
   isGroupMember,
   getGroupMember,
   updateWalletGroup,
+  updateWalletGroupWithResult,
   getWalletSharingInfo,
 };
 

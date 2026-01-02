@@ -16,20 +16,30 @@ jest.mock('../../../../src/models/prisma', () => ({
   default: mockPrismaClient,
 }));
 
-// Mock providers
-const mockSendToAPNs = jest.fn();
-const mockSendToFCM = jest.fn();
-const mockIsAPNsConfigured = jest.fn();
-const mockIsFCMConfigured = jest.fn();
-
-jest.mock('../../../../src/services/push/apnsProvider', () => ({
-  sendToAPNs: (...args: any[]) => mockSendToAPNs(...args),
-  isAPNsConfigured: () => mockIsAPNsConfigured(),
+// Mock dead letter queue
+jest.mock('../../../../src/services/deadLetterQueue', () => ({
+  recordPushFailure: jest.fn(),
 }));
 
-jest.mock('../../../../src/services/push/fcmProvider', () => ({
-  sendToFCM: (...args: any[]) => mockSendToFCM(...args),
-  isFCMConfigured: () => mockIsFCMConfigured(),
+// Mock providers module
+const mockProvider = {
+  name: 'mock-provider',
+  send: jest.fn(),
+  isHealthy: jest.fn().mockResolvedValue(true),
+};
+
+const mockHasConfiguredProviders = jest.fn();
+const mockGetProviderForPlatform = jest.fn();
+
+jest.mock('../../../../src/services/push/providers', () => ({
+  createPushProviderRegistry: jest.fn(() => ({
+    getAll: () => [mockProvider],
+    getHealth: jest.fn().mockResolvedValue({ healthyProviders: 1, providers: [{ name: 'mock', healthy: true }] }),
+    shutdown: jest.fn(),
+  })),
+  initializePushProviders: jest.fn(),
+  getProviderForPlatform: (...args: unknown[]) => mockGetProviderForPlatform(...args),
+  hasConfiguredProviders: () => mockHasConfiguredProviders(),
 }));
 
 // Mock logger
@@ -47,43 +57,44 @@ import {
   isPushConfigured,
   sendPushNotification,
   notifyNewTransactions,
+  getPushService,
 } from '../../../../src/services/push/pushService';
 
 describe('Push Service', () => {
   beforeEach(() => {
     resetPrismaMocks();
     jest.clearAllMocks();
-    mockIsAPNsConfigured.mockReturnValue(false);
-    mockIsFCMConfigured.mockReturnValue(false);
+    mockHasConfiguredProviders.mockReturnValue(false);
+    mockGetProviderForPlatform.mockReturnValue(null);
   });
 
   describe('isPushConfigured', () => {
-    it('should return true when APNs is configured', () => {
-      mockIsAPNsConfigured.mockReturnValue(true);
-      mockIsFCMConfigured.mockReturnValue(false);
+    it('should return true when providers are configured', () => {
+      // isPushConfigured checks env vars directly, so we test the sync check
+      // The async version uses hasConfiguredProviders
+      const original = process.env;
+      process.env = {
+        ...original,
+        APNS_KEY_ID: 'key',
+        APNS_TEAM_ID: 'team',
+        APNS_KEY_PATH: '/path/to/key',
+        APNS_BUNDLE_ID: 'com.app',
+      };
 
       expect(isPushConfigured()).toBe(true);
+
+      process.env = original;
     });
 
-    it('should return true when FCM is configured', () => {
-      mockIsAPNsConfigured.mockReturnValue(false);
-      mockIsFCMConfigured.mockReturnValue(true);
-
-      expect(isPushConfigured()).toBe(true);
-    });
-
-    it('should return true when both are configured', () => {
-      mockIsAPNsConfigured.mockReturnValue(true);
-      mockIsFCMConfigured.mockReturnValue(true);
-
-      expect(isPushConfigured()).toBe(true);
-    });
-
-    it('should return false when neither is configured', () => {
-      mockIsAPNsConfigured.mockReturnValue(false);
-      mockIsFCMConfigured.mockReturnValue(false);
+    it('should return false when no providers are configured', () => {
+      const original = process.env;
+      process.env = { ...original };
+      delete process.env.APNS_KEY_ID;
+      delete process.env.FCM_SERVICE_ACCOUNT;
 
       expect(isPushConfigured()).toBe(false);
+
+      process.env = original;
     });
   });
 
@@ -95,8 +106,8 @@ describe('Push Service', () => {
       data: { txid: 'abc123' },
     };
 
-    it('should send notification to iOS device via APNs', async () => {
-      const iosDevice = {
+    it('should send notification to device via provider', async () => {
+      const device = {
         id: 'device-1',
         userId,
         platform: 'ios',
@@ -104,35 +115,15 @@ describe('Push Service', () => {
         lastUsedAt: new Date(),
       };
 
-      mockPrismaClient.pushDevice.findMany.mockResolvedValue([iosDevice]);
-      mockSendToAPNs.mockResolvedValue(true);
+      mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockResolvedValue({ success: true });
 
       await sendPushNotification(userId, message);
 
-      expect(mockSendToAPNs).toHaveBeenCalledWith('apns-token-123', message);
+      expect(mockProvider.send).toHaveBeenCalledWith('apns-token-123', message);
       expect(mockPrismaClient.pushDevice.update).toHaveBeenCalledWith({
         where: { id: 'device-1' },
-        data: { lastUsedAt: expect.any(Date) },
-      });
-    });
-
-    it('should send notification to Android device via FCM', async () => {
-      const androidDevice = {
-        id: 'device-2',
-        userId,
-        platform: 'android',
-        token: 'fcm-token-456',
-        lastUsedAt: new Date(),
-      };
-
-      mockPrismaClient.pushDevice.findMany.mockResolvedValue([androidDevice]);
-      mockSendToFCM.mockResolvedValue(true);
-
-      await sendPushNotification(userId, message);
-
-      expect(mockSendToFCM).toHaveBeenCalledWith('fcm-token-456', message);
-      expect(mockPrismaClient.pushDevice.update).toHaveBeenCalledWith({
-        where: { id: 'device-2' },
         data: { lastUsedAt: expect.any(Date) },
       });
     });
@@ -144,13 +135,12 @@ describe('Push Service', () => {
       ];
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue(devices);
-      mockSendToAPNs.mockResolvedValue(true);
-      mockSendToFCM.mockResolvedValue(true);
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockResolvedValue({ success: true });
 
       await sendPushNotification(userId, message);
 
-      expect(mockSendToAPNs).toHaveBeenCalledTimes(1);
-      expect(mockSendToFCM).toHaveBeenCalledTimes(1);
+      expect(mockProvider.send).toHaveBeenCalledTimes(2);
       expect(mockPrismaClient.pushDevice.update).toHaveBeenCalledTimes(2);
     });
 
@@ -159,8 +149,7 @@ describe('Push Service', () => {
 
       await sendPushNotification(userId, message);
 
-      expect(mockSendToAPNs).not.toHaveBeenCalled();
-      expect(mockSendToFCM).not.toHaveBeenCalled();
+      expect(mockProvider.send).not.toHaveBeenCalled();
     });
 
     it('should not update lastUsedAt when send fails', async () => {
@@ -173,7 +162,8 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToAPNs.mockResolvedValue(false);
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockResolvedValue({ success: false, error: 'Some error' });
 
       await sendPushNotification(userId, message);
 
@@ -190,7 +180,8 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToAPNs.mockRejectedValue(new Error('410 Gone'));
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockRejectedValue(new Error('410 Gone'));
 
       await sendPushNotification(userId, message);
 
@@ -209,7 +200,8 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToAPNs.mockRejectedValue(new Error('BadDeviceToken'));
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockRejectedValue(new Error('BadDeviceToken'));
 
       await sendPushNotification(userId, message);
 
@@ -228,7 +220,8 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToFCM.mockRejectedValue(new Error('messaging/registration-token-not-registered'));
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockRejectedValue(new Error('messaging/registration-token-not-registered'));
 
       await sendPushNotification(userId, message);
 
@@ -247,14 +240,15 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToAPNs.mockRejectedValue(new Error('Network timeout'));
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockRejectedValue(new Error('Network timeout'));
 
       await sendPushNotification(userId, message);
 
       expect(mockPrismaClient.pushDevice.delete).not.toHaveBeenCalled();
     });
 
-    it('should skip unknown platforms', async () => {
+    it('should skip platforms without configured provider', async () => {
       const device = {
         id: 'device-1',
         userId,
@@ -264,11 +258,11 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
+      mockGetProviderForPlatform.mockReturnValue(null);
 
       await sendPushNotification(userId, message);
 
-      expect(mockSendToAPNs).not.toHaveBeenCalled();
-      expect(mockSendToFCM).not.toHaveBeenCalled();
+      expect(mockProvider.send).not.toHaveBeenCalled();
     });
   });
 
@@ -276,8 +270,10 @@ describe('Push Service', () => {
     const walletId = 'wallet-123';
 
     beforeEach(() => {
-      // Configure at least one provider
-      mockIsAPNsConfigured.mockReturnValue(true);
+      // Configure provider
+      mockHasConfiguredProviders.mockReturnValue(true);
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockResolvedValue({ success: true });
     });
 
     it('should skip when no transactions', async () => {
@@ -287,8 +283,7 @@ describe('Push Service', () => {
     });
 
     it('should skip when push not configured', async () => {
-      mockIsAPNsConfigured.mockReturnValue(false);
-      mockIsFCMConfigured.mockReturnValue(false);
+      mockHasConfiguredProviders.mockReturnValue(false);
 
       await notifyNewTransactions(walletId, [
         { txid: 'tx1', type: 'received', amount: BigInt(100000) },
@@ -326,13 +321,12 @@ describe('Push Service', () => {
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([
         { id: 'd1', userId: 'user-1', platform: 'ios', token: 'token1', lastUsedAt: new Date() },
       ]);
-      mockSendToAPNs.mockResolvedValue(true);
 
       await notifyNewTransactions(walletId, [
         { txid: 'tx1', type: 'received', amount: BigInt(10000000) }, // 0.1 BTC
       ]);
 
-      expect(mockSendToAPNs).toHaveBeenCalledWith(
+      expect(mockProvider.send).toHaveBeenCalledWith(
         'token1',
         expect.objectContaining({
           title: expect.stringContaining('Received'),
@@ -402,7 +396,7 @@ describe('Push Service', () => {
       ]);
 
       // Should not attempt to send notification
-      expect(mockSendToAPNs).not.toHaveBeenCalled();
+      expect(mockProvider.send).not.toHaveBeenCalled();
     });
 
     it('should skip users with no push devices', async () => {
@@ -465,13 +459,12 @@ describe('Push Service', () => {
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([
         { id: 'd1', userId: 'user-1', platform: 'android', token: 'fcm-token', lastUsedAt: new Date() },
       ]);
-      mockSendToFCM.mockResolvedValue(true);
 
       await notifyNewTransactions(walletId, [
         { txid: 'tx1', type: 'sent', amount: BigInt(-5000000) },
       ]);
 
-      expect(mockSendToFCM).toHaveBeenCalledWith(
+      expect(mockProvider.send).toHaveBeenCalledWith(
         'fcm-token',
         expect.objectContaining({
           title: expect.stringContaining('Sent'),
@@ -508,13 +501,12 @@ describe('Push Service', () => {
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([
         { id: 'd1', userId: 'user-1', platform: 'ios', token: 'token', lastUsedAt: new Date() },
       ]);
-      mockSendToAPNs.mockResolvedValue(true);
 
       await notifyNewTransactions(walletId, [
         { txid: 'tx1', type: 'consolidation', amount: BigInt(-1000) },
       ]);
 
-      expect(mockSendToAPNs).toHaveBeenCalled();
+      expect(mockProvider.send).toHaveBeenCalled();
     });
 
     it('should handle wallet not found', async () => {
@@ -561,7 +553,8 @@ describe('Push Service', () => {
       };
 
       mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
-      mockSendToAPNs.mockRejectedValue(new Error(error));
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockRejectedValue(new Error(error));
 
       await sendPushNotification('user-1', { title: 'Test', body: 'Test' });
 

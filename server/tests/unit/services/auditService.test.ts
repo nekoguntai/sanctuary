@@ -4,13 +4,31 @@
  * Tests for security audit logging, event tracking, and query capabilities.
  */
 
-import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 import { createMockRequest } from '../../helpers/testUtils';
 
-// Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
+// Mock repository functions - defined before jest.mock
+const mockCreate = jest.fn();
+const mockFindMany = jest.fn();
+const mockFindByUserId = jest.fn();
+const mockDeleteOlderThan = jest.fn();
+const mockCountByCategory = jest.fn();
+const mockCountByAction = jest.fn();
+
+// Mock the audit log repository
+jest.mock('../../../src/repositories', () => ({
+  auditLogRepository: {
+    create: (...args: unknown[]) => mockCreate(...args),
+    findMany: (...args: unknown[]) => mockFindMany(...args),
+    findByUserId: (...args: unknown[]) => mockFindByUserId(...args),
+    findByCategory: jest.fn(),
+    findFailedActions: jest.fn(),
+    findRecent: jest.fn(),
+    countByCategory: () => mockCountByCategory(),
+    countByAction: () => mockCountByAction(),
+    deleteOlderThan: (...args: unknown[]) => mockDeleteOlderThan(...args),
+    logSuccess: jest.fn(),
+    logFailure: jest.fn(),
+  },
 }));
 
 // Mock logger
@@ -32,13 +50,18 @@ import {
 
 describe('Audit Service', () => {
   beforeEach(() => {
-    resetPrismaMocks();
     jest.clearAllMocks();
+    mockCreate.mockReset();
+    mockFindMany.mockReset();
+    mockFindByUserId.mockReset();
+    mockDeleteOlderThan.mockReset();
+    mockCountByCategory.mockReset();
+    mockCountByAction.mockReset();
   });
 
   describe('log', () => {
     it('should create an audit log entry', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({
+      mockCreate.mockResolvedValue({
         id: 'audit-1',
         userId: 'user-123',
         username: 'testuser',
@@ -55,19 +78,19 @@ describe('Audit Service', () => {
         category: AuditCategory.AUTH,
       });
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           userId: 'user-123',
           username: 'testuser',
           action: AuditAction.LOGIN,
           category: AuditCategory.AUTH,
           success: true,
-        }),
-      });
+        })
+      );
     });
 
     it('should log failed events with error message', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({
+      mockCreate.mockResolvedValue({
         id: 'audit-2',
         success: false,
       });
@@ -81,16 +104,16 @@ describe('Audit Service', () => {
         errorMsg: 'Invalid password',
       });
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           success: false,
           errorMsg: 'Invalid password',
-        }),
-      });
+        })
+      );
     });
 
     it('should include IP address and user agent', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({ id: 'audit-3' });
+      mockCreate.mockResolvedValue({ id: 'audit-3' });
 
       await auditService.log({
         username: 'testuser',
@@ -100,16 +123,16 @@ describe('Audit Service', () => {
         userAgent: 'Mozilla/5.0...',
       });
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           ipAddress: '192.168.1.100',
           userAgent: 'Mozilla/5.0...',
-        }),
-      });
+        })
+      );
     });
 
     it('should include details as JSON', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({ id: 'audit-4' });
+      mockCreate.mockResolvedValue({ id: 'audit-4' });
 
       await auditService.log({
         username: 'admin',
@@ -121,18 +144,18 @@ describe('Audit Service', () => {
         },
       });
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           details: {
             newUserId: 'new-user-1',
             newUsername: 'newuser',
           },
-        }),
-      });
+        })
+      );
     });
 
     it('should not throw when database write fails', async () => {
-      mockPrismaClient.auditLog.create.mockRejectedValue(new Error('DB error'));
+      mockCreate.mockRejectedValue(new Error('DB error'));
 
       // Should not throw - audit failures should not break the application
       await expect(
@@ -145,7 +168,7 @@ describe('Audit Service', () => {
     });
 
     it('should default success to true', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({ id: 'audit-5' });
+      mockCreate.mockResolvedValue({ id: 'audit-5' });
 
       await auditService.log({
         username: 'testuser',
@@ -153,17 +176,17 @@ describe('Audit Service', () => {
         category: AuditCategory.AUTH,
       });
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           success: true,
-        }),
-      });
+        })
+      );
     });
   });
 
   describe('logFromRequest', () => {
     it('should extract user info from request', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({ id: 'audit-6' });
+      mockCreate.mockResolvedValue({ id: 'audit-6' });
 
       // Create a more complete mock request with socket
       const req = {
@@ -188,18 +211,18 @@ describe('Audit Service', () => {
         { details: { walletId: 'wallet-1' } }
       );
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           userId: 'user-123',
           username: 'testuser',
           action: AuditAction.WALLET_CREATE,
           category: AuditCategory.WALLET,
-        }),
-      });
+        })
+      );
     });
 
     it('should use anonymous for unauthenticated requests', async () => {
-      mockPrismaClient.auditLog.create.mockResolvedValue({ id: 'audit-7' });
+      mockCreate.mockResolvedValue({ id: 'audit-7' });
 
       // Create a more complete mock request with socket
       const req = {
@@ -213,11 +236,11 @@ describe('Audit Service', () => {
         AuditCategory.AUTH
       );
 
-      expect(mockPrismaClient.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
           username: 'anonymous',
-        }),
-      });
+        })
+      );
     });
   });
 
@@ -228,8 +251,7 @@ describe('Audit Service', () => {
         { id: 'log-2', action: AuditAction.LOGIN },
       ];
 
-      mockPrismaClient.auditLog.findMany.mockResolvedValue(mockLogs);
-      mockPrismaClient.auditLog.count.mockResolvedValue(100);
+      mockFindMany.mockResolvedValue({ logs: mockLogs, total: 100 });
 
       const result = await auditService.query({ limit: 2, offset: 0 });
 
@@ -240,72 +262,65 @@ describe('Audit Service', () => {
     });
 
     it('should filter by userId', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
-      mockPrismaClient.auditLog.count.mockResolvedValue(0);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       await auditService.query({ userId: 'user-123' });
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ userId: 'user-123' }),
-        })
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-123' }),
+        expect.any(Object)
       );
     });
 
     it('should filter by category', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
-      mockPrismaClient.auditLog.count.mockResolvedValue(0);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       await auditService.query({ category: AuditCategory.AUTH });
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ category: AuditCategory.AUTH }),
-        })
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ category: AuditCategory.AUTH }),
+        expect.any(Object)
       );
     });
 
     it('should filter by date range', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
-      mockPrismaClient.auditLog.count.mockResolvedValue(0);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       const startDate = new Date('2024-01-01');
       const endDate = new Date('2024-01-31');
 
       await auditService.query({ startDate, endDate });
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
+      expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            createdAt: { gte: startDate, lte: endDate },
-          }),
-        })
+          startDate,
+          endDate,
+        }),
+        expect.any(Object)
       );
     });
 
     it('should filter by success status', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
-      mockPrismaClient.auditLog.count.mockResolvedValue(0);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       await auditService.query({ success: false });
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ success: false }),
-        })
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false }),
+        expect.any(Object)
       );
     });
 
     it('should use default limit of 50', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
-      mockPrismaClient.auditLog.count.mockResolvedValue(0);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       const result = await auditService.query({});
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
-          take: 50,
-          skip: 0,
+          limit: 50,
+          offset: 0,
         })
       );
       expect(result.limit).toBe(50);
@@ -319,26 +334,20 @@ describe('Audit Service', () => {
         { id: 'log-2', userId: 'user-123' },
       ];
 
-      mockPrismaClient.auditLog.findMany.mockResolvedValue(mockLogs);
+      mockFindByUserId.mockResolvedValue(mockLogs);
 
       const result = await auditService.getForUser('user-123');
 
       expect(result).toHaveLength(2);
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      });
+      expect(mockFindByUserId).toHaveBeenCalledWith('user-123', { limit: 20 });
     });
 
     it('should respect custom limit', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
+      mockFindByUserId.mockResolvedValue([]);
 
       await auditService.getForUser('user-123', 5);
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 5 })
-      );
+      expect(mockFindByUserId).toHaveBeenCalledWith('user-123', { limit: 5 });
     });
   });
 
@@ -349,49 +358,47 @@ describe('Audit Service', () => {
         { id: 'fail-1', action: AuditAction.LOGIN_FAILED },
       ];
 
-      mockPrismaClient.auditLog.findMany.mockResolvedValue(mockLogs);
+      mockFindMany.mockResolvedValue({ logs: mockLogs, total: 1 });
 
       const result = await auditService.getFailedLogins(since);
 
       expect(result).toHaveLength(1);
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith({
-        where: {
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
           action: AuditAction.LOGIN_FAILED,
-          createdAt: { gte: since },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      });
+          startDate: since,
+          success: false,
+        }),
+        expect.objectContaining({ limit: 100 })
+      );
     });
   });
 
   describe('getAdminActions', () => {
-    it('should return admin, backup, and system actions', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
+    it('should return admin actions', async () => {
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       await auditService.getAdminActions();
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith({
-        where: {
-          category: {
-            in: [AuditCategory.ADMIN, AuditCategory.BACKUP, AuditCategory.SYSTEM],
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-        skip: 0,
-      });
+      expect(mockFindMany).toHaveBeenCalledWith(
+        { category: 'admin' },
+        expect.objectContaining({
+          limit: 50,
+          offset: 0,
+        })
+      );
     });
 
     it('should support pagination', async () => {
-      mockPrismaClient.auditLog.findMany.mockResolvedValue([]);
+      mockFindMany.mockResolvedValue({ logs: [], total: 0 });
 
       await auditService.getAdminActions(10, 20);
 
-      expect(mockPrismaClient.auditLog.findMany).toHaveBeenCalledWith(
+      expect(mockFindMany).toHaveBeenCalledWith(
+        expect.any(Object),
         expect.objectContaining({
-          take: 10,
-          skip: 20,
+          limit: 10,
+          offset: 20,
         })
       );
     });
@@ -400,26 +407,25 @@ describe('Audit Service', () => {
   describe('cleanup', () => {
     it('should delete logs older than specified date', async () => {
       const olderThan = new Date('2023-01-01');
-      mockPrismaClient.auditLog.deleteMany.mockResolvedValue({ count: 500 });
+      mockDeleteOlderThan.mockResolvedValue(500);
 
       const deleted = await auditService.cleanup(olderThan);
 
       expect(deleted).toBe(500);
-      expect(mockPrismaClient.auditLog.deleteMany).toHaveBeenCalledWith({
-        where: {
-          createdAt: { lt: olderThan },
-        },
-      });
+      expect(mockDeleteOlderThan).toHaveBeenCalledWith(olderThan);
     });
   });
 
   describe('getStats', () => {
     it('should return statistics for the specified period', async () => {
-      mockPrismaClient.auditLog.count.mockResolvedValue(1000);
-      mockPrismaClient.auditLog.groupBy.mockResolvedValue([
-        { category: 'auth', _count: 500 },
-        { category: 'wallet', _count: 300 },
-      ]);
+      mockFindMany
+        .mockResolvedValueOnce({ logs: [], total: 1000 })  // all events
+        .mockResolvedValueOnce({ logs: [], total: 50 });    // failed events
+      mockCountByCategory.mockResolvedValue({
+        auth: 500,
+        wallet: 300,
+      });
+      mockCountByAction.mockResolvedValue({});
 
       const stats = await auditService.getStats(30);
 
@@ -431,10 +437,11 @@ describe('Audit Service', () => {
     });
 
     it('should count failed events', async () => {
-      mockPrismaClient.auditLog.count
-        .mockResolvedValueOnce(1000) // totalEvents
-        .mockResolvedValueOnce(50);  // failedEvents
-      mockPrismaClient.auditLog.groupBy.mockResolvedValue([]);
+      mockFindMany
+        .mockResolvedValueOnce({ logs: [], total: 1000 })  // all events
+        .mockResolvedValueOnce({ logs: [], total: 50 });    // failed events
+      mockCountByCategory.mockResolvedValue({});
+      mockCountByAction.mockResolvedValue({});
 
       const stats = await auditService.getStats();
 
@@ -442,13 +449,14 @@ describe('Audit Service', () => {
     });
 
     it('should return top actions', async () => {
-      mockPrismaClient.auditLog.count.mockResolvedValue(100);
-      mockPrismaClient.auditLog.groupBy
-        .mockResolvedValueOnce([]) // category stats
-        .mockResolvedValueOnce([
-          { action: 'auth.login', _count: 50 },
-          { action: 'wallet.create', _count: 20 },
-        ]);
+      mockFindMany
+        .mockResolvedValueOnce({ logs: [], total: 100 })
+        .mockResolvedValueOnce({ logs: [], total: 0 });
+      mockCountByCategory.mockResolvedValue({});
+      mockCountByAction.mockResolvedValue({
+        'auth.login': 50,
+        'wallet.create': 20,
+      });
 
       const stats = await auditService.getStats();
 

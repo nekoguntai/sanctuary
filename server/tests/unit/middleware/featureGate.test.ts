@@ -50,6 +50,19 @@ jest.mock('../../../src/config', () => ({
   }),
 }));
 
+// Mock the featureFlagService to use our mockFeatures
+jest.mock('../../../src/services/featureFlagService', () => ({
+  featureFlagService: {
+    isEnabled: jest.fn((flag: string) => {
+      if (flag.startsWith('experimental.')) {
+        const key = flag.replace('experimental.', '');
+        return Promise.resolve(mockFeatures.experimental[key as keyof typeof mockFeatures.experimental] ?? false);
+      }
+      return Promise.resolve(mockFeatures[flag as keyof typeof mockFeatures] ?? false);
+    }),
+  },
+}));
+
 describe('Feature Gate Middleware', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
@@ -89,19 +102,19 @@ describe('Feature Gate Middleware', () => {
   });
 
   describe('requireFeature', () => {
-    it('should call next when feature is enabled', () => {
+    it('should call next when feature is enabled', async () => {
       const middleware = requireFeature('hardwareWalletSigning');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
       expect(statusMock).not.toHaveBeenCalled();
     });
 
-    it('should return 403 when feature is disabled', () => {
+    it('should return 403 when feature is disabled', async () => {
       const middleware = requireFeature('payjoinSupport');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(403);
@@ -111,20 +124,20 @@ describe('Feature Gate Middleware', () => {
       }));
     });
 
-    it('should handle experimental features', () => {
+    it('should handle experimental features', async () => {
       mockFeatures.experimental.taprootAddresses = true;
 
       const middleware = requireFeature('experimental.taprootAddresses');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
     });
 
-    it('should block disabled experimental features', () => {
+    it('should block disabled experimental features', async () => {
       const middleware = requireFeature('experimental.silentPayments');
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(403);
@@ -132,25 +145,25 @@ describe('Feature Gate Middleware', () => {
   });
 
   describe('requireAllFeatures', () => {
-    it('should call next when all features are enabled', () => {
+    it('should call next when all features are enabled', async () => {
       const middleware = requireAllFeatures([
         'hardwareWalletSigning',
         'qrCodeSigning',
       ]);
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
       expect(statusMock).not.toHaveBeenCalled();
     });
 
-    it('should return 403 when any feature is disabled', () => {
+    it('should return 403 when any feature is disabled', async () => {
       const middleware = requireAllFeatures([
         'hardwareWalletSigning',
         'payjoinSupport', // disabled
       ]);
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(403);
@@ -160,14 +173,14 @@ describe('Feature Gate Middleware', () => {
       }));
     });
 
-    it('should list all disabled features', () => {
+    it('should list all disabled features', async () => {
       const middleware = requireAllFeatures([
         'hardwareWalletSigning',
         'payjoinSupport',
         'priceAlerts',
       ]);
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
         disabledFeatures: expect.arrayContaining(['payjoinSupport', 'priceAlerts']),
@@ -176,26 +189,26 @@ describe('Feature Gate Middleware', () => {
   });
 
   describe('requireAnyFeature', () => {
-    it('should call next when any feature is enabled', () => {
+    it('should call next when any feature is enabled', async () => {
       const middleware = requireAnyFeature([
         'payjoinSupport', // disabled
         'hardwareWalletSigning', // enabled
       ]);
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).toHaveBeenCalled();
       expect(statusMock).not.toHaveBeenCalled();
     });
 
-    it('should return 403 when no features are enabled', () => {
+    it('should return 403 when no features are enabled', async () => {
       const middleware = requireAnyFeature([
         'payjoinSupport',
         'priceAlerts',
         'aiAssistant',
       ]);
 
-      middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
       expect(nextFunction).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(403);

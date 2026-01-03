@@ -174,6 +174,8 @@ test_install_script_creates_env() {
 
     # Run install.sh in non-interactive mode with test ports
     # ENABLE_MONITORING and ENABLE_TOR are set to skip prompts
+    # SKIP_GIT_CHECKOUT=true prevents install.sh from checking out a different
+    # version (the "latest release") which would test wrong code in CI
     log_info "Running install.sh (this may take several minutes for first build)..."
 
     # Capture output for debugging
@@ -181,6 +183,7 @@ test_install_script_creates_env() {
     install_output=$(HTTPS_PORT="$HTTPS_PORT" HTTP_PORT="$HTTP_PORT" \
         ENABLE_MONITORING="no" ENABLE_TOR="no" \
         SANCTUARY_DIR="$PROJECT_ROOT" \
+        SKIP_GIT_CHECKOUT="true" \
         bash -x "$PROJECT_ROOT/install.sh" 2>&1) || {
         log_error "install.sh failed to run"
         log_error "Output: $install_output"

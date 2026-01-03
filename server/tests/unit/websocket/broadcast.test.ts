@@ -33,7 +33,18 @@ jest.mock('../../../src/utils/logger', () => ({
 const mockBroadcast = jest.fn();
 const mockGetStats = jest.fn().mockReturnValue({
   clients: 5,
-  channels: ['wallet:123', 'wallet:456', 'blocks'],
+  maxClients: 10000,
+  subscriptions: 15,
+  channels: 3,
+  channelList: ['wallet:123', 'wallet:456', 'blocks'],
+  uniqueUsers: 2,
+  maxPerUser: 10,
+  rateLimits: {
+    maxMessagesPerSecond: 10,
+    gracePeriodMs: 5000,
+    gracePeriodMessageLimit: 500,
+    maxSubscriptionsPerConnection: 500,
+  },
 });
 const mockIsGatewayConnected = jest.fn().mockReturnValue(false);
 const mockSendEvent = jest.fn();

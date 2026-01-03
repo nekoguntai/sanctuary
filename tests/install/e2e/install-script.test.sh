@@ -357,6 +357,45 @@ test_api_health() {
 }
 
 # ============================================
+# Test: Migration Completed
+# ============================================
+
+test_migration_completed() {
+    log_info "Waiting for database migration and seeding to complete..."
+
+    cd "$PROJECT_ROOT"
+
+    # Wait for migrate container to exit (it runs once and exits)
+    local max_attempts=60
+    local attempt=0
+
+    while [ $attempt -lt $max_attempts ]; do
+        local migrate_status=$(docker compose ps migrate --format '{{.State}}' 2>/dev/null || echo "unknown")
+
+        # Container exited successfully
+        if [[ "$migrate_status" == *"exited"* ]]; then
+            # Check exit code
+            local exit_code=$(docker compose ps migrate --format '{{.ExitCode}}' 2>/dev/null || echo "1")
+            if [ "$exit_code" = "0" ]; then
+                log_success "Migration completed successfully"
+                return 0
+            else
+                log_error "Migration failed with exit code: $exit_code"
+                docker compose logs migrate 2>&1 | tail -30
+                return 1
+            fi
+        fi
+
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+
+    log_error "Migration did not complete within timeout"
+    docker compose logs migrate 2>&1 | tail -30
+    return 1
+}
+
+# ============================================
 # Test: Login with Default Credentials
 # ============================================
 
@@ -448,6 +487,7 @@ main() {
     run_test "Database Healthy" test_database_healthy
     run_test "Backend Healthy" test_backend_healthy
     run_test "API Health Endpoint" test_api_health
+    run_test "Migration Completed" test_migration_completed
     run_test "Default Login Works" test_default_login
     run_test "Docker Compose Standalone" test_docker_compose_standalone
 

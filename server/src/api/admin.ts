@@ -20,7 +20,7 @@ import { encrypt } from '../utils/encryption';
 import { getAllCacheStats } from '../utils/cache';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
 import { deadLetterQueue, type DeadLetterCategory } from '../services/deadLetterQueue';
-import { getWebSocketServer } from '../websocket/server';
+import { getWebSocketServer, getRateLimitEvents } from '../websocket/server';
 
 // Domain routers (extracted for maintainability)
 import usersRouter from './admin/users';
@@ -2328,6 +2328,7 @@ router.get('/websocket/stats', authenticate, requireAdmin, async (_req: Request,
         channelList: stats.channelList,
       },
       rateLimits: stats.rateLimits,
+      recentRateLimitEvents: getRateLimitEvents(),
     });
   } catch (error) {
     log.error('[ADMIN] Get WebSocket stats failed', { error: String(error) });

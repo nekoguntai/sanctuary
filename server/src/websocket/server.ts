@@ -51,6 +51,16 @@ const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIO
 const RATE_LIMIT_GRACE_PERIOD_MS = 5000; // 5 seconds grace period after connection
 const GRACE_PERIOD_MESSAGE_LIMIT = parseInt(process.env.WS_GRACE_PERIOD_LIMIT || '500', 10);
 
+// Rate limit event buffer for admin visibility
+const MAX_RATE_LIMIT_EVENTS = 50;
+export interface RateLimitEvent {
+  timestamp: string;
+  userId: string | null;
+  reason: 'grace_period_exceeded' | 'per_second_exceeded' | 'subscription_limit';
+  details: string;
+}
+const rateLimitEvents: RateLimitEvent[] = [];
+
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   subscriptions: Set<string>;
@@ -81,6 +91,29 @@ export interface WebSocketEvent {
 
 // Re-export typed events for gradual migration
 export type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
+
+// Helper to record rate limit events for admin visibility
+function recordRateLimitEvent(
+  userId: string | null,
+  reason: RateLimitEvent['reason'],
+  details: string
+): void {
+  rateLimitEvents.unshift({
+    timestamp: new Date().toISOString(),
+    userId,
+    reason,
+    details,
+  });
+  // Keep only the most recent events
+  if (rateLimitEvents.length > MAX_RATE_LIMIT_EVENTS) {
+    rateLimitEvents.pop();
+  }
+}
+
+// Getter for rate limit events (used by admin API)
+export function getRateLimitEvents(): RateLimitEvent[] {
+  return [...rateLimitEvents];
+}
 
 export class SanctauryWebSocketServer {
   private wss: WebSocketServer;
@@ -277,8 +310,13 @@ export class SanctauryWebSocketServer {
           userId: client.userId,
           totalMessageCount: client.totalMessageCount,
         });
-        // Record metric
+        // Record metric and event
         websocketRateLimitHits.inc({ reason: 'grace_period_exceeded' });
+        recordRateLimitEvent(
+          client.userId || null,
+          'grace_period_exceeded',
+          `${client.totalMessageCount}/${GRACE_PERIOD_MESSAGE_LIMIT} messages during setup`
+        );
         // Notify user before disconnecting
         this.sendToClient(client, {
           type: 'error',
@@ -306,8 +344,13 @@ export class SanctauryWebSocketServer {
           userId: client.userId,
           messageCount: client.messageCount,
         });
-        // Record metric
+        // Record metric and event
         websocketRateLimitHits.inc({ reason: 'per_second_exceeded' });
+        recordRateLimitEvent(
+          client.userId || null,
+          'per_second_exceeded',
+          `${client.messageCount}/${MAX_MESSAGES_PER_SECOND} messages/sec`
+        );
         // Notify user before disconnecting
         this.sendToClient(client, {
           type: 'error',
@@ -443,8 +486,13 @@ export class SanctauryWebSocketServer {
         subscriptionCount: client.subscriptions.size,
         channel,
       });
-      // Record metric
+      // Record metric and event
       websocketRateLimitHits.inc({ reason: 'subscription_limit' });
+      recordRateLimitEvent(
+        client.userId || null,
+        'subscription_limit',
+        `${client.subscriptions.size}/${MAX_SUBSCRIPTIONS_PER_CONNECTION} subscriptions`
+      );
       this.sendToClient(client, {
         type: 'error',
         data: {

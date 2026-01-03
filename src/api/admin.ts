@@ -548,6 +548,16 @@ export async function stopTorContainer(): Promise<ContainerActionResponse> {
 // ========================================
 
 /**
+ * Rate limit event for admin visibility
+ */
+export interface RateLimitEvent {
+  timestamp: string;
+  userId: string | null;
+  reason: 'grace_period_exceeded' | 'per_second_exceeded' | 'subscription_limit';
+  details: string;
+}
+
+/**
  * WebSocket stats response
  */
 export interface WebSocketStats {
@@ -568,6 +578,7 @@ export interface WebSocketStats {
     gracePeriodMessageLimit: number;
     maxSubscriptionsPerConnection: number;
   };
+  recentRateLimitEvents: RateLimitEvent[];
 }
 
 /**

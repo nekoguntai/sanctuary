@@ -76,6 +76,8 @@ export class WebSocketClient {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
+        // Always log open events for debugging
+        console.log('[WS] Connected successfully');
         log.debug('Connected');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
@@ -112,6 +114,8 @@ export class WebSocketClient {
       };
 
       this.ws.onclose = (event) => {
+        // Always log close events for debugging
+        console.log(`[WS] Closed: code=${event.code}, reason="${event.reason}", wasClean=${event.wasClean}`);
         log.debug('Closed:', event.code, event.reason);
         this.isConnecting = false;
         this.ws = null;
@@ -351,6 +355,9 @@ export class WebSocketClient {
    * Notify connection listeners
    */
   private notifyConnectionListeners(connected: boolean) {
+    // Always log connection state changes for debugging
+    console.log(`[WS] Connection state changed: ${connected ? 'CONNECTED' : 'DISCONNECTED'}`);
+
     for (const callback of this.connectionListeners) {
       try {
         callback(connected);

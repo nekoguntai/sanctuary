@@ -1,0 +1,64 @@
+/**
+ * Coldcard JSON Export Format Handler
+ *
+ * Handles JSON exports from Coldcard hardware wallets.
+ * These contain xfp (fingerprint) and multiple BIP paths.
+ */
+
+import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
+import { parseColdcardExport, isColdcardExportFormat } from '../../bitcoin/descriptorParser';
+
+export const coldcardHandler: ImportFormatHandler = {
+  id: 'coldcard',
+  name: 'Coldcard Export',
+  description: 'JSON export from Coldcard hardware wallet',
+  priority: 85,
+  fileExtensions: ['.json'],
+
+  canHandle(input: string): FormatDetectionResult {
+    const trimmed = input.trim();
+
+    // Must be JSON
+    if (!trimmed.startsWith('{')) {
+      return { detected: false, confidence: 0 };
+    }
+
+    try {
+      const json = JSON.parse(trimmed);
+
+      if (isColdcardExportFormat(json)) {
+        // High confidence if it has the expected Coldcard structure
+        const hasMultiplePaths =
+          json.bip84 || json.bip48_2 || json.bip49 || json.bip44;
+        return {
+          detected: true,
+          confidence: hasMultiplePaths ? 95 : 85,
+        };
+      }
+
+      return { detected: false, confidence: 0 };
+    } catch {
+      return { detected: false, confidence: 0 };
+    }
+  },
+
+  parse(input: string): ImportParseResult {
+    const json = JSON.parse(input.trim());
+    const { parsed, availablePaths } = parseColdcardExport(json);
+
+    return {
+      parsed,
+      availablePaths,
+      suggestedName: json.name || json.label,
+    };
+  },
+
+  extractName(input: string): string | undefined {
+    try {
+      const json = JSON.parse(input.trim());
+      return json.name || json.label;
+    } catch {
+      return undefined;
+    }
+  },
+};

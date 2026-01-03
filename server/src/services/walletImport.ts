@@ -15,13 +15,8 @@ import type {
   ScriptType,
   Network,
 } from './bitcoin/descriptorParser';
-import {
-  parseDescriptorForImport,
-  parseJsonImport,
-  parseImportInput,
-  validateDescriptor,
-  validateJsonImport,
-} from './bitcoin/descriptorParser';
+import { parseJsonImport } from './bitcoin/descriptorParser';
+import { parseImportInput } from './import';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';

@@ -364,6 +364,7 @@ export interface JsonImportConfig {
   quorum?: number;
   network?: Network;
   devices: JsonImportDevice[];
+  name?: string;
 }
 
 /**
@@ -551,7 +552,7 @@ export interface BlueWalletTextFormat {
 /**
  * Check if input looks like BlueWallet text format
  */
-function isBlueWalletTextFormat(input: string): boolean {
+export function isBlueWalletTextFormat(input: string): boolean {
   const lines = input.split('\n');
   let hasPolicy = false;
   let hasDeviceLine = false;
@@ -573,7 +574,7 @@ function isBlueWalletTextFormat(input: string): boolean {
 /**
  * Parse BlueWallet text format
  */
-function parseBlueWalletText(input: string): BlueWalletTextFormat {
+export function parseBlueWalletText(input: string): BlueWalletTextFormat {
   const lines = input.split('\n');
   const result: BlueWalletTextFormat = {
     devices: [],
@@ -679,7 +680,7 @@ function blueWalletFormatToScriptType(format: string | undefined): ScriptType {
 /**
  * Parse BlueWallet text format into standard ParsedDescriptor
  */
-function parseBlueWalletTextImport(input: string): ParsedDescriptor {
+export function parseBlueWalletTextImport(input: string): ParsedDescriptor {
   const parsed = parseBlueWalletText(input);
 
   if (parsed.devices.length === 0) {
@@ -718,7 +719,7 @@ function parseBlueWalletTextImport(input: string): ParsedDescriptor {
 /**
  * Check if JSON is a wallet export format (has descriptor field)
  */
-function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
+export function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
   return (
     typeof obj === 'object' &&
     obj !== null &&
@@ -730,7 +731,7 @@ function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
 /**
  * Check if JSON is a Coldcard export format (has xfp and bip paths)
  */
-function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
+export function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
   if (typeof obj !== 'object' || obj === null) return false;
   const cc = obj as ColdcardJsonExport;
   // Coldcard exports have xfp (fingerprint) and at least one BIP path
@@ -746,7 +747,7 @@ function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
  * Coldcard exports contain multiple derivation paths - we need to pick one based on priority
  * Priority: bip84 (native segwit) > bip49 (nested segwit) > bip44 (legacy)
  */
-function parseColdcardExport(cc: ColdcardJsonExport): { parsed: ParsedDescriptor; availablePaths: Array<{ scriptType: ScriptType; path: string }> } {
+export function parseColdcardExport(cc: ColdcardJsonExport): { parsed: ParsedDescriptor; availablePaths: Array<{ scriptType: ScriptType; path: string }> } {
   const fingerprint = cc.xfp.toLowerCase();
   const availablePaths: Array<{ scriptType: ScriptType; path: string }> = [];
 
@@ -804,7 +805,7 @@ function parseColdcardExport(cc: ColdcardJsonExport): { parsed: ParsedDescriptor
  * Extract descriptor from text that may contain comments
  * Returns the first valid descriptor line found
  */
-function extractDescriptorFromText(input: string): string | null {
+export function extractDescriptorFromText(input: string): string | null {
   const lines = input.split('\n');
 
   for (const line of lines) {
@@ -831,7 +832,7 @@ function extractDescriptorFromText(input: string): string | null {
 /**
  * Check if input is a text file with descriptors and comments
  */
-function isDescriptorTextFormat(input: string): boolean {
+export function isDescriptorTextFormat(input: string): boolean {
   const lines = input.split('\n');
   let hasComment = false;
   let hasDescriptor = false;

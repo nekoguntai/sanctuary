@@ -69,6 +69,7 @@ export interface HardwareDeviceModel {
   scriptTypes: string[];
   hasScreen: boolean;
   screenType?: string;
+  integrationTested: boolean;
   releaseYear?: number;
   discontinued: boolean;
   imageUrl?: string;

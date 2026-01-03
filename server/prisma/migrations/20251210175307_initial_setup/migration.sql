@@ -47,10 +47,6 @@ CREATE TABLE "wallets" (
     "descriptor" TEXT,
     "fingerprint" TEXT,
     "groupId" TEXT,
-    "lastSyncedAt" TIMESTAMP(3),
-    "lastSyncStatus" TEXT,
-    "lastSyncError" TEXT,
-    "syncInProgress" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -69,37 +65,9 @@ CREATE TABLE "wallet_users" (
 );
 
 -- CreateTable
-CREATE TABLE "hardware_device_models" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "manufacturer" TEXT NOT NULL,
-    "connectivity" TEXT[],
-    "secureElement" BOOLEAN NOT NULL DEFAULT false,
-    "openSource" BOOLEAN NOT NULL DEFAULT false,
-    "airGapped" BOOLEAN NOT NULL DEFAULT false,
-    "supportsBitcoinOnly" BOOLEAN NOT NULL DEFAULT true,
-    "supportsMultisig" BOOLEAN NOT NULL DEFAULT true,
-    "supportsTaproot" BOOLEAN NOT NULL DEFAULT false,
-    "supportsPassphrase" BOOLEAN NOT NULL DEFAULT true,
-    "scriptTypes" TEXT[],
-    "hasScreen" BOOLEAN NOT NULL DEFAULT true,
-    "screenType" TEXT,
-    "releaseYear" INTEGER,
-    "discontinued" BOOLEAN NOT NULL DEFAULT false,
-    "imageUrl" TEXT,
-    "websiteUrl" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "hardware_device_models_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "devices" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "modelId" TEXT,
     "type" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "fingerprint" TEXT NOT NULL,
@@ -150,7 +118,6 @@ CREATE TABLE "transactions" (
     "label" TEXT,
     "memo" TEXT,
     "rawTx" TEXT,
-    "counterpartyAddress" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "addressId" TEXT,
@@ -183,12 +150,10 @@ CREATE TABLE "node_configs" (
     "type" TEXT NOT NULL,
     "host" TEXT NOT NULL,
     "port" INTEGER NOT NULL,
-    "useSsl" BOOLEAN NOT NULL DEFAULT false,
     "username" TEXT,
     "password" TEXT,
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "explorerUrl" TEXT,
-    "feeEstimatorUrl" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -217,39 +182,6 @@ CREATE TABLE "price_data" (
     CONSTRAINT "price_data_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "labels" (
-    "id" TEXT NOT NULL,
-    "walletId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "color" TEXT NOT NULL DEFAULT '#6366f1',
-    "description" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "labels_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "transaction_labels" (
-    "id" TEXT NOT NULL,
-    "transactionId" TEXT NOT NULL,
-    "labelId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "transaction_labels_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "address_labels" (
-    "id" TEXT NOT NULL,
-    "addressId" TEXT NOT NULL,
-    "labelId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "address_labels_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 
@@ -261,12 +193,6 @@ CREATE UNIQUE INDEX "group_members_userId_groupId_key" ON "group_members"("userI
 
 -- CreateIndex
 CREATE UNIQUE INDEX "wallet_users_walletId_userId_key" ON "wallet_users"("walletId", "userId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "hardware_device_models_name_key" ON "hardware_device_models"("name");
-
--- CreateIndex
-CREATE UNIQUE INDEX "hardware_device_models_slug_key" ON "hardware_device_models"("slug");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "devices_fingerprint_key" ON "devices"("fingerprint");
@@ -298,30 +224,6 @@ CREATE UNIQUE INDEX "utxos_txid_vout_key" ON "utxos"("txid", "vout");
 -- CreateIndex
 CREATE INDEX "price_data_currency_createdAt_idx" ON "price_data"("currency", "createdAt");
 
--- CreateIndex
-CREATE INDEX "labels_walletId_idx" ON "labels"("walletId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "labels_walletId_name_key" ON "labels"("walletId", "name");
-
--- CreateIndex
-CREATE INDEX "transaction_labels_transactionId_idx" ON "transaction_labels"("transactionId");
-
--- CreateIndex
-CREATE INDEX "transaction_labels_labelId_idx" ON "transaction_labels"("labelId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "transaction_labels_transactionId_labelId_key" ON "transaction_labels"("transactionId", "labelId");
-
--- CreateIndex
-CREATE INDEX "address_labels_addressId_idx" ON "address_labels"("addressId");
-
--- CreateIndex
-CREATE INDEX "address_labels_labelId_idx" ON "address_labels"("labelId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "address_labels_addressId_labelId_key" ON "address_labels"("addressId", "labelId");
-
 -- AddForeignKey
 ALTER TABLE "group_members" ADD CONSTRAINT "group_members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -339,9 +241,6 @@ ALTER TABLE "wallet_users" ADD CONSTRAINT "wallet_users_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "devices" ADD CONSTRAINT "devices_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "devices" ADD CONSTRAINT "devices_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "hardware_device_models"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "wallet_devices" ADD CONSTRAINT "wallet_devices_walletId_fkey" FOREIGN KEY ("walletId") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -363,18 +262,3 @@ ALTER TABLE "transactions" ADD CONSTRAINT "transactions_addressId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "utxos" ADD CONSTRAINT "utxos_walletId_fkey" FOREIGN KEY ("walletId") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "labels" ADD CONSTRAINT "labels_walletId_fkey" FOREIGN KEY ("walletId") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction_labels" ADD CONSTRAINT "transaction_labels_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "transaction_labels" ADD CONSTRAINT "transaction_labels_labelId_fkey" FOREIGN KEY ("labelId") REFERENCES "labels"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "address_labels" ADD CONSTRAINT "address_labels_addressId_fkey" FOREIGN KEY ("addressId") REFERENCES "addresses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "address_labels" ADD CONSTRAINT "address_labels_labelId_fkey" FOREIGN KEY ("labelId") REFERENCES "labels"("id") ON DELETE CASCADE ON UPDATE CASCADE;

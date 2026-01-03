@@ -51,6 +51,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'oled',
     releaseYear: 2022,
+    integrationTested: true,
     websiteUrl: 'https://coldcard.com',
   },
   {
@@ -69,6 +70,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'lcd',
     releaseYear: 2024,
+    integrationTested: true,
     websiteUrl: 'https://coldcard.com',
   },
   {
@@ -88,6 +90,7 @@ const hardwareDeviceModels = [
     screenType: 'oled',
     releaseYear: 2019,
     discontinued: true,
+    integrationTested: true,
     websiteUrl: 'https://coldcard.com',
   },
 
@@ -110,6 +113,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'oled',
     releaseYear: 2022,
+    integrationTested: true,
     websiteUrl: 'https://ledger.com',
   },
   {
@@ -128,6 +132,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'oled',
     releaseYear: 2019,
+    integrationTested: true,
     websiteUrl: 'https://ledger.com',
   },
   {
@@ -146,6 +151,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'e-ink',
     releaseYear: 2023,
+    integrationTested: true,
     websiteUrl: 'https://ledger.com',
   },
   {
@@ -164,6 +170,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'e-ink',
     releaseYear: 2024,
+    integrationTested: true,
     websiteUrl: 'https://ledger.com',
   },
   {
@@ -182,6 +189,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'color-lcd',
     releaseYear: 2025,
+    integrationTested: true,
     websiteUrl: 'https://ledger.com',
   },
 
@@ -204,6 +212,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'oled',
     releaseYear: 2014,
+    integrationTested: true,
     websiteUrl: 'https://trezor.io',
   },
   {
@@ -222,6 +231,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'lcd',
     releaseYear: 2018,
+    integrationTested: true,
     websiteUrl: 'https://trezor.io',
   },
   {
@@ -240,6 +250,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'oled',
     releaseYear: 2023,
+    integrationTested: true,
     websiteUrl: 'https://trezor.io',
   },
   {
@@ -258,6 +269,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'lcd',
     releaseYear: 2024,
+    integrationTested: true,
     websiteUrl: 'https://trezor.io',
   },
   {
@@ -276,6 +288,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'color-lcd',
     releaseYear: 2025,
+    integrationTested: true,
     websiteUrl: 'https://trezor.io',
   },
 
@@ -298,6 +311,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'lcd',
     releaseYear: 2021,
+    integrationTested: true,
     websiteUrl: 'https://foundationdevices.com',
   },
   {
@@ -316,6 +330,7 @@ const hardwareDeviceModels = [
     hasScreen: true,
     screenType: 'lcd',
     releaseYear: 2023,
+    integrationTested: true,
     websiteUrl: 'https://foundationdevices.com',
   },
 

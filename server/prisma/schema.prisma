@@ -179,6 +179,9 @@ model HardwareDeviceModel {
   hasScreen  Boolean @default(true)
   screenType String? // e-ink, lcd, oled, none
 
+  // Integration status
+  integrationTested Boolean @default(false) // Has this device been tested with Sanctuary?
+
   // Additional info
   releaseYear  Int?
   discontinued Boolean @default(false)

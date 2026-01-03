@@ -1194,12 +1194,17 @@ export const ConnectDevice: React.FC = () => {
                   <button
                     key={model.id}
                     onClick={() => setSelectedModel(model)}
-                    className={`p-3 rounded-xl border text-left text-sm transition-all flex flex-col items-center justify-center space-y-2 py-4 ${
+                    className={`p-3 rounded-xl border text-left text-sm transition-all flex flex-col items-center justify-center space-y-2 py-4 relative ${
                       selectedModel?.id === model.id
                         ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500'
                         : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-400 dark:hover:border-sanctuary-500'
                     }`}
                   >
+                    {!model.integrationTested && (
+                      <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                        Untested
+                      </span>
+                    )}
                     {getDeviceIcon(model.name, "w-8 h-8 opacity-80")}
                     <div className="font-medium text-center text-sanctuary-900 dark:text-sanctuary-100 text-xs">{model.name}</div>
                     <div className="text-[10px] text-sanctuary-500">{model.manufacturer}</div>
@@ -1213,6 +1218,23 @@ export const ConnectDevice: React.FC = () => {
           {selectedModel && (
             <div className="surface-elevated p-6 rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
               <h3 className="text-sm font-medium text-sanctuary-500 uppercase mb-4">2. Connection Method</h3>
+
+              {/* Untested Device Warning */}
+              {!selectedModel.integrationTested && (
+                <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl">
+                  <div className="flex items-start">
+                    <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-2 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Untested Device
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                        This device has not been fully tested with Sanctuary. Basic functionality (xpub import via SD card, QR, or manual entry) should work, but you may encounter issues. Use at your own risk.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Device Capabilities Preview */}
               <div className="mb-4 p-3 surface-muted rounded-xl">

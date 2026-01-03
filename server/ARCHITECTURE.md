@@ -202,6 +202,56 @@ try {
 
 ---
 
+## Wallet Sync Pipeline
+
+The wallet sync process (`syncWallet` in `src/services/bitcoin/blockchain.ts`) runs in multiple phases to ensure accurate transaction classification and balance calculation.
+
+**Location:** `src/services/bitcoin/blockchain.ts`
+
+### Sync Phases
+
+| Phase | Name | Purpose |
+|-------|------|---------|
+| 1-3 | Address History | Batch fetch transaction history for all addresses |
+| 4-6 | Transaction Details | Fetch full transaction data, classify as received/sent/consolidation |
+| 7-8 | UTXO Processing | Sync unspent outputs, mark spent UTXOs |
+| 9 | Confirmations | Update confirmation counts |
+| 10 | Balance Calculation | Recalculate running balances |
+| 11 | Gap Limit Expansion | Derive new addresses per BIP-44 gap limit |
+| 12 | Consolidation Correction | Fix misclassified consolidation transactions |
+
+### Transaction Classification
+
+Transactions are classified during Phase 4-6 based on input/output ownership:
+
+| Type | Condition | Amount |
+|------|-----------|--------|
+| `received` | External inputs, outputs to wallet | `+value` |
+| `sent` | Wallet inputs, outputs to external | `-(value + fee)` |
+| `consolidation` | Wallet inputs, ALL outputs to wallet | `-fee` |
+
+### Consolidation Correction (Phase 12)
+
+**Problem**: During sync, a consolidation can be misclassified as "sent" if the output address wasn't in the wallet's address set yet. This happens because:
+1. Addresses are derived incrementally via BIP-44 gap limit (Phase 11)
+2. Transaction classification (Phase 4-6) happens before new addresses exist
+3. An output to a not-yet-derived address appears "external"
+
+**Solution**: Phase 12 runs after all addresses are synced and checks every "sent" transaction. If ALL outputs now belong to wallet addresses, the transaction is reclassified as a consolidation with the correct amount (`-fee`).
+
+```typescript
+// In balanceCalculation.ts
+export async function correctMisclassifiedConsolidations(walletId: string): Promise<number> {
+  // Find "sent" transactions where ALL outputs are actually wallet addresses
+  // Update type to "consolidation", amount to -fee
+  // Fix output isOurs flags
+}
+```
+
+**Key insight**: This correction must run on every sync because new addresses may reveal previously misclassified transactions.
+
+---
+
 ## Infrastructure
 
 **Location:** `src/infrastructure/`

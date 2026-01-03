@@ -60,6 +60,35 @@ vi.mock('../../hooks/useAIStatus', () => ({
   invalidateAIStatusCache: vi.fn(),
 }));
 
+// Mock popular models response
+const mockPopularModels = {
+  version: '1.0.0',
+  lastUpdated: '2026-01-02',
+  models: [
+    { name: 'llama3.2:3b', description: 'Meta, fast & lightweight (2GB)', recommended: true },
+    { name: 'deepseek-r1:7b', description: 'DeepSeek, reasoning model (4.7GB)' },
+    { name: 'mistral:7b', description: 'Mistral AI, balanced (4GB)' },
+  ],
+};
+
+// Mock global fetch for popular models
+const originalFetch = global.fetch;
+beforeEach(() => {
+  global.fetch = vi.fn((url: string) => {
+    if (url.includes('popular-models.json')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockPopularModels),
+      } as Response);
+    }
+    return originalFetch(url);
+  });
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
+
 // Import component after mocks
 import AISettings from '../../components/AISettings';
 

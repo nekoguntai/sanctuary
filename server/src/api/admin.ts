@@ -190,7 +190,8 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
-          poolEnabled: poolEnabled ?? true,
+          // poolEnabled should be true if mainnetMode is 'pool'
+          poolEnabled: poolEnabled ?? (mainnetMode === 'pool' || mainnetMode === undefined),
           poolMinConnections: poolMinConnections ?? 1,
           poolMaxConnections: poolMaxConnections ?? 5,
           poolLoadBalancing: loadBalancing,
@@ -242,7 +243,8 @@ router.put('/node-config', authenticate, requireAdmin, async (req: Request, res:
           explorerUrl: explorerUrl || 'https://mempool.space',
           feeEstimatorUrl: feeEstimatorUrl || null,
           mempoolEstimator: estimator,
-          poolEnabled: poolEnabled ?? true,
+          // poolEnabled should be true if mainnetMode is 'pool'
+          poolEnabled: poolEnabled ?? (mainnetMode === 'pool' || mainnetMode === undefined),
           poolMinConnections: poolMinConnections ?? 1,
           poolMaxConnections: poolMaxConnections ?? 5,
           poolLoadBalancing: loadBalancing,

@@ -403,9 +403,9 @@ export class TrezorAdapter implements DeviceAdapter {
           (psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0);
 
         if (isChange && psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0) {
-          const outputScriptType = scriptType === 'SPENDADDRESS' ? 'PAYTOADDRESS' :
-            scriptType === 'SPENDP2SHWITNESS' ? 'PAYTOP2SHWITNESS' :
-            scriptType === 'SPENDTAPROOT' ? 'PAYTOTAPROOT' : 'PAYTOWITNESS';
+          const outputScriptType = scriptType === 'SPENDADDRESS' ? 'PAYTOADDRESS' as const :
+            scriptType === 'SPENDP2SHWITNESS' ? 'PAYTOP2SHWITNESS' as const :
+            scriptType === 'SPENDTAPROOT' ? 'PAYTOTAPROOT' as const : 'PAYTOWITNESS' as const;
 
           return {
             address_n: pathToAddressN(psbtOutput.bip32Derivation[0].path),
@@ -421,7 +421,7 @@ export class TrezorAdapter implements DeviceAdapter {
           return {
             address,
             amount: validateSatoshiAmount(output.value, `Output ${idx}`),
-            script_type: 'PAYTOADDRESS',
+            script_type: 'PAYTOADDRESS' as const,
           };
         }
       });

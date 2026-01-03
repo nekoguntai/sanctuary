@@ -66,6 +66,7 @@ import React, {
   useMemo,
   type ReactNode,
   type ComponentType,
+  type JSX,
 } from 'react';
 
 /**

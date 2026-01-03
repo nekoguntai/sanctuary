@@ -162,19 +162,34 @@ export function createDeviceCellRenderers(
     );
   };
 
-  // Wallets Cell - Wallet count badge
+  // Wallets Cell - Shows wallet names (supports multiple wallets per device)
   const WalletsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
-    const count = device.walletCount ?? device.wallets?.length ?? 0;
+    const wallets = device.wallets || [];
+    const count = device.walletCount ?? wallets.length;
 
     if (count === 0) {
       return <span className="text-xs text-sanctuary-400 italic">Unused</span>;
     }
 
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
-        <HardDrive className="w-3 h-3 mr-1" />
-        {count} {count === 1 ? 'wallet' : 'wallets'}
-      </span>
+      <div className="flex flex-wrap gap-1">
+        {wallets.map((wd) => (
+          <span
+            key={wd.wallet.id}
+            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20"
+          >
+            <HardDrive className="w-3 h-3 mr-1 flex-shrink-0" />
+            {wd.wallet.name}
+          </span>
+        ))}
+        {/* Fallback if wallets array is empty but count > 0 (legacy data) */}
+        {wallets.length === 0 && count > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
+            <HardDrive className="w-3 h-3 mr-1" />
+            {count} {count === 1 ? 'wallet' : 'wallets'}
+          </span>
+        )}
+      </div>
     );
   };
 

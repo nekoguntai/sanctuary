@@ -21,6 +21,15 @@ export interface DeviceAccessCheckResult {
   role: DeviceRole;
 }
 
+export interface DeviceWalletInfo {
+  wallet: {
+    id: string;
+    name: string;
+    type: string;
+    scriptType: string | null;
+  };
+}
+
 export interface DeviceWithAccess {
   id: string;
   userId: string;
@@ -40,6 +49,7 @@ export interface DeviceWithAccess {
   sharedBy?: string; // Username of owner if shared
   model?: { id: string; slug: string; name: string } | null;
   walletCount: number;
+  wallets: DeviceWalletInfo[];
 }
 
 // ========================================
@@ -135,9 +145,18 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
           name: true,
         },
       },
-      // Get wallet count instead of full wallet data
-      _count: {
-        select: { wallets: true },
+      // Get associated wallets with basic info for display
+      wallets: {
+        select: {
+          wallet: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              scriptType: true,
+            },
+          },
+        },
       },
       // Get user's role for this device
       users: {
@@ -179,7 +198,8 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
       userRole,
       sharedBy: isOwner ? undefined : device.user.username,
       model: device.model,
-      walletCount: device._count.wallets,
+      walletCount: device.wallets.length,
+      wallets: device.wallets,
     };
   });
 }

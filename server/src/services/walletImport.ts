@@ -291,6 +291,15 @@ export async function importFromDescriptor(
           },
         });
 
+        // Create DeviceUser record for access control
+        await tx.deviceUser.create({
+          data: {
+            deviceId: newDevice.id,
+            userId,
+            role: 'owner',
+          },
+        });
+
         createdDeviceIds.push(newDevice.id);
         deviceIdsForWallet.push(newDevice.id);
       } else {
@@ -462,6 +471,15 @@ export async function importFromJson(
             fingerprint: resolution.fingerprint,
             derivationPath: resolution.derivationPath,
             xpub: resolution.xpub,
+          },
+        });
+
+        // Create DeviceUser record for access control
+        await tx.deviceUser.create({
+          data: {
+            deviceId: newDevice.id,
+            userId,
+            role: 'owner',
           },
         });
 
@@ -663,6 +681,15 @@ export async function importFromParsedData(
             fingerprint: resolution.fingerprint,
             derivationPath: resolution.derivationPath,
             xpub: resolution.xpub,
+          },
+        });
+
+        // Create DeviceUser record for access control
+        await tx.deviceUser.create({
+          data: {
+            deviceId: newDevice.id,
+            userId,
+            role: 'owner',
           },
         });
 

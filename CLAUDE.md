@@ -114,6 +114,8 @@ The repository has pre-commit hooks that run AI agents to analyze changes:
 - **Test Coverage Analysis** - checks if tests need to be added/updated/removed
 - **UI Consistency & Style Analysis** - validates dark mode, patterns, and style consistency
 - **Architecture & Scalability Analysis** - reviews for scalability, cleanup, and memory issues
+- **Stability & Perpetual Operation** - validates long-running operation patterns
+- **Code Documentation Analysis** - ensures security-critical and complex code is documented
 
 **IMPORTANT**: Always run `git commit` with full output visible (not in background) so the agent feedback can be reviewed before pushing. Each agent will end with one of:
 - ✅ **RECOMMEND PROCEED** - no issues found

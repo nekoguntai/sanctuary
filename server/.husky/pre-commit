@@ -22,6 +22,7 @@ TEST_COVERAGE_STOP=0
 UI_CONSISTENCY_STOP=0
 ARCHITECTURE_STOP=0
 STABILITY_STOP=0
+DOCUMENTATION_STOP=0
 
 echo "${YELLOW}Running pre-commit checks...${NC}"
 
@@ -339,8 +340,101 @@ End with one of:
 # Run stability analysis
 run_stability_agent
 
+# =============================================
+# Code Documentation Analysis
+# =============================================
+# Check if complex or security-critical code has adequate documentation
+
+run_documentation_agent() {
+    # Check if claude is available
+    if ! command -v claude >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Get staged source files (focus on backend services and bitcoin-related code)
+    DOC_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | grep -vE '(\.test\.|\.spec\.|/tests/)' || true)
+
+    if [ -z "$DOC_FILES" ]; then
+        return 0
+    fi
+
+    # Check if any security-critical files are being changed
+    CRITICAL_FILES=$(echo "$DOC_FILES" | grep -E '(bitcoin|crypto|key|sign|wallet|descriptor|address|transaction|auth|password|token|secret)' || true)
+
+    # If no critical files, only run for large diffs
+    if [ -z "$CRITICAL_FILES" ]; then
+        DIFF_LINES=$(git diff --cached --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
+        if [ "$DIFF_LINES" -lt 50 ]; then
+            return 0
+        fi
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}📚 Code Documentation Analysis${NC}"
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Get the diff for context
+    DOC_DIFF=$(git diff --cached -- $DOC_FILES)
+
+    # Create the prompt for documentation analysis
+    PROMPT="PRE-COMMIT CODE DOCUMENTATION REVIEW
+
+Analyze these changes for adequate documentation, especially for complex or security-critical code.
+
+STAGED FILES:
+$DOC_FILES
+
+SECURITY-CRITICAL FILES DETECTED:
+$CRITICAL_FILES
+
+DIFF:
+$DOC_DIFF
+
+DOCUMENTATION REQUIREMENTS:
+- Security-critical code (crypto, keys, signing, auth) MUST have clear documentation
+- Complex algorithms or non-obvious logic should have explanatory comments
+- Exported functions/types should have JSDoc describing purpose and parameters
+- Bitcoin-specific logic (descriptors, derivation paths, script types) needs documentation
+- Error handling rationale should be documented for non-obvious cases
+
+Answer concisely:
+1. SECURITY DOCUMENTATION: Is security-critical code (crypto, keys, auth, signing) adequately documented?
+2. COMPLEXITY DOCUMENTATION: Are complex algorithms or non-obvious logic explained?
+3. API DOCUMENTATION: Do new exported functions/types have JSDoc comments?
+4. BITCOIN DOCUMENTATION: Is Bitcoin-specific logic (BIP standards, script types, derivation) documented?
+
+End with one of:
+- ✅ RECOMMEND PROCEED - documentation is adequate
+- ⚠️ SUGGEST REVIEW - minor documentation improvements recommended
+- ❌ RECOMMEND STOP - security-critical or complex code lacks essential documentation"
+
+    # Run claude with general-purpose agent for documentation review
+    # Output to stderr (visible in terminal) and capture to temp file
+    TEMP_OUTPUT=$(mktemp)
+    echo "$PROMPT" | claude --print 2>&1 | tee "$TEMP_OUTPUT" >&2
+    AGENT_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
+
+    # Check if agent recommends stopping
+    if echo "$AGENT_OUTPUT" | grep -q "RECOMMEND STOP"; then
+        echo ""
+        echo "${RED}❌ Documentation agent recommends stopping. Please address the issues above.${NC}"
+        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        DOCUMENTATION_STOP=1
+    fi
+
+    echo ""
+    echo "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Run documentation analysis
+run_documentation_agent
+
 # Check if any agent recommended stopping
-if [ "$TEST_COVERAGE_STOP" = "1" ] || [ "$UI_CONSISTENCY_STOP" = "1" ] || [ "$ARCHITECTURE_STOP" = "1" ] || [ "$STABILITY_STOP" = "1" ]; then
+if [ "$TEST_COVERAGE_STOP" = "1" ] || [ "$UI_CONSISTENCY_STOP" = "1" ] || [ "$ARCHITECTURE_STOP" = "1" ] || [ "$STABILITY_STOP" = "1" ] || [ "$DOCUMENTATION_STOP" = "1" ]; then
     echo ""
     echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo "${RED}⛔ COMMIT BLOCKED - One or more agents recommend stopping${NC}"

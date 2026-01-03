@@ -20,7 +20,7 @@ import {
   getBlockTimestamp,
   type Network,
 } from './utils/blockHeight';
-import { recalculateWalletBalances } from './utils/balanceCalculation';
+import { recalculateWalletBalances, correctMisclassifiedConsolidations } from './utils/balanceCalculation';
 import { ensureGapLimit } from './sync/addressDiscovery';
 import {
   updateTransactionConfirmations,
@@ -35,6 +35,7 @@ export {
   setCachedBlockHeight,
   getBlockHeight,
   recalculateWalletBalances,
+  correctMisclassifiedConsolidations,
   ensureGapLimit,
   updateTransactionConfirmations,
   populateMissingTransactionFields,
@@ -1683,6 +1684,19 @@ export async function syncWallet(walletId: string): Promise<{
     } catch (error) {
       log.warn(`[BLOCKCHAIN] Failed to scan new addresses: ${error}`);
     }
+  }
+
+  // PHASE 12: Correct misclassified consolidations
+  // After all addresses are synced, check for "sent" transactions that should
+  // actually be consolidations (all outputs go to wallet addresses that were
+  // derived after the initial classification)
+  walletLog(walletId, 'debug', 'SYNC', 'Phase 12: Checking for misclassified consolidations...');
+  const correctedCount = await correctMisclassifiedConsolidations(walletId);
+
+  // Recalculate running balances if any corrections were made
+  if (correctedCount > 0) {
+    walletLog(walletId, 'info', 'SYNC', `Corrected ${correctedCount} misclassified consolidations, recalculating balances...`);
+    await recalculateWalletBalances(walletId);
   }
 
   const elapsed = Date.now() - startTime;

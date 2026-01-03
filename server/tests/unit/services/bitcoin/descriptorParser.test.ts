@@ -225,14 +225,22 @@ describe('Descriptor Parser Service', () => {
     });
 
     it('should handle H notation for hardened derivation', () => {
-      // The parser only converts lowercase 'h' to apostrophe, not uppercase 'H'
-      // Uppercase H is less common in descriptors
+      // Both uppercase H and lowercase h are normalized to apostrophe notation
       const descriptor = 'wpkh([d34db33f/84H/0H/0H]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)';
 
       const result = parseDescriptorForImport(descriptor);
 
-      // Uppercase H is preserved as-is (not normalized)
-      expect(result.devices[0].derivationPath).toBe("m/84H/0H/0H");
+      // Uppercase H is now normalized to apostrophe notation
+      expect(result.devices[0].derivationPath).toBe("m/84'/0'/0'");
+    });
+
+    it('should handle mixed H and h notation for hardened derivation', () => {
+      // Mixed uppercase H and lowercase h should all normalize to apostrophe
+      const descriptor = 'wpkh([d34db33f/84H/0h/0H]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)';
+
+      const result = parseDescriptorForImport(descriptor);
+
+      expect(result.devices[0].derivationPath).toBe("m/84'/0'/0'");
     });
 
     it('should handle mixed hardened and unhardened paths', () => {
@@ -852,6 +860,73 @@ wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkh
 
       expect(result.format).toBe('descriptor');
       expect(result.parsed.type).toBe('single_sig');
+    });
+
+    it('should parse P2SH-P2TR format as taproot', () => {
+      const input = `# Nested Taproot setup
+Name: Nested Taproot Wallet
+Policy: 2 of 3
+Derivation: m/86'/0'/0'
+Format: P2SH-P2TR
+
+aabbccdd: xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL
+11223344: xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5
+99887766: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWZiD6sBpHwJmENQUMWnrdwJP5EHjDBdJxY8hLhN9P3AyaCANDmrUdDLLY8jSqmqQWmxDPdxiKdE6UkHj`;
+
+      const result = parseImportInput(input);
+
+      expect(result.format).toBe('bluewallet_text');
+      expect(result.parsed.scriptType).toBe('taproot');
+    });
+
+    it('should parse P2TR-P2SH format (inner-outer notation) as taproot', () => {
+      const input = `# Nested Taproot setup
+Name: Nested Taproot Wallet
+Policy: 2 of 3
+Derivation: m/86'/0'/0'
+Format: P2TR-P2SH
+
+aabbccdd: xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL
+11223344: xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5
+99887766: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWZiD6sBpHwJmENQUMWnrdwJP5EHjDBdJxY8hLhN9P3AyaCANDmrUdDLLY8jSqmqQWmxDPdxiKdE6UkHj`;
+
+      const result = parseImportInput(input);
+
+      expect(result.format).toBe('bluewallet_text');
+      expect(result.parsed.scriptType).toBe('taproot');
+    });
+  });
+
+  describe('Checksum Validation', () => {
+    it('should accept descriptor with valid checksum', () => {
+      // Note: This descriptor has a placeholder checksum - the actual checksum
+      // validation logs a warning but still accepts the descriptor
+      const descriptor = 'wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)#abcd1234';
+
+      // Should not throw - checksum validation is lenient
+      const result = parseDescriptorForImport(descriptor);
+
+      expect(result.type).toBe('single_sig');
+      expect(result.scriptType).toBe('native_segwit');
+    });
+
+    it('should accept descriptor without checksum', () => {
+      const descriptor = 'wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)';
+
+      const result = parseDescriptorForImport(descriptor);
+
+      expect(result.type).toBe('single_sig');
+      expect(result.devices[0].fingerprint).toBe('d34db33f');
+    });
+
+    it('should strip checksum and parse descriptor correctly', () => {
+      const descriptor = 'wsh(sortedmulti(2,[aabbccdd/48h/1h/0h/2h]tpubDFH9dgzveyD8zTbPUFuLrGmCydNvxehyNdUXKJAQN8x4aZ4j6UZqGfnqFrD4NqyaTVGKbvEW54tsvPTK2UoSbCC1PJY8iCNiwTL3RWZEheQ/0/*,[11223344/48h/1h/0h/2h]tpubDFH9dgzveyD8zTbPUFuLrGmCydNvxehyNdUXKJAQN8x4aZ4j6UZqGfnqFrD4NqyaTVGKbvEW54tsvPTK2UoSbCC1PJY8iCNiwTL3RWZEheR/0/*))#checksum';
+
+      const result = parseDescriptorForImport(descriptor);
+
+      expect(result.type).toBe('multi_sig');
+      expect(result.quorum).toBe(2);
+      expect(result.devices).toHaveLength(2);
     });
   });
 });

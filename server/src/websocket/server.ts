@@ -42,12 +42,12 @@ const MAX_WEBSOCKET_PER_USER = parseInt(process.env.MAX_WEBSOCKET_PER_USER || '1
 // Rate limiting to prevent message flooding
 const MAX_MESSAGES_PER_SECOND = parseInt(process.env.MAX_WS_MESSAGES_PER_SECOND || '30', 10);
 // Subscription limit: 5 channels per wallet + 4 global channels
-// Default 500 supports ~99 wallets, configurable via environment variable
-const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '500', 10);
+// Default 1100 supports ~219 wallets, configurable via environment variable
+const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '1100', 10);
 
 // Grace period for initial connection setup (auth + subscriptions)
-// Formula: 5 + (5 × wallets) messages needed at connect time
-// Default 500 supports ~99 wallets, configurable via environment variable
+// With batch subscriptions: ~3 messages (auth + global batch + wallets batch)
+// Without batch: 1 + (wallets) messages - limit 500 supports many wallets
 const RATE_LIMIT_GRACE_PERIOD_MS = 5000; // 5 seconds grace period after connection
 const GRACE_PERIOD_MESSAGE_LIMIT = parseInt(process.env.WS_GRACE_PERIOD_LIMIT || '500', 10);
 

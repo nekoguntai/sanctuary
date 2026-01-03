@@ -173,7 +173,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   // WebSocket integration
-  const { connected: wsConnected, state: wsState, subscribeWallet, unsubscribeWallet, subscribe, unsubscribe } = useWebSocket();
+  const { connected: wsConnected, state: wsState, subscribeWallets, unsubscribeWallets, subscribe, unsubscribe } = useWebSocket();
   const { addNotification } = useNotifications();
   const { playEventSound } = useNotificationSound();
   const invalidateAllWallets = useInvalidateAllWallets();
@@ -303,20 +303,20 @@ export const Dashboard: React.FC = () => {
     }
   }, [user, wallets.length]);
 
-  // Subscribe to all wallet events
+  // Subscribe to all wallet events (single batch message for efficiency)
   useEffect(() => {
     if (wallets.length > 0) {
-      wallets.forEach(wallet => {
-        subscribeWallet(wallet.id);
-      });
+      const walletIds = wallets.map(wallet => wallet.id);
+      subscribeWallets(walletIds);
     }
     // Cleanup: unsubscribe from all wallets when effect re-runs or component unmounts
     return () => {
-      wallets.forEach(wallet => {
-        unsubscribeWallet(wallet.id);
-      });
+      if (wallets.length > 0) {
+        const walletIds = wallets.map(wallet => wallet.id);
+        unsubscribeWallets(walletIds);
+      }
     };
-  }, [wallets, subscribeWallet, unsubscribeWallet]);
+  }, [wallets, subscribeWallets, unsubscribeWallets]);
 
   // Refetch wallet data when window becomes visible (handles missed WS events)
   useEffect(() => {

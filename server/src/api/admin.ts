@@ -20,6 +20,7 @@ import { encrypt } from '../utils/encryption';
 import { getAllCacheStats } from '../utils/cache';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
 import { deadLetterQueue, type DeadLetterCategory } from '../services/deadLetterQueue';
+import { getWebSocketServer } from '../websocket/server';
 
 // Domain routers (extracted for maintainability)
 import usersRouter from './admin/users';
@@ -2297,6 +2298,42 @@ router.get('/metrics/cache', authenticate, requireAdmin, async (req: Request, re
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get cache metrics',
+    });
+  }
+});
+
+// =============================================================================
+// WebSocket Stats Endpoint
+// =============================================================================
+
+/**
+ * GET /api/v1/admin/websocket/stats
+ * Get WebSocket server statistics and rate limit configuration
+ */
+router.get('/websocket/stats', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const wsServer = getWebSocketServer();
+    const stats = wsServer.getStats();
+
+    res.json({
+      connections: {
+        current: stats.clients,
+        max: stats.maxClients,
+        uniqueUsers: stats.uniqueUsers,
+        maxPerUser: stats.maxPerUser,
+      },
+      subscriptions: {
+        total: stats.subscriptions,
+        channels: stats.channels,
+        channelList: stats.channelList,
+      },
+      rateLimits: stats.rateLimits,
+    });
+  } catch (error) {
+    log.error('[ADMIN] Get WebSocket stats failed', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get WebSocket statistics',
     });
   }
 });

@@ -252,7 +252,7 @@ export function hasWalletSubscribers(walletId: string): boolean {
   try {
     const wsServer = getWebSocketServer();
     const stats = wsServer.getStats();
-    return stats.channels.some((ch) => ch.startsWith(`wallet:${walletId}`));
+    return stats.channelList.some((ch) => ch.startsWith(`wallet:${walletId}`));
   } catch {
     return false;
   }
@@ -275,7 +275,7 @@ export function getBroadcastStats(): {
     return {
       connected: true,
       clients: stats.clients,
-      channels: stats.channels,
+      channels: stats.channelList,
       gatewayConnected: gatewayServer?.isGatewayConnected() ?? false,
     };
   } catch {

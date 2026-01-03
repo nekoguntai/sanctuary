@@ -22,7 +22,13 @@ import { checkWalletAccess } from '../services/wallet';
 import config from '../config';
 import type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
 import { redisBridge } from './redisBridge';
-import { websocketConnections, websocketMessagesTotal } from '../observability/metrics';
+import {
+  websocketConnections,
+  websocketMessagesTotal,
+  websocketRateLimitHits,
+  websocketSubscriptions,
+  websocketConnectionDuration,
+} from '../observability/metrics';
 
 const log = createLogger('WS');
 
@@ -54,6 +60,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
   lastMessageReset: number;
   connectionTime: number; // Timestamp when connection was established
   totalMessageCount: number; // Total messages since connection (for grace period tracking)
+  closeReason?: 'normal' | 'rate_limit' | 'auth_timeout' | 'error'; // For metrics tracking
 }
 
 export interface WebSocketMessage {
@@ -161,6 +168,7 @@ export class SanctauryWebSocketServer {
       client.authTimeout = setTimeout(() => {
         if (!client.userId) {
           log.debug('Closing unauthenticated connection due to timeout');
+          client.closeReason = 'auth_timeout';
           client.close(4001, 'Authentication timeout');
         }
       }, AUTH_TIMEOUT_MS);
@@ -210,6 +218,7 @@ export class SanctauryWebSocketServer {
     // Setup error handler
     client.on('error', (error) => {
       log.error('WebSocket error', { error });
+      client.closeReason = 'error';
       this.handleDisconnect(client);
     });
 
@@ -268,6 +277,18 @@ export class SanctauryWebSocketServer {
           userId: client.userId,
           totalMessageCount: client.totalMessageCount,
         });
+        // Record metric
+        websocketRateLimitHits.inc({ reason: 'grace_period_exceeded' });
+        // Notify user before disconnecting
+        this.sendToClient(client, {
+          type: 'error',
+          data: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Message limit exceeded during connection setup (${client.totalMessageCount}/${GRACE_PERIOD_MESSAGE_LIMIT})`,
+            hint: 'Consider using batch subscriptions or increase WS_GRACE_PERIOD_LIMIT',
+          },
+        });
+        client.closeReason = 'rate_limit';
         client.close(1008, 'Rate limit exceeded');
         return;
       }
@@ -285,6 +306,18 @@ export class SanctauryWebSocketServer {
           userId: client.userId,
           messageCount: client.messageCount,
         });
+        // Record metric
+        websocketRateLimitHits.inc({ reason: 'per_second_exceeded' });
+        // Notify user before disconnecting
+        this.sendToClient(client, {
+          type: 'error',
+          data: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Message rate limit exceeded (${client.messageCount}/${MAX_MESSAGES_PER_SECOND} per second)`,
+            hint: 'Reduce message frequency or increase MAX_WS_MESSAGES_PER_SECOND',
+          },
+        });
+        client.closeReason = 'rate_limit';
         client.close(1008, 'Rate limit exceeded');
         return;
       }
@@ -410,9 +443,17 @@ export class SanctauryWebSocketServer {
         subscriptionCount: client.subscriptions.size,
         channel,
       });
+      // Record metric
+      websocketRateLimitHits.inc({ reason: 'subscription_limit' });
       this.sendToClient(client, {
         type: 'error',
-        data: { message: `Subscription limit of ${MAX_SUBSCRIPTIONS_PER_CONNECTION} exceeded` },
+        data: {
+          code: 'SUBSCRIPTION_LIMIT_EXCEEDED',
+          message: `Subscription limit of ${MAX_SUBSCRIPTIONS_PER_CONNECTION} exceeded`,
+          current: client.subscriptions.size,
+          limit: MAX_SUBSCRIPTIONS_PER_CONNECTION,
+          hint: 'Consider using fewer subscriptions or increase MAX_WS_SUBSCRIPTIONS',
+        },
       });
       return;
     }
@@ -451,6 +492,9 @@ export class SanctauryWebSocketServer {
     }
     this.subscriptions.get(channel)!.add(client);
 
+    // Track subscription gauge
+    websocketSubscriptions.inc();
+
     log.info(`Client subscribed to ${channel} (total subscribers: ${this.subscriptions.get(channel)!.size})`);
 
     this.sendToClient(client, {
@@ -466,6 +510,10 @@ export class SanctauryWebSocketServer {
     if (!data?.channel || typeof data.channel !== 'string') return;
 
     const { channel } = data;
+
+    // Only process if actually subscribed
+    if (!client.subscriptions.has(channel)) return;
+
     client.subscriptions.delete(channel);
 
     const subscribers = this.subscriptions.get(channel);
@@ -475,6 +523,9 @@ export class SanctauryWebSocketServer {
         this.subscriptions.delete(channel);
       }
     }
+
+    // Track subscription gauge
+    websocketSubscriptions.dec();
 
     log.debug(`Client unsubscribed from ${channel}`);
 
@@ -543,6 +594,9 @@ export class SanctauryWebSocketServer {
       }
       this.subscriptions.get(channel)!.add(client);
       subscribed.push(channel);
+
+      // Track subscription gauge
+      websocketSubscriptions.inc();
     }
 
     log.info(`Client batch subscribed to ${subscribed.length} channels (${errors.length} errors)`);
@@ -584,6 +638,9 @@ export class SanctauryWebSocketServer {
       }
 
       unsubscribed.push(channel);
+
+      // Track subscription gauge
+      websocketSubscriptions.dec();
     }
 
     log.debug(`Client batch unsubscribed from ${unsubscribed.length} channels`);
@@ -604,6 +661,11 @@ export class SanctauryWebSocketServer {
       client.authTimeout = undefined;
     }
 
+    // Track connection duration
+    const connectionDurationSec = (Date.now() - client.connectionTime) / 1000;
+    const closeReason = client.closeReason || 'normal';
+    websocketConnectionDuration.observe({ close_reason: closeReason }, connectionDurationSec);
+
     this.clients.delete(client);
 
     // Track WebSocket disconnection metric
@@ -621,15 +683,22 @@ export class SanctauryWebSocketServer {
       }
     }
 
-    // Remove from all subscriptions
+    // Remove from all subscriptions and decrement gauge
+    const subscriptionCount = client.subscriptions.size;
     for (const [channel, subscribers] of this.subscriptions.entries()) {
-      subscribers.delete(client);
-      if (subscribers.size === 0) {
-        this.subscriptions.delete(channel);
+      if (subscribers.has(client)) {
+        subscribers.delete(client);
+        if (subscribers.size === 0) {
+          this.subscriptions.delete(channel);
+        }
       }
     }
+    // Decrement subscription gauge by count of client's subscriptions
+    if (subscriptionCount > 0) {
+      websocketSubscriptions.dec(subscriptionCount);
+    }
 
-    log.debug('WebSocket client disconnected');
+    log.debug('WebSocket client disconnected', { closeReason, durationSec: connectionDurationSec.toFixed(1) });
   }
 
   /**
@@ -767,13 +836,26 @@ export class SanctauryWebSocketServer {
    * Get statistics
    */
   public getStats() {
+    // Calculate total subscriptions across all clients
+    let totalSubscriptions = 0;
+    for (const client of this.clients) {
+      totalSubscriptions += client.subscriptions.size;
+    }
+
     return {
       clients: this.clients.size,
       maxClients: MAX_WEBSOCKET_CONNECTIONS,
-      subscriptions: this.subscriptions.size,
-      channels: Array.from(this.subscriptions.keys()),
+      subscriptions: totalSubscriptions,
+      channels: this.subscriptions.size,
+      channelList: Array.from(this.subscriptions.keys()),
       uniqueUsers: this.connectionsPerUser.size,
       maxPerUser: MAX_WEBSOCKET_PER_USER,
+      rateLimits: {
+        maxMessagesPerSecond: MAX_MESSAGES_PER_SECOND,
+        gracePeriodMs: RATE_LIMIT_GRACE_PERIOD_MS,
+        gracePeriodMessageLimit: GRACE_PERIOD_MESSAGE_LIMIT,
+        maxSubscriptionsPerConnection: MAX_SUBSCRIPTIONS_PER_CONNECTION,
+      },
     };
   }
 

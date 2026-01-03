@@ -35,7 +35,9 @@ const MAX_WEBSOCKET_PER_USER = parseInt(process.env.MAX_WEBSOCKET_PER_USER || '1
 
 // Rate limiting to prevent message flooding
 const MAX_MESSAGES_PER_SECOND = parseInt(process.env.MAX_WS_MESSAGES_PER_SECOND || '10', 10);
-const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '100', 10);
+// Subscription limit: 5 channels per wallet + 4 global channels
+// Default 500 supports ~99 wallets, configurable via environment variable
+const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIONS || '500', 10);
 
 // Grace period for initial connection setup (auth + subscriptions)
 // Formula: 5 + (5 × wallets) messages needed at connect time
@@ -55,7 +57,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
 }
 
 export interface WebSocketMessage {
-  type: 'auth' | 'subscribe' | 'unsubscribe' | 'ping' | 'pong';
+  type: 'auth' | 'subscribe' | 'unsubscribe' | 'subscribe_batch' | 'unsubscribe_batch' | 'ping' | 'pong';
   data?: Record<string, unknown>;
 }
 
@@ -304,6 +306,14 @@ export class SanctauryWebSocketServer {
           this.handleUnsubscribe(client, message.data);
           break;
 
+        case 'subscribe_batch':
+          this.handleSubscribeBatch(client, message.data);
+          break;
+
+        case 'unsubscribe_batch':
+          this.handleUnsubscribeBatch(client, message.data);
+          break;
+
         case 'ping':
           this.sendToClient(client, { type: 'pong' });
           break;
@@ -471,6 +481,116 @@ export class SanctauryWebSocketServer {
     this.sendToClient(client, {
       type: 'unsubscribed',
       data: { channel },
+    });
+  }
+
+  /**
+   * Handle batch subscribe request (scalable subscription for many channels)
+   * Reduces message count from O(N) to O(1) for N channels
+   */
+  private async handleSubscribeBatch(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+    if (!data?.channels || !Array.isArray(data.channels)) {
+      this.sendToClient(client, {
+        type: 'error',
+        data: { message: 'Channels array required for batch subscribe' },
+      });
+      return;
+    }
+
+    const channels = data.channels as string[];
+    const subscribed: string[] = [];
+    const errors: { channel: string; reason: string }[] = [];
+
+    for (const channel of channels) {
+      if (typeof channel !== 'string') continue;
+
+      // Check subscription limit
+      if (client.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CONNECTION) {
+        errors.push({ channel, reason: 'Subscription limit reached' });
+        continue;
+      }
+
+      // Skip if already subscribed
+      if (client.subscriptions.has(channel)) {
+        subscribed.push(channel);
+        continue;
+      }
+
+      // Validate subscription based on authentication
+      if (channel.startsWith('wallet:') && !client.userId) {
+        errors.push({ channel, reason: 'Authentication required' });
+        continue;
+      }
+
+      // Validate wallet access for wallet-specific channels
+      if (channel.startsWith('wallet:') && client.userId) {
+        const walletIdMatch = channel.match(/^wallet:([a-f0-9-]+)/);
+        if (walletIdMatch) {
+          const walletId = walletIdMatch[1];
+          const hasAccess = await checkWalletAccess(walletId, client.userId);
+          if (!hasAccess) {
+            errors.push({ channel, reason: 'Access denied' });
+            continue;
+          }
+        }
+      }
+
+      // Add to subscriptions
+      client.subscriptions.add(channel);
+
+      if (!this.subscriptions.has(channel)) {
+        this.subscriptions.set(channel, new Set());
+      }
+      this.subscriptions.get(channel)!.add(client);
+      subscribed.push(channel);
+    }
+
+    log.info(`Client batch subscribed to ${subscribed.length} channels (${errors.length} errors)`);
+
+    this.sendToClient(client, {
+      type: 'subscribed_batch',
+      data: { subscribed, errors: errors.length > 0 ? errors : undefined },
+    });
+  }
+
+  /**
+   * Handle batch unsubscribe request
+   */
+  private handleUnsubscribeBatch(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
+    if (!data?.channels || !Array.isArray(data.channels)) {
+      this.sendToClient(client, {
+        type: 'error',
+        data: { message: 'Channels array required for batch unsubscribe' },
+      });
+      return;
+    }
+
+    const channels = data.channels as string[];
+    const unsubscribed: string[] = [];
+
+    for (const channel of channels) {
+      if (typeof channel !== 'string') continue;
+
+      if (!client.subscriptions.has(channel)) continue;
+
+      client.subscriptions.delete(channel);
+
+      const subscribers = this.subscriptions.get(channel);
+      if (subscribers) {
+        subscribers.delete(client);
+        if (subscribers.size === 0) {
+          this.subscriptions.delete(channel);
+        }
+      }
+
+      unsubscribed.push(channel);
+    }
+
+    log.debug(`Client batch unsubscribed from ${unsubscribed.length} channels`);
+
+    this.sendToClient(client, {
+      type: 'unsubscribed_batch',
+      data: { unsubscribed },
     });
   }
 

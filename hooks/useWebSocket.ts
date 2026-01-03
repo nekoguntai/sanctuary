@@ -27,8 +27,12 @@ export interface UseWebSocketReturn {
   state: 'connecting' | 'connected' | 'disconnected';
   subscribe: (channel: string) => void;
   unsubscribe: (channel: string) => void;
+  subscribeBatch: (channels: string[]) => void;
+  unsubscribeBatch: (channels: string[]) => void;
   subscribeWallet: (walletId: string) => void;
   unsubscribeWallet: (walletId: string) => void;
+  subscribeWallets: (walletIds: string[]) => void;
+  unsubscribeWallets: (walletIds: string[]) => void;
 }
 
 /**
@@ -77,20 +81,41 @@ export const useWebSocket = (): UseWebSocketReturn => {
     websocketClient.unsubscribe(channel);
   }, []);
 
+  const subscribeBatch = useCallback((channels: string[]) => {
+    websocketClient.subscribeBatch(channels);
+  }, []);
+
+  const unsubscribeBatch = useCallback((channels: string[]) => {
+    websocketClient.unsubscribeBatch(channels);
+  }, []);
+
+  // Helper to get all channels for a wallet
+  const getWalletChannels = (walletId: string): string[] => [
+    `wallet:${walletId}`,
+    `wallet:${walletId}:transaction`,
+    `wallet:${walletId}:balance`,
+    `wallet:${walletId}:confirmation`,
+    `wallet:${walletId}:sync`,
+  ];
+
   const subscribeWallet = useCallback((walletId: string) => {
-    websocketClient.subscribe(`wallet:${walletId}`);
-    websocketClient.subscribe(`wallet:${walletId}:transaction`);
-    websocketClient.subscribe(`wallet:${walletId}:balance`);
-    websocketClient.subscribe(`wallet:${walletId}:confirmation`);
-    websocketClient.subscribe(`wallet:${walletId}:sync`);
+    websocketClient.subscribeBatch(getWalletChannels(walletId));
   }, []);
 
   const unsubscribeWallet = useCallback((walletId: string) => {
-    websocketClient.unsubscribe(`wallet:${walletId}`);
-    websocketClient.unsubscribe(`wallet:${walletId}:transaction`);
-    websocketClient.unsubscribe(`wallet:${walletId}:balance`);
-    websocketClient.unsubscribe(`wallet:${walletId}:confirmation`);
-    websocketClient.unsubscribe(`wallet:${walletId}:sync`);
+    websocketClient.unsubscribeBatch(getWalletChannels(walletId));
+  }, []);
+
+  // Batch subscribe to multiple wallets in a single message (most efficient)
+  const subscribeWallets = useCallback((walletIds: string[]) => {
+    const channels = walletIds.flatMap(getWalletChannels);
+    websocketClient.subscribeBatch(channels);
+  }, []);
+
+  // Batch unsubscribe from multiple wallets in a single message
+  const unsubscribeWallets = useCallback((walletIds: string[]) => {
+    const channels = walletIds.flatMap(getWalletChannels);
+    websocketClient.unsubscribeBatch(channels);
   }, []);
 
   return {
@@ -98,8 +123,12 @@ export const useWebSocket = (): UseWebSocketReturn => {
     state,
     subscribe,
     unsubscribe,
+    subscribeBatch,
+    unsubscribeBatch,
     subscribeWallet,
     unsubscribeWallet,
+    subscribeWallets,
+    unsubscribeWallets,
   };
 };
 
@@ -366,16 +395,14 @@ export const useModelDownloadProgress = (
  * as fast as Sparrow does.
  */
 export const useWebSocketQueryInvalidation = () => {
-  const { connected, subscribe, unsubscribe } = useWebSocket();
+  const { connected, subscribeBatch, unsubscribeBatch } = useWebSocket();
 
   useEffect(() => {
     if (!connected) return;
 
-    // Subscribe to global channels
-    subscribe('blocks');
-    subscribe('sync:all');
-    subscribe('transactions:all');
-    subscribe('logs:all');
+    // Subscribe to global channels (batch for efficiency)
+    const globalChannels = ['blocks', 'sync:all', 'transactions:all', 'logs:all'];
+    subscribeBatch(globalChannels);
 
     const handleTransactionEvent = (event: WebSocketEvent) => {
       const queryClient = getQueryClient();
@@ -457,15 +484,12 @@ export const useWebSocketQueryInvalidation = () => {
     websocketClient.on('sync', handleSyncEvent);
 
     return () => {
-      unsubscribe('blocks');
-      unsubscribe('sync:all');
-      unsubscribe('transactions:all');
-      unsubscribe('logs:all');
+      unsubscribeBatch(globalChannels);
       websocketClient.off('transaction', handleTransactionEvent);
       websocketClient.off('confirmation', handleTransactionEvent);
       websocketClient.off('balance', handleTransactionEvent);
       websocketClient.off('newBlock', handleNewBlock);
       websocketClient.off('sync', handleSyncEvent);
     };
-  }, [connected, subscribe, unsubscribe]);
+  }, [connected, subscribeBatch, unsubscribeBatch]);
 };

@@ -197,8 +197,16 @@ export class WebSocketClient {
         log.debug('Subscribed to:', message.data?.channel);
         break;
 
+      case 'subscribed_batch':
+        log.debug('Batch subscribed to:', message.data?.subscribed?.length, 'channels');
+        break;
+
       case 'unsubscribed':
         log.debug('Unsubscribed from:', message.data?.channel);
+        break;
+
+      case 'unsubscribed_batch':
+        log.debug('Batch unsubscribed from:', message.data?.unsubscribed?.length, 'channels');
         break;
 
       case 'event':
@@ -302,15 +310,55 @@ export class WebSocketClient {
   }
 
   /**
-   * Resubscribe to all channels after reconnection
+   * Subscribe to multiple channels in a single message (scalable)
+   * Reduces message count from O(N) to O(1)
    */
-  private resubscribe() {
-    for (const channel of this.subscriptions) {
+  subscribeBatch(channels: string[]) {
+    const newChannels = channels.filter(c => !this.subscriptions.has(c));
+    if (newChannels.length === 0) return;
+
+    for (const channel of newChannels) {
+      this.subscriptions.add(channel);
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.send({
-        type: 'subscribe',
-        data: { channel },
+        type: 'subscribe_batch',
+        data: { channels: newChannels },
       });
     }
+  }
+
+  /**
+   * Unsubscribe from multiple channels in a single message
+   */
+  unsubscribeBatch(channels: string[]) {
+    const existingChannels = channels.filter(c => this.subscriptions.has(c));
+    if (existingChannels.length === 0) return;
+
+    for (const channel of existingChannels) {
+      this.subscriptions.delete(channel);
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.send({
+        type: 'unsubscribe_batch',
+        data: { channels: existingChannels },
+      });
+    }
+  }
+
+  /**
+   * Resubscribe to all channels after reconnection (uses batch for efficiency)
+   */
+  private resubscribe() {
+    if (this.subscriptions.size === 0) return;
+
+    // Use batch subscribe for efficiency
+    this.send({
+      type: 'subscribe_batch',
+      data: { channels: Array.from(this.subscriptions) },
+    });
   }
 
   /**

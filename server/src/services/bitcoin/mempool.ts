@@ -62,6 +62,7 @@ interface MempoolBlock {
     feeRange: number[];
     reward: number;
     totalFees: number;
+    avgFeeRate?: number; // Average fee rate in sat/vB (provided by mempool.space)
   };
 }
 
@@ -411,25 +412,31 @@ export async function getBlocksAndMempool() {
       return rate.toFixed(2);
     };
 
-    // Helper to get valid medianFee - falls back to feeRange if medianFee is 0 or missing
+    // Helper to get valid medianFee - falls back to avgFeeRate or feeRange middle if medianFee is 0
     const getValidMedianFee = (
       medianFee: number | undefined,
-      feeRangeArr: number[] | undefined
+      feeRangeArr: number[] | undefined,
+      avgFeeRate?: number
     ): number => {
       // If medianFee is valid (non-zero positive), use it
       if (medianFee && medianFee > 0) {
         return medianFee;
       }
-      // Derive from feeRange if available
-      if (feeRangeArr && feeRangeArr.length >= 2) {
-        // Use average of min and max
-        return (feeRangeArr[0] + feeRangeArr[feeRangeArr.length - 1]) / 2;
+      // Second choice: use avgFeeRate from API if available
+      if (avgFeeRate && avgFeeRate > 0) {
+        return avgFeeRate;
+      }
+      // Third choice: use middle value of feeRange (represents ~50th percentile)
+      // feeRange is typically [min, 10th, 25th, 50th, 75th, 90th, max]
+      if (feeRangeArr && feeRangeArr.length >= 3) {
+        const middleIndex = Math.floor(feeRangeArr.length / 2);
+        return feeRangeArr[middleIndex];
       }
       if (feeRangeArr && feeRangeArr.length >= 1) {
         return feeRangeArr[0];
       }
-      // Fallback default
-      return 50;
+      // Fallback default - use minimum relay fee
+      return 1;
     };
 
     // Format confirmed blocks
@@ -439,13 +446,15 @@ export async function getBlocksAndMempool() {
       // block.weight is in weight units, vsize = weight / 4
       const vsize = (block.weight || block.size) / 4;
       const totalFeesSats = block.extras?.totalFees || 0;
-      const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
+      const calculatedAvgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
       const feeRangeArr = block.extras?.feeRange;
       const rawMedianFee = block.extras?.medianFee ?? block.medianFee;
+      // Prefer API's avgFeeRate, fall back to our calculation
+      const avgFeeRateFallback = block.extras?.avgFeeRate ?? calculatedAvgFeeRate;
       return {
         height: block.height,
-        medianFee: getValidMedianFee(rawMedianFee, feeRangeArr),
-        avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
+        medianFee: getValidMedianFee(rawMedianFee, feeRangeArr, avgFeeRateFallback),
+        avgFeeRate: calculatedAvgFeeRate < 1 ? parseFloat(calculatedAvgFeeRate.toFixed(2)) : Math.round(calculatedAvgFeeRate),
         feeRange: feeRangeArr && feeRangeArr.length >= 2
           ? `${formatFeeRateConfirmed(feeRangeArr[0])}-${formatFeeRateConfirmed(feeRangeArr[feeRangeArr.length - 1])} sat/vB`
           : '40.00-200.00 sat/vB',
@@ -501,23 +510,30 @@ function getBlocksAndMempoolSimple(
     return rate.toFixed(2);
   };
 
-  // Helper to get valid medianFee - falls back to feeRange if medianFee is 0 or missing
+  // Helper to get valid medianFee - falls back to avgFeeRate or feeRange middle if medianFee is 0
   const getValidMedianFee = (
     medianFee: number | undefined,
-    feeRangeArr: number[] | undefined
+    feeRangeArr: number[] | undefined,
+    avgFeeRate?: number
   ): number => {
     // If medianFee is valid (non-zero positive), use it
     if (medianFee && medianFee > 0) {
       return medianFee;
     }
-    // Derive from feeRange if available
-    if (feeRangeArr && feeRangeArr.length >= 2) {
-      return (feeRangeArr[0] + feeRangeArr[feeRangeArr.length - 1]) / 2;
+    // Second choice: use avgFeeRate from API if available
+    if (avgFeeRate && avgFeeRate > 0) {
+      return avgFeeRate;
+    }
+    // Third choice: use middle value of feeRange (represents ~50th percentile)
+    if (feeRangeArr && feeRangeArr.length >= 3) {
+      const middleIndex = Math.floor(feeRangeArr.length / 2);
+      return feeRangeArr[middleIndex];
     }
     if (feeRangeArr && feeRangeArr.length >= 1) {
       return feeRangeArr[0];
     }
-    return 50;
+    // Fallback default - use minimum relay fee
+    return 1;
   };
 
   const mempoolBlocks: Array<{
@@ -594,13 +610,15 @@ function getBlocksAndMempoolSimple(
     // Calculate average fee rate from totalFees and block weight
     const vsize = (block.weight || block.size) / 4;
     const totalFeesSats = block.extras?.totalFees || 0;
-    const avgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
+    const calculatedAvgFeeRate = vsize > 0 ? totalFeesSats / vsize : 0;
     const feeRangeArr = block.extras?.feeRange;
     const rawMedianFee = block.extras?.medianFee ?? block.medianFee;
+    // Prefer API's avgFeeRate, fall back to our calculation
+    const avgFeeRateFallback = block.extras?.avgFeeRate ?? calculatedAvgFeeRate;
     return {
       height: block.height,
-      medianFee: getValidMedianFee(rawMedianFee, feeRangeArr),
-      avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
+      medianFee: getValidMedianFee(rawMedianFee, feeRangeArr, avgFeeRateFallback),
+      avgFeeRate: calculatedAvgFeeRate < 1 ? parseFloat(calculatedAvgFeeRate.toFixed(2)) : Math.round(calculatedAvgFeeRate),
       feeRange: feeRangeArr && feeRangeArr.length >= 2
         ? `${formatFeeRate(feeRangeArr[0])}-${formatFeeRate(feeRangeArr[feeRangeArr.length - 1])} sat/vB`
         : '40.00-200.00 sat/vB',

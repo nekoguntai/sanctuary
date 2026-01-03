@@ -38,8 +38,8 @@ export interface DeviceWithAccess {
   isOwner: boolean;
   userRole: DeviceRole;
   sharedBy?: string; // Username of owner if shared
-  model?: any;
-  wallets?: any[];
+  model?: { id: string; slug: string; name: string } | null;
+  walletCount: number;
 }
 
 // ========================================
@@ -110,30 +110,41 @@ export async function checkDeviceAccessWithRole(
 
 /**
  * Get all devices accessible by user (owned + shared via user + shared via group)
+ * Optimized: single query with OR logic, only loads needed fields
  */
 export async function getUserAccessibleDevices(userId: string): Promise<DeviceWithAccess[]> {
-  // Get devices where user has direct access
-  const directAccessDevices = await prisma.device.findMany({
+  // Single query combining direct access and group access
+  const devices = await prisma.device.findMany({
     where: {
-      users: { some: { userId } },
+      OR: [
+        // Direct access via DeviceUser
+        { users: { some: { userId } } },
+        // Group access (user is member of device's group)
+        {
+          groupId: { not: null },
+          group: { members: { some: { userId } } },
+        },
+      ],
     },
     include: {
-      model: true,
-      wallets: {
-        include: {
-          wallet: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-            },
-          },
+      // Only load needed model fields
+      model: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
         },
       },
+      // Get wallet count instead of full wallet data
+      _count: {
+        select: { wallets: true },
+      },
+      // Get user's role for this device
       users: {
         where: { userId },
         select: { role: true },
       },
+      // Get device owner's username for "shared by" display
       user: {
         select: { username: true },
       },
@@ -141,40 +152,16 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
     orderBy: { createdAt: 'desc' },
   });
 
-  // Get devices accessible via group membership
-  const groupAccessDevices = await prisma.device.findMany({
-    where: {
-      groupId: { not: null },
-      group: { members: { some: { userId } } },
-      // Exclude devices already in directAccessDevices
-      NOT: {
-        users: { some: { userId } },
-      },
-    },
-    include: {
-      model: true,
-      wallets: {
-        include: {
-          wallet: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-            },
-          },
-        },
-      },
-      user: {
-        select: { username: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  // Format direct access devices
-  const formattedDirect: DeviceWithAccess[] = directAccessDevices.map((device) => {
+  // Format devices with access info
+  return devices.map((device) => {
     const userAccess = device.users[0];
-    const isOwner = userAccess?.role === 'owner';
+    // If user has direct access, use that role; otherwise it's group access
+    const hasDirectAccess = userAccess !== undefined;
+    const userRole = hasDirectAccess
+      ? (userAccess.role as DeviceRole)
+      : (device.groupRole as DeviceRole);
+    const isOwner = userRole === 'owner';
+
     return {
       id: device.id,
       userId: device.userId,
@@ -189,35 +176,12 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
       createdAt: device.createdAt,
       updatedAt: device.updatedAt,
       isOwner,
-      userRole: userAccess?.role as DeviceRole || null,
+      userRole,
       sharedBy: isOwner ? undefined : device.user.username,
       model: device.model,
-      wallets: device.wallets,
+      walletCount: device._count.wallets,
     };
   });
-
-  // Format group access devices
-  const formattedGroup: DeviceWithAccess[] = groupAccessDevices.map((device) => ({
-    id: device.id,
-    userId: device.userId,
-    modelId: device.modelId,
-    type: device.type,
-    label: device.label,
-    fingerprint: device.fingerprint,
-    derivationPath: device.derivationPath,
-    xpub: device.xpub,
-    groupId: device.groupId,
-    groupRole: device.groupRole,
-    createdAt: device.createdAt,
-    updatedAt: device.updatedAt,
-    isOwner: false,
-    userRole: device.groupRole as DeviceRole,
-    sharedBy: device.user.username,
-    model: device.model,
-    wallets: device.wallets,
-  }));
-
-  return [...formattedDirect, ...formattedGroup];
 }
 
 /**

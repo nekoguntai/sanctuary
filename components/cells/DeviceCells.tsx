@@ -6,18 +6,14 @@
  */
 
 import React from 'react';
-import { WalletType, HardwareDevice, HardwareDeviceModel, Device } from '../../types';
+import { HardwareDevice, HardwareDeviceModel, Device } from '../../types';
 import { Edit2, Save, X, Trash2, Users, HardDrive } from 'lucide-react';
 import { getDeviceIcon } from '../ui/CustomIcons';
 import type { CellRendererProps } from '../ui/ConfigurableTable';
 
-// Extended device type with associated wallets
+// Extended device type with wallet count for display
 export interface DeviceWithWallets extends Device {
-  associatedWallets: Array<{
-    id: string;
-    name: string;
-    type: WalletType;
-  }>;
+  // walletCount comes from API, fallback to computed from wallets array
 }
 
 // Edit state interface
@@ -166,41 +162,28 @@ export function createDeviceCellRenderers(
     );
   };
 
-  // Wallets Cell - Wallet badges
+  // Wallets Cell - Wallet count badge
   const WalletsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
-    const { associatedWallets } = device;
+    const count = device.walletCount ?? device.wallets?.length ?? 0;
 
-    if (associatedWallets.length === 0) {
+    if (count === 0) {
       return <span className="text-xs text-sanctuary-400 italic">Unused</span>;
     }
 
     return (
-      <div className="flex flex-wrap gap-1">
-        {associatedWallets.map(w => {
-          const isMultisig = w.type === WalletType.MULTI_SIG;
-          const badgeClass = isMultisig
-            ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-            : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-          return (
-            <span
-              key={w.id}
-              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badgeClass}`}
-            >
-              {w.name}
-            </span>
-          );
-        })}
-      </div>
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
+        <HardDrive className="w-3 h-3 mr-1" />
+        {count} {count === 1 ? 'wallet' : 'wallets'}
+      </span>
     );
   };
 
   // Actions Cell - Delete button with confirmation
   const ActionsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
-    const { associatedWallets } = device;
+    const walletCount = device.walletCount ?? device.wallets?.length ?? 0;
 
     // Only show delete for owned devices with no wallets
-    if (!device.isOwner || associatedWallets.length > 0) {
+    if (!device.isOwner || walletCount > 0) {
       return null;
     }
 

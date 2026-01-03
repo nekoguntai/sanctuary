@@ -468,7 +468,8 @@ export interface Device {
   createdAt?: string;
   updatedAt?: string;
   model?: HardwareDeviceModel;
-  wallets?: Array<{
+  walletCount?: number; // Number of associated wallets (list view)
+  wallets?: Array<{    // Full wallet details (detail view only)
     wallet: {
       id: string;
       name: string;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { WalletType, HardwareDevice, HardwareDeviceModel, Device } from '../types';
+import { HardwareDevice, HardwareDeviceModel, Device } from '../types';
 import { getDevices, updateDevice, deleteDevice, getDeviceModels } from '../src/api/devices';
 import { HardDrive, Plus, LayoutGrid, List as ListIcon, Users, User, Edit2, Save, X, Trash2 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
@@ -179,12 +179,9 @@ export const DeviceList: React.FC = () => {
     }
   };
 
-  const getAssociatedWallets = (device: Device) => {
-    return device.wallets?.map(w => ({
-      id: w.wallet.id,
-      name: w.wallet.name,
-      type: w.wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG
-    })) || [];
+  // Get wallet count for a device
+  const getWalletCount = (device: Device): number => {
+    return device.walletCount ?? device.wallets?.length ?? 0;
   };
 
   // Filter and sort devices based on current settings
@@ -213,7 +210,7 @@ export const DeviceList: React.FC = () => {
           comparison = a.fingerprint.localeCompare(b.fingerprint);
           break;
         case 'wallets':
-          comparison = (a.wallets?.length || 0) - (b.wallets?.length || 0);
+          comparison = (a.walletCount ?? a.wallets?.length ?? 0) - (b.walletCount ?? b.wallets?.length ?? 0);
           break;
         default:
           comparison = 0;
@@ -241,13 +238,8 @@ export const DeviceList: React.FC = () => {
     return model ? model.name : type || 'Unknown Device';
   };
 
-  // Create devices with associated wallets for ConfigurableTable
-  const devicesWithWallets: DeviceWithWallets[] = useMemo(() => {
-    return sortedDevices.map(device => ({
-      ...device,
-      associatedWallets: getAssociatedWallets(device),
-    }));
-  }, [sortedDevices]);
+  // Create devices for ConfigurableTable (type alias for clarity)
+  const devicesWithWallets: DeviceWithWallets[] = sortedDevices;
 
   // Create cell renderers with current state
   const cellRenderers = useMemo(
@@ -406,9 +398,9 @@ export const DeviceList: React.FC = () => {
                     <div className="p-4 flex-1 overflow-y-auto max-h-[400px]">
                         <ul className="space-y-3">
                            {groupDevices.map(device => {
-                              const associatedWallets = getAssociatedWallets(device);
+                              const walletCount = getWalletCount(device);
                               const isEditing = editingId === device.id;
-                              
+
                               return (
                                  <li
                                    key={device.id}
@@ -453,7 +445,7 @@ export const DeviceList: React.FC = () => {
                                                     {device.isOwner && (
                                                       <>
                                                         <button onClick={(e) => { e.stopPropagation(); handleEdit(device); }} className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-sanctuary-600 transition-opacity"><Edit2 className="w-3 h-3" /></button>
-                                                        {associatedWallets.length === 0 && (
+                                                        {walletCount === 0 && (
                                                           <button
                                                             onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(device.id); }}
                                                             className="opacity-0 group-hover:opacity-100 text-sanctuary-400 hover:text-rose-600 transition-opacity ml-1"
@@ -496,21 +488,13 @@ export const DeviceList: React.FC = () => {
                                         )}
                                      </div>
 
-                                     {/* Mini Wallet Tags */}
+                                     {/* Wallet count badge */}
                                      <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-sanctuary-50 dark:border-sanctuary-800">
-                                         {associatedWallets.length > 0 ? (
-                                             associatedWallets.map(w => {
-                                                 const isMultisig = w.type === WalletType.MULTI_SIG;
-                                                 const tagClass = isMultisig
-                                                    ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
-                                                    : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
-
-                                                 return (
-                                                     <span key={w.id} className={`text-[10px] px-1.5 py-0.5 rounded flex items-center truncate max-w-[100px] ${tagClass}`}>
-                                                         <HardDrive className="w-2 h-2 mr-1 flex-shrink-0" /> {w.name}
-                                                     </span>
-                                                 );
-                                             })
+                                         {walletCount > 0 ? (
+                                             <span className="text-[10px] px-1.5 py-0.5 rounded flex items-center bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">
+                                                 <HardDrive className="w-2 h-2 mr-1 flex-shrink-0" />
+                                                 {walletCount} {walletCount === 1 ? 'wallet' : 'wallets'}
+                                             </span>
                                          ) : (
                                              <span className="text-[10px] text-sanctuary-300 italic">Unused</span>
                                          )}

@@ -149,6 +149,12 @@ jest.mock('../../../src/constants', () => ({
   DEFAULT_AI_MODEL: 'llama2',
 }));
 
+// Mock websocket server to prevent import chain to tiny-secp256k1
+jest.mock('../../../src/websocket/server', () => ({
+  getWebSocketServer: jest.fn(() => null),
+  getRateLimitEvents: jest.fn(() => []),
+}));
+
 // Mock fs for version check
 jest.mock('fs', () => ({
   readFileSync: jest.fn(() => JSON.stringify({ version: '1.0.0' })),

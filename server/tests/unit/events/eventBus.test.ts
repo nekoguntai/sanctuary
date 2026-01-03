@@ -21,6 +21,12 @@ describe('EventBus', () => {
 
   beforeEach(() => {
     testBus = createTestEventBus();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
   });
 
   describe('basic event emission', () => {
@@ -37,7 +43,7 @@ describe('EventBus', () => {
       });
 
       // Wait for async handler
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       expect(handler).toHaveBeenCalledTimes(1);
       expect(handler).toHaveBeenCalledWith(expect.objectContaining({
@@ -61,7 +67,7 @@ describe('EventBus', () => {
         network: 'mainnet',
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       expect(handler1).toHaveBeenCalledTimes(1);
       expect(handler2).toHaveBeenCalledTimes(1);
@@ -74,7 +80,7 @@ describe('EventBus', () => {
 
       // First emit - should be received
       testBus.emit('wallet:deleted', { walletId: 'w1', userId: 'u1' });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1);
 
       // Unsubscribe
@@ -82,7 +88,7 @@ describe('EventBus', () => {
 
       // Second emit - should not be received
       testBus.emit('wallet:deleted', { walletId: 'w2', userId: 'u1' });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1); // Still 1
     });
 
@@ -97,7 +103,7 @@ describe('EventBus', () => {
         txid: 'tx1',
         rawTx: '0100...',
       });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1);
 
       // Second emit - should not be received (once)
@@ -106,7 +112,7 @@ describe('EventBus', () => {
         txid: 'tx2',
         rawTx: '0100...',
       });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1); // Still 1
     });
   });
@@ -116,19 +122,22 @@ describe('EventBus', () => {
       const results: number[] = [];
 
       testBus.on('system:startup', async () => {
-        await new Promise(resolve => setTimeout(resolve, 30));
+        await Promise.resolve(); // Simulate async work
         results.push(1);
       });
 
       testBus.on('system:startup', async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await Promise.resolve(); // Simulate async work
         results.push(2);
       });
 
-      await testBus.emitAsync('system:startup', {
+      const emitPromise = testBus.emitAsync('system:startup', {
         version: '1.0.0',
         environment: 'test',
       });
+
+      await jest.runAllTimersAsync();
+      await emitPromise;
 
       // Both handlers should have completed
       expect(results).toHaveLength(2);
@@ -152,7 +161,7 @@ describe('EventBus', () => {
         retryCount: 0,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       // The other handler should still have been called
       expect(successHandler).toHaveBeenCalled();
@@ -169,7 +178,7 @@ describe('EventBus', () => {
         ipAddress: '127.0.0.1',
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       const metrics = testBus.getMetrics();
       expect(metrics.errors['user:login']).toBe(1);
@@ -193,7 +202,7 @@ describe('EventBus', () => {
         limitedBus.on('wallet:synced', async () => {
           activeCount++;
           maxActive = Math.max(maxActive, activeCount);
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await Promise.resolve(); // Simulate async work
           results.push(i);
           activeCount--;
         });
@@ -208,7 +217,7 @@ describe('EventBus', () => {
       });
 
       // Wait for all handlers to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await jest.runAllTimersAsync();
 
       expect(results).toHaveLength(5);
       // Concurrency should be limited (default is 10, so with 5 handlers all should run)
@@ -247,20 +256,20 @@ describe('EventBus', () => {
       testBus.on('system:shutdown', async () => {
         // Capture status while handler is running
         capturedStatus = testBus.getConcurrencyStatus();
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await Promise.resolve(); // Simulate async work
       });
 
       testBus.emit('system:shutdown', { reason: 'test' });
 
-      // Wait a bit for handler to start
-      await new Promise(resolve => setTimeout(resolve, 20));
+      // Run pending microtasks to start handler
+      await Promise.resolve();
 
       // The handler should be running
       const currentStatus = testBus.getConcurrencyStatus();
       expect(currentStatus.available).toBeLessThanOrEqual(10);
 
       // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await jest.runAllTimersAsync();
 
       // Should be back to full availability
       const finalStatus = testBus.getConcurrencyStatus();
@@ -328,7 +337,7 @@ describe('EventBus', () => {
         throw new Error('test');
       });
       testBus.emit('user:logout', { userId: 'u1' });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       // Verify counts exist
       let metrics = testBus.getMetrics();
@@ -402,7 +411,7 @@ describe('EventBus', () => {
         hash: '000000000000000000...',
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await jest.runAllTimersAsync();
 
       expect(handler).toHaveBeenCalledWith({
         network: 'mainnet',

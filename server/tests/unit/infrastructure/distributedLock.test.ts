@@ -25,9 +25,12 @@ describe('DistributedLock', () => {
   beforeEach(() => {
     // Clean up any locks from previous tests
     shutdownDistributedLock();
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
     shutdownDistributedLock();
   });
 
@@ -71,10 +74,12 @@ describe('DistributedLock', () => {
         retryIntervalMs: 50,
       });
 
-      // Release the first lock after 100ms
-      setTimeout(async () => {
-        await releaseLock(lock1!);
-      }, 100);
+      // Advance time and release the first lock
+      jest.advanceTimersByTime(50);
+      await releaseLock(lock1!);
+
+      // Advance time for retry to acquire
+      jest.advanceTimersByTime(100);
 
       const lock2 = await waitPromise;
       expect(lock2).not.toBeNull();
@@ -84,12 +89,16 @@ describe('DistributedLock', () => {
       const lock1 = await acquireLock('test:key:timeout', 5000);
       expect(lock1).not.toBeNull();
 
-      const lock2 = await acquireLock('test:key:timeout', {
+      const lockPromise = acquireLock('test:key:timeout', {
         ttlMs: 5000,
         waitTimeMs: 100,
         retryIntervalMs: 20,
       });
 
+      // Advance time past the wait timeout
+      await jest.advanceTimersByTimeAsync(150);
+
+      const lock2 = await lockPromise;
       expect(lock2).toBeNull();
     });
 
@@ -97,8 +106,8 @@ describe('DistributedLock', () => {
       const lock = await acquireLock('test:key:expire', 50);
       expect(lock).not.toBeNull();
 
-      // Wait for TTL to expire
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Advance time past TTL expiry
+      jest.advanceTimersByTime(100);
 
       // Should be able to acquire now
       const lock2 = await acquireLock('test:key:expire', 5000);
@@ -262,8 +271,8 @@ describe('DistributedLock', () => {
       const lock = await acquireLock('test:check:expired', 50);
       expect(lock).not.toBeNull();
 
-      // Wait for expiry
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Advance time past expiry
+      jest.advanceTimersByTime(100);
 
       const locked = await isLocked('test:check:expired');
       expect(locked).toBe(false);
@@ -308,10 +317,11 @@ describe('DistributedLock', () => {
     it('should handle concurrent withLock correctly', async () => {
       let executionCount = 0;
 
-      const results = await Promise.all([
+      const resultsPromise = Promise.all([
         withLock('test:concurrent:2', 5000, async () => {
           executionCount++;
-          await new Promise(resolve => setTimeout(resolve, 50));
+          // Use a resolved promise instead of setTimeout
+          await Promise.resolve();
           return 'a';
         }),
         withLock('test:concurrent:2', 5000, async () => {
@@ -323,6 +333,10 @@ describe('DistributedLock', () => {
           return 'c';
         }),
       ]);
+
+      // Advance timers to ensure all operations complete
+      jest.advanceTimersByTime(100);
+      const results = await resultsPromise;
 
       const successes = results.filter(r => r.success);
       const failures = results.filter(r => !r.success);

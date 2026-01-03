@@ -98,8 +98,8 @@ describe('requestContext', () => {
       };
 
       await requestContext.run(context, async () => {
-        // Wait a small amount
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // Wait a small amount - allow variance for timer precision
+        await new Promise(resolve => setTimeout(resolve, 15));
         const duration = requestContext.getDuration();
         expect(duration).toBeGreaterThanOrEqual(10);
       });

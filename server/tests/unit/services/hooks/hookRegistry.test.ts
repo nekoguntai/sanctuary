@@ -159,7 +159,7 @@ describe('HookRegistry', () => {
     it('should allow hooks to modify payload', async () => {
       const registry = new HookRegistry();
 
-      registry.before('test', (ctx) => ({ ...ctx.payload, modified: true }));
+      registry.before('test', (ctx) => ({ ...(ctx.payload as object), modified: true }));
 
       const result = await registry.executeBefore('test', { original: true });
 
@@ -169,9 +169,9 @@ describe('HookRegistry', () => {
     it('should chain payload modifications', async () => {
       const registry = new HookRegistry();
 
-      registry.before('test', (ctx) => ({ ...ctx.payload, step1: true }), { priority: HookPriorities.HIGH });
-      registry.before('test', (ctx) => ({ ...ctx.payload, step2: true }), { priority: HookPriorities.NORMAL });
-      registry.before('test', (ctx) => ({ ...ctx.payload, step3: true }), { priority: HookPriorities.LOW });
+      registry.before('test', (ctx) => ({ ...(ctx.payload as object), step1: true }), { priority: HookPriorities.HIGH });
+      registry.before('test', (ctx) => ({ ...(ctx.payload as object), step2: true }), { priority: HookPriorities.NORMAL });
+      registry.before('test', (ctx) => ({ ...(ctx.payload as object), step3: true }), { priority: HookPriorities.LOW });
 
       const result = await registry.executeBefore('test', { initial: true });
 
@@ -299,7 +299,7 @@ describe('HookRegistry', () => {
     it('should pass modified payload to operation', async () => {
       const registry = new HookRegistry();
 
-      registry.before('test', (ctx) => ({ ...ctx.payload, modified: true }));
+      registry.before('test', (ctx) => ({ ...(ctx.payload as object), modified: true }));
 
       const operation = jest.fn().mockResolvedValue('result');
 

@@ -20,6 +20,7 @@ describe('CircuitBreaker', () => {
   beforeEach(() => {
     // Clear and reset registry between tests
     circuitBreakerRegistry.clear();
+    jest.useFakeTimers();
 
     circuit = new CircuitBreaker({
       name: 'test-circuit',
@@ -30,6 +31,8 @@ describe('CircuitBreaker', () => {
   });
 
   afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
     circuitBreakerRegistry.resetAll();
   });
 
@@ -120,8 +123,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should transition to half-open after recovery timeout', async () => {
-      // Wait for recovery timeout
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      // Advance past recovery timeout
+      jest.advanceTimersByTime(1100);
 
       // Next call should be allowed (circuit transitions to half-open)
       const result = await circuit.execute(async () => 'success');
@@ -135,7 +138,7 @@ describe('CircuitBreaker', () => {
     });
 
     it('should report as allowing requests after recovery timeout', async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      jest.advanceTimersByTime(1100);
       expect(circuit.isAllowingRequests()).toBe(true);
     });
   });
@@ -151,8 +154,8 @@ describe('CircuitBreaker', () => {
         ).rejects.toThrow('fail');
       }
 
-      // Wait for recovery timeout
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      // Advance past recovery timeout
+      jest.advanceTimersByTime(1100);
 
       // Trigger transition to half-open with first success
       await circuit.execute(async () => 'success');
@@ -178,8 +181,8 @@ describe('CircuitBreaker', () => {
         testCircuit.execute(async () => { throw new Error('fail'); })
       ).rejects.toThrow();
 
-      // Wait for recovery
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      // Advance past recovery timeout
+      jest.advanceTimersByTime(150);
 
       // One success - now in half-open
       await testCircuit.execute(async () => 'success');

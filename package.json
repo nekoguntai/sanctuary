@@ -53,7 +53,7 @@
     "@types/w3c-web-usb": "^1.0.13",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitest/coverage-v8": "^4.0.16",
-    "jsdom": "^27.3.0",
+    "jsdom": "^26.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vite-plugin-node-polyfills": "^0.24.0",

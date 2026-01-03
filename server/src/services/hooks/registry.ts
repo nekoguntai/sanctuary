@@ -343,7 +343,8 @@ class HookRegistry {
   getOperations(): string[] {
     const operations = new Set<string>();
     for (const key of this.hooks.keys()) {
-      operations.add(key.split(':')[0]);
+      // Key format is `${operation}:${phase}`, remove the trailing :before or :after
+      operations.add(key.replace(/:(?:before|after)$/, ''));
     }
     return Array.from(operations);
   }

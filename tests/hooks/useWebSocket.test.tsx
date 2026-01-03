@@ -17,6 +17,8 @@ const mockConnect = vi.fn();
 const mockDisconnect = vi.fn();
 const mockSubscribe = vi.fn();
 const mockUnsubscribe = vi.fn();
+const mockSubscribeBatch = vi.fn();
+const mockUnsubscribeBatch = vi.fn();
 const mockOn = vi.fn();
 const mockOff = vi.fn();
 const mockIsConnected = vi.fn();
@@ -30,6 +32,8 @@ vi.mock('../../services/websocket', () => ({
     disconnect: (...args: any[]) => mockDisconnect(...args),
     subscribe: (...args: any[]) => mockSubscribe(...args),
     unsubscribe: (...args: any[]) => mockUnsubscribe(...args),
+    subscribeBatch: (...args: any[]) => mockSubscribeBatch(...args),
+    unsubscribeBatch: (...args: any[]) => mockUnsubscribeBatch(...args),
     on: (...args: any[]) => mockOn(...args),
     off: (...args: any[]) => mockOff(...args),
     isConnected: (...args: any[]) => mockIsConnected(...args),
@@ -69,7 +73,8 @@ vi.mock('../../providers/QueryProvider', () => ({
 }));
 
 // Helper to flush pending promises (for React state updates)
-const flushPromises = () => new Promise(resolve => setTimeout(resolve, 50));
+// Uses microtask queueing which is more reliable than setTimeout
+const flushPromises = () => new Promise(resolve => queueMicrotask(resolve));
 
 // Import hooks after mocks
 import {
@@ -312,12 +317,14 @@ describe('useWebSocket', () => {
         result.current.subscribeWallet('wallet-abc');
       });
 
-      expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-abc');
-      expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-abc:transaction');
-      expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-abc:balance');
-      expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-abc:confirmation');
-      expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-abc:sync');
-      expect(mockSubscribe).toHaveBeenCalledTimes(5);
+      expect(mockSubscribeBatch).toHaveBeenCalledWith([
+        'wallet:wallet-abc',
+        'wallet:wallet-abc:transaction',
+        'wallet:wallet-abc:balance',
+        'wallet:wallet-abc:confirmation',
+        'wallet:wallet-abc:sync',
+      ]);
+      expect(mockSubscribeBatch).toHaveBeenCalledTimes(1);
     });
 
     it('should unsubscribe from all wallet channels', () => {
@@ -327,12 +334,14 @@ describe('useWebSocket', () => {
         result.current.unsubscribeWallet('wallet-xyz');
       });
 
-      expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-xyz');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-xyz:transaction');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-xyz:balance');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-xyz:confirmation');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-xyz:sync');
-      expect(mockUnsubscribe).toHaveBeenCalledTimes(5);
+      expect(mockUnsubscribeBatch).toHaveBeenCalledWith([
+        'wallet:wallet-xyz',
+        'wallet:wallet-xyz:transaction',
+        'wallet:wallet-xyz:balance',
+        'wallet:wallet-xyz:confirmation',
+        'wallet:wallet-xyz:sync',
+      ]);
+      expect(mockUnsubscribeBatch).toHaveBeenCalledTimes(1);
     });
 
     it('should maintain stable subscribe callback reference', () => {
@@ -511,11 +520,13 @@ describe('useWalletEvents', () => {
 
     renderHook(() => useWalletEvents('wallet-123', callbacks));
 
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123');
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123:transaction');
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123:balance');
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123:confirmation');
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123:sync');
+    expect(mockSubscribeBatch).toHaveBeenCalledWith([
+      'wallet:wallet-123',
+      'wallet:wallet-123:transaction',
+      'wallet:wallet-123:balance',
+      'wallet:wallet-123:confirmation',
+      'wallet:wallet-123:sync',
+    ]);
   });
 
   it('should unsubscribe from wallet on unmount', () => {
@@ -527,11 +538,13 @@ describe('useWalletEvents', () => {
 
     unmount();
 
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-456');
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-456:transaction');
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-456:balance');
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-456:confirmation');
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-456:sync');
+    expect(mockUnsubscribeBatch).toHaveBeenCalledWith([
+      'wallet:wallet-456',
+      'wallet:wallet-456:transaction',
+      'wallet:wallet-456:balance',
+      'wallet:wallet-456:confirmation',
+      'wallet:wallet-456:sync',
+    ]);
   });
 
   it('should not subscribe when walletId is undefined', () => {
@@ -541,7 +554,7 @@ describe('useWalletEvents', () => {
 
     renderHook(() => useWalletEvents(undefined, callbacks));
 
-    expect(mockSubscribe).not.toHaveBeenCalled();
+    expect(mockSubscribeBatch).not.toHaveBeenCalled();
   });
 
   it('should call onTransaction callback when transaction event is received', async () => {
@@ -634,13 +647,13 @@ describe('useWalletEvents', () => {
     );
 
     // Clear subscribe calls from initial mount
-    mockSubscribe.mockClear();
+    mockSubscribeBatch.mockClear();
 
     // Update callbacks
     rerender({ callbacks: { onTransaction: onTransaction2 } });
 
     // Should not resubscribe
-    expect(mockSubscribe).not.toHaveBeenCalled();
+    expect(mockSubscribeBatch).not.toHaveBeenCalled();
 
     const transactionEvent = {
       event: 'transaction',
@@ -666,18 +679,28 @@ describe('useWalletEvents', () => {
       { initialProps: { walletId: 'wallet-old' } }
     );
 
-    mockSubscribe.mockClear();
-    mockUnsubscribe.mockClear();
+    mockSubscribeBatch.mockClear();
+    mockUnsubscribeBatch.mockClear();
 
     rerender({ walletId: 'wallet-new' });
 
-    // Should unsubscribe from old wallet
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-old');
-    expect(mockUnsubscribe).toHaveBeenCalledWith('wallet:wallet-old:transaction');
+    // Should unsubscribe from old wallet (batch)
+    expect(mockUnsubscribeBatch).toHaveBeenCalledWith([
+      'wallet:wallet-old',
+      'wallet:wallet-old:transaction',
+      'wallet:wallet-old:balance',
+      'wallet:wallet-old:confirmation',
+      'wallet:wallet-old:sync',
+    ]);
 
-    // Should subscribe to new wallet
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-new');
-    expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-new:transaction');
+    // Should subscribe to new wallet (batch)
+    expect(mockSubscribeBatch).toHaveBeenCalledWith([
+      'wallet:wallet-new',
+      'wallet:wallet-new:transaction',
+      'wallet:wallet-new:balance',
+      'wallet:wallet-new:confirmation',
+      'wallet:wallet-new:sync',
+    ]);
   });
 });
 
@@ -1221,10 +1244,12 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('blocks');
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
-        expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
-        expect(mockSubscribe).toHaveBeenCalledWith('logs:all');
+        expect(mockSubscribeBatch).toHaveBeenCalledWith([
+          'blocks',
+          'sync:all',
+          'transactions:all',
+          'logs:all',
+        ]);
       });
     });
 
@@ -1234,10 +1259,7 @@ describe('useWebSocketQueryInvalidation', () => {
 
       renderHook(() => useWebSocketQueryInvalidation());
 
-      expect(mockSubscribe).not.toHaveBeenCalledWith('blocks');
-      expect(mockSubscribe).not.toHaveBeenCalledWith('sync:all');
-      expect(mockSubscribe).not.toHaveBeenCalledWith('transactions:all');
-      expect(mockSubscribe).not.toHaveBeenCalledWith('logs:all');
+      expect(mockSubscribeBatch).not.toHaveBeenCalled();
     });
 
     it('should unsubscribe from global channels on unmount', async () => {
@@ -1246,15 +1268,22 @@ describe('useWebSocketQueryInvalidation', () => {
       const { unmount } = renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('blocks');
+        expect(mockSubscribeBatch).toHaveBeenCalledWith([
+          'blocks',
+          'sync:all',
+          'transactions:all',
+          'logs:all',
+        ]);
       });
 
       unmount();
 
-      expect(mockUnsubscribe).toHaveBeenCalledWith('blocks');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('sync:all');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('transactions:all');
-      expect(mockUnsubscribe).toHaveBeenCalledWith('logs:all');
+      expect(mockUnsubscribeBatch).toHaveBeenCalledWith([
+        'blocks',
+        'sync:all',
+        'transactions:all',
+        'logs:all',
+      ]);
     });
 
     it('should subscribe when connection is established', async () => {
@@ -1263,7 +1292,7 @@ describe('useWebSocketQueryInvalidation', () => {
 
       renderHook(() => useWebSocketQueryInvalidation());
 
-      expect(mockSubscribe).not.toHaveBeenCalled();
+      expect(mockSubscribeBatch).not.toHaveBeenCalled();
 
       // Simulate connection
       act(() => {
@@ -1273,10 +1302,12 @@ describe('useWebSocketQueryInvalidation', () => {
       });
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('blocks');
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
-        expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
-        expect(mockSubscribe).toHaveBeenCalledWith('logs:all');
+        expect(mockSubscribeBatch).toHaveBeenCalledWith([
+          'blocks',
+          'sync:all',
+          'transactions:all',
+          'logs:all',
+        ]);
       });
     });
   });
@@ -1289,7 +1320,7 @@ describe('useWebSocketQueryInvalidation', () => {
 
       // Wait for subscriptions and event listeners to be set up
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
         expect(mockOn).toHaveBeenCalledWith('transaction', expect.any(Function));
       });
 
@@ -1314,7 +1345,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1340,7 +1371,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('transactions:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1367,7 +1398,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('blocks');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1394,7 +1425,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('blocks');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1423,7 +1454,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1459,7 +1490,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1488,7 +1519,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();
@@ -1514,7 +1545,7 @@ describe('useWebSocketQueryInvalidation', () => {
       renderHook(() => useWebSocketQueryInvalidation());
 
       await waitFor(() => {
-        expect(mockSubscribe).toHaveBeenCalledWith('sync:all');
+        expect(mockSubscribeBatch).toHaveBeenCalled();
       });
 
       await flushPromises();

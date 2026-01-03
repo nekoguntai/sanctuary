@@ -402,22 +402,35 @@ test_migration_completed() {
 test_default_login() {
     log_info "Testing login with default credentials..."
 
-    local login_response=$(curl -k -s -X POST \
-        -H "Content-Type: application/json" \
-        -d '{"username":"admin","password":"sanctuary"}' \
-        "$API_BASE_URL/api/v1/auth/login")
+    # Wait for migration/seed to complete (creates admin user)
+    # The migrate container runs after backend starts and may take time
+    local max_attempts=30
+    local attempt=0
 
-    log_debug "Login response: $login_response"
+    while [ $attempt -lt $max_attempts ]; do
+        local login_response=$(curl -k -s -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"sanctuary"}' \
+            "$API_BASE_URL/api/v1/auth/login")
 
-    # Check for token in response
-    if ! echo "$login_response" | grep -q '"token"'; then
-        log_error "Login failed - no token in response"
-        log_error "Response: $login_response"
-        return 1
-    fi
+        log_debug "Login response: $login_response"
 
-    log_success "Login with default credentials successful"
-    return 0
+        # Check for token in response
+        if echo "$login_response" | grep -q '"token"'; then
+            log_success "Login with default credentials successful"
+            return 0
+        fi
+
+        attempt=$((attempt + 1))
+        if [ $attempt -lt $max_attempts ]; then
+            log_info "Waiting for seed to create admin user (attempt $attempt/$max_attempts)..."
+            sleep 5
+        fi
+    done
+
+    log_error "Login failed after $max_attempts attempts - seed may not have completed"
+    log_error "Last response: $login_response"
+    return 1
 }
 
 # ============================================

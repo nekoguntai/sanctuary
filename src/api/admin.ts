@@ -542,3 +542,37 @@ export async function startTorContainer(): Promise<ContainerActionResponse> {
 export async function stopTorContainer(): Promise<ContainerActionResponse> {
   return apiClient.post<ContainerActionResponse>('/admin/tor-container/stop', {});
 }
+
+// ========================================
+// WEBSOCKET STATISTICS
+// ========================================
+
+/**
+ * WebSocket stats response
+ */
+export interface WebSocketStats {
+  connections: {
+    current: number;
+    max: number;
+    uniqueUsers: number;
+    maxPerUser: number;
+  };
+  subscriptions: {
+    total: number;
+    channels: number;
+    channelList: string[];
+  };
+  rateLimits: {
+    maxMessagesPerSecond: number;
+    gracePeriodMs: number;
+    gracePeriodMessageLimit: number;
+    maxSubscriptionsPerConnection: number;
+  };
+}
+
+/**
+ * Get WebSocket server statistics (admin only)
+ */
+export async function getWebSocketStats(): Promise<WebSocketStats> {
+  return apiClient.get<WebSocketStats>('/admin/websocket/stats');
+}

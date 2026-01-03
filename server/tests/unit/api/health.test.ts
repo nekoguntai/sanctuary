@@ -51,6 +51,7 @@ import healthRouter from '../../../src/api/health';
 
 describe('Health API', () => {
   let app: Express;
+  const originalMemoryUsage = process.memoryUsage;
 
   beforeAll(() => {
     app = express();
@@ -59,6 +60,15 @@ describe('Health API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Mock process.memoryUsage to return low memory values (under 500MB threshold)
+    process.memoryUsage = jest.fn().mockReturnValue({
+      heapUsed: 100 * 1024 * 1024,   // 100MB
+      heapTotal: 200 * 1024 * 1024,  // 200MB
+      rss: 300 * 1024 * 1024,        // 300MB
+      external: 10 * 1024 * 1024,    // 10MB
+      arrayBuffers: 5 * 1024 * 1024, // 5MB
+    }) as unknown as typeof process.memoryUsage;
 
     // Default healthy mocks
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ 1: 1 }]);
@@ -80,6 +90,10 @@ describe('Health API', () => {
         uniqueUsers: 3,
       }),
     });
+  });
+
+  afterEach(() => {
+    process.memoryUsage = originalMemoryUsage;
   });
 
   describe('GET /api/v1/health', () => {

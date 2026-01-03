@@ -50,10 +50,10 @@ export default defineConfig(() => {
               if (id.includes('bitcoinjs-lib') || id.includes('bip174') || id.includes('ecpair') || id.includes('@bitcoinerlab/')) {
                 return 'bitcoin';
               }
-              // Charts - only used on Dashboard
-              if (id.includes('recharts') || id.includes('d3-')) {
-                return 'charts';
-              }
+              // Charts - keep in main bundle to avoid initialization issues
+              // if (id.includes('recharts') || id.includes('d3-')) {
+              //   return 'charts';
+              // }
               // React core
               if (id.includes('react-dom') || id.includes('react-router')) {
                 return 'react-vendor';

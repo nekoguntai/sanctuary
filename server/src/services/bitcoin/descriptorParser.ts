@@ -560,6 +560,7 @@ function blueWalletFormatToScriptType(format: string | undefined): ScriptType {
     case 'P2WSH':
       return 'native_segwit';
     case 'P2SH-P2WSH':
+    case 'P2WSH-P2SH': // Coldcard uses inner-outer notation (P2WSH wrapped in P2SH)
       return 'nested_segwit';
     case 'P2SH':
       return 'legacy';
@@ -568,6 +569,7 @@ function blueWalletFormatToScriptType(format: string | undefined): ScriptType {
     case 'P2WPKH':
       return 'native_segwit';
     case 'P2SH-P2WPKH':
+    case 'P2WPKH-P2SH': // Coldcard uses inner-outer notation
       return 'nested_segwit';
     case 'P2PKH':
       return 'legacy';

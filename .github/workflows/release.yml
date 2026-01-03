@@ -229,12 +229,18 @@ jobs:
             ${IMAGE}:v${VERSION}-linux-amd64 \
             ${IMAGE}:v${VERSION}-linux-arm64
 
-          docker manifest create ${IMAGE}:latest \
-            ${IMAGE}:v${VERSION}-linux-amd64 \
-            ${IMAGE}:v${VERSION}-linux-arm64
-
           docker manifest push ${IMAGE}:v${VERSION}
-          docker manifest push ${IMAGE}:latest
+
+          # Only update :latest tag for stable releases (not -rc, -alpha, -beta)
+          if [[ "$VERSION" != *-rc* && "$VERSION" != *-alpha* && "$VERSION" != *-beta* ]]; then
+            docker manifest create ${IMAGE}:latest \
+              ${IMAGE}:v${VERSION}-linux-amd64 \
+              ${IMAGE}:v${VERSION}-linux-arm64
+            docker manifest push ${IMAGE}:latest
+            echo "✓ Updated :latest tag for frontend"
+          else
+            echo "⏭ Skipping :latest tag update for pre-release version"
+          fi
 
           # Get digest from the pushed manifest (use docker buildx imagetools for proper digest)
           DIGEST=$(docker buildx imagetools inspect ${IMAGE}:v${VERSION} --format '{{json .Manifest.Digest}}' | tr -d '"')
@@ -250,12 +256,18 @@ jobs:
             ${IMAGE}:v${VERSION}-linux-amd64 \
             ${IMAGE}:v${VERSION}-linux-arm64
 
-          docker manifest create ${IMAGE}:latest \
-            ${IMAGE}:v${VERSION}-linux-amd64 \
-            ${IMAGE}:v${VERSION}-linux-arm64
-
           docker manifest push ${IMAGE}:v${VERSION}
-          docker manifest push ${IMAGE}:latest
+
+          # Only update :latest tag for stable releases (not -rc, -alpha, -beta)
+          if [[ "$VERSION" != *-rc* && "$VERSION" != *-alpha* && "$VERSION" != *-beta* ]]; then
+            docker manifest create ${IMAGE}:latest \
+              ${IMAGE}:v${VERSION}-linux-amd64 \
+              ${IMAGE}:v${VERSION}-linux-arm64
+            docker manifest push ${IMAGE}:latest
+            echo "✓ Updated :latest tag for backend"
+          else
+            echo "⏭ Skipping :latest tag update for pre-release version"
+          fi
 
           # Get digest from the pushed manifest
           DIGEST=$(docker buildx imagetools inspect ${IMAGE}:v${VERSION} --format '{{json .Manifest.Digest}}' | tr -d '"')
@@ -276,7 +288,20 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if stable release
+        id: check-stable
+        run: |
+          VERSION="${{ needs.create-manifests.outputs.version }}"
+          if [[ "$VERSION" == *-rc* || "$VERSION" == *-alpha* || "$VERSION" == *-beta* ]]; then
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+            echo "⏭ Skipping Umbrel update for pre-release version: $VERSION"
+          else
+            echo "is_stable=true" >> $GITHUB_OUTPUT
+            echo "✓ Proceeding with Umbrel update for stable version: $VERSION"
+          fi
+
       - name: Update Umbrel package files
+        if: steps.check-stable.outputs.is_stable == 'true'
         run: |
           VERSION="${{ needs.create-manifests.outputs.version }}"
           FRONTEND_DIGEST="${{ needs.create-manifests.outputs.frontend_digest }}"
@@ -303,6 +328,7 @@ jobs:
           grep "image:" sanctuary/docker-compose.yml
 
       - name: Commit and push Umbrel updates
+        if: steps.check-stable.outputs.is_stable == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

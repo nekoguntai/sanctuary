@@ -67,6 +67,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 
+# Copy migration scripts
+COPY server/scripts ./scripts
+
 # Change ownership
 RUN chown -R sanctuary:nodejs /app
 

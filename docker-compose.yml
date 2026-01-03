@@ -214,7 +214,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public
-    command: ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
+    command: ["sh", "/app/scripts/migrate.sh"]
     networks:
       - sanctuary-network
     restart: "no"

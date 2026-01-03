@@ -804,6 +804,45 @@ aabbccdd: xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4ko
       expect(result.parsed.totalSigners).toBe(3);
     });
 
+    it('should parse Coldcard format with P2WSH-P2SH (inner-outer notation) as nested_segwit', () => {
+      const input = `# Coldcard Multisig setup file
+Name: Casa Multisig
+Policy: 3 of 5
+Derivation: m/49'/0'/0'
+Format: P2WSH-P2SH
+
+aabbccdd: xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL
+11223344: xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5
+99887766: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWZiD6sBpHwJmENQUMWnrdwJP5EHjDBdJxY8hLhN9P3AyaCANDmrUdDLLY8jSqmqQWmxDPdxiKdE6UkHj
+deadbeef: xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ
+cafebabe: xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj`;
+
+      const result = parseImportInput(input);
+
+      expect(result.format).toBe('bluewallet_text');
+      expect(result.parsed.type).toBe('multi_sig');
+      expect(result.parsed.scriptType).toBe('nested_segwit');
+      expect(result.parsed.quorum).toBe(3);
+      expect(result.parsed.totalSigners).toBe(5);
+    });
+
+    it('should parse P2SH-P2WSH format (outer-inner notation) as nested_segwit', () => {
+      const input = `# Multisig setup file
+Name: Nested Segwit Multisig
+Policy: 2 of 3
+Derivation: m/48'/0'/0'/1'
+Format: P2SH-P2WSH
+
+aabbccdd: xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL
+11223344: xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5
+99887766: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWZiD6sBpHwJmENQUMWnrdwJP5EHjDBdJxY8hLhN9P3AyaCANDmrUdDLLY8jSqmqQWmxDPdxiKdE6UkHj`;
+
+      const result = parseImportInput(input);
+
+      expect(result.format).toBe('bluewallet_text');
+      expect(result.parsed.scriptType).toBe('nested_segwit');
+    });
+
     it('should handle descriptor with comments (text format)', () => {
       const input = `# Sparrow Wallet export
 # Created: 2024-01-01

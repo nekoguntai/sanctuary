@@ -15,17 +15,14 @@ import { invalidateAIStatusCache } from '../hooks/useAIStatus';
 
 const log = createLogger('AISettings');
 
-// Popular models for quick pull
-const POPULAR_MODELS = [
-  { name: 'llama3.2:3b', description: 'Meta, fast & lightweight (2GB)', recommended: true },
-  { name: 'deepseek-r1:7b', description: 'DeepSeek, reasoning model (4.7GB)' },
-  { name: 'deepseek-r1:1.5b', description: 'DeepSeek, compact (1GB)' },
-  { name: 'mistral:7b', description: 'Mistral AI, balanced (4GB)' },
-  { name: 'qwen2.5:7b', description: 'Alibaba, multilingual (4.7GB)' },
-  { name: 'gemma2:2b', description: 'Google, compact (1.6GB)' },
-  { name: 'phi3:mini', description: 'Microsoft, small (2.3GB)' },
-  { name: 'llama3.2:1b', description: 'Meta, ultra-fast (1GB)' },
-];
+// URL to fetch popular models list
+const POPULAR_MODELS_URL = 'https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/config/popular-models.json';
+
+interface PopularModel {
+  name: string;
+  description: string;
+  recommended?: boolean;
+}
 
 type AISettingsTab = 'status' | 'settings' | 'models';
 
@@ -56,6 +53,11 @@ export default function AISettings() {
   const [availableModels, setAvailableModels] = useState<aiApi.OllamaModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  // Popular models state (fetched from remote)
+  const [popularModels, setPopularModels] = useState<PopularModel[]>([]);
+  const [isLoadingPopularModels, setIsLoadingPopularModels] = useState(true);
+  const [popularModelsError, setPopularModelsError] = useState<string | null>(null);
 
   // Pull model state
   const [isPulling, setIsPulling] = useState(false);
@@ -105,6 +107,29 @@ export default function AISettings() {
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [acknowledgeInsufficient, setAcknowledgeInsufficient] = useState(false);
 
+  // Load popular models from remote
+  const loadPopularModels = async () => {
+    setIsLoadingPopularModels(true);
+    setPopularModelsError(null);
+    try {
+      const response = await fetch(POPULAR_MODELS_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.models && Array.isArray(data.models)) {
+        setPopularModels(data.models);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error: any) {
+      log.error('Failed to fetch popular models', { error });
+      setPopularModelsError('Unable to fetch the latest popular models list. Please check your connection and try again.');
+    } finally {
+      setIsLoadingPopularModels(false);
+    }
+  };
+
   // Load settings and container status on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -126,6 +151,7 @@ export default function AISettings() {
       }
     };
     loadSettings();
+    loadPopularModels();
   }, []);
 
   // Load models when endpoint changes
@@ -889,38 +915,80 @@ export default function AISettings() {
 
               {/* Popular Models Grid */}
               <div>
-                <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-3">Popular Models</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {POPULAR_MODELS.map((model) => {
-                    const isInstalled = availableModels.some(m => m.name === model.name);
-                    const isPullingThis = isPulling && pullModelName === model.name;
-                    return (
-                      <div key={model.name} className={`p-3 rounded-lg border ${isInstalled ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10' : 'border-sanctuary-200 dark:border-sanctuary-700'}`}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
-                              {model.recommended && <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-primary-800 dark:bg-primary-100 text-primary-200 dark:text-primary-800 rounded">Recommended</span>}
-                              {isInstalled && <Check className="w-3.5 h-3.5 text-emerald-500" />}
-                            </div>
-                            <p className="text-xs text-sanctuary-500 mt-0.5">{model.description}</p>
-                          </div>
-                          {isInstalled ? (
-                            <button onClick={() => handleDeleteModel(model.name)} disabled={isDeleting} className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
-                              {isDeleting && deleteModelName === model.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                              <span>Delete</span>
-                            </button>
-                          ) : (
-                            <button onClick={() => handlePullModel(model.name)} disabled={isPulling} className="px-3 py-1 text-xs bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
-                              {isPullingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                              <span>Pull</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Popular Models</h3>
+                  {!isLoadingPopularModels && (
+                    <button
+                      onClick={loadPopularModels}
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center space-x-1"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Refresh</span>
+                    </button>
+                  )}
                 </div>
+
+                {/* Loading state */}
+                {isLoadingPopularModels && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary-500" />
+                    <span className="ml-2 text-sm text-sanctuary-500">Loading popular models...</span>
+                  </div>
+                )}
+
+                {/* Error state */}
+                {!isLoadingPopularModels && popularModelsError && (
+                  <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-rose-700 dark:text-rose-300">{popularModelsError}</p>
+                        <button
+                          onClick={loadPopularModels}
+                          className="mt-2 text-xs text-rose-600 dark:text-rose-400 hover:underline flex items-center space-x-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Try again</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Models grid */}
+                {!isLoadingPopularModels && !popularModelsError && popularModels.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {popularModels.map((model) => {
+                      const isInstalled = availableModels.some(m => m.name === model.name);
+                      const isPullingThis = isPulling && pullModelName === model.name;
+                      return (
+                        <div key={model.name} className={`p-3 rounded-lg border ${isInstalled ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10' : 'border-sanctuary-200 dark:border-sanctuary-700'}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{model.name}</span>
+                                {model.recommended && <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-primary-800 dark:bg-primary-100 text-primary-200 dark:text-primary-800 rounded">Recommended</span>}
+                                {isInstalled && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                              </div>
+                              <p className="text-xs text-sanctuary-500 mt-0.5">{model.description}</p>
+                            </div>
+                            {isInstalled ? (
+                              <button onClick={() => handleDeleteModel(model.name)} disabled={isDeleting} className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
+                                {isDeleting && deleteModelName === model.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                <span>Delete</span>
+                              </button>
+                            ) : (
+                              <button onClick={() => handlePullModel(model.name)} disabled={isPulling} className="px-3 py-1 text-xs bg-primary-600 dark:bg-primary-300 hover:bg-primary-700 dark:hover:bg-primary-200 text-white rounded disabled:opacity-50 transition-colors flex items-center space-x-1">
+                                {isPullingThis ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                <span>Pull</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Custom Model Input */}

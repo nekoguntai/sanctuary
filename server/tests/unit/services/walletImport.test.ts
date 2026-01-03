@@ -44,11 +44,15 @@ const mockValidateDescriptor = jest.fn();
 const mockValidateJsonImport = jest.fn();
 
 jest.mock('../../../src/services/bitcoin/descriptorParser', () => ({
-  parseImportInput: (...args: any[]) => mockParseImportInput(...args),
   parseDescriptorForImport: (...args: any[]) => mockParseDescriptorForImport(...args),
   parseJsonImport: (...args: any[]) => mockParseJsonImport(...args),
   validateDescriptor: (...args: any[]) => mockValidateDescriptor(...args),
   validateJsonImport: (...args: any[]) => mockValidateJsonImport(...args),
+}));
+
+// Mock import format registry (parseImportInput is now imported from here)
+jest.mock('../../../src/services/import', () => ({
+  parseImportInput: (...args: any[]) => mockParseImportInput(...args),
 }));
 
 // Mock descriptor builder

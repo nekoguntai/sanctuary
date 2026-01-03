@@ -39,7 +39,7 @@ const MAX_SUBSCRIPTIONS_PER_CONNECTION = parseInt(process.env.MAX_WS_SUBSCRIPTIO
 
 // Grace period for initial connection setup (auth + subscriptions)
 const RATE_LIMIT_GRACE_PERIOD_MS = 5000; // 5 seconds grace period after connection
-const GRACE_PERIOD_MESSAGE_LIMIT = 50; // Allow up to 50 messages during grace period
+const GRACE_PERIOD_MESSAGE_LIMIT = 200; // Allow up to 200 messages during grace period (supports ~35 wallets)
 
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;

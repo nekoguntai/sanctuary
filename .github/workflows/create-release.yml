@@ -64,15 +64,10 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
 
-          echo "Checking if release $TAG exists..."
+          echo "Creating release $TAG..."
 
-          # Check if release already exists (with explicit output for debugging)
-          if gh release view "$TAG" 2>&1; then
-            echo "::notice::Release $TAG already exists, skipping creation"
-            exit 0
-          else
-            echo "Release $TAG does not exist, creating..."
-          fi
+          # Try to create release - if it already exists, gh will error and we exit gracefully
+          set +e  # Don't exit on error
 
           # Create release notes
           cat > /tmp/release_notes.md << 'RELEASE_EOF'
@@ -121,10 +116,18 @@ jobs:
           cat /tmp/changelog.md >> /tmp/release_notes.md
 
           # Create as pre-release first (release.yml will validate and convert to full release)
-          gh release create "$TAG" \
+          if gh release create "$TAG" \
             --title "$TAG" \
             --notes-file /tmp/release_notes.md \
-            --prerelease
-
-          echo "✓ Created pre-release $TAG"
-          echo "  The release.yml workflow will validate and convert it to a full release."
+            --prerelease; then
+            echo "✓ Created pre-release $TAG"
+            echo "  The release.yml workflow will validate and convert it to a full release."
+          else
+            # Check if it failed because release already exists
+            if gh release view "$TAG" &>/dev/null; then
+              echo "::notice::Release $TAG already exists"
+            else
+              echo "::error::Failed to create release $TAG"
+              exit 1
+            fi
+          fi

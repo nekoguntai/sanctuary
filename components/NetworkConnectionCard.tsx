@@ -5,6 +5,7 @@ import {
   Server,
   Plus,
   Trash2,
+  Edit2,
   ChevronUp,
   ChevronDown,
   CheckCircle,
@@ -131,6 +132,7 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
     return poolStats?.servers?.find(s => s.serverId === serverId);
   };
   const [isAddingServer, setIsAddingServer] = useState(false);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [newServer, setNewServer] = useState({ label: '', host: '', port: getDefaultPort(network), useSsl: true });
   const [serverActionLoading, setServerActionLoading] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -275,6 +277,33 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
     } finally {
       setServerActionLoading(null);
     }
+  };
+
+  const handleUpdateServer = async () => {
+    if (!editingServerId || !newServer.label || !newServer.host) return;
+    setServerActionLoading(editingServerId);
+    try {
+      const updatedServer = await adminApi.updateElectrumServer(editingServerId, newServer);
+      onServersChange(servers.map(s => s.id === editingServerId ? updatedServer : s));
+      setNewServer({ label: '', host: '', port: getDefaultPort(network), useSsl: true });
+      setEditingServerId(null);
+      setIsAddingServer(false);
+    } catch (error) {
+      log.error('Failed to update server', { error });
+    } finally {
+      setServerActionLoading(null);
+    }
+  };
+
+  const handleEditServer = (server: ElectrumServer) => {
+    setEditingServerId(server.id);
+    setNewServer({
+      label: server.label,
+      host: server.host,
+      port: server.port,
+      useSsl: server.useSsl,
+    });
+    setIsAddingServer(true);
   };
 
   const handleDeleteServer = async (serverId: string) => {
@@ -489,7 +518,11 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
           <label className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
             Pool Servers ({servers.length})
           </label>
-          <Button variant="secondary" size="sm" onClick={() => setIsAddingServer(true)}>
+          <Button variant="secondary" size="sm" onClick={() => {
+            setEditingServerId(null);
+            setNewServer({ label: '', host: '', port: getDefaultPort(network), useSsl: true });
+            setIsAddingServer(true);
+          }}>
             <Plus className="w-4 h-4 mr-1" /> Add Server
           </Button>
         </div>
@@ -654,6 +687,14 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                     >
                       <ChevronDown className="w-4 h-4 text-sanctuary-400" />
                     </button>
+                    {/* Edit */}
+                    <button
+                      onClick={() => handleEditServer(server)}
+                      className="p-1.5 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800"
+                      title="Edit server"
+                    >
+                      <Edit2 className="w-4 h-4 text-sanctuary-400" />
+                    </button>
                     {/* Delete */}
                     <button
                       onClick={() => handleDeleteServer(server.id)}
@@ -674,9 +715,12 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
           </div>
         )}
 
-        {/* Add Server Form */}
+        {/* Add/Edit Server Form */}
         {isAddingServer && (
           <div className="mt-3 p-4 surface-muted rounded-xl space-y-3">
+            <div className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
+              {editingServerId ? 'Edit Server' : 'Add New Server'}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-sanctuary-500 mb-1">Label</label>
@@ -734,19 +778,23 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
                 ))}
               </div>
               <div className="flex space-x-2">
-                <Button variant="ghost" size="sm" onClick={() => setIsAddingServer(false)}>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setIsAddingServer(false);
+                  setEditingServerId(null);
+                  setNewServer({ label: '', host: '', port: getDefaultPort(network), useSsl: true });
+                }}>
                   Cancel
                 </Button>
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleAddServer}
-                  disabled={!newServer.label || !newServer.host || serverActionLoading === 'add'}
+                  onClick={editingServerId ? handleUpdateServer : handleAddServer}
+                  disabled={!newServer.label || !newServer.host || serverActionLoading === 'add' || serverActionLoading === editingServerId}
                 >
-                  {serverActionLoading === 'add' ? (
-                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Adding</>
+                  {(serverActionLoading === 'add' || serverActionLoading === editingServerId) ? (
+                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> {editingServerId ? 'Updating' : 'Adding'}</>
                   ) : (
-                    'Add Server'
+                    editingServerId ? 'Update Server' : 'Add Server'
                   )}
                 </Button>
               </div>

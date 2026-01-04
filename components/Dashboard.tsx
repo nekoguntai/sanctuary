@@ -654,14 +654,18 @@ export const Dashboard: React.FC = () => {
 
               <div className="flex items-center justify-between mt-4">
                 <div className={`flex items-center text-sm font-medium ${
-                  priceChangePositive
-                    ? 'text-success-600 dark:text-success-400'
-                    : 'text-rose-600 dark:text-rose-400'
+                  priceChange24h === null
+                    ? 'text-sanctuary-400'
+                    : priceChangePositive
+                      ? 'text-success-600 dark:text-success-400'
+                      : 'text-rose-600 dark:text-rose-400'
                 }`}>
-                  {priceChangePositive ? (
-                    <TrendingUp className="w-4 h-4 mr-1" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 mr-1" />
+                  {priceChange24h !== null && (
+                    priceChangePositive ? (
+                      <TrendingUp className="w-4 h-4 mr-1" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 mr-1" />
+                    )
                   )}
                   {priceChange24h !== null ? `${priceChangePositive ? '+' : ''}${priceChange24h.toFixed(2)}%` : '---'}
                   <span className="text-sanctuary-400 font-normal ml-2">24h</span>

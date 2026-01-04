@@ -31,7 +31,7 @@ export type {
 } from './types';
 
 // Re-export adapters
-export { LedgerAdapter, TrezorAdapter } from './adapters';
+export { LedgerAdapter, TrezorAdapter, BitBoxAdapter, JadeAdapter } from './adapters';
 
 // Re-export service class
 export { HardwareWalletService, createHardwareWalletService } from './service';
@@ -40,6 +40,8 @@ export { HardwareWalletService, createHardwareWalletService } from './service';
 import { HardwareWalletService } from './service';
 import { LedgerAdapter } from './adapters/ledger';
 import { TrezorAdapter } from './adapters/trezor';
+import { BitBoxAdapter } from './adapters/bitbox';
+import { JadeAdapter } from './adapters/jade';
 
 /**
  * Check if WebUSB is supported in this browser
@@ -77,6 +79,8 @@ export const getConnectedDevices = async (): Promise<import('./types').HardwareW
  * Supported devices:
  * - Ledger (Nano S, Nano X, Nano S Plus, Stax, Flex) via WebUSB
  * - Trezor (Model One, Model T, Safe 3/5/7) via Trezor Connect (requires Trezor Suite)
+ * - BitBox02 (Multi, Bitcoin-only) via WebHID
+ * - Blockstream Jade (Jade, Jade Plus) via WebSerial
  *
  * All devices require HTTPS (secure context) for USB connectivity.
  *
@@ -90,11 +94,11 @@ const createDefaultService = (): HardwareWalletService => {
   // Register built-in adapters
   service.registerAdapter(new LedgerAdapter());
   service.registerAdapter(new TrezorAdapter());
+  service.registerAdapter(new BitBoxAdapter());
+  service.registerAdapter(new JadeAdapter());
 
   // Future adapters can be added here:
   // service.registerAdapter(new ColdcardAdapter());
-  // service.registerAdapter(new BitBoxAdapter());
-  // service.registerAdapter(new JadeAdapter());
 
   return service;
 };

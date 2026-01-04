@@ -7,3 +7,5 @@
 
 export { LedgerAdapter } from './ledger';
 export { TrezorAdapter } from './trezor';
+export { BitBoxAdapter } from './bitbox';
+export { JadeAdapter } from './jade';

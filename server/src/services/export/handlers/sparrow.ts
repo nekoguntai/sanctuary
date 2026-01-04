@@ -87,10 +87,6 @@ function mapDeviceType(deviceType: string): string {
     keystone_3_pro: 'KEYSTONE',
     // Other devices
     specter: 'SPECTER_DIY',
-    keepkey: 'KEEPKEY',
-    krux: 'SEEDSIGNER',
-    ngrave_zero: 'COLDCARD',
-    satochip: 'COLDCARD',
     // Generic fallbacks
     generic_sd: 'COLDCARD',
     generic_usb: 'COLDCARD',

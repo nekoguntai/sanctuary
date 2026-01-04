@@ -25,15 +25,17 @@ function drawTiledSanctuaryBackground(
   canvasWidth: number,
   canvasHeight: number,
   _time: number,
-  _darkMode: boolean,
+  darkMode: boolean,
   _opacityMultiplier: number
 ) {
-  // Solid black background
-  ctx.fillStyle = '#000000';
+  // Background color based on dark mode
+  ctx.fillStyle = darkMode ? '#000000' : '#ffffff';
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Very dark gray logo color - subtly blends into black background
-  const logoColor = '#080808';
+  // Logo color - subtly blends into background
+  // Dark mode: very dark gray on black
+  // Light mode: very light gray on white
+  const logoColor = darkMode ? '#080808' : '#f5f5f5';
 
   // Match CSS tile size: 40x40 with viewBox 0 0 24 24
   const tileSize = 40;

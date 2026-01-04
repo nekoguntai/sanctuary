@@ -167,7 +167,8 @@ function parseMultisigDescriptor(
   const quorum = parseInt(quorumMatch[1], 10);
 
   // Extract all key expressions: [fingerprint/path]xpub/derivation
-  const keyRegex = /\[([a-f0-9]{8})\/([^\]]+)\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*]+))?/g;
+  // Note: fingerprint can be uppercase or lowercase hex
+  const keyRegex = /\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*]+))?/g;
   const keys: MultisigKeyInfo[] = [];
 
   let match;

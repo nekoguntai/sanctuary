@@ -52,13 +52,13 @@ export async function initializeServices(): Promise<void> {
 
   // Register price service
   serviceRegistry.registerFactory(ServiceNames.PRICE, () => {
-    const priceService = require('./priceService');
-    return priceService;
+    const { getPriceService } = require('./price');
+    return getPriceService();
   });
 
   // Register token revocation service
   serviceRegistry.registerFactory(ServiceNames.TOKEN_REVOCATION, () => {
-    const tokenRevocationService = require('./tokenRevocationService');
+    const tokenRevocationService = require('./tokenRevocation');
     return tokenRevocationService;
   });
 

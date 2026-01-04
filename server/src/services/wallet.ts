@@ -818,7 +818,21 @@ export async function generateAddress(
 
 /**
  * Repair wallet descriptor
- * Regenerates descriptor from attached devices for wallets that have devices but no descriptor
+ *
+ * Regenerates the Bitcoin descriptor from attached hardware devices for wallets
+ * that have devices linked but are missing a descriptor. This can happen when
+ * a multisig wallet is created before all devices are added.
+ *
+ * Security: Only wallet owners can repair descriptors. This prevents unauthorized
+ * users from regenerating descriptors which could theoretically be used to derive
+ * addresses. The operation is safe because descriptors are deterministically
+ * derived from the immutable device xpubs - the same devices will always
+ * produce the same descriptor.
+ *
+ * @param walletId - The wallet to repair
+ * @param userId - The user requesting the repair (must be owner)
+ * @returns Success status and message
+ * @throws Error if wallet not found or user is not owner
  */
 export async function repairWalletDescriptor(
   walletId: string,
@@ -929,7 +943,9 @@ export async function repairWalletDescriptor(
       });
     }
 
-    // Bulk insert addresses (skip if they already exist)
+    // Bulk insert addresses
+    // skipDuplicates ensures idempotency - if repair is called multiple times
+    // or addresses already exist from a partial repair, they won't cause errors
     await prisma.address.createMany({
       data: addressesToCreate,
       skipDuplicates: true,

@@ -26,12 +26,14 @@ const mockGetUserWallets = jest.fn();
 const mockCreateWallet = jest.fn();
 const mockUpdateWallet = jest.fn();
 const mockDeleteWallet = jest.fn();
+const mockRepairWalletDescriptor = jest.fn();
 
 jest.mock('../../../src/services/wallet', () => ({
   getUserWallets: (...args: any[]) => mockGetUserWallets(...args),
   createWallet: (...args: any[]) => mockCreateWallet(...args),
   updateWallet: (...args: any[]) => mockUpdateWallet(...args),
   deleteWallet: (...args: any[]) => mockDeleteWallet(...args),
+  repairWalletDescriptor: (...args: any[]) => mockRepairWalletDescriptor(...args),
   checkWalletAccess: jest.fn().mockResolvedValue(true),
   checkWalletEditAccess: jest.fn().mockResolvedValue(true),
 }));
@@ -448,6 +450,114 @@ describe('Wallets API', () => {
         const error = 'Quorum must be greater than 0';
         expect(error).toBe('Quorum must be greater than 0');
       }
+    });
+  });
+
+  describe('POST /wallets/:walletId/repair', () => {
+    it('should repair wallet with missing descriptor', async () => {
+      const walletId = 'wallet-123';
+      const userId = 'user-123';
+
+      mockRepairWalletDescriptor.mockResolvedValue({
+        success: true,
+        message: 'Generated descriptor and 40 addresses',
+      });
+
+      const { res, getResponse } = createMockResponse();
+
+      const result = await mockRepairWalletDescriptor(walletId, userId);
+      res.json!(result);
+
+      const response = getResponse();
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toContain('Generated descriptor');
+      expect(mockRepairWalletDescriptor).toHaveBeenCalledWith(walletId, userId);
+    });
+
+    it('should return success when wallet already has descriptor', async () => {
+      const walletId = 'wallet-123';
+      const userId = 'user-123';
+
+      mockRepairWalletDescriptor.mockResolvedValue({
+        success: true,
+        message: 'Wallet already has a descriptor',
+      });
+
+      const { res, getResponse } = createMockResponse();
+
+      const result = await mockRepairWalletDescriptor(walletId, userId);
+      res.json!(result);
+
+      const response = getResponse();
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Wallet already has a descriptor');
+    });
+
+    it('should fail when not enough devices for multisig', async () => {
+      const walletId = 'wallet-multisig';
+      const userId = 'user-123';
+
+      mockRepairWalletDescriptor.mockResolvedValue({
+        success: false,
+        message: 'Multi-sig wallet needs 3 devices, but only has 1',
+      });
+
+      const { res, getResponse } = createMockResponse();
+
+      const result = await mockRepairWalletDescriptor(walletId, userId);
+      res.json!(result);
+
+      const response = getResponse();
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('needs 3 devices');
+    });
+
+    it('should fail when wallet not found or access denied', async () => {
+      const walletId = 'wallet-not-found';
+      const userId = 'user-123';
+
+      mockRepairWalletDescriptor.mockRejectedValue(
+        new Error('Wallet not found or access denied')
+      );
+
+      const { res, getResponse } = createMockResponse();
+
+      try {
+        await mockRepairWalletDescriptor(walletId, userId);
+      } catch (error: any) {
+        res.status!(500).json!({
+          error: 'Internal Server Error',
+          message: error.message,
+        });
+      }
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(500);
+      expect(response.body.message).toBe('Wallet not found or access denied');
+    });
+
+    it('should handle descriptor generation error', async () => {
+      const walletId = 'wallet-123';
+      const userId = 'user-123';
+
+      mockRepairWalletDescriptor.mockRejectedValue(
+        new Error('Failed to generate descriptor: Invalid xpub format')
+      );
+
+      const { res, getResponse } = createMockResponse();
+
+      try {
+        await mockRepairWalletDescriptor(walletId, userId);
+      } catch (error: any) {
+        res.status!(500).json!({
+          error: 'Internal Server Error',
+          message: error.message,
+        });
+      }
+
+      const response = getResponse();
+      expect(response.statusCode).toBe(500);
+      expect(response.body.message).toContain('Failed to generate descriptor');
     });
   });
 });

@@ -586,6 +586,27 @@ router.post('/:id/devices', requireWalletAccess('edit'), async (req: Request, re
 });
 
 /**
+ * POST /api/v1/wallets/:id/repair
+ * Repair wallet descriptor - regenerate from attached devices
+ */
+router.post('/:id/repair', requireWalletAccess('owner'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const walletId = req.walletId!;
+
+    const result = await walletService.repairWalletDescriptor(walletId, userId);
+
+    res.json(result);
+  } catch (error: any) {
+    log.error('Repair wallet error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message || 'Failed to repair wallet',
+    });
+  }
+});
+
+/**
  * POST /api/v1/wallets/validate-xpub
  * Validate an xpub and generate descriptor
  */

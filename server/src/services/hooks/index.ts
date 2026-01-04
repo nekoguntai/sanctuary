@@ -38,6 +38,8 @@
  *   2. Use hookRegistry.wrap() or manually call executeBefore/executeAfter
  */
 
+import { registerAuditHooks, getHooksSummary } from './defaults';
+
 export { hookRegistry, HookRegistry } from './registry';
 export {
   HookPriorities,
@@ -54,3 +56,9 @@ export type {
   OperationName,
   HookPriority,
 } from './types';
+
+// Re-export helper functions
+export { registerAuditHooks, getHooksSummary };
+
+// Auto-register default audit hooks on import
+registerAuditHooks();

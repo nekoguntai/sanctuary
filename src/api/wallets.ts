@@ -130,6 +130,19 @@ export async function deleteWallet(walletId: string): Promise<void> {
   return apiClient.delete<void>(`/wallets/${walletId}`);
 }
 
+export interface RepairWalletResult {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Repair wallet descriptor
+ * Regenerates descriptor from attached devices for wallets missing a descriptor
+ */
+export async function repairWallet(walletId: string): Promise<RepairWalletResult> {
+  return apiClient.post<RepairWalletResult>(`/wallets/${walletId}/repair`);
+}
+
 /**
  * Get wallet statistics
  */

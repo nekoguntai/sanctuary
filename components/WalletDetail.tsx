@@ -412,6 +412,7 @@ export const WalletDetail: React.FC = () => {
   // Loading states
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sync retry state
@@ -1087,6 +1088,28 @@ export const WalletDetail: React.FC = () => {
       handleError(err, 'Resync Failed');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Repair wallet descriptor - regenerates from attached devices
+  const handleRepairWallet = async () => {
+    if (!id) return;
+
+    try {
+      setRepairing(true);
+      const result = await walletsApi.repairWallet(id);
+      if (result.success) {
+        showSuccess(result.message, 'Repair Complete');
+        // Reload wallet data after repair
+        await fetchData(true);
+      } else {
+        handleError(new Error(result.message), 'Repair Failed');
+      }
+    } catch (err) {
+      log.error('Failed to repair wallet', { error: err });
+      handleError(err, 'Repair Failed');
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -2659,6 +2682,31 @@ export const WalletDetail: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Troubleshooting - show if wallet has issues */}
+                {!wallet.descriptor && wallet.userRole === 'owner' && (
+                  <div className="surface-elevated rounded-xl p-5 border border-warning-200 dark:border-warning-800 bg-warning-50/50 dark:bg-warning-900/20">
+                    <h3 className="text-base font-medium mb-2 text-warning-700 dark:text-warning-300">Troubleshooting</h3>
+                    <p className="text-xs text-warning-600 dark:text-warning-400 mb-4">
+                      This wallet is missing a descriptor, which is needed to generate addresses.
+                      If you have hardware devices linked, you can repair the wallet to regenerate the descriptor.
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Repair Wallet</p>
+                        <p className="text-xs text-sanctuary-500">Regenerate descriptor from linked devices</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleRepairWallet}
+                        disabled={repairing}
+                      >
+                        {repairing ? 'Repairing...' : 'Repair'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Export Wallet */}
                 <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">

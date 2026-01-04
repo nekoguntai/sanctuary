@@ -12,6 +12,7 @@ import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
 import { INITIAL_ADDRESS_COUNT } from '../constants';
+import { hookRegistry, Operations } from './hooks';
 
 const log = createLogger('WALLET');
 
@@ -318,13 +319,22 @@ export async function createWallet(
     },
   });
 
-  return {
+  const result = {
     ...wallet,
     balance: 0,
     deviceCount: wallet.devices.length,
     addressCount: walletWithAddresses?.addresses.length || 0,
     isShared: false,
   };
+
+  // Execute after hooks for audit logging
+  hookRegistry.executeAfter(Operations.WALLET_CREATE, input, {
+    userId,
+    result,
+    success: true,
+  }).catch(err => log.warn('After hook failed', { error: err }));
+
+  return result;
 }
 
 /**
@@ -628,6 +638,12 @@ export async function deleteWallet(walletId: string, userId: string): Promise<vo
   await prisma.wallet.delete({
     where: { id: walletId },
   });
+
+  // Execute after hooks for audit logging
+  hookRegistry.executeAfter(Operations.WALLET_DELETE, { walletId }, {
+    userId,
+    success: true,
+  }).catch(err => log.warn('After hook failed', { error: err }));
 }
 
 /**
@@ -790,7 +806,152 @@ export async function generateAddress(
     },
   });
 
+  // Execute after hooks for audit logging
+  hookRegistry.executeAfter(Operations.ADDRESS_GENERATE, { walletId }, {
+    userId,
+    result: address,
+    success: true,
+  }).catch(err => log.warn('After hook failed', { error: err }));
+
   return address;
+}
+
+/**
+ * Repair wallet descriptor
+ * Regenerates descriptor from attached devices for wallets that have devices but no descriptor
+ */
+export async function repairWalletDescriptor(
+  walletId: string,
+  userId: string
+): Promise<{ success: boolean; message: string }> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId, role: 'owner' } },
+    },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
+  });
+
+  if (!wallet) {
+    throw new Error('Wallet not found or access denied');
+  }
+
+  if (wallet.descriptor) {
+    return { success: true, message: 'Wallet already has a descriptor' };
+  }
+
+  const devices = wallet.devices.map(wd => wd.device);
+
+  // Check device count requirements
+  if (wallet.type === 'single_sig' && devices.length !== 1) {
+    return {
+      success: false,
+      message: `Single-sig wallet needs exactly 1 device, but has ${devices.length}`
+    };
+  }
+
+  if (wallet.type === 'multi_sig') {
+    const requiredDevices = wallet.totalSigners || 2;
+    if (devices.length < requiredDevices) {
+      return {
+        success: false,
+        message: `Multi-sig wallet needs ${requiredDevices} devices, but only has ${devices.length}`
+      };
+    }
+  }
+
+  // Build descriptor from devices
+  const deviceInfos = devices.map(d => ({
+    fingerprint: d.fingerprint,
+    xpub: d.xpub,
+    derivationPath: d.derivationPath || undefined,
+  }));
+
+  try {
+    const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+      deviceInfos,
+      {
+        type: wallet.type as 'single_sig' | 'multi_sig',
+        scriptType: wallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
+        network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+        quorum: wallet.quorum || undefined,
+      }
+    );
+
+    // Update wallet with descriptor
+    await prisma.wallet.update({
+      where: { id: walletId },
+      data: {
+        descriptor: descriptorResult.descriptor,
+        fingerprint: descriptorResult.fingerprint,
+      },
+    });
+
+    // Generate initial addresses
+    const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
+    const addressesToCreate = [];
+
+    // Generate receive addresses
+    for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+      const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+        descriptorResult.descriptor,
+        i,
+        { network, change: false }
+      );
+      addressesToCreate.push({
+        walletId: wallet.id,
+        address,
+        derivationPath,
+        index: i,
+        used: false,
+      });
+    }
+
+    // Generate change addresses
+    for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+      const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+        descriptorResult.descriptor,
+        i,
+        { network, change: true }
+      );
+      addressesToCreate.push({
+        walletId: wallet.id,
+        address,
+        derivationPath,
+        index: i,
+        used: false,
+      });
+    }
+
+    // Bulk insert addresses (skip if they already exist)
+    await prisma.address.createMany({
+      data: addressesToCreate,
+      skipDuplicates: true,
+    });
+
+    log.info('Repaired wallet descriptor', {
+      walletId,
+      deviceCount: devices.length,
+      addressesGenerated: addressesToCreate.length,
+    });
+
+    return {
+      success: true,
+      message: `Generated descriptor and ${addressesToCreate.length} addresses`
+    };
+  } catch (err) {
+    log.error('Failed to repair wallet descriptor', {
+      walletId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw new Error(`Failed to generate descriptor: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**

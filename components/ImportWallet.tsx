@@ -1103,10 +1103,10 @@ export const ImportWallet: React.FC = () => {
                   className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                     network === net
                       ? net === 'mainnet'
-                        ? 'border-mainnet-500 bg-mainnet-50 text-mainnet-700 dark:border-mainnet-500 dark:bg-mainnet-900/20 dark:text-mainnet-400'
+                        ? 'border-mainnet-500 bg-mainnet-800 text-mainnet-200 dark:border-mainnet-500 dark:bg-mainnet-100 dark:text-mainnet-800'
                         : net === 'testnet'
-                        ? 'border-testnet-500 bg-testnet-50 text-testnet-700 dark:border-testnet-500 dark:bg-testnet-900/20 dark:text-testnet-400'
-                        : 'border-sanctuary-600 bg-sanctuary-50 text-sanctuary-700 dark:border-sanctuary-400 dark:bg-sanctuary-900/20 dark:text-sanctuary-400'
+                        ? 'border-testnet-500 bg-testnet-800 text-testnet-200 dark:border-testnet-500 dark:bg-testnet-100 dark:text-testnet-800'
+                        : 'border-signet-500 bg-signet-800 text-signet-200 dark:border-signet-500 dark:bg-signet-100 dark:text-signet-800'
                       : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
                   }`}
                 >

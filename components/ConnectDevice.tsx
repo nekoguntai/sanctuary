@@ -4,6 +4,7 @@ import { Scanner } from '@yudiel/react-qr-scanner';
 import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount, RegistryTypes } from '@keystonehq/bc-ur-registry';
 import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
 import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel } from '../src/api/devices';
+import { parseDeviceJson, parseDeviceData } from '../services/deviceParsers';
 import { Button } from './ui/Button';
 import {
   ArrowLeft,
@@ -298,213 +299,23 @@ export const ConnectDevice: React.FC = () => {
     // Read and parse the file
     const reader = new FileReader();
     reader.onload = (event) => {
-      try {
-        const content = event.target?.result as string;
-        // Try to parse as JSON
-        const data = JSON.parse(content);
+      const content = event.target?.result as string;
 
-        let foundXpub = '';
-        let foundFingerprint = '';
-        let foundDerivation = '';
-        let foundLabel = '';
+      // Use the device parser registry to parse the file content
+      // This handles JSON formats (Coldcard, Keystone, Ledger, BitBox, etc.)
+      // as well as plain text formats (descriptors, xpubs)
+      const result = parseDeviceJson(content);
 
-        // ============================================================
-        // COMPREHENSIVE HARDWARE WALLET JSON FORMAT SUPPORT
-        // ============================================================
-        // Supported formats:
-        // 1. Output Descriptor format (Sparrow, ColdCard wallet export, Specter)
-        // 2. ColdCard Generic JSON (Advanced > MicroSD > Export Wallet > Generic JSON)
-        // 3. Keystone JSON format (with coins/accounts structure)
-        // 4. Keystone Multisig format (with ExtendedPublicKey, Path, xfp)
-        // 5. Ledger Live Advanced Logs format (xpub with freshAddressPath)
-        // 6. BitBox02 BIP-329 format
-        // 7. Jade/BlueWallet/Nunchuk multisig wallet file format
-        // 8. Simple/direct format (various wallets)
-        // ============================================================
+      if (result && (result.xpub || result.fingerprint)) {
+        if (result.xpub) setXpub(result.xpub);
+        if (result.fingerprint) setFingerprint(result.fingerprint);
+        if (result.derivationPath) setDerivationPath(normalizeDerivationPath(result.derivationPath));
+        if (result.label && !label) setLabel(result.label);
 
-        // FORMAT 1: Output Descriptor format
-        // Example: { descriptor: "wpkh([fingerprint/84h/0h/0h]xpub.../0/*)#checksum", label: "..." }
-        if (data.descriptor) {
-          const descriptorMatch = data.descriptor.match(/\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuv]pub[a-zA-Z0-9]+)/);
-          if (descriptorMatch) {
-            foundFingerprint = descriptorMatch[1];
-            const pathPart = descriptorMatch[2].replace(/h/g, "'");
-            foundDerivation = `m/${pathPart}`;
-            foundXpub = descriptorMatch[3];
-          }
-          if (data.label) foundLabel = data.label;
-        }
-
-        // FORMAT 2a: ColdCard Generic JSON format (nested)
-        // Example: { xfp: "...", bip84: { xpub: "...", _pub: "zpub...", deriv: "m/84'/0'/0'" } }
-        if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
-          // Prefer BIP84 (Native SegWit), then BIP86 (Taproot), then BIP49, then BIP44
-          const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
-          if (bipSection) {
-            foundXpub = bipSection._pub || bipSection.xpub || '';
-            foundDerivation = bipSection.deriv || '';
-          }
-        }
-
-        // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
-        // Example: { xfp: "FA79B6AA", p2wsh: "Zpub...", p2wsh_deriv: "m/48'/0'/0'/2'",
-        //           p2sh_p2wsh: "Ypub...", p2sh_p2wsh_deriv: "m/48'/0'/0'/1'",
-        //           p2sh: "xpub...", p2sh_deriv: "m/45'" }
-        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
-          // Prefer p2wsh (Native SegWit multisig), then p2sh_p2wsh (Nested SegWit), then p2sh (Legacy)
-          if (data.p2wsh && data.p2wsh_deriv) {
-            foundXpub = data.p2wsh;
-            foundDerivation = data.p2wsh_deriv;
-          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
-            foundXpub = data.p2sh_p2wsh;
-            foundDerivation = data.p2sh_p2wsh_deriv;
-          } else if (data.p2sh && data.p2sh_deriv) {
-            foundXpub = data.p2sh;
-            foundDerivation = data.p2sh_deriv;
-          }
-        }
-
-        // FORMAT 3: Keystone JSON format (QR code decoded or file export)
-        // Example: { coins: [{ coinCode: "BTC", accounts: [{ hdPath: "M/84'/0'/0'", xPub: "xpub..." }] }] }
-        // Or nested: { data: { sync: { coins: [...] } } }
-        const keystoneCoins = data.coins || data.data?.sync?.coins;
-        if (!foundXpub && keystoneCoins && Array.isArray(keystoneCoins)) {
-          const btcCoin = keystoneCoins.find((c: Record<string, unknown>) => c.coinCode === 'BTC' || c.coin === 'BTC');
-          if (btcCoin?.accounts && Array.isArray(btcCoin.accounts)) {
-            // Prefer Native SegWit (84') account
-            const nativeSegwit = btcCoin.accounts.find((a: Record<string, unknown>) => (a.hdPath as string)?.includes("84'") || (a.hdPath as string)?.includes("84h"));
-            const account = nativeSegwit || btcCoin.accounts[0];
-            if (account) {
-              foundXpub = account.xPub || account.xpub || '';
-              foundDerivation = (account.hdPath || '').replace(/^M/, 'm');
-            }
-          }
-        }
-
-        // FORMAT 4: Keystone Multisig export format
-        // Example: { ExtendedPublicKey: "Zpub...", Path: "M/48'/0'/0'/2'", xfp: "37b5eed4" }
-        if (!foundXpub && data.ExtendedPublicKey) {
-          foundXpub = data.ExtendedPublicKey;
-          foundDerivation = (data.Path || '').replace(/^M/, 'm');
-          foundFingerprint = data.xfp || '';
-        }
-
-        // FORMAT 5: Ledger Live Advanced Logs format
-        // Example: { xpub: "xpub...", freshAddressPath: "44'/0'/0'/0/0" }
-        // Note: Ledger always outputs xpub prefix, need to check freshAddressPath for actual type
-        if (!foundXpub && data.xpub && data.freshAddressPath) {
-          foundXpub = data.xpub;
-          // Extract account path from freshAddressPath (remove last two components: /0/0)
-          const pathMatch = data.freshAddressPath.match(/^(\d+)'\/(\d+)'\/(\d+)'/);
-          if (pathMatch) {
-            foundDerivation = `m/${pathMatch[1]}'/${pathMatch[2]}'/${pathMatch[3]}'`;
-          }
-          if (data.name) foundLabel = data.name;
-        }
-
-        // FORMAT 6: BitBox02 format (simple xpub/ypub/zpub with optional metadata)
-        // Example: { keypath: "m/84'/0'/0'", xpub: "zpub..." }
-        if (!foundXpub && data.keypath && data.xpub) {
-          foundXpub = data.xpub;
-          foundDerivation = data.keypath;
-        }
-
-        // FORMAT 7: Jade/BlueWallet/Nunchuk multisig wallet file format
-        // Example: { fingerprint: "...", derivation: [...], xpub: "..." }
-        // Or: { signers: [{ fingerprint: "...", xpub: "...", derivation: "..." }] }
-        if (!foundXpub && data.signers && Array.isArray(data.signers)) {
-          const signer = data.signers[0];
-          if (signer) {
-            foundXpub = signer.xpub || '';
-            foundFingerprint = signer.fingerprint || signer.xfp || '';
-            foundDerivation = Array.isArray(signer.derivation)
-              ? `m/${signer.derivation.join('/')}`
-              : (signer.derivation || '');
-          }
-        }
-
-        // FORMAT 8: Simple/direct format fallbacks
-        // Example: { xpub: "...", xfp: "...", derivation: "..." }
-        if (!foundXpub && data.xpub) {
-          foundXpub = data.xpub;
-        }
-        if (!foundXpub && data.zpub) {
-          foundXpub = data.zpub;
-        }
-        if (!foundXpub && data.ypub) {
-          foundXpub = data.ypub;
-        }
-        if (!foundXpub && data.p2wpkh) {
-          foundXpub = data.p2wpkh;
-        }
-
-        // Extract fingerprint from various field names
-        if (!foundFingerprint) {
-          foundFingerprint = data.xfp || data.fingerprint || data.master_fingerprint ||
-                            data.masterFingerprint || data.root_fingerprint || '';
-        }
-
-        // Extract derivation path from various field names
-        // (normalization happens via normalizeDerivationPath when setting state)
-        if (!foundDerivation) {
-          foundDerivation = data.deriv || data.derivation || data.path ||
-                          data.derivationPath || data.hdPath || data.keypath || '';
-        }
-
-        // Extract label from various field names
-        if (!foundLabel) {
-          foundLabel = data.label || data.name || data.walletName || data.wallet_name || '';
-        }
-
-        // Validate we got what we need
-        if (!foundXpub && !foundFingerprint) {
-          setError('Could not find xpub or fingerprint in file. Please check the format.');
-          setScanning(false);
-          return;
-        }
-
-        // Set the extracted values
-        if (foundXpub) setXpub(foundXpub);
-        if (foundFingerprint) setFingerprint(foundFingerprint);
-        if (foundDerivation) setDerivationPath(normalizeDerivationPath(foundDerivation));
-        if (foundLabel && !label) setLabel(foundLabel);
-
+        log.info('File parsed successfully', { format: result.format, hasXpub: !!result.xpub, hasFingerprint: !!result.fingerprint });
         setScanned(true);
         setScanning(false);
-      } catch (err) {
-        // If not JSON, try to extract xpub from plain text
-        const content = event.target?.result as string;
-
-        // Try to extract descriptor from plain text
-        const descriptorMatch = content.match(/\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuv]pub[a-zA-Z0-9]+)/);
-        if (descriptorMatch) {
-          setFingerprint(descriptorMatch[1]);
-          const pathPart = descriptorMatch[2].replace(/h/g, "'");
-          setDerivationPath(normalizeDerivationPath(`m/${pathPart}`));
-          setXpub(descriptorMatch[3]);
-          setScanned(true);
-          setScanning(false);
-          return;
-        }
-
-        // Try to extract standalone xpub
-        const xpubMatch = content.match(/([xyztuv]pub[a-zA-Z0-9]{100,})/i);
-        if (xpubMatch) {
-          setXpub(xpubMatch[1]);
-          setScanned(true);
-          setScanning(false);
-          return;
-        }
-
-        // Try Zpub/Ypub (capital - multisig formats)
-        const multisigPubMatch = content.match(/([ZY]pub[a-zA-Z0-9]{100,})/);
-        if (multisigPubMatch) {
-          setXpub(multisigPubMatch[1]);
-          setScanned(true);
-          setScanning(false);
-          return;
-        }
-
+      } else {
         setError('Could not parse file. Please check the format.');
         setScanning(false);
       }
@@ -630,91 +441,20 @@ export const ConnectDevice: React.FC = () => {
           const textContent = textDecoder.decode(bytes);
           log.debug('Decoded bytes as text', { preview: textContent.substring(0, 200) });
 
-          // Try to parse as JSON
-          let data: any;
-          try {
-            data = JSON.parse(textContent);
-            log.debug('Parsed as JSON', { keys: Object.keys(data) });
-          } catch {
-            // Not JSON, try to extract from text directly
-            data = null;
-          }
-
-          let foundXpub = '';
-          let foundFingerprint = '';
-          let foundDerivation = '';
-
-          if (data) {
-            // FORMAT 1: Output Descriptor format (Sparrow wallet export)
-            // Example: { descriptor: "wpkh([fingerprint/84h/0h/0h]xpub.../0/*)#checksum", label: "..." }
-            if (data.descriptor) {
-              const descriptorMatch = data.descriptor.match(/\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuv]pub[a-zA-Z0-9]+)/);
-              if (descriptorMatch) {
-                foundFingerprint = descriptorMatch[1];
-                const pathPart = descriptorMatch[2].replace(/h/g, "'");
-                foundDerivation = `m/${pathPart}`;
-                foundXpub = descriptorMatch[3];
-              }
-            }
-
-            // FORMAT 2a: ColdCard / Passport JSON format (nested)
-            if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
-              const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
-              if (bipSection) {
-                foundXpub = bipSection._pub || bipSection.xpub || '';
-                foundDerivation = bipSection.deriv || '';
-              }
-            }
-
-            // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
-            if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
-              if (data.p2wsh && data.p2wsh_deriv) {
-                foundXpub = data.p2wsh;
-                foundDerivation = data.p2wsh_deriv;
-              } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
-                foundXpub = data.p2sh_p2wsh;
-                foundDerivation = data.p2sh_p2wsh_deriv;
-              } else if (data.p2sh && data.p2sh_deriv) {
-                foundXpub = data.p2sh;
-                foundDerivation = data.p2sh_deriv;
-              }
-            }
-
-            // FORMAT 3: Direct xpub fields
-            if (!foundXpub) {
-              foundXpub = data.xpub || data.zpub || data.ypub || data.ExtPubKey || data.extPubKey || '';
-            }
-            if (!foundFingerprint) {
-              foundFingerprint = data.xfp || data.fingerprint || data.master_fingerprint || data.MasterFingerprint || '';
-            }
-            if (!foundDerivation) {
-              foundDerivation = data.deriv || data.derivation || data.path || data.derivationPath || data.AccountKeyPath || '';
-            }
-          }
-
-          // If not JSON or no xpub found in JSON, try text patterns
-          if (!foundXpub) {
-            // Try descriptor format: [fingerprint/path]xpub
-            const descriptorMatch = textContent.match(/\[([a-fA-F0-9]{8})\/?([^\]]*)\]([xyztuv]pub[a-zA-Z0-9]+)/i);
-            if (descriptorMatch) {
-              foundFingerprint = descriptorMatch[1];
-              const pathPart = descriptorMatch[2].replace(/h/g, "'");
-              if (pathPart) foundDerivation = `m/${pathPart}`;
-              foundXpub = descriptorMatch[3];
-            }
-
-            // Try plain xpub
-            if (!foundXpub) {
-              const xpubMatch = textContent.match(/([xyztuv]pub[a-zA-Z0-9]{100,})/i);
-              if (xpubMatch) {
-                foundXpub = xpubMatch[1];
-              }
-            }
-          }
-
-          if (foundXpub) {
-            log.debug('Extracted from ur:bytes', { xpubPreview: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
-            return { xpub: foundXpub, fingerprint: foundFingerprint, path: foundDerivation };
+          // Use the device parser registry to parse the content
+          const result = parseDeviceJson(textContent);
+          if (result && result.xpub) {
+            log.debug('Extracted from ur:bytes', {
+              format: result.format,
+              xpubPreview: result.xpub.substring(0, 20) + '...',
+              fingerprint: result.fingerprint || '',
+              path: result.derivationPath || ''
+            });
+            return {
+              xpub: result.xpub,
+              fingerprint: result.fingerprint || '',
+              path: result.derivationPath || ''
+            };
           }
         } catch (decodeErr) {
           log.error('Failed to decode ur:bytes as text', { error: decodeErr });
@@ -733,104 +473,24 @@ export const ConnectDevice: React.FC = () => {
    * The ur:bytes typically contains JSON with wallet descriptor information
    */
   const extractFromUrBytesContent = (textContent: string): { xpub: string; fingerprint: string; path: string } | null => {
-    try {
-      let foundXpub = '';
-      let foundFingerprint = '';
-      let foundDerivation = '';
+    // Use the device parser registry to parse the text content
+    const result = parseDeviceJson(textContent);
 
-      // Try to parse as JSON
-      let data: any;
-      try {
-        data = JSON.parse(textContent);
-        log.debug('ur:bytes parsed as JSON', { keys: Object.keys(data) });
-      } catch {
-        data = null;
-      }
-
-      if (data) {
-        // FORMAT 1: Output Descriptor format (Sparrow wallet export)
-        // Example: { descriptor: "wpkh([fingerprint/84h/0h/0h]xpub.../0/*)#checksum", label: "..." }
-        if (data.descriptor) {
-          const descriptorMatch = data.descriptor.match(/\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuv]pub[a-zA-Z0-9]+)/);
-          if (descriptorMatch) {
-            foundFingerprint = descriptorMatch[1];
-            const pathPart = descriptorMatch[2].replace(/h/g, "'");
-            foundDerivation = `m/${pathPart}`;
-            foundXpub = descriptorMatch[3];
-          }
-        }
-
-        // FORMAT 2a: ColdCard / Passport JSON format with bip sections (nested)
-        if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
-          const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
-          if (bipSection) {
-            foundXpub = bipSection._pub || bipSection.xpub || '';
-            foundDerivation = bipSection.deriv || '';
-          }
-          if (!foundFingerprint && data.xfp) {
-            foundFingerprint = data.xfp;
-          }
-        }
-
-        // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
-        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
-          if (data.p2wsh && data.p2wsh_deriv) {
-            foundXpub = data.p2wsh;
-            foundDerivation = data.p2wsh_deriv;
-          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
-            foundXpub = data.p2sh_p2wsh;
-            foundDerivation = data.p2sh_p2wsh_deriv;
-          } else if (data.p2sh && data.p2sh_deriv) {
-            foundXpub = data.p2sh;
-            foundDerivation = data.p2sh_deriv;
-          }
-          if (!foundFingerprint && data.xfp) {
-            foundFingerprint = data.xfp;
-          }
-        }
-
-        // FORMAT 3: Direct xpub fields
-        if (!foundXpub) {
-          foundXpub = data.xpub || data.zpub || data.ypub || data.ExtPubKey || data.extPubKey || '';
-        }
-        if (!foundFingerprint) {
-          foundFingerprint = data.xfp || data.fingerprint || data.master_fingerprint || data.MasterFingerprint || '';
-        }
-        if (!foundDerivation) {
-          foundDerivation = data.deriv || data.derivation || data.path || data.derivationPath || data.AccountKeyPath || '';
-        }
-      }
-
-      // If not JSON or no xpub found in JSON, try text patterns
-      if (!foundXpub) {
-        // Try descriptor format: [fingerprint/path]xpub
-        const descriptorMatch = textContent.match(/\[([a-fA-F0-9]{8})\/?([^\]]*)\]([xyztuv]pub[a-zA-Z0-9]+)/i);
-        if (descriptorMatch) {
-          foundFingerprint = descriptorMatch[1];
-          const pathPart = descriptorMatch[2].replace(/h/g, "'");
-          if (pathPart) foundDerivation = `m/${pathPart}`;
-          foundXpub = descriptorMatch[3];
-        }
-
-        // Try plain xpub
-        if (!foundXpub) {
-          const xpubMatch = textContent.match(/([xyztuv]pub[a-zA-Z0-9]{100,})/i);
-          if (xpubMatch) {
-            foundXpub = xpubMatch[1];
-          }
-        }
-      }
-
-      if (foundXpub) {
-        log.debug('Extracted from ur:bytes text', { xpubPreview: foundXpub.substring(0, 20) + '...', fingerprint: foundFingerprint, path: foundDerivation });
-        return { xpub: foundXpub, fingerprint: foundFingerprint, path: foundDerivation };
-      }
-
-      return null;
-    } catch (err) {
-      log.error('Failed to extract from ur:bytes content', { error: err });
-      return null;
+    if (result && result.xpub) {
+      log.debug('Extracted from ur:bytes text', {
+        format: result.format,
+        xpubPreview: result.xpub.substring(0, 20) + '...',
+        fingerprint: result.fingerprint || '',
+        path: result.derivationPath || ''
+      });
+      return {
+        xpub: result.xpub,
+        fingerprint: result.fingerprint || '',
+        path: result.derivationPath || ''
+      };
     }
+
+    return null;
   };
 
   /**
@@ -1062,152 +722,44 @@ export const ConnectDevice: React.FC = () => {
       }
     }
 
-    // Not UR format - use existing parsing logic
+    // Not UR format - use device parser registry
     setCameraActive(false);
     setScanning(true);
     setError(null);
 
-    try {
-      // Try to parse as JSON first
-      let data: any;
-      try {
-        data = JSON.parse(content);
-      } catch {
-        // Not JSON, try other formats below
-        data = null;
-      }
+    // Use the device parser registry to parse the QR content
+    const parseResult = parseDeviceJson(content);
 
-      let foundXpub = '';
-      let foundFingerprint = '';
-      let foundDerivation = '';
-      let foundLabel = '';
-
-      if (data) {
-        // FORMAT 1a: ColdCard / Passport JSON format (simple)
-        // { "xfp": "DEADBEEF", "xpub": "xpub...", "deriv": "m/84'/0'/0'" }
-        if (data.xpub) {
-          foundXpub = data.xpub;
-          if (data.xfp) foundFingerprint = data.xfp;
-          if (data.deriv) foundDerivation = data.deriv;
-          if (data.name) foundLabel = data.name;
-        }
-
-        // FORMAT 1b: ColdCard nested BIP format
-        // { xfp: "...", bip84: { xpub: "...", _pub: "zpub...", deriv: "m/84'/0'/0'" } }
-        if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
-          const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
-          if (bipSection) {
-            foundXpub = bipSection._pub || bipSection.xpub || '';
-            foundDerivation = bipSection.deriv || '';
-          }
-          if (data.xfp) foundFingerprint = data.xfp;
-        }
-
-        // FORMAT 1c: ColdCard Generic Multisig JSON format (flat)
-        // { xfp: "FA79B6AA", p2wsh: "Zpub...", p2wsh_deriv: "m/48'/0'/0'/2'" }
-        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
-          if (data.p2wsh && data.p2wsh_deriv) {
-            foundXpub = data.p2wsh;
-            foundDerivation = data.p2wsh_deriv;
-          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
-            foundXpub = data.p2sh_p2wsh;
-            foundDerivation = data.p2sh_p2wsh_deriv;
-          } else if (data.p2sh && data.p2sh_deriv) {
-            foundXpub = data.p2sh;
-            foundDerivation = data.p2sh_deriv;
-          }
-          if (data.xfp) foundFingerprint = data.xfp;
-        }
-
-        // FORMAT 2: Keystone format
-        // { coins: [{ coinCode: "BTC", accounts: [{ hdPath: "M/84'/0'/0'", xPub: "xpub..." }] }] }
-        const keystoneCoins = data.coins || data.data?.sync?.coins;
-        if (keystoneCoins && Array.isArray(keystoneCoins)) {
-          const btcCoin = keystoneCoins.find((c: any) => c.coinCode === 'BTC' || c.coin === 'BTC');
-          if (btcCoin && btcCoin.accounts && btcCoin.accounts.length > 0) {
-            const account = btcCoin.accounts[0];
-            foundXpub = account.xPub || account.xpub || '';
-            if (account.hdPath) foundDerivation = account.hdPath.replace(/^M/, 'm');
-          }
-        }
-
-        // FORMAT 3: Generic JSON with various field names
-        if (!foundXpub) {
-          foundXpub = data.ExtPubKey || data.extPubKey || data.zpub || data.ypub || data.Zpub || data.Ypub || '';
-        }
-        if (!foundFingerprint) {
-          foundFingerprint = data.MasterFingerprint || data.masterFingerprint || data.fingerprint || '';
-        }
-        if (!foundDerivation) {
-          foundDerivation = data.AccountKeyPath || data.accountKeyPath || data.derivationPath || data.path || '';
-        }
-      }
-
-      // If not JSON or no xpub found, try text patterns
-      if (!foundXpub) {
-        // Try descriptor format: [fingerprint/path]xpub
-        const descriptorMatch = content.match(/\[([a-fA-F0-9]{8})\/?([^\]]*)\]([xyztuv]pub[a-zA-Z0-9]+)/i);
-        if (descriptorMatch) {
-          foundFingerprint = descriptorMatch[1];
-          const pathPart = descriptorMatch[2].replace(/h/g, "'");
-          if (pathPart) foundDerivation = `m/${pathPart}`;
-          foundXpub = descriptorMatch[3];
-        }
-
-        // Try plain xpub
-        if (!foundXpub) {
-          const xpubMatch = content.match(/([xyztuv]pub[a-zA-Z0-9]{100,})/i);
-          if (xpubMatch) {
-            foundXpub = xpubMatch[1];
-          }
-        }
-
-        // Try multisig format (Zpub/Ypub)
-        if (!foundXpub) {
-          const multisigPubMatch = content.match(/([ZY]pub[a-zA-Z0-9]{100,})/);
-          if (multisigPubMatch) {
-            foundXpub = multisigPubMatch[1];
-          }
-        }
-      }
-
-      // Validate we found something
-      if (!foundXpub) {
-        log.debug('No xpub found in non-UR content', { preview: content.substring(0, 200) });
-        setError(`Could not find xpub in QR code. Content starts with: "${content.substring(0, 30)}...". Check browser console (F12) for details.`);
-        setScanning(false);
-        return;
-      }
-
+    if (parseResult && parseResult.xpub) {
       // Apply found values
-      if (foundFingerprint) setFingerprint(foundFingerprint.toUpperCase());
-      if (foundXpub) setXpub(foundXpub);
-      if (foundDerivation) setDerivationPath(normalizeDerivationPath(foundDerivation));
-      if (foundLabel && !label) setLabel(foundLabel);
+      if (parseResult.fingerprint) setFingerprint(parseResult.fingerprint.toUpperCase());
+      setXpub(parseResult.xpub);
+      if (parseResult.derivationPath) setDerivationPath(normalizeDerivationPath(parseResult.derivationPath));
+      if (parseResult.label && !label) setLabel(parseResult.label);
 
       // Track which fields came from QR
       const extractedFields = {
-        xpub: !!foundXpub,
-        fingerprint: !!foundFingerprint,
-        derivationPath: !!foundDerivation,
-        label: !!foundLabel,
+        xpub: true,
+        fingerprint: !!parseResult.fingerprint,
+        derivationPath: !!parseResult.derivationPath,
+        label: !!parseResult.label,
       };
       setQrExtractedFields(extractedFields);
 
       // Generate warning for missing fields
       const warningMsg = generateMissingFieldsWarning({
-        hasFingerprint: !!foundFingerprint,
-        hasDerivationPath: !!foundDerivation,
+        hasFingerprint: !!parseResult.fingerprint,
+        hasDerivationPath: !!parseResult.derivationPath,
       });
       setWarning(warningMsg);
 
       setScanned(true);
       setScanning(false);
 
-      log.info('QR code parsed successfully', extractedFields);
-    } catch (err) {
-      log.error('Failed to parse QR code', { error: err });
-      setError('Failed to parse QR code content.');
+      log.info('QR code parsed successfully', { format: parseResult.format, ...extractedFields });
+    } else {
+      log.debug('No xpub found in non-UR content', { preview: content.substring(0, 200) });
+      setError(`Could not find xpub in QR code. Content starts with: "${content.substring(0, 30)}...". Check browser console (F12) for details.`);
       setScanning(false);
     }
   };

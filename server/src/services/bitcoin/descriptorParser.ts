@@ -486,12 +486,17 @@ export interface WalletExportFormat {
 /**
  * Coldcard JSON export format
  * Contains xfp (fingerprint) and multiple derivation paths (bip44, bip49, bip84, bip48)
+ *
+ * Two export formats exist:
+ * 1. Nested format (standard single-sig export): bip44/bip49/bip84/bip48_1/bip48_2 objects
+ * 2. Flat format (generic multisig export): p2sh/p2sh_p2wsh/p2wsh with separate _deriv keys
  */
 export interface ColdcardJsonExport {
   chain?: string;
   xfp: string;
   xpub?: string;
-  account?: number;
+  account?: number | string;
+  // Nested format (standard export)
   bip44?: {
     xpub: string;
     deriv: string;
@@ -522,6 +527,13 @@ export interface ColdcardJsonExport {
     deriv: string;
     name?: string;
   };
+  // Flat format (generic multisig export from Coldcard)
+  p2sh?: string;        // Legacy multisig xpub
+  p2sh_deriv?: string;  // e.g., "m/45'"
+  p2sh_p2wsh?: string;  // Nested segwit multisig Ypub
+  p2sh_p2wsh_deriv?: string; // e.g., "m/48'/0'/0'/1'"
+  p2wsh?: string;       // Native segwit multisig Zpub
+  p2wsh_deriv?: string; // e.g., "m/48'/0'/0'/2'"
 }
 
 /**
@@ -730,27 +742,89 @@ export function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
 
 /**
  * Check if JSON is a Coldcard export format (has xfp and bip paths)
+ * Supports both nested format (bip44/bip49/bip84) and flat format (p2sh/p2wsh/p2sh_p2wsh)
  */
 export function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
   if (typeof obj !== 'object' || obj === null) return false;
   const cc = obj as ColdcardJsonExport;
-  // Coldcard exports have xfp (fingerprint) and at least one BIP path
-  return (
-    typeof cc.xfp === 'string' &&
-    cc.xfp.length === 8 &&
-    (cc.bip44 !== undefined || cc.bip49 !== undefined || cc.bip84 !== undefined || cc.bip48_1 !== undefined || cc.bip48_2 !== undefined)
-  );
+  // Coldcard exports have xfp (fingerprint) - 8 hex characters
+  if (typeof cc.xfp !== 'string' || cc.xfp.length !== 8) return false;
+
+  // Check for nested format (standard single-sig export)
+  const hasNestedFormat =
+    cc.bip44 !== undefined || cc.bip49 !== undefined || cc.bip84 !== undefined ||
+    cc.bip48_1 !== undefined || cc.bip48_2 !== undefined;
+
+  // Check for flat format (generic multisig export)
+  const hasFlatFormat =
+    cc.p2sh !== undefined || cc.p2sh_p2wsh !== undefined || cc.p2wsh !== undefined;
+
+  return hasNestedFormat || hasFlatFormat;
 }
 
 /**
  * Parse Coldcard JSON export into ParsedDescriptor
  * Coldcard exports contain multiple derivation paths - we need to pick one based on priority
- * Priority: bip84 (native segwit) > bip49 (nested segwit) > bip44 (legacy)
+ * Priority: bip84/p2wsh (native segwit) > bip49/p2sh_p2wsh (nested segwit) > bip44/p2sh (legacy)
+ *
+ * Supports both:
+ * - Nested format: bip44/bip49/bip84/bip48_1/bip48_2 objects
+ * - Flat format: p2sh/p2sh_p2wsh/p2wsh with separate _deriv keys (generic multisig export)
  */
 export function parseColdcardExport(cc: ColdcardJsonExport): { parsed: ParsedDescriptor; availablePaths: Array<{ scriptType: ScriptType; path: string }> } {
   const fingerprint = cc.xfp.toLowerCase();
   const availablePaths: Array<{ scriptType: ScriptType; path: string }> = [];
 
+  // Check if this is the flat format (generic multisig export)
+  const isFlatFormat = cc.p2wsh !== undefined || cc.p2sh_p2wsh !== undefined || cc.p2sh !== undefined;
+
+  if (isFlatFormat) {
+    // Handle flat format (generic multisig export from Coldcard)
+    // Collect all available paths
+    if (cc.p2wsh && cc.p2wsh_deriv) {
+      availablePaths.push({ scriptType: 'native_segwit', path: cc.p2wsh_deriv });
+    }
+    if (cc.p2sh_p2wsh && cc.p2sh_p2wsh_deriv) {
+      availablePaths.push({ scriptType: 'nested_segwit', path: cc.p2sh_p2wsh_deriv });
+    }
+    if (cc.p2sh && cc.p2sh_deriv) {
+      availablePaths.push({ scriptType: 'legacy', path: cc.p2sh_deriv });
+    }
+
+    // Pick the best available path (prefer native segwit)
+    let selectedPath: { xpub: string; deriv: string; scriptType: ScriptType };
+
+    if (cc.p2wsh && cc.p2wsh_deriv) {
+      selectedPath = { xpub: cc.p2wsh, deriv: cc.p2wsh_deriv, scriptType: 'native_segwit' };
+    } else if (cc.p2sh_p2wsh && cc.p2sh_p2wsh_deriv) {
+      selectedPath = { xpub: cc.p2sh_p2wsh, deriv: cc.p2sh_p2wsh_deriv, scriptType: 'nested_segwit' };
+    } else if (cc.p2sh && cc.p2sh_deriv) {
+      selectedPath = { xpub: cc.p2sh, deriv: cc.p2sh_deriv, scriptType: 'legacy' };
+    } else {
+      throw new Error('Coldcard export does not contain any recognized derivation paths with xpubs');
+    }
+
+    const device: ParsedDevice = {
+      fingerprint,
+      xpub: selectedPath.xpub,
+      derivationPath: normalizeDerivationPath(selectedPath.deriv),
+    };
+
+    const network = detectNetwork(device.xpub, device.derivationPath);
+
+    return {
+      parsed: {
+        type: 'single_sig',
+        scriptType: selectedPath.scriptType,
+        devices: [device],
+        network,
+        isChange: false,
+      },
+      availablePaths,
+    };
+  }
+
+  // Handle nested format (standard Coldcard export)
   // Collect all available paths
   if (cc.bip84) {
     availablePaths.push({ scriptType: 'native_segwit', path: cc.bip84.deriv });

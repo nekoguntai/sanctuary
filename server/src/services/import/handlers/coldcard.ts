@@ -28,11 +28,15 @@ export const coldcardHandler: ImportFormatHandler = {
 
       if (isColdcardExportFormat(json)) {
         // High confidence if it has the expected Coldcard structure
-        const hasMultiplePaths =
+        // Nested format (standard single-sig export)
+        const hasNestedPaths =
           json.bip84 || json.bip48_2 || json.bip49 || json.bip44;
+        // Flat format (generic multisig export)
+        const hasFlatPaths =
+          json.p2wsh || json.p2sh_p2wsh || json.p2sh;
         return {
           detected: true,
-          confidence: hasMultiplePaths ? 95 : 85,
+          confidence: (hasNestedPaths || hasFlatPaths) ? 95 : 85,
         };
       }
 

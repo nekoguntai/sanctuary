@@ -335,7 +335,7 @@ export const ConnectDevice: React.FC = () => {
           if (data.label) foundLabel = data.label;
         }
 
-        // FORMAT 2: ColdCard Generic JSON format
+        // FORMAT 2a: ColdCard Generic JSON format (nested)
         // Example: { xfp: "...", bip84: { xpub: "...", _pub: "zpub...", deriv: "m/84'/0'/0'" } }
         if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
           // Prefer BIP84 (Native SegWit), then BIP86 (Taproot), then BIP49, then BIP44
@@ -343,6 +343,24 @@ export const ConnectDevice: React.FC = () => {
           if (bipSection) {
             foundXpub = bipSection._pub || bipSection.xpub || '';
             foundDerivation = bipSection.deriv || '';
+          }
+        }
+
+        // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
+        // Example: { xfp: "FA79B6AA", p2wsh: "Zpub...", p2wsh_deriv: "m/48'/0'/0'/2'",
+        //           p2sh_p2wsh: "Ypub...", p2sh_p2wsh_deriv: "m/48'/0'/0'/1'",
+        //           p2sh: "xpub...", p2sh_deriv: "m/45'" }
+        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
+          // Prefer p2wsh (Native SegWit multisig), then p2sh_p2wsh (Nested SegWit), then p2sh (Legacy)
+          if (data.p2wsh && data.p2wsh_deriv) {
+            foundXpub = data.p2wsh;
+            foundDerivation = data.p2wsh_deriv;
+          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
+            foundXpub = data.p2sh_p2wsh;
+            foundDerivation = data.p2sh_p2wsh_deriv;
+          } else if (data.p2sh && data.p2sh_deriv) {
+            foundXpub = data.p2sh;
+            foundDerivation = data.p2sh_deriv;
           }
         }
 
@@ -639,12 +657,26 @@ export const ConnectDevice: React.FC = () => {
               }
             }
 
-            // FORMAT 2: ColdCard / Passport JSON format
+            // FORMAT 2a: ColdCard / Passport JSON format (nested)
             if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
               const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
               if (bipSection) {
                 foundXpub = bipSection._pub || bipSection.xpub || '';
                 foundDerivation = bipSection.deriv || '';
+              }
+            }
+
+            // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
+            if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
+              if (data.p2wsh && data.p2wsh_deriv) {
+                foundXpub = data.p2wsh;
+                foundDerivation = data.p2wsh_deriv;
+              } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
+                foundXpub = data.p2sh_p2wsh;
+                foundDerivation = data.p2sh_p2wsh_deriv;
+              } else if (data.p2sh && data.p2sh_deriv) {
+                foundXpub = data.p2sh;
+                foundDerivation = data.p2sh_deriv;
               }
             }
 
@@ -728,12 +760,29 @@ export const ConnectDevice: React.FC = () => {
           }
         }
 
-        // FORMAT 2: ColdCard / Passport JSON format with bip sections
+        // FORMAT 2a: ColdCard / Passport JSON format with bip sections (nested)
         if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
           const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
           if (bipSection) {
             foundXpub = bipSection._pub || bipSection.xpub || '';
             foundDerivation = bipSection.deriv || '';
+          }
+          if (!foundFingerprint && data.xfp) {
+            foundFingerprint = data.xfp;
+          }
+        }
+
+        // FORMAT 2b: ColdCard Generic Multisig JSON format (flat)
+        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
+          if (data.p2wsh && data.p2wsh_deriv) {
+            foundXpub = data.p2wsh;
+            foundDerivation = data.p2wsh_deriv;
+          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
+            foundXpub = data.p2sh_p2wsh;
+            foundDerivation = data.p2sh_p2wsh_deriv;
+          } else if (data.p2sh && data.p2sh_deriv) {
+            foundXpub = data.p2sh;
+            foundDerivation = data.p2sh_deriv;
           }
           if (!foundFingerprint && data.xfp) {
             foundFingerprint = data.xfp;
@@ -1034,13 +1083,40 @@ export const ConnectDevice: React.FC = () => {
       let foundLabel = '';
 
       if (data) {
-        // FORMAT 1: ColdCard / Passport JSON format
+        // FORMAT 1a: ColdCard / Passport JSON format (simple)
         // { "xfp": "DEADBEEF", "xpub": "xpub...", "deriv": "m/84'/0'/0'" }
         if (data.xpub) {
           foundXpub = data.xpub;
           if (data.xfp) foundFingerprint = data.xfp;
           if (data.deriv) foundDerivation = data.deriv;
           if (data.name) foundLabel = data.name;
+        }
+
+        // FORMAT 1b: ColdCard nested BIP format
+        // { xfp: "...", bip84: { xpub: "...", _pub: "zpub...", deriv: "m/84'/0'/0'" } }
+        if (!foundXpub && (data.bip84 || data.bip49 || data.bip44 || data.bip86)) {
+          const bipSection = data.bip84 || data.bip86 || data.bip49 || data.bip44;
+          if (bipSection) {
+            foundXpub = bipSection._pub || bipSection.xpub || '';
+            foundDerivation = bipSection.deriv || '';
+          }
+          if (data.xfp) foundFingerprint = data.xfp;
+        }
+
+        // FORMAT 1c: ColdCard Generic Multisig JSON format (flat)
+        // { xfp: "FA79B6AA", p2wsh: "Zpub...", p2wsh_deriv: "m/48'/0'/0'/2'" }
+        if (!foundXpub && (data.p2wsh || data.p2sh_p2wsh || data.p2sh)) {
+          if (data.p2wsh && data.p2wsh_deriv) {
+            foundXpub = data.p2wsh;
+            foundDerivation = data.p2wsh_deriv;
+          } else if (data.p2sh_p2wsh && data.p2sh_p2wsh_deriv) {
+            foundXpub = data.p2sh_p2wsh;
+            foundDerivation = data.p2sh_p2wsh_deriv;
+          } else if (data.p2sh && data.p2sh_deriv) {
+            foundXpub = data.p2sh;
+            foundDerivation = data.p2sh_deriv;
+          }
+          if (data.xfp) foundFingerprint = data.xfp;
         }
 
         // FORMAT 2: Keystone format

@@ -1,37 +1,27 @@
 /**
  * Unified Notification Service
  *
- * Central dispatcher for all notification channels (Telegram, Push).
+ * Central dispatcher for all notification channels using the channel registry.
  * Call this service from blockchain.ts when new transactions are detected.
+ *
+ * Channels are pluggable - to add new channels (Webhook, Slack, Discord, Email):
+ *   1. Create handler implementing NotificationChannelHandler
+ *   2. Register in channels/index.ts
  */
 
-import * as telegramService from '../telegram/telegramService';
-import * as pushService from '../push/pushService';
+import { notificationChannelRegistry, type TransactionNotification, type DraftNotification } from './channels';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('NOTIFY');
 
-export interface TransactionData {
-  txid: string;
-  type: string;
-  amount: bigint;
-}
-
-export interface DraftData {
-  id: string;
-  amount: bigint;
-  recipient: string;
-  label?: string | null;
-  feeRate: number;
-}
+// Re-export types for backward compatibility
+export type TransactionData = TransactionNotification;
+export type DraftData = DraftNotification;
 
 /**
  * Notify all eligible users about new transactions
  *
- * Dispatches notifications to all configured channels:
- * - Telegram (if user has configured bot token and chat ID)
- * - Push (if user has registered mobile devices)
- *
+ * Dispatches notifications to all registered and enabled channels.
  * Each channel checks its own per-wallet settings independently.
  *
  * @param walletId - The wallet that received/sent transactions
@@ -45,18 +35,16 @@ export async function notifyNewTransactions(
 
   log.debug(`Sending notifications for ${transactions.length} transactions in wallet ${walletId}`);
 
-  // Dispatch to all notification channels in parallel
-  const results = await Promise.allSettled([
-    telegramService.notifyNewTransactions(walletId, transactions),
-    pushService.notifyNewTransactions(walletId, transactions),
-  ]);
+  // Dispatch to all registered channels via registry
+  const results = await notificationChannelRegistry.notifyTransactions(
+    walletId,
+    transactions as TransactionNotification[]
+  );
 
-  // Log any failures (but don't throw - notifications are best-effort)
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === 'rejected') {
-      const channelName = i === 0 ? 'Telegram' : 'Push';
-      log.error(`${channelName} notification failed: ${result.reason}`);
+  // Log results
+  for (const result of results) {
+    if (!result.success && result.errors?.length) {
+      log.error(`${result.channelId} notification failed: ${result.errors.join(', ')}`);
     }
   }
 }
@@ -78,11 +66,29 @@ export async function notifyNewDraft(
 ): Promise<void> {
   log.debug(`Sending draft notification for wallet ${walletId}`);
 
-  // Currently only Telegram supports draft notifications
-  // Push can be added later if needed
-  try {
-    await telegramService.notifyNewDraft(walletId, draft, createdByUserId);
-  } catch (err) {
-    log.error(`Draft notification failed: ${err}`);
+  // Dispatch to all registered channels that support drafts
+  const results = await notificationChannelRegistry.notifyDraft(
+    walletId,
+    draft as DraftNotification,
+    createdByUserId
+  );
+
+  // Log results
+  for (const result of results) {
+    if (!result.success && result.errors?.length) {
+      log.error(`${result.channelId} draft notification failed: ${result.errors.join(', ')}`);
+    }
   }
+}
+
+/**
+ * Get list of available notification channels
+ */
+export function getAvailableChannels() {
+  return notificationChannelRegistry.getAll().map((handler) => ({
+    id: handler.id,
+    name: handler.name,
+    description: handler.description,
+    capabilities: handler.capabilities,
+  }));
 }

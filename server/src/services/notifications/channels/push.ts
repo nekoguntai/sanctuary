@@ -1,0 +1,61 @@
+/**
+ * Push Notification Channel Handler
+ *
+ * Wraps the existing Push service as a notification channel.
+ */
+
+import * as pushService from '../../push/pushService';
+import type {
+  NotificationChannelHandler,
+  TransactionNotification,
+  NotificationResult,
+} from './types';
+
+export const pushChannelHandler: NotificationChannelHandler = {
+  id: 'push',
+  name: 'Push Notifications',
+  description: 'Send notifications to mobile devices (iOS/Android)',
+  capabilities: {
+    supportsTransactions: true,
+    supportsDrafts: false, // Push doesn't support draft notifications yet
+    supportsRichFormatting: false,
+    supportsImages: false,
+  },
+
+  async isEnabled(): Promise<boolean> {
+    // Check if any push provider is configured
+    return pushService.isPushConfigured();
+  },
+
+  async notifyTransactions(
+    walletId: string,
+    transactions: TransactionNotification[]
+  ): Promise<NotificationResult> {
+    try {
+      // Convert to pushService format
+      const txData = transactions.map((tx) => ({
+        txid: tx.txid,
+        type: tx.type,
+        amount: tx.amount,
+      }));
+
+      await pushService.notifyNewTransactions(walletId, txData);
+
+      return {
+        success: true,
+        channelId: 'push',
+        usersNotified: 1, // Push service handles user lookup internally
+      };
+    } catch (err) {
+      return {
+        success: false,
+        channelId: 'push',
+        usersNotified: 0,
+        errors: [err instanceof Error ? err.message : String(err)],
+      };
+    }
+  },
+
+  // Push doesn't support draft notifications
+  // notifyDraft is not implemented
+};

@@ -21,6 +21,7 @@ import {
 import { createLogger } from '../utils/logger';
 import { balanceHistoryCache } from '../utils/cache';
 import { exportFormatRegistry, type WalletExportData } from '../services/export';
+import { isValidScriptType, scriptTypeRegistry } from '../services/scriptTypes';
 
 const router = Router();
 const log = createLogger('WALLETS');
@@ -82,10 +83,10 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    if (!['native_segwit', 'nested_segwit', 'taproot', 'legacy'].includes(scriptType)) {
+    if (!isValidScriptType(scriptType)) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Invalid scriptType',
+        message: `Invalid scriptType. Valid types: ${scriptTypeRegistry.getIds().join(', ')}`,
       });
     }
 
@@ -873,6 +874,33 @@ router.get('/:id/share', requireWalletAccess('view'), async (req: Request, res: 
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get sharing info',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/wallets/import/formats
+ * Get available import formats
+ */
+router.get('/import/formats', async (_req: Request, res: Response) => {
+  try {
+    const { importFormatRegistry } = await import('../services/import');
+    const handlers = importFormatRegistry.getAll();
+
+    const formats = handlers.map((handler) => ({
+      id: handler.id,
+      name: handler.name,
+      description: handler.description,
+      extensions: handler.fileExtensions || [],
+      priority: handler.priority,
+    }));
+
+    res.json({ formats });
+  } catch (error) {
+    log.error('Get import formats error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get import formats',
     });
   }
 });

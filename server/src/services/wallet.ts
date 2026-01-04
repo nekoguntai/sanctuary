@@ -645,6 +645,13 @@ export async function addDeviceToWallet(
       id: walletId,
       users: { some: { userId } },
     },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
   });
 
   if (!wallet) {
@@ -663,6 +670,12 @@ export async function addDeviceToWallet(
     throw new Error('Device not found');
   }
 
+  // Check if device is already attached to this wallet
+  const existingLink = wallet.devices.find(wd => wd.deviceId === deviceId);
+  if (existingLink) {
+    throw new Error('Device is already linked to this wallet');
+  }
+
   // Add device to wallet
   await prisma.walletDevice.create({
     data: {
@@ -671,6 +684,53 @@ export async function addDeviceToWallet(
       signerIndex,
     },
   });
+
+  // Regenerate descriptor if wallet now has enough devices
+  const allDevices = [...wallet.devices.map(wd => wd.device), device];
+  const shouldGenerateDescriptor =
+    (wallet.type === 'single_sig' && allDevices.length === 1) ||
+    (wallet.type === 'multi_sig' && allDevices.length >= (wallet.totalSigners || 2));
+
+  if (shouldGenerateDescriptor && !wallet.descriptor) {
+    // Build descriptor from all linked devices
+    const deviceInfos = allDevices.map(d => ({
+      fingerprint: d.fingerprint,
+      xpub: d.xpub,
+      derivationPath: d.derivationPath || undefined,
+    }));
+
+    try {
+      const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+        deviceInfos,
+        {
+          type: wallet.type as 'single_sig' | 'multi_sig',
+          scriptType: wallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
+          network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+          quorum: wallet.quorum || undefined,
+        }
+      );
+
+      // Update wallet with new descriptor
+      await prisma.wallet.update({
+        where: { id: walletId },
+        data: {
+          descriptor: descriptorResult.descriptor,
+          fingerprint: descriptorResult.fingerprint,
+        },
+      });
+
+      log.info('Generated descriptor for wallet after device link', {
+        walletId,
+        deviceCount: allDevices.length,
+      });
+    } catch (err) {
+      // Log but don't fail - device was still added
+      log.warn('Failed to generate descriptor after device link', {
+        walletId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 /**

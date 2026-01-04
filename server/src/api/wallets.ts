@@ -20,6 +20,7 @@ import {
 } from '../repositories';
 import { createLogger } from '../utils/logger';
 import { balanceHistoryCache } from '../utils/cache';
+import { exportFormatRegistry, type WalletExportData } from '../services/export';
 
 const router = Router();
 const log = createLogger('WALLETS');
@@ -365,12 +366,72 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
 });
 
 /**
+ * GET /api/v1/wallets/:id/export/formats
+ * Get available export formats for this wallet
+ */
+router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    // Get wallet to determine which formats are available
+    const wallet = await walletRepository.findByIdWithDevices(walletId);
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Wallet not found',
+      });
+    }
+
+    // Build wallet export data to check format availability
+    const walletData: WalletExportData = {
+      id: wallet.id,
+      name: wallet.name,
+      type: wallet.type === 'multi_sig' ? 'multi_sig' : 'single_sig',
+      scriptType: wallet.scriptType as any,
+      network: wallet.network as any,
+      descriptor: wallet.descriptor || '',
+      quorum: wallet.quorum || undefined,
+      totalSigners: wallet.totalSigners || undefined,
+      devices: wallet.devices.map((wd) => ({
+        label: wd.device.label,
+        type: wd.device.type,
+        fingerprint: wd.device.fingerprint,
+        xpub: wd.device.xpub,
+        derivationPath: wd.device.derivationPath || undefined,
+      })),
+      createdAt: wallet.createdAt,
+    };
+
+    // Get available formats
+    const formats = exportFormatRegistry.getAvailableFormats(walletData).map((handler) => ({
+      id: handler.id,
+      name: handler.name,
+      description: handler.description,
+      extension: handler.fileExtension,
+      mimeType: handler.mimeType,
+    }));
+
+    res.json({ formats });
+  } catch (error: any) {
+    log.error('Get export formats error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get export formats',
+    });
+  }
+});
+
+/**
  * GET /api/v1/wallets/:id/export
- * Export wallet in Sparrow-compatible JSON format
+ * Export wallet in the specified format (default: sparrow)
+ * Query params:
+ *   format - Export format ID (sparrow, descriptor, bluewallet, coldcard)
  */
 router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const walletId = req.walletId!;
+    const formatId = (req.query.format as string) || 'sparrow';
 
     // Get wallet with all related data
     const wallet = await walletRepository.findByIdWithDevices(walletId);
@@ -382,91 +443,51 @@ router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res:
       });
     }
 
-    // Map script type to Sparrow format
-    const scriptTypeMap: Record<string, string> = {
-      'native_segwit': 'P2WPKH',
-      'nested_segwit': 'P2SH_P2WPKH',
-      'taproot': 'P2TR',
-      'legacy': 'P2PKH',
-    };
-
-    // For multisig, use P2WSH (native) or P2SH_P2WSH (nested)
-    const getScriptType = () => {
-      if (wallet.type === 'multi_sig') {
-        if (wallet.scriptType === 'native_segwit') return 'P2WSH';
-        if (wallet.scriptType === 'nested_segwit') return 'P2SH_P2WSH';
-      }
-      return scriptTypeMap[wallet.scriptType] || 'P2WPKH';
-    };
-
-    // Build keystores array from devices
-    const keystores = wallet.devices.map((wd, index) => {
-      const device = wd.device;
-
-      // Parse derivation path to extract fingerprint and path
-      // Format: m/84'/0'/0' or just the path
-      const derivationPath = device.derivationPath || "m/84'/0'/0'";
-
-      return {
-        label: device.label || `Keystore ${index + 1}`,
-        source: 'HW_USB', // Hardware wallet
-        walletModel: mapDeviceTypeToWalletModel(device.type),
-        keyDerivation: {
-          masterFingerprint: device.fingerprint,
-          derivationPath: derivationPath,
-        },
-        extendedPublicKey: device.xpub,
-      };
-    });
-
-    // Build policy for multisig
-    const getDefaultPolicy = () => {
-      if (wallet.type === 'multi_sig' && wallet.quorum && wallet.totalSigners) {
-        return {
-          name: 'Multi Signature',
-          miniscript: `thresh(${wallet.quorum},${keystores.map((_, i) => `pk(${String.fromCharCode(65 + i)})`).join(',')})`,
-        };
-      }
-      return {
-        name: 'Single Signature',
-        miniscript: 'pk(A)',
-      };
-    };
-
-    // Build Sparrow-compatible export format
-    const exportData = {
-      // Core wallet info
-      label: wallet.name,
+    // Build wallet export data
+    const walletData: WalletExportData = {
+      id: wallet.id,
       name: wallet.name,
-
-      // Policy and script type (Sparrow format)
-      policyType: wallet.type === 'multi_sig' ? 'MULTI' : 'SINGLE',
-      scriptType: getScriptType(),
-
-      // Multisig threshold
-      ...(wallet.type === 'multi_sig' && {
-        defaultPolicy: getDefaultPolicy(),
-      }),
-
-      // Keystores (signing devices)
-      keystores,
-
-      // Network
-      network: wallet.network?.toUpperCase() || 'MAINNET',
-
-      // Descriptor (for direct import)
-      descriptor: wallet.descriptor,
-
-      // Gap limit (standard)
-      gapLimit: 20,
-
-      // Export metadata
-      exportedAt: new Date().toISOString(),
-      exportedFrom: 'Sanctuary',
-      version: '1.0',
+      type: wallet.type === 'multi_sig' ? 'multi_sig' : 'single_sig',
+      scriptType: wallet.scriptType as any,
+      network: wallet.network as any,
+      descriptor: wallet.descriptor || '',
+      quorum: wallet.quorum || undefined,
+      totalSigners: wallet.totalSigners || undefined,
+      devices: wallet.devices.map((wd) => ({
+        label: wd.device.label,
+        type: wd.device.type,
+        fingerprint: wd.device.fingerprint,
+        xpub: wd.device.xpub,
+        derivationPath: wd.device.derivationPath || undefined,
+      })),
+      createdAt: wallet.createdAt,
     };
 
-    res.json(exportData);
+    // Check if format exists
+    if (!exportFormatRegistry.has(formatId)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Unknown export format: ${formatId}. Use GET /export/formats to see available formats.`,
+      });
+    }
+
+    // Export using registry
+    try {
+      const result = exportFormatRegistry.export(formatId, walletData, {
+        includeDevices: true,
+        includeChangeDescriptor: true,
+      });
+
+      // Set appropriate headers for download
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.send(result.content);
+    } catch (exportError: any) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: exportError.message || 'Failed to export wallet in the specified format',
+      });
+    }
   } catch (error: any) {
     log.error('Export wallet error', { error });
     res.status(500).json({

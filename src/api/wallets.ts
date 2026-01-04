@@ -264,10 +264,71 @@ export interface WalletExport {
 }
 
 /**
- * Export wallet in Sparrow-compatible JSON format
+ * Export format info
+ */
+export interface ExportFormat {
+  id: string;
+  name: string;
+  description: string;
+  extension: string;
+  mimeType: string;
+}
+
+/**
+ * Get available export formats for a wallet
+ */
+export async function getExportFormats(walletId: string): Promise<{ formats: ExportFormat[] }> {
+  return apiClient.get(`/wallets/${walletId}/export/formats`);
+}
+
+/**
+ * Export wallet in Sparrow-compatible JSON format (legacy method)
  */
 export async function exportWallet(walletId: string): Promise<WalletExport> {
   return apiClient.get(`/wallets/${walletId}/export`);
+}
+
+/**
+ * Export wallet in the specified format
+ * Downloads the file directly
+ */
+export async function exportWalletFormat(
+  walletId: string,
+  formatId: string,
+  walletName: string
+): Promise<void> {
+  const token = apiClient.getToken();
+  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/export?format=${formatId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to export wallet (${response.status})`);
+  }
+
+  // Get filename from Content-Disposition header or generate one
+  const contentDisposition = response.headers.get('Content-Disposition');
+  let filename = `${walletName.replace(/[^a-zA-Z0-9-_]/g, '_')}_export`;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (match) {
+      filename = match[1];
+    }
+  }
+
+  // Download the file
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
 
 /**

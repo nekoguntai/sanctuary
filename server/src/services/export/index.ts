@@ -27,11 +27,13 @@ import { exportFormatRegistry } from './registry';
 import { sparrowHandler } from './handlers/sparrow';
 import { descriptorHandler } from './handlers/descriptor';
 import { bluewalletHandler } from './handlers/bluewallet';
+import { coldcardHandler } from './handlers/coldcard';
 
 // Register handlers
 exportFormatRegistry.register(sparrowHandler);
 exportFormatRegistry.register(descriptorHandler);
 exportFormatRegistry.register(bluewalletHandler);
+exportFormatRegistry.register(coldcardHandler);
 
 // Export the registry and types
 export { exportFormatRegistry } from './registry';
@@ -47,3 +49,4 @@ export type {
 export { sparrowHandler } from './handlers/sparrow';
 export { descriptorHandler } from './handlers/descriptor';
 export { bluewalletHandler } from './handlers/bluewallet';
+export { coldcardHandler } from './handlers/coldcard';

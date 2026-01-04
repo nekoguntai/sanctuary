@@ -440,7 +440,9 @@ export const WalletDetail: React.FC = () => {
   
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
-  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels'>('qr');
+  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels' | 'device'>('qr');
+  const [exportFormats, setExportFormats] = useState<walletsApi.ExportFormat[]>([]);
+  const [loadingFormats, setLoadingFormats] = useState(false);
 
   // Transaction Export Modal State
   const [showTransactionExport, setShowTransactionExport] = useState(false);
@@ -577,6 +579,27 @@ export const WalletDetail: React.FC = () => {
       clearTimeout(timeoutId);
     };
   }, [payjoinEnabled, receiveAmount, receiveAddressForPayjoin?.id]);
+
+  // Fetch export formats when export modal opens
+  useEffect(() => {
+    if (!showExport || !id) return;
+
+    const fetchFormats = async () => {
+      setLoadingFormats(true);
+      try {
+        const result = await walletsApi.getExportFormats(id);
+        setExportFormats(result.formats);
+      } catch (err) {
+        log.error('Failed to fetch export formats', err);
+        // Don't set error state - formats are optional enhancement
+        setExportFormats([]);
+      } finally {
+        setLoadingFormats(false);
+      }
+    };
+
+    fetchFormats();
+  }, [showExport, id]);
 
   // Clipboard functionality
   const { copy, isCopied } = useCopyToClipboard();
@@ -2637,6 +2660,28 @@ export const WalletDetail: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Export Wallet */}
+                <div className="surface-elevated rounded-xl p-5 border border-sanctuary-200 dark:border-sanctuary-800">
+                  <h3 className="text-base font-medium mb-3 text-sanctuary-900 dark:text-sanctuary-100">Export Wallet</h3>
+                  <p className="text-xs text-sanctuary-500 mb-4">Export your wallet configuration for backup or to import into other applications.</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Export Options</p>
+                        <p className="text-xs text-sanctuary-500">QR code, JSON backup, descriptor, labels{wallet.type === 'Multi Sig' ? ', device setup' : ''}</p>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowExport(true)}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Export
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Danger Zone - only show if user is owner */}
                 {wallet.userRole === 'owner' && (
                   <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
@@ -2696,6 +2741,12 @@ export const WalletDetail: React.FC = () => {
                    <Tag className="w-4 h-4 mx-auto mb-1" />
                    Labels
                  </button>
+                 {wallet.type === 'Multi Sig' && (
+                   <button onClick={() => setExportTab('device')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'device' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
+                     <HardDrive className="w-4 h-4 mx-auto mb-1" />
+                     Device
+                   </button>
+                 )}
             </div>
             
             <div className="flex flex-col items-center space-y-6">
@@ -2746,6 +2797,48 @@ export const WalletDetail: React.FC = () => {
                        }} className="w-full">
                            <Download className="w-4 h-4 mr-2" /> Download Labels (BIP 329)
                        </Button>
+                   </div>
+               )}
+
+               {exportTab === 'device' && (
+                   <div className="w-full">
+                       <HardDrive className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
+                       <p className="text-sm text-sanctuary-500 mb-2 text-center">Export wallet configuration for hardware devices.</p>
+                       <p className="text-xs text-sanctuary-400 mb-6 text-center">Download a file that can be imported directly onto your hardware wallet to set up the multisig configuration.</p>
+
+                       {loadingFormats ? (
+                           <div className="text-center text-sanctuary-400 py-4">
+                               Loading export formats...
+                           </div>
+                       ) : exportFormats.length === 0 ? (
+                           <div className="text-center text-sanctuary-400 py-4">
+                               No device export formats available for this wallet type.
+                           </div>
+                       ) : (
+                           <div className="space-y-3">
+                               {exportFormats.filter(f => f.id !== 'sparrow' && f.id !== 'descriptor').map((format) => (
+                                   <Button
+                                       key={format.id}
+                                       onClick={async () => {
+                                           try {
+                                               await walletsApi.exportWalletFormat(id!, format.id, wallet.name);
+                                           } catch (err) {
+                                               log.error(`Failed to export wallet in ${format.name} format`, { error: err });
+                                               handleError(err, `Export Failed`);
+                                           }
+                                       }}
+                                       variant="secondary"
+                                       className="w-full justify-between"
+                                   >
+                                       <div className="flex items-center">
+                                           <Download className="w-4 h-4 mr-2" />
+                                           <span>{format.name}</span>
+                                       </div>
+                                       <span className="text-xs text-sanctuary-400">{format.extension}</span>
+                                   </Button>
+                               ))}
+                           </div>
+                       )}
                    </div>
                )}
             </div>

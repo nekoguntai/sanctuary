@@ -23,7 +23,7 @@ services:
         ipv4_address: $APP_SANCTUARY_WEB_IP
 
   server:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.12@sha256:19d80036914a1f89ed71b1c07a328e5e67e4fe78258d9be047c92ecb5769e29f
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.12@sha256:925ba50ca347a7880fccad7181f0f7c719d4ece2d3cbdf3b8657fc8cd46739b9
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -73,7 +73,7 @@ services:
         ipv4_address: $APP_SANCTUARY_DB_IP
 
   migrate:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.12@sha256:19d80036914a1f89ed71b1c07a328e5e67e4fe78258d9be047c92ecb5769e29f
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.12@sha256:925ba50ca347a7880fccad7181f0f7c719d4ece2d3cbdf3b8657fc8cd46739b9
     restart: "no"
     depends_on:
       db:

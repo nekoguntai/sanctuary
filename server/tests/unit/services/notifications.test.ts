@@ -515,7 +515,7 @@ describe('Notification Services', () => {
   describe('Unified Notification Service', () => {
     const walletId = 'test-wallet-id';
     const transactions = [
-      { txid: 'b'.repeat(64), type: 'received', amount: BigInt(100000) },
+      { txid: 'b'.repeat(64), type: 'received' as const, amount: BigInt(100000) },
     ];
 
     beforeEach(() => {

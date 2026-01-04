@@ -391,3 +391,24 @@ export interface MempoolData {
 export async function getMempoolData(): Promise<MempoolData> {
   return apiClient.get<MempoolData>('/bitcoin/mempool');
 }
+
+/**
+ * Address Lookup for Internal Wallet Detection
+ */
+
+export interface AddressLookupResult {
+  walletId: string;
+  walletName: string;
+}
+
+export interface AddressLookupResponse {
+  lookup: Record<string, AddressLookupResult>;
+}
+
+/**
+ * Look up which wallets own given addresses
+ * Used to detect internal transfers in the send flow
+ */
+export async function lookupAddresses(addresses: string[]): Promise<AddressLookupResponse> {
+  return apiClient.post<AddressLookupResponse>('/bitcoin/address-lookup', { addresses });
+}

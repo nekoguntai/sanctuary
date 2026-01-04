@@ -80,7 +80,12 @@ router.get('/wallets/:walletId/transactions', requireWalletAccess('view'), async
           },
         },
       },
-      orderBy: { blockTime: 'desc' },
+      // Sort pending transactions (null blockTime) first, then by date descending
+      // Pending txs use createdAt for ordering, confirmed txs use blockTime
+      orderBy: [
+        { blockTime: { sort: 'desc', nulls: 'first' } },
+        { createdAt: 'desc' },
+      ],
       take: limit,
       skip: offset,
     });
@@ -153,7 +158,10 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
         }),
         prisma.transaction.findFirst({
           where: { walletId },
-          orderBy: [{ blockTime: 'desc' }, { createdAt: 'desc' }],
+          orderBy: [
+            { blockTime: { sort: 'desc', nulls: 'first' } },
+            { createdAt: 'desc' },
+          ],
           select: { balanceAfter: true },
         }),
       ]);
@@ -471,7 +479,10 @@ router.post('/wallets/:walletId/transactions/recalculate', requireWalletAccess('
     // Get the final balance after recalculation
     const lastTx = await prisma.transaction.findFirst({
       where: { walletId },
-      orderBy: [{ blockTime: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [
+        { blockTime: { sort: 'desc', nulls: 'first' } },
+        { createdAt: 'desc' },
+      ],
       select: { balanceAfter: true },
     });
 
@@ -554,7 +565,11 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
           },
         },
       },
-      orderBy: { blockTime: 'desc' },
+      // Sort pending transactions (null blockTime) first, then by date descending
+      orderBy: [
+        { blockTime: { sort: 'desc', nulls: 'first' } },
+        { createdAt: 'desc' },
+      ],
       take: limit,
     });
 

@@ -5,7 +5,7 @@
  * Shows transaction summary and handles signing/broadcasting.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send,
   Save,
@@ -28,6 +28,7 @@ import { useSendTransaction } from '../../../contexts/send';
 import { useCurrency } from '../../../contexts/CurrencyContext';
 import { createLogger } from '../../../utils/logger';
 import { STEP_LABELS } from '../../../contexts/send/types';
+import { lookupAddresses, type AddressLookupResult } from '../../../src/api/bitcoin';
 import type { WizardStep } from '../../../contexts/send/types';
 import type { TransactionData } from '../../../hooks/useSendTransactionActions';
 import type { Device } from '../../../types';
@@ -125,6 +126,32 @@ export function ReviewStep({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [signingDeviceId, setSigningDeviceId] = useState<string | null>(null);
   const [qrSigningDevice, setQrSigningDevice] = useState<Device | null>(null);
+  const [addressLookup, setAddressLookup] = useState<Record<string, AddressLookupResult>>({});
+
+  // Fetch wallet labels for output addresses (to detect internal transfers)
+  useEffect(() => {
+    const addresses = state.outputs
+      .map(o => o.address)
+      .filter(addr => addr && addr.length > 0);
+
+    // Also include change/decoy addresses if available
+    if (txData?.changeAddress) {
+      addresses.push(txData.changeAddress);
+    }
+    if (txData?.decoyOutputs) {
+      addresses.push(...txData.decoyOutputs.map(d => d.address));
+    }
+
+    if (addresses.length === 0) return;
+
+    lookupAddresses(addresses)
+      .then(response => {
+        setAddressLookup(response.lookup);
+      })
+      .catch(err => {
+        log.warn('Failed to lookup addresses', { error: String(err) });
+      });
+  }, [state.outputs, txData?.changeAddress, txData?.decoyOutputs]);
 
   // Calculate change amount
   const changeAmount = useMemo(() => {
@@ -139,13 +166,19 @@ export function ReviewStep({
     return new Set(walletAddresses.map(wa => wa.address));
   }, [walletAddresses]);
 
-  // Helper to get label for an address if it belongs to our wallet
+  // Helper to get label for an address if it belongs to any wallet in the app
   const getAddressLabel = useCallback((address: string): string | undefined => {
+    // First check if it's from the current (sending) wallet
     if (knownAddresses.has(address)) {
       return wallet.name;
     }
+    // Then check if it belongs to another wallet (from the lookup)
+    const lookupResult = addressLookup[address];
+    if (lookupResult) {
+      return lookupResult.walletName;
+    }
     return undefined;
-  }, [knownAddresses, wallet.name]);
+  }, [knownAddresses, wallet.name, addressLookup]);
 
   // Build flow visualization data
   const flowData = useMemo(() => {

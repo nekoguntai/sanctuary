@@ -822,4 +822,71 @@ router.post('/utils/estimate-optimal-fee', async (req: Request, res: Response) =
   }
 });
 
+/**
+ * POST /api/v1/bitcoin/address-lookup
+ * Look up which wallets own given addresses (for internal wallet detection in send flow)
+ */
+router.post('/address-lookup', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { addresses } = req.body;
+
+    if (!Array.isArray(addresses) || addresses.length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'addresses must be a non-empty array',
+      });
+    }
+
+    // Limit the number of addresses to prevent abuse
+    if (addresses.length > 100) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Maximum 100 addresses per request',
+      });
+    }
+
+    const userId = (req as any).user?.id;
+
+    // Find addresses that belong to wallets the user has access to
+    const addressRecords = await prisma.address.findMany({
+      where: {
+        address: { in: addresses },
+        wallet: {
+          users: {
+            some: {
+              userId,
+            },
+          },
+        },
+      },
+      select: {
+        address: true,
+        wallet: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    // Build lookup map: address -> { walletId, walletName }
+    const lookup: Record<string, { walletId: string; walletName: string }> = {};
+    for (const record of addressRecords) {
+      lookup[record.address] = {
+        walletId: record.wallet.id,
+        walletName: record.wallet.name,
+      };
+    }
+
+    res.json({ lookup });
+  } catch (error) {
+    log.error('[BITCOIN] Address lookup error', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to look up addresses',
+    });
+  }
+});
+
 export default router;

@@ -1222,6 +1222,114 @@ export async function broadcastAndSave(
     rawTx,
   });
 
+  // Check if any output addresses belong to other wallets in the app
+  // If so, create pending "received" transactions for those wallets immediately
+  // This handles both single-recipient and multi-recipient (batch) transactions
+  try {
+    const tx = bitcoin.Transaction.fromHex(rawTx);
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { network: true },
+    });
+    const networkObj = getNetwork(wallet?.network === 'testnet' ? 'testnet' : 'mainnet');
+
+    // Extract all output addresses
+    const outputAddresses: Array<{ address: string; amount: number }> = [];
+    for (const output of tx.outs) {
+      try {
+        const addr = bitcoin.address.fromOutputScript(output.script, networkObj);
+        outputAddresses.push({ address: addr, amount: output.value });
+      } catch (e) {
+        // Skip OP_RETURN or non-standard outputs
+      }
+    }
+
+    // Find which output addresses belong to OTHER wallets in the app
+    const recipientAddresses = await prisma.address.findMany({
+      where: {
+        address: { in: outputAddresses.map(o => o.address) },
+        walletId: { not: walletId }, // Not the sending wallet
+      },
+      select: {
+        walletId: true,
+        address: true,
+      },
+    });
+
+    // Group outputs by receiving wallet
+    const walletOutputs = new Map<string, { address: string; amount: number }[]>();
+    for (const addrRecord of recipientAddresses) {
+      const outputs = outputAddresses.filter(o => o.address === addrRecord.address);
+      const existing = walletOutputs.get(addrRecord.walletId) || [];
+      walletOutputs.set(addrRecord.walletId, [...existing, ...outputs]);
+    }
+
+    // Create pending received transaction for each receiving wallet
+    for (const [receivingWalletId, outputs] of walletOutputs) {
+      const totalAmount = outputs.reduce((sum, o) => sum + o.amount, 0);
+
+      log.info('Creating pending received transaction for internal wallet', {
+        txid,
+        sendingWalletId: walletId,
+        receivingWalletId,
+        outputCount: outputs.length,
+        totalAmount,
+      });
+
+      // Check if transaction already exists for receiving wallet (avoid duplicates)
+      const existingReceivedTx = await prisma.transaction.findFirst({
+        where: {
+          txid,
+          walletId: receivingWalletId,
+        },
+      });
+
+      if (!existingReceivedTx) {
+        // Create pending received transaction for the receiving wallet
+        await prisma.transaction.create({
+          data: {
+            txid,
+            walletId: receivingWalletId,
+            type: 'received',
+            amount: BigInt(totalAmount),
+            fee: BigInt(0), // Receiver doesn't pay fee
+            confirmations: 0,
+            label: metadata.label,
+            blockHeight: null,
+            blockTime: null,
+            rawTx,
+            counterpartyAddress: null,
+          },
+        });
+
+        // Recalculate balances for receiving wallet
+        await recalculateWalletBalances(receivingWalletId);
+
+        // Emit transaction received event for real-time updates
+        eventService.emitTransactionReceived({
+          walletId: receivingWalletId,
+          txid,
+          amount: BigInt(totalAmount),
+          address: outputs[0].address,
+          confirmations: 0,
+        });
+
+        // Send notifications for the receiving wallet
+        import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
+          notifyNewTransactions(receivingWalletId, [{
+            txid,
+            type: 'received',
+            amount: BigInt(totalAmount),
+          }]).catch(err => {
+            log.warn('Failed to send notifications for receiving wallet', { error: String(err) });
+          });
+        });
+      }
+    }
+  } catch (e) {
+    log.warn('Failed to create pending transactions for receiving wallets', { error: String(e) });
+  }
+
   return {
     txid,
     broadcasted: true,

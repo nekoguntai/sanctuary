@@ -1579,6 +1579,9 @@ export const WalletDetail: React.FC = () => {
                <Button variant="ghost" size="sm" onClick={handleSync} disabled={syncing} title="Sync wallet">
                  <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                </Button>
+               <Button variant="ghost" size="sm" onClick={handleFullResync} disabled={syncing} title="Full resync (clears and re-syncs all transactions)">
+                 <RotateCcw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+               </Button>
                <Button variant="ghost" size="sm" onClick={() => setShowExport(true)} title="Export wallet">
                  <Share2 className="w-4 h-4" />
                </Button>

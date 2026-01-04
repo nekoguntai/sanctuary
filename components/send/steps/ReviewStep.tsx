@@ -47,7 +47,8 @@ const getDeviceCapabilities = (deviceType: string): DeviceCapabilities => {
   const normalizedType = deviceType.toLowerCase();
 
   if (normalizedType.includes('coldcard')) {
-    return { methods: ['usb', 'airgap'], labels: { usb: 'USB', airgap: 'PSBT File', qr: '' } };
+    // ColdCard does not support USB signing - only air-gapped PSBT file signing
+    return { methods: ['airgap'], labels: { usb: '', airgap: 'PSBT File', qr: '' } };
   }
   if (normalizedType.includes('ledger') || normalizedType.includes('trezor') || normalizedType.includes('bitbox') || normalizedType.includes('jade')) {
     return { methods: ['usb'], labels: { usb: 'USB', airgap: '', qr: '' } };

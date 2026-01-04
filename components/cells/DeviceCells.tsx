@@ -6,9 +6,9 @@
  */
 
 import React from 'react';
-import { HardwareDevice, HardwareDeviceModel, Device } from '../../types';
+import { HardwareDevice, HardwareDeviceModel, Device, WalletType, ApiWalletType } from '../../types';
 import { Edit2, Save, X, Trash2, Users, HardDrive } from 'lucide-react';
-import { getDeviceIcon } from '../ui/CustomIcons';
+import { getDeviceIcon, getWalletIcon } from '../ui/CustomIcons';
 import type { CellRendererProps } from '../ui/ConfigurableTable';
 
 // Extended device type with wallet count for display
@@ -163,6 +163,7 @@ export function createDeviceCellRenderers(
   };
 
   // Wallets Cell - Shows wallet names (supports multiple wallets per device)
+  // Color coded: warning (amber) for multisig, success (green) for single-sig
   const WalletsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
     const wallets = device.wallets || [];
     const count = device.walletCount ?? wallets.length;
@@ -171,17 +172,28 @@ export function createDeviceCellRenderers(
       return <span className="text-xs text-sanctuary-400 italic">Unused</span>;
     }
 
+    // Get badge styling based on wallet type
+    const getBadgeClass = (walletType: string) => {
+      const isMultisig = walletType === 'multi_sig' || walletType === WalletType.MULTI_SIG;
+      return isMultisig
+        ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
+        : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';
+    };
+
     return (
       <div className="flex flex-wrap gap-1">
-        {wallets.map((wd) => (
-          <span
-            key={wd.wallet.id}
-            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20"
-          >
-            <HardDrive className="w-3 h-3 mr-1 flex-shrink-0" />
-            {wd.wallet.name}
-          </span>
-        ))}
+        {wallets.map((wd) => {
+          const walletType = (wd.wallet.type || 'single_sig') as ApiWalletType;
+          return (
+            <span
+              key={wd.wallet.id}
+              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getBadgeClass(walletType)}`}
+            >
+              {getWalletIcon(walletType, 'w-3 h-3 mr-1 flex-shrink-0')}
+              {wd.wallet.name}
+            </span>
+          );
+        })}
         {/* Fallback if wallets array is empty but count > 0 (legacy data) */}
         {wallets.length === 0 && count > 0 && (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200 dark:bg-primary-500/10 dark:text-primary-300 dark:border-primary-500/20">

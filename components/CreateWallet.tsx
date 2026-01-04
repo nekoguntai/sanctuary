@@ -395,7 +395,7 @@ export const CreateWallet: React.FC = () => {
                         size="lg"
                         onClick={handleCreate}
                         isLoading={isSubmitting}
-                        className="bg-success-600 hover:bg-success-700 text-white dark:bg-success-600 dark:hover:bg-success-700"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
                     >
                         <Check className="w-4 h-4 mr-2" /> Construct Wallet
                     </Button>

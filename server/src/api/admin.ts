@@ -1623,19 +1623,31 @@ import { join } from 'path';
 
 let currentVersion = '0.0.0';
 try {
-  // Try to read from root package.json (Docker build copies it)
-  const pkgPath = join(__dirname, '../../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-  currentVersion = pkg.version || '0.0.0';
-} catch {
-  try {
-    // Fallback: try parent directory (development)
-    const pkgPath = join(__dirname, '../../../package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    currentVersion = pkg.version || '0.0.0';
-  } catch {
+  // In Docker: dist/app/src/api/ -> need ../../../../package.json
+  // In dev: dist/src/api/ -> need ../../../package.json
+  const paths = [
+    join(__dirname, '../../../../package.json'),  // Docker production
+    join(__dirname, '../../../package.json'),      // Development
+    join(__dirname, '../../package.json'),         // Fallback
+  ];
+
+  for (const pkgPath of paths) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      if (pkg.version) {
+        currentVersion = pkg.version;
+        break;
+      }
+    } catch {
+      // Try next path
+    }
+  }
+
+  if (currentVersion === '0.0.0') {
     log.warn('[ADMIN] Could not read version from package.json');
   }
+} catch {
+  log.warn('[ADMIN] Could not read version from package.json');
 }
 
 // Cache for GitHub release check (avoid rate limiting)

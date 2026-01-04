@@ -74,7 +74,7 @@ vi.mock('../../providers/QueryProvider', () => ({
 
 // Helper to flush pending promises (for React state updates)
 // Uses microtask queueing which is more reliable than setTimeout
-const flushPromises = () => new Promise(resolve => queueMicrotask(resolve));
+const flushPromises = () => new Promise<void>(resolve => queueMicrotask(resolve));
 
 // Import hooks after mocks
 import {

@@ -200,8 +200,10 @@ describe('useHardwareWallet', () => {
 
   describe('signTransaction', () => {
     const mockTx = {
-      inputs: [{ txid: 'abc123', vout: 0, path: "m/84'/0'/0'/0/0" }],
-      outputs: [{ address: 'tb1qtest...', value: 100000 }],
+      walletId: 'wallet-123',
+      recipient: 'tb1qtest...',
+      amount: 100000,
+      feeRate: 5,
     };
 
     it('should sign transaction successfully', async () => {

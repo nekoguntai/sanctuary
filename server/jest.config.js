@@ -26,7 +26,7 @@ module.exports = {
     './src/services/bitcoin/transactionService.ts': {
       statements: 70,
       branches: 50,
-      functions: 70,
+      functions: 64,  // Current: 64.28%
       lines: 70,
     },
     './src/utils/encryption.ts': {

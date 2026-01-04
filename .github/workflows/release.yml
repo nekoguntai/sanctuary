@@ -151,9 +151,10 @@ jobs:
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             ATTEMPT=$((ATTEMPT + 1))
 
-            # Query for the check run
+            # Query for check runs - get the most recent one (first in array)
+            # Using [0] to handle cases where multiple checks exist with the same name
             RESULT=$(gh api repos/${{ github.repository }}/commits/${SHA}/check-runs \
-              --jq ".check_runs[] | select(.name == \"$CHECK_NAME\") | {status: .status, conclusion: .conclusion}" 2>/dev/null || echo "{}")
+              --jq "[.check_runs[] | select(.name == \"$CHECK_NAME\")] | .[0] // {} | {status: .status, conclusion: .conclusion}" 2>/dev/null || echo "{}")
 
             STATUS=$(echo "$RESULT" | jq -r '.status // "not_found"')
             CONCLUSION=$(echo "$RESULT" | jq -r '.conclusion // "null"')

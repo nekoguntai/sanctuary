@@ -213,10 +213,10 @@ export const CreateWallet: React.FC = () => {
                             className={`flex-1 py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                                 network === net
                                     ? net === 'mainnet'
-                                        ? 'border-mainnet-500 bg-mainnet-50 text-mainnet-700 dark:border-mainnet-500 dark:bg-mainnet-900/20 dark:text-mainnet-200'
+                                        ? 'border-mainnet-500 bg-mainnet-50 text-mainnet-700 dark:border-mainnet-500 dark:bg-mainnet-900/20 dark:text-mainnet-300'
                                         : net === 'testnet'
-                                        ? 'border-testnet-500 bg-testnet-50 text-testnet-700 dark:border-testnet-500 dark:bg-testnet-900/20 dark:text-testnet-200'
-                                        : 'border-signet-500 bg-signet-50 text-signet-700 dark:border-signet-500 dark:bg-signet-900/20 dark:text-signet-200'
+                                        ? 'border-testnet-500 bg-testnet-50 text-testnet-700 dark:border-testnet-500 dark:bg-testnet-900/20 dark:text-testnet-300'
+                                        : 'border-signet-500 bg-signet-50 text-signet-700 dark:border-signet-500 dark:bg-signet-900/20 dark:text-signet-300'
                                     : 'border-sanctuary-200 dark:border-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:border-sanctuary-400'
                             }`}
                         >
@@ -227,8 +227,8 @@ export const CreateWallet: React.FC = () => {
                 {network !== 'mainnet' && (
                     <div className={`mt-2 p-3 rounded-lg border text-xs ${
                         network === 'testnet'
-                            ? 'bg-testnet-50 dark:bg-testnet-900/10 border-testnet-300 dark:border-testnet-600 text-testnet-700 dark:text-testnet-200'
-                            : 'bg-signet-50 dark:bg-signet-900/10 border-signet-300 dark:border-signet-600 text-signet-700 dark:text-signet-200'
+                            ? 'bg-testnet-50 dark:bg-testnet-900/10 border-testnet-300 dark:border-testnet-600 text-testnet-700 dark:text-testnet-300'
+                            : 'bg-signet-50 dark:bg-signet-900/10 border-signet-300 dark:border-signet-600 text-signet-700 dark:text-signet-300'
                     }`}>
                         <strong>Warning:</strong> This wallet will operate on {network}. {network === 'testnet' ? 'Testnet coins have no real-world value.' : 'Signet is a controlled testing network.'}
                     </div>
@@ -308,10 +308,10 @@ export const CreateWallet: React.FC = () => {
                      <dd className="text-sm font-medium">
                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                              network === 'mainnet'
-                                 ? 'bg-mainnet-100 text-mainnet-700 dark:bg-mainnet-900/30 dark:text-mainnet-200'
+                                 ? 'bg-mainnet-100 text-mainnet-700 dark:bg-mainnet-900/30 dark:text-mainnet-300'
                                  : network === 'testnet'
-                                 ? 'bg-testnet-100 text-testnet-700 dark:bg-testnet-900/30 dark:text-testnet-200'
-                                 : 'bg-signet-100 text-signet-700 dark:bg-signet-900/30 dark:text-signet-200'
+                                 ? 'bg-testnet-100 text-testnet-700 dark:bg-testnet-900/30 dark:text-testnet-300'
+                                 : 'bg-signet-100 text-signet-700 dark:bg-signet-900/30 dark:text-signet-300'
                          }`}>
                              {network.charAt(0).toUpperCase() + network.slice(1)}
                          </span>

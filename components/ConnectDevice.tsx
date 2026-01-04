@@ -20,10 +20,12 @@ import {
   Lock,
   Loader2,
   ChevronRight,
+  ChevronDown,
   Search,
   X,
   Camera,
-  Upload
+  Upload,
+  Info
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
@@ -62,6 +64,71 @@ const getDeviceTypeFromModel = (model: HardwareDeviceModel): DeviceType => {
 
 type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'manual';
 
+/**
+ * Normalize a derivation path to standard format
+ * - Ensures 'm/' prefix
+ * - Converts 'h' notation to apostrophes (84h -> 84')
+ * - For standard BIP paths (44/49/84/86), ensures first 3 levels are hardened
+ */
+const normalizeDerivationPath = (path: string): string => {
+  if (!path) return '';
+
+  let normalized = path.trim();
+
+  // Ensure starts with 'm/'
+  if (normalized.startsWith('M/')) {
+    normalized = 'm/' + normalized.slice(2);
+  } else if (!normalized.startsWith('m/')) {
+    normalized = 'm/' + normalized;
+  }
+
+  // Convert 'h' notation to apostrophes (e.g., 84h -> 84')
+  normalized = normalized.replace(/(\d+)h/g, "$1'");
+
+  // Split into components
+  const parts = normalized.split('/');
+  if (parts.length < 2) return normalized;
+
+  // Check if this looks like a standard BIP path (44, 49, 84, 86)
+  const purposePart = parts[1]?.replace("'", '');
+  const standardPurposes = ['44', '49', '84', '86', '48'];
+
+  if (standardPurposes.includes(purposePart)) {
+    // For standard BIP paths, ensure first 3 levels after 'm' are hardened
+    // m / purpose' / coin_type' / account'
+    for (let i = 1; i <= 3 && i < parts.length; i++) {
+      if (parts[i] && !parts[i].endsWith("'")) {
+        parts[i] = parts[i] + "'";
+      }
+    }
+    normalized = parts.join('/');
+  }
+
+  return normalized;
+};
+
+/**
+ * Generate warning message for missing QR code fields
+ * Returns null if no important fields are missing
+ */
+const generateMissingFieldsWarning = (fields: {
+  hasFingerprint: boolean;
+  hasDerivationPath: boolean;
+}): string | null => {
+  const missing: string[] = [];
+
+  if (!fields.hasFingerprint) {
+    missing.push('master fingerprint');
+  }
+  if (!fields.hasDerivationPath) {
+    missing.push('derivation path');
+  }
+
+  if (missing.length === 0) return null;
+
+  return `QR code did not contain: ${missing.join(', ')}. Please verify these fields are correct.`;
+};
+
 // Map connectivity types to icons and labels
 // Note: Bluetooth and NFC are not currently supported for direct device communication
 const connectivityConfig: Record<string, { icon: React.FC<{ className?: string }>, label: string, description: string }> = {
@@ -97,6 +164,14 @@ export const ConnectDevice: React.FC = () => {
   const [scanned, setScanned] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [qrExtractedFields, setQrExtractedFields] = useState<{
+    xpub: boolean;
+    fingerprint: boolean;
+    derivationPath: boolean;
+    label: boolean;
+  } | null>(null);
+  const [showQrDetails, setShowQrDetails] = useState(false);
 
   // QR scanning state
   const [qrMode, setQrMode] = useState<'camera' | 'file'>('camera');
@@ -352,15 +427,10 @@ export const ConnectDevice: React.FC = () => {
         }
 
         // Extract derivation path from various field names
+        // (normalization happens via normalizeDerivationPath when setting state)
         if (!foundDerivation) {
           foundDerivation = data.deriv || data.derivation || data.path ||
                           data.derivationPath || data.hdPath || data.keypath || '';
-          // Normalize: ensure starts with 'm/'
-          if (foundDerivation && !foundDerivation.startsWith('m/')) {
-            foundDerivation = foundDerivation.startsWith('M/')
-              ? foundDerivation.replace(/^M/, 'm')
-              : `m/${foundDerivation}`;
-          }
         }
 
         // Extract label from various field names
@@ -378,7 +448,7 @@ export const ConnectDevice: React.FC = () => {
         // Set the extracted values
         if (foundXpub) setXpub(foundXpub);
         if (foundFingerprint) setFingerprint(foundFingerprint);
-        if (foundDerivation) setDerivationPath(foundDerivation);
+        if (foundDerivation) setDerivationPath(normalizeDerivationPath(foundDerivation));
         if (foundLabel && !label) setLabel(foundLabel);
 
         setScanned(true);
@@ -392,7 +462,7 @@ export const ConnectDevice: React.FC = () => {
         if (descriptorMatch) {
           setFingerprint(descriptorMatch[1]);
           const pathPart = descriptorMatch[2].replace(/h/g, "'");
-          setDerivationPath(`m/${pathPart}`);
+          setDerivationPath(normalizeDerivationPath(`m/${pathPart}`));
           setXpub(descriptorMatch[3]);
           setScanned(true);
           setScanning(false);
@@ -429,6 +499,34 @@ export const ConnectDevice: React.FC = () => {
   };
 
   /**
+   * Extract fingerprint from CryptoHDKey with fallbacks
+   */
+  const extractFingerprintFromHdKey = (hdKey: CryptoHDKey): string => {
+    // Try 1: Get from origin's source fingerprint (master fingerprint)
+    const origin = hdKey.getOrigin();
+    if (origin) {
+      const sourceFingerprint = origin.getSourceFingerprint();
+      if (sourceFingerprint && sourceFingerprint.length > 0) {
+        return sourceFingerprint.toString('hex');
+      }
+    }
+
+    // Try 2: Get parent fingerprint (not ideal, but better than nothing)
+    // This is the fingerprint of the key one level up in derivation
+    try {
+      const parentFp = hdKey.getParentFingerprint();
+      if (parentFp && parentFp.length > 0) {
+        log.debug('Using parent fingerprint as fallback');
+        return parentFp.toString('hex');
+      }
+    } catch {
+      // getParentFingerprint might not exist or fail
+    }
+
+    return '';
+  };
+
+  /**
    * Try to extract xpub data from UR registry result
    */
   const extractFromUrResult = (registryType: any): { xpub: string; fingerprint: string; path: string } | null => {
@@ -437,12 +535,13 @@ export const ConnectDevice: React.FC = () => {
       if (registryType instanceof CryptoHDKey) {
         const hdKey = registryType as CryptoHDKey;
         const xpub = hdKey.getBip32Key();
+        const fingerprint = extractFingerprintFromHdKey(hdKey);
         const origin = hdKey.getOrigin();
-        const fingerprint = origin?.getSourceFingerprint()?.toString('hex') || '';
         const pathComponents = origin?.getComponents() || [];
         const path = pathComponents.length > 0
           ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
           : '';
+        log.debug('Extracted from CryptoHDKey', { hasXpub: !!xpub, fingerprint, path });
         return { xpub, fingerprint, path };
       }
 
@@ -452,12 +551,13 @@ export const ConnectDevice: React.FC = () => {
         const hdKey = output.getHDKey();
         if (hdKey) {
           const xpub = hdKey.getBip32Key();
+          const fingerprint = extractFingerprintFromHdKey(hdKey);
           const origin = hdKey.getOrigin();
-          const fingerprint = origin?.getSourceFingerprint()?.toString('hex') || '';
           const pathComponents = origin?.getComponents() || [];
           const path = pathComponents.length > 0
             ? 'm/' + pathComponents.map((c: any) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
             : '';
+          log.debug('Extracted from CryptoOutput', { hasXpub: !!xpub, fingerprint, path });
           return { xpub, fingerprint, path };
         }
       }
@@ -557,9 +657,6 @@ export const ConnectDevice: React.FC = () => {
             }
             if (!foundDerivation) {
               foundDerivation = data.deriv || data.derivation || data.path || data.derivationPath || data.AccountKeyPath || '';
-              if (foundDerivation && !foundDerivation.startsWith('m/')) {
-                foundDerivation = foundDerivation.startsWith('M/') ? foundDerivation.replace(/^M/, 'm') : `m/${foundDerivation}`;
-              }
             }
           }
 
@@ -652,9 +749,6 @@ export const ConnectDevice: React.FC = () => {
         }
         if (!foundDerivation) {
           foundDerivation = data.deriv || data.derivation || data.path || data.derivationPath || data.AccountKeyPath || '';
-          if (foundDerivation && !foundDerivation.startsWith('m/')) {
-            foundDerivation = foundDerivation.startsWith('M/') ? foundDerivation.replace(/^M/, 'm') : `m/${foundDerivation}`;
-          }
         }
       }
 
@@ -789,17 +883,30 @@ export const ConnectDevice: React.FC = () => {
           if (extracted && extracted.xpub) {
             setXpub(extracted.xpub);
             if (extracted.fingerprint) setFingerprint(extracted.fingerprint.toUpperCase());
-            if (extracted.path) setDerivationPath(extracted.path);
+            if (extracted.path) setDerivationPath(normalizeDerivationPath(extracted.path));
+
+            // Track which fields came from QR
+            const extractedFields = {
+              xpub: true,
+              fingerprint: !!extracted.fingerprint,
+              derivationPath: !!extracted.path,
+              label: false,
+            };
+            setQrExtractedFields(extractedFields);
+
+            // Generate warning for missing fields
+            const warningMsg = generateMissingFieldsWarning({
+              hasFingerprint: !!extracted.fingerprint,
+              hasDerivationPath: !!extracted.path,
+            });
+            setWarning(warningMsg);
+
             setScanned(true);
             setScanning(false);
             setUrProgress(0);
             bytesDecoderRef.current = null;
 
-            log.info('UR bytes QR code parsed successfully', {
-              hasXpub: !!extracted.xpub,
-              hasFingerprint: !!extracted.fingerprint,
-              hasPath: !!extracted.path,
-            });
+            log.info('UR bytes QR code parsed successfully', extractedFields);
             return;
           }
 
@@ -850,29 +957,53 @@ export const ConnectDevice: React.FC = () => {
 
         if (extracted && extracted.xpub) {
           setXpub(extracted.xpub);
-          if (extracted.fingerprint) setFingerprint(extracted.fingerprint.toUpperCase());
-          if (extracted.path) setDerivationPath(extracted.path);
+          if (extracted.fingerprint) {
+            setFingerprint(extracted.fingerprint.toUpperCase());
+          }
+          if (extracted.path) setDerivationPath(normalizeDerivationPath(extracted.path));
+
+          // Track which fields came from QR
+          const extractedFields = {
+            xpub: true,
+            fingerprint: !!extracted.fingerprint,
+            derivationPath: !!extracted.path,
+            label: false,
+          };
+          setQrExtractedFields(extractedFields);
+
+          // Generate warning for missing fields
+          const warningMsg = generateMissingFieldsWarning({
+            hasFingerprint: !!extracted.fingerprint,
+            hasDerivationPath: !!extracted.path,
+          });
+          setWarning(warningMsg);
+
           setScanned(true);
           setScanning(false);
           setUrProgress(0);
           urDecoderRef.current = null;
 
           log.info('UR QR code parsed successfully', {
-            hasXpub: !!extracted.xpub,
+            hasXpub: true,
             hasFingerprint: !!extracted.fingerprint,
             hasPath: !!extracted.path,
+            fingerprint: extracted.fingerprint || '(not provided)',
           });
           return;
         }
 
         // Could not extract xpub from UR
-        log.error('Could not extract xpub from registry type', { type: registryType?.constructor?.name });
-        throw new Error(`Could not extract xpub from UR type: ${registryType?.constructor?.name || urType}`);
+        log.error('Could not extract xpub from registry type', {
+          type: registryType?.constructor?.name,
+          urType,
+          registryTypeKeys: registryType ? Object.keys(registryType) : [],
+        });
+        throw new Error(`Could not extract xpub from UR type: ${registryType?.constructor?.name || urType}. The QR code format may not be supported.`);
 
       } catch (err) {
-        log.error('Failed to decode UR QR code', { error: err });
+        log.error('Failed to decode UR QR code', { error: err, urType, contentPreview: content.substring(0, 100) });
         const errMsg = err instanceof Error ? err.message : 'Unknown error';
-        setError(`UR error: ${errMsg}. Open browser console (F12) for details.`);
+        setError(`UR error (${urType}): ${errMsg}. Check console (F12) for details.`);
         setCameraActive(false);
         setScanning(false);
         setUrProgress(0);
@@ -975,17 +1106,29 @@ export const ConnectDevice: React.FC = () => {
       // Apply found values
       if (foundFingerprint) setFingerprint(foundFingerprint.toUpperCase());
       if (foundXpub) setXpub(foundXpub);
-      if (foundDerivation) setDerivationPath(foundDerivation);
+      if (foundDerivation) setDerivationPath(normalizeDerivationPath(foundDerivation));
       if (foundLabel && !label) setLabel(foundLabel);
+
+      // Track which fields came from QR
+      const extractedFields = {
+        xpub: !!foundXpub,
+        fingerprint: !!foundFingerprint,
+        derivationPath: !!foundDerivation,
+        label: !!foundLabel,
+      };
+      setQrExtractedFields(extractedFields);
+
+      // Generate warning for missing fields
+      const warningMsg = generateMissingFieldsWarning({
+        hasFingerprint: !!foundFingerprint,
+        hasDerivationPath: !!foundDerivation,
+      });
+      setWarning(warningMsg);
 
       setScanned(true);
       setScanning(false);
 
-      log.info('QR code parsed successfully', {
-        hasXpub: !!foundXpub,
-        hasFingerprint: !!foundFingerprint,
-        hasDerivation: !!foundDerivation,
-      });
+      log.info('QR code parsed successfully', extractedFields);
     } catch (err) {
       log.error('Failed to parse QR code', { error: err });
       setError('Failed to parse QR code content.');
@@ -1273,7 +1416,7 @@ export const ConnectDevice: React.FC = () => {
                   return (
                     <button
                       key={m}
-                      onClick={() => { setMethod(m); setScanned(false); setError(null); }}
+                      onClick={() => { setMethod(m); setScanned(false); setError(null); setWarning(null); setQrExtractedFields(null); }}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         method === m
                           ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500'
@@ -1630,6 +1773,67 @@ export const ConnectDevice: React.FC = () => {
                     <p className="text-center text-xs text-rose-600 dark:text-rose-400 mt-2">
                       {error}
                     </p>
+                  )}
+
+                  {/* Collapsible QR import details - shown whenever we have QR extracted data */}
+                  {qrExtractedFields && scanned && (
+                    <div className="mt-3">
+                      {/* Always-visible warning when fields are missing */}
+                      {warning && (
+                        <div className="mb-2 p-2 rounded-lg bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-700">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-warning-600 dark:text-warning-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-xs text-warning-700 dark:text-warning-300">
+                              {warning}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setShowQrDetails(!showQrDetails)}
+                        className="flex items-center gap-1 text-xs text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                      >
+                        <Info className="w-3 h-3" />
+                        <span>QR Import Details</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showQrDetails ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showQrDetails && (
+                        <div className="mt-2 p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700 text-xs">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sanctuary-600 dark:text-sanctuary-400">Extended Public Key</span>
+                              {qrExtractedFields.xpub ? (
+                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                  <Check className="w-3 h-3" /> From QR
+                                </span>
+                              ) : (
+                                <span className="text-sanctuary-400">Manual</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sanctuary-600 dark:text-sanctuary-400">Master Fingerprint</span>
+                              {qrExtractedFields.fingerprint ? (
+                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                  <Check className="w-3 h-3" /> From QR
+                                </span>
+                              ) : (
+                                <span className="text-warning-600 dark:text-warning-400">Not in QR</span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sanctuary-600 dark:text-sanctuary-400">Derivation Path</span>
+                              {qrExtractedFields.derivationPath ? (
+                                <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                  <Check className="w-3 h-3" /> From QR
+                                </span>
+                              ) : (
+                                <span className="text-warning-600 dark:text-warning-400">Using default</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {(!fingerprint || !xpub) && !error && method && (

@@ -227,7 +227,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 - **Multi-wallet support** — Manage multiple wallets (single-sig and multisig)
 - **Multi-network support** — Mainnet, testnet, and signet with per-network Electrum connections
 - **Network tabs** — Filter wallets by network with visual indicators
-- **Hardware wallet integration** — Connect Ledger and Trezor devices directly
+- **Hardware wallet integration** — Connect Ledger, Trezor, BitBox02, and Jade devices directly
 - **QR code scanning** — Import device xpubs via camera (Keystone, Passport, ColdCard Q)
 - **QR code signing** — Sign PSBTs on air-gapped devices and scan back via camera
 - **Real-time sync** — Monitor transactions and balances via Electrum or your own Bitcoin node
@@ -723,6 +723,8 @@ Sanctuary supports multiple hardware wallet types through different connection m
 | **Ledger Stax/Flex** | WebUSB | HTTPS (8443) | Supported |
 | **Trezor Model One/T** | Trezor Connect | Either | Supported |
 | **Trezor Safe 3/5/7** | Trezor Connect | Either | Supported |
+| **BitBox02** | WebHID | HTTPS (8443) | Supported |
+| **Blockstream Jade** | WebSerial | HTTPS (8443) | Supported |
 | **ColdCard** | File (MicroSD) | Any | Supported |
 | **ColdCard Q** | QR code or file | HTTPS for QR camera | Supported |
 | **Keystone** | QR code or file | HTTPS for QR camera | Supported |
@@ -745,6 +747,26 @@ Sanctuary supports multiple hardware wallet types through different connection m
 4. A popup will open to **connect.trezor.io**
 5. Follow the prompts to authorize and export your xpub
 6. **Note:** You may need to switch between Trezor Suite and Sanctuary for device operations
+
+#### Connecting a BitBox02
+
+1. Open **https://localhost:8443** (HTTPS required for WebHID)
+2. Connect your BitBox02 via USB
+3. Click **Connect Device** → **BitBox02**
+4. Your browser will show a HID device picker — select your BitBox02
+5. Enter the pairing code shown on your BitBox02 screen
+6. Unlock with your device password
+
+#### Connecting a Blockstream Jade
+
+1. Open **https://localhost:8443** (HTTPS required for WebSerial)
+2. Connect your Jade via USB
+3. Click **Connect Device** → **Jade**
+4. Your browser will show a serial port picker — select your Jade
+5. Unlock your Jade with your PIN
+6. The device will initialize and connect
+
+> **Note:** Jade also supports QR code signing for air-gapped operation.
 
 #### Air-Gapped Devices (ColdCard, ColdCard Q, Keystone, Passport)
 
@@ -788,6 +810,16 @@ Once connected, you can:
 - Use HTTPS: https://localhost:8443
 - Allow camera permissions when prompted
 - Check browser settings if previously denied
+
+**BitBox02: "WebHID not supported"**
+- Use Chrome, Edge, or Brave (WebHID required)
+- Use HTTPS: https://localhost:8443
+- Close BitBoxApp if it's open (it locks the HID connection)
+
+**Jade: "WebSerial not supported"**
+- Use Chrome or Edge (WebSerial required)
+- Use HTTPS: https://localhost:8443
+- Ensure Jade is unlocked before connecting
 
 ## Usage
 

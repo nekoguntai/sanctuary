@@ -7,30 +7,30 @@ Technical documentation for Sanctuary's hardware wallet integration architecture
 Sanctuary uses a **registry pattern** with pluggable adapters to support multiple hardware wallet vendors. This design enables adding new device support without modifying the core service.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Browser (React)                              │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │  HardwareWalletService                                          │ │
-│  │  ├── registerAdapter(adapter)                                   │ │
-│  │  ├── connect(type) → device                                     │ │
-│  │  ├── getXpub(path) → xpub                                       │ │
-│  │  └── signPSBT(request) → signed                                 │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                              │                                       │
-│              ┌───────────────┼───────────────┐                      │
-│              ▼               ▼               ▼                      │
-│  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐          │
-│  │ LedgerAdapter  │ │ TrezorAdapter  │ │ Future Adapter │          │
-│  │  (WebUSB)      │ │  (Connect API) │ │  (WebHID, etc) │          │
-│  └───────┬────────┘ └───────┬────────┘ └────────────────┘          │
-│          │                  │                                        │
-└──────────┼──────────────────┼────────────────────────────────────────┘
-           │                  │
-           ▼                  ▼
-    ┌─────────────┐   ┌─────────────────────┐
-    │ Ledger USB  │   │ connect.trezor.io   │
-    │ (WebUSB)    │   │ (Trezor Connect)    │
-    └─────────────┘   └─────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              Browser (React)                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  HardwareWalletService                                                  │  │
+│  │  ├── registerAdapter(adapter)                                           │  │
+│  │  ├── connect(type) → device                                             │  │
+│  │  ├── getXpub(path) → xpub                                               │  │
+│  │  └── signPSBT(request) → signed                                         │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                     │                                          │
+│      ┌──────────────┬───────────────┼───────────────┬──────────────┐         │
+│      ▼              ▼               ▼               ▼              ▼         │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ │
+│  │  Ledger    │ │  Trezor    │ │  BitBox02  │ │   Jade     │ │  Future    │ │
+│  │  (WebUSB)  │ │  (Connect) │ │  (WebHID)  │ │ (WebSerial)│ │  Adapter   │ │
+│  └──────┬─────┘ └──────┬─────┘ └──────┬─────┘ └──────┬─────┘ └────────────┘ │
+│         │              │              │              │                        │
+└─────────┼──────────────┼──────────────┼──────────────┼────────────────────────┘
+          │              │              │              │
+          ▼              ▼              ▼              ▼
+   ┌────────────┐ ┌─────────────┐ ┌────────────┐ ┌────────────┐
+   │ Ledger USB │ │ Trezor.io   │ │ BitBox HID │ │ Jade Serial│
+   │  (WebUSB)  │ │ (Connect)   │ │  (WebHID)  │ │ (WebSerial)│
+   └────────────┘ └─────────────┘ └────────────┘ └────────────┘
 ```
 
 ## Core Components
@@ -45,7 +45,9 @@ services/hardwareWallet/
 └── adapters/
     ├── index.ts          # Adapter exports
     ├── ledger.ts         # Ledger WebUSB adapter
-    └── trezor.ts         # Trezor Connect adapter
+    ├── trezor.ts         # Trezor Connect adapter
+    ├── bitbox.ts         # BitBox02 WebHID adapter
+    └── jade.ts           # Blockstream Jade WebSerial adapter
 ```
 
 ### DeviceAdapter Interface
@@ -388,6 +390,145 @@ Multiple commits added extensive logging (`c7cc4a0`, `ab0e69e`) because Ledger e
 
 ---
 
+## BitBox02 Integration
+
+### Overview
+
+The BitBox02 adapter uses **WebHID** to communicate with BitBox02 devices via the `bitbox02-api` npm package. This requires HTTPS (secure context) and Chrome/Edge/Brave.
+
+### Supported Devices
+
+| Device | Edition | Detection |
+|--------|---------|-----------|
+| BitBox02 Multi | Multi-edition | `edition === 'multi'` |
+| BitBox02 BTC-Only | Bitcoin-only | `edition === 'btconly'` |
+
+### Dependencies
+
+- `bitbox02-api` - Official BitBox02 JavaScript API
+- `@types/w3c-web-hid` - TypeScript types for WebHID
+
+### Connection Flow
+
+1. **Check WebHID support** and secure context (HTTPS)
+2. **Request HID permission** via `navigator.hid.requestDevice()`
+3. **Pair with device** - display pairing code, user confirms on device
+4. **Unlock device** - user enters password on device
+5. Return `HardwareWalletDevice` with device info
+
+### PSBT Signing
+
+BitBox02 uses `btcSignSimple()` which requires converting PSBT to BitBox format:
+
+1. **Parse PSBT** using bitcoinjs-lib
+2. **Convert inputs** to BitBox format (prevOutHash, prevOutIndex, prevOutValue, etc.)
+3. **Convert outputs** to BitBox format (type, value, scriptConfig)
+4. **Call btcSignSimple()** - returns signatures array
+5. **Apply signatures** back to PSBT and finalize
+
+### Script Type Mapping
+
+| Derivation Path | BitBox Simple Type | Output Type |
+|-----------------|-------------------|-------------|
+| `m/44'/...` | `p2pkh` | `P2PKH` |
+| `m/49'/...` | `p2wpkh-p2sh` | `P2SH` |
+| `m/84'/...` | `p2wpkh` | `P2WPKH` |
+| `m/86'/...` | `p2tr` | `P2TR` |
+
+### Key Differences from Other Adapters
+
+| Feature | BitBox02 | Ledger | Trezor |
+|---------|----------|--------|--------|
+| Connection | WebHID | WebUSB | Connect API |
+| HTTPS Required | Yes | Yes | No |
+| Pairing | Device-side code | N/A | N/A |
+| Returns | Signatures array | Signed PSBT | Raw transaction |
+| Desktop App | Close BitBoxApp | Close Ledger Live | Open Trezor Suite |
+
+---
+
+## Jade Integration
+
+### Overview
+
+The Jade adapter uses **WebSerial** to communicate with Blockstream Jade devices. Unlike other devices, Jade has no official JavaScript SDK—the adapter implements the CBOR-RPC protocol directly.
+
+### Dependencies
+
+- `cbor-x` - Fast CBOR encoding/decoding
+- `@types/w3c-web-serial` - TypeScript types for WebSerial
+
+### Connection Parameters
+
+```typescript
+await port.open({
+  baudRate: 115200,
+  dataBits: 8,
+  stopBits: 1,
+  parity: 'none',
+  flowControl: 'none',
+});
+```
+
+### CBOR RPC Protocol
+
+All communication uses CBOR-encoded messages:
+
+**Request format:**
+```javascript
+{ id: "unique-id", method: "get_xpub", params: { path: [84, 0x80000000, 0, 0x80000000, 0, 0x80000000] } }
+```
+
+**Response format:**
+```javascript
+{ id: "unique-id", result: "xpub..." }
+// or
+{ id: "unique-id", error: { code: -32000, message: "..." } }
+```
+
+### Key RPC Methods
+
+| Method | Purpose | Parameters |
+|--------|---------|------------|
+| `get_version_info` | Get device info | None |
+| `auth_user` | Start unlock flow | `network` |
+| `get_xpub` | Get extended public key | `path`, `network` |
+| `sign_psbt` | Sign PSBT | `psbt` (base64) |
+| `get_receive_address` | Display address on device | `path`, `network`, `variant` |
+
+### PSBT Signing
+
+Jade natively supports PSBT signing—no conversion required:
+
+```typescript
+const result = await this.sendRpc('sign_psbt', { psbt: base64Psbt });
+// result is signed PSBT in base64
+```
+
+This is simpler than other devices which require manual PSBT parsing.
+
+### Path Format
+
+Jade requires BIP32 paths as arrays with hardened indices OR'd with 0x80000000:
+
+```typescript
+// m/84'/0'/0' becomes:
+[84 | 0x80000000, 0 | 0x80000000, 0 | 0x80000000]
+```
+
+### Key Differences from Other Adapters
+
+| Feature | Jade | Ledger | Trezor | BitBox02 |
+|---------|------|--------|--------|----------|
+| Connection | WebSerial | WebUSB | Connect API | WebHID |
+| Protocol | CBOR-RPC | APDU | Protobuf | Protobuf |
+| HTTPS Required | Yes | Yes | No | Yes |
+| Native PSBT | Yes | Yes | No | No |
+| Desktop App | N/A | Close Ledger Live | Open Trezor Suite | Close BitBoxApp |
+| Air-gap Support | QR codes | N/A | N/A | N/A |
+
+---
+
 ## Adding a New Device Adapter
 
 1. Create adapter file in `services/hardwareWallet/adapters/`:
@@ -448,10 +589,24 @@ service.registerAdapter(new MyDeviceAdapter());
 2. **Single connection** - Close Ledger Live before connecting
 3. **Bitcoin app required** - Must be open on device
 
+### BitBox02
+
+1. **HTTPS required** - WebHID needs secure context
+2. **Single connection** - Close BitBoxApp before connecting
+3. **Pairing required** - Must confirm pairing code on device
+4. **Chrome/Edge only** - Safari and Firefox don't support WebHID
+
+### Jade
+
+1. **HTTPS required** - WebSerial needs secure context
+2. **Chrome/Edge only** - Safari and Firefox don't support WebSerial
+3. **No official SDK** - Uses custom CBOR-RPC implementation
+4. **Device must be unlocked** - Unlock before connecting
+
 ### General
 
-1. **Browser support** - Chrome, Edge, Brave only (WebUSB)
-2. **No Firefox/Safari** - These browsers don't support WebUSB
+1. **Browser support** - Chrome, Edge, Brave only (WebUSB/WebHID/WebSerial)
+2. **No Firefox/Safari** - These browsers don't support WebUSB/WebHID/WebSerial
 3. **Camera for QR** - HTTPS required for air-gapped device QR scanning
 
 ---

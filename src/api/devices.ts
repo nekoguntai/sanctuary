@@ -270,3 +270,18 @@ export async function shareDeviceWithGroup(
 ): Promise<ShareDeviceResponse> {
   return apiClient.post<ShareDeviceResponse>(`/devices/${deviceId}/share/group`, data);
 }
+
+// ========================================
+// DEVICE ACCOUNTS
+// ========================================
+
+/**
+ * Add a new account to an existing device
+ * Used to add additional derivation paths (e.g., multisig to a single-sig device)
+ */
+export async function addDeviceAccount(
+  deviceId: string,
+  account: DeviceAccountInput
+): Promise<DeviceAccountInput & { id: string }> {
+  return apiClient.post<DeviceAccountInput & { id: string }>(`/devices/${deviceId}/accounts`, account);
+}

@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount } from '../types';
-import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup } from '../src/api/devices';
+import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup, addDeviceAccount, DeviceAccountInput } from '../src/api/devices';
+import { hardwareWalletService, isSecureContext, DeviceType } from '../services/hardwareWallet';
 import * as authApi from '../src/api/auth';
 import * as adminApi from '../src/api/admin';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send, User as UserIcon } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send, User as UserIcon, Plus, Loader2, Usb } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
@@ -115,6 +116,24 @@ export const DeviceDetail: React.FC = () => {
   const [userSearchResults, setUserSearchResults] = useState<authApi.SearchUser[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [sharingLoading, setSharingLoading] = useState(false);
+
+  // Add account state
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [addAccountLoading, setAddAccountLoading] = useState(false);
+  const [addAccountError, setAddAccountError] = useState<string | null>(null);
+  const [addAccountMethod, setAddAccountMethod] = useState<'usb' | 'manual' | null>(null);
+  const [usbProgress, setUsbProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+  const [manualAccount, setManualAccount] = useState<{
+    purpose: 'single_sig' | 'multisig';
+    scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+    derivationPath: string;
+    xpub: string;
+  }>({
+    purpose: 'multisig',
+    scriptType: 'native_segwit',
+    derivationPath: "m/48'/0'/0'/2'",
+    xpub: '',
+  });
 
   // Derived ownership state
   const isOwner = device?.isOwner ?? true; // Default to true for backward compat
@@ -302,6 +321,118 @@ export const DeviceDetail: React.FC = () => {
     }
   };
 
+  // Helper to get device type from device model
+  const getDeviceTypeFromDeviceModel = (): DeviceType | null => {
+    if (!device) return null;
+    const type = device.type?.toLowerCase();
+    if (type?.includes('trezor')) return 'trezor';
+    if (type?.includes('ledger')) return 'ledger';
+    if (type?.includes('coldcard')) return 'coldcard';
+    if (type?.includes('bitbox')) return 'bitbox';
+    if (type?.includes('jade')) return 'jade';
+    return null;
+  };
+
+  // Add accounts via USB connection
+  const handleAddAccountsViaUsb = async () => {
+    if (!id || !device) return;
+
+    const deviceType = getDeviceTypeFromDeviceModel();
+    if (!deviceType) {
+      setAddAccountError('USB connection not supported for this device type');
+      return;
+    }
+
+    setAddAccountLoading(true);
+    setAddAccountError(null);
+    setUsbProgress(null);
+
+    try {
+      // Connect to the device
+      await hardwareWalletService.connect(deviceType);
+
+      // Fetch all xpubs
+      const allXpubs = await hardwareWalletService.getAllXpubs((current, total, name) => {
+        setUsbProgress({ current, total, name });
+      });
+
+      // Filter out accounts that already exist on this device
+      const existingPaths = new Set(device.accounts?.map(a => a.derivationPath) || []);
+      const newAccounts = allXpubs.filter(x => !existingPaths.has(x.path));
+
+      if (newAccounts.length === 0) {
+        setAddAccountError('No new accounts to add. All derivation paths already exist on this device.');
+        return;
+      }
+
+      // Add each new account
+      let addedCount = 0;
+      for (const account of newAccounts) {
+        try {
+          await addDeviceAccount(id, {
+            purpose: account.purpose,
+            scriptType: account.scriptType,
+            derivationPath: account.path,
+            xpub: account.xpub,
+          });
+          addedCount++;
+        } catch (err) {
+          log.warn('Failed to add account', { path: account.path, err });
+        }
+      }
+
+      // Refresh device data
+      const updatedDevice = await getDevice(id);
+      setDevice(updatedDevice);
+      setShowAddAccount(false);
+      setAddAccountMethod(null);
+
+      log.info('Added accounts via USB', { addedCount, totalFetched: allXpubs.length });
+    } catch (err) {
+      log.error('Failed to add accounts via USB', { err });
+      setAddAccountError(err instanceof Error ? err.message : 'Failed to connect to device');
+    } finally {
+      setAddAccountLoading(false);
+      setUsbProgress(null);
+      try {
+        await hardwareWalletService.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+    }
+  };
+
+  // Add account manually
+  const handleAddAccountManually = async () => {
+    if (!id || !manualAccount.xpub || !manualAccount.derivationPath) return;
+
+    setAddAccountLoading(true);
+    setAddAccountError(null);
+
+    try {
+      await addDeviceAccount(id, manualAccount);
+
+      // Refresh device data
+      const updatedDevice = await getDevice(id);
+      setDevice(updatedDevice);
+      setShowAddAccount(false);
+      setAddAccountMethod(null);
+      setManualAccount({
+        purpose: 'multisig',
+        scriptType: 'native_segwit',
+        derivationPath: "m/48'/0'/0'/2'",
+        xpub: '',
+      });
+
+      log.info('Added account manually', { path: manualAccount.derivationPath });
+    } catch (err) {
+      log.error('Failed to add account manually', { err });
+      setAddAccountError(err instanceof Error ? err.message : 'Failed to add account');
+    } finally {
+      setAddAccountLoading(false);
+    }
+  };
+
   // Get display name for current device type
   const getDeviceDisplayName = (type: string): string => {
     const model = deviceModels.find(m => m.slug === type);
@@ -467,6 +598,222 @@ export const DeviceDetail: React.FC = () => {
                               <code className="text-[10px] text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono block">
                                 {device.xpub || 'N/A'}
                               </code>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add Account Button - only for owners */}
+                      {isOwner && (
+                        <button
+                          onClick={() => setShowAddAccount(true)}
+                          className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 hover:border-sanctuary-400 dark:hover:border-sanctuary-600 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="text-sm font-medium">Add Derivation Path</span>
+                        </button>
+                      )}
+
+                      {/* Add Account Dialog */}
+                      {showAddAccount && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-md w-full shadow-xl">
+                            <div className="p-6">
+                              <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-50">
+                                  Add Derivation Path
+                                </h3>
+                                <button
+                                  onClick={() => {
+                                    setShowAddAccount(false);
+                                    setAddAccountMethod(null);
+                                    setAddAccountError(null);
+                                  }}
+                                  className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                                >
+                                  <X className="w-5 h-5" />
+                                </button>
+                              </div>
+
+                              {!addAccountMethod ? (
+                                <div className="space-y-3">
+                                  <p className="text-sm text-sanctuary-500 mb-4">
+                                    Choose how to add a new derivation path to this device.
+                                  </p>
+
+                                  {/* USB Option */}
+                                  {isSecureContext() && getDeviceTypeFromDeviceModel() && (
+                                    <button
+                                      onClick={() => setAddAccountMethod('usb')}
+                                      className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                    >
+                                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                                        <Usb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                      </div>
+                                      <div>
+                                        <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                                          Connect via USB
+                                        </p>
+                                        <p className="text-xs text-sanctuary-500">
+                                          Fetch all derivation paths from device
+                                        </p>
+                                      </div>
+                                    </button>
+                                  )}
+
+                                  {/* Manual Option */}
+                                  <button
+                                    onClick={() => setAddAccountMethod('manual')}
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                  >
+                                    <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800">
+                                      <Edit2 className="w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                                        Enter Manually
+                                      </p>
+                                      <p className="text-xs text-sanctuary-500">
+                                        Enter derivation path and xpub
+                                      </p>
+                                    </div>
+                                  </button>
+                                </div>
+                              ) : addAccountMethod === 'usb' ? (
+                                <div className="text-center py-6">
+                                  {addAccountLoading ? (
+                                    <>
+                                      <Loader2 className="w-10 h-10 mx-auto animate-spin text-sanctuary-500 mb-4" />
+                                      {usbProgress ? (
+                                        <>
+                                          <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300">
+                                            Fetching {usbProgress.name}...
+                                          </p>
+                                          <p className="text-xs text-sanctuary-400 mt-1">
+                                            {usbProgress.current} of {usbProgress.total} paths
+                                          </p>
+                                          <div className="w-48 mx-auto mt-3 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-full h-2">
+                                            <div
+                                              className="bg-sanctuary-600 dark:bg-sanctuary-400 h-2 rounded-full transition-all duration-300"
+                                              style={{ width: `${(usbProgress.current / usbProgress.total) * 100}%` }}
+                                            />
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <p className="text-sm text-sanctuary-500">Connecting to device...</p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Usb className="w-10 h-10 mx-auto text-sanctuary-400 mb-4" />
+                                      <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-2">
+                                        Connect your {device.type} and confirm on device
+                                      </p>
+                                      <p className="text-xs text-sanctuary-400 mb-4">
+                                        This will fetch all standard derivation paths
+                                      </p>
+                                      <button
+                                        onClick={handleAddAccountsViaUsb}
+                                        className="px-6 py-2 rounded-lg bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 transition-colors"
+                                      >
+                                        Connect Device
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {/* Purpose */}
+                                  <div>
+                                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Purpose</label>
+                                    <select
+                                      value={manualAccount.purpose}
+                                      onChange={(e) => setManualAccount(prev => ({ ...prev, purpose: e.target.value as 'single_sig' | 'multisig' }))}
+                                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                    >
+                                      <option value="single_sig">Single-sig</option>
+                                      <option value="multisig">Multisig</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Script Type */}
+                                  <div>
+                                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Script Type</label>
+                                    <select
+                                      value={manualAccount.scriptType}
+                                      onChange={(e) => setManualAccount(prev => ({ ...prev, scriptType: e.target.value as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy' }))}
+                                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                    >
+                                      <option value="native_segwit">Native SegWit (bc1q...)</option>
+                                      <option value="taproot">Taproot (bc1p...)</option>
+                                      <option value="nested_segwit">Nested SegWit (3...)</option>
+                                      <option value="legacy">Legacy (1...)</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Derivation Path */}
+                                  <div>
+                                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Derivation Path</label>
+                                    <input
+                                      type="text"
+                                      value={manualAccount.derivationPath}
+                                      onChange={(e) => setManualAccount(prev => ({ ...prev, derivationPath: e.target.value }))}
+                                      placeholder="m/48'/0'/0'/2'"
+                                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                    />
+                                  </div>
+
+                                  {/* XPub */}
+                                  <div>
+                                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">Extended Public Key</label>
+                                    <textarea
+                                      value={manualAccount.xpub}
+                                      onChange={(e) => setManualAccount(prev => ({ ...prev, xpub: e.target.value }))}
+                                      placeholder="xpub..."
+                                      rows={3}
+                                      className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                                    />
+                                  </div>
+
+                                  <button
+                                    onClick={handleAddAccountManually}
+                                    disabled={!manualAccount.xpub || !manualAccount.derivationPath || addAccountLoading}
+                                    className="w-full px-4 py-2.5 rounded-lg bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                  >
+                                    {addAccountLoading ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Adding...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-4 h-4" />
+                                        Add Account
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Error Message */}
+                              {addAccountError && (
+                                <p className="mt-4 text-center text-sm text-rose-600 dark:text-rose-400">
+                                  {addAccountError}
+                                </p>
+                              )}
+
+                              {/* Back button when in a method */}
+                              {addAccountMethod && !addAccountLoading && (
+                                <button
+                                  onClick={() => {
+                                    setAddAccountMethod(null);
+                                    setAddAccountError(null);
+                                  }}
+                                  className="mt-4 w-full text-center text-sm text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300"
+                                >
+                                  ← Back to options
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

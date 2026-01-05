@@ -185,7 +185,8 @@ export const sampleWallets = {
     type: 'multi_sig',
     scriptType: 'native_segwit',
     network: 'testnet',
-    descriptor: 'wsh(sortedmulti(2,[aabbccdd/84h/1h/0h]tpub1.../0/*,[eeff0011/84h/1h/0h]tpub2.../0/*,[22334455/84h/1h/0h]tpub3.../0/*))',
+    // BIP-48 paths for multisig: m/48'/1'/0'/2' (testnet native segwit multisig)
+    descriptor: "wsh(sortedmulti(2,[aabbccdd/48'/1'/0'/2']tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*,[eeff0011/48'/1'/0'/2']tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba/0/*,[22334455/48'/1'/0'/2']tpubDCBWBScQPGv4Xk3JSbhw6wYYpayMjb2eAYyArpbSqQTbLDpphHGAetB6VQgVeftLML8vDSUEWcC43M5a2F9rShd1Y8e26Kq2tGjJw9wfNmB/0/*))",
     fingerprint: 'aabbccdd',
     createdAt: new Date(),
     lastSyncedAt: null,
@@ -195,6 +196,28 @@ export const sampleWallets = {
     totalSigners: 3,
   },
 };
+
+// Multisig key info for testing - matches the descriptor above
+export const multisigKeyInfo = [
+  {
+    fingerprint: 'aabbccdd',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+    derivationPath: '0/*',
+  },
+  {
+    fingerprint: 'eeff0011',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+    derivationPath: '0/*',
+  },
+  {
+    fingerprint: '22334455',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDCBWBScQPGv4Xk3JSbhw6wYYpayMjb2eAYyArpbSqQTbLDpphHGAetB6VQgVeftLML8vDSUEWcC43M5a2F9rShd1Y8e26Kq2tGjJw9wfNmB',
+    derivationPath: '0/*',
+  },
+];
 
 // ========================================
 // SAMPLE USERS

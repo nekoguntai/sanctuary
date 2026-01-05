@@ -1114,7 +1114,7 @@ export const DeviceDetail: React.FC = () => {
                                   {isSecureContext() && getDeviceTypeFromDeviceModel() && (
                                     <button
                                       onClick={() => setAddAccountMethod('usb')}
-                                      className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                      className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
                                     >
                                       <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                                         <Usb className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -1133,7 +1133,7 @@ export const DeviceDetail: React.FC = () => {
                                   {/* SD Card Option */}
                                   <button
                                     onClick={() => { setAddAccountMethod('sdcard'); resetImportState(); }}
-                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
                                   >
                                     <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
                                       <HardDrive className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -1151,7 +1151,7 @@ export const DeviceDetail: React.FC = () => {
                                   {/* QR Code Option */}
                                   <button
                                     onClick={() => { setAddAccountMethod('qr'); resetImportState(); }}
-                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
                                   >
                                     <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
                                       <QrCode className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -1169,7 +1169,7 @@ export const DeviceDetail: React.FC = () => {
                                   {/* Manual Option */}
                                   <button
                                     onClick={() => setAddAccountMethod('manual')}
-                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors text-left"
                                   >
                                     <div className="p-2 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800">
                                       <Edit2 className="w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400" />

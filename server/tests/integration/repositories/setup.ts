@@ -19,6 +19,7 @@ import * as bcrypt from 'bcryptjs';
 
 let prisma: PrismaClient | null = null;
 let isSetup = false;
+let txCounter = 0;
 
 // ========================================
 // DATABASE CONNECTION
@@ -349,10 +350,11 @@ export async function createTestTransaction(
   walletId: string,
   options: CreateTransactionOptions = {}
 ) {
+  const uniqueTxid = options.txid || `${Date.now().toString(16)}${(++txCounter).toString(16).padStart(8, '0')}`.padEnd(64, 'a');
   return tx.transaction.create({
     data: {
       walletId,
-      txid: options.txid || `${Date.now().toString(16).padEnd(64, 'a')}`,
+      txid: uniqueTxid,
       type: options.type || 'received',
       amount: options.amount ?? BigInt(100000),
       fee: options.fee ?? BigInt(1000),

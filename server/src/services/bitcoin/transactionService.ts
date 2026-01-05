@@ -84,6 +84,23 @@ interface Bip32DerivationEntry {
  * @param inputIndex - Optional input index for logging
  * @returns Array of bip32Derivation entries, or empty array on failure
  */
+/**
+ * Extract change index and address index from a derivation path.
+ * For BIP-48: purpose'/coin'/account'/script'/change/index
+ * The last two non-hardened parts are change and index.
+ */
+function extractChangeAndAddressIndex(derivationPath: string): { changeIdx: number; addressIdx: number } {
+  const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+  // The last two parts are change and index (non-hardened)
+  const changeIdx = pathParts.length >= 2
+    ? parseInt(pathParts[pathParts.length - 2].replace(/['h]/g, ''), 10)
+    : 0;
+  const addressIdx = pathParts.length >= 1
+    ? parseInt(pathParts[pathParts.length - 1].replace(/['h]/g, ''), 10)
+    : 0;
+  return { changeIdx, addressIdx };
+}
+
 export function buildMultisigBip32Derivations(
   derivationPath: string,
   multisigKeys: MultisigKeyInfo[],
@@ -92,15 +109,7 @@ export function buildMultisigBip32Derivations(
 ): Bip32DerivationEntry[] {
   try {
     // Extract change/index from the derivation path (e.g., m/48'/0'/0'/2'/0/5 -> 0, 5)
-    const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
-    // For BIP-48: purpose'/coin'/account'/script'/change/index
-    // The last two parts are change and index (non-hardened)
-    const changeIdx = pathParts.length >= 2
-      ? parseInt(pathParts[pathParts.length - 2].replace(/['h]/g, ''), 10)
-      : 0;
-    const addressIdx = pathParts.length >= 1
-      ? parseInt(pathParts[pathParts.length - 1].replace(/['h]/g, ''), 10)
-      : 0;
+    const { changeIdx, addressIdx } = extractChangeAndAddressIndex(derivationPath);
 
     const bip32Derivations: Bip32DerivationEntry[] = [];
 
@@ -154,6 +163,96 @@ export function buildMultisigBip32Derivations(
       error: (e as Error).message,
     });
     return [];
+  }
+}
+
+/**
+ * Build the witnessScript (multisig redeem script) for a P2WSH multisig input.
+ *
+ * Hardware wallets require the witnessScript to:
+ * 1. Verify the scriptPubKey matches (witnessUtxo contains P2WSH hash of witnessScript)
+ * 2. Know what they're signing (m-of-n with which public keys)
+ *
+ * @param derivationPath - Full derivation path for the address (e.g., "m/48'/0'/0'/2'/0/5")
+ * @param multisigKeys - Array of cosigner key info from parsed descriptor
+ * @param quorum - Number of required signatures (M in M-of-N)
+ * @param network - Bitcoin network object
+ * @param inputIndex - Optional input index for logging
+ * @returns The witnessScript buffer, or undefined if derivation fails
+ */
+export function buildMultisigWitnessScript(
+  derivationPath: string,
+  multisigKeys: MultisigKeyInfo[],
+  quorum: number,
+  network: bitcoin.Network,
+  inputIndex?: number
+): Buffer | undefined {
+  try {
+    const { changeIdx, addressIdx } = extractChangeAndAddressIndex(derivationPath);
+
+    // Derive public keys from each xpub at the change/index level
+    const pubkeys: Buffer[] = [];
+    for (const keyInfo of multisigKeys) {
+      try {
+        const standardXpub = convertToStandardXpub(keyInfo.xpub);
+        const keyNode = bip32.fromBase58(standardXpub, network);
+        const derivedNode = keyNode.derive(changeIdx).derive(addressIdx);
+
+        if (derivedNode.publicKey) {
+          pubkeys.push(derivedNode.publicKey);
+        } else {
+          log.warn('No publicKey on derived node for witnessScript', {
+            inputIndex,
+            fingerprint: keyInfo.fingerprint,
+          });
+        }
+      } catch (keyError) {
+        log.warn('Failed to derive key for witnessScript', {
+          inputIndex,
+          fingerprint: keyInfo.fingerprint,
+          error: (keyError as Error).message,
+        });
+      }
+    }
+
+    if (pubkeys.length !== multisigKeys.length) {
+      log.warn('Not all pubkeys derived for witnessScript', {
+        inputIndex,
+        expected: multisigKeys.length,
+        actual: pubkeys.length,
+      });
+      return undefined;
+    }
+
+    // Sort public keys lexicographically (required for sortedmulti)
+    pubkeys.sort((a, b) => a.compare(b));
+
+    // Create the multisig redeem script (p2ms)
+    const p2ms = bitcoin.payments.p2ms({
+      m: quorum,
+      pubkeys,
+      network,
+    });
+
+    if (!p2ms.output) {
+      log.warn('Failed to generate p2ms output for witnessScript', { inputIndex });
+      return undefined;
+    }
+
+    log.info('Multisig witnessScript built', {
+      inputIndex,
+      quorum,
+      keyCount: pubkeys.length,
+      scriptSize: p2ms.output.length,
+    });
+
+    return p2ms.output;
+  } catch (e) {
+    log.warn('Failed to build multisig witnessScript', {
+      inputIndex,
+      error: (e as Error).message,
+    });
+    return undefined;
   }
 }
 
@@ -419,6 +518,8 @@ export async function createTransaction(
   let masterFingerprint: Buffer | undefined;
   let accountXpub: string | undefined;
   let multisigKeys: MultisigKeyInfo[] | undefined;
+  let multisigQuorum: number | undefined;
+  let multisigScriptType: 'wsh-sortedmulti' | 'sh-wsh-sortedmulti' | undefined;
   const isMultisig = wallet.type === 'multi_sig';
 
   log.info('BIP32 derivation: checking wallet data', {
@@ -438,9 +539,15 @@ export async function createTransaction(
       const parsed = parseDescriptor(wallet.descriptor);
       if (parsed.keys && parsed.keys.length > 0) {
         multisigKeys = parsed.keys;
+        multisigQuorum = parsed.quorum;
+        // Store descriptor type for script selection (P2WSH vs P2SH-P2WSH)
+        if (parsed.type === 'wsh-sortedmulti' || parsed.type === 'sh-wsh-sortedmulti') {
+          multisigScriptType = parsed.type;
+        }
         log.info('BIP32 derivation: parsed multisig descriptor', {
           keyCount: parsed.keys.length,
           quorum: parsed.quorum,
+          scriptType: multisigScriptType,
           keys: parsed.keys.map(k => ({
             fingerprint: k.fingerprint,
             accountPath: k.accountPath,
@@ -757,6 +864,46 @@ export async function createTransaction(
 
       if (bip32Derivations.length > 0) {
         psbt.updateInput(inputIndex, { bip32Derivation: bip32Derivations });
+      }
+
+      // Add witnessScript for P2WSH multisig (required for hardware wallet signing)
+      // For P2SH-P2WSH, we also need redeemScript (the P2WSH wrapper)
+      if (multisigQuorum !== undefined && multisigScriptType === 'wsh-sortedmulti') {
+        const witnessScript = buildMultisigWitnessScript(
+          derivationPath,
+          multisigKeys,
+          multisigQuorum,
+          networkObj,
+          inputIndex
+        );
+        if (witnessScript) {
+          psbt.updateInput(inputIndex, { witnessScript });
+        }
+      } else if (multisigQuorum !== undefined && multisigScriptType === 'sh-wsh-sortedmulti') {
+        // P2SH-P2WSH requires both witnessScript and redeemScript
+        const witnessScript = buildMultisigWitnessScript(
+          derivationPath,
+          multisigKeys,
+          multisigQuorum,
+          networkObj,
+          inputIndex
+        );
+        if (witnessScript) {
+          // Create the P2WSH output from witnessScript to use as redeemScript
+          const p2wsh = bitcoin.payments.p2wsh({
+            redeem: { output: witnessScript, network: networkObj },
+            network: networkObj,
+          });
+          psbt.updateInput(inputIndex, {
+            witnessScript,
+            redeemScript: p2wsh.output,
+          });
+          log.info('P2SH-P2WSH scripts added to input', {
+            inputIndex,
+            witnessScriptSize: witnessScript.length,
+            redeemScriptSize: p2wsh.output?.length,
+          });
+        }
       }
     } else if (masterFingerprint && derivationPath && accountNode) {
       // SINGLE-SIG: Add single bip32Derivation entry
@@ -1626,6 +1773,8 @@ export async function createBatchTransaction(
   let masterFingerprint: Buffer | undefined;
   let accountXpub: string | undefined;
   let multisigKeys: MultisigKeyInfo[] | undefined;
+  let multisigQuorum: number | undefined;
+  let multisigScriptType: 'wsh-sortedmulti' | 'sh-wsh-sortedmulti' | undefined;
   const isMultisig = wallet.type === 'multi_sig';
 
   // For multisig, parse the descriptor to get ALL keys' info
@@ -1634,9 +1783,15 @@ export async function createBatchTransaction(
       const parsed = parseDescriptor(wallet.descriptor);
       if (parsed.keys && parsed.keys.length > 0) {
         multisigKeys = parsed.keys;
+        multisigQuorum = parsed.quorum;
+        // Store descriptor type for script selection (P2WSH vs P2SH-P2WSH)
+        if (parsed.type === 'wsh-sortedmulti' || parsed.type === 'sh-wsh-sortedmulti') {
+          multisigScriptType = parsed.type;
+        }
         log.info('[BATCH] Parsed multisig descriptor', {
           keyCount: parsed.keys.length,
           quorum: parsed.quorum,
+          scriptType: multisigScriptType,
         });
       }
     } catch (e) {
@@ -1918,6 +2073,46 @@ export async function createBatchTransaction(
 
       if (bip32Derivations.length > 0) {
         psbt.updateInput(inputIndex, { bip32Derivation: bip32Derivations });
+      }
+
+      // Add witnessScript for P2WSH multisig (required for hardware wallet signing)
+      // For P2SH-P2WSH, we also need redeemScript (the P2WSH wrapper)
+      if (multisigQuorum !== undefined && multisigScriptType === 'wsh-sortedmulti') {
+        const witnessScript = buildMultisigWitnessScript(
+          derivationPath,
+          multisigKeys,
+          multisigQuorum,
+          networkObj,
+          inputIndex
+        );
+        if (witnessScript) {
+          psbt.updateInput(inputIndex, { witnessScript });
+        }
+      } else if (multisigQuorum !== undefined && multisigScriptType === 'sh-wsh-sortedmulti') {
+        // P2SH-P2WSH requires both witnessScript and redeemScript
+        const witnessScript = buildMultisigWitnessScript(
+          derivationPath,
+          multisigKeys,
+          multisigQuorum,
+          networkObj,
+          inputIndex
+        );
+        if (witnessScript) {
+          // Create the P2WSH output from witnessScript to use as redeemScript
+          const p2wsh = bitcoin.payments.p2wsh({
+            redeem: { output: witnessScript, network: networkObj },
+            network: networkObj,
+          });
+          psbt.updateInput(inputIndex, {
+            witnessScript,
+            redeemScript: p2wsh.output,
+          });
+          log.info('[BATCH] P2SH-P2WSH scripts added to input', {
+            inputIndex,
+            witnessScriptSize: witnessScript.length,
+            redeemScriptSize: p2wsh.output?.length,
+          });
+        }
       }
     } else if (masterFingerprint && derivationPath && accountNode) {
       // SINGLE-SIG: Add single bip32Derivation entry

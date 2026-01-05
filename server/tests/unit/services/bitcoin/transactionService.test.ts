@@ -40,6 +40,7 @@ jest.mock('../../../../src/services/bitcoin/blockchain', () => ({
 }));
 
 // Mock address derivation - supports both single-sig and multisig
+// Using only 2 keys for 2-of-2 multisig (both keys are valid testnet tpubs)
 const mockParseDescriptor = jest.fn().mockImplementation((descriptor: string) => {
   // Check if it's a multisig descriptor
   if (descriptor.startsWith('wsh(sortedmulti(') || descriptor.startsWith('wsh(multi(')) {
@@ -57,12 +58,6 @@ const mockParseDescriptor = jest.fn().mockImplementation((descriptor: string) =>
           fingerprint: 'eeff0011',
           accountPath: "48'/1'/0'/2'",
           xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
-          derivationPath: '0/*',
-        },
-        {
-          fingerprint: '22334455',
-          accountPath: "48'/1'/0'/2'",
-          xpub: 'tpubDCBWBScQPGv4Xk3JSbhw6wYYpayMjb2eAYyArpbSqQTbLDpphHGAetB6VQgVeftLML8vDSUEWcC43M5a2F9rShd1Y8e26Kq2tGjJw9wfNmB',
           derivationPath: '0/*',
         },
       ],
@@ -100,6 +95,8 @@ import {
   getPSBTInfo,
   UTXOSelectionStrategy,
   generateDecoyAmounts,
+  buildMultisigWitnessScript,
+  buildMultisigBip32Derivations,
 } from '../../../../src/services/bitcoin/transactionService';
 import { estimateTransactionSize, calculateFee } from '../../../../src/services/bitcoin/utils';
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
@@ -1203,14 +1200,15 @@ describe('Transaction Service', () => {
     const walletId = 'multisig-batch-wallet-id';
 
     beforeEach(() => {
-      // Set up multisig wallet mock
+      // Set up multisig wallet mock with 2-of-2 configuration (using 2 valid keys)
       mockPrismaClient.wallet.findUnique.mockResolvedValue({
         ...sampleWallets.multiSig2of3,
         id: walletId,
+        quorum: 2,
+        totalSigners: 2,
         devices: [
           { device: { id: 'device-1', fingerprint: 'aabbccdd', xpub: multisigKeyInfo[0].xpub } },
           { device: { id: 'device-2', fingerprint: 'eeff0011', xpub: multisigKeyInfo[1].xpub } },
-          { device: { id: 'device-3', fingerprint: '22334455', xpub: multisigKeyInfo[2].xpub } },
         ],
       });
 
@@ -1356,6 +1354,173 @@ describe('Transaction Service', () => {
       for (const path of result.inputPaths) {
         expect(path).toMatch(/^m\/48'\/\d+'\/\d+'\/\d+'\/\d+\/\d+$/);
       }
+    });
+
+    it('should include witnessScript for P2WSH multisig inputs', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+      const input = psbt.data.inputs[0];
+
+      // P2WSH multisig should have witnessScript
+      expect(input.witnessScript).toBeDefined();
+      expect(input.witnessScript!.length).toBeGreaterThan(0);
+
+      // WitnessScript for 2-of-2 multisig starts with OP_2 (0x52) and ends with OP_2 OP_CHECKMULTISIG (0x52 0xae)
+      // Format: OP_2 <pubkey1> <pubkey2> OP_2 OP_CHECKMULTISIG
+      const script = input.witnessScript!;
+      expect(script[0]).toBe(0x52); // OP_2 (m)
+      expect(script[script.length - 2]).toBe(0x52); // OP_2 (n)
+      expect(script[script.length - 1]).toBe(0xae); // OP_CHECKMULTISIG
+    });
+  });
+
+  describe('buildMultisigWitnessScript', () => {
+    const network = bitcoin.networks.testnet;
+
+    it('should build valid witnessScript from multisig keys', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      // Use 2 valid testnet tpub keys for 2-of-2 multisig
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+      const quorum = 2;
+
+      const witnessScript = buildMultisigWitnessScript(
+        derivationPath,
+        multisigKeys,
+        quorum,
+        network,
+        0
+      );
+
+      expect(witnessScript).toBeDefined();
+      expect(witnessScript!.length).toBeGreaterThan(0);
+
+      // Verify it's a valid 2-of-2 multisig script
+      expect(witnessScript![0]).toBe(0x52); // OP_2
+      expect(witnessScript![witnessScript!.length - 2]).toBe(0x52); // OP_2 (n=2)
+      expect(witnessScript![witnessScript!.length - 1]).toBe(0xae); // OP_CHECKMULTISIG
+    });
+
+    it('should sort pubkeys lexicographically', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+      const quorum = 2;
+
+      const witnessScript = buildMultisigWitnessScript(
+        derivationPath,
+        multisigKeys,
+        quorum,
+        network,
+        0
+      );
+
+      expect(witnessScript).toBeDefined();
+
+      // Extract pubkeys from script (each is 33 bytes, preceded by 0x21 push opcode)
+      const pubkeys: Buffer[] = [];
+      let i = 1; // Skip OP_2
+      while (witnessScript![i] === 0x21) { // 0x21 = push 33 bytes
+        pubkeys.push(witnessScript!.slice(i + 1, i + 34));
+        i += 34;
+      }
+
+      // Verify pubkeys are sorted
+      for (let j = 0; j < pubkeys.length - 1; j++) {
+        expect(pubkeys[j].compare(pubkeys[j + 1])).toBeLessThan(0);
+      }
+    });
+
+    it('should return undefined for invalid keys', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const invalidKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'invalid-xpub',
+          derivationPath: '0/*',
+        },
+      ];
+
+      const result = buildMultisigWitnessScript(
+        derivationPath,
+        invalidKeys,
+        2,
+        network,
+        0
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle different derivation paths (change vs receive)', () => {
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+
+      // Receive address path (change=0, index=5)
+      const receiveScript = buildMultisigWitnessScript(
+        "m/48'/1'/0'/2'/0/5",
+        multisigKeys,
+        2,
+        network,
+        0
+      );
+
+      // Change address path (change=1, index=3)
+      const changeScript = buildMultisigWitnessScript(
+        "m/48'/1'/0'/2'/1/3",
+        multisigKeys,
+        2,
+        network,
+        0
+      );
+
+      expect(receiveScript).toBeDefined();
+      expect(changeScript).toBeDefined();
+
+      // Different paths should produce different scripts (different pubkeys derived)
+      expect(receiveScript!.equals(changeScript!)).toBe(false);
     });
   });
 

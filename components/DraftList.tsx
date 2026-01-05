@@ -590,18 +590,18 @@ export const DraftList: React.FC<DraftListProps> = ({
                 )}
 
                 <div className="flex gap-1">
-                  <button
-                    onClick={() => handleDownloadPsbt(draft)}
-                    className="p-1.5 rounded-lg text-sanctuary-500 hover:text-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
-                    title="Download PSBT"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-
-                  {canEdit && (
+                  {/* Download/Upload PSBT only for single-sig - multisig has per-device buttons in ReviewStep */}
+                  {walletType !== WalletType.MULTI_SIG && (
                     <>
-                      {/* Upload PSBT only for single-sig - multisig has per-device upload in ReviewStep */}
-                      {walletType !== WalletType.MULTI_SIG && (
+                      <button
+                        onClick={() => handleDownloadPsbt(draft)}
+                        className="p-1.5 rounded-lg text-sanctuary-500 hover:text-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
+                        title="Download PSBT"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+
+                      {canEdit && (
                         <label className="cursor-pointer">
                           <input
                             type="file"
@@ -623,7 +623,11 @@ export const DraftList: React.FC<DraftListProps> = ({
                           </span>
                         </label>
                       )}
+                    </>
+                  )}
 
+                  {canEdit && (
+                    <>
                       {deleteConfirm === draft.id ? (
                         <div className="flex items-center gap-1 ml-2">
                           <button

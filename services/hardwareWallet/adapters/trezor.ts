@@ -401,7 +401,10 @@ export class TrezorAdapter implements DeviceAdapter {
       const isTestnet = (request.accountPath || request.inputPaths?.[0] || '').includes("/1'/");
       const coin = isTestnet ? 'Testnet' : 'Bitcoin';
 
-      // Get connected device fingerprint for matching bip32Derivation entries
+      // Multisig PSBTs contain bip32Derivation entries for ALL cosigners in each input/output.
+      // Trezor requires we use the derivation path that belongs to THIS device (matched by
+      // master fingerprint), not an arbitrary cosigner's path, or it will reject with
+      // "Forbidden key path" or "wrong derivation path" error.
       const deviceFingerprint = this.connection.fingerprint;
       const deviceFingerprintBuffer = deviceFingerprint
         ? Buffer.from(deviceFingerprint, 'hex')

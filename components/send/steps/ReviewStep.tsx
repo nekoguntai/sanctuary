@@ -26,6 +26,7 @@ import { Button } from '../../ui/Button';
 import { TransactionFlowPreview, FlowInput, FlowOutput } from '../../TransactionFlowPreview';
 import { useSendTransaction } from '../../../contexts/send';
 import { useCurrency } from '../../../contexts/CurrencyContext';
+import { FiatDisplay } from '../../FiatDisplay';
 import { createLogger } from '../../../utils/logger';
 import { STEP_LABELS } from '../../../contexts/send/types';
 import { lookupAddresses, type AddressLookupResult } from '../../../src/api/bitcoin';
@@ -412,6 +413,13 @@ export function ReviewStep({
                   <div className="font-semibold text-sanctuary-900 dark:text-sanctuary-100">
                     {output.sendMax ? 'MAX' : format(parseInt(output.amount, 10) || 0)}
                   </div>
+                  {!output.sendMax && (
+                    <FiatDisplay
+                      sats={parseInt(output.amount, 10) || 0}
+                      size="xs"
+                      showApprox
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -430,11 +438,12 @@ export function ReviewStep({
                   : format(totalOutputAmount)
                 }
               </div>
-              {formatFiat(totalOutputAmount) && (
-                <div className="text-xs text-sanctuary-500">
-                  ≈ {formatFiat(totalOutputAmount)}
-                </div>
-              )}
+              <FiatDisplay
+                sats={state.outputs.some(o => o.sendMax) ? selectedTotal - estimatedFee : totalOutputAmount}
+                size="xs"
+                showApprox
+                mode="subtle"
+              />
             </div>
           </div>
 
@@ -455,8 +464,9 @@ export function ReviewStep({
               <div className="font-semibold text-sanctuary-900 dark:text-sanctuary-100">
                 {format(txData?.fee || estimatedFee)}
               </div>
-              <div className="text-xs text-sanctuary-500">
-                {state.feeRate} sat/vB
+              <div className="flex items-center gap-1.5 justify-end text-xs text-sanctuary-500">
+                <span>{state.feeRate} sat/vB</span>
+                <FiatDisplay sats={txData?.fee || estimatedFee} size="xs" mode="subtle" />
               </div>
             </div>
           </div>
@@ -465,8 +475,11 @@ export function ReviewStep({
           {changeAmount > 0 && (
             <div className="flex justify-between items-center">
               <span className="text-sm text-sanctuary-500">Change</span>
-              <div className="font-semibold text-sanctuary-900 dark:text-sanctuary-100">
-                {format(changeAmount)}
+              <div className="text-right">
+                <div className="font-semibold text-sanctuary-900 dark:text-sanctuary-100">
+                  {format(changeAmount)}
+                </div>
+                <FiatDisplay sats={changeAmount} size="xs" showApprox mode="subtle" />
               </div>
             </div>
           )}
@@ -484,6 +497,14 @@ export function ReviewStep({
                     : format(totalOutputAmount + (txData?.fee || estimatedFee))
                   }
                 </div>
+                <FiatDisplay
+                  sats={state.outputs.some(o => o.sendMax)
+                    ? selectedTotal
+                    : totalOutputAmount + (txData?.fee || estimatedFee)
+                  }
+                  size="sm"
+                  showApprox
+                />
               </div>
             </div>
           </div>

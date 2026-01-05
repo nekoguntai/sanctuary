@@ -539,6 +539,7 @@ export function OutputsStep() {
             displayValue={getDisplayValue(output)}
             maxAmount={calculateMaxForOutput(index)}
             formatAmount={formatDisplayValue}
+            fiatAmount={output.sendMax ? calculateMaxForOutput(index) : parseInt(output.amount, 10) || 0}
           />
         ))}
 

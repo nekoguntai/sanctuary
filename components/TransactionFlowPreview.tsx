@@ -9,6 +9,23 @@ import React, { useMemo } from 'react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { truncateAddress } from '../utils/formatters';
 
+/**
+ * Compact fiat display for the flow preview.
+ * Uses a lighter color that works on the dark themed flow visualization.
+ */
+const FlowFiatDisplay: React.FC<{
+  sats: number;
+  formatFiat: (sats: number) => string | null;
+}> = ({ sats, formatFiat }) => {
+  const fiatValue = formatFiat(sats);
+  if (!fiatValue) return null;
+  return (
+    <span className="text-[9px] text-white/60 ml-1">
+      {fiatValue}
+    </span>
+  );
+};
+
 export interface FlowInput {
   txid: string;
   vout: number;
@@ -45,7 +62,7 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
   isEstimate = false,
   className = '',
 }) => {
-  const { format } = useCurrency();
+  const { format, formatFiat } = useCurrency();
 
   // Calculate proportional heights for visualization
   const maxAmount = useMemo(() => {
@@ -105,8 +122,9 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                     background: `linear-gradient(135deg, ${inputColor} 0%, #15803d 100%)`,
                   }}
                 >
-                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm">
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm flex items-center">
                     {isEstimate && '~'}{format(input.amount)}
+                    <FlowFiatDisplay sats={input.amount} formatFiat={formatFiat} />
                   </span>
                 </div>
                 {/* Address */}
@@ -172,8 +190,9 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
                       : `linear-gradient(135deg, ${outputColor} 0%, #7c3aed 100%)`,
                   }}
                 >
-                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm">
+                  <span className="text-white text-[11px] font-semibold whitespace-nowrap drop-shadow-sm flex items-center">
                     {isEstimate && '~'}{format(output.amount)}
+                    <FlowFiatDisplay sats={output.amount} formatFiat={formatFiat} />
                   </span>
                 </div>
               </div>
@@ -220,12 +239,14 @@ export const TransactionFlowPreview: React.FC<TransactionFlowPreviewProps> = ({
           <span className="text-white font-semibold">
             {isEstimate && '~'}{format(totalInput)}
           </span>
+          <FlowFiatDisplay sats={totalInput} formatFiat={formatFiat} />
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-white/70">Out:</span>
           <span className="text-white font-semibold">
             {isEstimate && '~'}{format(totalOutput)}
           </span>
+          <FlowFiatDisplay sats={totalOutput} formatFiat={formatFiat} />
           <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: outputColor }} />
         </div>
       </div>

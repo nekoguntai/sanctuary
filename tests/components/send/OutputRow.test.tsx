@@ -5,6 +5,13 @@ import React from 'react';
 import { OutputRow, OutputRowProps } from '../../../components/send/OutputRow';
 import type { OutputEntry, WalletAddress } from '../../../contexts/send/types';
 
+// Mock the CurrencyContext for FiatDisplaySubtle
+vi.mock('../../../contexts/CurrencyContext', () => ({
+  useCurrency: vi.fn(() => ({
+    formatFiat: vi.fn((sats: number) => sats > 0 ? `$${(sats / 100000 * 50).toFixed(2)}` : null),
+  })),
+}));
+
 describe('OutputRow', () => {
   // Use vi.fn() directly - these will be reset in beforeEach
   const mockOnAddressChange = vi.fn();
@@ -499,6 +506,55 @@ describe('OutputRow', () => {
 
       const addressInput = screen.getByPlaceholderText('bc1q... or bitcoin:...');
       expect(addressInput.className).toContain('opacity-60');
+    });
+  });
+
+  describe('Real-time fiat display', () => {
+    it('should display fiat value when fiatAmount is provided and positive', () => {
+      renderRow({ fiatAmount: 50000 });
+
+      // Based on our mock: $${(sats / 100000 * 50).toFixed(2)} = $25.00
+      expect(screen.getByText(/≈ \$25\.00/)).toBeInTheDocument();
+    });
+
+    it('should not display fiat when fiatAmount is 0', () => {
+      renderRow({ fiatAmount: 0 });
+
+      // Fiat display should not appear for 0 amount
+      expect(screen.queryByText(/≈ \$/)).not.toBeInTheDocument();
+    });
+
+    it('should not display fiat when fiatAmount is undefined', () => {
+      renderRow({ fiatAmount: undefined });
+
+      expect(screen.queryByText(/≈ \$/)).not.toBeInTheDocument();
+    });
+
+    it('should display fiat for large amounts', () => {
+      renderRow({ fiatAmount: 1000000 });
+
+      // Based on our mock: $${(1000000 / 100000 * 50).toFixed(2)} = $500.00
+      expect(screen.getByText(/≈ \$500\.00/)).toBeInTheDocument();
+    });
+
+    it('should update fiat display when amount changes', () => {
+      const { rerender } = render(
+        <OutputRow
+          {...defaultProps}
+          fiatAmount={10000}
+        />
+      );
+
+      expect(screen.getByText(/≈ \$5\.00/)).toBeInTheDocument();
+
+      rerender(
+        <OutputRow
+          {...defaultProps}
+          fiatAmount={20000}
+        />
+      );
+
+      expect(screen.getByText(/≈ \$10\.00/)).toBeInTheDocument();
     });
   });
 });

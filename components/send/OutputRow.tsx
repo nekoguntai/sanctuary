@@ -14,6 +14,7 @@
 import React, { RefObject } from 'react';
 import { Check, X, Shield, QrCode, ChevronDown, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { FiatDisplaySubtle } from '../FiatDisplay';
 import type { OutputEntry, WalletAddress } from '../../contexts/send/types';
 
 export interface OutputRowProps {
@@ -56,6 +57,9 @@ export interface OutputRowProps {
   // Max amount calculation
   maxAmount: number;
   formatAmount: (sats: number) => string;
+
+  // Fiat display - amount in sats for fiat conversion
+  fiatAmount?: number;
 }
 
 export function OutputRow({
@@ -83,6 +87,7 @@ export function OutputRow({
   displayValue,
   maxAmount,
   formatAmount,
+  fiatAmount,
 }: OutputRowProps) {
   const isMultiOutput = totalOutputs > 1;
   const isScanningThis = showScanner && scanningOutputIndex === index;
@@ -199,58 +204,66 @@ export function OutputRow({
       )}
 
       {/* Amount Input */}
-      <div className="flex items-center space-x-2">
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            inputMode={unit === 'btc' ? 'decimal' : 'numeric'}
-            value={output.sendMax ? formatAmount(maxAmount) : displayValue}
-            onChange={(e) => {
-              const value = e.target.value;
-              // Allow empty, digits, and decimal point for BTC mode
-              const isValidBtc = value === '' || /^[0-9]*\.?[0-9]*$/.test(value);
-              const isValidSats = value === '' || /^[0-9]*$/.test(value);
+      <div className="space-y-1">
+        <div className="flex items-center space-x-2">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              inputMode={unit === 'btc' ? 'decimal' : 'numeric'}
+              value={output.sendMax ? formatAmount(maxAmount) : displayValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow empty, digits, and decimal point for BTC mode
+                const isValidBtc = value === '' || /^[0-9]*\.?[0-9]*$/.test(value);
+                const isValidSats = value === '' || /^[0-9]*$/.test(value);
 
-              if ((unit === 'btc' && isValidBtc) || (unit !== 'btc' && isValidSats)) {
-                onAmountChange(index, value, value);
-              }
-            }}
-            onBlur={() => onAmountBlur(index)}
-            placeholder="0"
-            readOnly={output.sendMax || disabled}
-            disabled={disabled}
-            className={`block w-full px-4 py-2.5 pr-20 rounded-xl border text-sm ${
-              output.sendMax
-                ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
-                : 'border-sanctuary-300 dark:border-sanctuary-700'
-            } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-          />
-          <div className="absolute right-3 top-2.5 text-sanctuary-400 text-xs flex items-center">
-            {output.sendMax && !disabled && (
-              <button
-                type="button"
-                onClick={() => onToggleSendMax(index)}
-                className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 rounded hover:bg-primary-600 dark:hover:bg-sanctuary-500 transition-colors"
-                title="Click to exit MAX mode"
-              >
-                MAX
-              </button>
-            )}
-            <span className="pointer-events-none">{unitLabel}</span>
+                if ((unit === 'btc' && isValidBtc) || (unit !== 'btc' && isValidSats)) {
+                  onAmountChange(index, value, value);
+                }
+              }}
+              onBlur={() => onAmountBlur(index)}
+              placeholder="0"
+              readOnly={output.sendMax || disabled}
+              disabled={disabled}
+              className={`block w-full px-4 py-2.5 pr-20 rounded-xl border text-sm ${
+                output.sendMax
+                  ? 'border-primary-400 dark:border-primary-500 bg-primary-50/50 dark:bg-primary-900/10'
+                  : 'border-sanctuary-300 dark:border-sanctuary-700'
+              } surface-muted focus:ring-2 focus:ring-sanctuary-500 focus:outline-none transition-colors ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+            />
+            <div className="absolute right-3 top-2.5 text-sanctuary-400 text-xs flex items-center">
+              {output.sendMax && !disabled && (
+                <button
+                  type="button"
+                  onClick={() => onToggleSendMax(index)}
+                  className="mr-1.5 px-1.5 py-0.5 text-[10px] font-medium bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 rounded hover:bg-primary-600 dark:hover:bg-sanctuary-500 transition-colors"
+                  title="Click to exit MAX mode"
+                >
+                  MAX
+                </button>
+              )}
+              <span className="pointer-events-none">{unitLabel}</span>
+            </div>
           </div>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={() => onToggleSendMax(index)}
+              className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
+                output.sendMax
+                  ? 'bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 border-primary-500 dark:border-sanctuary-500 hover:bg-primary-600 dark:hover:bg-sanctuary-500'
+                  : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
+              }`}
+            >
+              MAX
+            </button>
+          )}
         </div>
-        {!disabled && (
-          <button
-            type="button"
-            onClick={() => onToggleSendMax(index)}
-            className={`px-3 py-2.5 text-xs font-medium rounded-xl border transition-colors ${
-              output.sendMax
-                ? 'bg-primary-500 dark:bg-sanctuary-600 text-white dark:text-sanctuary-100 border-primary-500 dark:border-sanctuary-500 hover:bg-primary-600 dark:hover:bg-sanctuary-500'
-                : 'border-sanctuary-300 dark:border-sanctuary-700 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800'
-            }`}
-          >
-            MAX
-          </button>
+        {/* Real-time fiat conversion display */}
+        {fiatAmount !== undefined && fiatAmount > 0 && (
+          <div className="pl-1">
+            <FiatDisplaySubtle sats={fiatAmount} size="xs" showApprox />
+          </div>
         )}
       </div>
     </div>

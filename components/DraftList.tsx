@@ -18,6 +18,7 @@ import { TransactionFlowPreview, FlowInput, FlowOutput } from './TransactionFlow
 import { WalletType } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
+import { FiatDisplaySubtle } from './FiatDisplay';
 import { createLogger } from '../utils/logger';
 import { truncateAddress } from '../utils/formatters';
 
@@ -501,8 +502,11 @@ export const DraftList: React.FC<DraftListProps> = ({
                             <span className="font-mono text-sanctuary-700 dark:text-sanctuary-300">
                               {truncateAddress(output.address)}
                             </span>
-                            <span className="ml-2 text-sanctuary-600 dark:text-sanctuary-400">
+                            <span className="ml-2 text-sanctuary-600 dark:text-sanctuary-400 flex items-center gap-1">
                               {output.sendMax ? 'MAX' : format(output.amount)}
+                              {!output.sendMax && (
+                                <FiatDisplaySubtle sats={output.amount} size="xs" />
+                              )}
                             </span>
                           </div>
                         ))}
@@ -532,6 +536,7 @@ export const DraftList: React.FC<DraftListProps> = ({
                     <span className="text-sm text-sanctuary-600 dark:text-sanctuary-300">
                       {draft.fee.toLocaleString()} sats ({draft.feeRate} sat/vB)
                     </span>
+                    <FiatDisplaySubtle sats={draft.fee} size="xs" className="ml-1" />
                   </div>
                 </div>
 

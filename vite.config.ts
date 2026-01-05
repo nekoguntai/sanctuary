@@ -20,6 +20,7 @@ export default defineConfig(() => {
           globals: {
             Buffer: true,
             process: true,
+            global: true,
           },
         }),
       ],
@@ -29,14 +30,23 @@ export default defineConfig(() => {
           '@shared': path.resolve(__dirname, './shared'),
         }
       },
-      // Manual chunk splitting disabled - was causing initialization errors
-      // TODO: Re-enable with proper dependency analysis
-      // build: {
-      //   rollupOptions: {
-      //     output: {
-      //       manualChunks(id) { ... }
-      //     },
-      //   },
-      // },
+      optimizeDeps: {
+        // Pre-bundle regenerator-runtime to ensure it's available
+        include: ['regenerator-runtime/runtime'],
+      },
+      build: {
+        rollupOptions: {
+          // Ensure regenerator-runtime is treated as external-facing code
+          output: {
+            // Preserve module execution order
+            preserveModules: false,
+          },
+        },
+        // Don't tree-shake regenerator-runtime side effects
+        commonjsOptions: {
+          include: [/regenerator-runtime/, /node_modules/],
+          transformMixedEsModules: true,
+        },
+      },
     };
 });

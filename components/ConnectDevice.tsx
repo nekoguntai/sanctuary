@@ -264,11 +264,15 @@ export const ConnectDevice: React.FC = () => {
     return methods;
   };
 
+  // USB scanning progress state
+  const [usbProgress, setUsbProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+
   const handleScan = async () => {
     if (!selectedModel) return;
 
     setScanning(true);
     setError(null);
+    setUsbProgress(null);
 
     try {
       // Determine device type from selected model
@@ -286,16 +290,33 @@ export const ConnectDevice: React.FC = () => {
         throw new Error('Failed to connect to device');
       }
 
-      // Get xpub from the device
-      const xpubResult = await hardwareWalletService.getXpub(derivationPath);
+      // Fetch all standard derivation paths
+      log.info('Fetching all derivation paths from device');
+      const allXpubs = await hardwareWalletService.getAllXpubs((current, total, name) => {
+        setUsbProgress({ current, total, name });
+      });
 
-      setFingerprint(xpubResult.fingerprint);
-      setXpub(xpubResult.xpub);
+      // Convert to DeviceAccount format
+      const accounts: DeviceAccount[] = allXpubs.map((result) => ({
+        purpose: result.purpose,
+        scriptType: result.scriptType,
+        derivationPath: result.path,
+        xpub: result.xpub,
+      }));
+
+      // Set fingerprint from first result (all should have same fingerprint)
+      if (allXpubs.length > 0) {
+        setFingerprint(allXpubs[0].fingerprint);
+      }
+
+      // Set parsed accounts and auto-select all
+      setParsedAccounts(accounts);
+      setSelectedAccounts(new Set(accounts.map((_, i) => i)));
       setScanned(true);
 
       log.info('Device connected successfully', {
-        fingerprint: xpubResult.fingerprint,
-        path: xpubResult.path,
+        fingerprint: allXpubs[0]?.fingerprint,
+        accountCount: accounts.length,
         deviceType,
       });
     } catch (err) {
@@ -305,6 +326,7 @@ export const ConnectDevice: React.FC = () => {
       setScanned(false);
     } finally {
       setScanning(false);
+      setUsbProgress(null);
     }
   };
 
@@ -1250,15 +1272,40 @@ export const ConnectDevice: React.FC = () => {
                       {scanning && (
                         <div className="flex flex-col items-center">
                           <Loader2 className="w-8 h-8 animate-spin text-sanctuary-600 dark:text-sanctuary-400 mb-3" />
-                          <p className="text-sm text-sanctuary-500">Connecting to device...</p>
-                          <p className="text-xs text-sanctuary-400 mt-1">Please confirm on your device if prompted.</p>
+                          {usbProgress ? (
+                            <>
+                              <p className="text-sm text-sanctuary-500">
+                                Fetching {usbProgress.name}...
+                              </p>
+                              <p className="text-xs text-sanctuary-400 mt-1">
+                                {usbProgress.current} of {usbProgress.total} derivation paths
+                              </p>
+                              <div className="w-48 mt-3 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-full h-2">
+                                <div
+                                  className="bg-sanctuary-600 dark:bg-sanctuary-400 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${(usbProgress.current / usbProgress.total) * 100}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-sanctuary-400 mt-2">Confirm each path on your device</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm text-sanctuary-500">Connecting to device...</p>
+                              <p className="text-xs text-sanctuary-400 mt-1">Please confirm on your device if prompted.</p>
+                            </>
+                          )}
                         </div>
                       )}
                       {scanned && !error && (
                         <div className="flex flex-col items-center text-emerald-600 dark:text-emerald-400">
                           <Check className="w-10 h-10 mb-2" />
                           <p className="font-medium">Device Connected</p>
-                          <p className="text-xs text-sanctuary-500 mt-1">Fingerprint: {fingerprint}</p>
+                          <p className="text-xs text-sanctuary-500 mt-1">
+                            {parsedAccounts.length > 0
+                              ? `${parsedAccounts.length} derivation paths fetched`
+                              : `Fingerprint: ${fingerprint}`
+                            }
+                          </p>
                         </div>
                       )}
                     </div>

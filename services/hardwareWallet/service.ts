@@ -169,6 +169,63 @@ export class HardwareWalletService {
   }
 
   /**
+   * Standard derivation paths to fetch for multi-account import
+   */
+  static readonly STANDARD_PATHS = [
+    { path: "m/84'/0'/0'", purpose: 'single_sig' as const, scriptType: 'native_segwit' as const, name: 'Native SegWit (BIP-84)' },
+    { path: "m/86'/0'/0'", purpose: 'single_sig' as const, scriptType: 'taproot' as const, name: 'Taproot (BIP-86)' },
+    { path: "m/49'/0'/0'", purpose: 'single_sig' as const, scriptType: 'nested_segwit' as const, name: 'Nested SegWit (BIP-49)' },
+    { path: "m/44'/0'/0'", purpose: 'single_sig' as const, scriptType: 'legacy' as const, name: 'Legacy (BIP-44)' },
+    { path: "m/48'/0'/0'/2'", purpose: 'multisig' as const, scriptType: 'native_segwit' as const, name: 'Multisig Native SegWit (BIP-48)' },
+    { path: "m/48'/0'/0'/1'", purpose: 'multisig' as const, scriptType: 'nested_segwit' as const, name: 'Multisig Nested SegWit (BIP-48)' },
+  ];
+
+  /**
+   * Get all standard xpubs from the connected device
+   * Fetches multiple derivation paths for comprehensive account import
+   * @param onProgress Optional callback for progress updates
+   * @returns Array of xpub results with account metadata
+   */
+  async getAllXpubs(
+    onProgress?: (current: number, total: number, path: string) => void
+  ): Promise<Array<XpubResult & { purpose: 'single_sig' | 'multisig'; scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy' }>> {
+    if (!this.activeAdapter) {
+      throw new Error('No device connected');
+    }
+
+    const results: Array<XpubResult & { purpose: 'single_sig' | 'multisig'; scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy' }> = [];
+    const paths = HardwareWalletService.STANDARD_PATHS;
+
+    for (let i = 0; i < paths.length; i++) {
+      const { path, purpose, scriptType, name } = paths[i];
+
+      if (onProgress) {
+        onProgress(i + 1, paths.length, name);
+      }
+
+      try {
+        log.info(`Fetching xpub for ${name}`, { path });
+        const xpubResult = await this.activeAdapter.getXpub(path);
+        results.push({
+          ...xpubResult,
+          purpose,
+          scriptType,
+        });
+        log.info(`Successfully fetched ${name}`, { fingerprint: xpubResult.fingerprint });
+      } catch (error) {
+        // Log but continue - some paths may not be supported by all devices
+        log.warn(`Failed to fetch ${name}, skipping`, { path, error });
+      }
+    }
+
+    if (results.length === 0) {
+      throw new Error('Failed to fetch any xpubs from device');
+    }
+
+    return results;
+  }
+
+  /**
    * Sign a PSBT with the connected device
    * @param request PSBT signing request
    */

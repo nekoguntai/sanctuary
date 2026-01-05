@@ -133,21 +133,27 @@ export async function createDeviceWithConflictHandling(
     return { status: 'created', device: device as Device };
   } catch (error: unknown) {
     // Check if this is a 409 conflict with comparison data
+    // ApiError uses 'response' property, not 'data'
     if (
       error &&
       typeof error === 'object' &&
       'status' in error &&
-      (error as { status: number }).status === 409 &&
-      'data' in error
+      (error as { status: number }).status === 409
     ) {
-      const data = (error as { data: unknown }).data;
+      // Check both 'response' (ApiError) and 'data' (other error types) for compatibility
+      const responseData = 'response' in error
+        ? (error as { response: unknown }).response
+        : 'data' in error
+        ? (error as { data: unknown }).data
+        : null;
+
       if (
-        data &&
-        typeof data === 'object' &&
-        'existingDevice' in data &&
-        'comparison' in data
+        responseData &&
+        typeof responseData === 'object' &&
+        'existingDevice' in responseData &&
+        'comparison' in responseData
       ) {
-        return { status: 'conflict', conflict: data as DeviceConflictResponse };
+        return { status: 'conflict', conflict: responseData as DeviceConflictResponse };
       }
     }
     throw error;

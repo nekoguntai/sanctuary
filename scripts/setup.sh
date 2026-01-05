@@ -113,17 +113,41 @@ BITCOIN_NETWORK=mainnet
 LOG_LEVEL=info
 EOF
 
+echo -e "${GREEN}Secrets generated!${NC}"
+echo
+
+# ============================================
+# Generate SSL certificates if needed
+# ============================================
+SSL_DIR="$PROJECT_DIR/docker/nginx/ssl"
+if [ ! -f "$SSL_DIR/fullchain.pem" ] || [ ! -f "$SSL_DIR/privkey.pem" ]; then
+    echo -e "${GREEN}Generating SSL certificates...${NC}"
+    if command -v openssl &> /dev/null; then
+        mkdir -p "$SSL_DIR"
+        chmod +x "$SSL_DIR/generate-certs.sh" 2>/dev/null || true
+        if (cd "$SSL_DIR" && ./generate-certs.sh localhost); then
+            echo -e "${GREEN}✓${NC} SSL certificates generated"
+        else
+            echo -e "${YELLOW}⚠${NC} Could not generate SSL certificates"
+            echo "  Run manually: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} OpenSSL not found - cannot generate SSL certificates"
+        echo "  Install openssl and run: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+    fi
+else
+    echo -e "${GREEN}✓${NC} SSL certificates already exist"
+fi
+echo
+
 echo -e "${GREEN}Setup complete!${NC}"
 echo
 echo -e "${BLUE}Your .env file has been created with secure random secrets.${NC}"
 echo
 echo "Next steps:"
-echo "  1. Generate SSL certificates (if not done):"
-echo "     cd docker/nginx/ssl && ./generate-certs.sh localhost"
-echo
-echo "  2. Start Sanctuary:"
+echo "  1. Start Sanctuary:"
 echo "     docker compose up -d"
 echo
-echo "  3. Open https://localhost:8443"
+echo "  2. Open https://localhost:8443"
 echo
 echo -e "${YELLOW}Note: Your secrets are stored in .env - keep this file secure!${NC}"

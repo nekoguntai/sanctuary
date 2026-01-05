@@ -1,12 +1,16 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Scanner } from '@yudiel/react-qr-scanner';
+import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount } from '@keystonehq/bc-ur-registry';
+import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
 import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount } from '../types';
 import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup, addDeviceAccount, DeviceAccountInput } from '../src/api/devices';
+import { parseDeviceJson, DeviceAccount as ParsedDeviceAccount } from '../services/deviceParsers';
 import { hardwareWalletService, isSecureContext, DeviceType } from '../services/hardwareWallet';
 import * as authApi from '../src/api/auth';
 import * as adminApi from '../src/api/admin';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
-import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send, User as UserIcon, Plus, Loader2, Usb } from 'lucide-react';
+import { Edit2, Save, X, ArrowLeft, ChevronDown, Users, Shield, Send, User as UserIcon, Plus, Loader2, Usb, QrCode, HardDrive, Camera, Upload, AlertCircle, Check, AlertTriangle } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
@@ -121,7 +125,7 @@ export const DeviceDetail: React.FC = () => {
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [addAccountLoading, setAddAccountLoading] = useState(false);
   const [addAccountError, setAddAccountError] = useState<string | null>(null);
-  const [addAccountMethod, setAddAccountMethod] = useState<'usb' | 'manual' | null>(null);
+  const [addAccountMethod, setAddAccountMethod] = useState<'usb' | 'manual' | 'sdcard' | 'qr' | null>(null);
   const [usbProgress, setUsbProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const [manualAccount, setManualAccount] = useState<{
     purpose: 'single_sig' | 'multisig';
@@ -134,6 +138,27 @@ export const DeviceDetail: React.FC = () => {
     derivationPath: "m/48'/0'/0'/2'",
     xpub: '',
   });
+
+  // QR scanning state
+  const [qrMode, setQrMode] = useState<'camera' | 'file'>('camera');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [urProgress, setUrProgress] = useState<number>(0);
+  const urDecoderRef = useRef<URRegistryDecoder | null>(null);
+  const bytesDecoderRef = useRef<BytesURDecoder | null>(null);
+
+  // Parsed accounts from file/QR import
+  const [parsedAccounts, setParsedAccounts] = useState<ParsedDeviceAccount[]>([]);
+  const [selectedParsedAccounts, setSelectedParsedAccounts] = useState<Set<number>>(new Set());
+  const [importFingerprint, setImportFingerprint] = useState<string>('');
+
+  // Conflict state for adding accounts
+  interface AccountConflict {
+    existingAccounts: DeviceAccount[];
+    newAccounts: ParsedDeviceAccount[];
+    matchingAccounts: ParsedDeviceAccount[];
+  }
+  const [accountConflict, setAccountConflict] = useState<AccountConflict | null>(null);
 
   // Derived ownership state
   const isOwner = device?.isOwner ?? true; // Default to true for backward compat
@@ -433,6 +458,444 @@ export const DeviceDetail: React.FC = () => {
     }
   };
 
+  /**
+   * Normalize a derivation path to standard format
+   */
+  const normalizeDerivationPath = (path: string): string => {
+    if (!path) return '';
+    let normalized = path.trim();
+    if (normalized.startsWith('M/')) {
+      normalized = 'm/' + normalized.slice(2);
+    } else if (!normalized.startsWith('m/')) {
+      normalized = 'm/' + normalized;
+    }
+    normalized = normalized.replace(/(\d+)h/g, "$1'");
+    return normalized;
+  };
+
+  /**
+   * Extract fingerprint from CryptoHDKey
+   */
+  const extractFingerprintFromHdKey = (hdKey: CryptoHDKey): string => {
+    const origin = hdKey.getOrigin();
+    if (origin) {
+      const sourceFingerprint = origin.getSourceFingerprint();
+      if (sourceFingerprint && sourceFingerprint.length > 0) {
+        return sourceFingerprint.toString('hex');
+      }
+    }
+    try {
+      const parentFp = hdKey.getParentFingerprint();
+      if (parentFp && parentFp.length > 0) {
+        return parentFp.toString('hex');
+      }
+    } catch {
+      // getParentFingerprint might not exist or fail
+    }
+    return '';
+  };
+
+  /**
+   * Extract xpub data from UR registry result
+   */
+  const extractFromUrResult = (registryType: unknown): { xpub: string; fingerprint: string; path: string } | null => {
+    try {
+      if (registryType instanceof CryptoHDKey) {
+        const hdKey = registryType as CryptoHDKey;
+        const xpub = hdKey.getBip32Key();
+        const fingerprint = extractFingerprintFromHdKey(hdKey);
+        const origin = hdKey.getOrigin();
+        const pathComponents = origin?.getComponents() || [];
+        const path = pathComponents.length > 0
+          ? 'm/' + pathComponents.map((c: { getIndex: () => number; isHardened: () => boolean }) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+          : '';
+        return { xpub, fingerprint, path };
+      }
+
+      if (registryType instanceof CryptoOutput) {
+        const output = registryType as CryptoOutput;
+        const hdKey = output.getHDKey();
+        if (hdKey) {
+          const xpub = hdKey.getBip32Key();
+          const fingerprint = extractFingerprintFromHdKey(hdKey);
+          const origin = hdKey.getOrigin();
+          const pathComponents = origin?.getComponents() || [];
+          const path = pathComponents.length > 0
+            ? 'm/' + pathComponents.map((c: { getIndex: () => number; isHardened: () => boolean }) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+            : '';
+          return { xpub, fingerprint, path };
+        }
+      }
+
+      if (registryType instanceof CryptoAccount) {
+        const account = registryType as CryptoAccount;
+        const masterFingerprint = account.getMasterFingerprint()?.toString('hex') || '';
+        const outputs = account.getOutputDescriptors();
+        for (const output of outputs) {
+          const hdKey = output.getHDKey();
+          if (hdKey) {
+            const xpub = hdKey.getBip32Key();
+            const origin = hdKey.getOrigin();
+            const pathComponents = origin?.getComponents() || [];
+            const path = pathComponents.length > 0
+              ? 'm/' + pathComponents.map((c: { getIndex: () => number; isHardened: () => boolean }) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+              : '';
+            if (path.includes("84'")) {
+              return { xpub, fingerprint: masterFingerprint, path };
+            }
+          }
+        }
+        if (outputs.length > 0) {
+          const hdKey = outputs[0].getHDKey();
+          if (hdKey) {
+            const xpub = hdKey.getBip32Key();
+            const origin = hdKey.getOrigin();
+            const pathComponents = origin?.getComponents() || [];
+            const path = pathComponents.length > 0
+              ? 'm/' + pathComponents.map((c: { getIndex: () => number; isHardened: () => boolean }) => `${c.getIndex()}${c.isHardened() ? "'" : ''}`).join('/')
+              : '';
+            return { xpub, fingerprint: masterFingerprint, path };
+          }
+        }
+      }
+
+      // Handle ur:bytes format
+      const regType = registryType as { bytes?: Uint8Array };
+      if (regType && regType.bytes instanceof Uint8Array) {
+        const textDecoder = new TextDecoder('utf-8');
+        const textContent = textDecoder.decode(regType.bytes);
+        const result = parseDeviceJson(textContent);
+        if (result && result.xpub) {
+          return {
+            xpub: result.xpub,
+            fingerprint: result.fingerprint || '',
+            path: result.derivationPath || ''
+          };
+        }
+      }
+
+      return null;
+    } catch (err) {
+      log.error('Failed to extract from UR result', { err });
+      return null;
+    }
+  };
+
+  /**
+   * Process parsed accounts - compare with existing device accounts
+   */
+  const processImportedAccounts = (accounts: ParsedDeviceAccount[], fingerprint: string) => {
+    if (!device) return;
+
+    // Check fingerprint matches
+    if (fingerprint && device.fingerprint !== fingerprint.toLowerCase() && device.fingerprint !== fingerprint.toUpperCase()) {
+      setAddAccountError(`Fingerprint mismatch: imported ${fingerprint} but device has ${device.fingerprint}`);
+      return;
+    }
+
+    const existingPaths = new Set(device.accounts?.map(a => a.derivationPath) || []);
+    const existingXpubs = new Map(device.accounts?.map(a => [a.derivationPath, a.xpub]) || []);
+
+    const newAccounts: ParsedDeviceAccount[] = [];
+    const matchingAccounts: ParsedDeviceAccount[] = [];
+    const conflictingAccounts: ParsedDeviceAccount[] = [];
+
+    for (const account of accounts) {
+      if (!existingPaths.has(account.derivationPath)) {
+        newAccounts.push(account);
+      } else {
+        const existingXpub = existingXpubs.get(account.derivationPath);
+        if (existingXpub === account.xpub) {
+          matchingAccounts.push(account);
+        } else {
+          conflictingAccounts.push(account);
+        }
+      }
+    }
+
+    if (conflictingAccounts.length > 0) {
+      setAddAccountError(`${conflictingAccounts.length} account(s) have conflicting xpubs - this may indicate a security issue`);
+      return;
+    }
+
+    if (newAccounts.length === 0) {
+      setAddAccountError('No new accounts to add - all derivation paths already exist on this device');
+      return;
+    }
+
+    // Set up for selection
+    setParsedAccounts(newAccounts);
+    setSelectedParsedAccounts(new Set(newAccounts.map((_, i) => i)));
+    setImportFingerprint(fingerprint);
+    setAccountConflict({
+      existingAccounts: device.accounts || [],
+      newAccounts,
+      matchingAccounts,
+    });
+  };
+
+  /**
+   * Handle file upload for SD card import
+   */
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAddAccountLoading(true);
+    setAddAccountError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const result = parseDeviceJson(content);
+
+      if (result && (result.xpub || result.accounts?.length)) {
+        if (result.accounts && result.accounts.length > 0) {
+          processImportedAccounts(result.accounts, result.fingerprint || '');
+          log.info('File parsed with multiple accounts', {
+            format: result.format,
+            accountCount: result.accounts.length,
+          });
+        } else if (result.xpub) {
+          // Single account - convert to account format
+          const singleAccount: ParsedDeviceAccount = {
+            purpose: result.derivationPath?.includes("48'") ? 'multisig' : 'single_sig',
+            scriptType: result.derivationPath?.includes("/2'") ? 'native_segwit' :
+                       result.derivationPath?.includes("/1'") ? 'nested_segwit' : 'native_segwit',
+            derivationPath: result.derivationPath || "m/84'/0'/0'",
+            xpub: result.xpub,
+          };
+          processImportedAccounts([singleAccount], result.fingerprint || '');
+        }
+        setAddAccountLoading(false);
+      } else {
+        setAddAccountError('Could not parse file. Please check the format.');
+        setAddAccountLoading(false);
+      }
+    };
+    reader.onerror = () => {
+      setAddAccountError('Failed to read file.');
+      setAddAccountLoading(false);
+    };
+    reader.readAsText(file);
+  };
+
+  /**
+   * Handle QR code scan result
+   */
+  const handleQrScan = (result: { rawValue: string }[]) => {
+    if (!result || result.length === 0) return;
+
+    const content = result[0].rawValue;
+    const contentLower = content.toLowerCase();
+
+    log.info('QR code scanned', { length: content.length, prefix: content.substring(0, 50) });
+
+    // Check if this is UR format
+    if (contentLower.startsWith('ur:')) {
+      const urTypeMatch = contentLower.match(/^ur:([a-z0-9-]+)/);
+      const urType = urTypeMatch ? urTypeMatch[1] : 'unknown';
+
+      try {
+        // Handle ur:bytes format
+        if (urType === 'bytes') {
+          if (!bytesDecoderRef.current) {
+            bytesDecoderRef.current = new BytesURDecoder();
+          }
+
+          bytesDecoderRef.current.receivePart(content);
+          const progress = bytesDecoderRef.current.estimatedPercentComplete();
+          setUrProgress(Math.round(progress * 100));
+
+          if (bytesDecoderRef.current.isComplete() !== true) {
+            return;
+          }
+
+          setCameraActive(false);
+          setAddAccountLoading(true);
+
+          if (!bytesDecoderRef.current.isSuccess()) {
+            throw new Error('UR bytes decode failed');
+          }
+
+          const decodedUR = bytesDecoderRef.current.resultUR();
+          const rawBytes = decodedUR.decodeCBOR();
+          const textDecoder = new TextDecoder('utf-8');
+          const textContent = textDecoder.decode(rawBytes);
+
+          const parseResult = parseDeviceJson(textContent);
+          if (parseResult && parseResult.accounts) {
+            processImportedAccounts(parseResult.accounts, parseResult.fingerprint || '');
+          } else if (parseResult && parseResult.xpub) {
+            const singleAccount: ParsedDeviceAccount = {
+              purpose: parseResult.derivationPath?.includes("48'") ? 'multisig' : 'single_sig',
+              scriptType: 'native_segwit',
+              derivationPath: parseResult.derivationPath || "m/84'/0'/0'",
+              xpub: parseResult.xpub,
+            };
+            processImportedAccounts([singleAccount], parseResult.fingerprint || '');
+          } else {
+            throw new Error('Could not extract accounts from ur:bytes');
+          }
+
+          setAddAccountLoading(false);
+          setUrProgress(0);
+          bytesDecoderRef.current = null;
+          return;
+        }
+
+        // For other UR types
+        if (!urDecoderRef.current) {
+          urDecoderRef.current = new URRegistryDecoder();
+        }
+
+        urDecoderRef.current.receivePart(content);
+        const progress = urDecoderRef.current.estimatedPercentComplete();
+        setUrProgress(Math.round(progress * 100));
+
+        if (!urDecoderRef.current.isComplete()) {
+          return;
+        }
+
+        setCameraActive(false);
+        setAddAccountLoading(true);
+
+        if (!urDecoderRef.current.isSuccess()) {
+          throw new Error('UR decode failed');
+        }
+
+        const registryType = urDecoderRef.current.resultRegistryType();
+        const extracted = extractFromUrResult(registryType);
+
+        if (extracted && extracted.xpub) {
+          const singleAccount: ParsedDeviceAccount = {
+            purpose: extracted.path.includes("48'") ? 'multisig' : 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: normalizeDerivationPath(extracted.path) || "m/84'/0'/0'",
+            xpub: extracted.xpub,
+          };
+          processImportedAccounts([singleAccount], extracted.fingerprint || '');
+        } else {
+          throw new Error('Could not extract xpub from UR');
+        }
+
+        setAddAccountLoading(false);
+        setUrProgress(0);
+        urDecoderRef.current = null;
+        return;
+
+      } catch (err) {
+        log.error('Failed to decode UR QR code', { err });
+        setAddAccountError(err instanceof Error ? err.message : 'Failed to decode UR QR code');
+        setCameraActive(false);
+        setAddAccountLoading(false);
+        setUrProgress(0);
+        urDecoderRef.current = null;
+        bytesDecoderRef.current = null;
+        return;
+      }
+    }
+
+    // Non-UR format
+    setCameraActive(false);
+    setAddAccountLoading(true);
+
+    const parseResult = parseDeviceJson(content);
+    if (parseResult && (parseResult.xpub || parseResult.accounts?.length)) {
+      if (parseResult.accounts && parseResult.accounts.length > 0) {
+        processImportedAccounts(parseResult.accounts, parseResult.fingerprint || '');
+      } else if (parseResult.xpub) {
+        const singleAccount: ParsedDeviceAccount = {
+          purpose: parseResult.derivationPath?.includes("48'") ? 'multisig' : 'single_sig',
+          scriptType: 'native_segwit',
+          derivationPath: parseResult.derivationPath || "m/84'/0'/0'",
+          xpub: parseResult.xpub,
+        };
+        processImportedAccounts([singleAccount], parseResult.fingerprint || '');
+      }
+      log.info('QR code parsed successfully', { format: parseResult.format });
+    } else {
+      setAddAccountError('Could not find valid account data in QR code');
+    }
+    setAddAccountLoading(false);
+  };
+
+  const handleCameraError = (error: unknown) => {
+    log.error('Camera error', { error });
+    setCameraActive(false);
+    if (error instanceof Error) {
+      if (error.name === 'NotAllowedError') {
+        setCameraError('Camera access denied. Please allow camera permissions.');
+      } else if (error.name === 'NotFoundError') {
+        setCameraError('No camera found on this device.');
+      } else {
+        setCameraError(`Camera error: ${error.message}`);
+      }
+    } else {
+      setCameraError('Failed to access camera. Make sure you are using HTTPS.');
+    }
+  };
+
+  /**
+   * Add selected parsed accounts to the device
+   */
+  const handleAddParsedAccounts = async () => {
+    if (!id || parsedAccounts.length === 0 || selectedParsedAccounts.size === 0) return;
+
+    setAddAccountLoading(true);
+    setAddAccountError(null);
+
+    try {
+      let addedCount = 0;
+      for (const [index, account] of parsedAccounts.entries()) {
+        if (selectedParsedAccounts.has(index)) {
+          try {
+            await addDeviceAccount(id, {
+              purpose: account.purpose,
+              scriptType: account.scriptType,
+              derivationPath: account.derivationPath,
+              xpub: account.xpub,
+            });
+            addedCount++;
+          } catch (err) {
+            log.warn('Failed to add account', { path: account.derivationPath, err });
+          }
+        }
+      }
+
+      // Refresh device data
+      const updatedDevice = await getDevice(id);
+      setDevice(updatedDevice);
+      setShowAddAccount(false);
+      setAddAccountMethod(null);
+      setParsedAccounts([]);
+      setSelectedParsedAccounts(new Set());
+      setAccountConflict(null);
+
+      log.info('Added accounts from import', { addedCount });
+    } catch (err) {
+      log.error('Failed to add accounts', { err });
+      setAddAccountError(err instanceof Error ? err.message : 'Failed to add accounts');
+    } finally {
+      setAddAccountLoading(false);
+    }
+  };
+
+  /**
+   * Reset import state
+   */
+  const resetImportState = () => {
+    setParsedAccounts([]);
+    setSelectedParsedAccounts(new Set());
+    setAccountConflict(null);
+    setImportFingerprint('');
+    setCameraActive(false);
+    setCameraError(null);
+    setUrProgress(0);
+    urDecoderRef.current = null;
+    bytesDecoderRef.current = null;
+  };
+
   // Get display name for current device type
   const getDeviceDisplayName = (type: string): string => {
     const model = deviceModels.find(m => m.slug === type);
@@ -628,6 +1091,7 @@ export const DeviceDetail: React.FC = () => {
                                     setShowAddAccount(false);
                                     setAddAccountMethod(null);
                                     setAddAccountError(null);
+                                    resetImportState();
                                   }}
                                   className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
                                 >
@@ -661,6 +1125,42 @@ export const DeviceDetail: React.FC = () => {
                                     </button>
                                   )}
 
+                                  {/* SD Card Option */}
+                                  <button
+                                    onClick={() => { setAddAccountMethod('sdcard'); resetImportState(); }}
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                  >
+                                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                                      <HardDrive className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                                        Import from SD Card
+                                      </p>
+                                      <p className="text-xs text-sanctuary-500">
+                                        Upload export file from device
+                                      </p>
+                                    </div>
+                                  </button>
+
+                                  {/* QR Code Option */}
+                                  <button
+                                    onClick={() => { setAddAccountMethod('qr'); resetImportState(); }}
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl border border-sanctuary-200 dark:border-sanctuary-700 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors text-left"
+                                  >
+                                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                                      <QrCode className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                                        Scan QR Code
+                                      </p>
+                                      <p className="text-xs text-sanctuary-500">
+                                        Scan animated or static QR codes
+                                      </p>
+                                    </div>
+                                  </button>
+
                                   {/* Manual Option */}
                                   <button
                                     onClick={() => setAddAccountMethod('manual')}
@@ -677,6 +1177,90 @@ export const DeviceDetail: React.FC = () => {
                                         Enter derivation path and xpub
                                       </p>
                                     </div>
+                                  </button>
+                                </div>
+                              ) : parsedAccounts.length > 0 ? (
+                                /* Parsed accounts selection UI */
+                                <div className="space-y-4">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300">
+                                      Select accounts to add:
+                                    </p>
+                                    <span className="text-xs text-sanctuary-400">
+                                      {selectedParsedAccounts.size} of {parsedAccounts.length}
+                                    </span>
+                                  </div>
+
+                                  {accountConflict && accountConflict.matchingAccounts.length > 0 && (
+                                    <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-xs text-blue-600 dark:text-blue-400">
+                                      <Check className="w-3 h-3 inline mr-1" />
+                                      {accountConflict.matchingAccounts.length} account(s) already exist
+                                    </div>
+                                  )}
+
+                                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {parsedAccounts.map((account, index) => {
+                                      const isSelected = selectedParsedAccounts.has(index);
+                                      return (
+                                        <label
+                                          key={index}
+                                          className={`block p-3 rounded-lg border cursor-pointer transition-all ${
+                                            isSelected
+                                              ? 'border-sanctuary-500 bg-sanctuary-50 dark:bg-sanctuary-800'
+                                              : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300'
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => {
+                                                const newSelected = new Set(selectedParsedAccounts);
+                                                if (isSelected) {
+                                                  newSelected.delete(index);
+                                                } else {
+                                                  newSelected.add(index);
+                                                }
+                                                setSelectedParsedAccounts(newSelected);
+                                              }}
+                                              className="mt-1 rounded border-sanctuary-300"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1 mb-1">
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                  account.purpose === 'multisig'
+                                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                                }`}>
+                                                  {account.purpose === 'multisig' ? 'Multisig' : 'Single-sig'}
+                                                </span>
+                                              </div>
+                                              <code className="text-xs font-mono text-sanctuary-600 dark:text-sanctuary-300">
+                                                {account.derivationPath}
+                                              </code>
+                                            </div>
+                                          </div>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <button
+                                    onClick={handleAddParsedAccounts}
+                                    disabled={selectedParsedAccounts.size === 0 || addAccountLoading}
+                                    className="w-full px-4 py-2.5 rounded-lg bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                  >
+                                    {addAccountLoading ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Adding...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-4 h-4" />
+                                        Add {selectedParsedAccounts.size} Account{selectedParsedAccounts.size !== 1 ? 's' : ''}
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               ) : addAccountMethod === 'usb' ? (
@@ -721,7 +1305,173 @@ export const DeviceDetail: React.FC = () => {
                                     </>
                                   )}
                                 </div>
-                              ) : (
+                              ) : addAccountMethod === 'sdcard' ? (
+                                /* SD Card file upload */
+                                <div className="text-center py-6">
+                                  {addAccountLoading ? (
+                                    <div className="flex flex-col items-center">
+                                      <Loader2 className="w-10 h-10 animate-spin text-sanctuary-500 mb-4" />
+                                      <p className="text-sm text-sanctuary-500">Parsing file...</p>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <HardDrive className="w-10 h-10 mx-auto text-sanctuary-400 mb-4" />
+                                      <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4">
+                                        Upload the export file from your {device.type}
+                                      </p>
+                                      <label className="cursor-pointer">
+                                        <span className="inline-flex items-center justify-center rounded-lg px-6 py-2 bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 transition-colors">
+                                          Select File
+                                        </span>
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          accept=".json,.txt"
+                                          onChange={handleFileUpload}
+                                        />
+                                      </label>
+                                    </>
+                                  )}
+                                </div>
+                              ) : addAccountMethod === 'qr' ? (
+                                /* QR Code scanning */
+                                <div className="space-y-3">
+                                  {/* QR Mode Toggle */}
+                                  <div className="flex justify-center gap-2">
+                                    <button
+                                      onClick={() => { setQrMode('camera'); setCameraError(null); }}
+                                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                        qrMode === 'camera'
+                                          ? 'bg-sanctuary-800 text-sanctuary-50 dark:bg-sanctuary-200 dark:text-sanctuary-900'
+                                          : 'bg-sanctuary-100 text-sanctuary-600 dark:bg-sanctuary-800 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                                      }`}
+                                    >
+                                      <Camera className="w-4 h-4" />
+                                      Camera
+                                    </button>
+                                    <button
+                                      onClick={() => { setQrMode('file'); setCameraActive(false); }}
+                                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                        qrMode === 'file'
+                                          ? 'bg-sanctuary-800 text-sanctuary-50 dark:bg-sanctuary-200 dark:text-sanctuary-900'
+                                          : 'bg-sanctuary-100 text-sanctuary-600 dark:bg-sanctuary-800 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                                      }`}
+                                    >
+                                      <Upload className="w-4 h-4" />
+                                      File
+                                    </button>
+                                  </div>
+
+                                  {/* Camera Scanner */}
+                                  {qrMode === 'camera' && (
+                                    <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+                                      {!cameraActive && !cameraError && (
+                                        <div className="text-center py-6">
+                                          <Camera className="w-10 h-10 mx-auto text-sanctuary-400 mb-3" />
+                                          <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4">
+                                            Scan QR code from your device
+                                          </p>
+                                          {!isSecureContext() && (
+                                            <p className="text-xs text-amber-600 dark:text-amber-400 mb-4 px-4">
+                                              Camera requires HTTPS
+                                            </p>
+                                          )}
+                                          <button
+                                            onClick={() => { setCameraActive(true); setCameraError(null); }}
+                                            className="px-6 py-2 rounded-lg bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 transition-colors"
+                                          >
+                                            Start Camera
+                                          </button>
+                                        </div>
+                                      )}
+                                      {cameraActive && (
+                                        <div className="relative">
+                                          <div className="aspect-square max-w-xs mx-auto">
+                                            <Scanner
+                                              onScan={handleQrScan}
+                                              onError={handleCameraError}
+                                              constraints={{ facingMode: 'environment' }}
+                                              scanDelay={100}
+                                              styles={{
+                                                container: { width: '100%', height: '100%' },
+                                                video: { width: '100%', height: '100%', objectFit: 'cover' },
+                                              }}
+                                            />
+                                          </div>
+                                          <button
+                                            onClick={() => { setCameraActive(false); setUrProgress(0); urDecoderRef.current = null; bytesDecoderRef.current = null; }}
+                                            className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors z-10"
+                                          >
+                                            <X className="w-4 h-4" />
+                                          </button>
+                                          {/* Progress for animated QR */}
+                                          {urProgress > 0 && urProgress < 100 && (
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm p-3 z-10">
+                                              <div className="flex items-center justify-between text-white mb-2">
+                                                <span className="flex items-center text-sm font-medium">
+                                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                  Scanning...
+                                                </span>
+                                                <span className="text-lg font-bold">{urProgress}%</span>
+                                              </div>
+                                              <div className="w-full bg-white/20 rounded-full h-2">
+                                                <div
+                                                  className="bg-green-400 h-2 rounded-full transition-all duration-300"
+                                                  style={{ width: `${urProgress}%` }}
+                                                />
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {cameraError && (
+                                        <div className="text-center py-6">
+                                          <AlertCircle className="w-10 h-10 mx-auto text-rose-400 mb-3" />
+                                          <p className="text-sm text-rose-600 dark:text-rose-400 mb-4 px-4">
+                                            {cameraError}
+                                          </p>
+                                          <button
+                                            onClick={() => { setCameraActive(true); setCameraError(null); }}
+                                            className="px-6 py-2 rounded-lg bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 transition-colors"
+                                          >
+                                            Try Again
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* File upload alternative */}
+                                  {qrMode === 'file' && (
+                                    <div className="text-center py-6 surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700">
+                                      {addAccountLoading ? (
+                                        <div className="flex flex-col items-center">
+                                          <Loader2 className="w-10 h-10 animate-spin text-sanctuary-500 mb-4" />
+                                          <p className="text-sm text-sanctuary-500">Parsing file...</p>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <Upload className="w-10 h-10 mx-auto text-sanctuary-400 mb-3" />
+                                          <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-4">
+                                            Upload QR data file
+                                          </p>
+                                          <label className="cursor-pointer">
+                                            <span className="inline-flex items-center justify-center rounded-lg px-6 py-2 bg-sanctuary-800 text-white text-sm font-medium hover:bg-sanctuary-700 transition-colors">
+                                              Select File
+                                            </span>
+                                            <input
+                                              type="file"
+                                              className="hidden"
+                                              accept=".json,.txt"
+                                              onChange={handleFileUpload}
+                                            />
+                                          </label>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : addAccountMethod === 'manual' ? (
                                 <div className="space-y-4">
                                   {/* Purpose */}
                                   <div>
@@ -793,7 +1543,7 @@ export const DeviceDetail: React.FC = () => {
                                     )}
                                   </button>
                                 </div>
-                              )}
+                              ) : null}
 
                               {/* Error Message */}
                               {addAccountError && (
@@ -808,6 +1558,7 @@ export const DeviceDetail: React.FC = () => {
                                   onClick={() => {
                                     setAddAccountMethod(null);
                                     setAddAccountError(null);
+                                    resetImportState();
                                   }}
                                   className="mt-4 w-full text-center text-sm text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300"
                                 >

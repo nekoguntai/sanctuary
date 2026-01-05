@@ -123,3 +123,73 @@ The repository has pre-commit hooks that run AI agents to analyze changes:
 - ❌ **RECOMMEND STOP** - significant issues that should be addressed
 
 Review the agent recommendations and address any concerns before pushing.
+
+## Extensibility & Perpetual Operation Principles
+
+When implementing features, always consider extensibility and long-running operation patterns. This project is designed to run continuously for extended periods.
+
+### Extensibility Guidelines
+
+1. **Use config objects over hard-coded values**
+   ```typescript
+   // GOOD - extensible configuration
+   const ACCOUNT_TYPE_CONFIG: Record<string, AccountTypeInfo> = {
+     'single_sig:native_segwit': { title: 'Native SegWit', ... },
+     // Easy to add new types
+   };
+
+   // BAD - hard-coded switch statements
+   switch(type) { case 'single_sig': ...; case 'multisig': ...; }
+   ```
+
+2. **Design for multiple account/wallet/script types from the start**
+   - Don't assume single-sig only or native_segwit only
+   - Support multisig (m/48' BIP-48) and single-sig (m/44'/49'/84'/86') paths
+   - Handle P2WSH, P2SH-P2WSH, P2TR, P2PKH, P2SH-P2WPKH script types
+
+3. **Filter and validate at boundaries**
+   - Filter devices by capability (e.g., show only multisig-capable devices for multisig wallet creation)
+   - Validate imported data against device fingerprints
+   - Show helpful messages when data is missing or incompatible
+
+4. **Reuse parsing and import patterns**
+   - Use `parseDeviceJson()` from `services/deviceParsers` for device imports
+   - Use the Scanner component pattern from `ConnectDevice.tsx` for QR codes
+   - Use UR decoders (`URRegistryDecoder`, `BytesURDecoder`) for animated QR codes
+
+5. **Handle conflicts gracefully**
+   - Check for existing data before adding (device fingerprints, derivation paths)
+   - Offer merge options when duplicates are detected
+   - Warn about security implications (xpub mismatches)
+
+### Perpetual Operation Guidelines
+
+1. **Clean up resources properly**
+   - Reset all state when dialogs close
+   - Clear decoder refs (`urDecoderRef.current = null`)
+   - Stop cameras and timers on component unmount
+
+2. **Avoid memory leaks**
+   - Don't store unbounded lists in state
+   - Use pagination for large data sets
+   - Clear caches periodically
+
+3. **Handle reconnection gracefully**
+   - WebSocket connections should auto-reconnect
+   - Hardware wallet connections may need user re-initiation
+   - Show clear status when connections are lost
+
+4. **Design for server restarts**
+   - Use distributed locks for multi-instance coordination
+   - Don't rely on in-memory state across requests
+   - Store critical state in database
+
+### Code Organization Patterns
+
+| Pattern | Example | Purpose |
+|---------|---------|---------|
+| Config objects | `ACCOUNT_TYPE_CONFIG` | Extensible type definitions |
+| Helper functions | `hasCompatibleAccount()` | Reusable logic for filtering |
+| Process functions | `processImportedAccounts()` | Handle imports with conflict detection |
+| Reset functions | `resetImportState()` | Clean up all related state |
+| useMemo for filtering | `compatibleDevices` | Efficient derived state |

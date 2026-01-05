@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as walletsApi from '../src/api/wallets';
 import * as devicesApi from '../src/api/devices';
-import { Device, WalletType, Wallet } from '../types';
+import { Device, WalletType, Wallet, DeviceAccount } from '../types';
 import { Button } from './ui/Button';
 import { SingleSigIcon, MultiSigIcon, getDeviceIcon } from './ui/CustomIcons';
-import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Cpu, Shield, Settings, CheckCircle, AlertCircle } from 'lucide-react';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { createLogger } from '../utils/logger';
 import { logError } from '../utils/errorHandler';
@@ -33,17 +33,8 @@ export const CreateWallet: React.FC = () => {
     const loadDevices = async () => {
       try {
         const apiDevices = await devicesApi.getDevices();
-        // Convert API devices to component format
-        const formatted: Device[] = apiDevices.map(d => ({
-          id: d.id,
-          type: d.type,
-          label: d.label,
-          fingerprint: d.fingerprint,
-          derivationPath: d.derivationPath || "m/84'/0'/0'",
-          xpub: d.xpub,
-          userId: '', // Not needed in frontend
-        }));
-        setAvailableDevices(formatted);
+        // Use API devices directly - they include accounts array
+        setAvailableDevices(apiDevices);
       } catch (error) {
         logError(log, error, 'Failed to load devices');
         setAvailableDevices([]);
@@ -53,6 +44,47 @@ export const CreateWallet: React.FC = () => {
 
     loadDevices();
   }, []);
+
+  /**
+   * Check if a device has an account compatible with the wallet type
+   */
+  const hasCompatibleAccount = (device: Device, type: WalletType): boolean => {
+    if (!device.accounts || device.accounts.length === 0) {
+      // Legacy devices without accounts array - check derivationPath
+      // m/48' paths are multisig, m/44'/49'/84'/86' are single-sig
+      const path = device.derivationPath || '';
+      const isMultisigPath = path.includes("48'");
+      return type === WalletType.MULTI_SIG ? isMultisigPath : !isMultisigPath;
+    }
+
+    const requiredPurpose = type === WalletType.MULTI_SIG ? 'multisig' : 'single_sig';
+    return device.accounts.some(a => a.purpose === requiredPurpose);
+  };
+
+  /**
+   * Get the appropriate account for display based on wallet type
+   */
+  const getDisplayAccount = (device: Device, type: WalletType): DeviceAccount | null => {
+    if (!device.accounts || device.accounts.length === 0) return null;
+    const requiredPurpose = type === WalletType.MULTI_SIG ? 'multisig' : 'single_sig';
+    return device.accounts.find(a => a.purpose === requiredPurpose) || null;
+  };
+
+  /**
+   * Filter devices based on wallet type - only show compatible devices
+   */
+  const compatibleDevices = useMemo(() => {
+    if (!walletType) return availableDevices;
+    return availableDevices.filter(d => hasCompatibleAccount(d, walletType));
+  }, [availableDevices, walletType]);
+
+  /**
+   * Devices that are NOT compatible (for showing warning)
+   */
+  const incompatibleDevices = useMemo(() => {
+    if (!walletType) return [];
+    return availableDevices.filter(d => !hasCompatibleAccount(d, walletType));
+  }, [availableDevices, walletType]);
 
   const toggleDevice = (id: string) => {
     const next = new Set(selectedDeviceIds);
@@ -142,47 +174,93 @@ export const CreateWallet: React.FC = () => {
     </div>
   );
 
-  const renderStep2 = () => (
-    <div className="space-y-6 animate-fade-in">
-        <h2 className="text-xl font-light text-center text-sanctuary-900 dark:text-sanctuary-50 mb-2">Select Signers</h2>
-        <p className="text-center text-sanctuary-500 mb-6">
-            {walletType === WalletType.SINGLE_SIG ? "Select the device that will control this wallet." : "Select the devices that will participate in this multisig quorum."}
-        </p>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
-            {availableDevices.map(device => {
-                const isSelected = selectedDeviceIds.has(device.id);
-                return (
-                    <div 
-                        key={device.id}
-                        onClick={() => toggleDevice(device.id)}
-                        className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${isSelected ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500' : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'}`}
-                    >
-                        <div className="flex items-center space-x-3">
-                            <div className="text-sanctuary-500">{getDeviceIcon(device.type, "w-6 h-6")}</div>
-                            <div>
-                                <h4 className="font-medium text-sm">{device.label}</h4>
-                                <p className="text-xs text-sanctuary-400 font-mono">{device.fingerprint}</p>
-                            </div>
-                        </div>
-                        {isSelected && <CheckCircle className="w-5 h-5 text-sanctuary-800 dark:text-sanctuary-200" />}
-                    </div>
-                );
-            })}
-             {/* Add New Device Option */}
-             <button 
-                onClick={() => navigate('/devices/connect')}
-                className="p-4 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 flex items-center justify-center text-sanctuary-500 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
-             >
-                <Plus className="w-5 h-5 mr-2" />
-                <span className="text-sm font-medium">Connect New Device</span>
-             </button>
-        </div>
-        <div className="text-center text-xs text-sanctuary-400 mt-2">
-            Don't see your device? Click "Connect New Device" above to add it to Sanctuary.
-        </div>
-    </div>
-  );
+  const renderStep2 = () => {
+    const accountTypeLabel = walletType === WalletType.MULTI_SIG ? 'multisig' : 'single-sig';
+
+    return (
+      <div className="space-y-6 animate-fade-in">
+          <h2 className="text-xl font-light text-center text-sanctuary-900 dark:text-sanctuary-50 mb-2">Select Signers</h2>
+          <p className="text-center text-sanctuary-500 mb-6">
+              {walletType === WalletType.SINGLE_SIG ? "Select the device that will control this wallet." : "Select the devices that will participate in this multisig quorum."}
+          </p>
+
+          {/* Warning about incompatible devices */}
+          {incompatibleDevices.length > 0 && (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                  {incompatibleDevices.length} device{incompatibleDevices.length !== 1 ? 's' : ''} hidden
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  {incompatibleDevices.map(d => d.label).join(', ')} {incompatibleDevices.length === 1 ? 'doesn\'t' : 'don\'t'} have a {accountTypeLabel} derivation path.
+                  <button
+                    onClick={() => navigate(`/devices/${incompatibleDevices[0].id}`)}
+                    className="underline hover:no-underline ml-1"
+                  >
+                    Add derivation path
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+              {compatibleDevices.map(device => {
+                  const isSelected = selectedDeviceIds.has(device.id);
+                  const displayAccount = walletType ? getDisplayAccount(device, walletType) : null;
+                  return (
+                      <div
+                          key={device.id}
+                          onClick={() => toggleDevice(device.id)}
+                          className={`cursor-pointer p-4 rounded-xl border flex items-center justify-between transition-all ${isSelected ? 'border-sanctuary-800 bg-sanctuary-50 dark:border-sanctuary-200 dark:bg-sanctuary-800 ring-1 ring-sanctuary-500' : 'border-sanctuary-200 dark:border-sanctuary-800 hover:border-sanctuary-400'}`}
+                      >
+                          <div className="flex items-center space-x-3">
+                              <div className="text-sanctuary-500">{getDeviceIcon(device.type, "w-6 h-6")}</div>
+                              <div>
+                                  <h4 className="font-medium text-sm">{device.label}</h4>
+                                  <p className="text-xs text-sanctuary-400 font-mono">{device.fingerprint}</p>
+                                  {displayAccount && (
+                                    <p className="text-[10px] text-sanctuary-400 font-mono mt-0.5">
+                                      {displayAccount.derivationPath}
+                                    </p>
+                                  )}
+                              </div>
+                          </div>
+                          {isSelected && <CheckCircle className="w-5 h-5 text-sanctuary-800 dark:text-sanctuary-200" />}
+                      </div>
+                  );
+              })}
+               {/* Add New Device Option */}
+               <button
+                  onClick={() => navigate('/devices/connect')}
+                  className="p-4 rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 flex items-center justify-center text-sanctuary-500 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
+               >
+                  <Plus className="w-5 h-5 mr-2" />
+                  <span className="text-sm font-medium">Connect New Device</span>
+               </button>
+          </div>
+
+          {/* Helpful message when no compatible devices */}
+          {compatibleDevices.length === 0 && (
+            <div className="text-center py-4">
+              <p className="text-sm text-sanctuary-500">
+                No devices with {accountTypeLabel} accounts found.
+              </p>
+              <p className="text-xs text-sanctuary-400 mt-1">
+                Connect a new device or add a {accountTypeLabel} derivation path to an existing device.
+              </p>
+            </div>
+          )}
+
+          {compatibleDevices.length > 0 && (
+            <div className="text-center text-xs text-sanctuary-400 mt-2">
+                Don't see your device? It may need a {accountTypeLabel} derivation path added.
+            </div>
+          )}
+      </div>
+    );
+  };
 
   const renderStep3 = () => (
     <div className="space-y-6 animate-fade-in max-w-lg mx-auto">

@@ -50,8 +50,9 @@ interface TrezorConnection {
 
 /**
  * Determine Trezor script type from BIP path
+ * @internal Exported for testing
  */
-const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' | 'SPENDMULTISIG' | 'SPENDP2SHWITNESS' => {
+export const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' => {
   if (path.startsWith("m/44'") || path.startsWith("44'")) {
     return 'SPENDADDRESS';
   }
@@ -76,18 +77,22 @@ const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' 
 };
 
 /**
- * Check if a path is a non-standard path that requires unlocking
- * BIP-48 multisig paths are considered non-standard by Trezor
+ * Check if a path is a non-standard path that requires unlocking.
+ * Trezor's safety checks block non-standard derivation paths by default to prevent
+ * accidental use of unusual paths that could lead to lost funds. BIP-48 multisig
+ * paths require explicit unlocking via TrezorConnect.unlockPath() before signing.
+ * @internal Exported for testing
  */
-const isNonStandardPath = (path: string): boolean => {
+export const isNonStandardPath = (path: string): boolean => {
   return path.startsWith("m/48'") || path.startsWith("48'");
 };
 
 /**
  * Extract the account-level path prefix for unlocking
  * e.g., "m/48'/0'/0'/2'/0/5" -> "m/48'/0'/0'/2'"
+ * @internal Exported for testing
  */
-const getAccountPathPrefix = (path: string): string => {
+export const getAccountPathPrefix = (path: string): string => {
   const parts = path.replace(/^m\//, '').split('/');
   // For BIP-48, the account path is the first 4 segments: purpose'/coin'/account'/script'
   const accountParts = parts.slice(0, 4);

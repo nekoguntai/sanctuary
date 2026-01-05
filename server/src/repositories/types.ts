@@ -22,6 +22,70 @@ export interface WalletWithUsers extends Wallet {
   group?: { members: { userId: string }[] } | null;
 }
 
+// =============================================================================
+// Cursor-Based Pagination Types
+// =============================================================================
+
+/**
+ * Cursor-based pagination options
+ * More efficient than offset-based for large datasets
+ */
+export interface CursorPaginationOptions {
+  /** Maximum number of items to return (default: 50, max: 200) */
+  limit?: number;
+  /** Cursor for the next page (ID of the last item from previous page) */
+  cursor?: string;
+  /** Direction of pagination */
+  direction?: 'forward' | 'backward';
+}
+
+/**
+ * Result of a cursor-paginated query
+ */
+export interface CursorPaginatedResult<T> {
+  /** The items for this page */
+  items: T[];
+  /** Cursor to fetch the next page (null if no more items) */
+  nextCursor: string | null;
+  /** Whether there are more items after this page */
+  hasMore: boolean;
+  /** Total count (only included if requested, expensive for large tables) */
+  totalCount?: number;
+}
+
+/**
+ * Transaction-specific cursor using (blockTime, id) for stable ordering
+ */
+export interface TransactionCursor {
+  blockTime: Date;
+  id: string;
+}
+
+/**
+ * Transaction pagination options with compound cursor
+ */
+export interface TransactionPaginationOptions {
+  limit?: number;
+  cursor?: TransactionCursor;
+  direction?: 'forward' | 'backward';
+  /** Include total count (expensive, use sparingly) */
+  includeCount?: boolean;
+}
+
+/**
+ * Result of a transaction pagination query
+ */
+export interface TransactionPaginatedResult {
+  items: Transaction[];
+  nextCursor: TransactionCursor | null;
+  hasMore: boolean;
+  totalCount?: number;
+}
+
+// =============================================================================
+// Legacy Offset-Based Pagination (for backwards compatibility)
+// =============================================================================
+
 // Pagination options
 export interface PaginationOptions {
   skip?: number;

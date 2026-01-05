@@ -56,10 +56,35 @@ const MAX_RATE_LIMIT_EVENTS = 50;
 export interface RateLimitEvent {
   timestamp: string;
   userId: string | null;
-  reason: 'grace_period_exceeded' | 'per_second_exceeded' | 'subscription_limit';
+  reason: 'grace_period_exceeded' | 'per_second_exceeded' | 'subscription_limit' | 'queue_overflow';
   details: string;
 }
 const rateLimitEvents: RateLimitEvent[] = [];
+
+// =============================================================================
+// Bounded Message Queue Configuration
+// =============================================================================
+
+/**
+ * Maximum messages to queue per client before applying backpressure
+ * Prevents memory exhaustion from slow consumers
+ */
+const MAX_QUEUE_SIZE = parseInt(process.env.WS_MAX_QUEUE_SIZE || '100', 10);
+
+/**
+ * Policy for handling queue overflow
+ * - 'drop_oldest': Drop oldest messages to make room (default)
+ * - 'drop_newest': Reject new messages when full
+ * - 'disconnect': Disconnect slow consumers
+ */
+type QueueOverflowPolicy = 'drop_oldest' | 'drop_newest' | 'disconnect';
+const QUEUE_OVERFLOW_POLICY: QueueOverflowPolicy =
+  (process.env.WS_QUEUE_OVERFLOW_POLICY as QueueOverflowPolicy) || 'drop_oldest';
+
+/**
+ * Track dropped messages for observability
+ */
+let droppedMessagesTotal = 0;
 
 export interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -70,7 +95,11 @@ export interface AuthenticatedWebSocket extends WebSocket {
   lastMessageReset: number;
   connectionTime: number; // Timestamp when connection was established
   totalMessageCount: number; // Total messages since connection (for grace period tracking)
-  closeReason?: 'normal' | 'rate_limit' | 'auth_timeout' | 'error'; // For metrics tracking
+  closeReason?: 'normal' | 'rate_limit' | 'auth_timeout' | 'error' | 'queue_overflow'; // For metrics tracking
+  // Bounded message queue for backpressure
+  messageQueue: Array<string>;
+  isProcessingQueue: boolean;
+  droppedMessages: number;
 }
 
 export interface WebSocketMessage {
@@ -152,6 +181,10 @@ export class SanctauryWebSocketServer {
     client.lastMessageReset = Date.now();
     client.connectionTime = Date.now();
     client.totalMessageCount = 0;
+    // Initialize bounded message queue
+    client.messageQueue = [];
+    client.isProcessingQueue = false;
+    client.droppedMessages = 0;
 
     // Check total connection limit
     if (this.clients.size >= MAX_WEBSOCKET_CONNECTIONS) {
@@ -750,14 +783,110 @@ export class SanctauryWebSocketServer {
   }
 
   /**
-   * Send message to specific client
+   * Send message to specific client with bounded queue
+   * Returns false if message was dropped due to queue overflow
    */
-  private sendToClient(client: AuthenticatedWebSocket, message: any) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message));
+  private sendToClient(client: AuthenticatedWebSocket, message: any): boolean {
+    if (client.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    const messageStr = JSON.stringify(message);
+
+    // Check queue capacity
+    if (client.messageQueue.length >= MAX_QUEUE_SIZE) {
+      // Apply overflow policy
+      switch (QUEUE_OVERFLOW_POLICY) {
+        case 'drop_oldest':
+          // Drop oldest message to make room
+          client.messageQueue.shift();
+          client.droppedMessages++;
+          droppedMessagesTotal++;
+          log.debug('Dropped oldest message due to queue overflow', {
+            userId: client.userId,
+            queueSize: client.messageQueue.length,
+          });
+          break;
+
+        case 'drop_newest':
+          // Reject this new message
+          client.droppedMessages++;
+          droppedMessagesTotal++;
+          log.debug('Dropped new message due to queue overflow', {
+            userId: client.userId,
+            queueSize: client.messageQueue.length,
+          });
+          return false;
+
+        case 'disconnect':
+          // Disconnect slow consumer
+          log.warn('Disconnecting client due to queue overflow', {
+            userId: client.userId,
+            queueSize: client.messageQueue.length,
+            droppedMessages: client.droppedMessages,
+          });
+          recordRateLimitEvent(
+            client.userId || null,
+            'queue_overflow',
+            `Queue full: ${client.messageQueue.length}/${MAX_QUEUE_SIZE} messages`
+          );
+          client.closeReason = 'queue_overflow';
+          client.close(4009, 'Message queue overflow');
+          return false;
+      }
+    }
+
+    // Add to queue
+    client.messageQueue.push(messageStr);
+
+    // Process queue if not already processing
+    if (!client.isProcessingQueue) {
+      this.processClientQueue(client);
+    }
+
+    return true;
+  }
+
+  /**
+   * Process queued messages for a client
+   * Uses drain event to handle backpressure from slow consumers
+   */
+  private processClientQueue(client: AuthenticatedWebSocket): void {
+    if (client.readyState !== WebSocket.OPEN || client.messageQueue.length === 0) {
+      client.isProcessingQueue = false;
+      return;
+    }
+
+    client.isProcessingQueue = true;
+
+    // Send messages while socket buffer is not full
+    while (client.messageQueue.length > 0 && client.readyState === WebSocket.OPEN) {
+      const message = client.messageQueue.shift()!;
+
+      // Check if socket buffer is getting full (backpressure)
+      const bufferSize = client.bufferedAmount;
+      if (bufferSize > 64 * 1024) { // 64KB threshold
+        // Re-queue message and wait for drain
+        client.messageQueue.unshift(message);
+        log.debug('Socket buffer full, waiting for drain', {
+          userId: client.userId,
+          bufferSize,
+          queuedMessages: client.messageQueue.length,
+        });
+
+        // Wait for drain event before continuing
+        client.once('drain', () => {
+          this.processClientQueue(client);
+        });
+        return;
+      }
+
+      client.send(message);
       // Track outgoing WebSocket message metric
       websocketMessagesTotal.inc({ type: 'main', direction: 'out' });
     }
+
+    client.isProcessingQueue = false;
   }
 
   /**
@@ -884,10 +1013,17 @@ export class SanctauryWebSocketServer {
    * Get statistics
    */
   public getStats() {
-    // Calculate total subscriptions across all clients
+    // Calculate total subscriptions and queue stats across all clients
     let totalSubscriptions = 0;
+    let totalQueuedMessages = 0;
+    let totalDroppedMessages = 0;
+    let maxQueueSize = 0;
+
     for (const client of this.clients) {
       totalSubscriptions += client.subscriptions.size;
+      totalQueuedMessages += client.messageQueue.length;
+      totalDroppedMessages += client.droppedMessages;
+      maxQueueSize = Math.max(maxQueueSize, client.messageQueue.length);
     }
 
     return {
@@ -903,6 +1039,14 @@ export class SanctauryWebSocketServer {
         gracePeriodMs: RATE_LIMIT_GRACE_PERIOD_MS,
         gracePeriodMessageLimit: GRACE_PERIOD_MESSAGE_LIMIT,
         maxSubscriptionsPerConnection: MAX_SUBSCRIPTIONS_PER_CONNECTION,
+      },
+      // Bounded queue stats
+      messageQueue: {
+        maxQueueSize: MAX_QUEUE_SIZE,
+        overflowPolicy: QUEUE_OVERFLOW_POLICY,
+        totalQueuedMessages,
+        totalDroppedMessages: totalDroppedMessages + droppedMessagesTotal,
+        maxClientQueueSize: maxQueueSize,
       },
     };
   }

@@ -13,6 +13,8 @@ import type {
   WalletAccessFilter,
   WalletNetworkFilter,
   WalletSyncState,
+  CursorPaginationOptions,
+  CursorPaginatedResult,
 } from './types';
 
 /**
@@ -69,6 +71,41 @@ export async function findByUserId(userId: string): Promise<Wallet[]> {
   return prisma.wallet.findMany({
     where: buildAccessWhere(userId),
   });
+}
+
+/**
+ * Find wallets for a user with cursor-based pagination
+ * More efficient for large wallet collections
+ */
+export async function findByUserIdPaginated(
+  userId: string,
+  options: CursorPaginationOptions = {}
+): Promise<CursorPaginatedResult<Wallet>> {
+  const { limit = 50, cursor, direction = 'forward' } = options;
+  const take = Math.min(limit, 200) + 1; // Fetch one extra to detect hasMore
+
+  const wallets = await prisma.wallet.findMany({
+    where: {
+      ...buildAccessWhere(userId),
+      ...(cursor ? { id: direction === 'forward' ? { gt: cursor } : { lt: cursor } } : {}),
+    },
+    take,
+    orderBy: { id: direction === 'forward' ? 'asc' : 'desc' },
+  });
+
+  const hasMore = wallets.length > limit;
+  const items = wallets.slice(0, limit);
+
+  // Reverse if paginating backward to maintain consistent order
+  if (direction === 'backward') {
+    items.reverse();
+  }
+
+  return {
+    items,
+    nextCursor: hasMore ? items[items.length - 1]?.id ?? null : null,
+    hasMore,
+  };
 }
 
 /**
@@ -235,6 +272,7 @@ export const walletRepository = {
   findByIdWithAccess,
   findByIdWithAddresses,
   findByUserId,
+  findByUserIdPaginated,
   findByNetwork,
   findByNetworkWithSyncStatus,
   getIdsByNetwork,

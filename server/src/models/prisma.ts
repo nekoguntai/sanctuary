@@ -58,7 +58,11 @@ export function getOperationType(action: string): string {
   return 'other';
 }
 
-// Add slow query detection and metrics middleware
+// Rolling window for latency tracking (pool health watchdog)
+const LATENCY_WINDOW_SIZE = 100;
+const latencyWindow: number[] = [];
+
+// Add slow query detection, metrics, and pool health tracking middleware
 prisma.$use(async (params, next) => {
   const before = Date.now();
   const result = await next(params);
@@ -67,6 +71,12 @@ prisma.$use(async (params, next) => {
   // Record query duration metric
   const operation = getOperationType(params.action || 'unknown');
   dbQueryDuration.observe({ operation }, duration / 1000);
+
+  // Record for pool health monitoring
+  latencyWindow.push(duration);
+  if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
+    latencyWindow.shift();
+  }
 
   if (duration > SLOW_QUERY_THRESHOLD_MS) {
     log.warn(`Slow query (${duration}ms): ${params.model}.${params.action}`, {
@@ -169,6 +179,81 @@ export async function disconnect(): Promise<void> {
 // Database health check and reconnection
 let healthCheckInterval: NodeJS.Timeout | null = null;
 let isReconnecting = false;
+
+// =============================================================================
+// Pool Health Watchdog
+// =============================================================================
+
+/**
+ * Pool health metrics for monitoring
+ */
+export interface PoolHealthMetrics {
+  /** Average query latency in ms */
+  avgLatencyMs: number;
+  /** Max query latency in ms */
+  maxLatencyMs: number;
+  /** Number of queries in the sample window */
+  queryCount: number;
+  /** Health status based on latency thresholds */
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  /** Warning message if status is not healthy */
+  warning?: string;
+}
+
+// Pool health thresholds
+let poolWarningThresholdMs = 100; // Warn if avg latency exceeds this
+let poolCriticalThresholdMs = 500; // Critical if avg latency exceeds this
+
+/**
+ * Get pool health metrics
+ */
+export function getPoolHealthMetrics(): PoolHealthMetrics {
+  if (latencyWindow.length === 0) {
+    return {
+      avgLatencyMs: 0,
+      maxLatencyMs: 0,
+      queryCount: 0,
+      status: 'healthy',
+    };
+  }
+
+  const avgLatencyMs = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
+  const maxLatencyMs = Math.max(...latencyWindow);
+
+  let status: PoolHealthMetrics['status'] = 'healthy';
+  let warning: string | undefined;
+
+  if (avgLatencyMs > poolCriticalThresholdMs) {
+    status = 'unhealthy';
+    warning = `Average query latency ${avgLatencyMs.toFixed(0)}ms exceeds critical threshold ${poolCriticalThresholdMs}ms`;
+  } else if (avgLatencyMs > poolWarningThresholdMs) {
+    status = 'degraded';
+    warning = `Average query latency ${avgLatencyMs.toFixed(0)}ms exceeds warning threshold ${poolWarningThresholdMs}ms`;
+  }
+
+  return {
+    avgLatencyMs: Math.round(avgLatencyMs * 100) / 100,
+    maxLatencyMs,
+    queryCount: latencyWindow.length,
+    status,
+    warning,
+  };
+}
+
+/**
+ * Configure pool health thresholds
+ */
+export function configurePoolHealthThresholds(options: {
+  warningThresholdMs?: number;
+  criticalThresholdMs?: number;
+}): void {
+  if (options.warningThresholdMs !== undefined) {
+    poolWarningThresholdMs = options.warningThresholdMs;
+  }
+  if (options.criticalThresholdMs !== undefined) {
+    poolCriticalThresholdMs = options.criticalThresholdMs;
+  }
+}
 
 /**
  * Start database health check monitoring

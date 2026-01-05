@@ -67,6 +67,67 @@ describe('Device Parser Registry', () => {
       const result = coldcardNestedParser.canParse({ xpub: 'xpub123' });
       expect(result.detected).toBe(false);
     });
+
+    describe('Multi-account support', () => {
+      it('returns all available accounts in accounts array', () => {
+        const result = coldcardNestedParser.parse(coldcardNestedJson);
+        expect(result.accounts).toBeDefined();
+        expect(result.accounts).toHaveLength(2); // bip84 + bip49
+      });
+
+      it('includes correct purpose and scriptType for each account', () => {
+        const result = coldcardNestedParser.parse(coldcardNestedJson);
+
+        const bip84Account = result.accounts?.find(a => a.derivationPath === "m/84'/0'/0'");
+        expect(bip84Account).toBeDefined();
+        expect(bip84Account?.purpose).toBe('single_sig');
+        expect(bip84Account?.scriptType).toBe('native_segwit');
+        expect(bip84Account?.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y');
+
+        const bip49Account = result.accounts?.find(a => a.derivationPath === "m/49'/0'/0'");
+        expect(bip49Account).toBeDefined();
+        expect(bip49Account?.purpose).toBe('single_sig');
+        expect(bip49Account?.scriptType).toBe('nested_segwit');
+      });
+
+      it('includes multisig accounts from bip48 sections', () => {
+        const withMultisig = {
+          ...coldcardNestedJson,
+          bip48_2: { xpub: 'Zpub74mMqDrTGjmahLnCEpF18LoRMJCp8Wu1x6dJXw8rfT2vfCHKn8f8uxXJQgAKmLB4vZKT7EfXwMrnk9z1wJZBgUPbK1rhMjYFRvG8cBb2HA1', deriv: "m/48'/0'/0'/2'" },
+          bip48_1: { xpub: 'Ypub6kmozyJz2ut3cLFdmC9fVy6bNz6m7d7FZ3S8JJiNFhbPbKPFYnH7Pt2qYntVaLPMzrdADsWJjHQwFjJZ5XAWJpEwAq1FxXpvzNS2xCSxJQH', deriv: "m/48'/0'/0'/1'" },
+        };
+        const result = coldcardNestedParser.parse(withMultisig);
+
+        expect(result.accounts?.length).toBe(4); // bip84 + bip49 + bip48_2 + bip48_1
+
+        const multisigNativeSegwit = result.accounts?.find(a => a.purpose === 'multisig' && a.scriptType === 'native_segwit');
+        expect(multisigNativeSegwit).toBeDefined();
+        expect(multisigNativeSegwit?.derivationPath).toBe("m/48'/0'/0'/2'");
+
+        const multisigNestedSegwit = result.accounts?.find(a => a.purpose === 'multisig' && a.scriptType === 'nested_segwit');
+        expect(multisigNestedSegwit).toBeDefined();
+        expect(multisigNestedSegwit?.derivationPath).toBe("m/48'/0'/0'/1'");
+      });
+
+      it('includes taproot and legacy accounts when present', () => {
+        const fullExport = {
+          ...coldcardNestedJson,
+          bip86: { _pub: 'xpub6CUGRUonZSQ4TWtTMmzXdrXDtyPWKiKbERLgVvnEB', deriv: "m/86'/0'/0'" },
+          bip44: { _pub: 'xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNs', deriv: "m/44'/0'/0'" },
+        };
+        const result = coldcardNestedParser.parse(fullExport);
+
+        const taprootAccount = result.accounts?.find(a => a.scriptType === 'taproot');
+        expect(taprootAccount).toBeDefined();
+        expect(taprootAccount?.derivationPath).toBe("m/86'/0'/0'");
+        expect(taprootAccount?.purpose).toBe('single_sig');
+
+        const legacyAccount = result.accounts?.find(a => a.scriptType === 'legacy');
+        expect(legacyAccount).toBeDefined();
+        expect(legacyAccount?.derivationPath).toBe("m/44'/0'/0'");
+        expect(legacyAccount?.purpose).toBe('single_sig');
+      });
+    });
   });
 
   describe('Coldcard Flat Format Parser', () => {
@@ -143,6 +204,66 @@ describe('Device Parser Registry', () => {
       const result = keystoneStandardParser.parse(nestedFormat);
       expect(result.xpub).toBe('xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj');
     });
+
+    describe('Multi-account support', () => {
+      it('returns all accounts in accounts array', () => {
+        const result = keystoneStandardParser.parse(keystoneJson);
+        expect(result.accounts).toBeDefined();
+        expect(result.accounts).toHaveLength(2); // BIP84 + BIP49
+      });
+
+      it('sets correct purpose and scriptType for each account', () => {
+        const result = keystoneStandardParser.parse(keystoneJson);
+
+        const bip84Account = result.accounts?.find(a => a.derivationPath === "m/84'/0'/0'");
+        expect(bip84Account).toBeDefined();
+        expect(bip84Account?.purpose).toBe('single_sig');
+        expect(bip84Account?.scriptType).toBe('native_segwit');
+
+        const bip49Account = result.accounts?.find(a => a.derivationPath === "m/49'/0'/0'");
+        expect(bip49Account).toBeDefined();
+        expect(bip49Account?.purpose).toBe('single_sig');
+        expect(bip49Account?.scriptType).toBe('nested_segwit');
+      });
+
+      it('correctly identifies multisig accounts from BIP-48 paths', () => {
+        const withMultisig = {
+          coins: [
+            {
+              coinCode: 'BTC',
+              accounts: [
+                { hdPath: "M/84'/0'/0'", xPub: 'xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj' },
+                { hdPath: "M/48'/0'/0'/2'", xPub: 'Zpub74mMqDrTGjmahLnCEpF18LoRMJCp8Wu1x6dJXw8rfT2vfCHKn8f8uxXJQgAKmLB4vZKT7EfXwMrnk9z1wJZBgUPbK1rhMjYFRvG8cBb2HA1' },
+              ],
+            },
+          ],
+        };
+        const result = keystoneStandardParser.parse(withMultisig);
+
+        const multisigAccount = result.accounts?.find(a => a.purpose === 'multisig');
+        expect(multisigAccount).toBeDefined();
+        expect(multisigAccount?.derivationPath).toBe("m/48'/0'/0'/2'");
+        expect(multisigAccount?.scriptType).toBe('native_segwit');
+      });
+
+      it('correctly identifies taproot accounts from BIP-86 paths', () => {
+        const withTaproot = {
+          coins: [
+            {
+              coinCode: 'BTC',
+              accounts: [
+                { hdPath: "M/86'/0'/0'", xPub: 'xpub6CUGRUonZSQ4TWtTMmzXdrXDtyPWKiKbERLgVvnEB' },
+              ],
+            },
+          ],
+        };
+        const result = keystoneStandardParser.parse(withTaproot);
+
+        expect(result.accounts).toHaveLength(1);
+        expect(result.accounts?.[0].scriptType).toBe('taproot');
+        expect(result.accounts?.[0].purpose).toBe('single_sig');
+      });
+    });
   });
 
   describe('Keystone Multisig Format Parser', () => {
@@ -163,6 +284,33 @@ describe('Device Parser Registry', () => {
       expect(result.xpub).toBe('Zpub74mMqDrTGjmahLnCEpF18LoRMJCp8Wu1x6dJXw8rfT2vfCHKn8f8uxXJQgAKmLB4vZKT7EfXwMrnk9z1wJZBgUPbK1rhMjYFRvG8cBb2HA1');
       expect(result.fingerprint).toBe('37b5eed4');
       expect(result.derivationPath).toBe("m/48'/0'/0'/2'");
+    });
+
+    describe('Multi-account support', () => {
+      it('returns accounts array with single multisig account', () => {
+        const result = keystoneMultisigParser.parse(keystoneMultisigJson);
+        expect(result.accounts).toBeDefined();
+        expect(result.accounts).toHaveLength(1);
+      });
+
+      it('sets purpose to multisig for native segwit multisig path', () => {
+        const result = keystoneMultisigParser.parse(keystoneMultisigJson);
+        expect(result.accounts?.[0].purpose).toBe('multisig');
+        expect(result.accounts?.[0].scriptType).toBe('native_segwit');
+        expect(result.accounts?.[0].derivationPath).toBe("m/48'/0'/0'/2'");
+      });
+
+      it('correctly identifies nested segwit multisig from BIP-48 /1/ path', () => {
+        const nestedSegwitMultisig = {
+          ExtendedPublicKey: 'Ypub6kmozyJz2ut3cLFdmC9fVy6bNz6m7d7FZ3S8JJiNFhbPbKPFYnH7Pt2qYntVaLPMzrdADsWJjHQwFjJZ5XAWJpEwAq1FxXpvzNS2xCSxJQH',
+          Path: "M/48'/0'/0'/1'",
+          xfp: '37b5eed4',
+        };
+        const result = keystoneMultisigParser.parse(nestedSegwitMultisig);
+
+        expect(result.accounts?.[0].scriptType).toBe('nested_segwit');
+        expect(result.accounts?.[0].purpose).toBe('multisig');
+      });
     });
   });
 

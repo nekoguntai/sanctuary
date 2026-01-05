@@ -51,7 +51,7 @@ interface TrezorConnection {
 /**
  * Determine Trezor script type from BIP path
  */
-const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' => {
+const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' | 'SPENDMULTISIG' | 'SPENDP2SHWITNESS' => {
   if (path.startsWith("m/44'") || path.startsWith("44'")) {
     return 'SPENDADDRESS';
   }
@@ -64,7 +64,34 @@ const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' 
   if (path.startsWith("m/86'") || path.startsWith("86'")) {
     return 'SPENDTAPROOT';
   }
+  // BIP-48 multisig paths
+  if (path.startsWith("m/48'") || path.startsWith("48'")) {
+    // Check script type suffix: /1' = P2SH-P2WSH, /2' = P2WSH
+    if (path.includes("/2'")) {
+      return 'SPENDWITNESS'; // Native SegWit multisig (P2WSH)
+    }
+    return 'SPENDP2SHWITNESS'; // Nested SegWit multisig (P2SH-P2WSH)
+  }
   return 'SPENDWITNESS';
+};
+
+/**
+ * Check if a path is a non-standard path that requires unlocking
+ * BIP-48 multisig paths are considered non-standard by Trezor
+ */
+const isNonStandardPath = (path: string): boolean => {
+  return path.startsWith("m/48'") || path.startsWith("48'");
+};
+
+/**
+ * Extract the account-level path prefix for unlocking
+ * e.g., "m/48'/0'/0'/2'/0/5" -> "m/48'/0'/0'/2'"
+ */
+const getAccountPathPrefix = (path: string): string => {
+  const parts = path.replace(/^m\//, '').split('/');
+  // For BIP-48, the account path is the first 4 segments: purpose'/coin'/account'/script'
+  const accountParts = parts.slice(0, 4);
+  return 'm/' + accountParts.join('/');
 };
 
 /**
@@ -429,11 +456,42 @@ export class TrezorAdapter implements DeviceAdapter {
       // Fetch reference transactions
       const refTxs = await fetchRefTxs(psbt);
 
+      // Check if we need to unlock non-standard paths (BIP-48 multisig)
+      let unlockPathParam: { address_n: number[]; mac?: string } | undefined;
+      const accountPath = request.accountPath || request.inputPaths?.[0];
+
+      if (accountPath && isNonStandardPath(accountPath)) {
+        const pathToUnlock = getAccountPathPrefix(accountPath);
+        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock });
+
+        try {
+          const unlockResult = await TrezorConnect.unlockPath({
+            path: pathToUnlock,
+          });
+
+          if (unlockResult.success && unlockResult.payload.mac) {
+            unlockPathParam = {
+              address_n: pathToAddressN(pathToUnlock),
+              mac: unlockResult.payload.mac,
+            };
+            log.info('Path unlocked successfully');
+          } else if (!unlockResult.success) {
+            const errorPayload = unlockResult.payload as { error?: string };
+            log.warn('Failed to unlock path, proceeding without unlock', {
+              error: errorPayload.error
+            });
+          }
+        } catch (unlockError) {
+          log.warn('Error unlocking path, proceeding without unlock', { error: unlockError });
+        }
+      }
+
       log.info('Calling TrezorConnect.signTransaction', {
         inputCount: inputs.length,
         outputCount: outputs.length,
         refTxCount: refTxs.length,
         coin,
+        hasUnlockPath: !!unlockPathParam,
       });
 
       // Sign with Trezor
@@ -443,6 +501,7 @@ export class TrezorAdapter implements DeviceAdapter {
         refTxs: refTxs.length > 0 ? refTxs : undefined,
         coin,
         push: false,
+        unlockPath: unlockPathParam,
       });
 
       if (!result.success) {
@@ -477,6 +536,11 @@ export class TrezorAdapter implements DeviceAdapter {
       }
       if (message.includes('Device disconnected') || message.includes('no device')) {
         throw new Error('Trezor disconnected. Please reconnect and try again.');
+      }
+      if (message.includes('Forbidden key path')) {
+        throw new Error(
+          'Trezor blocked this derivation path. In Trezor Suite, go to Settings > Device > Safety Checks and set to "Prompt" to allow multisig signing.'
+        );
       }
 
       throw new Error(`Failed to sign with Trezor: ${message}`);

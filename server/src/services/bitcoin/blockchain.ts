@@ -567,32 +567,6 @@ export async function syncWallet(walletId: string): Promise<{
     change: changeAddrs,
   });
 
-  // Cleanup: Mark any pending transactions as replaced if their inputs are already spent
-  // This catches edge cases where UTXOs were marked spent before this logic was deployed
-  const staleReplacedTxs = await prisma.$queryRaw<Array<{ id: string; txid: string }>>`
-    SELECT DISTINCT t.id, t.txid
-    FROM transactions t
-    JOIN transaction_inputs ti ON ti."transactionId" = t.id
-    JOIN utxos u ON u.txid = ti.txid AND u.vout = ti.vout
-    WHERE t."walletId" = ${walletId}
-      AND t.confirmations = 0
-      AND t."rbfStatus" = 'active'
-      AND u.spent = true
-  `;
-
-  if (staleReplacedTxs.length > 0) {
-    await prisma.transaction.updateMany({
-      where: { id: { in: staleReplacedTxs.map(tx => tx.id) } },
-      data: { rbfStatus: 'replaced' },
-    });
-    walletLog(
-      walletId,
-      'info',
-      'TX',
-      `Cleanup: Marked ${staleReplacedTxs.length} stale pending transaction(s) as replaced: ${staleReplacedTxs.map(tx => tx.txid.slice(0, 8)).join(', ')}`
-    );
-  }
-
   // RBF Cleanup: Mark pending transactions as replaced if a confirmed tx shares the same inputs
   // This catches cases the UTXO-based cleanup might miss (e.g., missing UTXO records)
   const pendingTxsWithInputs = await prisma.transaction.findMany({
@@ -1518,43 +1492,11 @@ export async function syncWallet(walletId: string): Promise<{
       );
     }
 
-    // Also invalidate pending mempool transactions whose inputs were spent
-    // This handles RBF scenarios where a replacement tx confirms
-    const spentUtxoDetails = await prisma.uTXO.findMany({
-      where: { id: { in: utxosToMarkSpent } },
-      select: { txid: true, vout: true },
-    });
-
-    if (spentUtxoDetails.length > 0) {
-      // Find pending transactions that have inputs matching the spent UTXOs
-      const pendingTxsToInvalidate = await prisma.transaction.findMany({
-        where: {
-          walletId,
-          confirmations: 0,
-          rbfStatus: 'active',
-          inputs: {
-            some: {
-              OR: spentUtxoDetails.map(u => ({ txid: u.txid, vout: u.vout })),
-            },
-          },
-        },
-        select: { id: true, txid: true },
-      });
-
-      if (pendingTxsToInvalidate.length > 0) {
-        await prisma.transaction.updateMany({
-          where: { id: { in: pendingTxsToInvalidate.map(tx => tx.id) } },
-          data: { rbfStatus: 'replaced' },
-        });
-
-        walletLog(
-          walletId,
-          'info',
-          'TX',
-          `Marked ${pendingTxsToInvalidate.length} pending transaction(s) as replaced (inputs spent): ${pendingTxsToInvalidate.map(tx => tx.txid.slice(0, 8)).join(', ')}`
-        );
-      }
-    }
+    // Note: RBF detection is handled separately in the RBF Cleanup phase at the start of sync.
+    // We no longer mark pending transactions as replaced just because their inputs are marked spent,
+    // as this causes false positives - a pending transaction's inputs ARE spent (by that transaction).
+    // The proper check is whether a CONFIRMED transaction exists that shares the same inputs,
+    // which is already handled by the RBF Cleanup phase.
   }
 
   // Batch update UTXO confirmations

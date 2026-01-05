@@ -12,7 +12,7 @@ import { broadcastTransaction, recalculateWalletBalances } from './blockchain';
 import { RBF_SEQUENCE } from './advancedTx';
 import prisma from '../../models/prisma';
 import { getElectrumClient } from './electrum';
-import { parseDescriptor, convertToStandardXpub } from './addressDerivation';
+import { parseDescriptor, convertToStandardXpub, MultisigKeyInfo } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { unlockUtxosForDraft } from '../draftLockService';
@@ -315,13 +315,17 @@ export async function createTransaction(
   const networkObj = getNetwork(network);
 
   // Get wallet fingerprint and xpub for BIP32 derivation info
-  // For single-sig wallets, get from the first associated device
-  // For multi-sig, this is more complex (not yet fully supported)
+  // For single-sig: use the device's fingerprint and xpub
+  // For multi-sig: parse descriptor to get ALL keys' info (fingerprint, path, xpub)
   let masterFingerprint: Buffer | undefined;
   let accountXpub: string | undefined;
+  let multisigKeys: MultisigKeyInfo[] | undefined;
+  const isMultisig = wallet.type === 'multi_sig';
 
   log.info('BIP32 derivation: checking wallet data', {
     walletId,
+    walletType: wallet.type,
+    isMultisig,
     hasDevices: wallet.devices?.length > 0,
     deviceCount: wallet.devices?.length || 0,
     walletFingerprint: wallet.fingerprint,
@@ -329,50 +333,75 @@ export async function createTransaction(
     descriptorPreview: wallet.descriptor?.substring(0, 60),
   });
 
-  if (wallet.devices && wallet.devices.length > 0) {
-    const primaryDevice = wallet.devices[0].device;
-    log.info('BIP32 derivation: found primary device', {
-      deviceId: primaryDevice.id,
-      deviceFingerprint: primaryDevice.fingerprint,
-      hasXpub: !!primaryDevice.xpub,
-      xpubPrefix: primaryDevice.xpub?.substring(0, 4),
-    });
-    if (primaryDevice.fingerprint) {
-      masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
-    }
-    if (primaryDevice.xpub) {
-      accountXpub = primaryDevice.xpub;
-    }
-  } else if (wallet.fingerprint) {
-    // Fallback to wallet fingerprint if available
-    log.info('BIP32 derivation: using wallet fingerprint fallback', { fingerprint: wallet.fingerprint });
-    masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
-  }
-
-  // Try to get xpub from descriptor if not from device
-  if (!accountXpub && wallet.descriptor) {
+  // For multisig, parse the descriptor to get ALL keys' info
+  if (isMultisig && wallet.descriptor) {
     try {
       const parsed = parseDescriptor(wallet.descriptor);
-      log.info('BIP32 derivation: parsed descriptor', {
-        hasXpub: !!parsed.xpub,
-        xpubPrefix: parsed.xpub?.substring(0, 4),
-        fingerprint: parsed.fingerprint,
-        accountPath: parsed.accountPath,
-      });
-      if (parsed.xpub) {
-        accountXpub = parsed.xpub;
-      }
-      // Also try to get fingerprint from descriptor if not already set
-      if (!masterFingerprint && parsed.fingerprint) {
-        masterFingerprint = Buffer.from(parsed.fingerprint, 'hex');
-        log.info('BIP32 derivation: using fingerprint from descriptor', { fingerprint: parsed.fingerprint });
+      if (parsed.keys && parsed.keys.length > 0) {
+        multisigKeys = parsed.keys;
+        log.info('BIP32 derivation: parsed multisig descriptor', {
+          keyCount: parsed.keys.length,
+          quorum: parsed.quorum,
+          keys: parsed.keys.map(k => ({
+            fingerprint: k.fingerprint,
+            accountPath: k.accountPath,
+            xpubPrefix: k.xpub.substring(0, 8),
+          })),
+        });
       }
     } catch (e) {
-      log.warn('BIP32 derivation: failed to parse descriptor', { error: (e as Error).message });
+      log.warn('BIP32 derivation: failed to parse multisig descriptor', { error: (e as Error).message });
+    }
+  }
+
+  // For single-sig, get from device or descriptor
+  if (!isMultisig) {
+    if (wallet.devices && wallet.devices.length > 0) {
+      const primaryDevice = wallet.devices[0].device;
+      log.info('BIP32 derivation: found primary device', {
+        deviceId: primaryDevice.id,
+        deviceFingerprint: primaryDevice.fingerprint,
+        hasXpub: !!primaryDevice.xpub,
+        xpubPrefix: primaryDevice.xpub?.substring(0, 4),
+      });
+      if (primaryDevice.fingerprint) {
+        masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
+      }
+      if (primaryDevice.xpub) {
+        accountXpub = primaryDevice.xpub;
+      }
+    } else if (wallet.fingerprint) {
+      log.info('BIP32 derivation: using wallet fingerprint fallback', { fingerprint: wallet.fingerprint });
+      masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
+    }
+
+    // Try to get xpub from descriptor if not from device
+    if (!accountXpub && wallet.descriptor) {
+      try {
+        const parsed = parseDescriptor(wallet.descriptor);
+        log.info('BIP32 derivation: parsed descriptor', {
+          hasXpub: !!parsed.xpub,
+          xpubPrefix: parsed.xpub?.substring(0, 4),
+          fingerprint: parsed.fingerprint,
+          accountPath: parsed.accountPath,
+        });
+        if (parsed.xpub) {
+          accountXpub = parsed.xpub;
+        }
+        if (!masterFingerprint && parsed.fingerprint) {
+          masterFingerprint = Buffer.from(parsed.fingerprint, 'hex');
+          log.info('BIP32 derivation: using fingerprint from descriptor', { fingerprint: parsed.fingerprint });
+        }
+      } catch (e) {
+        log.warn('BIP32 derivation: failed to parse descriptor', { error: (e as Error).message });
+      }
     }
   }
 
   log.info('BIP32 derivation: final values', {
+    isMultisig,
+    hasMultisigKeys: !!multisigKeys && multisigKeys.length > 0,
+    multisigKeyCount: multisigKeys?.length || 0,
     hasMasterFingerprint: !!masterFingerprint,
     masterFingerprintHex: masterFingerprint?.toString('hex'),
     hasAccountXpub: !!accountXpub,
@@ -613,25 +642,83 @@ export async function createTransaction(
 
     psbt.addInput(inputOptions);
 
-    // Add BIP32 derivation info if we have the master fingerprint
-    log.debug('BIP32 derivation check for input', {
-      inputIndex: inputPaths.length - 1,
-      hasMasterFingerprint: !!masterFingerprint,
-      hasDerivationPath: !!derivationPath,
-      derivationPath,
-      hasAccountNode: !!accountNode,
-    });
-    if (masterFingerprint && derivationPath && accountNode) {
-      try {
-        // Parse the derivation path
-        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+    // Add BIP32 derivation info
+    // For multisig: add entries for ALL cosigners from the descriptor
+    // For single-sig: add single entry from the device
+    const inputIndex = inputPaths.length - 1;
 
-        // For BIP44/49/84/86, account path is first 3 levels (purpose'/coin'/account')
-        // Address derivation is the remaining levels (change/index)
-        // The accountNode is at the account level, so we derive from there
+    if (isMultisig && multisigKeys && multisigKeys.length > 0 && derivationPath) {
+      // MULTISIG: Add bip32Derivation for each cosigner
+      try {
+        // Extract change/index from the derivation path (e.g., m/48'/0'/0'/2'/0/5 -> 0, 5)
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+        // For BIP-48: purpose'/coin'/account'/script'/change/index
+        // The last two parts are change and index (non-hardened)
+        const changeIdx = pathParts.length >= 2 ? parseInt(pathParts[pathParts.length - 2].replace(/['h]/g, ''), 10) : 0;
+        const addressIdx = pathParts.length >= 1 ? parseInt(pathParts[pathParts.length - 1].replace(/['h]/g, ''), 10) : 0;
+
+        const bip32Derivations: Array<{
+          masterFingerprint: Buffer;
+          path: string;
+          pubkey: Buffer;
+        }> = [];
+
+        for (const keyInfo of multisigKeys) {
+          try {
+            // Convert xpub to standard format and create BIP32 node
+            const standardXpub = convertToStandardXpub(keyInfo.xpub);
+            const keyNode = bip32.fromBase58(standardXpub, networkObj);
+
+            // Derive at change/index level from this key's xpub
+            const derivedNode = keyNode.derive(changeIdx).derive(addressIdx);
+
+            if (derivedNode.publicKey) {
+              // Build full path for this key: m/{accountPath}/{change}/{index}
+              const fullPath = `m/${keyInfo.accountPath}/${changeIdx}/${addressIdx}`;
+
+              bip32Derivations.push({
+                masterFingerprint: Buffer.from(keyInfo.fingerprint, 'hex'),
+                path: fullPath,
+                pubkey: derivedNode.publicKey,
+              });
+
+              log.debug('Multisig bip32Derivation added', {
+                inputIndex,
+                fingerprint: keyInfo.fingerprint,
+                path: fullPath,
+                pubkeyPrefix: derivedNode.publicKey.toString('hex').substring(0, 16),
+              });
+            }
+          } catch (keyError) {
+            log.warn('Failed to derive key for multisig input', {
+              inputIndex,
+              fingerprint: keyInfo.fingerprint,
+              error: (keyError as Error).message,
+            });
+          }
+        }
+
+        if (bip32Derivations.length > 0) {
+          psbt.updateInput(inputIndex, { bip32Derivation: bip32Derivations });
+          log.info('Multisig BIP32 derivations added to input', {
+            inputIndex,
+            derivationCount: bip32Derivations.length,
+            fingerprints: bip32Derivations.map(d => d.masterFingerprint.toString('hex')),
+          });
+        }
+      } catch (e) {
+        log.warn('Multisig BIP32 derivation failed for input', {
+          inputIndex,
+          error: (e as Error).message,
+        });
+      }
+    } else if (masterFingerprint && derivationPath && accountNode) {
+      // SINGLE-SIG: Add single bip32Derivation entry
+      try {
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
         let pubkeyNode = accountNode;
 
-        // Find where the account path ends (after 3 hardened levels)
+        // Find where the account path ends (after hardened levels)
         let accountPathEnd = 0;
         for (let i = 0; i < pathParts.length && i < 3; i++) {
           if (pathParts[i].endsWith("'") || pathParts[i].endsWith('h')) {
@@ -647,30 +734,31 @@ export async function createTransaction(
         }
 
         if (pubkeyNode.publicKey) {
-          // Update input with bip32Derivation using the correct path format (string)
-          psbt.updateInput(inputPaths.length - 1, {
+          psbt.updateInput(inputIndex, {
             bip32Derivation: [{
               masterFingerprint,
               path: derivationPath,
               pubkey: pubkeyNode.publicKey,
             }],
           });
-          log.info('BIP32 derivation added to input', {
-            inputIndex: inputPaths.length - 1,
+          log.info('Single-sig BIP32 derivation added to input', {
+            inputIndex,
             fingerprint: masterFingerprint.toString('hex'),
             path: derivationPath,
             pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
           });
         }
       } catch (e) {
-        log.warn('BIP32 derivation failed for input', {
-          inputIndex: inputPaths.length - 1,
+        log.warn('Single-sig BIP32 derivation failed for input', {
+          inputIndex,
           error: (e as Error).message,
         });
       }
     } else {
       log.warn('BIP32 derivation skipped - missing required data', {
-        inputIndex: inputPaths.length - 1,
+        inputIndex,
+        isMultisig,
+        hasMultisigKeys: !!multisigKeys && multisigKeys.length > 0,
         hasMasterFingerprint: !!masterFingerprint,
         hasDerivationPath: !!derivationPath,
         hasAccountNode: !!accountNode,
@@ -1488,29 +1576,51 @@ export async function createBatchTransaction(
   const networkObj = getNetwork(network);
 
   // Get wallet fingerprint and xpub for BIP32 derivation info
+  // For multi-sig: parse descriptor to get ALL keys' info
   let masterFingerprint: Buffer | undefined;
   let accountXpub: string | undefined;
+  let multisigKeys: MultisigKeyInfo[] | undefined;
+  const isMultisig = wallet.type === 'multi_sig';
 
-  if (wallet.devices && wallet.devices.length > 0) {
-    const primaryDevice = wallet.devices[0].device;
-    if (primaryDevice.fingerprint) {
-      masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
-    }
-    if (primaryDevice.xpub) {
-      accountXpub = primaryDevice.xpub;
-    }
-  } else if (wallet.fingerprint) {
-    masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
-  }
-
-  if (!accountXpub && wallet.descriptor) {
+  // For multisig, parse the descriptor to get ALL keys' info
+  if (isMultisig && wallet.descriptor) {
     try {
       const parsed = parseDescriptor(wallet.descriptor);
-      if (parsed.xpub) {
-        accountXpub = parsed.xpub;
+      if (parsed.keys && parsed.keys.length > 0) {
+        multisigKeys = parsed.keys;
+        log.info('[BATCH] Parsed multisig descriptor', {
+          keyCount: parsed.keys.length,
+          quorum: parsed.quorum,
+        });
       }
     } catch (e) {
-      // Ignore parsing errors
+      log.warn('[BATCH] Failed to parse multisig descriptor', { error: (e as Error).message });
+    }
+  }
+
+  // For single-sig, get from device or descriptor
+  if (!isMultisig) {
+    if (wallet.devices && wallet.devices.length > 0) {
+      const primaryDevice = wallet.devices[0].device;
+      if (primaryDevice.fingerprint) {
+        masterFingerprint = Buffer.from(primaryDevice.fingerprint, 'hex');
+      }
+      if (primaryDevice.xpub) {
+        accountXpub = primaryDevice.xpub;
+      }
+    } else if (wallet.fingerprint) {
+      masterFingerprint = Buffer.from(wallet.fingerprint, 'hex');
+    }
+
+    if (!accountXpub && wallet.descriptor) {
+      try {
+        const parsed = parseDescriptor(wallet.descriptor);
+        if (parsed.xpub) {
+          accountXpub = parsed.xpub;
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
     }
   }
 
@@ -1746,13 +1856,55 @@ export async function createBatchTransaction(
 
     psbt.addInput(inputOptions);
 
-    // Add BIP32 derivation info if we have the master fingerprint
-    if (masterFingerprint && derivationPath && accountNode) {
+    // Add BIP32 derivation info
+    // For multisig: add entries for ALL cosigners from the descriptor
+    // For single-sig: add single entry from the device
+    const inputIndex = inputPaths.length - 1;
+
+    if (isMultisig && multisigKeys && multisigKeys.length > 0 && derivationPath) {
+      // MULTISIG: Add bip32Derivation for each cosigner
+      try {
+        const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
+        const changeIdx = pathParts.length >= 2 ? parseInt(pathParts[pathParts.length - 2].replace(/['h]/g, ''), 10) : 0;
+        const addressIdx = pathParts.length >= 1 ? parseInt(pathParts[pathParts.length - 1].replace(/['h]/g, ''), 10) : 0;
+
+        const bip32Derivations: Array<{
+          masterFingerprint: Buffer;
+          path: string;
+          pubkey: Buffer;
+        }> = [];
+
+        for (const keyInfo of multisigKeys) {
+          try {
+            const standardXpub = convertToStandardXpub(keyInfo.xpub);
+            const keyNode = bip32.fromBase58(standardXpub, networkObj);
+            const derivedNode = keyNode.derive(changeIdx).derive(addressIdx);
+
+            if (derivedNode.publicKey) {
+              const fullPath = `m/${keyInfo.accountPath}/${changeIdx}/${addressIdx}`;
+              bip32Derivations.push({
+                masterFingerprint: Buffer.from(keyInfo.fingerprint, 'hex'),
+                path: fullPath,
+                pubkey: derivedNode.publicKey,
+              });
+            }
+          } catch (keyError) {
+            // Skip this key if derivation fails
+          }
+        }
+
+        if (bip32Derivations.length > 0) {
+          psbt.updateInput(inputIndex, { bip32Derivation: bip32Derivations });
+        }
+      } catch (e) {
+        // Skip BIP32 derivation if we can't derive
+      }
+    } else if (masterFingerprint && derivationPath && accountNode) {
+      // SINGLE-SIG: Add single bip32Derivation entry
       try {
         const pathParts = derivationPath.replace(/^m\/?/, '').split('/').filter(p => p);
         let pubkeyNode = accountNode;
 
-        // Find where the account path ends (after 3 hardened levels)
         let accountPathEnd = 0;
         for (let i = 0; i < pathParts.length && i < 3; i++) {
           if (pathParts[i].endsWith("'") || pathParts[i].endsWith('h')) {
@@ -1760,7 +1912,6 @@ export async function createBatchTransaction(
           }
         }
 
-        // Derive from account node using the remaining path (change/index)
         for (let i = accountPathEnd; i < pathParts.length; i++) {
           const part = pathParts[i];
           const idx = parseInt(part.replace(/['h]/g, ''), 10);
@@ -1768,7 +1919,7 @@ export async function createBatchTransaction(
         }
 
         if (pubkeyNode.publicKey) {
-          psbt.updateInput(inputPaths.length - 1, {
+          psbt.updateInput(inputIndex, {
             bip32Derivation: [{
               masterFingerprint,
               path: derivationPath,

@@ -116,7 +116,8 @@ export function useSendTransactionActions({
   const [txData, setTxData] = useState<TransactionData | null>(initialTxData || null);
   const [unsignedPsbt, setUnsignedPsbt] = useState<string | null>(initialPsbt || null);
   const [signedRawTx, setSignedRawTx] = useState<string | null>(null);  // Raw tx hex from Trezor
-  const [signedDevices, setSignedDevices] = useState<Set<string>>(new Set());
+  // Initialize signedDevices from state for draft resume (state.signedDevices is loaded from draft)
+  const [signedDevices, setSignedDevices] = useState<Set<string>>(() => new Set(state.signedDevices));
   const [payjoinStatus, setPayjoinStatus] = useState<'idle' | 'attempting' | 'success' | 'failed'>('idle');
   const payjoinAttempted = useRef(false);
 

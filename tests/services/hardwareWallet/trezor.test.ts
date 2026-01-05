@@ -10,7 +10,43 @@ import {
   getTrezorScriptType,
   isNonStandardPath,
   getAccountPathPrefix,
+  buildTrezorMultisig,
 } from '@/services/hardwareWallet/adapters/trezor';
+
+/**
+ * Helper to create a valid multisig witnessScript
+ * Format: OP_M <pubkey1> <pubkey2> ... OP_N OP_CHECKMULTISIG
+ */
+function createWitnessScript(m: number, pubkeys: Buffer[]): Buffer {
+  const parts: Buffer[] = [];
+  // OP_M (OP_1 = 0x51, OP_2 = 0x52, etc.)
+  parts.push(Buffer.from([0x50 + m]));
+  // Push each pubkey (0x21 = push 33 bytes for compressed pubkey)
+  for (const pubkey of pubkeys) {
+    parts.push(Buffer.from([0x21]));
+    parts.push(pubkey);
+  }
+  // OP_N
+  parts.push(Buffer.from([0x50 + pubkeys.length]));
+  // OP_CHECKMULTISIG
+  parts.push(Buffer.from([0xae]));
+  return Buffer.concat(parts);
+}
+
+/**
+ * Helper to create mock bip32Derivation entries
+ */
+function createBip32Derivation(
+  pubkeyHex: string,
+  path: string,
+  fingerprintHex: string
+): { pubkey: Buffer; path: string; masterFingerprint: Buffer } {
+  return {
+    pubkey: Buffer.from(pubkeyHex, 'hex'),
+    path,
+    masterFingerprint: Buffer.from(fingerprintHex, 'hex'),
+  };
+}
 
 describe('validateSatoshiAmount', () => {
   describe('Valid amounts', () => {
@@ -227,6 +263,259 @@ describe('getAccountPathPrefix', () => {
     it('handles paths with fewer than 4 segments', () => {
       // Returns whatever segments exist
       expect(getAccountPathPrefix("m/48'/0'")).toBe("m/48'/0'");
+    });
+  });
+});
+
+describe('buildTrezorMultisig', () => {
+  // Sample compressed pubkeys (33 bytes each)
+  const pubkey1 = Buffer.from('02' + '11'.repeat(32), 'hex');
+  const pubkey2 = Buffer.from('02' + '22'.repeat(32), 'hex');
+  const pubkey3 = Buffer.from('02' + '33'.repeat(32), 'hex');
+  const pubkey4 = Buffer.from('02' + '44'.repeat(32), 'hex');
+  const pubkey5 = Buffer.from('02' + '55'.repeat(32), 'hex');
+
+  describe('Valid multisig structures', () => {
+    it('parses 2-of-3 multisig correctly', () => {
+      const witnessScript = createWitnessScript(2, [pubkey1, pubkey2, pubkey3]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/0", '11223344'),
+        createBip32Derivation(pubkey3.toString('hex'), "m/48'/0'/0'/2'/0/0", '55667788'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(2);
+      expect(result!.pubkeys).toHaveLength(3);
+      expect(result!.signatures).toHaveLength(3);
+      expect(result!.signatures.every(s => s === '')).toBe(true);
+    });
+
+    it('parses 3-of-5 multisig correctly', () => {
+      const witnessScript = createWitnessScript(3, [pubkey1, pubkey2, pubkey3, pubkey4, pubkey5]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/0", '11223344'),
+        createBip32Derivation(pubkey3.toString('hex'), "m/48'/0'/0'/2'/0/0", '55667788'),
+        createBip32Derivation(pubkey4.toString('hex'), "m/48'/0'/0'/2'/0/0", '99aabbcc'),
+        createBip32Derivation(pubkey5.toString('hex'), "m/48'/0'/0'/2'/0/0", 'ddeeff00'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(3);
+      expect(result!.pubkeys).toHaveLength(5);
+      expect(result!.signatures).toHaveLength(5);
+    });
+
+    it('parses 1-of-2 multisig (edge case m=1)', () => {
+      const witnessScript = createWitnessScript(1, [pubkey1, pubkey2]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/0", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(1);
+      expect(result!.pubkeys).toHaveLength(2);
+    });
+
+    it('parses 3-of-3 multisig (edge case m=n)', () => {
+      const witnessScript = createWitnessScript(3, [pubkey1, pubkey2, pubkey3]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/0", '11223344'),
+        createBip32Derivation(pubkey3.toString('hex'), "m/48'/0'/0'/2'/0/0", '55667788'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(3);
+      expect(result!.pubkeys).toHaveLength(3);
+    });
+  });
+
+  describe('Pubkey sorting (sortedmulti compatibility)', () => {
+    it('sorts pubkeys lexicographically by hex value', () => {
+      // Pubkeys are already defined in ascending order: 02111..., 02222..., 02333...
+      const witnessScript = createWitnessScript(2, [pubkey1, pubkey2, pubkey3]);
+      // Pass derivations in reverse order
+      const derivations = [
+        createBip32Derivation(pubkey3.toString('hex'), "m/48'/0'/0'/2'/0/2", '55667788'),
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/1", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      // Should be sorted: pubkey1, pubkey2, pubkey3
+      expect(result!.pubkeys[0].node).toBe(pubkey1.toString('hex'));
+      expect(result!.pubkeys[1].node).toBe(pubkey2.toString('hex'));
+      expect(result!.pubkeys[2].node).toBe(pubkey3.toString('hex'));
+    });
+  });
+
+  describe('Child path extraction', () => {
+    it('extracts child path (change/index) from full derivation path with apostrophe', () => {
+      const witnessScript = createWitnessScript(2, [pubkey1, pubkey2]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/5", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/1/10", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      // First pubkey: change=0, index=5
+      expect(result!.pubkeys[0].address_n).toEqual([0, 5]);
+      // Second pubkey: change=1, index=10
+      expect(result!.pubkeys[1].address_n).toEqual([1, 10]);
+    });
+
+    it('extracts child path from paths with h notation', () => {
+      const witnessScript = createWitnessScript(2, [pubkey1, pubkey2]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48h/0h/0h/2h/0/3", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48h/0h/0h/2h/1/7", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      // Child paths are non-hardened: 0/3 and 1/7
+      expect(result!.pubkeys[0].address_n).toEqual([0, 3]);
+      expect(result!.pubkeys[1].address_n).toEqual([1, 7]);
+    });
+
+    it('handles hardened child paths correctly', () => {
+      const witnessScript = createWitnessScript(2, [pubkey1, pubkey2]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0'/5'", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/1h/10h", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      // Hardened: 0' = 0x80000000, 5' = 0x80000005
+      expect(result!.pubkeys[0].address_n).toEqual([0x80000000, 0x80000005]);
+      // Hardened with h: 1h = 0x80000001, 10h = 0x8000000a
+      expect(result!.pubkeys[1].address_n).toEqual([0x80000001, 0x8000000a]);
+    });
+  });
+
+  describe('Invalid or missing witnessScript', () => {
+    it('returns undefined for undefined witnessScript', () => {
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+      ];
+
+      const result = buildTrezorMultisig(undefined, derivations);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined for empty witnessScript', () => {
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+      ];
+
+      const result = buildTrezorMultisig(Buffer.alloc(0), derivations);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined for invalid m value (m=0)', () => {
+      // Create script with OP_0 (0x00) instead of OP_M
+      const invalidScript = Buffer.concat([
+        Buffer.from([0x50]), // This would be m=0
+        Buffer.from([0x21]), pubkey1,
+        Buffer.from([0x51]), // n=1
+        Buffer.from([0xae]),
+      ]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+      ];
+
+      const result = buildTrezorMultisig(invalidScript, derivations);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined for invalid m > n', () => {
+      // Create script where m=3 but only 2 pubkeys (n=2)
+      const invalidScript = Buffer.concat([
+        Buffer.from([0x53]), // m=3
+        Buffer.from([0x21]), pubkey1,
+        Buffer.from([0x21]), pubkey2,
+        Buffer.from([0x52]), // n=2
+        Buffer.from([0xae]),
+      ]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+        createBip32Derivation(pubkey2.toString('hex'), "m/48'/0'/0'/2'/0/0", '11223344'),
+      ];
+
+      const result = buildTrezorMultisig(invalidScript, derivations);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined for m > 16', () => {
+      // Create script with invalid m=17 (0x61 which would decode to 17)
+      const invalidScript = Buffer.concat([
+        Buffer.from([0x61]), // Would be m=17
+        Buffer.from([0x21]), pubkey1,
+        Buffer.from([0x61]), // n=17
+        Buffer.from([0xae]),
+      ]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+      ];
+
+      const result = buildTrezorMultisig(invalidScript, derivations);
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('Edge cases', () => {
+    it('handles single signer (1-of-1)', () => {
+      const witnessScript = createWitnessScript(1, [pubkey1]);
+      const derivations = [
+        createBip32Derivation(pubkey1.toString('hex'), "m/48'/0'/0'/2'/0/0", 'aabbccdd'),
+      ];
+
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(1);
+      expect(result!.pubkeys).toHaveLength(1);
+    });
+
+    it('handles maximum reasonable multisig (15-of-15)', () => {
+      // Create 15 pubkeys
+      const pubkeys: Buffer[] = [];
+      const derivations: Array<{ pubkey: Buffer; path: string; masterFingerprint: Buffer }> = [];
+      for (let i = 0; i < 15; i++) {
+        const pk = Buffer.from('02' + (i + 10).toString(16).padStart(2, '0').repeat(32), 'hex');
+        pubkeys.push(pk);
+        derivations.push(createBip32Derivation(pk.toString('hex'), `m/48'/0'/0'/2'/0/${i}`, 'aabbccdd'));
+      }
+
+      const witnessScript = createWitnessScript(15, pubkeys);
+      const result = buildTrezorMultisig(witnessScript, derivations);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(15);
+      expect(result!.pubkeys).toHaveLength(15);
     });
   });
 });

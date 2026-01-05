@@ -482,6 +482,12 @@ describe('Blockchain Service', () => {
     const walletId = 'test-wallet-id';
 
     it('should update confirmations for pending transactions', async () => {
+      // Mock wallet lookup for network (required for getBlockHeight)
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'mainnet',
+      });
+
       mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
         key: 'deepConfirmationThreshold',
         value: '100',
@@ -501,6 +507,12 @@ describe('Blockchain Service', () => {
     });
 
     it('should not update already deep confirmed transactions', async () => {
+      // Mock wallet lookup for network
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'mainnet',
+      });
+
       mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
         key: 'deepConfirmationThreshold',
         value: '6',
@@ -515,6 +527,12 @@ describe('Blockchain Service', () => {
     });
 
     it('should return confirmation update details', async () => {
+      // Mock wallet lookup for network
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'mainnet',
+      });
+
       mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
         key: 'deepConfirmationThreshold',
         value: '100',
@@ -534,6 +552,40 @@ describe('Blockchain Service', () => {
         expect(updates[0].newConfirmations).toBeDefined();
         expect(updates[0].newConfirmations).toBeGreaterThan(updates[0].oldConfirmations);
       }
+    });
+
+    it('should return empty array when wallet not found', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+
+      const updates = await updateTransactionConfirmations(walletId);
+
+      expect(updates.length).toBe(0);
+    });
+
+    it('should use correct network for block height lookup', async () => {
+      // Mock testnet wallet
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'testnet',
+      });
+
+      mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
+        key: 'deepConfirmationThreshold',
+        value: '100',
+      });
+
+      mockPrismaClient.transaction.findMany.mockResolvedValue([
+        { id: 'tx-1', txid: 'l'.repeat(64), blockHeight: 2800000, confirmations: 5 },
+      ]);
+
+      // Testnet has different block height
+      mockElectrumClient.getBlockHeight.mockResolvedValue(2800010);
+
+      const updates = await updateTransactionConfirmations(walletId);
+
+      expect(updates.length).toBeGreaterThan(0);
+      // Verify block height was fetched (can't easily verify network param with current mock)
+      expect(mockElectrumClient.getBlockHeight).toHaveBeenCalled();
     });
   });
 
@@ -822,6 +874,11 @@ describe('Blockchain Service', () => {
     const walletId = 'test-wallet-id';
 
     beforeEach(() => {
+      // Mock wallet lookup for network (required for getBlockHeight and getNodeClient)
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: 'mainnet',
+      });
       mockElectrumClient.getBlockHeight.mockResolvedValue(800100);
     });
 
@@ -842,6 +899,15 @@ describe('Blockchain Service', () => {
 
       expect(typeof result.updated).toBe('number');
       expect(Array.isArray(result.confirmationUpdates)).toBe(true);
+    });
+
+    it('should return empty result when wallet not found', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+
+      const result = await populateMissingTransactionFields(walletId);
+
+      expect(result.updated).toBe(0);
+      expect(result.confirmationUpdates).toEqual([]);
     });
   });
 

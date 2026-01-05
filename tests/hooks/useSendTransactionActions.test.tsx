@@ -28,6 +28,21 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Mock queryClient from QueryProvider - hoisted to ensure mocks are available
+const { mockRefetchQueries, mockInvalidateQueries, mockQueryClient } = vi.hoisted(() => {
+  const mockRefetchQueries = vi.fn().mockResolvedValue(undefined);
+  const mockInvalidateQueries = vi.fn();
+  const mockQueryClient = {
+    refetchQueries: mockRefetchQueries,
+    invalidateQueries: mockInvalidateQueries,
+  };
+  return { mockRefetchQueries, mockInvalidateQueries, mockQueryClient };
+});
+
+vi.mock('../../providers/QueryProvider', () => ({
+  queryClient: mockQueryClient,
+}));
+
 // Mock hooks
 vi.mock('../../hooks/useErrorHandler', () => ({
   useErrorHandler: () => ({
@@ -128,6 +143,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('useSendTransactionActions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRefetchQueries.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -422,6 +438,82 @@ describe('useSendTransactionActions', () => {
 
       expect(success).toBe(false);
       expect(result.current.error).toBe('No transaction to broadcast');
+    });
+
+    it('should refetch critical queries before navigation for immediate visibility', async () => {
+      vi.mocked(transactionsApi.createTransaction).mockResolvedValue(mockTxResult);
+      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123', broadcasted: true });
+
+      const { result } = renderHook(
+        () => useSendTransactionActions({
+          walletId: 'test-wallet',
+          wallet: mockWallet,
+          state: createMockState(),
+        }),
+        { wrapper }
+      );
+
+      // Create and broadcast
+      await act(async () => {
+        await result.current.createTransaction();
+      });
+
+      await act(async () => {
+        await result.current.broadcastTransaction('signed-psbt-base64');
+      });
+
+      // Verify refetchQueries was called for critical queries (data needed before navigation)
+      expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['pendingTransactions'] });
+      expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['wallets'] });
+      expect(mockRefetchQueries).toHaveBeenCalledWith({ queryKey: ['wallet', 'test-wallet'] });
+
+      // Verify invalidateQueries was called for background refresh queries
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['recentTransactions'] });
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['transactions', 'test-wallet'] });
+
+      // Navigation should happen after refetch completes
+      expect(mockNavigate).toHaveBeenCalledWith('/wallets/test-wallet');
+    });
+
+    it('should call refetchQueries before navigate to ensure transaction visibility', async () => {
+      // Track call order to verify refetch happens before navigate
+      const callOrder: string[] = [];
+      mockRefetchQueries.mockImplementation(async () => {
+        callOrder.push('refetch');
+        return undefined;
+      });
+      mockNavigate.mockImplementation(() => {
+        callOrder.push('navigate');
+      });
+
+      vi.mocked(transactionsApi.createTransaction).mockResolvedValue(mockTxResult);
+      vi.mocked(transactionsApi.broadcastTransaction).mockResolvedValue({ txid: 'txid123', broadcasted: true });
+
+      const { result } = renderHook(
+        () => useSendTransactionActions({
+          walletId: 'test-wallet',
+          wallet: mockWallet,
+          state: createMockState(),
+        }),
+        { wrapper }
+      );
+
+      await act(async () => {
+        await result.current.createTransaction();
+      });
+
+      await act(async () => {
+        await result.current.broadcastTransaction('signed-psbt-base64');
+      });
+
+      // Refetch should be called 3 times before navigate
+      const refetchCalls = callOrder.filter(c => c === 'refetch').length;
+      const navigateIndex = callOrder.indexOf('navigate');
+
+      expect(refetchCalls).toBe(3);
+      expect(navigateIndex).toBeGreaterThan(0);
+      // All refetches should happen before navigate
+      expect(callOrder.slice(0, navigateIndex).every(c => c === 'refetch')).toBe(true);
     });
   });
 

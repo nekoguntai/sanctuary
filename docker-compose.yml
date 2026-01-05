@@ -66,6 +66,10 @@ services:
   # ============================================
   # PostgreSQL Database
   # ============================================
+  # Performance tuned with custom config (see docker/postgres/postgresql.conf)
+  # Key settings: shared_buffers=256MB, effective_cache_size=768MB, work_mem=16MB
+  # Slow query logging enabled (>1s) for diagnostics
+  # ============================================
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -73,12 +77,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sanctuary}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-sanctuary}
+    # Load custom PostgreSQL configuration for performance tuning
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     # Port exposure disabled by default for security
     # Uncomment for local development or use: docker exec -it sanctuary-db psql -U sanctuary
     # ports:
     #   - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sanctuary} -d ${POSTGRES_DB:-sanctuary}"]
       interval: 10s
@@ -95,14 +102,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '2'
+          memory: 1G
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 512M
     # Prevent swap thrashing - kill rather than swap excessively
     mem_swappiness: 10
-    memswap_limit: 768M  # memory + 256M swap
+    memswap_limit: 1280M  # memory + 256M swap
 
   # ============================================
   # Backend API Server

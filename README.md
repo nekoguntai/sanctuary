@@ -364,7 +364,7 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 
 - **Docker** and **Docker Compose** (v2.0+)
 - A modern web browser (Chrome, Firefox, Edge, Brave)
-- 2GB RAM minimum, 4GB recommended
+- 4GB RAM minimum, 6GB recommended (8GB+ if using local AI)
 - ~500MB disk space (plus blockchain index cache)
 
 Optional:

@@ -24,6 +24,50 @@ This guide explains how to deploy Sanctuary using Docker and Docker Compose.
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
+## System Requirements
+
+### Minimum Hardware
+
+- **CPU**: 2 cores
+- **RAM**: 4GB minimum, 6GB recommended
+- **Storage**: 500MB for application + blockchain index cache
+
+### Container Resource Allocation
+
+| Service    | Memory Limit | CPU Limit | Notes |
+|------------|--------------|-----------|-------|
+| PostgreSQL | 1GB          | 2 cores   | Performance tuned with custom config |
+| Backend    | 2GB          | 2 cores   | Handles sync, WebSocket, API |
+| Frontend   | 256MB        | 0.5 core  | Nginx + static files |
+| Gateway    | 256MB        | 0.5 core  | Mobile API gateway |
+| Redis      | 192MB        | 0.5 core  | Cache and pub/sub |
+| AI         | 256MB        | 0.5 core  | AI proxy (idle until enabled) |
+| Ollama     | 8GB          | 4 cores   | Optional, for local AI |
+
+> **Note**: Add 8GB+ RAM if using local AI with Ollama (`./start.sh --with-ai`)
+
+### PostgreSQL Performance Tuning
+
+PostgreSQL is configured with optimized settings in `docker/postgres/postgresql.conf`:
+
+- `shared_buffers = 256MB` - Main memory pool for caching
+- `effective_cache_size = 768MB` - Query planner hint
+- `work_mem = 16MB` - Memory per sort/join operation
+- Slow query logging enabled (queries >1s logged)
+
+Use the analysis script to diagnose performance issues:
+
+```bash
+# View slow queries
+./scripts/db-analyze.sh slow
+
+# Show database statistics and index usage
+./scripts/db-analyze.sh stats
+
+# Show current locks
+./scripts/db-analyze.sh locks
+```
+
 ## Quick Start
 
 ### 1. Prerequisites

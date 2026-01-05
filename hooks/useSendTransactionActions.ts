@@ -87,7 +87,7 @@ export interface UseSendTransactionActionsResult {
   broadcastTransaction: (signedPsbt?: string, rawTxHex?: string) => Promise<boolean>;
   saveDraft: (label?: string) => Promise<string | null>;
   downloadPsbt: () => void;
-  uploadSignedPsbt: (file: File) => Promise<void>;
+  uploadSignedPsbt: (file: File, deviceId?: string) => Promise<void>;
   processQrSignedPsbt: (signedPsbt: string, deviceId: string) => void;
   markDeviceSigned: (deviceId: string) => void;
   clearError: () => void;
@@ -549,7 +549,8 @@ export function useSendTransactionActions({
   }, [unsignedPsbt, txData, wallet.name]);
 
   // Upload signed PSBT (supports both binary and base64 formats)
-  const uploadSignedPsbt = useCallback(async (file: File): Promise<void> => {
+  // deviceId is optional - for multisig, pass the device ID to track which device signed
+  const uploadSignedPsbt = useCallback(async (file: File, deviceId?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -576,18 +577,27 @@ export function useSendTransactionActions({
             log.debug('Uploaded base64 PSBT');
           }
 
-          log.debug('Uploaded signed PSBT', { preview: base64Psbt.substring(0, 50) + '...' });
+          // Use provided deviceId or fallback to 'psbt-signed' for single-sig
+          const effectiveDeviceId = deviceId || 'psbt-signed';
+
+          log.debug('Uploaded signed PSBT', {
+            preview: base64Psbt.substring(0, 50) + '...',
+            deviceId: effectiveDeviceId
+          });
           setUnsignedPsbt(base64Psbt); // Now contains signed PSBT
-          setSignedDevices(prev => new Set([...prev, 'psbt-signed']));
+          setSignedDevices(prev => new Set([...prev, effectiveDeviceId]));
 
           // Persist signature to draft if we're in draft mode
           if (state.draftId) {
             try {
               await draftsApi.updateDraft(walletId, state.draftId, {
                 signedPsbtBase64: base64Psbt,
-                signedDeviceId: 'psbt-signed',
+                signedDeviceId: effectiveDeviceId,
               });
-              log.info('Uploaded PSBT signature persisted to draft', { draftId: state.draftId });
+              log.info('Uploaded PSBT signature persisted to draft', {
+                draftId: state.draftId,
+                deviceId: effectiveDeviceId
+              });
             } catch (persistErr) {
               log.warn('Failed to persist uploaded PSBT to draft', { error: persistErr });
             }

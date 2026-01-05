@@ -77,7 +77,7 @@ export interface ReviewStepProps {
   payjoinStatus?: 'idle' | 'attempting' | 'success' | 'failed';
   onCreateTransaction?: () => Promise<TransactionData | null>;
   onDownloadPsbt?: () => void;
-  onUploadSignedPsbt?: (file: File) => Promise<void>;
+  onUploadSignedPsbt?: (file: File, deviceId?: string) => Promise<void>;
   onSignWithDevice?: (device: Device) => Promise<boolean>;
   onMarkDeviceSigned?: (deviceId: string) => void;
   onProcessQrSignedPsbt?: (signedPsbt: string, deviceId: string) => void;
@@ -126,8 +126,10 @@ export function ReviewStep({
 
   const { format, formatFiat } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deviceFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [signingDeviceId, setSigningDeviceId] = useState<string | null>(null);
   const [qrSigningDevice, setQrSigningDevice] = useState<Device | null>(null);
+  const [uploadingDeviceId, setUploadingDeviceId] = useState<string | null>(null);
   const [addressLookup, setAddressLookup] = useState<Record<string, AddressLookupResult>>({});
 
   // Fetch wallet labels for output addresses (to detect internal transfers)
@@ -296,7 +298,7 @@ export function ReviewStep({
     ? wallet.quorum.m
     : wallet.quorum || 1;
 
-  // Handle file upload
+  // Handle file upload (single-sig)
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && onUploadSignedPsbt) {
@@ -305,6 +307,25 @@ export function ReviewStep({
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  // Handle per-device file upload (multisig)
+  const handleDeviceFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, deviceId: string) => {
+    const file = event.target.files?.[0];
+    if (file && onUploadSignedPsbt) {
+      setUploadingDeviceId(deviceId);
+      try {
+        // Pass deviceId to track which device signed - the hook handles marking as signed
+        await onUploadSignedPsbt(file, deviceId);
+      } finally {
+        setUploadingDeviceId(null);
+      }
+    }
+    // Reset input
+    const inputRef = deviceFileInputRefs.current[deviceId];
+    if (inputRef) {
+      inputRef.value = '';
     }
   };
 
@@ -630,13 +651,38 @@ export function ReviewStep({
                         </button>
                       )}
                       {capabilities.methods.includes('airgap') && (
-                        <button
-                          onClick={onDownloadPsbt}
-                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-sanctuary-700 dark:text-sanctuary-300 bg-white dark:bg-sanctuary-800 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 border border-sanctuary-200 dark:border-sanctuary-600 rounded-lg transition-colors"
-                        >
-                          <FileDown className="w-3 h-3 mr-1.5" />
-                          PSBT
-                        </button>
+                        <>
+                          <button
+                            onClick={onDownloadPsbt}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-sanctuary-700 dark:text-sanctuary-300 bg-white dark:bg-sanctuary-800 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 border border-sanctuary-200 dark:border-sanctuary-600 rounded-lg transition-colors"
+                            title="Download PSBT to sign on device"
+                          >
+                            <FileDown className="w-3 h-3 mr-1.5" />
+                            Download
+                          </button>
+                          <label className="cursor-pointer">
+                            <input
+                              ref={(el) => { deviceFileInputRefs.current[device.id] = el; }}
+                              type="file"
+                              accept=".psbt,.txt"
+                              className="hidden"
+                              onChange={(e) => handleDeviceFileUpload(e, device.id)}
+                            />
+                            <span
+                              className={`inline-flex items-center px-3 py-1.5 text-xs font-medium text-sanctuary-700 dark:text-sanctuary-300 bg-white dark:bg-sanctuary-800 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 border border-sanctuary-200 dark:border-sanctuary-600 rounded-lg transition-colors ${
+                                uploadingDeviceId === device.id ? 'opacity-50 cursor-wait' : ''
+                              }`}
+                              title="Upload signed PSBT from device"
+                            >
+                              {uploadingDeviceId === device.id ? (
+                                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                              ) : (
+                                <Upload className="w-3 h-3 mr-1.5" />
+                              )}
+                              Upload
+                            </span>
+                          </label>
+                        </>
                       )}
                     </div>
                   )}

@@ -600,26 +600,29 @@ export const DraftList: React.FC<DraftListProps> = ({
 
                   {canEdit && (
                     <>
-                      <label className="cursor-pointer">
-                        <input
-                          type="file"
-                          accept=".psbt,.txt"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              handleUploadPsbt(draft.id, file);
-                            }
-                            e.target.value = '';
-                          }}
-                        />
-                        <span
-                          className="inline-flex p-1.5 rounded-lg text-sanctuary-500 hover:text-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
-                          title="Upload signed PSBT"
-                        >
-                          <Upload className="w-4 h-4" />
-                        </span>
-                      </label>
+                      {/* Upload PSBT only for single-sig - multisig has per-device upload in ReviewStep */}
+                      {walletType !== WalletType.MULTI_SIG && (
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".psbt,.txt"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleUploadPsbt(draft.id, file);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                          <span
+                            className="inline-flex p-1.5 rounded-lg text-sanctuary-500 hover:text-sanctuary-700 hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
+                            title="Upload signed PSBT"
+                          >
+                            <Upload className="w-4 h-4" />
+                          </span>
+                        </label>
+                      )}
 
                       {deleteConfirm === draft.id ? (
                         <div className="flex items-center gap-1 ml-2">

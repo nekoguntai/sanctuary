@@ -227,7 +227,7 @@ function WizardContent({
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       {/* Header with cancel button */}
       <div className="flex items-center justify-between mb-6">
         <Button variant="ghost" size="sm" onClick={onCancel}>

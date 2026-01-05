@@ -613,6 +613,13 @@ export class TrezorAdapter implements DeviceAdapter {
           'Trezor blocked this derivation path. In Trezor Suite, go to Settings > Device > Safety Checks and set to "Prompt" to allow multisig signing.'
         );
       }
+      if (message.includes('wrong derivation path') || message.includes('Wrong derivation path')) {
+        throw new Error(
+          'The derivation path does not match your Trezor account. Please ensure: ' +
+          '(1) You are using the same passphrase (or no passphrase) as when you registered the device, and ' +
+          '(2) In Trezor Suite, go to Settings > Device > Safety Checks and set to "Prompt" to allow non-standard paths.'
+        );
+      }
 
       throw new Error(`Failed to sign with Trezor: ${message}`);
     }

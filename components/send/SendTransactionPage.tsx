@@ -182,9 +182,30 @@ export const SendTransactionPage: React.FC = () => {
             wallets: d.wallets?.map(w => ({ walletId: w.wallet?.id, walletName: w.wallet?.name })),
           })),
         });
-        const walletDeviceList = allDevices.filter(d =>
+
+        // First try to match via wallet-device association
+        let walletDeviceList = allDevices.filter(d =>
           d.wallets?.some(w => w.wallet.id === id)
         );
+
+        // If no matches and this is a multisig, try to match by fingerprint from descriptor
+        if (walletDeviceList.length === 0 && apiWallet.type === 'multi_sig' && apiWallet.descriptor) {
+          // Extract fingerprints from descriptor (format: [fingerprint/path])
+          const fingerprintMatches = apiWallet.descriptor.match(/\[([a-f0-9]{8})\//gi);
+          if (fingerprintMatches) {
+            const descriptorFingerprints = new Set(
+              fingerprintMatches.map(m => m.slice(1, 9).toLowerCase())
+            );
+            walletDeviceList = allDevices.filter(d =>
+              d.fingerprint && descriptorFingerprints.has(d.fingerprint.toLowerCase())
+            );
+            log.info('Fallback fingerprint matching for multisig:', {
+              descriptorFingerprints: [...descriptorFingerprints],
+              matchedDevices: walletDeviceList.length,
+            });
+          }
+        }
+
         log.info('Filtered devices for wallet:', {
           walletId: id,
           matchedDevices: walletDeviceList.map(d => ({ id: d.id, type: d.type, label: d.label })),

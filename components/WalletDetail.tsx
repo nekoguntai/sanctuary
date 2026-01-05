@@ -282,6 +282,44 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
   );
 };
 
+/**
+ * Generate Coldcard/Passport compatible multisig config text.
+ * This format includes explicit fingerprints that Passport can parse.
+ */
+function generateMultisigConfigText(
+  name: string,
+  quorum: number,
+  totalSigners: number,
+  scriptType: string,
+  devices: Array<{ fingerprint: string; derivationPath: string; xpub: string }>
+): string {
+  const lines: string[] = [];
+
+  // Header
+  lines.push(`Name: ${name}`);
+  lines.push(`Policy: ${quorum} of ${totalSigners}`);
+
+  // Script type format
+  const formatMap: Record<string, string> = {
+    native_segwit: 'P2WSH',
+    nested_segwit: 'P2SH-P2WSH',
+    legacy: 'P2SH',
+  };
+  lines.push(`Format: ${formatMap[scriptType] || 'P2WSH'}`);
+  lines.push('');
+
+  // Device/Key information
+  for (const device of devices) {
+    // Normalize derivation path to use apostrophes (Coldcard/Passport expect this)
+    const normalizedPath = device.derivationPath.replace(/h/g, "'");
+    lines.push(`Derivation: ${normalizedPath}`);
+    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub}`);
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+
 export const WalletDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -444,6 +482,7 @@ export const WalletDetail: React.FC = () => {
   const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels' | 'device'>('qr');
   const [exportFormats, setExportFormats] = useState<walletsApi.ExportFormat[]>([]);
   const [loadingFormats, setLoadingFormats] = useState(false);
+  const [qrFormat, setQrFormat] = useState<'descriptor' | 'passport'>('passport'); // Default to passport for better compatibility
 
   // Transaction Export Modal State
   const [showTransactionExport, setShowTransactionExport] = useState(false);
@@ -2834,9 +2873,63 @@ export const WalletDetail: React.FC = () => {
             
             <div className="flex flex-col items-center space-y-6">
                {exportTab === 'qr' && (
-                  <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100">
-                    <QRCodeSVG value={wallet.descriptor} size={240} level="L" />
-                    <p className="text-center text-xs text-sanctuary-400 mt-2">Scan to import into another device</p>
+                  <div className="w-full">
+                    {/* QR Format Selector - only show for multisig */}
+                    {wallet.type === 'Multi Sig' && devices.length > 0 && (
+                      <div className="flex gap-2 mb-4 justify-center">
+                        <button
+                          onClick={() => setQrFormat('passport')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            qrFormat === 'passport'
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                          }`}
+                        >
+                          Passport/Coldcard
+                        </button>
+                        <button
+                          onClick={() => setQrFormat('descriptor')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            qrFormat === 'descriptor'
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
+                          }`}
+                        >
+                          Raw Descriptor
+                        </button>
+                      </div>
+                    )}
+                    <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center">
+                      <QRCodeSVG
+                        value={
+                          wallet.type === 'Multi Sig' && qrFormat === 'passport' && devices.length > 0
+                            ? generateMultisigConfigText(
+                                wallet.name,
+                                getQuorumM(wallet.quorum),
+                                getQuorumN(wallet.quorum, wallet.totalSigners),
+                                wallet.scriptType,
+                                devices.map(d => ({
+                                  fingerprint: d.fingerprint,
+                                  derivationPath: d.derivationPath,
+                                  xpub: d.xpub,
+                                }))
+                              )
+                            : wallet.descriptor
+                        }
+                        size={240}
+                        level="L"
+                      />
+                      <p className="text-center text-xs text-sanctuary-400 mt-2">
+                        {wallet.type === 'Multi Sig' && qrFormat === 'passport'
+                          ? 'Coldcard/Passport compatible format'
+                          : 'Scan to import into another device'}
+                      </p>
+                    </div>
+                    {wallet.type === 'Multi Sig' && qrFormat === 'passport' && devices.length === 0 && (
+                      <p className="text-center text-xs text-amber-500 mt-2">
+                        Note: No devices found. Using raw descriptor format instead.
+                      </p>
+                    )}
                   </div>
                )}
 

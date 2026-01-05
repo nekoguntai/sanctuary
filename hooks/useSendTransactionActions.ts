@@ -296,6 +296,20 @@ export function useSendTransactionActions({
         // Mark this device as signed
         setSignedDevices(prev => new Set([...prev, device.id]));
 
+        // Persist signature to draft if we're in draft mode
+        if (state.draftId) {
+          try {
+            await draftsApi.updateDraft(walletId, state.draftId, {
+              signedPsbtBase64: signedPsbt,
+              signedDeviceId: device.id,
+            });
+            log.info('Signature persisted to draft', { draftId: state.draftId, deviceId: device.id });
+          } catch (persistErr) {
+            log.warn('Failed to persist signature to draft', { error: persistErr });
+            // Don't fail the signing - the signature is still valid locally
+          }
+        }
+
         log.info('Device signing successful', {
           deviceId: device.id,
           hasRawTx: !!signResult.rawTx,
@@ -315,7 +329,7 @@ export function useSendTransactionActions({
       // Disconnect after signing
       hardwareWallet.disconnect();
     }
-  }, [txData, unsignedPsbt, hardwareWallet]);
+  }, [txData, unsignedPsbt, hardwareWallet, state.draftId, walletId]);
 
   // Broadcast signed transaction
   const broadcastTransaction = useCallback(async (
@@ -538,45 +552,76 @@ export function useSendTransactionActions({
   const uploadSignedPsbt = useCallback(async (file: File): Promise<void> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        const bytes = new Uint8Array(arrayBuffer);
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const bytes = new Uint8Array(arrayBuffer);
 
-        // Check if it's binary PSBT (starts with magic bytes 0x70736274 = "psbt")
-        // or base64 (starts with "cHNidP8" which is base64 for "psbt\xff")
-        let base64Psbt: string;
+          // Check if it's binary PSBT (starts with magic bytes 0x70736274 = "psbt")
+          // or base64 (starts with "cHNidP8" which is base64 for "psbt\xff")
+          let base64Psbt: string;
 
-        if (bytes[0] === 0x70 && bytes[1] === 0x73 && bytes[2] === 0x62 && bytes[3] === 0x74) {
-          // Binary PSBT - convert to base64
-          let binaryString = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binaryString += String.fromCharCode(bytes[i]);
+          if (bytes[0] === 0x70 && bytes[1] === 0x73 && bytes[2] === 0x62 && bytes[3] === 0x74) {
+            // Binary PSBT - convert to base64
+            let binaryString = '';
+            for (let i = 0; i < bytes.length; i++) {
+              binaryString += String.fromCharCode(bytes[i]);
+            }
+            base64Psbt = btoa(binaryString);
+            log.debug('Uploaded binary PSBT, converted to base64');
+          } else {
+            // Assume it's already base64 text
+            const textDecoder = new TextDecoder();
+            base64Psbt = textDecoder.decode(bytes).trim();
+            log.debug('Uploaded base64 PSBT');
           }
-          base64Psbt = btoa(binaryString);
-          log.debug('Uploaded binary PSBT, converted to base64');
-        } else {
-          // Assume it's already base64 text
-          const textDecoder = new TextDecoder();
-          base64Psbt = textDecoder.decode(bytes).trim();
-          log.debug('Uploaded base64 PSBT');
-        }
 
-        log.debug('Uploaded signed PSBT', { preview: base64Psbt.substring(0, 50) + '...' });
-        setUnsignedPsbt(base64Psbt); // Now contains signed PSBT
-        setSignedDevices(prev => new Set([...prev, 'psbt-signed']));
-        resolve();
+          log.debug('Uploaded signed PSBT', { preview: base64Psbt.substring(0, 50) + '...' });
+          setUnsignedPsbt(base64Psbt); // Now contains signed PSBT
+          setSignedDevices(prev => new Set([...prev, 'psbt-signed']));
+
+          // Persist signature to draft if we're in draft mode
+          if (state.draftId) {
+            try {
+              await draftsApi.updateDraft(walletId, state.draftId, {
+                signedPsbtBase64: base64Psbt,
+                signedDeviceId: 'psbt-signed',
+              });
+              log.info('Uploaded PSBT signature persisted to draft', { draftId: state.draftId });
+            } catch (persistErr) {
+              log.warn('Failed to persist uploaded PSBT to draft', { error: persistErr });
+            }
+          }
+
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsArrayBuffer(file);
     });
-  }, []);
+  }, [state.draftId, walletId]);
 
   // Process QR-scanned signed PSBT
-  const processQrSignedPsbt = useCallback((signedPsbt: string, deviceId: string) => {
+  const processQrSignedPsbt = useCallback(async (signedPsbt: string, deviceId: string) => {
     log.info('Processing QR-signed PSBT', { deviceId, psbtLength: signedPsbt.length });
     setUnsignedPsbt(signedPsbt);
     setSignedDevices(prev => new Set([...prev, deviceId]));
-  }, []);
+
+    // Persist signature to draft if we're in draft mode
+    if (state.draftId) {
+      try {
+        await draftsApi.updateDraft(walletId, state.draftId, {
+          signedPsbtBase64: signedPsbt,
+          signedDeviceId: deviceId,
+        });
+        log.info('QR signature persisted to draft', { draftId: state.draftId, deviceId });
+      } catch (persistErr) {
+        log.warn('Failed to persist QR signature to draft', { error: persistErr });
+      }
+    }
+  }, [state.draftId, walletId]);
 
   // Mark device as signed
   const markDeviceSigned = useCallback((deviceId: string) => {

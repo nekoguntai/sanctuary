@@ -152,6 +152,7 @@ services:
       context: .
       dockerfile: server/Dockerfile
     image: sanctuary-backend:local
+    pull_policy: build  # Always build locally, never pull
     restart: unless-stopped
     depends_on:
       postgres:
@@ -247,6 +248,7 @@ services:
   # ============================================
   migrate:
     image: sanctuary-backend:local
+    pull_policy: never  # Use locally built image from backend service
     depends_on:
       backend:
         condition: service_started
@@ -333,6 +335,7 @@ services:
       context: .
       dockerfile: gateway/Dockerfile
     image: sanctuary-gateway:local
+    pull_policy: build  # Always build locally, never pull
     restart: unless-stopped
     depends_on:
       backend:
@@ -412,6 +415,7 @@ services:
       context: ./ai-proxy
       dockerfile: Dockerfile
     image: sanctuary-ai:local
+    pull_policy: build  # Always build locally, never pull
     restart: unless-stopped
     depends_on:
       backend:

@@ -587,8 +587,11 @@ export const DeviceDetail: React.FC = () => {
   const processImportedAccounts = (accounts: ParsedDeviceAccount[], fingerprint: string) => {
     if (!device) return;
 
-    // Check fingerprint matches
-    if (fingerprint && device.fingerprint !== fingerprint.toLowerCase() && device.fingerprint !== fingerprint.toUpperCase()) {
+    // SECURITY: Fingerprint validation prevents adding accounts from wrong device.
+    // Case-insensitive comparison because different hardware wallets export fingerprints
+    // in different formats (some uppercase, some lowercase). This is a security check
+    // to ensure imported data belongs to this device.
+    if (fingerprint && device.fingerprint.toLowerCase() !== fingerprint.toLowerCase()) {
       setAddAccountError(`Fingerprint mismatch: imported ${fingerprint} but device has ${device.fingerprint}`);
       return;
     }
@@ -658,6 +661,8 @@ export const DeviceDetail: React.FC = () => {
           });
         } else if (result.xpub) {
           // Single account - convert to account format
+          // BIP-48 defines script type indices in the derivation path: m/48'/coin'/account'/script'
+          // Script type index: /1' = nested_segwit (P2SH-P2WSH), /2' = native_segwit (P2WSH)
           const singleAccount: ParsedDeviceAccount = {
             purpose: result.derivationPath?.includes("48'") ? 'multisig' : 'single_sig',
             scriptType: result.derivationPath?.includes("/2'") ? 'native_segwit' :

@@ -1699,7 +1699,7 @@ export const ConnectDevice: React.FC = () => {
                         <ChevronDown className={`w-3 h-3 transition-transform ${showQrDetails ? 'rotate-180' : ''}`} />
                       </button>
                       {showQrDetails && (
-                        <div className="mt-2 p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700 text-xs">
+                        <div className="mt-2 p-3 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800 border border-sanctuary-200 dark:border-sanctuary-700 text-xs">
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
                               <span className="text-sanctuary-600 dark:text-sanctuary-400">Extended Public Key</span>
@@ -1781,7 +1781,7 @@ export const ConnectDevice: React.FC = () => {
               </div>
 
               {/* Existing Device Info */}
-              <div className="p-3 rounded-xl bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700 mb-4">
+              <div className="p-3 rounded-xl bg-sanctuary-100 dark:bg-sanctuary-800 border border-sanctuary-200 dark:border-sanctuary-700 mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   {getDeviceIcon(conflictData.existingDevice.type, "w-5 h-5")}
                   <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">

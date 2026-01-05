@@ -401,13 +401,48 @@ export class TrezorAdapter implements DeviceAdapter {
       const isTestnet = (request.accountPath || request.inputPaths?.[0] || '').includes("/1'/");
       const coin = isTestnet ? 'Testnet' : 'Bitcoin';
 
+      // Get connected device fingerprint for matching bip32Derivation entries
+      const deviceFingerprint = this.connection.fingerprint;
+      const deviceFingerprintBuffer = deviceFingerprint
+        ? Buffer.from(deviceFingerprint, 'hex')
+        : null;
+
       // Build Trezor inputs
       const inputs = psbt.data.inputs.map((input, idx) => {
         let addressN: number[] = [];
+        let derivationPath: string | undefined;
+
         if (input.bip32Derivation && input.bip32Derivation.length > 0) {
-          addressN = pathToAddressN(input.bip32Derivation[0].path);
+          // For multisig, find the bip32Derivation entry matching this device's fingerprint
+          let matchingDerivation = input.bip32Derivation[0]; // Default to first
+
+          if (deviceFingerprintBuffer && input.bip32Derivation.length > 1) {
+            const matching = input.bip32Derivation.find(d =>
+              d.masterFingerprint.equals(deviceFingerprintBuffer)
+            );
+            if (matching) {
+              matchingDerivation = matching;
+              log.info('Found matching bip32Derivation for device', {
+                inputIdx: idx,
+                fingerprint: deviceFingerprint,
+                path: matching.path,
+              });
+            } else {
+              log.warn('No matching bip32Derivation found for device fingerprint', {
+                inputIdx: idx,
+                deviceFingerprint,
+                availableFingerprints: input.bip32Derivation.map(d =>
+                  d.masterFingerprint.toString('hex')
+                ),
+              });
+            }
+          }
+
+          derivationPath = matchingDerivation.path;
+          addressN = pathToAddressN(derivationPath);
         } else if (request.inputPaths && request.inputPaths[idx]) {
-          addressN = pathToAddressN(request.inputPaths[idx]);
+          derivationPath = request.inputPaths[idx];
+          addressN = pathToAddressN(derivationPath);
         }
 
         const txInput = psbt.txInputs[idx];
@@ -435,12 +470,24 @@ export class TrezorAdapter implements DeviceAdapter {
           (psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0);
 
         if (isChange && psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 0) {
+          // For multisig, find the bip32Derivation entry matching this device's fingerprint
+          let matchingDerivation = psbtOutput.bip32Derivation[0]; // Default to first
+
+          if (deviceFingerprintBuffer && psbtOutput.bip32Derivation.length > 1) {
+            const matching = psbtOutput.bip32Derivation.find(d =>
+              d.masterFingerprint.equals(deviceFingerprintBuffer)
+            );
+            if (matching) {
+              matchingDerivation = matching;
+            }
+          }
+
           const outputScriptType = scriptType === 'SPENDADDRESS' ? 'PAYTOADDRESS' as const :
             scriptType === 'SPENDP2SHWITNESS' ? 'PAYTOP2SHWITNESS' as const :
             scriptType === 'SPENDTAPROOT' ? 'PAYTOTAPROOT' as const : 'PAYTOWITNESS' as const;
 
           return {
-            address_n: pathToAddressN(psbtOutput.bip32Derivation[0].path),
+            address_n: pathToAddressN(matchingDerivation.path),
             amount: validateSatoshiAmount(output.value, `Output ${idx}`),
             script_type: outputScriptType,
           };
@@ -462,12 +509,28 @@ export class TrezorAdapter implements DeviceAdapter {
       const refTxs = await fetchRefTxs(psbt);
 
       // Check if we need to unlock non-standard paths (BIP-48 multisig)
+      // Get the derivation path from the first input (after fingerprint matching)
       let unlockPathParam: { address_n: number[]; mac?: string } | undefined;
-      const accountPath = request.accountPath || request.inputPaths?.[0];
+      let accountPath = request.accountPath || request.inputPaths?.[0];
+
+      // Try to get account path from first input's bip32Derivation (more reliable for multisig)
+      const firstInput = psbt.data.inputs[0];
+      if (firstInput?.bip32Derivation && firstInput.bip32Derivation.length > 0) {
+        let matchingDerivation = firstInput.bip32Derivation[0];
+        if (deviceFingerprintBuffer && firstInput.bip32Derivation.length > 1) {
+          const matching = firstInput.bip32Derivation.find(d =>
+            d.masterFingerprint.equals(deviceFingerprintBuffer)
+          );
+          if (matching) {
+            matchingDerivation = matching;
+          }
+        }
+        accountPath = matchingDerivation.path;
+      }
 
       if (accountPath && isNonStandardPath(accountPath)) {
         const pathToUnlock = getAccountPathPrefix(accountPath);
-        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock });
+        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock, accountPath });
 
         try {
           const unlockResult = await TrezorConnect.unlockPath({

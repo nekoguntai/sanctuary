@@ -60,14 +60,14 @@ jobs:
           fi
 
   # ============================================
-  # Verify Release is a Pre-release (Release Candidate)
+  # Ensure Release is a Pre-release (Release Candidate)
   # ============================================
   verify-prerelease:
     name: Verify Pre-release
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
-      - name: Check that release is a pre-release
+      - name: Ensure release is a pre-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -75,16 +75,21 @@ jobs:
           VERSION="${{ github.event.release.tag_name }}"
 
           if [ "$IS_PRERELEASE" != "true" ]; then
-            echo "::error::Release $VERSION was published as a full release, not a pre-release."
-            echo "::error::Please create releases as pre-releases (release candidates) first."
-            echo "::error::After validation passes, the workflow will automatically convert it to a full release."
+            echo "::warning::Release $VERSION was published as a full release. Converting to pre-release..."
             echo ""
-            echo "To fix: Delete this release and recreate it with 'Set as a pre-release' checked."
-            exit 1
-          fi
+            echo "Releases must pass validation before becoming full releases."
+            echo "Converting to pre-release now..."
 
-          echo "✓ Release $VERSION is a pre-release (release candidate)"
-          echo "  It will be converted to a full release after validation passes."
+            # Convert to pre-release
+            gh release edit "$VERSION" --prerelease
+
+            echo ""
+            echo "✓ Converted $VERSION to pre-release (release candidate)"
+            echo "  It will be converted back to a full release after validation passes."
+          else
+            echo "✓ Release $VERSION is already a pre-release (release candidate)"
+            echo "  It will be converted to a full release after validation passes."
+          fi
 
   # ============================================
   # Wait for Install Tests to Pass

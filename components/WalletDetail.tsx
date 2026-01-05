@@ -2075,7 +2075,7 @@ export const WalletDetail: React.FC = () => {
           <div className="surface-elevated rounded-2xl p-6 shadow-sm border border-sanctuary-200 dark:border-sanctuary-800 animate-fade-in">
             <DraftList
               walletId={id!}
-              walletType={wallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
+              walletType={wallet.type === WalletType.MULTI_SIG ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG}
               quorum={wallet.quorum ? { m: getQuorumM(wallet.quorum), n: getQuorumN(wallet.quorum, wallet.totalSigners) } : undefined}
               canEdit={wallet.userRole !== 'viewer'}
               walletAddresses={addresses}

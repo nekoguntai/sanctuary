@@ -122,6 +122,93 @@ const pathToAddressN = (path: string): number[] => {
 };
 
 /**
+ * Trezor multisig pubkey structure
+ */
+interface TrezorMultisigPubkey {
+  node: string;     // Hex-encoded pubkey
+  address_n: number[]; // Child derivation path (change, index)
+}
+
+/**
+ * Trezor multisig structure for inputs/outputs
+ */
+interface TrezorMultisig {
+  pubkeys: TrezorMultisigPubkey[];
+  signatures: string[];  // Empty strings for unsigned, hex for signed
+  m: number;            // Required signatures (quorum)
+}
+
+/**
+ * Build Trezor multisig structure from PSBT input data.
+ * This is required for Trezor to properly validate and sign multisig transactions.
+ * @internal Exported for testing
+ */
+export function buildTrezorMultisig(
+  witnessScript: Buffer | undefined,
+  bip32Derivations: Array<{ pubkey: Buffer; path: string; masterFingerprint: Buffer }>
+): TrezorMultisig | undefined {
+  if (!witnessScript || witnessScript.length === 0) {
+    return undefined;
+  }
+
+  try {
+    // Parse m-of-n from witnessScript
+    // Format: OP_M <pubkey1> <pubkey2> ... OP_N OP_CHECKMULTISIG
+    // OP_1 through OP_16 are 0x51 through 0x60
+    const firstByte = witnessScript[0];
+    const lastBeforeOpMulti = witnessScript[witnessScript.length - 2];
+
+    const m = firstByte - 0x50;
+    const n = lastBeforeOpMulti - 0x50;
+
+    // Validate m and n are reasonable
+    if (m < 1 || m > 16 || n < 1 || n > 16 || m > n) {
+      return undefined;
+    }
+
+    // Sort derivations by pubkey to match sortedmulti order
+    const sortedDerivations = [...bip32Derivations].sort((a, b) =>
+      Buffer.compare(a.pubkey, b.pubkey)
+    );
+
+    // Build pubkeys array
+    const pubkeys: TrezorMultisigPubkey[] = sortedDerivations.map(deriv => {
+      // Extract child path (last 2 components: change/index)
+      const pathParts = deriv.path.replace(/^m\//, '').split('/');
+      const childPath = pathParts.slice(-2).map(p => {
+        const hardened = p.endsWith("'") || p.endsWith('h');
+        const index = parseInt(p.replace(/['h]/g, ''), 10);
+        return hardened ? index + 0x80000000 : index;
+      });
+
+      return {
+        node: deriv.pubkey.toString('hex'),
+        address_n: childPath,
+      };
+    });
+
+    // Initialize empty signatures array
+    const signatures = sortedDerivations.map(() => '');
+
+    return { pubkeys, signatures, m };
+  } catch (error) {
+    log.warn('Failed to parse multisig structure from witnessScript', { error });
+    return undefined;
+  }
+}
+
+/**
+ * Check if PSBT input is a multisig input
+ */
+function isMultisigInput(input: any): boolean {
+  return !!(
+    input.witnessScript ||
+    input.redeemScript ||
+    (input.bip32Derivation && input.bip32Derivation.length > 1)
+  );
+}
+
+/**
  * Fetch reference transactions needed for Trezor signing
  */
 const fetchRefTxs = async (psbt: bitcoin.Psbt): Promise<any[]> => {
@@ -469,6 +556,19 @@ export class TrezorAdapter implements DeviceAdapter {
 
         if (input.witnessUtxo) {
           trezorInput.amount = validateSatoshiAmount(input.witnessUtxo.value, `Input ${idx}`);
+        }
+
+        // Add multisig structure for multisig inputs (required for Trezor to validate multisig paths)
+        if (isMultisigInput(input) && input.bip32Derivation) {
+          const multisig = buildTrezorMultisig(input.witnessScript, input.bip32Derivation);
+          if (multisig) {
+            trezorInput.multisig = multisig;
+            log.info('Built multisig structure for input', {
+              inputIdx: idx,
+              m: multisig.m,
+              pubkeyCount: multisig.pubkeys.length,
+            });
+          }
         }
 
         return trezorInput;

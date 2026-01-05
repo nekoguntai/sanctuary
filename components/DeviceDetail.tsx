@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo } from '../types';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount } from '../types';
 import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup } from '../src/api/devices';
 import * as authApi from '../src/api/auth';
 import * as adminApi from '../src/api/admin';
@@ -14,6 +14,69 @@ import { PendingTransfersPanel } from './PendingTransfersPanel';
 const log = createLogger('DeviceDetail');
 
 type TabType = 'details' | 'access';
+
+/**
+ * Account type configuration - extensible for future BIP standards
+ */
+interface AccountTypeInfo {
+  title: string;
+  description: string;
+  addressPrefix: string;
+  recommended?: boolean;
+}
+
+/**
+ * Configuration for all supported account types
+ * Key format: `${purpose}:${scriptType}`
+ */
+const ACCOUNT_TYPE_CONFIG: Record<string, AccountTypeInfo> = {
+  // Single-sig accounts
+  'single_sig:native_segwit': {
+    title: 'Native SegWit (BIP-84)',
+    description: 'Most common modern address type. Lower fees than legacy.',
+    addressPrefix: 'bc1q...',
+    recommended: true,
+  },
+  'single_sig:taproot': {
+    title: 'Taproot (BIP-86)',
+    description: 'Latest address type with enhanced privacy and smart contract capabilities.',
+    addressPrefix: 'bc1p...',
+  },
+  'single_sig:nested_segwit': {
+    title: 'Nested SegWit (BIP-49)',
+    description: 'SegWit wrapped in legacy format for compatibility with older software.',
+    addressPrefix: '3...',
+  },
+  'single_sig:legacy': {
+    title: 'Legacy (BIP-44)',
+    description: 'Original Bitcoin address format. Higher fees but maximum compatibility.',
+    addressPrefix: '1...',
+  },
+  // Multisig accounts
+  'multisig:native_segwit': {
+    title: 'Multisig Native SegWit (BIP-48)',
+    description: 'For multi-signature wallets. Most efficient fee-wise.',
+    addressPrefix: 'bc1q...',
+    recommended: true,
+  },
+  'multisig:nested_segwit': {
+    title: 'Multisig Nested SegWit (BIP-48)',
+    description: 'For multi-signature wallets with better legacy software compatibility.',
+    addressPrefix: '3...',
+  },
+};
+
+/**
+ * Get human-readable info for an account type
+ */
+function getAccountTypeInfo(account: DeviceAccount): AccountTypeInfo {
+  const key = `${account.purpose}:${account.scriptType}`;
+  return ACCOUNT_TYPE_CONFIG[key] || {
+    title: 'Unknown Format',
+    description: account.derivationPath,
+    addressPrefix: '?',
+  };
+}
 
 // Wallet info for display
 interface WalletInfo {
@@ -327,19 +390,87 @@ export const DeviceDetail: React.FC = () => {
                          </div>
                     </div>
 
-                    <div className="mt-6 pt-6 border-t border-sanctuary-100 dark:border-sanctuary-800 grid grid-cols-2 gap-6">
-                        <div>
-                             <p className="text-xs text-sanctuary-500 uppercase mb-1">Extended Public Key (XPUB)</p>
-                             <div className="surface-muted p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
-                                 <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">{device.xpub || "N/A"}</code>
-                             </div>
+                    {/* Device Accounts Section */}
+                    <div className="mt-6 pt-6 border-t border-sanctuary-100 dark:border-sanctuary-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs text-sanctuary-500 uppercase">Registered Accounts</p>
+                        <span className="text-xs text-sanctuary-400">
+                          {device.accounts?.length || 1} {(device.accounts?.length || 1) === 1 ? 'account' : 'accounts'}
+                        </span>
+                      </div>
+
+                      {device.accounts && device.accounts.length > 0 ? (
+                        <div className="space-y-3">
+                          {device.accounts.map((account) => {
+                            const info = getAccountTypeInfo(account);
+                            const isMultisig = account.purpose === 'multisig';
+
+                            return (
+                              <div
+                                key={account.id}
+                                className="surface-muted p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800"
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100 text-sm">
+                                      {info.title}
+                                    </span>
+                                    {info.recommended && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">
+                                        Recommended
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                                    isMultisig
+                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  }`}>
+                                    {isMultisig ? 'Multisig' : 'Single-sig'}
+                                  </span>
+                                </div>
+
+                                <p className="text-xs text-sanctuary-500 mb-3">
+                                  {info.description} <span className="text-sanctuary-400">Addresses: {info.addressPrefix}</span>
+                                </p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                  <div>
+                                    <p className="text-[10px] text-sanctuary-400 uppercase mb-1">Derivation Path</p>
+                                    <code className="text-xs text-sanctuary-600 dark:text-sanctuary-300 font-mono">
+                                      {account.derivationPath}
+                                    </code>
+                                  </div>
+                                  <div className="md:col-span-2">
+                                    <p className="text-[10px] text-sanctuary-400 uppercase mb-1">Extended Public Key</p>
+                                    <code className="text-[10px] text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono block">
+                                      {account.xpub}
+                                    </code>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                         <div>
-                             <p className="text-xs text-sanctuary-500 uppercase mb-1">Derivation Path</p>
-                             <div className="surface-muted p-3 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
-                                 <code className="text-sm text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono">{device.derivationPath || "m/84'/0'/0'"}</code>
-                             </div>
+                      ) : (
+                        /* Legacy fallback for devices without accounts array */
+                        <div className="surface-muted p-4 rounded-lg border border-sanctuary-200 dark:border-sanctuary-800">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                              <p className="text-[10px] text-sanctuary-400 uppercase mb-1">Derivation Path</p>
+                              <code className="text-xs text-sanctuary-600 dark:text-sanctuary-300 font-mono">
+                                {device.derivationPath || "m/84'/0'/0'"}
+                              </code>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-[10px] text-sanctuary-400 uppercase mb-1">Extended Public Key</p>
+                              <code className="text-[10px] text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono block">
+                                {device.xpub || 'N/A'}
+                              </code>
+                            </div>
+                          </div>
                         </div>
+                      )}
                     </div>
                 </div>
             </div>

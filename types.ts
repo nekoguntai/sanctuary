@@ -457,6 +457,17 @@ export interface ElectrumPoolStats {
 // DEVICE TYPES
 // ============================================================================
 
+/**
+ * Device account - represents one xpub at a specific derivation path
+ */
+export interface DeviceAccount {
+  id: string;
+  purpose: 'single_sig' | 'multisig';
+  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+  derivationPath: string;
+  xpub: string;
+}
+
 export interface Device {
   id: string;
   type: HardwareDevice | string;
@@ -468,6 +479,7 @@ export interface Device {
   createdAt?: string;
   updatedAt?: string;
   model?: HardwareDeviceModel;
+  accounts?: DeviceAccount[]; // All accounts (multi-account support)
   walletCount?: number; // Number of associated wallets (list view)
   wallets?: Array<{    // Full wallet details (detail view only)
     wallet: {

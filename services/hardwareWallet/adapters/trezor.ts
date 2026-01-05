@@ -53,22 +53,28 @@ interface TrezorConnection {
  * @internal Exported for testing
  */
 export const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWITNESS' | 'SPENDWITNESS' | 'SPENDTAPROOT' => {
-  if (path.startsWith("m/44'") || path.startsWith("44'")) {
+  // Check for both apostrophe (') and h notation for hardened paths
+  if (path.startsWith("m/44'") || path.startsWith("44'") ||
+      path.startsWith("m/44h") || path.startsWith("44h")) {
     return 'SPENDADDRESS';
   }
-  if (path.startsWith("m/49'") || path.startsWith("49'")) {
+  if (path.startsWith("m/49'") || path.startsWith("49'") ||
+      path.startsWith("m/49h") || path.startsWith("49h")) {
     return 'SPENDP2SHWITNESS';
   }
-  if (path.startsWith("m/84'") || path.startsWith("84'")) {
+  if (path.startsWith("m/84'") || path.startsWith("84'") ||
+      path.startsWith("m/84h") || path.startsWith("84h")) {
     return 'SPENDWITNESS';
   }
-  if (path.startsWith("m/86'") || path.startsWith("86'")) {
+  if (path.startsWith("m/86'") || path.startsWith("86'") ||
+      path.startsWith("m/86h") || path.startsWith("86h")) {
     return 'SPENDTAPROOT';
   }
   // BIP-48 multisig paths
-  if (path.startsWith("m/48'") || path.startsWith("48'")) {
-    // Check script type suffix: /1' = P2SH-P2WSH, /2' = P2WSH
-    if (path.includes("/2'")) {
+  if (path.startsWith("m/48'") || path.startsWith("48'") ||
+      path.startsWith("m/48h") || path.startsWith("48h")) {
+    // Check script type suffix: /1' or /1h = P2SH-P2WSH, /2' or /2h = P2WSH
+    if (path.includes("/2'") || path.includes("/2h")) {
       return 'SPENDWITNESS'; // Native SegWit multisig (P2WSH)
     }
     return 'SPENDP2SHWITNESS'; // Nested SegWit multisig (P2SH-P2WSH)
@@ -84,7 +90,9 @@ export const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWI
  * @internal Exported for testing
  */
 export const isNonStandardPath = (path: string): boolean => {
-  return path.startsWith("m/48'") || path.startsWith("48'");
+  // Check for both apostrophe notation (') and h notation
+  return path.startsWith("m/48'") || path.startsWith("48'") ||
+         path.startsWith("m/48h") || path.startsWith("48h");
 };
 
 /**
@@ -532,8 +540,10 @@ export class TrezorAdapter implements DeviceAdapter {
       }
 
       if (accountPath && isNonStandardPath(accountPath)) {
-        const pathToUnlock = getAccountPathPrefix(accountPath);
-        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock, accountPath });
+        // Normalize to apostrophe notation (TrezorConnect expects this)
+        const normalizedAccountPath = accountPath.replace(/h/g, "'");
+        const pathToUnlock = getAccountPathPrefix(normalizedAccountPath);
+        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock, accountPath, normalizedAccountPath });
 
         try {
           const unlockResult = await TrezorConnect.unlockPath({

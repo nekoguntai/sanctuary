@@ -9,7 +9,7 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.7.14@sha256:76e3758f63afcf01e8aa8fb2b2ceddf4994e79fe92d7ab7d15b17c3e4d906acf
+    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.7.14@sha256:30c6972336d616a53504e116148a379632bf3dc668fb24cf898262047046de51
     restart: on-failure
     stop_grace_period: 1m
     depends_on:

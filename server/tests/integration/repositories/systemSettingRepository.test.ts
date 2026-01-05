@@ -145,15 +145,17 @@ describeIfDatabase('SystemSettingRepository Integration Tests', () => {
   describe('getAll', () => {
     it('should get all settings', async () => {
       await withTestTransaction(async (tx) => {
+        const prefix = `test_${Date.now()}_`;
         await tx.systemSetting.createMany({
           data: [
-            { key: 'setting.a', value: 'value-a' },
-            { key: 'setting.b', value: 'value-b' },
-            { key: 'setting.c', value: 'value-c' },
+            { key: `${prefix}setting.a`, value: 'value-a' },
+            { key: `${prefix}setting.b`, value: 'value-b' },
+            { key: `${prefix}setting.c`, value: 'value-c' },
           ],
         });
 
         const settings = await tx.systemSetting.findMany({
+          where: { key: { startsWith: prefix } },
           orderBy: { key: 'asc' },
         });
 
@@ -163,19 +165,25 @@ describeIfDatabase('SystemSettingRepository Integration Tests', () => {
 
     it('should order settings by key', async () => {
       await withTestTransaction(async (tx) => {
+        const prefix = `order_${Date.now()}_`;
         await tx.systemSetting.createMany({
           data: [
-            { key: 'z.setting', value: 'z' },
-            { key: 'a.setting', value: 'a' },
-            { key: 'm.setting', value: 'm' },
+            { key: `${prefix}z.setting`, value: 'z' },
+            { key: `${prefix}a.setting`, value: 'a' },
+            { key: `${prefix}m.setting`, value: 'm' },
           ],
         });
 
         const settings = await tx.systemSetting.findMany({
+          where: { key: { startsWith: prefix } },
           orderBy: { key: 'asc' },
         });
 
-        expect(settings.map((s) => s.key)).toEqual(['a.setting', 'm.setting', 'z.setting']);
+        expect(settings.map((s) => s.key)).toEqual([
+          `${prefix}a.setting`,
+          `${prefix}m.setting`,
+          `${prefix}z.setting`,
+        ]);
       });
     });
   });
@@ -278,23 +286,26 @@ describeIfDatabase('SystemSettingRepository Integration Tests', () => {
   describe('deleteByPrefix', () => {
     it('should delete settings by prefix', async () => {
       await withTestTransaction(async (tx) => {
+        const testPrefix = `deltest_${Date.now()}_`;
         await tx.systemSetting.createMany({
           data: [
-            { key: 'temp.setting1', value: 'v1' },
-            { key: 'temp.setting2', value: 'v2' },
-            { key: 'permanent.setting', value: 'keep' },
+            { key: `${testPrefix}temp.setting1`, value: 'v1' },
+            { key: `${testPrefix}temp.setting2`, value: 'v2' },
+            { key: `${testPrefix}permanent.setting`, value: 'keep' },
           ],
         });
 
         const result = await tx.systemSetting.deleteMany({
           where: {
-            key: { startsWith: 'temp.' },
+            key: { startsWith: `${testPrefix}temp.` },
           },
         });
 
         expect(result.count).toBe(2);
 
-        const remaining = await tx.systemSetting.count();
+        const remaining = await tx.systemSetting.count({
+          where: { key: { startsWith: testPrefix } },
+        });
         expect(remaining).toBe(1);
       });
     });

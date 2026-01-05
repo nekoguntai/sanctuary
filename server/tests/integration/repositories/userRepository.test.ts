@@ -356,12 +356,16 @@ describeIfDatabase('UserRepository Integration Tests', () => {
   describe('query patterns', () => {
     it('should find admin users', async () => {
       await withTestTransaction(async (tx) => {
-        await createTestUser(tx, { username: 'admin1', isAdmin: true });
-        await createTestUser(tx, { username: 'regular1', isAdmin: false });
-        await createTestUser(tx, { username: 'admin2', isAdmin: true });
+        const prefix = `admin_test_${Date.now()}_`;
+        await createTestUser(tx, { username: `${prefix}admin1`, isAdmin: true });
+        await createTestUser(tx, { username: `${prefix}regular1`, isAdmin: false });
+        await createTestUser(tx, { username: `${prefix}admin2`, isAdmin: true });
 
         const admins = await tx.user.findMany({
-          where: { isAdmin: true },
+          where: {
+            isAdmin: true,
+            username: { startsWith: prefix },
+          },
         });
 
         expect(admins.length).toBe(2);
@@ -371,25 +375,32 @@ describeIfDatabase('UserRepository Integration Tests', () => {
 
     it('should find users with 2FA enabled', async () => {
       await withTestTransaction(async (tx) => {
-        await createTestUser(tx, { username: '2fa-on', twoFactorEnabled: true });
-        await createTestUser(tx, { username: '2fa-off', twoFactorEnabled: false });
+        const prefix = `2fa_test_${Date.now()}_`;
+        await createTestUser(tx, { username: `${prefix}2fa-on`, twoFactorEnabled: true });
+        await createTestUser(tx, { username: `${prefix}2fa-off`, twoFactorEnabled: false });
 
         const with2FA = await tx.user.findMany({
-          where: { twoFactorEnabled: true },
+          where: {
+            twoFactorEnabled: true,
+            username: { startsWith: prefix },
+          },
         });
 
         expect(with2FA.length).toBe(1);
-        expect(with2FA[0].username).toBe('2fa-on');
+        expect(with2FA[0].username).toBe(`${prefix}2fa-on`);
       });
     });
 
     it('should count users', async () => {
       await withTestTransaction(async (tx) => {
-        await createTestUser(tx, { username: 'count1' });
-        await createTestUser(tx, { username: 'count2' });
-        await createTestUser(tx, { username: 'count3' });
+        const prefix = `count_test_${Date.now()}_`;
+        await createTestUser(tx, { username: `${prefix}count1` });
+        await createTestUser(tx, { username: `${prefix}count2` });
+        await createTestUser(tx, { username: `${prefix}count3` });
 
-        const count = await tx.user.count();
+        const count = await tx.user.count({
+          where: { username: { startsWith: prefix } },
+        });
 
         expect(count).toBe(3);
       });

@@ -347,11 +347,13 @@ describeIfDatabase('SessionRepository Integration Tests', () => {
 
     it('should clean up expired revocations', async () => {
       await withTestTransaction(async (tx) => {
+        const testPrefix = `test_${Date.now()}_`;
+
         // Create expired revocations
         for (let i = 0; i < 5; i++) {
           await tx.revokedToken.create({
             data: {
-              jti: crypto.randomUUID(),
+              jti: `${testPrefix}expired_${i}`,
               expiresAt: new Date(Date.now() - 1000), // Expired
             },
           });
@@ -360,20 +362,23 @@ describeIfDatabase('SessionRepository Integration Tests', () => {
         // Create valid revocation
         await tx.revokedToken.create({
           data: {
-            jti: crypto.randomUUID(),
+            jti: `${testPrefix}valid`,
             expiresAt: new Date(Date.now() + 60 * 60 * 1000),
           },
         });
 
         const result = await tx.revokedToken.deleteMany({
           where: {
+            jti: { startsWith: testPrefix },
             expiresAt: { lt: new Date() },
           },
         });
 
         expect(result.count).toBe(5);
 
-        const remaining = await tx.revokedToken.count();
+        const remaining = await tx.revokedToken.count({
+          where: { jti: { startsWith: testPrefix } },
+        });
         expect(remaining).toBe(1);
       });
     });

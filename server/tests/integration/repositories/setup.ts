@@ -22,6 +22,7 @@ let isSetup = false;
 let txCounter = 0;
 let deviceCounter = 0;
 let utxoCounter = 0;
+let addressCounter = 0;
 
 // ========================================
 // DATABASE CONNECTION
@@ -321,12 +322,13 @@ export async function createTestAddress(
   walletId: string,
   options: CreateAddressOptions = {}
 ) {
+  const counter = ++addressCounter;
   return tx.address.create({
     data: {
       walletId,
-      address: options.address || `tb1q${Date.now().toString(16).padEnd(38, '0')}`,
-      derivationPath: options.derivationPath || `m/84'/1'/0'/0/${options.index ?? 0}`,
-      index: options.index ?? 0,
+      address: options.address || `tb1q${Date.now().toString(16)}${counter.toString(16).padStart(6, '0')}`.padEnd(42, '0'),
+      derivationPath: options.derivationPath || `m/84'/1'/0'/0/${options.index ?? counter}`,
+      index: options.index ?? counter,
       used: options.used ?? false,
     },
   });
@@ -403,7 +405,7 @@ export async function createTestUtxo(
       amount: options.amount ?? BigInt(100000),
       scriptPubKey: options.scriptPubKey || '0014751e76e8199196d454941c45d1b3a323f1433bd6',
       confirmations: options.confirmations ?? 6,
-      blockHeight: options.blockHeight ?? 100000,
+      blockHeight: 'blockHeight' in options ? options.blockHeight : 100000,
       spent: options.spent ?? false,
       spentTxid: options.spentTxid,
       frozen: options.frozen ?? false,

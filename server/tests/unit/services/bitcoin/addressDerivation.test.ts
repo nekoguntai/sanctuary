@@ -13,6 +13,7 @@ import {
   validateXpub,
   deriveAddresses,
   deriveAddressesFromDescriptor,
+  convertXpubToFormat,
 } from '../../../../src/services/bitcoin/addressDerivation';
 import { testXpubs, testnetAddresses, mainnetAddresses } from '../../../fixtures/bitcoin';
 
@@ -512,6 +513,99 @@ describe('Address Derivation Service', () => {
       const result2 = deriveAddress(testTpub, 5, { network: 'testnet' });
 
       expect(result1.publicKey.equals(result2.publicKey)).toBe(true);
+    });
+  });
+
+  describe('convertXpubToFormat', () => {
+    // Known Zpub from test data - BIP84 mainnet P2WSH multisig format
+    const testZpub = 'Zpub74omgM7ehB1aZZsx274C1CrbXjE8MSzKzijgwh4Wvhupc5UaLioFcYRi5pEtfdrJa5kSumat5xbiMWrNZuuKLqN22H72P6DrAqNQLE4dv1m';
+    // Known xpub from fixtures
+    const testXpub = testXpubs.mainnet.bip44;
+    const testTpub = testXpubs.testnet.bip84;
+
+    describe('Zpub to xpub conversion', () => {
+      it('should convert Zpub to xpub format', () => {
+        const result = convertXpubToFormat(testZpub, 'xpub');
+
+        expect(result).toMatch(/^xpub/);
+        expect(result).not.toBe(testZpub);
+        // The converted xpub should be a valid xpub (starts with xpub, correct length)
+        expect(result.length).toBeGreaterThan(100);
+      });
+
+      it('should preserve key data during Zpub to xpub conversion', () => {
+        const converted = convertXpubToFormat(testZpub, 'xpub');
+
+        // Derive an address from both and compare - they should produce the same derived keys
+        // (The address format will differ but the underlying key should be the same)
+        const zpubAddr = deriveAddress(testZpub, 0, { network: 'mainnet' });
+        const xpubAddr = deriveAddress(converted, 0, { network: 'mainnet' });
+
+        // Public keys should be identical since they represent the same key
+        expect(zpubAddr.publicKey.equals(xpubAddr.publicKey)).toBe(true);
+      });
+    });
+
+    describe('Identity conversions', () => {
+      it('should return xpub unchanged when converting xpub to xpub', () => {
+        const result = convertXpubToFormat(testXpub, 'xpub');
+
+        expect(result).toBe(testXpub);
+      });
+
+      it('should return tpub unchanged when converting tpub to tpub', () => {
+        const result = convertXpubToFormat(testTpub, 'tpub');
+
+        expect(result).toBe(testTpub);
+      });
+    });
+
+    describe('xpub to Zpub conversion', () => {
+      it('should convert xpub to Zpub format', () => {
+        const result = convertXpubToFormat(testXpub, 'Zpub');
+
+        expect(result).toMatch(/^Zpub/);
+        expect(result).not.toBe(testXpub);
+      });
+
+      it('should round-trip xpub -> Zpub -> xpub', () => {
+        const zpub = convertXpubToFormat(testXpub, 'Zpub');
+        const backToXpub = convertXpubToFormat(zpub, 'xpub');
+
+        expect(backToXpub).toBe(testXpub);
+      });
+    });
+
+    describe('Testnet conversions', () => {
+      it('should convert tpub to Vpub format', () => {
+        const result = convertXpubToFormat(testTpub, 'Vpub');
+
+        expect(result).toMatch(/^Vpub/);
+        expect(result).not.toBe(testTpub);
+      });
+
+      it('should round-trip tpub -> Vpub -> tpub', () => {
+        const vpub = convertXpubToFormat(testTpub, 'Vpub');
+        const backToTpub = convertXpubToFormat(vpub, 'tpub');
+
+        expect(backToTpub).toBe(testTpub);
+      });
+    });
+
+    describe('Error handling', () => {
+      it('should return original key if conversion fails (invalid key)', () => {
+        const invalidKey = 'invalidkey12345';
+        const result = convertXpubToFormat(invalidKey, 'xpub');
+
+        expect(result).toBe(invalidKey);
+      });
+
+      it('should return original key for truncated xpub', () => {
+        const truncatedXpub = 'xpub6BosfCnifzxcFwrSzQi';
+        const result = convertXpubToFormat(truncatedXpub, 'Zpub');
+
+        expect(result).toBe(truncatedXpub);
+      });
     });
   });
 });

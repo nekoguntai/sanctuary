@@ -431,6 +431,52 @@ describe('Devices API', () => {
       expect(mockPrismaClient.deviceAccount.create).not.toHaveBeenCalled();
     });
 
+    it('should detect duplicate device with different fingerprint case', async () => {
+      // Device exists with lowercase fingerprint
+      const existingDevice = {
+        id: 'existing-device',
+        fingerprint: 'abc12345', // lowercase in database
+        label: 'Existing Device',
+        type: 'trezor',
+        userId: 'test-user-id',
+        model: null,
+        accounts: [
+          {
+            id: 'account-1',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_existing...',
+          },
+        ],
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(existingDevice);
+
+      // Incoming request has UPPERCASE fingerprint
+      const deviceWithUpperCase = {
+        type: 'trezor',
+        label: 'My Trezor',
+        fingerprint: 'ABC12345', // UPPERCASE in request
+        xpub: 'xpub_new...',
+        derivationPath: "m/84'/0'/0'",
+      };
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithUpperCase);
+
+      // Should detect as duplicate (409) not create new device (201)
+      expect(response.status).toBe(409);
+      expect(response.body.existingDevice.fingerprint).toBe('abc12345');
+
+      // Verify the findUnique was called with lowercase fingerprint
+      expect(mockPrismaClient.device.findUnique).toHaveBeenCalledWith({
+        where: { fingerprint: 'abc12345' }, // Should be normalized to lowercase
+        include: expect.any(Object),
+      });
+    });
+
     it('should detect multisig purpose from BIP-48 path in legacy mode', async () => {
       const multisigDevice = {
         type: 'coldcard',

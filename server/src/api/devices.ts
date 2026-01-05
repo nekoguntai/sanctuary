@@ -218,15 +218,19 @@ function compareAccounts(
 router.post('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { type, label, fingerprint, derivationPath, xpub, modelSlug, accounts, merge } = req.body;
+    const { type, label, fingerprint: rawFingerprint, derivationPath, xpub, modelSlug, accounts, merge } = req.body;
 
     // Validation - require fingerprint and label always
-    if (!type || !label || !fingerprint) {
+    if (!type || !label || !rawFingerprint) {
       return res.status(400).json({
         error: 'Bad Request',
         message: 'type, label, and fingerprint are required',
       });
     }
+
+    // Normalize fingerprint to lowercase for consistent storage and comparison
+    // This prevents duplicate devices due to case differences (e.g., 'ABC12345' vs 'abc12345')
+    const fingerprint = rawFingerprint.toLowerCase();
 
     // Must have either xpub (legacy) or accounts (multi-account)
     if (!xpub && (!accounts || accounts.length === 0)) {

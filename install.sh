@@ -106,7 +106,18 @@ check_docker() {
 
 check_openssl() {
     if ! command -v openssl &> /dev/null; then
-        echo -e "${YELLOW}Warning: OpenSSL not found. Will use pre-generated certificates.${NC}"
+        echo -e "${YELLOW}Warning: OpenSSL not found.${NC}"
+        # Try to install openssl on Debian/Ubuntu
+        if command -v apt-get &> /dev/null; then
+            echo "  Attempting to install OpenSSL..."
+            if sudo apt-get update -qq && sudo apt-get install -y -qq openssl >/dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} OpenSSL installed successfully"
+                return 0
+            else
+                echo -e "${YELLOW}  Could not install OpenSSL automatically.${NC}"
+            fi
+        fi
+        echo -e "${YELLOW}  SSL certificates cannot be generated without OpenSSL.${NC}"
         return 1
     fi
     echo -e "${GREEN}✓${NC} OpenSSL is available"
@@ -212,8 +223,20 @@ main() {
             cd "$INSTALL_DIR"
             echo -e "${GREEN}✓${NC} SSL certificates generated"
         else
-            echo -e "${YELLOW}⚠${NC} Could not generate certificates (OpenSSL not found)"
-            echo "  You'll need to provide SSL certificates manually."
+            echo -e "${RED}✗${NC} Could not generate SSL certificates (OpenSSL not found)"
+            echo ""
+            echo -e "${YELLOW}IMPORTANT: HTTPS will not work without SSL certificates!${NC}"
+            echo ""
+            echo "To fix this, install OpenSSL and regenerate certificates:"
+            echo "  sudo apt install openssl    # Debian/Ubuntu"
+            echo "  sudo yum install openssl    # CentOS/RHEL"
+            echo "  brew install openssl        # macOS"
+            echo ""
+            echo "Then run: cd $SSL_DIR && ./generate-certs.sh localhost"
+            echo ""
+            echo "Until then, you can access Sanctuary via HTTP on port ${HTTP_PORT:-8080}"
+            echo "(Note: Hardware wallet support requires HTTPS)"
+            echo ""
         fi
     else
         echo -e "${GREEN}✓${NC} SSL certificates already exist"
@@ -397,10 +420,17 @@ ENVEOF
     echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}║${NC}  Open your browser:                                       ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}    ${GREEN}https://localhost:${HTTPS_PORT}${NC}                              ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}  ${YELLOW}Accept the self-signed certificate warning${NC}              ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}  ${YELLOW}(click Advanced → Proceed)${NC}                               ${BLUE}║${NC}"
+    if [ -f "$INSTALL_DIR/docker/nginx/ssl/fullchain.pem" ]; then
+        echo -e "${BLUE}║${NC}    ${GREEN}https://localhost:${HTTPS_PORT}${NC}                              ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}Accept the self-signed certificate warning${NC}              ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}(click Advanced → Proceed)${NC}                               ${BLUE}║${NC}"
+    else
+        echo -e "${BLUE}║${NC}    ${GREEN}http://localhost:${HTTP_PORT}${NC}                               ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${RED}HTTPS unavailable - SSL certs missing${NC}                   ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}Install openssl and run: ./start.sh --rebuild${NC}          ${BLUE}║${NC}"
+    fi
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"

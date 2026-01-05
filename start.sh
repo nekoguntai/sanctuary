@@ -74,6 +74,18 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
+# Check if local images exist - if not, we need to build
+NEED_BUILD="no"
+if ! docker image inspect sanctuary-backend:local &>/dev/null; then
+    NEED_BUILD="yes"
+fi
+if ! docker image inspect sanctuary-frontend:local &>/dev/null; then
+    NEED_BUILD="yes"
+fi
+if ! docker image inspect sanctuary-gateway:local &>/dev/null; then
+    NEED_BUILD="yes"
+fi
+
 case "${1:-}" in
     --stop)
         echo "Stopping Sanctuary..."
@@ -94,7 +106,13 @@ case "${1:-}" in
         echo "Note: First-time AI setup will download the Ollama image (~1GB)."
         echo "      Models are downloaded separately when you pull them in settings."
         echo ""
-        docker compose --profile ai up -d
+        # Auto-build if images are missing
+        BUILD_FLAG=""
+        if [ "$NEED_BUILD" = "yes" ]; then
+            echo "Local images not found - building..."
+            BUILD_FLAG="--build"
+        fi
+        docker compose --profile ai up -d $BUILD_FLAG
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         echo ""
@@ -109,7 +127,13 @@ case "${1:-}" in
         echo ""
         echo "Note: First-time setup will download monitoring images (~500MB total)."
         echo ""
-        docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+        # Auto-build if images are missing
+        BUILD_FLAG=""
+        if [ "$NEED_BUILD" = "yes" ]; then
+            echo "Local images not found - building..."
+            BUILD_FLAG="--build"
+        fi
+        docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d $BUILD_FLAG
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         echo ""
@@ -125,7 +149,13 @@ case "${1:-}" in
         echo ""
         echo "Note: First-time setup will download the Tor image (~50MB)."
         echo ""
-        docker compose -f docker-compose.yml -f docker-compose.tor.yml up -d
+        # Auto-build if images are missing
+        BUILD_FLAG=""
+        if [ "$NEED_BUILD" = "yes" ]; then
+            echo "Local images not found - building..."
+            BUILD_FLAG="--build"
+        fi
+        docker compose -f docker-compose.yml -f docker-compose.tor.yml up -d $BUILD_FLAG
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"
         echo ""
@@ -137,6 +167,25 @@ case "${1:-}" in
         ;;
     --rebuild)
         echo "Rebuilding and starting Sanctuary..."
+
+        # Generate SSL certificates if missing and openssl is available
+        SSL_DIR="$SCRIPT_DIR/docker/nginx/ssl"
+        if [ ! -f "$SSL_DIR/fullchain.pem" ] || [ ! -f "$SSL_DIR/privkey.pem" ]; then
+            if command -v openssl &>/dev/null; then
+                echo "Generating SSL certificates..."
+                mkdir -p "$SSL_DIR"
+                chmod +x "$SSL_DIR/generate-certs.sh" 2>/dev/null || true
+                if (cd "$SSL_DIR" && ./generate-certs.sh localhost); then
+                    echo "SSL certificates generated successfully"
+                else
+                    echo "Warning: Failed to generate SSL certificates"
+                fi
+            else
+                echo "Warning: SSL certificates missing and openssl not available"
+                echo "  Install openssl to enable HTTPS: sudo apt install openssl"
+            fi
+        fi
+
         # Detect which stacks are running (check containers or env preference)
         HAS_AI=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-ollama-[0-9]+$' && echo "yes" || echo "no")
         HAS_MONITORING=$(docker ps -a --format '{{.Names}}' | grep -qE '.*-(grafana|loki|promtail)' && echo "yes" || echo "no")
@@ -201,10 +250,17 @@ case "${1:-}" in
         [ "$HAS_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
         [ "$HAS_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
 
+        # Auto-build if images are missing
+        BUILD_FLAG=""
+        if [ "$NEED_BUILD" = "yes" ]; then
+            echo "Local images not found - building..."
+            BUILD_FLAG="--build"
+        fi
+
         if [ "$HAS_AI" = "yes" ]; then
-            docker compose $COMPOSE_FILES --profile ai up -d
+            docker compose $COMPOSE_FILES --profile ai up -d $BUILD_FLAG
         else
-            docker compose $COMPOSE_FILES up -d
+            docker compose $COMPOSE_FILES up -d $BUILD_FLAG
         fi
         echo ""
         echo "Sanctuary is running at https://localhost:${HTTPS_PORT}"

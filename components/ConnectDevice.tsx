@@ -1441,7 +1441,7 @@ export const ConnectDevice: React.FC = () => {
                             key={index}
                             className={`block p-3 rounded-lg border cursor-pointer transition-all ${
                               isSelected
-                                ? 'border-sanctuary-500 bg-sanctuary-50 dark:bg-sanctuary-800/50'
+                                ? 'border-sanctuary-500 bg-sanctuary-100 dark:bg-sanctuary-800'
                                 : 'border-sanctuary-200 dark:border-sanctuary-700 bg-white dark:bg-sanctuary-900 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
                             }`}
                           >

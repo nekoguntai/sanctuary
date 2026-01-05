@@ -77,7 +77,11 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
     if (!results || results.length === 0 || processing) return;
 
     const content = results[0].rawValue;
-    log.debug('QR scanned', { preview: content.substring(0, 50) });
+    log.debug('QR scanned', {
+      preview: content.substring(0, 100),
+      length: content.length,
+      startsWithUr: content.toLowerCase().startsWith('ur:'),
+    });
 
     // Initialize decoder if needed
     if (!decoderRef.current) {
@@ -98,10 +102,15 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
           handleClose();
           return;
         }
-      } catch {
-        // Not base64
+        log.warn('Base64 decoded but not a PSBT', { firstChars: decoded.substring(0, 10) });
+      } catch (e) {
+        log.warn('Not valid base64', { error: e });
       }
-      setScanError('Invalid QR code format. Expected UR or base64 PSBT.');
+      log.error('Invalid QR format scanned', {
+        preview: content.substring(0, 100),
+        length: content.length,
+      });
+      setScanError(`Invalid QR code format. Expected UR (ur:crypto-psbt) or base64 PSBT. Got: ${content.substring(0, 30)}...`);
       return;
     }
 

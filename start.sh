@@ -55,6 +55,46 @@ fi
 export JWT_SECRET ENCRYPTION_KEY GATEWAY_SECRET POSTGRES_PASSWORD
 export HTTPS_PORT HTTP_PORT ENABLE_MONITORING ENABLE_TOR
 
+# Check SSL certificate expiry
+check_ssl_expiry() {
+    local cert_file="$SCRIPT_DIR/docker/nginx/ssl/fullchain.pem"
+
+    if [ -f "$cert_file" ] && command -v openssl &> /dev/null; then
+        local expiry_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+        if [ -n "$expiry_date" ]; then
+            # Calculate days until expiry (works on Linux and macOS)
+            local expiry_epoch
+            if date --version 2>/dev/null | grep -q GNU; then
+                # GNU date (Linux)
+                expiry_epoch=$(date -d "$expiry_date" +%s 2>/dev/null || echo "0")
+            else
+                # BSD date (macOS)
+                expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry_date" +%s 2>/dev/null || echo "0")
+            fi
+
+            if [ "$expiry_epoch" != "0" ]; then
+                local now_epoch=$(date +%s)
+                local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+                if [ "$days_left" -le 0 ]; then
+                    echo ""
+                    echo -e "\033[0;31mWarning: SSL certificate has expired!\033[0m"
+                    echo "  Regenerate with: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+                    echo ""
+                elif [ "$days_left" -lt 30 ]; then
+                    echo ""
+                    echo -e "\033[1;33mWarning: SSL certificate expires in $days_left days.\033[0m"
+                    echo "  Regenerate with: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+                    echo ""
+                fi
+            fi
+        fi
+    fi
+}
+
+# Run SSL check (suppress errors for missing cert - handled at startup)
+check_ssl_expiry 2>/dev/null || true
+
 # Check Docker permissions
 if ! docker info &>/dev/null; then
     echo "Error: Cannot connect to Docker daemon."

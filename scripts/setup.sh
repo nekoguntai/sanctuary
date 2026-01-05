@@ -38,13 +38,27 @@ if [ -f "$ENV_FILE" ]; then
     echo
 fi
 
-# Generate secure random strings
+# Generate secure random strings (aligned with install.sh)
+# Uses multiple fallback methods for maximum compatibility
 generate_secret() {
-    openssl rand -base64 32 | tr -d '/+=' | head -c 32
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 32 | tr -d '=/+' | head -c 48
+    elif [ -f /dev/urandom ]; then
+        cat /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9' | head -c 48
+    else
+        # Fallback: use date + process ID (less secure but works everywhere)
+        echo "$(date +%s%N)$$" | sha256sum | head -c 48
+    fi
 }
 
 generate_password() {
-    openssl rand -base64 16 | tr -d '/+='
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 16 | tr -d '=/+' | head -c 24
+    elif [ -f /dev/urandom ]; then
+        cat /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9' | head -c 24
+    else
+        echo "$(date +%s%N)$$" | sha256sum | head -c 24
+    fi
 }
 
 echo -e "${GREEN}Generating secure secrets...${NC}"

@@ -692,6 +692,221 @@ test_start_script_env_has_set_a() {
 }
 
 # ============================================
+# Unit Tests: Pre-flight checks (new functions)
+# ============================================
+
+test_install_script_has_disk_space_check() {
+    if grep -q "check_disk_space" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_disk_space function"
+        return 1
+    fi
+}
+
+test_install_script_has_memory_check() {
+    if grep -q "check_memory" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_memory function"
+        return 1
+    fi
+}
+
+test_install_script_has_wsl_check() {
+    if grep -q "check_wsl" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_wsl function"
+        return 1
+    fi
+}
+
+test_install_script_has_architecture_check() {
+    if grep -q "check_architecture" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_architecture function"
+        return 1
+    fi
+}
+
+test_install_script_has_port_conflict_check() {
+    if grep -q "check_port_conflict" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_port_conflict function"
+        return 1
+    fi
+}
+
+test_install_script_checks_multiple_ports() {
+    # Should check HTTPS, HTTP, and Gateway ports
+    local https_check=$(grep -c 'check_port_conflict.*HTTPS' "$INSTALL_SCRIPT" || echo "0")
+    local http_check=$(grep -c 'check_port_conflict.*HTTP' "$INSTALL_SCRIPT" || echo "0")
+    local gateway_check=$(grep -c 'check_port_conflict.*Gateway\|GATEWAY' "$INSTALL_SCRIPT" || echo "0")
+
+    if [ "$https_check" -ge 1 ] && [ "$http_check" -ge 1 ] && [ "$gateway_check" -ge 1 ]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should check HTTPS, HTTP, and Gateway ports"
+        echo "  HTTPS checks: $https_check, HTTP checks: $http_check, Gateway checks: $gateway_check"
+        return 1
+    fi
+}
+
+test_install_script_has_upgrade_backup_guidance() {
+    if grep -q "backup\|pg_dump" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should provide database backup guidance for upgrades"
+        return 1
+    fi
+}
+
+test_install_script_has_health_check_timeout() {
+    # Should have MAX_WAIT for health check polling (not just sleep 5)
+    if grep -q "MAX_WAIT" "$INSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have MAX_WAIT for health check timeout"
+        return 1
+    fi
+}
+
+# ============================================
+# Unit Tests: start.sh SSL expiry check
+# ============================================
+
+test_start_script_has_ssl_expiry_check() {
+    if grep -q "check_ssl_expiry\|ssl.*expir" "$START_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} start.sh should have SSL certificate expiry check"
+        return 1
+    fi
+}
+
+# ============================================
+# Unit Tests: uninstall.sh
+# ============================================
+
+UNINSTALL_SCRIPT="$PROJECT_ROOT/uninstall.sh"
+
+test_uninstall_script_exists() {
+    assert_file_exists "$UNINSTALL_SCRIPT" "uninstall.sh should exist in project root"
+}
+
+test_uninstall_script_is_executable() {
+    if [ -x "$UNINSTALL_SCRIPT" ]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} uninstall.sh should be executable"
+        return 1
+    fi
+}
+
+test_uninstall_script_has_force_option() {
+    if grep -q "\-\-force\|-f" "$UNINSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} uninstall.sh should have --force option"
+        return 1
+    fi
+}
+
+test_uninstall_script_has_keep_data_option() {
+    if grep -q "\-\-keep-data" "$UNINSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} uninstall.sh should have --keep-data option"
+        return 1
+    fi
+}
+
+test_uninstall_script_has_confirmation() {
+    if grep -q "DELETE\|confirm" "$UNINSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} uninstall.sh should have confirmation prompt"
+        return 1
+    fi
+}
+
+test_uninstall_script_removes_volumes() {
+    if grep -q "docker.*volume\|down -v" "$UNINSTALL_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} uninstall.sh should remove Docker volumes"
+        return 1
+    fi
+}
+
+# ============================================
+# Unit Tests: scripts/setup.sh
+# ============================================
+
+SETUP_SCRIPT="$PROJECT_ROOT/scripts/setup.sh"
+
+test_setup_script_exists() {
+    assert_file_exists "$SETUP_SCRIPT" "scripts/setup.sh should exist"
+}
+
+test_setup_script_has_secret_fallbacks() {
+    # setup.sh should have fallback methods like install.sh (not just openssl)
+    if grep -q "/dev/urandom\|sha256sum" "$SETUP_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} scripts/setup.sh should have fallback secret generation methods"
+        return 1
+    fi
+}
+
+test_setup_script_generates_48_char_secrets() {
+    # Secrets should be 48 characters (aligned with install.sh)
+    if grep -q "head -c 48" "$SETUP_SCRIPT"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} scripts/setup.sh should generate 48-character secrets"
+        return 1
+    fi
+}
+
+# ============================================
+# Unit Tests: .env.example
+# ============================================
+
+ENV_EXAMPLE="$PROJECT_ROOT/.env.example"
+
+test_env_example_exists() {
+    assert_file_exists "$ENV_EXAMPLE" ".env.example should exist in project root"
+}
+
+test_env_example_has_all_required_secrets() {
+    local missing=""
+    grep -q "JWT_SECRET" "$ENV_EXAMPLE" || missing="$missing JWT_SECRET"
+    grep -q "ENCRYPTION_KEY" "$ENV_EXAMPLE" || missing="$missing ENCRYPTION_KEY"
+    grep -q "GATEWAY_SECRET" "$ENV_EXAMPLE" || missing="$missing GATEWAY_SECRET"
+    grep -q "POSTGRES_PASSWORD" "$ENV_EXAMPLE" || missing="$missing POSTGRES_PASSWORD"
+
+    if [ -z "$missing" ]; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} .env.example missing:$missing"
+        return 1
+    fi
+}
+
+test_env_example_has_setup_instructions() {
+    if grep -qi "install.sh\|setup.sh" "$ENV_EXAMPLE"; then
+        return 0
+    else
+        echo -e "${RED}ASSERTION FAILED:${NC} .env.example should reference install.sh or setup.sh"
+        return 1
+    fi
+}
+
+# ============================================
 # Unit Tests: SSL certificate generation
 # ============================================
 
@@ -799,6 +1014,42 @@ main() {
     run_test "start script has .env.local fallback" test_start_script_has_env_local_fallback
     run_test "start script .env has set -a" test_start_script_env_has_set_a
     run_test "start script .env.local has set -a" test_start_script_env_local_has_set_a
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: Pre-flight Checks${NC}"
+    run_test "install script has disk space check" test_install_script_has_disk_space_check
+    run_test "install script has memory check" test_install_script_has_memory_check
+    run_test "install script has WSL check" test_install_script_has_wsl_check
+    run_test "install script has architecture check" test_install_script_has_architecture_check
+    run_test "install script has port conflict check" test_install_script_has_port_conflict_check
+    run_test "install script checks multiple ports" test_install_script_checks_multiple_ports
+    run_test "install script has upgrade backup guidance" test_install_script_has_upgrade_backup_guidance
+    run_test "install script has health check timeout" test_install_script_has_health_check_timeout
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: start.sh Enhancements${NC}"
+    run_test "start script has SSL expiry check" test_start_script_has_ssl_expiry_check
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: uninstall.sh${NC}"
+    run_test "uninstall script exists" test_uninstall_script_exists
+    run_test "uninstall script is executable" test_uninstall_script_is_executable
+    run_test "uninstall script has --force option" test_uninstall_script_has_force_option
+    run_test "uninstall script has --keep-data option" test_uninstall_script_has_keep_data_option
+    run_test "uninstall script has confirmation" test_uninstall_script_has_confirmation
+    run_test "uninstall script removes volumes" test_uninstall_script_removes_volumes
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: scripts/setup.sh${NC}"
+    run_test "setup script exists" test_setup_script_exists
+    run_test "setup script has secret fallbacks" test_setup_script_has_secret_fallbacks
+    run_test "setup script generates 48-char secrets" test_setup_script_generates_48_char_secrets
+    echo ""
+
+    echo -e "${YELLOW}Test Suite: .env.example${NC}"
+    run_test ".env.example exists" test_env_example_exists
+    run_test ".env.example has all required secrets" test_env_example_has_all_required_secrets
+    run_test ".env.example has setup instructions" test_env_example_has_setup_instructions
     echo ""
 
     echo -e "${YELLOW}Test Suite: SSL Certificate Generation${NC}"

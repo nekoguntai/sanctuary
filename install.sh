@@ -129,6 +129,91 @@ has_openssl() {
     command -v openssl &> /dev/null
 }
 
+# ============================================
+# Pre-flight resource checks
+# ============================================
+check_disk_space() {
+    local required_gb=6
+    local install_dir="${1:-$HOME}"
+
+    if command -v df &> /dev/null; then
+        # Get available space in KB, handle different df output formats
+        local available_kb=$(df -k "$install_dir" 2>/dev/null | tail -1 | awk '{print $4}')
+        if [ -n "$available_kb" ] && [ "$available_kb" -gt 0 ] 2>/dev/null; then
+            local available_gb=$((available_kb / 1024 / 1024))
+            if [ "$available_kb" -lt $((required_gb * 1024 * 1024)) ]; then
+                echo -e "${YELLOW}Warning: Low disk space detected.${NC}"
+                echo "  Available: ${available_gb}GB (recommended: ${required_gb}GB+)"
+                echo "  Docker images and build cache require significant space."
+                echo ""
+            else
+                echo -e "${GREEN}✓${NC} Disk space: ${available_gb}GB available"
+            fi
+        fi
+    fi
+}
+
+check_memory() {
+    local required_gb=4
+
+    # Linux: read from /proc/meminfo
+    if [ -f /proc/meminfo ]; then
+        local total_kb=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
+        if [ -n "$total_kb" ] && [ "$total_kb" -gt 0 ] 2>/dev/null; then
+            local total_gb=$((total_kb / 1024 / 1024))
+            if [ "$total_kb" -lt $((required_gb * 1024 * 1024)) ]; then
+                echo -e "${YELLOW}Warning: Low memory detected.${NC}"
+                echo "  Available: ${total_gb}GB RAM (recommended: ${required_gb}GB+)"
+                echo "  Sanctuary containers require approximately 4GB RAM."
+                echo ""
+            else
+                echo -e "${GREEN}✓${NC} Memory: ${total_gb}GB RAM available"
+            fi
+        fi
+    # macOS: use sysctl
+    elif command -v sysctl &> /dev/null; then
+        local total_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+        if [ -n "$total_bytes" ] && [ "$total_bytes" -gt 0 ] 2>/dev/null; then
+            local total_gb=$((total_bytes / 1024 / 1024 / 1024))
+            if [ "$total_gb" -lt "$required_gb" ]; then
+                echo -e "${YELLOW}Warning: Low memory detected.${NC}"
+                echo "  Available: ${total_gb}GB RAM (recommended: ${required_gb}GB+)"
+                echo ""
+            else
+                echo -e "${GREEN}✓${NC} Memory: ${total_gb}GB RAM available"
+            fi
+        fi
+    fi
+}
+
+check_wsl() {
+    if uname -r 2>/dev/null | grep -qi "wsl\|microsoft"; then
+        echo -e "${BLUE}ℹ${NC} WSL detected - ensure Docker Desktop for Windows is running"
+    fi
+}
+
+check_architecture() {
+    local arch=$(uname -m 2>/dev/null)
+    case "$arch" in
+        arm64|aarch64)
+            echo -e "${BLUE}ℹ${NC} ARM64 architecture detected"
+            # Check if running on Apple Silicon Mac
+            if [ "$(uname -s)" = "Darwin" ]; then
+                echo "  Apple Silicon Mac - Docker Desktop includes Rosetta for x86 images"
+            else
+                echo "  Some images may need ARM64 variants or emulation"
+            fi
+            ;;
+        x86_64|amd64)
+            # Standard architecture, no message needed
+            ;;
+        *)
+            echo -e "${YELLOW}ℹ${NC} Unusual architecture detected: $arch"
+            echo "  Some Docker images may not be available for this platform"
+            ;;
+    esac
+}
+
 check_git() {
     if ! command -v git &> /dev/null; then
         echo -e "${RED}Error: Git is not installed.${NC}"
@@ -169,6 +254,10 @@ main() {
     check_git
     check_openssl  # Display status message
     HAS_OPENSSL=$(has_openssl && echo "yes" || echo "no")
+    check_disk_space "$HOME"
+    check_memory
+    check_wsl
+    check_architecture
 
     echo ""
 
@@ -189,8 +278,36 @@ main() {
         # Clone or update repository
         if [ -d "$INSTALL_DIR" ]; then
             echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
-            echo "Updating existing installation..."
+
+            # Show version information
             cd "$INSTALL_DIR"
+            CURRENT_VERSION=$(git describe --tags 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            echo ""
+            echo "  Current version: $CURRENT_VERSION"
+            if [ -n "$RELEASE_TAG" ]; then
+                echo "  New version:     $RELEASE_TAG"
+            fi
+
+            # Check if database container exists with data
+            if docker volume ls -q 2>/dev/null | grep -q "sanctuary.*postgres_data\|postgres_data"; then
+                echo ""
+                echo -e "${YELLOW}Existing database detected.${NC}"
+                echo ""
+                echo "Before upgrading, we recommend backing up your database:"
+                echo -e "  ${GREEN}docker exec \$(docker compose ps -q postgres) pg_dump -U sanctuary sanctuary > backup-\$(date +%Y%m%d).sql${NC}"
+                echo ""
+                if [ -t 0 ]; then
+                    read -p "Continue with upgrade? [Y/n] " -n 1 -r
+                    echo ""
+                    if [[ $REPLY =~ ^[Nn]$ ]]; then
+                        echo "Upgrade cancelled. Run again after backing up."
+                        exit 0
+                    fi
+                fi
+            fi
+
+            echo ""
+            echo "Updating existing installation..."
             git fetch --tags 2>/dev/null || true
             if [ -n "$RELEASE_TAG" ]; then
                 git checkout "$RELEASE_TAG" 2>/dev/null || {
@@ -302,11 +419,35 @@ main() {
     fi
 
     # Check for port conflicts
-    if command -v ss &> /dev/null; then
-        if ss -tuln | grep -q ":${HTTPS_PORT} "; then
-            echo -e "${YELLOW}Warning: Port ${HTTPS_PORT} is already in use.${NC}"
-            echo "  Set HTTPS_PORT to a different value if Sanctuary fails to start."
+    check_port_conflict() {
+        local port="$1"
+        local name="$2"
+        if command -v ss &> /dev/null; then
+            if ss -tuln 2>/dev/null | grep -q ":${port} "; then
+                echo -e "${YELLOW}Warning: $name port ${port} is already in use.${NC}"
+                return 1
+            fi
+        elif command -v netstat &> /dev/null; then
+            if netstat -tuln 2>/dev/null | grep -q ":${port} "; then
+                echo -e "${YELLOW}Warning: $name port ${port} is already in use.${NC}"
+                return 1
+            fi
         fi
+        return 0
+    }
+
+    PORT_CONFLICTS=false
+    check_port_conflict "$HTTPS_PORT" "HTTPS" || PORT_CONFLICTS=true
+    check_port_conflict "$HTTP_PORT" "HTTP" || PORT_CONFLICTS=true
+    check_port_conflict "${GATEWAY_PORT:-4000}" "Gateway" || PORT_CONFLICTS=true
+
+    if [ "$ENABLE_MONITORING" = "true" ]; then
+        check_port_conflict "${GRAFANA_PORT:-3000}" "Grafana" || PORT_CONFLICTS=true
+    fi
+
+    if [ "$PORT_CONFLICTS" = true ]; then
+        echo "  Set alternative ports via environment variables if Sanctuary fails to start."
+        echo "  Example: HTTPS_PORT=9443 HTTP_PORT=9080 ./install.sh"
     fi
 
     echo ""
@@ -394,16 +535,43 @@ ENVEOF
         POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
         docker compose $COMPOSE_FILES up -d --build
 
-    # Wait for services to be healthy
+    # Wait for services to be healthy (with proper timeout)
     echo ""
     echo "Waiting for services to start..."
-    sleep 5
 
-    # Check if services are running (use docker compose ps which respects project name)
-    if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -q "frontend.*running"; then
-        FRONTEND_RUNNING=true
-    else
-        FRONTEND_RUNNING=false
+    MAX_WAIT=120
+    WAITED=0
+    INTERVAL=5
+    FRONTEND_RUNNING=false
+
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        # Check if frontend is healthy (last service to become ready)
+        if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
+            FRONTEND_RUNNING=true
+            break
+        fi
+
+        # Check for container failures
+        if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE "(Exit|exited)"; then
+            echo -e "${YELLOW}Some containers exited. Checking status...${NC}"
+            # Migration container exiting with 0 is expected
+            FAILED=$(docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E "(Exit|exited)" | grep -v "migrate" || true)
+            if [ -n "$FAILED" ]; then
+                echo -e "${RED}Container failures detected:${NC}"
+                echo "$FAILED"
+                break
+            fi
+        fi
+
+        sleep $INTERVAL
+        WAITED=$((WAITED + INTERVAL))
+        echo "  Still starting... ($WAITED/${MAX_WAIT}s)"
+    done
+
+    if [ $WAITED -ge $MAX_WAIT ] && [ "$FRONTEND_RUNNING" = false ]; then
+        echo -e "${YELLOW}Timeout waiting for services. They may still be starting.${NC}"
+        echo "  Check status with: docker compose ps"
+        echo "  View logs with: docker compose logs -f"
     fi
 
     echo ""

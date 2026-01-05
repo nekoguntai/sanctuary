@@ -825,17 +825,31 @@ export const WalletDetail: React.FC = () => {
     fetchPromises.push(
       devicesApi.getDevices()
         .then(allDevices => {
+          // Determine expected account purpose based on wallet type
+          const expectedPurpose = walletType === WalletType.MULTI_SIG ? 'multisig' : 'single_sig';
+
           const walletDevices = allDevices
             .filter(d => d.wallets?.some(w => w.wallet.id === id))
-            .map(d => ({
-              id: d.id,
-              type: d.type,
-              label: d.label,
-              fingerprint: d.fingerprint,
-              derivationPath: d.derivationPath || "m/84'/0'/0'",
-              xpub: d.xpub,
-              userId: user.id,
-            }));
+            .map(d => {
+              // Find the matching account for this wallet's type and script type
+              const accounts = d.accounts || [];
+              // Priority: exact match (purpose + scriptType) > purpose match > legacy fallback
+              const exactMatch = accounts.find(
+                a => a.purpose === expectedPurpose && a.scriptType === apiWallet.scriptType
+              );
+              const purposeMatch = accounts.find(a => a.purpose === expectedPurpose);
+              const account = exactMatch || purposeMatch;
+
+              return {
+                id: d.id,
+                type: d.type,
+                label: d.label,
+                fingerprint: d.fingerprint,
+                derivationPath: account?.derivationPath || d.derivationPath || "m/84'/0'/0'",
+                xpub: account?.xpub || d.xpub,
+                userId: user.id,
+              };
+            });
           setDevices(walletDevices);
         })
         .catch(err => log.error('Failed to fetch devices', { error: err }))

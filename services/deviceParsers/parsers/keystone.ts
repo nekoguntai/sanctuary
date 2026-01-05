@@ -4,9 +4,11 @@
  * Handles multiple Keystone export formats:
  * 1. Standard format with coins/accounts structure
  * 2. Multisig format with ExtendedPublicKey/Path
+ *
+ * Returns ALL available accounts for multi-account import.
  */
 
-import type { DeviceParser, DeviceParseResult, FormatDetectionResult } from '../types';
+import type { DeviceParser, DeviceParseResult, DeviceAccount, FormatDetectionResult } from '../types';
 
 // Standard Keystone format
 interface KeystoneStandardFormat {
@@ -84,15 +86,47 @@ export const keystoneStandardParser: DeviceParser = {
       return {};
     }
 
-    // Prefer Native SegWit (84') account
-    const nativeSegwit = btcCoin.accounts.find(
-      (a) => a.hdPath?.includes("84'") || a.hdPath?.includes("84h")
-    );
-    const account = nativeSegwit || btcCoin.accounts[0];
+    // Extract all accounts
+    const accounts: DeviceAccount[] = [];
+    for (const acct of btcCoin.accounts) {
+      const xpub = acct.xPub || acct.xpub || '';
+      const hdPath = (acct.hdPath || '').replace(/^M/, 'm');
+      if (!xpub) continue;
+
+      // Determine purpose and scriptType from path
+      let purpose: 'single_sig' | 'multisig' = 'single_sig';
+      let scriptType: DeviceAccount['scriptType'] = 'native_segwit';
+
+      if (hdPath.includes("48'") || hdPath.includes("48h")) {
+        purpose = 'multisig';
+        // Check script type from BIP-48 last hardened component
+        if (hdPath.includes("/2'") || hdPath.includes("/2h")) {
+          scriptType = 'native_segwit';
+        } else if (hdPath.includes("/1'") || hdPath.includes("/1h")) {
+          scriptType = 'nested_segwit';
+        }
+      } else if (hdPath.includes("84'") || hdPath.includes("84h")) {
+        scriptType = 'native_segwit';
+      } else if (hdPath.includes("86'") || hdPath.includes("86h")) {
+        scriptType = 'taproot';
+      } else if (hdPath.includes("49'") || hdPath.includes("49h")) {
+        scriptType = 'nested_segwit';
+      } else if (hdPath.includes("44'") || hdPath.includes("44h")) {
+        scriptType = 'legacy';
+      }
+
+      accounts.push({ xpub, derivationPath: hdPath, purpose, scriptType });
+    }
+
+    // Primary: prefer native segwit single-sig
+    const primaryAccount = accounts.find(a => a.purpose === 'single_sig' && a.scriptType === 'native_segwit')
+      || accounts.find(a => a.purpose === 'single_sig')
+      || accounts[0];
 
     return {
-      xpub: account.xPub || account.xpub || '',
-      derivationPath: (account.hdPath || '').replace(/^M/, 'm'),
+      xpub: primaryAccount?.xpub || '',
+      derivationPath: primaryAccount?.derivationPath || '',
+      accounts: accounts.length > 0 ? accounts : undefined,
     };
   },
 };
@@ -123,11 +157,27 @@ export const keystoneMultisigParser: DeviceParser = {
 
   parse(data: unknown): DeviceParseResult {
     const ks = data as KeystoneMultisigFormat;
+    const xpub = ks.ExtendedPublicKey || '';
+    const derivationPath = (ks.Path || '').replace(/^M/, 'm');
+
+    // Determine script type from path (BIP-48)
+    let scriptType: DeviceAccount['scriptType'] = 'native_segwit';
+    if (derivationPath.includes("/1'") || derivationPath.includes("/1h")) {
+      scriptType = 'nested_segwit';
+    }
+
+    const accounts: DeviceAccount[] = xpub ? [{
+      xpub,
+      derivationPath,
+      purpose: 'multisig',
+      scriptType,
+    }] : [];
 
     return {
-      xpub: ks.ExtendedPublicKey || '',
+      xpub,
       fingerprint: ks.xfp || '',
-      derivationPath: (ks.Path || '').replace(/^M/, 'm'),
+      derivationPath,
+      accounts: accounts.length > 0 ? accounts : undefined,
     };
   },
 };

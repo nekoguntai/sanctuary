@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount, RegistryTypes } from '@keystonehq/bc-ur-registry';
 import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
-import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel } from '../src/api/devices';
-import { parseDeviceJson, parseDeviceData } from '../services/deviceParsers';
+import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel, DeviceAccountInput } from '../src/api/devices';
+import { parseDeviceJson, parseDeviceData, DeviceAccount } from '../services/deviceParsers';
 import { Button } from './ui/Button';
 import {
   ArrowLeft,
@@ -160,6 +160,9 @@ export const ConnectDevice: React.FC = () => {
   const [xpub, setXpub] = useState('');
   const [fingerprint, setFingerprint] = useState('');
   const [derivationPath, setDerivationPath] = useState("m/84'/0'/0'");
+  // Multi-account support: parsed accounts from file/QR import
+  const [parsedAccounts, setParsedAccounts] = useState<DeviceAccount[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<number>>(new Set());
 
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -208,6 +211,8 @@ export const ConnectDevice: React.FC = () => {
     setScanned(false);
     setXpub('');
     setFingerprint('');
+    setParsedAccounts([]);
+    setSelectedAccounts(new Set());
     setCameraActive(false);
     setCameraError(null);
     setQrMode('camera');
@@ -306,11 +311,26 @@ export const ConnectDevice: React.FC = () => {
       // as well as plain text formats (descriptors, xpubs)
       const result = parseDeviceJson(content);
 
-      if (result && (result.xpub || result.fingerprint)) {
+      if (result && (result.xpub || result.fingerprint || result.accounts?.length)) {
         if (result.xpub) setXpub(result.xpub);
         if (result.fingerprint) setFingerprint(result.fingerprint);
         if (result.derivationPath) setDerivationPath(normalizeDerivationPath(result.derivationPath));
         if (result.label && !label) setLabel(result.label);
+
+        // Handle multi-account import
+        if (result.accounts && result.accounts.length > 0) {
+          setParsedAccounts(result.accounts);
+          // Auto-select all accounts
+          setSelectedAccounts(new Set(result.accounts.map((_, i) => i)));
+          log.info('File parsed with multiple accounts', {
+            format: result.format,
+            accountCount: result.accounts.length,
+            purposes: result.accounts.map(a => a.purpose),
+          });
+        } else {
+          setParsedAccounts([]);
+          setSelectedAccounts(new Set());
+        }
 
         log.info('File parsed successfully', { format: result.format, hasXpub: !!result.xpub, hasFingerprint: !!result.fingerprint });
         setScanned(true);
@@ -737,6 +757,21 @@ export const ConnectDevice: React.FC = () => {
       if (parseResult.derivationPath) setDerivationPath(normalizeDerivationPath(parseResult.derivationPath));
       if (parseResult.label && !label) setLabel(parseResult.label);
 
+      // Handle multi-account import
+      if (parseResult.accounts && parseResult.accounts.length > 0) {
+        setParsedAccounts(parseResult.accounts);
+        // Auto-select all accounts
+        setSelectedAccounts(new Set(parseResult.accounts.map((_, i) => i)));
+        log.info('QR parsed with multiple accounts', {
+          format: parseResult.format,
+          accountCount: parseResult.accounts.length,
+          purposes: parseResult.accounts.map(a => a.purpose),
+        });
+      } else {
+        setParsedAccounts([]);
+        setSelectedAccounts(new Set());
+      }
+
       // Track which fields came from QR
       const extractedFields = {
         xpub: true,
@@ -787,14 +822,40 @@ export const ConnectDevice: React.FC = () => {
     setError(null);
 
     try {
+      // Build accounts array from selected parsed accounts
+      const accounts: DeviceAccountInput[] = [];
+      if (parsedAccounts.length > 0 && selectedAccounts.size > 0) {
+        parsedAccounts.forEach((account, index) => {
+          if (selectedAccounts.has(index)) {
+            accounts.push({
+              purpose: account.purpose,
+              scriptType: account.scriptType,
+              derivationPath: account.derivationPath,
+              xpub: account.xpub,
+            });
+          }
+        });
+      }
+
       const deviceData: CreateDeviceRequest = {
         type: selectedModel.name,
         label: label || `${selectedModel.name} ${fingerprint}`,
         fingerprint: fingerprint || '00000000',
-        xpub,
-        derivationPath,
+        // Use accounts array if available, otherwise fall back to single xpub
+        ...(accounts.length > 0
+          ? { accounts }
+          : { xpub, derivationPath }
+        ),
         modelSlug: selectedModel.slug
       };
+
+      log.info('Saving device', {
+        label: deviceData.label,
+        fingerprint: deviceData.fingerprint,
+        accountCount: accounts.length,
+        hasLegacyXpub: !accounts.length && !!xpub,
+      });
+
       await createDevice(deviceData);
       // Refresh sidebar to show new device
       refreshSidebar();
@@ -1344,17 +1405,6 @@ export const ConnectDevice: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-sanctuary-500 mb-1">Derivation Path</label>
-                  <input
-                    type="text"
-                    value={derivationPath}
-                    onChange={(e) => setDerivationPath(e.target.value)}
-                    className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
-                  />
-                  <p className="text-[10px] text-sanctuary-400 mt-1">BIP84 Native SegWit default</p>
-                </div>
-
-                <div>
                   <label className="block text-xs font-medium text-sanctuary-500 mb-1">Master Fingerprint</label>
                   <input
                     type="text"
@@ -1366,23 +1416,112 @@ export const ConnectDevice: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-sanctuary-500 mb-1">Extended Public Key</label>
-                  <textarea
-                    value={xpub}
-                    onChange={(e) => setXpub(e.target.value)}
-                    placeholder="xpub... / ypub... / zpub..."
-                    readOnly={method !== 'manual' && scanned}
-                    rows={3}
-                    className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
-                  />
-                </div>
+                {/* Multi-account display when accounts are parsed from file/QR */}
+                {parsedAccounts.length > 0 ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-medium text-sanctuary-500">Accounts to Import</label>
+                      <span className="text-[10px] text-sanctuary-400">
+                        {selectedAccounts.size} of {parsedAccounts.length} selected
+                      </span>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {parsedAccounts.map((account, index) => {
+                        const isSelected = selectedAccounts.has(index);
+                        const purposeLabel = account.purpose === 'multisig' ? 'Multisig' : 'Single-sig';
+                        const scriptLabel = {
+                          native_segwit: 'Native SegWit',
+                          nested_segwit: 'Nested SegWit',
+                          taproot: 'Taproot',
+                          legacy: 'Legacy',
+                        }[account.scriptType];
+
+                        return (
+                          <label
+                            key={index}
+                            className={`block p-3 rounded-lg border cursor-pointer transition-all ${
+                              isSelected
+                                ? 'border-sanctuary-500 bg-sanctuary-50 dark:bg-sanctuary-800/50'
+                                : 'border-sanctuary-200 dark:border-sanctuary-700 hover:border-sanctuary-300 dark:hover:border-sanctuary-600'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  const newSelected = new Set(selectedAccounts);
+                                  if (isSelected) {
+                                    newSelected.delete(index);
+                                  } else {
+                                    newSelected.add(index);
+                                  }
+                                  setSelectedAccounts(newSelected);
+                                }}
+                                className="mt-1 rounded border-sanctuary-300 text-sanctuary-600 focus:ring-sanctuary-500"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    account.purpose === 'multisig'
+                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                  }`}>
+                                    {purposeLabel}
+                                  </span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sanctuary-100 text-sanctuary-600 dark:bg-sanctuary-800 dark:text-sanctuary-400">
+                                    {scriptLabel}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-mono text-sanctuary-600 dark:text-sanctuary-300 truncate">
+                                  {account.derivationPath}
+                                </div>
+                                <div className="text-[10px] font-mono text-sanctuary-400 truncate mt-0.5" title={account.xpub}>
+                                  {account.xpub.substring(0, 20)}...{account.xpub.substring(account.xpub.length - 8)}
+                                </div>
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-sanctuary-400 mt-2">
+                      All accounts will be registered with this device for use in wallets.
+                    </p>
+                  </div>
+                ) : (
+                  /* Single account mode (manual entry or legacy imports) */
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">Derivation Path</label>
+                      <input
+                        type="text"
+                        value={derivationPath}
+                        onChange={(e) => setDerivationPath(e.target.value)}
+                        className="w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500"
+                      />
+                      <p className="text-[10px] text-sanctuary-400 mt-1">BIP84 Native SegWit default</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">Extended Public Key</label>
+                      <textarea
+                        value={xpub}
+                        onChange={(e) => setXpub(e.target.value)}
+                        placeholder="xpub... / ypub... / zpub..."
+                        readOnly={method !== 'manual' && scanned}
+                        rows={3}
+                        className={`w-full px-3 py-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sanctuary-500 resize-none ${method !== 'manual' && scanned ? 'opacity-70' : ''}`}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
                   <Button
                     onClick={handleSave}
                     className="w-full"
-                    disabled={!fingerprint || !xpub || saving || !method}
+                    disabled={!fingerprint || (parsedAccounts.length > 0 ? selectedAccounts.size === 0 : !xpub) || saving || !method}
                   >
                     {saving ? (
                       <>
@@ -1464,11 +1603,13 @@ export const ConnectDevice: React.FC = () => {
                     </div>
                   )}
 
-                  {(!fingerprint || !xpub) && !error && method && (
+                  {(!fingerprint || (parsedAccounts.length > 0 ? selectedAccounts.size === 0 : !xpub)) && !error && method && (
                     <p className="text-center text-xs text-sanctuary-400 mt-2">
-                      {method === 'manual'
-                        ? 'Enter fingerprint and xpub to save.'
-                        : 'Complete the connection step to enable saving.'
+                      {parsedAccounts.length > 0 && selectedAccounts.size === 0
+                        ? 'Select at least one account to import.'
+                        : method === 'manual'
+                          ? 'Enter fingerprint and xpub to save.'
+                          : 'Complete the connection step to enable saving.'
                       }
                     </p>
                   )}

@@ -10,13 +10,27 @@ import type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '.
 // Re-export types for backward compatibility
 export type { Device, HardwareDeviceModel, DeviceShareInfo, DeviceRole } from '../types';
 
+/**
+ * Account input for multi-account device registration
+ */
+export interface DeviceAccountInput {
+  purpose: 'single_sig' | 'multisig';
+  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+  derivationPath: string;
+  xpub: string;
+}
+
 export interface CreateDeviceRequest {
   type: string;
   label: string;
   fingerprint: string;
+  /** Single xpub (legacy mode) - use accounts[] for multi-account */
   derivationPath?: string;
-  xpub: string;
+  /** Single xpub (legacy mode) - use accounts[] for multi-account */
+  xpub?: string;
   modelSlug?: string;
+  /** Multiple accounts for multi-account import (preferred) */
+  accounts?: DeviceAccountInput[];
 }
 
 export interface UpdateDeviceRequest {

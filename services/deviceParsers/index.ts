@@ -52,6 +52,7 @@ deviceParserRegistry.register(plainXpubParser);           // 10 - Plain xpub fal
 export type {
   DeviceParser,
   DeviceParseResult,
+  DeviceAccount,
   FormatDetectionResult,
   DeviceParserRegistryConfig,
 } from './types';

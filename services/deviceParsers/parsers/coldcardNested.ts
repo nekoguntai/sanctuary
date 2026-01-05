@@ -3,9 +3,11 @@
  *
  * Handles the standard Coldcard JSON export with nested BIP sections:
  * { xfp: "...", bip84: { xpub: "...", _pub: "zpub...", deriv: "m/84'/0'/0'" }, ... }
+ *
+ * Returns ALL available accounts (single-sig and multisig) for multi-account import.
  */
 
-import type { DeviceParser, DeviceParseResult, FormatDetectionResult } from '../types';
+import type { DeviceParser, DeviceParseResult, DeviceAccount, FormatDetectionResult } from '../types';
 
 interface ColdcardNestedFormat {
   xfp?: string;
@@ -13,8 +15,8 @@ interface ColdcardNestedFormat {
   bip49?: { xpub?: string; _pub?: string; deriv?: string };
   bip84?: { xpub?: string; _pub?: string; deriv?: string };
   bip86?: { xpub?: string; _pub?: string; deriv?: string };
-  bip48_1?: { xpub?: string; deriv?: string };
-  bip48_2?: { xpub?: string; deriv?: string };
+  bip48_1?: { xpub?: string; deriv?: string }; // Nested segwit multisig (P2SH-P2WSH)
+  bip48_2?: { xpub?: string; deriv?: string }; // Native segwit multisig (P2WSH)
   name?: string;
   label?: string;
 }
@@ -55,37 +57,93 @@ export const coldcardNestedParser: DeviceParser = {
 
   parse(data: unknown): DeviceParseResult {
     const cc = data as ColdcardNestedFormat;
+    const accounts: DeviceAccount[] = [];
 
-    // Priority: bip84 > bip86 > bip49 > bip44 > bip48_2 > bip48_1
-    // (Native SegWit preferred)
-    let xpub = '';
-    let derivationPath = '';
-
+    // Extract all available single-sig accounts
     if (cc.bip84) {
-      xpub = cc.bip84._pub || cc.bip84.xpub || '';
-      derivationPath = cc.bip84.deriv || '';
-    } else if (cc.bip86) {
-      xpub = cc.bip86._pub || cc.bip86.xpub || '';
-      derivationPath = cc.bip86.deriv || '';
-    } else if (cc.bip49) {
-      xpub = cc.bip49._pub || cc.bip49.xpub || '';
-      derivationPath = cc.bip49.deriv || '';
-    } else if (cc.bip44) {
-      xpub = cc.bip44._pub || cc.bip44.xpub || '';
-      derivationPath = cc.bip44.deriv || '';
-    } else if (cc.bip48_2) {
-      xpub = cc.bip48_2.xpub || '';
-      derivationPath = cc.bip48_2.deriv || '';
-    } else if (cc.bip48_1) {
-      xpub = cc.bip48_1.xpub || '';
-      derivationPath = cc.bip48_1.deriv || '';
+      const xpub = cc.bip84._pub || cc.bip84.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip84.deriv || "m/84'/0'/0'",
+          purpose: 'single_sig',
+          scriptType: 'native_segwit',
+        });
+      }
     }
 
+    if (cc.bip86) {
+      const xpub = cc.bip86._pub || cc.bip86.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip86.deriv || "m/86'/0'/0'",
+          purpose: 'single_sig',
+          scriptType: 'taproot',
+        });
+      }
+    }
+
+    if (cc.bip49) {
+      const xpub = cc.bip49._pub || cc.bip49.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip49.deriv || "m/49'/0'/0'",
+          purpose: 'single_sig',
+          scriptType: 'nested_segwit',
+        });
+      }
+    }
+
+    if (cc.bip44) {
+      const xpub = cc.bip44._pub || cc.bip44.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip44.deriv || "m/44'/0'/0'",
+          purpose: 'single_sig',
+          scriptType: 'legacy',
+        });
+      }
+    }
+
+    // Extract multisig accounts (BIP-48)
+    if (cc.bip48_2) {
+      const xpub = cc.bip48_2.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip48_2.deriv || "m/48'/0'/0'/2'",
+          purpose: 'multisig',
+          scriptType: 'native_segwit',
+        });
+      }
+    }
+
+    if (cc.bip48_1) {
+      const xpub = cc.bip48_1.xpub || '';
+      if (xpub) {
+        accounts.push({
+          xpub,
+          derivationPath: cc.bip48_1.deriv || "m/48'/0'/0'/1'",
+          purpose: 'multisig',
+          scriptType: 'nested_segwit',
+        });
+      }
+    }
+
+    // Primary account: prefer native segwit single-sig (bip84)
+    const primaryAccount = accounts.find(a => a.purpose === 'single_sig' && a.scriptType === 'native_segwit')
+      || accounts.find(a => a.purpose === 'single_sig')
+      || accounts[0];
+
     return {
-      xpub,
+      xpub: primaryAccount?.xpub || '',
       fingerprint: cc.xfp || '',
-      derivationPath,
+      derivationPath: primaryAccount?.derivationPath || '',
       label: cc.name || cc.label || '',
+      accounts: accounts.length > 0 ? accounts : undefined,
     };
   },
 };

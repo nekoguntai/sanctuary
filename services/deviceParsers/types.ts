@@ -6,17 +6,34 @@
  */
 
 /**
+ * A single account from a hardware wallet device
+ * Represents one xpub at a specific derivation path
+ */
+export interface DeviceAccount {
+  /** Extended public key (xpub, ypub, zpub, etc.) */
+  xpub: string;
+  /** BIP32 derivation path (e.g., "m/84'/0'/0'") */
+  derivationPath: string;
+  /** Purpose: single-sig or multisig */
+  purpose: 'single_sig' | 'multisig';
+  /** Script type for this account */
+  scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
+}
+
+/**
  * Result of parsing device data from various formats
  */
 export interface DeviceParseResult {
-  /** Extended public key (xpub, ypub, zpub, etc.) */
+  /** Extended public key (xpub, ypub, zpub, etc.) - primary/preferred account */
   xpub?: string;
   /** Master fingerprint (8 hex characters) */
   fingerprint?: string;
-  /** BIP32 derivation path (e.g., "m/84'/0'/0'") */
+  /** BIP32 derivation path (e.g., "m/84'/0'/0'") - primary/preferred account */
   derivationPath?: string;
   /** Optional label/name for the device */
   label?: string;
+  /** All available accounts from the device (for multi-account import) */
+  accounts?: DeviceAccount[];
 }
 
 /**

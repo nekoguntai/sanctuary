@@ -20,6 +20,8 @@ import * as bcrypt from 'bcryptjs';
 let prisma: PrismaClient | null = null;
 let isSetup = false;
 let txCounter = 0;
+let deviceCounter = 0;
+let utxoCounter = 0;
 
 // ========================================
 // DATABASE CONNECTION
@@ -291,12 +293,13 @@ export async function createTestDevice(
   userId: string,
   options: CreateDeviceOptions = {}
 ) {
+  const counter = ++deviceCounter;
   return tx.device.create({
     data: {
       userId,
       type: options.type || 'trezor',
-      label: options.label || `test-device-${Date.now()}`,
-      fingerprint: options.fingerprint || `fp${Date.now().toString(16)}`,
+      label: options.label || `test-device-${Date.now()}-${counter}`,
+      fingerprint: options.fingerprint || `fp${Date.now().toString(16)}${counter.toString(16).padStart(4, '0')}`,
       xpub: options.xpub || 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
       derivationPath: options.derivationPath || "m/84'/1'/0'",
     },
@@ -389,12 +392,14 @@ export async function createTestUtxo(
   walletId: string,
   options: CreateUtxoOptions = {}
 ) {
+  const counter = ++utxoCounter;
+  const uniqueTxid = options.txid || `${Date.now().toString(16)}${counter.toString(16).padStart(8, '0')}`.padEnd(64, 'b');
   return tx.uTXO.create({
     data: {
       walletId,
-      txid: options.txid || `${Date.now().toString(16).padEnd(64, 'b')}`,
+      txid: uniqueTxid,
       vout: options.vout ?? 0,
-      address: options.address || `tb1q${Date.now().toString(16).padEnd(38, '0')}`,
+      address: options.address || `tb1q${Date.now().toString(16)}${counter.toString(16).padStart(4, '0')}`.padEnd(42, '0'),
       amount: options.amount ?? BigInt(100000),
       scriptPubKey: options.scriptPubKey || '0014751e76e8199196d454941c45d1b3a323f1433bd6',
       confirmations: options.confirmations ?? 6,

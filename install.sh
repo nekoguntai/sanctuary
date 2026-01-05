@@ -76,9 +76,20 @@ check_docker() {
     fi
 
     if ! docker info &> /dev/null; then
-        echo -e "${RED}Error: Docker daemon is not running.${NC}"
+        echo -e "${RED}Error: Cannot connect to Docker daemon.${NC}"
         echo ""
-        echo "Please start Docker and try again."
+        if [ -e /var/run/docker.sock ]; then
+            echo "The Docker socket exists but you don't have permission to access it."
+            echo "To fix this, add your user to the docker group:"
+            echo ""
+            echo "  sudo usermod -aG docker \$USER"
+            echo "  newgrp docker   # Apply immediately, or log out and back in"
+            echo ""
+            echo "Then run this installer again."
+        else
+            echo "Please start Docker and try again:"
+            echo "  sudo systemctl start docker"
+        fi
         exit 1
     fi
 

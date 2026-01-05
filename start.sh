@@ -55,6 +55,25 @@ fi
 export JWT_SECRET ENCRYPTION_KEY GATEWAY_SECRET POSTGRES_PASSWORD
 export HTTPS_PORT HTTP_PORT ENABLE_MONITORING ENABLE_TOR
 
+# Check Docker permissions
+if ! docker info &>/dev/null; then
+    echo "Error: Cannot connect to Docker daemon."
+    echo ""
+    if [ -e /var/run/docker.sock ]; then
+        echo "The Docker socket exists but you don't have permission to access it."
+        echo "To fix this, add your user to the docker group:"
+        echo ""
+        echo "  sudo usermod -aG docker \$USER"
+        echo "  newgrp docker   # Apply immediately, or log out and back in"
+        echo ""
+    else
+        echo "Make sure Docker is installed and running:"
+        echo "  sudo systemctl start docker"
+        echo ""
+    fi
+    exit 1
+fi
+
 case "${1:-}" in
     --stop)
         echo "Stopping Sanctuary..."

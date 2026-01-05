@@ -109,7 +109,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         await createTestAuditLog(tx, user.id, user.username, { category: 'wallet' });
 
         const authLogs = await tx.auditLog.findMany({
-          where: { category: 'auth' },
+          where: { userId: user.id, category: 'auth' },
         });
 
         expect(authLogs).toHaveLength(2);
@@ -125,7 +125,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         await createTestAuditLog(tx, user.id, user.username, { success: false });
 
         const failedLogs = await tx.auditLog.findMany({
-          where: { success: false },
+          where: { userId: user.id, success: false },
         });
 
         expect(failedLogs).toHaveLength(1);
@@ -156,6 +156,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
 
         const recentLogs = await tx.auditLog.findMany({
           where: {
+            userId: user.id,
             createdAt: {
               gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), // Last 24 hours
             },
@@ -197,7 +198,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         await createTestAuditLog(tx, user.id, user.username, { category: 'system' });
 
         const adminLogs = await tx.auditLog.findMany({
-          where: { category: 'admin' },
+          where: { userId: user.id, category: 'admin' },
         });
 
         expect(adminLogs).toHaveLength(2);
@@ -221,7 +222,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         await createTestAuditLog(tx, user.id, user.username, { success: true });
 
         const failed = await tx.auditLog.findMany({
-          where: { success: false },
+          where: { userId: user.id, success: false },
           orderBy: { createdAt: 'desc' },
         });
 
@@ -243,6 +244,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         }
 
         const recent = await tx.auditLog.findMany({
+          where: { userId: user.id },
           orderBy: { createdAt: 'desc' },
           take: 10,
         });
@@ -263,6 +265,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
 
         const counts = await tx.auditLog.groupBy({
           by: ['action'],
+          where: { userId: user.id },
           _count: { action: true },
         });
 
@@ -285,6 +288,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
 
         const counts = await tx.auditLog.groupBy({
           by: ['category'],
+          where: { userId: user.id },
           _count: { category: true },
         });
 
@@ -326,13 +330,14 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
 
         const result = await tx.auditLog.deleteMany({
           where: {
+            userId: user.id,
             createdAt: { lt: cutoffDate },
           },
         });
 
         expect(result.count).toBe(3);
 
-        const remaining = await tx.auditLog.count();
+        const remaining = await tx.auditLog.count({ where: { userId: user.id } });
         expect(remaining).toBe(1);
       });
     });

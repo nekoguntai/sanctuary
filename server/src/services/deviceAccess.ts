@@ -30,6 +30,14 @@ export interface DeviceWalletInfo {
   };
 }
 
+export interface DeviceAccountInfo {
+  id: string;
+  purpose: string;
+  scriptType: string;
+  derivationPath: string;
+  xpub: string;
+}
+
 export interface DeviceWithAccess {
   id: string;
   userId: string;
@@ -50,6 +58,7 @@ export interface DeviceWithAccess {
   model?: { id: string; slug: string; name: string } | null;
   walletCount: number;
   wallets: DeviceWalletInfo[];
+  accounts: DeviceAccountInfo[];
 }
 
 // ========================================
@@ -145,6 +154,16 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
           name: true,
         },
       },
+      // Get all device accounts (for filtering by wallet type compatibility)
+      accounts: {
+        select: {
+          id: true,
+          purpose: true,
+          scriptType: true,
+          derivationPath: true,
+          xpub: true,
+        },
+      },
       // Get associated wallets with basic info for display
       wallets: {
         select: {
@@ -200,6 +219,7 @@ export async function getUserAccessibleDevices(userId: string): Promise<DeviceWi
       model: device.model,
       walletCount: device.wallets.length,
       wallets: device.wallets,
+      accounts: device.accounts,
     };
   });
 }

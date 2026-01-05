@@ -290,6 +290,58 @@ test_frontend_serves_content() {
     fi
 }
 
+test_frontend_javascript_bundle() {
+    log_info "Testing frontend JavaScript bundle..."
+
+    # Get index.html and extract the JS bundle path
+    local index_html=$(compose_exec frontend wget -q -O - --no-check-certificate https://localhost:443/ 2>/dev/null)
+
+    if [ -z "$index_html" ]; then
+        index_html=$(compose_exec frontend wget -q -O - http://localhost:80/ 2>/dev/null)
+    fi
+
+    # Extract the main JS bundle path (e.g., /assets/index-ABC123.js)
+    local js_path=$(echo "$index_html" | grep -oE 'src="(/assets/index-[^"]+\.js)"' | head -1 | sed 's/src="//;s/"$//')
+
+    if [ -z "$js_path" ]; then
+        log_error "Could not find JavaScript bundle in index.html"
+        return 1
+    fi
+
+    log_debug "Found JS bundle: $js_path"
+
+    # Fetch the JS bundle
+    local js_content=$(compose_exec frontend wget -q -O - --no-check-certificate "https://localhost:443${js_path}" 2>/dev/null)
+
+    if [ -z "$js_content" ]; then
+        js_content=$(compose_exec frontend wget -q -O - "http://localhost:80${js_path}" 2>/dev/null)
+    fi
+
+    # Check bundle size (should be substantial - at least 100KB)
+    local js_size=${#js_content}
+    if [ "$js_size" -lt 100000 ]; then
+        log_error "JavaScript bundle too small (${js_size} bytes) - build may have failed"
+        return 1
+    fi
+
+    log_debug "JS bundle size: ${js_size} bytes"
+
+    # Check for React/app indicators
+    if ! echo "$js_content" | grep -q "React\|useState\|useEffect\|createElement"; then
+        log_error "JavaScript bundle missing React code - build may have failed"
+        return 1
+    fi
+
+    # Check for regenerator-runtime (fixes BitBox02 hardware wallet support)
+    if ! echo "$js_content" | grep -q "regeneratorRuntime\|regenerator"; then
+        log_warning "JavaScript bundle may be missing regenerator-runtime polyfill"
+        # Don't fail - might be inlined differently
+    fi
+
+    log_success "Frontend JavaScript bundle is valid (${js_size} bytes)"
+    return 0
+}
+
 test_gateway_container_running() {
     log_info "Checking gateway container..."
 
@@ -564,6 +616,7 @@ main() {
     run_test "Frontend Container Healthy" test_frontend_container_healthy
     run_test "Frontend Nginx Running" test_frontend_nginx_running
     run_test "Frontend Serves Content" test_frontend_serves_content
+    run_test "Frontend JavaScript Bundle" test_frontend_javascript_bundle
 
     # Gateway tests
     run_test "Gateway Container Running" test_gateway_container_running

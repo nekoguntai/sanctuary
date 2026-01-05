@@ -236,13 +236,15 @@ describeIfDatabase('SystemSettingRepository Integration Tests', () => {
   describe('setMany', () => {
     it('should set multiple settings at once', async () => {
       await withTestTransaction(async (tx) => {
+        const testPrefix = `batch_${Date.now()}_`;
         const settings = [
-          { key: 'batch.a', value: 'a' },
-          { key: 'batch.b', value: 'b' },
-          { key: 'batch.c', value: 'c' },
+          { key: `${testPrefix}a`, value: 'a' },
+          { key: `${testPrefix}b`, value: 'b' },
+          { key: `${testPrefix}c`, value: 'c' },
         ];
 
-        await tx.$transaction(
+        // Use Promise.all instead of tx.$transaction (already in transaction)
+        await Promise.all(
           settings.map((s) =>
             tx.systemSetting.upsert({
               where: { key: s.key },
@@ -254,7 +256,7 @@ describeIfDatabase('SystemSettingRepository Integration Tests', () => {
 
         const result = await tx.systemSetting.findMany({
           where: {
-            key: { startsWith: 'batch.' },
+            key: { startsWith: testPrefix },
           },
         });
 

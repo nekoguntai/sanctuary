@@ -392,7 +392,7 @@ ENVEOF
         ENCRYPTION_KEY="$ENCRYPTION_KEY" \
         GATEWAY_SECRET="$GATEWAY_SECRET" \
         POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-        docker compose $COMPOSE_FILES up -d --build --pull missing
+        docker compose $COMPOSE_FILES up -d --build
 
     # Wait for services to be healthy
     echo ""

@@ -64,6 +64,53 @@ export function convertToStandardXpub(extendedKey: string): string {
 }
 
 /**
+ * Version bytes for converting TO specific formats (reverse of XPUB_VERSIONS)
+ */
+const XPUB_TARGET_VERSIONS: Record<string, Buffer> = {
+  'xpub': Buffer.from([0x04, 0x88, 0xB2, 0x1E]),
+  'tpub': Buffer.from([0x04, 0x35, 0x87, 0xCF]),
+  'Zpub': Buffer.from([0x02, 0xAA, 0x7E, 0xD3]), // P2WSH multisig mainnet
+  'Vpub': Buffer.from([0x02, 0x57, 0x54, 0x83]), // P2WSH multisig testnet
+  'Ypub': Buffer.from([0x02, 0x95, 0xB4, 0x3F]), // P2SH-P2WSH multisig mainnet
+  'Upub': Buffer.from([0x02, 0x42, 0x89, 0xEF]), // P2SH-P2WSH multisig testnet
+};
+
+/**
+ * Convert extended public key to a specific format (e.g., xpub -> Zpub)
+ * Used for exports that require consistent xpub format (like Coldcard)
+ */
+export function convertXpubToFormat(extendedKey: string, targetFormat: 'xpub' | 'tpub' | 'Zpub' | 'Vpub' | 'Ypub' | 'Upub'): string {
+  const prefix = extendedKey.slice(0, 4);
+
+  // If already in target format, return as-is
+  if (prefix === targetFormat) {
+    return extendedKey;
+  }
+
+  const targetVersion = XPUB_TARGET_VERSIONS[targetFormat];
+  if (!targetVersion) {
+    return extendedKey;
+  }
+
+  try {
+    // Decode the base58check encoded key
+    const decoded = bs58check.decode(extendedKey);
+
+    // Replace the version bytes (first 4 bytes) with target version
+    const converted = Buffer.concat([
+      targetVersion,
+      decoded.slice(4)
+    ]);
+
+    // Re-encode with base58check
+    return bs58check.encode(converted);
+  } catch (error) {
+    // If conversion fails, return original
+    return extendedKey;
+  }
+}
+
+/**
  * Multisig key info extracted from descriptor
  */
 export interface MultisigKeyInfo {

@@ -85,6 +85,15 @@ interface Bip32DerivationEntry {
  * @returns Array of bip32Derivation entries, or empty array on failure
  */
 /**
+ * Normalize derivation path to use apostrophe notation for hardened paths.
+ * bitcoinjs-lib only recognizes ' notation, not 'h' notation, when encoding PSBT bip32Derivation.
+ * Using 'h' notation causes the hardened flag to be lost during PSBT serialization.
+ */
+function normalizeHardenedPath(path: string): string {
+  return path.replace(/h/g, "'");
+}
+
+/**
  * Extract change index and address index from a derivation path.
  * For BIP-48: purpose'/coin'/account'/script'/change/index
  * The last two non-hardened parts are change and index.
@@ -124,7 +133,8 @@ export function buildMultisigBip32Derivations(
 
         if (derivedNode.publicKey) {
           // Build full path for this key: m/{accountPath}/{change}/{index}
-          const fullPath = `m/${keyInfo.accountPath}/${changeIdx}/${addressIdx}`;
+          // Normalize to apostrophe notation for PSBT compatibility
+          const fullPath = normalizeHardenedPath(`m/${keyInfo.accountPath}/${changeIdx}/${addressIdx}`);
 
           bip32Derivations.push({
             masterFingerprint: Buffer.from(keyInfo.fingerprint, 'hex'),
@@ -927,17 +937,19 @@ export async function createTransaction(
         }
 
         if (pubkeyNode.publicKey) {
+          // Normalize path to apostrophe notation for PSBT compatibility
+          const normalizedPath = normalizeHardenedPath(derivationPath);
           psbt.updateInput(inputIndex, {
             bip32Derivation: [{
               masterFingerprint,
-              path: derivationPath,
+              path: normalizedPath,
               pubkey: pubkeyNode.publicKey,
             }],
           });
           log.info('Single-sig BIP32 derivation added to input', {
             inputIndex,
             fingerprint: masterFingerprint.toString('hex'),
-            path: derivationPath,
+            path: normalizedPath,
             pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
           });
         }
@@ -2134,10 +2146,12 @@ export async function createBatchTransaction(
         }
 
         if (pubkeyNode.publicKey) {
+          // Normalize path to apostrophe notation for PSBT compatibility
+          const normalizedPath = normalizeHardenedPath(derivationPath);
           psbt.updateInput(inputIndex, {
             bip32Derivation: [{
               masterFingerprint,
-              path: derivationPath,
+              path: normalizedPath,
               pubkey: pubkeyNode.publicKey,
             }],
           });

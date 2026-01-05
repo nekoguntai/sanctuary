@@ -21,6 +21,7 @@ import type {
   ExportOptions,
   ExportResult,
 } from '../types';
+import { convertXpubToFormat } from '../../bitcoin/addressDerivation';
 
 /**
  * Map internal script type to Coldcard format string
@@ -35,6 +36,15 @@ function mapScriptTypeToFormat(scriptType: string): string {
 }
 
 /**
+ * Convert derivation path to Coldcard format using ' notation for hardened paths
+ * Coldcard expects m/48'/0'/0'/2' format, not m/48h/0h/0h/2h
+ */
+function normalizeDerivationPath(path: string): string {
+  // Replace 'h' with apostrophe for hardened notation
+  return path.replace(/h/g, "'");
+}
+
+/**
  * Extract derivation path from devices
  * All devices in a multisig should use the same derivation path
  */
@@ -42,7 +52,8 @@ function extractDerivationPath(devices: WalletExportData['devices']): string {
   // Find the first device with a derivation path
   for (const device of devices) {
     if (device.derivationPath) {
-      return device.derivationPath;
+      // Normalize to Coldcard's expected format
+      return normalizeDerivationPath(device.derivationPath);
     }
   }
   // Default to standard BIP-48 native segwit multisig path
@@ -83,10 +94,13 @@ export const coldcardHandler: ExportFormatHandler = {
     lines.push('');
 
     // Each cosigner: fingerprint: xpub
+    // Coldcard expects standard xpub format, so normalize all extended keys
     for (const device of wallet.devices) {
       // Fingerprint should be uppercase, 8 characters
       const fingerprint = device.fingerprint.toUpperCase();
-      lines.push(`${fingerprint}: ${device.xpub}`);
+      // Convert any format (Zpub, Ypub, etc.) to standard xpub for Coldcard compatibility
+      const normalizedXpub = convertXpubToFormat(device.xpub, 'xpub');
+      lines.push(`${fingerprint}: ${normalizedXpub}`);
     }
 
     const content = lines.join('\n');

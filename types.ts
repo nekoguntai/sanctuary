@@ -250,7 +250,7 @@ export type WalletColumnId = 'name' | 'type' | 'devices' | 'sync' | 'pending' | 
 /**
  * Column IDs for device list table
  */
-export type DeviceColumnId = 'label' | 'type' | 'fingerprint' | 'wallets' | 'actions';
+export type DeviceColumnId = 'label' | 'type' | 'fingerprint' | 'accounts' | 'wallets' | 'actions';
 
 // ============================================================================
 // USER & GROUP TYPES

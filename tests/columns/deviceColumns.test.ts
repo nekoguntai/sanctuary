@@ -202,5 +202,15 @@ describe('deviceColumns', () => {
     it('actions column is not sortable', () => {
       expect(DEVICE_COLUMNS.actions.sortable).toBe(false);
     });
+
+    it('accounts column is not sortable', () => {
+      expect(DEVICE_COLUMNS.accounts.sortable).toBe(false);
+    });
+
+    it('has accounts column for derivation paths', () => {
+      expect(DEVICE_COLUMNS.accounts).toBeDefined();
+      expect(DEVICE_COLUMNS.accounts.label).toBe('Accounts');
+      expect(DEVICE_COLUMNS.accounts.defaultVisible).toBe(true);
+    });
   });
 });

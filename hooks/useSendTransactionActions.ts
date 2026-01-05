@@ -365,12 +365,17 @@ export function useSendTransactionActions({
 
       playEventSound('send');
 
-      // Immediately invalidate React Query caches so Dashboard updates
-      // This ensures the pending transaction appears right away without waiting for WebSocket or polling
-      queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
+      // Refetch React Query caches so Dashboard updates immediately
+      // IMPORTANT: Use refetchQueries (not invalidateQueries) to ensure data is fetched BEFORE navigation.
+      // invalidateQueries only marks as stale and triggers background refetch, which races with navigate().
+      // Using refetchQueries with await ensures the pending transaction appears in the UI right away.
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['pendingTransactions'] }),
+        queryClient.refetchQueries({ queryKey: ['wallets'] }),
+        queryClient.refetchQueries({ queryKey: ['wallet', walletId] }),
+      ]);
+      // These can be invalidated (background refresh is fine)
       queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
-      queryClient.invalidateQueries({ queryKey: ['wallets'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet', walletId] });
       queryClient.invalidateQueries({ queryKey: ['transactions', walletId] });
 
       // Delete draft if exists

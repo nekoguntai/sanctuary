@@ -35,6 +35,14 @@ export const DEVICE_COLUMNS: Record<DeviceColumnId, TableColumnConfig> = {
     required: false,
     align: 'left',
   },
+  accounts: {
+    id: 'accounts',
+    label: 'Accounts',
+    sortable: false,
+    defaultVisible: true,
+    required: false,
+    align: 'left',
+  },
   wallets: {
     id: 'wallets',
     label: 'Wallets',
@@ -61,6 +69,7 @@ export const DEFAULT_DEVICE_COLUMN_ORDER: DeviceColumnId[] = [
   'label',
   'type',
   'fingerprint',
+  'accounts',
   'wallets',
   'actions',
 ];
@@ -72,6 +81,7 @@ export const DEFAULT_DEVICE_VISIBLE_COLUMNS: DeviceColumnId[] = [
   'label',
   'type',
   'fingerprint',
+  'accounts',
   'wallets',
   'actions',
 ];

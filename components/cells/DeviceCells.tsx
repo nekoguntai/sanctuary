@@ -162,6 +162,50 @@ export function createDeviceCellRenderers(
     );
   };
 
+  // Accounts Cell - Shows derivation paths with singlesig/multisig tags
+  // Color coded: warning (amber) for multisig, success (green) for single-sig
+  // Note: Dark mode uses inverted color scales per CLAUDE.md - low numbers are dark, high numbers are light
+  const AccountsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
+    const accounts = device.accounts || [];
+
+    // Extensible badge styling based on account purpose
+    // Uses solid colored backgrounds with light text in dark mode for better visibility
+    const getAccountBadgeClass = (purpose: string) => {
+      const isMultisig = purpose === 'multisig';
+      // Dark mode: bg-*-100 is dark (inverted), text-*-700/800 is light (inverted)
+      return isMultisig
+        ? 'bg-warning-600 text-white dark:bg-warning-100 dark:text-warning-700'
+        : 'bg-success-600 text-white dark:bg-success-100 dark:text-success-700';
+    };
+
+    if (accounts.length === 0) {
+      // Fallback to legacy derivation path display
+      if (device.derivationPath) {
+        const isMultisig = device.derivationPath.includes("48'");
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono ${getAccountBadgeClass(isMultisig ? 'multisig' : 'single_sig')}`}>
+            {device.derivationPath}
+          </span>
+        );
+      }
+      return <span className="text-xs text-sanctuary-400 italic">None</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {accounts.map((account) => (
+          <span
+            key={account.id}
+            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono ${getAccountBadgeClass(account.purpose)}`}
+            title={`${account.purpose === 'multisig' ? 'Multisig' : 'Single-sig'} (${account.scriptType})`}
+          >
+            {account.derivationPath}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   // Wallets Cell - Shows wallet names (supports multiple wallets per device)
   // Color coded: warning (amber) for multisig, success (green) for single-sig
   const WalletsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
@@ -257,6 +301,7 @@ export function createDeviceCellRenderers(
     label: LabelCell,
     type: TypeCell,
     fingerprint: FingerprintCell,
+    accounts: AccountsCell,
     wallets: WalletsCell,
     actions: ActionsCell,
   };

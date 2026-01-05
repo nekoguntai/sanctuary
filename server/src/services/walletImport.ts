@@ -260,11 +260,16 @@ export async function importFromDescriptor(
   // Resolve devices
   const resolutions = await resolveDevices(userId, parsed.devices);
 
+  // Determine account purpose from wallet type
+  const accountPurpose = parsed.type === 'multi_sig' ? 'multisig' : 'single_sig';
+
   // Create devices and wallet in a transaction
   return await prisma.$transaction(async (tx) => {
     const createdDeviceIds: string[] = [];
     const reusedDeviceIds: string[] = [];
     const deviceIdsForWallet: string[] = [];
+    // Track imported device info for building descriptor
+    const importedDeviceInfos: Array<{ fingerprint: string; xpub: string; derivationPath: string }> = [];
 
     // Create or reuse devices
     for (const resolution of resolutions) {
@@ -286,6 +291,17 @@ export async function importFromDescriptor(
           },
         });
 
+        // Create DeviceAccount for this wallet's purpose
+        await tx.deviceAccount.create({
+          data: {
+            deviceId: newDevice.id,
+            purpose: accountPurpose,
+            scriptType: parsed.scriptType,
+            derivationPath: resolution.derivationPath,
+            xpub: resolution.xpub,
+          },
+        });
+
         // Create DeviceUser record for access control
         await tx.deviceUser.create({
           data: {
@@ -298,26 +314,46 @@ export async function importFromDescriptor(
         createdDeviceIds.push(newDevice.id);
         deviceIdsForWallet.push(newDevice.id);
       } else {
+        // Device exists - check if we need to add the account with imported derivation path
+        const existingAccounts = await tx.deviceAccount.findMany({
+          where: { deviceId: resolution.existingDeviceId! },
+        });
+
+        const hasMatchingAccount = existingAccounts.some(
+          (a) => a.purpose === accountPurpose && a.derivationPath === resolution.derivationPath
+        );
+
+        if (!hasMatchingAccount) {
+          await tx.deviceAccount.create({
+            data: {
+              deviceId: resolution.existingDeviceId!,
+              purpose: accountPurpose,
+              scriptType: parsed.scriptType,
+              derivationPath: resolution.derivationPath,
+              xpub: resolution.xpub,
+            },
+          });
+          log.info('Added new device account for import', {
+            deviceId: resolution.existingDeviceId,
+            purpose: accountPurpose,
+            derivationPath: resolution.derivationPath,
+          });
+        }
+
         reusedDeviceIds.push(resolution.existingDeviceId!);
         deviceIdsForWallet.push(resolution.existingDeviceId!);
       }
+
+      // Always use the IMPORTED derivation path/xpub for building the descriptor
+      importedDeviceInfos.push({
+        fingerprint: resolution.fingerprint,
+        xpub: resolution.xpub,
+        derivationPath: resolution.derivationPath,
+      });
     }
 
-    // Build descriptor with proper formatting
-    const devices = await tx.device.findMany({
-      where: { id: { in: deviceIdsForWallet } },
-    });
-
-    // Sort devices by their order in the original parsed.devices
-    const sortedDevices = deviceIdsForWallet.map(
-      (id) => devices.find((d) => d.id === id)!
-    );
-
-    const deviceInfos = sortedDevices.map((d) => ({
-      fingerprint: d.fingerprint,
-      xpub: d.xpub,
-      derivationPath: d.derivationPath || undefined,
-    }));
+    // Build descriptor using IMPORTED device info (not stored device paths)
+    const deviceInfos = importedDeviceInfos;
 
     const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
       deviceInfos,
@@ -445,11 +481,16 @@ export async function importFromJson(
     jsonConfig.devices
   );
 
+  // Determine account purpose from wallet type
+  const accountPurpose = parsed.type === 'multi_sig' ? 'multisig' : 'single_sig';
+
   // Create devices and wallet in a transaction
   return await prisma.$transaction(async (tx) => {
     const createdDeviceIds: string[] = [];
     const reusedDeviceIds: string[] = [];
     const deviceIdsForWallet: string[] = [];
+    // Track imported device info (derivation path, xpub) for building descriptor
+    const importedDeviceInfos: Array<{ fingerprint: string; xpub: string; derivationPath: string }> = [];
 
     // Create or reuse devices
     for (let i = 0; i < resolutions.length; i++) {
@@ -469,6 +510,17 @@ export async function importFromJson(
           },
         });
 
+        // Create DeviceAccount for this wallet's purpose
+        await tx.deviceAccount.create({
+          data: {
+            deviceId: newDevice.id,
+            purpose: accountPurpose,
+            scriptType: parsed.scriptType,
+            derivationPath: resolution.derivationPath,
+            xpub: resolution.xpub,
+          },
+        });
+
         // Create DeviceUser record for access control
         await tx.deviceUser.create({
           data: {
@@ -481,25 +533,49 @@ export async function importFromJson(
         createdDeviceIds.push(newDevice.id);
         deviceIdsForWallet.push(newDevice.id);
       } else {
+        // Device exists - check if we need to add the account with imported derivation path
+        const existingAccounts = await tx.deviceAccount.findMany({
+          where: { deviceId: resolution.existingDeviceId! },
+        });
+
+        // Check if an account with this purpose and derivation path already exists
+        const hasMatchingAccount = existingAccounts.some(
+          (a) => a.purpose === accountPurpose && a.derivationPath === resolution.derivationPath
+        );
+
+        if (!hasMatchingAccount) {
+          // Create new account with imported derivation path
+          await tx.deviceAccount.create({
+            data: {
+              deviceId: resolution.existingDeviceId!,
+              purpose: accountPurpose,
+              scriptType: parsed.scriptType,
+              derivationPath: resolution.derivationPath,
+              xpub: resolution.xpub,
+            },
+          });
+          log.info('Added new device account for import', {
+            deviceId: resolution.existingDeviceId,
+            purpose: accountPurpose,
+            derivationPath: resolution.derivationPath,
+          });
+        }
+
         reusedDeviceIds.push(resolution.existingDeviceId!);
         deviceIdsForWallet.push(resolution.existingDeviceId!);
       }
+
+      // Always use the IMPORTED derivation path/xpub for building the descriptor
+      importedDeviceInfos.push({
+        fingerprint: resolution.fingerprint,
+        xpub: resolution.xpub,
+        derivationPath: resolution.derivationPath,
+      });
     }
 
-    // Build descriptor from devices
-    const devices = await tx.device.findMany({
-      where: { id: { in: deviceIdsForWallet } },
-    });
-
-    const sortedDevices = deviceIdsForWallet.map(
-      (id) => devices.find((d) => d.id === id)!
-    );
-
-    const deviceInfos = sortedDevices.map((d) => ({
-      fingerprint: d.fingerprint,
-      xpub: d.xpub,
-      derivationPath: d.derivationPath || undefined,
-    }));
+    // Build descriptor using IMPORTED device info (not stored device paths)
+    // This ensures the descriptor matches the source wallet exactly
+    const deviceInfos = importedDeviceInfos;
 
     const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
       deviceInfos,
@@ -653,11 +729,16 @@ export async function importFromParsedData(
   // Resolve devices
   const resolutions = await resolveDevices(userId, parsed.devices);
 
+  // Determine account purpose from wallet type
+  const accountPurpose = parsed.type === 'multi_sig' ? 'multisig' : 'single_sig';
+
   // Create devices and wallet in a transaction
   return await prisma.$transaction(async (tx) => {
     const createdDeviceIds: string[] = [];
     const reusedDeviceIds: string[] = [];
     const deviceIdsForWallet: string[] = [];
+    // Track imported device info for building descriptor
+    const importedDeviceInfos: Array<{ fingerprint: string; xpub: string; derivationPath: string }> = [];
 
     // Create or reuse devices
     for (const resolution of resolutions) {
@@ -679,6 +760,17 @@ export async function importFromParsedData(
           },
         });
 
+        // Create DeviceAccount for this wallet's purpose
+        await tx.deviceAccount.create({
+          data: {
+            deviceId: newDevice.id,
+            purpose: accountPurpose,
+            scriptType: parsed.scriptType,
+            derivationPath: resolution.derivationPath,
+            xpub: resolution.xpub,
+          },
+        });
+
         // Create DeviceUser record for access control
         await tx.deviceUser.create({
           data: {
@@ -691,26 +783,46 @@ export async function importFromParsedData(
         createdDeviceIds.push(newDevice.id);
         deviceIdsForWallet.push(newDevice.id);
       } else {
+        // Device exists - check if we need to add the account with imported derivation path
+        const existingAccounts = await tx.deviceAccount.findMany({
+          where: { deviceId: resolution.existingDeviceId! },
+        });
+
+        const hasMatchingAccount = existingAccounts.some(
+          (a) => a.purpose === accountPurpose && a.derivationPath === resolution.derivationPath
+        );
+
+        if (!hasMatchingAccount) {
+          await tx.deviceAccount.create({
+            data: {
+              deviceId: resolution.existingDeviceId!,
+              purpose: accountPurpose,
+              scriptType: parsed.scriptType,
+              derivationPath: resolution.derivationPath,
+              xpub: resolution.xpub,
+            },
+          });
+          log.info('Added new device account for import', {
+            deviceId: resolution.existingDeviceId,
+            purpose: accountPurpose,
+            derivationPath: resolution.derivationPath,
+          });
+        }
+
         reusedDeviceIds.push(resolution.existingDeviceId!);
         deviceIdsForWallet.push(resolution.existingDeviceId!);
       }
+
+      // Always use the IMPORTED derivation path/xpub for building the descriptor
+      importedDeviceInfos.push({
+        fingerprint: resolution.fingerprint,
+        xpub: resolution.xpub,
+        derivationPath: resolution.derivationPath,
+      });
     }
 
-    // Build descriptor with proper formatting
-    const devices = await tx.device.findMany({
-      where: { id: { in: deviceIdsForWallet } },
-    });
-
-    // Sort devices by their order in the original parsed.devices
-    const sortedDevices = deviceIdsForWallet.map(
-      (id) => devices.find((d) => d.id === id)!
-    );
-
-    const deviceInfos = sortedDevices.map((d) => ({
-      fingerprint: d.fingerprint,
-      xpub: d.xpub,
-      derivationPath: d.derivationPath || undefined,
-    }));
+    // Build descriptor using IMPORTED device info (not stored device paths)
+    const deviceInfos = importedDeviceInfos;
 
     const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
       deviceInfos,

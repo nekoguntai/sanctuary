@@ -440,7 +440,7 @@ export const ImportWallet: React.FC = () => {
           />
           <label
             htmlFor="file-upload"
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-xl cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50 transition-colors"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-sanctuary-300 dark:border-sanctuary-700 rounded-xl cursor-pointer hover:border-primary-500 dark:hover:border-primary-500 bg-transparent hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800 transition-colors"
           >
             <Upload className="w-5 h-5 text-sanctuary-400" />
             <span className="text-sm text-sanctuary-500">

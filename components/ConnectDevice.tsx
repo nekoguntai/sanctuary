@@ -13,6 +13,7 @@ import {
   DeviceConflictResponse,
 } from '../src/api/devices';
 import { parseDeviceJson, parseDeviceData, DeviceAccount } from '../services/deviceParsers';
+import { BBQrDecoder, isBBQr, BBQrFileTypes, BBQrEncodings } from '../services/bbqr';
 import { Button } from './ui/Button';
 import {
   ArrowLeft,
@@ -198,6 +199,7 @@ export const ConnectDevice: React.FC = () => {
   const [urProgress, setUrProgress] = useState<number>(0); // Progress for multi-part UR codes
   const urDecoderRef = useRef<URRegistryDecoder | null>(null);
   const bytesDecoderRef = useRef<BytesURDecoder | null>(null); // For ur:bytes format (Foundation Passport)
+  const bbqrDecoderRef = useRef<BBQrDecoder | null>(null); // For BBQr format (Coldcard Q)
 
   // Fetch device models on mount
   useEffect(() => {
@@ -233,6 +235,7 @@ export const ConnectDevice: React.FC = () => {
     setUrProgress(0);
     urDecoderRef.current = null;
     bytesDecoderRef.current = null;
+    bbqrDecoderRef.current = null;
     if (selectedModel) {
       setLabel(`My ${selectedModel.name}`);
     }
@@ -778,7 +781,139 @@ export const ConnectDevice: React.FC = () => {
       }
     }
 
-    // Not UR format - use device parser registry
+    // Check for BBQr format (Coldcard Q multi-part QR codes)
+    if (isBBQr(content)) {
+      try {
+        // Initialize BBQr decoder if needed
+        if (!bbqrDecoderRef.current) {
+          log.debug('Creating new BBQrDecoder');
+          bbqrDecoderRef.current = new BBQrDecoder();
+        }
+
+        // Feed the part to the decoder
+        const accepted = bbqrDecoderRef.current.receivePart(content);
+        if (!accepted) {
+          const err = bbqrDecoderRef.current.getError();
+          log.error('BBQr part rejected', { error: err });
+          throw new Error(`BBQr error: ${err}`);
+        }
+
+        // Update progress
+        const progress = bbqrDecoderRef.current.getProgress();
+        setUrProgress(progress);
+
+        const received = bbqrDecoderRef.current.getReceivedCount();
+        const total = bbqrDecoderRef.current.getTotalParts();
+        const fileType = bbqrDecoderRef.current.getFileType();
+        const encoding = bbqrDecoderRef.current.getEncoding();
+
+        log.info('BBQr progress', {
+          progress,
+          received,
+          total,
+          fileType: fileType ? BBQrFileTypes[fileType] : 'unknown',
+          encoding: encoding ? BBQrEncodings[encoding] : 'unknown',
+        });
+
+        // Check if complete
+        if (!bbqrDecoderRef.current.isComplete()) {
+          // Not complete yet - keep scanning for more parts
+          log.debug('Waiting for more BBQr parts', {
+            missing: bbqrDecoderRef.current.getMissingParts(),
+          });
+          return;
+        }
+
+        // Decode is complete
+        log.info('BBQr decode complete');
+        setCameraActive(false);
+        setScanning(true);
+        setError(null);
+
+        // Decode the accumulated data
+        const decoded = bbqrDecoderRef.current.decode();
+        log.debug('BBQr decoded', {
+          fileType: BBQrFileTypes[decoded.fileType],
+          dataLength: decoded.data.length,
+          hasText: !!decoded.text,
+        });
+
+        // Reset decoder for next scan
+        bbqrDecoderRef.current = null;
+        setUrProgress(0);
+
+        // For JSON file type, parse the content
+        if (decoded.fileType === 'J' && decoded.text) {
+          log.debug('Parsing BBQr JSON content', { preview: decoded.text.substring(0, 200) });
+
+          const parseResult = parseDeviceJson(decoded.text);
+
+          if (parseResult && parseResult.xpub) {
+            // Apply found values
+            if (parseResult.fingerprint) setFingerprint(parseResult.fingerprint.toUpperCase());
+            setXpub(parseResult.xpub);
+            if (parseResult.derivationPath) setDerivationPath(normalizeDerivationPath(parseResult.derivationPath));
+            if (parseResult.label && !label) setLabel(parseResult.label);
+
+            // Handle multi-account import
+            if (parseResult.accounts && parseResult.accounts.length > 0) {
+              setParsedAccounts(parseResult.accounts);
+              setSelectedAccounts(new Set(parseResult.accounts.map((_, i) => i)));
+              log.info('BBQr parsed with multiple accounts', {
+                format: parseResult.format,
+                accountCount: parseResult.accounts.length,
+                purposes: parseResult.accounts.map(a => a.purpose),
+              });
+            } else {
+              setParsedAccounts([]);
+              setSelectedAccounts(new Set());
+            }
+
+            // Track which fields came from QR
+            const extractedFields = {
+              xpub: true,
+              fingerprint: !!parseResult.fingerprint,
+              derivationPath: !!parseResult.derivationPath,
+              label: !!parseResult.label,
+            };
+            setQrExtractedFields(extractedFields);
+
+            // Generate warning for missing fields
+            const warningMsg = generateMissingFieldsWarning({
+              hasFingerprint: !!parseResult.fingerprint,
+              hasDerivationPath: !!parseResult.derivationPath,
+            });
+            setWarning(warningMsg);
+
+            setScanned(true);
+            setScanning(false);
+
+            log.info('BBQr QR code parsed successfully', { format: parseResult.format, ...extractedFields });
+            return;
+          }
+
+          throw new Error('Could not extract xpub from BBQr JSON content');
+        }
+
+        // Non-JSON BBQr types (PSBT, Transaction, etc.) are not supported for device import
+        throw new Error(
+          `BBQr file type "${BBQrFileTypes[decoded.fileType]}" is not supported for device import. ` +
+          'Please use the JSON export format from your Coldcard.'
+        );
+
+      } catch (err) {
+        log.error('Failed to decode BBQr', { error: err, contentPreview: content.substring(0, 50) });
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        setError(`BBQr error: ${errMsg}`);
+        setCameraActive(false);
+        setScanning(false);
+        setUrProgress(0);
+        bbqrDecoderRef.current = null;
+        return;
+      }
+    }
+
+    // Not UR or BBQr format - use device parser registry
     setCameraActive(false);
     setScanning(true);
     setError(null);

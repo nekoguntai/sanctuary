@@ -63,7 +63,9 @@ export async function syncAddress(addressId: string): Promise<{
     throw new Error('Address not found');
   }
 
-  const client = await getNodeClient();
+  // Get network from wallet for correct block height lookups
+  const network = (addressRecord.wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+  const client = await getNodeClient(network);
 
   try {
     // Get transaction history
@@ -216,7 +218,7 @@ export async function syncAddress(addressId: string): Promise<{
               addressId: addressRecord.id,
               type: 'received',
               amount: BigInt(amount),
-              confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+              confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
               blockHeight: item.height > 0 ? item.height : null,
               blockTime,
             },
@@ -263,7 +265,7 @@ export async function syncAddress(addressId: string): Promise<{
                 type: 'sent',
                 amount: BigInt(sentAmount),
                 fee: validFee !== null ? BigInt(validFee) : null,
-                confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+                confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
                 blockHeight: item.height > 0 ? item.height : null,
                 blockTime,
               },
@@ -286,7 +288,7 @@ export async function syncAddress(addressId: string): Promise<{
                 type: 'consolidation',
                 amount: validFee !== null ? BigInt(-validFee) : BigInt(0),
                 fee: validFee !== null ? BigInt(validFee) : null,
-                confirmations: item.height > 0 ? await getConfirmations(item.height) : 0,
+                confirmations: item.height > 0 ? await getConfirmations(item.height, network) : 0,
                 blockHeight: item.height > 0 ? item.height : null,
                 blockTime,
               },
@@ -347,7 +349,7 @@ export async function syncAddress(addressId: string): Promise<{
       if (!txDetails || !txDetails.vout || !txDetails.vout[utxo.tx_pos]) continue;
 
       const output = txDetails.vout[utxo.tx_pos];
-      const confirmations = utxo.height > 0 ? await getConfirmations(utxo.height) : 0;
+      const confirmations = utxo.height > 0 ? await getConfirmations(utxo.height, network) : 0;
 
       utxosToCreate.push({
         walletId: addressRecord.walletId,
@@ -1720,15 +1722,17 @@ export async function syncWallet(walletId: string): Promise<{
 
 /**
  * Calculate confirmations for a transaction (internal helper)
+ * @param blockHeight - Block height of the transaction
+ * @param network - Bitcoin network (defaults to mainnet for backwards compatibility)
  */
-async function getConfirmations(blockHeight: number): Promise<number> {
+async function getConfirmations(blockHeight: number, network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<number> {
   if (blockHeight <= 0) return 0;
 
   try {
-    const currentHeight = await getBlockHeight();
+    const currentHeight = await getBlockHeight(network);
     return Math.max(0, currentHeight - blockHeight + 1);
   } catch (error) {
-    log.error('[BLOCKCHAIN] Failed to get confirmations', { error: String(error) });
+    log.error('[BLOCKCHAIN] Failed to get confirmations', { error: String(error), network });
     return 0;
   }
 }

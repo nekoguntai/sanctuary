@@ -210,6 +210,7 @@ export async function findByIdWithGroup(walletId: string): Promise<(Wallet & { g
 
 /**
  * Find wallet with devices for export
+ * Includes device accounts to properly select derivation paths for wallet type
  */
 export async function findByIdWithDevices(walletId: string) {
   return prisma.wallet.findUnique({
@@ -217,7 +218,11 @@ export async function findByIdWithDevices(walletId: string) {
     include: {
       devices: {
         include: {
-          device: true,
+          device: {
+            include: {
+              accounts: true,
+            },
+          },
         },
         orderBy: { signerIndex: 'asc' },
       },

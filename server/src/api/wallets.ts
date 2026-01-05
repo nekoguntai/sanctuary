@@ -370,6 +370,46 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
  * GET /api/v1/wallets/:id/export/formats
  * Get available export formats for this wallet
  */
+/**
+ * Build wallet export data from wallet with devices
+ * Selects the appropriate device account based on wallet type
+ */
+function buildWalletExportData(wallet: NonNullable<Awaited<ReturnType<typeof walletRepository.findByIdWithDevices>>>): WalletExportData {
+  // Determine expected purpose based on wallet type
+  const expectedPurpose = wallet.type === 'multi_sig' ? 'multisig' : 'single_sig';
+
+  return {
+    id: wallet.id,
+    name: wallet.name,
+    type: wallet.type === 'multi_sig' ? 'multi_sig' : 'single_sig',
+    scriptType: wallet.scriptType as any,
+    network: wallet.network as any,
+    descriptor: wallet.descriptor || '',
+    quorum: wallet.quorum || undefined,
+    totalSigners: wallet.totalSigners || undefined,
+    devices: wallet.devices.map((wd) => {
+      // Find the appropriate account based on wallet type
+      // Priority: exact match (purpose + scriptType) > purpose match > legacy fields
+      const accounts = (wd.device as any).accounts || [];
+      const exactMatch = accounts.find(
+        (a: any) => a.purpose === expectedPurpose && a.scriptType === wallet.scriptType
+      );
+      const purposeMatch = accounts.find((a: any) => a.purpose === expectedPurpose);
+      const account = exactMatch || purposeMatch;
+
+      return {
+        label: wd.device.label,
+        type: wd.device.type,
+        fingerprint: wd.device.fingerprint,
+        // Use account-specific xpub and derivation path if available
+        xpub: account?.xpub || wd.device.xpub,
+        derivationPath: account?.derivationPath || wd.device.derivationPath || undefined,
+      };
+    }),
+    createdAt: wallet.createdAt,
+  };
+}
+
 router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const walletId = req.walletId!;
@@ -385,24 +425,7 @@ router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Reque
     }
 
     // Build wallet export data to check format availability
-    const walletData: WalletExportData = {
-      id: wallet.id,
-      name: wallet.name,
-      type: wallet.type === 'multi_sig' ? 'multi_sig' : 'single_sig',
-      scriptType: wallet.scriptType as any,
-      network: wallet.network as any,
-      descriptor: wallet.descriptor || '',
-      quorum: wallet.quorum || undefined,
-      totalSigners: wallet.totalSigners || undefined,
-      devices: wallet.devices.map((wd) => ({
-        label: wd.device.label,
-        type: wd.device.type,
-        fingerprint: wd.device.fingerprint,
-        xpub: wd.device.xpub,
-        derivationPath: wd.device.derivationPath || undefined,
-      })),
-      createdAt: wallet.createdAt,
-    };
+    const walletData = buildWalletExportData(wallet);
 
     // Get available formats
     const formats = exportFormatRegistry.getAvailableFormats(walletData).map((handler) => ({
@@ -444,25 +467,8 @@ router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res:
       });
     }
 
-    // Build wallet export data
-    const walletData: WalletExportData = {
-      id: wallet.id,
-      name: wallet.name,
-      type: wallet.type === 'multi_sig' ? 'multi_sig' : 'single_sig',
-      scriptType: wallet.scriptType as any,
-      network: wallet.network as any,
-      descriptor: wallet.descriptor || '',
-      quorum: wallet.quorum || undefined,
-      totalSigners: wallet.totalSigners || undefined,
-      devices: wallet.devices.map((wd) => ({
-        label: wd.device.label,
-        type: wd.device.type,
-        fingerprint: wd.device.fingerprint,
-        xpub: wd.device.xpub,
-        derivationPath: wd.device.derivationPath || undefined,
-      })),
-      createdAt: wallet.createdAt,
-    };
+    // Build wallet export data (uses device accounts for correct derivation paths)
+    const walletData = buildWalletExportData(wallet);
 
     // Check if format exists
     if (!exportFormatRegistry.has(formatId)) {

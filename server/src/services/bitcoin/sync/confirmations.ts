@@ -63,6 +63,15 @@ export interface PopulateFieldsResult {
  * Returns detailed info about which transactions changed, for milestone notifications
  */
 export async function updateTransactionConfirmations(walletId: string): Promise<ConfirmationUpdate[]> {
+  // Get wallet to determine network for correct block height
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { network: true },
+  });
+  if (!wallet) return [];
+
+  const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+
   // Get deep confirmation threshold from settings
   const deepThresholdSetting = await prisma.systemSetting.findUnique({
     where: { key: 'deepConfirmationThreshold' },
@@ -82,7 +91,7 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
 
   if (transactions.length === 0) return [];
 
-  const currentHeight = await getBlockHeight();
+  const currentHeight = await getBlockHeight(network);
 
   // Calculate new confirmations and collect updates
   const updates: Array<{ id: string; txid: string; oldConfirmations: number; newConfirmations: number }> = [];
@@ -132,7 +141,17 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
  * Returns both count and confirmation updates for notification broadcasting
  */
 export async function populateMissingTransactionFields(walletId: string): Promise<PopulateFieldsResult> {
-  const client = await getNodeClient();
+  // Get wallet to determine network for correct block height
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { network: true },
+  });
+  if (!wallet) {
+    return { updated: 0, confirmationUpdates: [] };
+  }
+
+  const network = (wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest') || 'mainnet';
+  const client = await getNodeClient(network);
 
   // Find transactions with missing fields (including fee and counterparty address)
   // OPTIMIZED: Don't include all wallet addresses - fetch them separately with only needed fields
@@ -187,7 +206,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     },
   });
 
-  const currentHeight = await getBlockHeight();
+  const currentHeight = await getBlockHeight(network);
 
   // PHASE 0: Get block heights from address history (more reliable than verbose tx for some servers)
   // This handles servers like Blockstream that don't support verbose transaction responses
@@ -420,7 +439,7 @@ export async function populateMissingTransactionFields(walletId: string): Promis
         } else if (tx.blockHeight || updates.blockHeight) {
           // Derive timestamp from block header if tx.time not available
           const height = updates.blockHeight || tx.blockHeight;
-          const blockTime = await getBlockTimestamp(height);
+          const blockTime = await getBlockTimestamp(height, network);
           if (blockTime) {
             updates.blockTime = blockTime;
             blockTimesPopulated++;

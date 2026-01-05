@@ -833,21 +833,24 @@ export const WalletDetail: React.FC = () => {
             .map(d => {
               // Find the matching account for this wallet's type and script type
               const accounts = d.accounts || [];
-              // Priority: exact match (purpose + scriptType) > purpose match > legacy fallback
+              // REQUIRE exact match (purpose + scriptType) - no fallback
               const exactMatch = accounts.find(
                 a => a.purpose === expectedPurpose && a.scriptType === apiWallet.scriptType
               );
-              const purposeMatch = accounts.find(a => a.purpose === expectedPurpose);
-              const account = exactMatch || purposeMatch;
+
+              // Flag if device lacks required account - cannot sign for this wallet
+              const accountMissing = !exactMatch;
 
               return {
                 id: d.id,
                 type: d.type,
                 label: d.label,
                 fingerprint: d.fingerprint,
-                derivationPath: account?.derivationPath || d.derivationPath || "m/84'/0'/0'",
-                xpub: account?.xpub || d.xpub,
+                // Only use exact match - show legacy path if no match (to indicate the problem)
+                derivationPath: exactMatch?.derivationPath || d.derivationPath || 'No matching account',
+                xpub: exactMatch?.xpub || d.xpub,
                 userId: user.id,
+                accountMissing, // Flag for UI warning
               };
             });
           setDevices(walletDevices);
@@ -2572,30 +2575,45 @@ export const WalletDetail: React.FC = () => {
                 <h3 className="text-base font-medium mb-3 text-sanctuary-900 dark:text-sanctuary-100">Hardware Devices</h3>
                 {devices.length > 0 ? (
                   <ul className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
-                    {devices.map(d => (
-                      <li
-                        key={d.id}
-                        onClick={() => navigate(`/devices/${d.id}`)}
-                        className="py-3 flex justify-between items-center cursor-pointer hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 -mx-2 px-2 rounded-lg transition-colors"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="p-2 rounded-lg surface-secondary">
-                            {getDeviceIcon(d.type, "w-5 h-5 text-sanctuary-600 dark:text-sanctuary-400")}
+                    {devices.map(d => {
+                      const hasAccountMismatch = (d as any).accountMissing;
+                      return (
+                        <li
+                          key={d.id}
+                          onClick={() => navigate(`/devices/${d.id}`)}
+                          className={`py-3 flex justify-between items-center cursor-pointer hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 -mx-2 px-2 rounded-lg transition-colors ${hasAccountMismatch ? 'border-l-4 border-rose-500' : ''}`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className={`p-2 rounded-lg ${hasAccountMismatch ? 'bg-rose-100 dark:bg-rose-900/30' : 'surface-secondary'}`}>
+                              {getDeviceIcon(d.type, `w-5 h-5 ${hasAccountMismatch ? 'text-rose-600 dark:text-rose-400' : 'text-sanctuary-600 dark:text-sanctuary-400'}`)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
+                              <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
+                              {hasAccountMismatch ? (
+                                <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                                  Missing {wallet.type === WalletType.MULTI_SIG ? 'multisig' : 'single-sig'} account for {wallet.scriptType} - cannot sign
+                                </p>
+                              ) : (
+                                <p className="text-xs font-mono text-sanctuary-400">{d.derivationPath}</p>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">{d.label}</p>
-                            <p className="text-xs text-sanctuary-500">{d.type} • {d.fingerprint}</p>
-                            <p className="text-xs font-mono text-sanctuary-400">{d.derivationPath}</p>
+                          <div className="flex items-center gap-2">
+                            {hasAccountMismatch ? (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-rose-600 text-white">
+                                Cannot Sign
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">
+                                Active
+                              </span>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-sanctuary-400" />
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-zen-indigo text-white">
-                            Active
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-sanctuary-400" />
-                        </div>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className="text-sm text-sanctuary-500">No hardware devices associated with this wallet.</p>

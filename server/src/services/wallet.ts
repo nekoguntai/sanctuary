@@ -173,11 +173,14 @@ export async function createWallet(
 
   // If device IDs provided, fetch devices and generate descriptor
   if (input.deviceIds && input.deviceIds.length > 0) {
-    // Fetch devices belonging to the user
+    // Fetch devices with their accounts
     const devices = await prisma.device.findMany({
       where: {
         id: { in: input.deviceIds },
         userId,
+      },
+      include: {
+        accounts: true,
       },
     });
 
@@ -193,12 +196,56 @@ export async function createWallet(
       throw new Error('Multi-sig wallet requires at least 2 devices');
     }
 
-    // Build descriptor from devices
-    const deviceInfos = devices.map(d => ({
-      fingerprint: d.fingerprint,
-      xpub: d.xpub,
-      derivationPath: d.derivationPath || undefined,
-    }));
+    // Determine purpose based on wallet type
+    const purpose = input.type === 'multi_sig' ? 'multisig' : 'single_sig';
+
+    // Build descriptor from devices, selecting the correct account for wallet type
+    const deviceInfos = devices.map(d => {
+      // Try to find matching account by purpose and scriptType
+      let account = d.accounts.find(
+        a => a.purpose === purpose && a.scriptType === input.scriptType
+      );
+
+      // If no exact match, try to find any account with matching purpose
+      if (!account) {
+        account = d.accounts.find(a => a.purpose === purpose);
+      }
+
+      // If still no match and we have accounts, log warning and use first account
+      if (!account && d.accounts.length > 0) {
+        log.warn('No matching account found for wallet type, using first account', {
+          deviceId: d.id,
+          fingerprint: d.fingerprint,
+          walletType: input.type,
+          scriptType: input.scriptType,
+          availableAccounts: d.accounts.map(a => ({
+            purpose: a.purpose,
+            scriptType: a.scriptType,
+          })),
+        });
+        account = d.accounts[0];
+      }
+
+      // Use account data if found, otherwise fall back to legacy device fields
+      const xpub = account?.xpub || d.xpub;
+      const derivationPath = account?.derivationPath || d.derivationPath;
+
+      // For multisig, warn if using single-sig account
+      if (input.type === 'multi_sig' && account?.purpose === 'single_sig') {
+        log.warn('Using single-sig account for multisig wallet - this may cause signing issues', {
+          deviceId: d.id,
+          fingerprint: d.fingerprint,
+          accountPath: account.derivationPath,
+          hint: 'Consider adding a multisig account to this device',
+        });
+      }
+
+      return {
+        fingerprint: d.fingerprint,
+        xpub,
+        derivationPath: derivationPath || undefined,
+      };
+    });
 
     const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
       deviceInfos,

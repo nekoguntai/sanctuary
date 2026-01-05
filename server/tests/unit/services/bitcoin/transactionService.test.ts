@@ -1199,6 +1199,166 @@ describe('Transaction Service', () => {
     });
   });
 
+  describe('createBatchTransaction - Multisig', () => {
+    const walletId = 'multisig-batch-wallet-id';
+
+    beforeEach(() => {
+      // Set up multisig wallet mock
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.multiSig2of3,
+        id: walletId,
+        devices: [
+          { device: { id: 'device-1', fingerprint: 'aabbccdd', xpub: multisigKeyInfo[0].xpub } },
+          { device: { id: 'device-2', fingerprint: 'eeff0011', xpub: multisigKeyInfo[1].xpub } },
+          { device: { id: 'device-3', fingerprint: '22334455', xpub: multisigKeyInfo[2].xpub } },
+        ],
+      });
+
+      // Set up UTXO mocks with multisig address
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2], // 200000 sats
+          walletId,
+          // P2WSH scriptPubKey (32-byte witness program)
+          scriptPubKey: '0020' + 'a'.repeat(64),
+        },
+        {
+          ...sampleUtxos[0], // 100000 sats
+          walletId,
+          scriptPubKey: '0020' + 'b'.repeat(64),
+        },
+      ]);
+
+      // Set up address mocks with BIP-48 derivation paths
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/48'/1'/0'/2'/1/0", // BIP-48 change address
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/48'/1'/0'/2'/0/0", // BIP-48 receive address
+          walletId,
+        },
+        {
+          id: 'addr-2',
+          address: sampleUtxos[0].address,
+          derivationPath: "m/48'/1'/0'/2'/0/1", // BIP-48 receive address
+          walletId,
+        },
+      ]);
+    });
+
+    it('should create batch PSBT with bip32Derivation for ALL cosigners', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 30000 },
+        { address: testnetAddresses.nativeSegwit[1], amount: 20000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.psbt).toBeDefined();
+      expect(result.psbtBase64).toBeDefined();
+
+      // Parse the PSBT to check bip32Derivation
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+      const input = psbt.data.inputs[0];
+
+      // Multisig should have bip32Derivation entries for cosigners (at least 2 for 2-of-3)
+      expect(input.bip32Derivation).toBeDefined();
+      expect(input.bip32Derivation!.length).toBeGreaterThanOrEqual(2);
+
+      // Verify fingerprints are valid hex strings
+      const fingerprints = input.bip32Derivation!.map(d =>
+        d.masterFingerprint.toString('hex')
+      );
+      // At least the first two keys should be present
+      expect(fingerprints).toContain('aabbccdd');
+      expect(fingerprints).toContain('eeff0011');
+    });
+
+    it('should use BIP-48 paths for multisig batch bip32Derivation', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+      const input = psbt.data.inputs[0];
+
+      expect(input.bip32Derivation).toBeDefined();
+
+      // All paths should be BIP-48 format: m/48'/coin'/account'/script'/change/index
+      for (const derivation of input.bip32Derivation!) {
+        expect(derivation.path).toMatch(/^m\/48'\/\d+'\/\d+'\/\d+'\/\d+\/\d+$/);
+      }
+    });
+
+    it('should include bip32Derivation in all batch inputs', async () => {
+      // Use sendMax to ensure we use all UTXOs (both inputs)
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 0, sendMax: true },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      // Should have 2 inputs
+      expect(psbt.data.inputs.length).toBe(2);
+
+      // Each input should have bip32Derivation entries for cosigners
+      for (let i = 0; i < psbt.data.inputs.length; i++) {
+        const input = psbt.data.inputs[i];
+        expect(input.bip32Derivation).toBeDefined();
+        expect(input.bip32Derivation!.length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it('should derive correct pubkeys for each cosigner in batch', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+      const input = psbt.data.inputs[0];
+
+      expect(input.bip32Derivation).toBeDefined();
+
+      // Each bip32Derivation should have a valid compressed public key (33 bytes)
+      for (const derivation of input.bip32Derivation!) {
+        expect(derivation.pubkey.length).toBe(33);
+        // Compressed pubkeys start with 0x02 or 0x03
+        expect([0x02, 0x03]).toContain(derivation.pubkey[0]);
+      }
+    });
+
+    it('should include inputPaths in response for hardware wallet signing', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.inputPaths).toBeDefined();
+      expect(result.inputPaths.length).toBe(result.utxos.length);
+
+      // Input paths should be BIP-48 format
+      for (const path of result.inputPaths) {
+        expect(path).toMatch(/^m\/48'\/\d+'\/\d+'\/\d+'\/\d+\/\d+$/);
+      }
+    });
+  });
+
   describe('getPSBTInfo', () => {
     // Note: Creating valid PSBTs programmatically is complex.
     // These tests verify the function's structure and error handling.

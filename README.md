@@ -20,6 +20,12 @@
 
 ---
 
+> **🚧 EXPERIMENTAL SOFTWARE**
+>
+> Sanctuary is currently in an **early experimental stage** and under active development. Features may be incomplete, unstable, or change without notice. **Do not use with significant amounts of Bitcoin.** This software has not undergone a formal security audit. Use at your own risk and always verify transactions on your hardware wallet before signing.
+
+---
+
 > ⚠️ **IMPORTANT LEGAL DISCLAIMER**
 >
 > **NO WARRANTY.** Sanctuary is provided "AS IS" and "AS AVAILABLE" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, title, and non-infringement.

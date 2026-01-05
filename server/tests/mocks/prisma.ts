@@ -53,6 +53,7 @@ export const mockPrismaClient = {
   electrumServer: createModelMock(),
   draftUtxoLock: createModelMock(),
   ownershipTransfer: createModelMock(),
+  deviceAccount: createModelMock(),
 
   // Transaction method
   $transaction: jest.fn().mockImplementation(async (callback) => {

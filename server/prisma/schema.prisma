@@ -207,8 +207,8 @@ model Device {
   type           String   // Legacy field for backward compatibility
   label          String
   fingerprint    String   @unique
-  derivationPath String?  // e.g., m/84'/0'/0'
-  xpub           String   // Extended public key
+  derivationPath String?  // e.g., m/84'/0'/0' - Legacy, use DeviceAccount for new devices
+  xpub           String   // Extended public key - Legacy, use DeviceAccount for new devices
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -217,16 +217,42 @@ model Device {
   groupRole String  @default("viewer") // Role for group members: viewer
 
   // Relationships
-  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  model   HardwareDeviceModel? @relation(fields: [modelId], references: [id])
-  wallets WalletDevice[]
-  users   DeviceUser[]         // Users with shared access
-  group   Group?               @relation(fields: [groupId], references: [id])
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model    HardwareDeviceModel? @relation(fields: [modelId], references: [id])
+  wallets  WalletDevice[]
+  users    DeviceUser[]         // Users with shared access
+  group    Group?               @relation(fields: [groupId], references: [id])
+  accounts DeviceAccount[]      // Multiple xpub accounts for different wallet types
 
   @@index([userId])
   @@index([modelId]) // For device by model lookups
   @@index([groupId]) // For group device lookups
   @@map("devices")
+}
+
+// Multiple xpub accounts per device - supports both single-sig and multisig from same seed
+// Each hardware wallet can derive keys at different BIP paths for different wallet types:
+//   - BIP-84 (m/84'/0'/0') for single-sig native segwit
+//   - BIP-48 (m/48'/0'/0'/2') for multisig native segwit
+//   - BIP-49 (m/49'/0'/0') for nested segwit
+//   - BIP-86 (m/86'/0'/0') for taproot
+model DeviceAccount {
+  id             String   @id @default(uuid())
+  deviceId       String
+  purpose        String   // "single_sig" or "multisig"
+  scriptType     String   // "native_segwit", "nested_segwit", "taproot", "legacy"
+  derivationPath String   // Full account path, e.g., m/84'/0'/0' or m/48'/0'/0'/2'
+  xpub           String   // Extended public key at this path
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, derivationPath]) // One account per path per device
+  @@unique([deviceId, purpose, scriptType]) // One account per purpose+scriptType combo per device
+  @@index([deviceId])
+  @@index([purpose, scriptType]) // For finding accounts by wallet type
+  @@map("device_accounts")
 }
 
 // Device sharing with individual users

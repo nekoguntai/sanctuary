@@ -284,7 +284,13 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
 
 /**
  * Generate Coldcard/Passport compatible multisig config text.
- * This format includes explicit fingerprints that Passport can parse.
+ *
+ * Format follows Coldcard spec (https://coldcard.com/docs/multisig/):
+ * - Name: wallet name (up to 20 chars)
+ * - Policy: M of N
+ * - Format: P2WSH, P2SH-P2WSH, or P2SH
+ * - Derivation: single line before all xpubs (applies to all subsequent keys)
+ * - FINGERPRINT: xpub... (one per cosigner)
  */
 function generateMultisigConfigText(
   name: string,
@@ -308,13 +314,22 @@ function generateMultisigConfigText(
   lines.push(`Format: ${formatMap[scriptType] || 'P2WSH'}`);
   lines.push('');
 
-  // Device/Key information
-  for (const device of devices) {
-    // Normalize derivation path to use apostrophes (Coldcard/Passport expect this)
-    const normalizedPath = device.derivationPath.replace(/h/g, "'");
+  // Derivation path - use first device's path (all cosigners should use same derivation)
+  // Coldcard expects ONE Derivation line that applies to all subsequent xpubs
+  if (devices.length > 0) {
+    // Normalize to 'h' notation (Coldcard's preferred format)
+    const normalizedPath = devices[0].derivationPath.replace(/'/g, 'h');
     lines.push(`Derivation: ${normalizedPath}`);
-    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub}`);
     lines.push('');
+  }
+
+  // Fingerprint: xpub pairs (sorted by fingerprint for consistency)
+  const sortedDevices = [...devices].sort((a, b) =>
+    a.fingerprint.toLowerCase().localeCompare(b.fingerprint.toLowerCase())
+  );
+
+  for (const device of sortedDevices) {
+    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub}`);
   }
 
   return lines.join('\n').trim();
@@ -483,6 +498,7 @@ export const WalletDetail: React.FC = () => {
   const [exportFormats, setExportFormats] = useState<walletsApi.ExportFormat[]>([]);
   const [loadingFormats, setLoadingFormats] = useState(false);
   const [qrFormat, setQrFormat] = useState<'descriptor' | 'passport'>('passport'); // Default to passport for better compatibility
+  const [qrSize, setQrSize] = useState(280); // QR code size in pixels
 
   // Transaction Export Modal State
   const [showTransactionExport, setShowTransactionExport] = useState(false);
@@ -2899,7 +2915,24 @@ export const WalletDetail: React.FC = () => {
                         </button>
                       </div>
                     )}
-                    <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center">
+                    {/* QR Size Slider */}
+                    <div className="w-full mb-4">
+                      <div className="flex items-center justify-between text-xs text-sanctuary-500 mb-1">
+                        <span>QR Code Size</span>
+                        <span>{qrSize}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="180"
+                        max="400"
+                        step="20"
+                        value={qrSize}
+                        onChange={(e) => setQrSize(Number(e.target.value))}
+                        className="w-full h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center overflow-auto max-h-[500px]">
                       <QRCodeSVG
                         value={
                           wallet.type === 'Multi Sig' && qrFormat === 'passport' && devices.length > 0
@@ -2916,8 +2949,8 @@ export const WalletDetail: React.FC = () => {
                               )
                             : wallet.descriptor
                         }
-                        size={240}
-                        level="L"
+                        size={qrSize}
+                        level="M"
                       />
                       <p className="text-center text-xs text-sanctuary-400 mt-2">
                         {wallet.type === 'Multi Sig' && qrFormat === 'passport'

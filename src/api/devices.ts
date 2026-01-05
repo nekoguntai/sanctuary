@@ -31,6 +31,50 @@ export interface CreateDeviceRequest {
   modelSlug?: string;
   /** Multiple accounts for multi-account import (preferred) */
   accounts?: DeviceAccountInput[];
+  /** Set to true to merge accounts into existing device with same fingerprint */
+  merge?: boolean;
+}
+
+/**
+ * Response when a device with same fingerprint already exists
+ */
+export interface DeviceConflictResponse {
+  error: 'Conflict';
+  message: string;
+  existingDevice: {
+    id: string;
+    label: string;
+    fingerprint: string;
+    type: string;
+    model?: HardwareDeviceModel;
+    accounts: Array<{
+      id: string;
+      purpose: string;
+      scriptType: string;
+      derivationPath: string;
+      xpub: string;
+    }>;
+  };
+  comparison: {
+    /** Accounts that can be added (don't exist yet) */
+    newAccounts: DeviceAccountInput[];
+    /** Accounts that already exist with same xpub */
+    matchingAccounts: DeviceAccountInput[];
+    /** Accounts with same path but different xpub - potential security issue */
+    conflictingAccounts: Array<{
+      incoming: DeviceAccountInput;
+      existing: { derivationPath: string; xpub: string };
+    }>;
+  };
+}
+
+/**
+ * Response when merge succeeds
+ */
+export interface DeviceMergeResponse {
+  message: string;
+  device: Device;
+  added: number;
 }
 
 export interface UpdateDeviceRequest {
@@ -55,10 +99,68 @@ export async function getDevice(deviceId: string): Promise<Device> {
 }
 
 /**
+ * Result of attempting to create a device
+ */
+export type CreateDeviceResult =
+  | { status: 'created'; device: Device }
+  | { status: 'conflict'; conflict: DeviceConflictResponse }
+  | { status: 'merged'; result: DeviceMergeResponse };
+
+/**
  * Register a new device
+ * Note: This may throw a 409 error if device exists. Use createDeviceWithConflictHandling
+ * for explicit conflict handling.
  */
 export async function createDevice(data: CreateDeviceRequest): Promise<Device> {
   return apiClient.post<Device>('/devices', data);
+}
+
+/**
+ * Register a new device with explicit conflict handling
+ * Returns structured result indicating success, conflict, or merge result
+ */
+export async function createDeviceWithConflictHandling(
+  data: CreateDeviceRequest
+): Promise<CreateDeviceResult> {
+  try {
+    const device = await apiClient.post<Device | DeviceMergeResponse>('/devices', data);
+
+    // Check if this is a merge response
+    if ('added' in device && 'message' in device) {
+      return { status: 'merged', result: device as DeviceMergeResponse };
+    }
+
+    return { status: 'created', device: device as Device };
+  } catch (error: unknown) {
+    // Check if this is a 409 conflict with comparison data
+    if (
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error as { status: number }).status === 409 &&
+      'data' in error
+    ) {
+      const data = (error as { data: unknown }).data;
+      if (
+        data &&
+        typeof data === 'object' &&
+        'existingDevice' in data &&
+        'comparison' in data
+      ) {
+        return { status: 'conflict', conflict: data as DeviceConflictResponse };
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Merge accounts into an existing device
+ */
+export async function mergeDeviceAccounts(
+  data: CreateDeviceRequest
+): Promise<DeviceMergeResponse> {
+  return apiClient.post<DeviceMergeResponse>('/devices', { ...data, merge: true });
 }
 
 /**

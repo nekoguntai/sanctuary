@@ -167,17 +167,58 @@ interface DeviceAccountInput {
 }
 
 /**
+ * Compare incoming accounts with existing accounts
+ * Returns categorized accounts: new, matching, and conflicting
+ */
+function compareAccounts(
+  existingAccounts: Array<{ derivationPath: string; xpub: string; purpose: string; scriptType: string }>,
+  incomingAccounts: DeviceAccountInput[]
+): {
+  newAccounts: DeviceAccountInput[];
+  matchingAccounts: DeviceAccountInput[];
+  conflictingAccounts: Array<{ incoming: DeviceAccountInput; existing: { derivationPath: string; xpub: string } }>;
+} {
+  const newAccounts: DeviceAccountInput[] = [];
+  const matchingAccounts: DeviceAccountInput[] = [];
+  const conflictingAccounts: Array<{ incoming: DeviceAccountInput; existing: { derivationPath: string; xpub: string } }> = [];
+
+  for (const incoming of incomingAccounts) {
+    const existing = existingAccounts.find(e => e.derivationPath === incoming.derivationPath);
+    if (!existing) {
+      // New account - path doesn't exist
+      newAccounts.push(incoming);
+    } else if (existing.xpub === incoming.xpub) {
+      // Matching account - same path and xpub
+      matchingAccounts.push(incoming);
+    } else {
+      // Conflicting account - same path but different xpub
+      conflictingAccounts.push({
+        incoming,
+        existing: { derivationPath: existing.derivationPath, xpub: existing.xpub },
+      });
+    }
+  }
+
+  return { newAccounts, matchingAccounts, conflictingAccounts };
+}
+
+/**
  * POST /api/v1/devices
  * Register a new hardware device
  *
- * Supports two modes:
+ * Supports multiple modes:
  * 1. Legacy mode: single derivationPath + xpub (backward compatible)
  * 2. Multi-account mode: accounts[] array with multiple xpubs for different wallet types
+ * 3. Merge mode: merge=true to add accounts to existing device (same fingerprint)
+ *
+ * When a device with the same fingerprint exists:
+ * - Without merge flag: Returns 409 with existing device info and account comparison
+ * - With merge=true: Adds new accounts to the existing device
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { type, label, fingerprint, derivationPath, xpub, modelSlug, accounts } = req.body;
+    const { type, label, fingerprint, derivationPath, xpub, modelSlug, accounts, merge } = req.body;
 
     // Validation - require fingerprint and label always
     if (!type || !label || !fingerprint) {
@@ -195,7 +236,8 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Validate accounts if provided
+    // Normalize incoming accounts
+    let incomingAccounts: DeviceAccountInput[] = [];
     if (accounts && accounts.length > 0) {
       for (const account of accounts as DeviceAccountInput[]) {
         if (!account.purpose || !account.scriptType || !account.derivationPath || !account.xpub) {
@@ -216,18 +258,112 @@ router.post('/', async (req: Request, res: Response) => {
             message: 'Account scriptType must be one of: native_segwit, nested_segwit, taproot, legacy',
           });
         }
+        incomingAccounts.push(account);
       }
+    } else if (xpub && derivationPath) {
+      // Convert legacy single account to accounts array format
+      const purpose = derivationPath.startsWith("m/48'") ? 'multisig' : 'single_sig';
+      let scriptType: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy' = 'native_segwit';
+      if (derivationPath.startsWith("m/86'")) scriptType = 'taproot';
+      else if (derivationPath.startsWith("m/49'")) scriptType = 'nested_segwit';
+      else if (derivationPath.startsWith("m/44'")) scriptType = 'legacy';
+
+      incomingAccounts = [{ purpose, scriptType, derivationPath, xpub }];
     }
 
     // Check if device already exists
     const existingDevice = await prisma.device.findUnique({
       where: { fingerprint },
+      include: {
+        accounts: true,
+        model: true,
+      },
     });
 
     if (existingDevice) {
+      // Compare accounts
+      const comparison = compareAccounts(existingDevice.accounts, incomingAccounts);
+
+      // If merge mode is requested
+      if (merge === true) {
+        // Check for conflicts - cannot merge if there are conflicting xpubs
+        if (comparison.conflictingAccounts.length > 0) {
+          return res.status(409).json({
+            error: 'Conflict',
+            message: 'Cannot merge: some accounts have conflicting xpubs for the same derivation path',
+            existingDevice: {
+              id: existingDevice.id,
+              label: existingDevice.label,
+              fingerprint: existingDevice.fingerprint,
+            },
+            conflictingAccounts: comparison.conflictingAccounts,
+          });
+        }
+
+        // Check if there are any new accounts to add
+        if (comparison.newAccounts.length === 0) {
+          return res.status(200).json({
+            message: 'Device already has all these accounts',
+            device: existingDevice,
+            added: 0,
+          });
+        }
+
+        // Add new accounts
+        const addedAccounts = await prisma.$transaction(async (tx) => {
+          const created = [];
+          for (const account of comparison.newAccounts) {
+            const newAccount = await tx.deviceAccount.create({
+              data: {
+                deviceId: existingDevice.id,
+                purpose: account.purpose,
+                scriptType: account.scriptType,
+                derivationPath: account.derivationPath,
+                xpub: account.xpub,
+              },
+            });
+            created.push(newAccount);
+          }
+          return created;
+        });
+
+        log.info('Merged accounts into existing device', {
+          deviceId: existingDevice.id,
+          fingerprint,
+          addedCount: addedAccounts.length,
+          paths: comparison.newAccounts.map(a => a.derivationPath),
+        });
+
+        // Return updated device
+        const updatedDevice = await prisma.device.findUnique({
+          where: { id: existingDevice.id },
+          include: { model: true, accounts: true },
+        });
+
+        return res.status(200).json({
+          message: `Added ${addedAccounts.length} new account(s) to existing device`,
+          device: updatedDevice,
+          added: addedAccounts.length,
+        });
+      }
+
+      // Not merge mode - return conflict with comparison info
       return res.status(409).json({
         error: 'Conflict',
         message: 'Device with this fingerprint already exists',
+        existingDevice: {
+          id: existingDevice.id,
+          label: existingDevice.label,
+          fingerprint: existingDevice.fingerprint,
+          type: existingDevice.type,
+          model: existingDevice.model,
+          accounts: existingDevice.accounts,
+        },
+        comparison: {
+          newAccounts: comparison.newAccounts,
+          matchingAccounts: comparison.matchingAccounts,
+          conflictingAccounts: comparison.conflictingAccounts,
+        },
       });
     }
 
@@ -243,17 +379,11 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Determine primary xpub (for legacy field) - prefer single_sig native_segwit
-    let primaryXpub = xpub;
-    let primaryPath = derivationPath;
-
-    if (accounts && accounts.length > 0) {
-      // Find the best primary account (prefer single_sig native_segwit)
-      const primaryAccount = (accounts as DeviceAccountInput[]).find(
-        a => a.purpose === 'single_sig' && a.scriptType === 'native_segwit'
-      ) || accounts[0];
-      primaryXpub = primaryXpub || primaryAccount.xpub;
-      primaryPath = primaryPath || primaryAccount.derivationPath;
-    }
+    const primaryAccount = incomingAccounts.find(
+      a => a.purpose === 'single_sig' && a.scriptType === 'native_segwit'
+    ) || incomingAccounts[0];
+    const primaryXpub = primaryAccount?.xpub;
+    const primaryPath = primaryAccount?.derivationPath;
 
     // Create device, owner record, and accounts in a transaction
     const device = await prisma.$transaction(async (tx) => {
@@ -282,49 +412,24 @@ router.post('/', async (req: Request, res: Response) => {
       });
 
       // Create DeviceAccount records
-      if (accounts && accounts.length > 0) {
-        // Multi-account mode: create from accounts array
-        for (const account of accounts as DeviceAccountInput[]) {
-          await tx.deviceAccount.create({
-            data: {
-              deviceId: newDevice.id,
-              purpose: account.purpose,
-              scriptType: account.scriptType,
-              derivationPath: account.derivationPath,
-              xpub: account.xpub,
-            },
-          });
-        }
-        log.info('Device registered with multiple accounts', {
-          deviceId: newDevice.id,
-          fingerprint,
-          accountCount: accounts.length,
-          purposes: (accounts as DeviceAccountInput[]).map(a => a.purpose),
-        });
-      } else if (xpub && derivationPath) {
-        // Legacy mode: create single account from xpub/derivationPath
-        const purpose = derivationPath.startsWith("m/48'") ? 'multisig' : 'single_sig';
-        let scriptType = 'native_segwit';
-        if (derivationPath.startsWith("m/86'")) scriptType = 'taproot';
-        else if (derivationPath.startsWith("m/49'")) scriptType = 'nested_segwit';
-        else if (derivationPath.startsWith("m/44'")) scriptType = 'legacy';
-
+      for (const account of incomingAccounts) {
         await tx.deviceAccount.create({
           data: {
             deviceId: newDevice.id,
-            purpose,
-            scriptType,
-            derivationPath,
-            xpub,
+            purpose: account.purpose,
+            scriptType: account.scriptType,
+            derivationPath: account.derivationPath,
+            xpub: account.xpub,
           },
         });
-        log.info('Device registered with single account (legacy mode)', {
-          deviceId: newDevice.id,
-          fingerprint,
-          purpose,
-          scriptType,
-        });
       }
+
+      log.info('Device registered', {
+        deviceId: newDevice.id,
+        fingerprint,
+        accountCount: incomingAccounts.length,
+        purposes: incomingAccounts.map(a => a.purpose),
+      });
 
       return newDevice;
     });

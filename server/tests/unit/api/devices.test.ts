@@ -234,18 +234,201 @@ describe('Devices API', () => {
       expect(response.body.message).toContain('scriptType');
     });
 
-    it('should reject registration with duplicate fingerprint', async () => {
-      mockPrismaClient.device.findUnique.mockResolvedValue({
+    it('should return conflict response with comparison data for duplicate fingerprint', async () => {
+      const existingDevice = {
         id: 'existing-device',
         fingerprint: 'abc12345',
-      });
+        label: 'Existing Trezor',
+        type: 'trezor',
+        userId: 'test-user-id',
+        model: null,
+        accounts: [
+          {
+            id: 'account-1',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_existing...',
+          },
+        ],
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(existingDevice);
 
       const response = await request(app)
         .post('/api/v1/devices')
         .send(validDevice);
 
       expect(response.status).toBe(409);
-      expect(response.body.message).toContain('already exists');
+      expect(response.body.error).toBe('Conflict');
+      expect(response.body.existingDevice).toBeDefined();
+      expect(response.body.existingDevice.id).toBe('existing-device');
+      expect(response.body.existingDevice.fingerprint).toBe('abc12345');
+      expect(response.body.comparison).toBeDefined();
+      expect(response.body.comparison.newAccounts).toBeDefined();
+      expect(response.body.comparison.matchingAccounts).toBeDefined();
+      expect(response.body.comparison.conflictingAccounts).toBeDefined();
+    });
+
+    it('should merge new accounts into existing device when merge=true', async () => {
+      const existingDevice = {
+        id: 'existing-device',
+        fingerprint: 'abc12345',
+        label: 'Existing Trezor',
+        type: 'trezor',
+        userId: 'test-user-id',
+        accounts: [
+          {
+            id: 'account-1',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_existing...',
+          },
+        ],
+      };
+
+      const deviceWithMerge = {
+        type: 'trezor',
+        label: 'My Trezor',
+        fingerprint: 'abc12345',
+        merge: true,
+        accounts: [
+          {
+            purpose: 'multisig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/48'/0'/0'/2'",
+            xpub: 'xpub_new_multisig...',
+          },
+        ],
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrismaClient.deviceAccount.create.mockResolvedValue({
+        id: 'account-new',
+        deviceId: 'existing-device',
+        ...deviceWithMerge.accounts[0],
+      });
+      // Mock the updated device fetch after merge
+      mockPrismaClient.device.findUnique.mockResolvedValueOnce(existingDevice).mockResolvedValue({
+        ...existingDevice,
+        accounts: [
+          ...existingDevice.accounts,
+          { id: 'account-new', ...deviceWithMerge.accounts[0] },
+        ],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithMerge);
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('Added');
+      expect(response.body.message).toContain('new account');
+      expect(response.body.added).toBe(1);
+      expect(response.body.device).toBeDefined();
+      expect(mockPrismaClient.deviceAccount.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          deviceId: 'existing-device',
+          purpose: 'multisig',
+          scriptType: 'native_segwit',
+        }),
+      });
+    });
+
+    it('should return 200 with added=0 when merging with no new accounts', async () => {
+      const existingDevice = {
+        id: 'existing-device',
+        fingerprint: 'abc12345',
+        label: 'Existing Trezor',
+        type: 'trezor',
+        userId: 'test-user-id',
+        accounts: [
+          {
+            id: 'account-1',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_same...',
+          },
+        ],
+      };
+
+      const deviceWithMerge = {
+        type: 'trezor',
+        label: 'My Trezor',
+        fingerprint: 'abc12345',
+        merge: true,
+        accounts: [
+          {
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_same...', // Same xpub as existing
+          },
+        ],
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(existingDevice);
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithMerge);
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('already has all');
+      expect(response.body.added).toBe(0);
+      expect(mockPrismaClient.deviceAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject merge when there are conflicting xpubs (security)', async () => {
+      const existingDevice = {
+        id: 'existing-device',
+        fingerprint: 'abc12345',
+        label: 'Existing Trezor',
+        type: 'trezor',
+        userId: 'test-user-id',
+        accounts: [
+          {
+            id: 'account-1',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_original...',
+          },
+        ],
+      };
+
+      const deviceWithConflict = {
+        type: 'trezor',
+        label: 'My Trezor',
+        fingerprint: 'abc12345',
+        merge: true,
+        accounts: [
+          {
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub_different...', // DIFFERENT xpub at same path - security issue!
+          },
+        ],
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(existingDevice);
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithConflict);
+
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe('Conflict');
+      expect(response.body.message).toContain('conflicting');
+      // When there are conflicting accounts, the merge is rejected with conflict details
+      expect(response.body.existingDevice).toBeDefined();
+      // Conflicting accounts are returned at top level for merge mode
+      expect(response.body.conflictingAccounts).toHaveLength(1);
+      expect(response.body.conflictingAccounts[0].incoming.derivationPath).toBe("m/84'/0'/0'");
+      expect(mockPrismaClient.deviceAccount.create).not.toHaveBeenCalled();
     });
 
     it('should detect multisig purpose from BIP-48 path in legacy mode', async () => {

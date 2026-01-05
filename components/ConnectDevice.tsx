@@ -3,7 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount, RegistryTypes } from '@keystonehq/bc-ur-registry';
 import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
-import { createDevice, CreateDeviceRequest, getDeviceModels, HardwareDeviceModel, DeviceAccountInput } from '../src/api/devices';
+import {
+  createDeviceWithConflictHandling,
+  mergeDeviceAccounts,
+  CreateDeviceRequest,
+  getDeviceModels,
+  HardwareDeviceModel,
+  DeviceAccountInput,
+  DeviceConflictResponse,
+} from '../src/api/devices';
 import { parseDeviceJson, parseDeviceData, DeviceAccount } from '../services/deviceParsers';
 import { Button } from './ui/Button';
 import {
@@ -26,7 +34,10 @@ import {
   X,
   Camera,
   Upload,
-  Info
+  Info,
+  GitMerge,
+  ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
@@ -169,6 +180,9 @@ export const ConnectDevice: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // Conflict handling for duplicate device imports
+  const [conflictData, setConflictData] = useState<DeviceConflictResponse | null>(null);
+  const [merging, setMerging] = useState(false);
   const [qrExtractedFields, setQrExtractedFields] = useState<{
     xpub: boolean;
     fingerprint: boolean;
@@ -820,6 +834,7 @@ export const ConnectDevice: React.FC = () => {
 
     setSaving(true);
     setError(null);
+    setConflictData(null);
 
     try {
       // Build accounts array from selected parsed accounts
@@ -856,15 +871,87 @@ export const ConnectDevice: React.FC = () => {
         hasLegacyXpub: !accounts.length && !!xpub,
       });
 
-      await createDevice(deviceData);
-      // Refresh sidebar to show new device
-      refreshSidebar();
-      navigate('/devices');
+      const result = await createDeviceWithConflictHandling(deviceData);
+
+      if (result.status === 'created') {
+        log.info('Device created successfully', { deviceId: result.device.id });
+        refreshSidebar();
+        navigate('/devices');
+      } else if (result.status === 'merged') {
+        log.info('Accounts merged into existing device', {
+          deviceId: result.result.device.id,
+          added: result.result.added,
+        });
+        refreshSidebar();
+        navigate(`/devices/${result.result.device.id}`);
+      } else if (result.status === 'conflict') {
+        log.info('Device conflict detected', {
+          existingId: result.conflict.existingDevice.id,
+          newAccounts: result.conflict.comparison.newAccounts.length,
+          matchingAccounts: result.conflict.comparison.matchingAccounts.length,
+          conflictingAccounts: result.conflict.comparison.conflictingAccounts.length,
+        });
+        setConflictData(result.conflict);
+      }
     } catch (err) {
       log.error('Failed to save device', { error: err });
       setError(err instanceof Error ? err.message : 'Failed to save device. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Handle merging accounts into an existing device
+   */
+  const handleMerge = async () => {
+    if (!selectedModel || !conflictData) return;
+
+    setMerging(true);
+    setError(null);
+
+    try {
+      // Build accounts array from selected parsed accounts
+      const accounts: DeviceAccountInput[] = [];
+      if (parsedAccounts.length > 0 && selectedAccounts.size > 0) {
+        parsedAccounts.forEach((account, index) => {
+          if (selectedAccounts.has(index)) {
+            accounts.push({
+              purpose: account.purpose,
+              scriptType: account.scriptType,
+              derivationPath: account.derivationPath,
+              xpub: account.xpub,
+            });
+          }
+        });
+      }
+
+      const deviceData: CreateDeviceRequest = {
+        type: selectedModel.name,
+        label: label || `${selectedModel.name} ${fingerprint}`,
+        fingerprint: fingerprint || '00000000',
+        ...(accounts.length > 0
+          ? { accounts }
+          : { xpub, derivationPath }
+        ),
+        modelSlug: selectedModel.slug,
+        merge: true,
+      };
+
+      const result = await mergeDeviceAccounts(deviceData);
+
+      log.info('Accounts merged successfully', {
+        deviceId: result.device.id,
+        added: result.added,
+      });
+
+      refreshSidebar();
+      navigate(`/devices/${result.device.id}`);
+    } catch (err) {
+      log.error('Failed to merge accounts', { error: err });
+      setError(err instanceof Error ? err.message : 'Failed to merge accounts. Please try again.');
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -1625,6 +1712,161 @@ export const ConnectDevice: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Device Conflict Dialog */}
+      {conflictData && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                  <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-sanctuary-900 dark:text-sanctuary-50">
+                    Device Already Exists
+                  </h3>
+                  <p className="text-sm text-sanctuary-500 mt-1">
+                    A device with fingerprint <span className="font-mono">{conflictData.existingDevice.fingerprint}</span> is already registered.
+                  </p>
+                </div>
+              </div>
+
+              {/* Existing Device Info */}
+              <div className="p-3 rounded-xl bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  {getDeviceIcon(conflictData.existingDevice.type, "w-5 h-5")}
+                  <span className="font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    {conflictData.existingDevice.label}
+                  </span>
+                </div>
+                <div className="text-xs text-sanctuary-500">
+                  {conflictData.existingDevice.accounts.length} account{conflictData.existingDevice.accounts.length !== 1 ? 's' : ''} registered
+                </div>
+              </div>
+
+              {/* Comparison Summary */}
+              <div className="space-y-3 mb-6">
+                {/* New Accounts */}
+                {conflictData.comparison.newAccounts.length > 0 && (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        {conflictData.comparison.newAccounts.length} New Account{conflictData.comparison.newAccounts.length !== 1 ? 's' : ''} Can Be Added
+                      </span>
+                    </div>
+                    <div className="space-y-1 ml-6">
+                      {conflictData.comparison.newAccounts.map((account, idx) => (
+                        <div key={idx} className="text-xs text-emerald-600 dark:text-emerald-400 font-mono">
+                          {account.derivationPath}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Matching Accounts */}
+                {conflictData.comparison.matchingAccounts.length > 0 && (
+                  <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        {conflictData.comparison.matchingAccounts.length} Account{conflictData.comparison.matchingAccounts.length !== 1 ? 's' : ''} Already Exist
+                      </span>
+                    </div>
+                    <div className="space-y-1 ml-6">
+                      {conflictData.comparison.matchingAccounts.map((account, idx) => (
+                        <div key={idx} className="text-xs text-blue-600 dark:text-blue-400 font-mono">
+                          {account.derivationPath}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Conflicting Accounts (security warning) */}
+                {conflictData.comparison.conflictingAccounts.length > 0 && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                      <span className="text-sm font-medium text-rose-700 dark:text-rose-300">
+                        {conflictData.comparison.conflictingAccounts.length} Conflicting Account{conflictData.comparison.conflictingAccounts.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-600 dark:text-rose-400 mb-2 ml-6">
+                      These paths have different xpubs than what's already registered. This could indicate a security issue.
+                    </p>
+                    <div className="space-y-1 ml-6">
+                      {conflictData.comparison.conflictingAccounts.map((conflict, idx) => (
+                        <div key={idx} className="text-xs font-mono">
+                          <span className="text-rose-600 dark:text-rose-400">{conflict.incoming.derivationPath}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2">
+                {/* Merge button - only show if there are new accounts to add */}
+                {conflictData.comparison.newAccounts.length > 0 && (
+                  <Button
+                    onClick={handleMerge}
+                    disabled={merging || conflictData.comparison.conflictingAccounts.length > 0}
+                    className="w-full"
+                  >
+                    {merging ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Merging...
+                      </>
+                    ) : (
+                      <>
+                        <GitMerge className="w-4 h-4 mr-2" />
+                        Merge {conflictData.comparison.newAccounts.length} New Account{conflictData.comparison.newAccounts.length !== 1 ? 's' : ''}
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* View existing device */}
+                <button
+                  onClick={() => navigate(`/devices/${conflictData.existingDevice.id}`)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-700 dark:text-sanctuary-300 text-sm font-medium hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Existing Device
+                </button>
+
+                {/* Cancel */}
+                <button
+                  onClick={() => setConflictData(null)}
+                  className="w-full px-4 py-2 text-sm text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {/* Error message */}
+              {error && (
+                <p className="text-center text-xs text-rose-600 dark:text-rose-400 mt-3">
+                  {error}
+                </p>
+              )}
+
+              {/* Warning about conflicting accounts */}
+              {conflictData.comparison.conflictingAccounts.length > 0 && (
+                <p className="text-center text-xs text-rose-600 dark:text-rose-400 mt-3">
+                  Cannot merge while there are conflicting accounts. Please resolve the conflicts first.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

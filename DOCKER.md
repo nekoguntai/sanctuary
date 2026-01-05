@@ -48,7 +48,7 @@ This guide explains how to deploy Sanctuary using Docker and Docker Compose.
 
 ### PostgreSQL Performance Tuning
 
-PostgreSQL is configured with optimized settings in `docker/postgres/postgresql.conf`:
+PostgreSQL is configured with optimized settings via command-line flags in `docker-compose.yml`:
 
 - `shared_buffers = 256MB` - Main memory pool for caching
 - `effective_cache_size = 768MB` - Query planner hint

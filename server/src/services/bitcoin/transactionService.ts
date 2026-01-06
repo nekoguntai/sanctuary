@@ -362,35 +362,64 @@ function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
     throw new Error(`Input #${inputIndex} witnessScript is not a valid multisig script`);
   }
 
-  log.debug('Multisig finalization', {
+  // Log detailed info for debugging
+  const partialSigPubkeys = input.partialSig.map(ps => ps.pubkey.toString('hex'));
+  const scriptPubkeyHexes = scriptPubkeys.map(pk => pk.toString('hex'));
+
+  log.info('Multisig finalization - detailed debug', {
     inputIndex,
     m,
     n,
     partialSigCount: input.partialSig.length,
     scriptPubkeyCount: scriptPubkeys.length,
+    partialSigPubkeys: partialSigPubkeys.map(pk => pk.substring(0, 16) + '...'),
+    scriptPubkeys: scriptPubkeyHexes.map(pk => pk.substring(0, 16) + '...'),
+    witnessScriptHex: witnessScript.toString('hex').substring(0, 40) + '...',
   });
 
   // Create a map of pubkey hex to signature
   const sigMap = new Map<string, Buffer>();
   for (const ps of input.partialSig) {
     sigMap.set(ps.pubkey.toString('hex'), ps.signature);
+    log.debug('Added signature for pubkey', {
+      pubkey: ps.pubkey.toString('hex').substring(0, 16) + '...',
+      sigLength: ps.signature.length,
+    });
   }
 
   // Sort signatures according to pubkey order in the witnessScript
   const orderedSigs: Buffer[] = [];
   for (const pubkey of scriptPubkeys) {
-    const sig = sigMap.get(pubkey.toString('hex'));
+    const pubkeyHex = pubkey.toString('hex');
+    const sig = sigMap.get(pubkeyHex);
     if (sig) {
       orderedSigs.push(sig);
+      log.debug('Matched signature for script pubkey', {
+        pubkey: pubkeyHex.substring(0, 16) + '...',
+      });
+    } else {
+      log.debug('No signature for script pubkey', {
+        pubkey: pubkeyHex.substring(0, 16) + '...',
+      });
     }
   }
 
   if (orderedSigs.length === 0) {
+    log.error('No matching signatures found', {
+      partialSigPubkeys,
+      scriptPubkeyHexes,
+    });
     throw new Error(`Input #${inputIndex} no matching signatures found for witnessScript pubkeys`);
   }
 
   // Validate we have exactly M signatures
   if (orderedSigs.length !== m) {
+    log.error('Signature count mismatch', {
+      found: orderedSigs.length,
+      required: m,
+      partialSigPubkeys,
+      scriptPubkeyHexes,
+    });
     throw new Error(`Input #${inputIndex} has ${orderedSigs.length} signatures but needs exactly ${m} for ${m}-of-${n} multisig`);
   }
 

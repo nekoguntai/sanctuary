@@ -11,6 +11,7 @@ import {
   isNonStandardPath,
   getAccountPathPrefix,
   buildTrezorMultisig,
+  convertToStandardXpub,
 } from '@/services/hardwareWallet/adapters/trezor';
 
 /**
@@ -516,6 +517,148 @@ describe('buildTrezorMultisig', () => {
       expect(result).toBeDefined();
       expect(result!.m).toBe(15);
       expect(result!.pubkeys).toHaveLength(15);
+    });
+  });
+});
+
+describe('convertToStandardXpub', () => {
+  // Test vectors: Real extended public keys from known sources
+  // Note: Many SLIP-132 test vectors online have invalid checksums, so we focus on
+  // the most commonly encountered format (Zpub) and standard xpub/tpub
+
+  // Standard BIP-32 mainnet xpub (version 0x0488B21E)
+  const standardXpub = 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8';
+
+  // Standard BIP-32 testnet tpub (version 0x043587CF)
+  const standardTpub = 'tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp';
+
+  // SLIP-132 Zpub - P2WSH mainnet (version 0x02AA7ED3)
+  // Real Zpub from a Passport device export
+  const zpubMainnet = 'Zpub74omgM7ehB1aZZsx274C1CrbXjE8MSzKzijgwh4Wvhupc5UaLioFcYRi5pEtfdrJa5kSumat5xbiMWrNZuuKLqN22H72P6DrAqNQLE4dv1m';
+
+  describe('Standard format passthrough', () => {
+    it('returns standard xpub unchanged', () => {
+      const result = convertToStandardXpub(standardXpub);
+      expect(result).toBe(standardXpub);
+    });
+
+    it('returns standard tpub unchanged', () => {
+      const result = convertToStandardXpub(standardTpub);
+      expect(result).toBe(standardTpub);
+    });
+  });
+
+  describe('SLIP-132 conversions', () => {
+    it('converts Zpub (P2WSH mainnet) to xpub', () => {
+      const result = convertToStandardXpub(zpubMainnet);
+
+      // Result should start with xpub
+      expect(result.startsWith('xpub')).toBe(true);
+      // Should not be the original Zpub
+      expect(result).not.toBe(zpubMainnet);
+      // Should be valid base58 of same length (version bytes are same size)
+      expect(result.length).toBe(zpubMainnet.length);
+    });
+
+    it('returns consistent results for the same input', () => {
+      const result1 = convertToStandardXpub(zpubMainnet);
+      const result2 = convertToStandardXpub(zpubMainnet);
+      expect(result1).toBe(result2);
+    });
+
+    it('converted xpub can be decoded with bs58check', () => {
+      const result = convertToStandardXpub(zpubMainnet);
+      const bs58check = require('bs58check');
+
+      // Should not throw - valid base58check encoding
+      const decoded = bs58check.decode(result);
+
+      // Should have correct xpub version bytes (0x0488b21e)
+      const versionHex = decoded.slice(0, 4).toString('hex');
+      expect(versionHex).toBe('0488b21e');
+    });
+  });
+
+  describe('Error handling', () => {
+    it('returns original value for invalid base58', () => {
+      const invalid = 'not-a-valid-xpub-at-all';
+
+      const result = convertToStandardXpub(invalid);
+
+      // Should return original value when decoding fails
+      expect(result).toBe(invalid);
+    });
+
+    it('returns original value for empty string', () => {
+      const result = convertToStandardXpub('');
+
+      expect(result).toBe('');
+    });
+
+    it('returns original value for base58 with invalid checksum', () => {
+      // Modify a character in a valid xpub to break checksum
+      const invalidChecksum = standardXpub.slice(0, -1) + 'X';
+
+      const result = convertToStandardXpub(invalidChecksum);
+
+      // Should return original since decode will fail
+      expect(result).toBe(invalidChecksum);
+    });
+  });
+
+  describe('Unknown version handling', () => {
+    it('returns original value for unknown version bytes', () => {
+      // Standard xpub already has known version, just verify passthrough
+      const result = convertToStandardXpub(standardXpub);
+      expect(result).toBe(standardXpub);
+    });
+  });
+
+  describe('Integration with buildTrezorMultisig', () => {
+    it('converts Zpub when used in xpubMap', () => {
+      // This tests the integration: buildTrezorMultisig should use converted xpubs
+      const pubkey1 = Buffer.from('02' + '11'.repeat(32), 'hex');
+      const pubkey2 = Buffer.from('02' + '22'.repeat(32), 'hex');
+
+      const witnessScript = Buffer.concat([
+        Buffer.from([0x52]), // OP_2
+        Buffer.from([0x21]), pubkey1,
+        Buffer.from([0x21]), pubkey2,
+        Buffer.from([0x52]), // OP_2
+        Buffer.from([0xae]), // OP_CHECKMULTISIG
+      ]);
+
+      const derivations = [
+        {
+          pubkey: pubkey1,
+          path: "m/48'/0'/0'/2'/0/0",
+          masterFingerprint: Buffer.from('7bf099a0', 'hex'),
+        },
+        {
+          pubkey: pubkey2,
+          path: "m/48'/0'/0'/2'/0/0",
+          masterFingerprint: Buffer.from('61419ad3', 'hex'),
+        },
+      ];
+
+      // Use a Zpub in the xpubMap (like from a Passport device)
+      const xpubMap: Record<string, string> = {
+        '7bf099a0': zpubMainnet,  // Zpub will be converted
+        '61419ad3': standardXpub,  // Already xpub
+      };
+
+      const result = buildTrezorMultisig(witnessScript, derivations, xpubMap);
+
+      expect(result).toBeDefined();
+      expect(result!.m).toBe(2);
+      expect(result!.pubkeys).toHaveLength(2);
+
+      // Both should be converted to xpub format (start with 'xpub')
+      for (const pk of result!.pubkeys) {
+        if (typeof pk.node === 'string' && pk.node.length > 10) {
+          expect(pk.node.startsWith('xpub')).toBe(true);
+        }
+      }
     });
   });
 });

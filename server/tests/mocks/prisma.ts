@@ -40,6 +40,8 @@ export const mockPrismaClient = {
   groupMember: createModelMock(),
   label: createModelMock(),
   transactionLabel: createModelMock(),
+  transactionInput: createModelMock(),
+  transactionOutput: createModelMock(),
   addressLabel: createModelMock(),
   nodeConfig: createModelMock(),
   systemSetting: createModelMock(),

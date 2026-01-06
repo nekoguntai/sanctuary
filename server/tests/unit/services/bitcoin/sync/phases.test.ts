@@ -39,7 +39,7 @@ jest.mock('../../../../../src/services/notifications/notificationService', () =>
 // Mock balance calculation
 jest.mock('../../../../../src/services/bitcoin/utils/balanceCalculation', () => ({
   recalculateWalletBalances: jest.fn().mockResolvedValue(undefined),
-  correctConsolidationTransactions: jest.fn().mockResolvedValue({ correctedCount: 0 }),
+  correctMisclassifiedConsolidations: jest.fn().mockResolvedValue(0),
 }));
 
 // Mock address derivation
@@ -54,17 +54,34 @@ jest.mock('../../../../../src/services/bitcoin/addressDerivation', () => ({
   }),
 }));
 
+// Mock block height utility
+jest.mock('../../../../../src/services/bitcoin/utils/blockHeight', () => ({
+  getBlockTimestamp: jest.fn().mockResolvedValue(new Date('2024-01-15T12:00:00Z')),
+}));
+
 import {
   createTestContext,
   rbfCleanupPhase,
   fetchHistoriesPhase,
   checkExistingPhase,
+  processTransactionsPhase,
   fetchUtxosPhase,
   reconcileUtxosPhase,
+  insertUtxosPhase,
   updateAddressesPhase,
   gapLimitPhase,
+  fixConsolidationsPhase,
   type SyncContext,
 } from '../../../../../src/services/bitcoin/sync';
+
+// Import the mocked balance calculation to control it per test
+import {
+  correctMisclassifiedConsolidations,
+  recalculateWalletBalances,
+} from '../../../../../src/services/bitcoin/utils/balanceCalculation';
+
+// Import block height mock
+import { getBlockTimestamp } from '../../../../../src/services/bitcoin/utils/blockHeight';
 
 describe('Sync Phases', () => {
   beforeEach(() => {
@@ -539,6 +556,575 @@ describe('Sync Phases', () => {
       const result = await gapLimitPhase(ctx);
 
       expect(result.newAddresses.length).toBe(0);
+    });
+  });
+
+  describe('processTransactionsPhase', () => {
+    const walletId = 'test-wallet';
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // Default mock for transaction operations
+      mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+      mockPrismaClient.transaction.createMany.mockResolvedValue({ count: 0 });
+      mockPrismaClient.transactionInput.createMany.mockResolvedValue({ count: 0 });
+      mockPrismaClient.transactionOutput.createMany.mockResolvedValue({ count: 0 });
+      mockPrismaClient.addressLabel.findMany.mockResolvedValue([]);
+    });
+
+    it('should return early when no new txids to process', async () => {
+      const ctx = createTestContext({
+        walletId,
+        newTxids: [],
+        historyResults: new Map(),
+      });
+
+      const result = await processTransactionsPhase(ctx);
+
+      expect(result.stats.newTransactionsCreated).toBe(0);
+      expect(mockPrismaClient.transaction.createMany).not.toHaveBeenCalled();
+    });
+
+    it('should classify transaction as received when external inputs only', async () => {
+      const txid = 'received_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet_addr';
+      const externalAddress = 'tb1q_external_addr';
+
+      // Mock transaction with external input, output to wallet
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev_tx'.padEnd(64, 'b'), vout: 0, value: 0.001, address: externalAddress }],
+        outputs: [{ value: 0.00099, address: walletAddress }],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              type: 'received',
+              amount: BigInt(99000), // 0.00099 BTC in sats
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should classify transaction as sent when wallet inputs go to external', async () => {
+      const txid = 'sent_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet_addr';
+      const externalAddress = 'tb1q_external_addr';
+      const changeAddress = 'tb1q_change_addr';
+
+      // Mock transaction: wallet input, external output + change
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev_tx'.padEnd(64, 'b'), vout: 0, value: 0.01, address: walletAddress }],
+        outputs: [
+          { value: 0.005, address: externalAddress },
+          { value: 0.0049, address: changeAddress },
+        ],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress, changeAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              type: 'sent',
+              // Sent amount is negative: -(external + fee)
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should classify transaction as consolidation when all outputs to wallet', async () => {
+      const txid = 'consolidation_tx'.padEnd(64, 'a');
+      const inputAddr1 = 'tb1q_input1';
+      const inputAddr2 = 'tb1q_input2';
+      const outputAddr = 'tb1q_output';
+
+      // Mock consolidation: multiple wallet inputs, single wallet output
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [
+          { txid: 'prev_tx1'.padEnd(64, 'b'), vout: 0, value: 0.01, address: inputAddr1 },
+          { txid: 'prev_tx2'.padEnd(64, 'c'), vout: 0, value: 0.01, address: inputAddr2 },
+        ],
+        outputs: [{ value: 0.0199, address: outputAddr }],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[inputAddr1, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([inputAddr1, inputAddr2, outputAddr]),
+        addressMap: new Map([[inputAddr1, { id: 'addr-1', address: inputAddr1 } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              type: 'consolidation',
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should set rbfStatus to active for unconfirmed transactions', async () => {
+      const txid = 'unconfirmed_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet';
+      const externalAddress = 'tb1q_external';
+
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.001, address: externalAddress }],
+        outputs: [{ value: 0.0009, address: walletAddress }],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 0 }]]]), // height 0 = unconfirmed
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              rbfStatus: 'active',
+              confirmations: 0,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should set rbfStatus to confirmed for confirmed transactions', async () => {
+      const txid = 'confirmed_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet';
+      const externalAddress = 'tb1q_external';
+
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.001, address: externalAddress }],
+        outputs: [{ value: 0.0009, address: walletAddress }],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              rbfStatus: 'confirmed',
+              confirmations: 101, // 800100 - 800000 + 1
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should calculate fee for sent transactions', async () => {
+      const txid = 'sent_with_fee'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet';
+      const externalAddress = 'tb1q_external';
+
+      // Input: 1,000,000 sats, Output: 990,000 sats, Fee: 10,000 sats
+      const mockTx = createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.01, address: walletAddress }],
+        outputs: [{ value: 0.0099, address: externalAddress }],
+      });
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, mockTx]]));
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid,
+              type: 'sent',
+              fee: BigInt(10000), // 0.01 - 0.0099 = 0.0001 BTC = 10000 sats
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should fall back to individual requests when batch fetch fails', async () => {
+      const txid = 'fallback_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet';
+
+      mockElectrumClient.getTransactionsBatch.mockRejectedValue(new Error('Batch failed'));
+      mockElectrumClient.getTransaction.mockResolvedValue(
+        createMockTransaction({
+          txid,
+          inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.001, address: 'external' }],
+          outputs: [{ value: 0.0009, address: walletAddress }],
+        })
+      );
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockElectrumClient.getTransaction).toHaveBeenCalledWith(txid, true);
+    });
+
+    it('should update stats with processed transaction counts', async () => {
+      const txid = 'stats_tx'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet';
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(
+        new Map([[txid, createMockTransaction({
+          txid,
+          inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.001, address: 'external' }],
+          outputs: [{ value: 0.0009, address: walletAddress }],
+        })]])
+      );
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-1', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      const result = await processTransactionsPhase(ctx);
+
+      expect(result.stats.transactionsProcessed).toBe(1);
+    });
+  });
+
+  describe('insertUtxosPhase', () => {
+    const walletId = 'test-wallet';
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should insert new UTXOs not in database', async () => {
+      const txid = 'new_utxo_tx'.padEnd(64, 'a');
+      const utxoAddress = 'tb1q_utxo_addr';
+
+      // No existing UTXOs
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+      mockPrismaClient.uTXO.createMany.mockResolvedValue({ count: 1 });
+
+      // Mock tx details for UTXO
+      const mockTx = createMockTransaction({
+        txid,
+        outputs: [{ value: 0.001, address: utxoAddress }],
+      });
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        allUtxoKeys: new Set([`${txid}:0`]),
+        utxoDataMap: new Map([
+          [`${txid}:0`, { address: utxoAddress, utxo: { tx_hash: txid, tx_pos: 0, value: 100000, height: 800000 } }],
+        ]),
+        txDetailsCache: new Map([[txid, mockTx]]) as any,
+        currentBlockHeight: 800100,
+      });
+
+      const result = await insertUtxosPhase(ctx);
+
+      expect(mockPrismaClient.uTXO.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              walletId,
+              txid,
+              vout: 0,
+              address: utxoAddress,
+              amount: BigInt(100000),
+              spent: false,
+            }),
+          ]),
+          skipDuplicates: true,
+        })
+      );
+      expect(result.stats.utxosCreated).toBe(1);
+    });
+
+    it('should skip UTXOs that already exist in database', async () => {
+      const txid = 'existing_utxo'.padEnd(64, 'a');
+
+      // UTXO already exists
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([{ txid, vout: 0 }]);
+      mockPrismaClient.uTXO.createMany.mockResolvedValue({ count: 0 });
+
+      const ctx = createTestContext({
+        walletId,
+        allUtxoKeys: new Set([`${txid}:0`]),
+        utxoDataMap: new Map([
+          [`${txid}:0`, { address: 'addr', utxo: { tx_hash: txid, tx_pos: 0, value: 100000, height: 800000 } }],
+        ]),
+        txDetailsCache: new Map(),
+      });
+
+      const result = await insertUtxosPhase(ctx);
+
+      expect(mockPrismaClient.uTXO.createMany).not.toHaveBeenCalled();
+      expect(result.stats.utxosCreated).toBe(0);
+    });
+
+    it('should calculate correct confirmations for UTXO', async () => {
+      const txid = 'utxo_confs'.padEnd(64, 'a');
+      const blockHeight = 800000;
+      const currentHeight = 800100;
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+      mockPrismaClient.uTXO.createMany.mockResolvedValue({ count: 1 });
+
+      const mockTx = createMockTransaction({
+        txid,
+        outputs: [{ value: 0.001, address: 'addr' }],
+      });
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        allUtxoKeys: new Set([`${txid}:0`]),
+        utxoDataMap: new Map([
+          [`${txid}:0`, { address: 'addr', utxo: { tx_hash: txid, tx_pos: 0, value: 100000, height: blockHeight } }],
+        ]),
+        txDetailsCache: new Map([[txid, mockTx]]) as any,
+        currentBlockHeight: currentHeight,
+      });
+
+      await insertUtxosPhase(ctx);
+
+      expect(mockPrismaClient.uTXO.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              confirmations: 101, // currentHeight - blockHeight + 1
+              blockHeight: blockHeight,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should handle unconfirmed UTXOs with height 0', async () => {
+      const txid = 'unconfirmed_utxo'.padEnd(64, 'a');
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+      mockPrismaClient.uTXO.createMany.mockResolvedValue({ count: 1 });
+
+      const mockTx = createMockTransaction({
+        txid,
+        outputs: [{ value: 0.001, address: 'addr' }],
+      });
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        allUtxoKeys: new Set([`${txid}:0`]),
+        utxoDataMap: new Map([
+          [`${txid}:0`, { address: 'addr', utxo: { tx_hash: txid, tx_pos: 0, value: 100000, height: 0 } }], // Unconfirmed
+        ]),
+        txDetailsCache: new Map([[txid, mockTx]]) as any,
+        currentBlockHeight: 800100,
+      });
+
+      await insertUtxosPhase(ctx);
+
+      expect(mockPrismaClient.uTXO.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              confirmations: 0,
+              blockHeight: null,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should fetch transaction details if not in cache', async () => {
+      const txid = 'fetch_tx_utxo'.padEnd(64, 'a');
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+      mockPrismaClient.uTXO.createMany.mockResolvedValue({ count: 1 });
+
+      const mockTx = createMockTransaction({
+        txid,
+        outputs: [{ value: 0.001, address: 'addr' }],
+      });
+      mockElectrumClient.getTransaction.mockResolvedValue(mockTx);
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        allUtxoKeys: new Set([`${txid}:0`]),
+        utxoDataMap: new Map([
+          [`${txid}:0`, { address: 'addr', utxo: { tx_hash: txid, tx_pos: 0, value: 100000, height: 800000 } }],
+        ]),
+        txDetailsCache: new Map() as any, // Empty cache
+        currentBlockHeight: 800100,
+      });
+
+      await insertUtxosPhase(ctx);
+
+      expect(mockElectrumClient.getTransaction).toHaveBeenCalledWith(txid);
+    });
+  });
+
+  describe('fixConsolidationsPhase', () => {
+    const walletId = 'test-wallet';
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(0);
+      (recalculateWalletBalances as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    it('should call correctMisclassifiedConsolidations with wallet ID', async () => {
+      const ctx = createTestContext({ walletId });
+
+      await fixConsolidationsPhase(ctx);
+
+      expect(correctMisclassifiedConsolidations).toHaveBeenCalledWith(walletId);
+    });
+
+    it('should update stats when consolidations are corrected', async () => {
+      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(3);
+
+      const ctx = createTestContext({ walletId });
+      const result = await fixConsolidationsPhase(ctx);
+
+      expect(result.stats.correctedConsolidations).toBe(3);
+    });
+
+    it('should recalculate balances when consolidations are corrected', async () => {
+      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(2);
+
+      const ctx = createTestContext({ walletId });
+      await fixConsolidationsPhase(ctx);
+
+      expect(recalculateWalletBalances).toHaveBeenCalledWith(walletId);
+    });
+
+    it('should not recalculate balances when no corrections needed', async () => {
+      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(0);
+
+      const ctx = createTestContext({ walletId });
+      await fixConsolidationsPhase(ctx);
+
+      expect(recalculateWalletBalances).not.toHaveBeenCalled();
+    });
+
+    it('should return context with stats updated', async () => {
+      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(5);
+
+      const ctx = createTestContext({ walletId });
+      const result = await fixConsolidationsPhase(ctx);
+
+      expect(result.stats.correctedConsolidations).toBe(5);
+      expect(result.walletId).toBe(walletId);
     });
   });
 });

@@ -200,6 +200,8 @@ export async function processTransactionsPhase(ctx: SyncContext): Promise<SyncCo
         const fee = calculatedFee !== null && calculatedFee >= 0 ? calculatedFee : null;
 
         // Determine transaction type
+        // Consolidation: wallet spends UTXOs but all outputs go back to wallet addresses.
+        // This happens when combining multiple UTXOs into one (e.g., for fee optimization).
         const isConsolidation = isSent && totalToExternal === 0 && totalToWallet > 0;
 
         if (isConsolidation && !existingTxMap.has(`${item.tx_hash}:consolidation`)) {
@@ -214,6 +216,7 @@ export async function processTransactionsPhase(ctx: SyncContext): Promise<SyncCo
             confirmations,
             blockHeight: item.height > 0 ? item.height : null,
             blockTime,
+            // RBF status: 'active' means unconfirmed (can be replaced), 'confirmed' means mined
             rbfStatus: confirmations > 0 ? 'confirmed' : 'active',
           });
           existingTxMap.set(`${item.tx_hash}:consolidation`, true);
@@ -467,7 +470,11 @@ async function storeTransactionIO(
 }
 
 /**
- * Detect and link RBF replacements
+ * Detect and link RBF (Replace-By-Fee) replacements
+ *
+ * Implements detection per BIP-125: when a confirmed transaction shares an input
+ * with a pending transaction, the pending tx has been replaced.
+ * See: https://github.com/bitcoin/bips/blob/master/bip-0125.mediawiki
  */
 async function detectRBFReplacements(
   walletId: string,

@@ -155,10 +155,14 @@ jest.mock('../../../src/websocket/server', () => ({
   getRateLimitEvents: jest.fn(() => []),
 }));
 
-// Mock fs for version check
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() => JSON.stringify({ version: '1.0.0' })),
-}));
+// Mock fs for version check - include all methods Prisma needs
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    readFileSync: jest.fn(() => JSON.stringify({ version: '1.0.0' })),
+  };
+});
 
 describe('Admin API', () => {
   let adminRouter: any;

@@ -204,25 +204,148 @@ try {
 
 ## Wallet Sync Pipeline
 
-The wallet sync process (`syncWallet` in `src/services/bitcoin/blockchain.ts`) runs in multiple phases to ensure accurate transaction classification and balance calculation.
+The wallet sync process uses a modular pipeline architecture where each phase is an independent, testable function. The pipeline orchestrator executes phases in sequence, passing a shared context object between them.
 
-**Location:** `src/services/bitcoin/blockchain.ts`
+**Location:** `src/services/bitcoin/sync/`
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   executeSyncPipeline()                     │
+│              (orchestrates phase execution)                 │
+├─────────────────────────────────────────────────────────────┤
+│    SyncContext (shared state between phases)                │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
+│  │ Phase 1 │→│ Phase 2 │→│ Phase 3 │→│   ...   │           │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### File Structure
+
+```
+src/services/bitcoin/sync/
+├── index.ts              # Public exports
+├── pipeline.ts           # Pipeline executor
+├── context.ts            # SyncContext factory
+├── types.ts              # Type definitions
+├── addressDiscovery.ts   # Gap limit (existing)
+├── confirmations.ts      # Confirmation updates (existing)
+└── phases/
+    ├── index.ts          # Phase exports and default sequence
+    ├── rbfCleanup.ts     # Mark RBF-replaced transactions
+    ├── fetchHistories.ts # Batch fetch address histories
+    ├── checkExisting.ts  # Filter already-processed txs
+    ├── processTransactions.ts  # Main tx processing logic
+    ├── fetchUtxos.ts     # Batch fetch UTXOs
+    ├── reconcileUtxos.ts # Mark spent, update confirmations
+    ├── insertUtxos.ts    # Insert new UTXOs
+    ├── updateAddresses.ts # Mark addresses as used
+    ├── gapLimit.ts       # Generate addresses for gap limit
+    └── fixConsolidations.ts # Correct misclassified txs
+```
 
 ### Sync Phases
 
-| Phase | Name | Purpose |
-|-------|------|---------|
-| 1-3 | Address History | Batch fetch transaction history for all addresses |
-| 4-6 | Transaction Details | Fetch full transaction data, classify as received/sent/consolidation |
-| 7-8 | UTXO Processing | Sync unspent outputs, mark spent UTXOs |
-| 9 | Confirmations | Update confirmation counts |
-| 10 | Balance Calculation | Recalculate running balances |
-| 11 | Gap Limit Expansion | Derive new addresses per BIP-44 gap limit |
-| 12 | Consolidation Correction | Fix misclassified consolidation transactions |
+| Phase | Name | File | Purpose |
+|-------|------|------|---------|
+| 0 | RBF Cleanup | `rbfCleanup.ts` | Mark pending txs as replaced if confirmed tx shares inputs |
+| 1 | Fetch Histories | `fetchHistories.ts` | Batch fetch transaction history for all addresses |
+| 2 | Check Existing | `checkExisting.ts` | Filter out already-processed transactions |
+| 3 | Process Transactions | `processTransactions.ts` | Fetch details, classify, insert transactions |
+| 4 | Fetch UTXOs | `fetchUtxos.ts` | Batch fetch unspent outputs |
+| 5 | Reconcile UTXOs | `reconcileUtxos.ts` | Mark spent UTXOs, update confirmations |
+| 6 | Insert UTXOs | `insertUtxos.ts` | Insert new UTXOs into database |
+| 7 | Update Addresses | `updateAddresses.ts` | Mark addresses with history as "used" |
+| 8 | Gap Limit | `gapLimit.ts` | Derive new addresses per BIP-44 gap limit |
+| 9 | Fix Consolidations | `fixConsolidations.ts` | Correct misclassified consolidation txs |
+
+### Usage
+
+```typescript
+import {
+  executeSyncPipeline,
+  defaultSyncPhases,
+  quickSyncPhases,
+  createPhase,
+} from './sync';
+
+// Standard sync with all phases
+const result = await executeSyncPipeline(walletId, defaultSyncPhases);
+
+// Quick sync (skips gap limit and consolidation correction)
+const result = await executeSyncPipeline(walletId, quickSyncPhases);
+
+// Custom phase selection
+const result = await executeSyncPipeline(walletId, defaultSyncPhases, {
+  skipPhases: ['fixConsolidations'],
+  onPhaseComplete: (phaseName, ctx) => console.log(`Completed: ${phaseName}`),
+});
+```
+
+### Creating Custom Phases
+
+```typescript
+import { createPhase, type SyncContext } from './sync';
+
+// Phase function signature
+async function myCustomPhase(ctx: SyncContext): Promise<SyncContext> {
+  // Access shared context
+  const { walletId, addresses, client } = ctx;
+
+  // Do work...
+
+  // Update stats
+  ctx.stats.customMetric = 42;
+
+  // Return modified context
+  return ctx;
+}
+
+// Register as a phase
+const customPhase = createPhase('myCustomPhase', myCustomPhase);
+
+// Use in pipeline
+const phases = [...defaultSyncPhases, customPhase];
+```
+
+### SyncContext
+
+The `SyncContext` object carries state between phases:
+
+```typescript
+interface SyncContext {
+  // Identifiers
+  walletId: string;
+  wallet: Wallet;
+  network: BitcoinNetwork;
+
+  // Services
+  client: NodeClientInterface;
+
+  // Input data
+  addresses: Address[];
+  walletAddressSet: Set<string>;
+
+  // Phase outputs (accumulated)
+  historyResults: Map<string, TxHistoryEntry[]>;
+  allTxids: Set<string>;
+  newTxids: string[];
+  txDetailsCache: Map<string, RawTransaction>;
+  utxoResults: Array<{ address: string; utxos: ElectrumUTXO[] }>;
+  newTransactions: TransactionCreateData[];
+  newAddresses: Array<{ address: string; derivationPath: string }>;
+
+  // Tracking
+  stats: SyncStats;
+  completedPhases: string[];
+}
+```
 
 ### Transaction Classification
 
-Transactions are classified during Phase 4-6 based on input/output ownership:
+Transactions are classified during the `processTransactions` phase:
 
 | Type | Condition | Amount |
 |------|-----------|--------|
@@ -230,25 +353,35 @@ Transactions are classified during Phase 4-6 based on input/output ownership:
 | `sent` | Wallet inputs, outputs to external | `-(value + fee)` |
 | `consolidation` | Wallet inputs, ALL outputs to wallet | `-fee` |
 
-### Consolidation Correction (Phase 12)
+### Consolidation Correction
 
 **Problem**: During sync, a consolidation can be misclassified as "sent" if the output address wasn't in the wallet's address set yet. This happens because:
-1. Addresses are derived incrementally via BIP-44 gap limit (Phase 11)
-2. Transaction classification (Phase 4-6) happens before new addresses exist
+1. Addresses are derived incrementally via BIP-44 gap limit
+2. Transaction classification happens before new addresses exist
 3. An output to a not-yet-derived address appears "external"
 
-**Solution**: Phase 12 runs after all addresses are synced and checks every "sent" transaction. If ALL outputs now belong to wallet addresses, the transaction is reclassified as a consolidation with the correct amount (`-fee`).
+**Solution**: The `fixConsolidations` phase runs after all addresses are synced and checks every "sent" transaction. If ALL outputs now belong to wallet addresses, the transaction is reclassified as a consolidation.
+
+### Testing Phases
+
+Each phase can be tested independently:
 
 ```typescript
-// In balanceCalculation.ts
-export async function correctMisclassifiedConsolidations(walletId: string): Promise<number> {
-  // Find "sent" transactions where ALL outputs are actually wallet addresses
-  // Update type to "consolidation", amount to -fee
-  // Fix output isOurs flags
-}
-```
+import { createTestContext, fetchHistoriesPhase } from './sync';
 
-**Key insight**: This correction must run on every sync because new addresses may reveal previously misclassified transactions.
+describe('fetchHistoriesPhase', () => {
+  it('should fetch histories for all addresses', async () => {
+    const ctx = createTestContext({
+      addresses: [mockAddress1, mockAddress2],
+      client: mockClient,
+    });
+
+    const result = await fetchHistoriesPhase(ctx);
+
+    expect(result.historyResults.size).toBe(2);
+  });
+});
+```
 
 ---
 
@@ -519,6 +652,12 @@ src/
 ├── repositories/        # Data access layer
 ├── services/            # Business logic layer
 │   ├── bitcoin/         # Bitcoin-specific services
+│   │   ├── sync/        # Modular sync pipeline
+│   │   │   ├── phases/  # Individual sync phases
+│   │   │   ├── pipeline.ts
+│   │   │   ├── context.ts
+│   │   │   └── types.ts
+│   │   └── *.ts         # Other bitcoin services
 │   └── *.ts             # Domain services
 ├── utils/               # Shared utilities
 │   ├── async.ts         # Concurrency, retry, timeout

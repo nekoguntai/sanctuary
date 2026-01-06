@@ -389,7 +389,7 @@ describeIfDatabase('AuditLogRepository Integration Tests', () => {
         });
 
         const adminActions = await tx.auditLog.findMany({
-          where: { category: 'admin' },
+          where: { category: 'admin', userId: admin.id },
         });
 
         expect(adminActions).toHaveLength(2);

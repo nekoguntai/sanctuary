@@ -24,6 +24,8 @@ export interface PSBTSignRequest {
   changeOutputs?: number[]; // Indices of change outputs
   accountPath?: string; // Account derivation path (e.g., "m/84'/0'/0'")
   scriptType?: 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr'; // Script type for wallet policy
+  // Multisig xpubs keyed by fingerprint (lowercase hex) - needed for Trezor multisig signing
+  multisigXpubs?: Record<string, string>;
 }
 
 export interface PSBTSignResponse {

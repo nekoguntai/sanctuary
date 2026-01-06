@@ -30,7 +30,7 @@ export interface UseHardwareWalletReturn {
   connect: (type?: DeviceType) => Promise<void>;
   disconnect: () => void;
   signTransaction: (tx: TransactionForSigning) => Promise<string>;
-  signPSBT: (psbtBase64: string, inputPaths?: string[]) => Promise<{ psbt: string; rawTx?: string }>;
+  signPSBT: (psbtBase64: string, inputPaths?: string[], multisigXpubs?: Record<string, string>) => Promise<{ psbt: string; rawTx?: string }>;
   refreshDevices: () => Promise<void>;
   clearError: () => void;
 }
@@ -124,8 +124,15 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
   /**
    * Sign a PSBT with hardware wallet
    * Returns both the signed PSBT and optionally a raw transaction hex (for Trezor)
+   * @param psbtBase64 Base64 encoded PSBT
+   * @param inputPaths Derivation paths for inputs
+   * @param multisigXpubs Map of fingerprint to xpub for multisig wallets (required for Trezor)
    */
-  const signPSBT = useCallback(async (psbtBase64: string, inputPaths: string[] = []): Promise<{ psbt: string; rawTx?: string }> => {
+  const signPSBT = useCallback(async (
+    psbtBase64: string,
+    inputPaths: string[] = [],
+    multisigXpubs?: Record<string, string>
+  ): Promise<{ psbt: string; rawTx?: string }> => {
     // Check the service's connection state directly (not React state which updates async)
     if (!hardwareWalletService.isConnected()) {
       throw new Error('No device connected');
@@ -138,6 +145,7 @@ export const useHardwareWallet = (): UseHardwareWalletReturn => {
       const result = await hardwareWalletService.signPSBT({
         psbt: psbtBase64,
         inputPaths,
+        multisigXpubs,
       });
 
       // Return both psbt and rawTx (rawTx is only set for Trezor)

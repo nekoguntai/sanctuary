@@ -39,6 +39,28 @@ function getHardwareWalletType(deviceType: string): DeviceType | null {
   return null;
 }
 
+/**
+ * Extract xpubs from a multisig descriptor keyed by fingerprint
+ * Returns a map of fingerprint (lowercase) -> xpub for Trezor multisig signing
+ */
+function extractXpubsFromDescriptor(descriptor: string | undefined): Record<string, string> | undefined {
+  if (!descriptor) return undefined;
+
+  // Match patterns like [fingerprint/path]xpub...
+  // Handles sortedmulti, wsh, sh-wsh descriptors
+  const keyRegex = /\[([a-fA-F0-9]{8})\/[^\]]+\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)/g;
+  const xpubMap: Record<string, string> = {};
+
+  let match;
+  while ((match = keyRegex.exec(descriptor)) !== null) {
+    const fingerprint = match[1].toLowerCase();
+    const xpub = match[2];
+    xpubMap[fingerprint] = xpub;
+  }
+
+  return Object.keys(xpubMap).length > 0 ? xpubMap : undefined;
+}
+
 export interface TransactionData {
   psbtBase64: string;
   fee: number;
@@ -234,7 +256,16 @@ export function useSendTransactionActions({
     setError(null);
 
     try {
-      const signResult = await hardwareWallet.signPSBT(txData.psbtBase64);
+      // For multisig wallets, extract xpubs from descriptor for Trezor signing
+      const multisigXpubs = wallet.type === 'multi_sig'
+        ? extractXpubsFromDescriptor(wallet.descriptor)
+        : undefined;
+
+      const signResult = await hardwareWallet.signPSBT(
+        txData.psbtBase64,
+        txData.inputPaths || [],
+        multisigXpubs
+      );
       return signResult.psbt || signResult.rawTx || null;
     } catch (err) {
       log.error('Hardware wallet signing failed', { error: err });
@@ -243,7 +274,7 @@ export function useSendTransactionActions({
     } finally {
       setIsSigning(false);
     }
-  }, [txData, hardwareWallet]);
+  }, [txData, hardwareWallet, wallet]);
 
   // Sign with a specific device (for multi-sig USB signing)
   const signWithDevice = useCallback(async (device: Device): Promise<boolean> => {
@@ -277,7 +308,18 @@ export function useSendTransactionActions({
 
       // Sign the PSBT
       const inputPaths = txData?.inputPaths || [];
-      const signResult = await hardwareWallet.signPSBT(psbtToSign, inputPaths);
+      // For multisig wallets, extract xpubs from descriptor for Trezor signing
+      const multisigXpubs = wallet.type === 'multi_sig'
+        ? extractXpubsFromDescriptor(wallet.descriptor)
+        : undefined;
+
+      if (multisigXpubs) {
+        log.info('Extracted xpubs from descriptor for multisig signing', {
+          fingerprints: Object.keys(multisigXpubs),
+        });
+      }
+
+      const signResult = await hardwareWallet.signPSBT(psbtToSign, inputPaths, multisigXpubs);
 
       if (signResult.psbt || signResult.rawTx) {
         // Update the PSBT with signatures

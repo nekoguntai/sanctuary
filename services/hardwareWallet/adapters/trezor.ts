@@ -141,11 +141,16 @@ interface TrezorMultisig {
 /**
  * Build Trezor multisig structure from PSBT input data.
  * This is required for Trezor to properly validate and sign multisig transactions.
+ *
+ * @param witnessScript The witness script from the PSBT input
+ * @param bip32Derivations Array of bip32 derivation info from the PSBT
+ * @param xpubMap Optional map of fingerprint (lowercase hex) to xpub string for multisig
  * @internal Exported for testing
  */
 export function buildTrezorMultisig(
   witnessScript: Buffer | undefined,
-  bip32Derivations: Array<{ pubkey: Buffer; path: string; masterFingerprint: Buffer }>
+  bip32Derivations: Array<{ pubkey: Buffer; path: string; masterFingerprint: Buffer }>,
+  xpubMap?: Record<string, string>
 ): TrezorMultisig | undefined {
   if (!witnessScript || witnessScript.length === 0) {
     return undefined;
@@ -181,6 +186,20 @@ export function buildTrezorMultisig(
         return hardened ? index + 0x80000000 : index;
       });
 
+      // Try to find xpub by fingerprint - Trezor requires xpub (base58) for multisig, not raw pubkey
+      const fingerprint = deriv.masterFingerprint.toString('hex').toLowerCase();
+      const xpub = xpubMap?.[fingerprint];
+
+      if (xpub) {
+        log.debug('Using xpub for multisig node', { fingerprint, xpubPrefix: xpub.substring(0, 15) });
+        return {
+          node: xpub,
+          address_n: childPath,
+        };
+      }
+
+      // Fallback to raw pubkey (will fail for Trezor but kept for compatibility)
+      log.warn('No xpub found for fingerprint, using raw pubkey (may fail)', { fingerprint });
       return {
         node: deriv.pubkey.toString('hex'),
         address_n: childPath,
@@ -560,13 +579,14 @@ export class TrezorAdapter implements DeviceAdapter {
 
         // Add multisig structure for multisig inputs (required for Trezor to validate multisig paths)
         if (isMultisigInput(input) && input.bip32Derivation) {
-          const multisig = buildTrezorMultisig(input.witnessScript, input.bip32Derivation);
+          const multisig = buildTrezorMultisig(input.witnessScript, input.bip32Derivation, request.multisigXpubs);
           if (multisig) {
             trezorInput.multisig = multisig;
             log.info('Built multisig structure for input', {
               inputIdx: idx,
               m: multisig.m,
               pubkeyCount: multisig.pubkeys.length,
+              hasXpubs: !!request.multisigXpubs,
             });
           }
         }

@@ -24,6 +24,11 @@ import { getTestUser, createTestUser, loginTestUser, createAndLoginUser, authHea
 function uniqueUsername(role: string): string {
   return `${role}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
+
+// Helper to generate unique device fingerprints (8 hex chars)
+function uniqueFingerprint(): string {
+  return Math.random().toString(16).substring(2, 10).padEnd(8, '0');
+}
 import { PrismaClient } from '@prisma/client';
 import { Express } from 'express';
 
@@ -562,7 +567,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
           userId,
           type: 'coldcard',
           label: 'My ColdCard',
-          fingerprint: 'aabbccdd',
+          fingerprint: uniqueFingerprint(),
           xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
           derivationPath: "m/84'/1'/0'",
         },
@@ -610,7 +615,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
           userId,
           type: 'coldcard',
           label: 'ColdCard 1',
-          fingerprint: '11223344',
+          fingerprint: uniqueFingerprint(),
           xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
           derivationPath: "m/48'/1'/0'/2'",
         },
@@ -662,7 +667,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
           userId: signerId,
           type: 'ledger',
           label: 'Signer Ledger',
-          fingerprint: '55667788',
+          fingerprint: uniqueFingerprint(),
           xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
         },
       });
@@ -704,7 +709,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
           userId: viewerId,
           type: 'ledger',
           label: 'Viewer Ledger',
-          fingerprint: '99887766',
+          fingerprint: uniqueFingerprint(),
           xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
         },
       });

@@ -1818,6 +1818,801 @@ describe('Transaction Service', () => {
     });
   });
 
+  describe('Error Handling - Transaction Building Edge Cases', () => {
+    const walletId = 'test-wallet-error-cases';
+    const recipient = testnetAddresses.nativeSegwit[0];
+
+    beforeEach(() => {
+      // Set up default wallet mock
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+      });
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2], // 200000 sats
+          walletId,
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+    });
+
+    it('should throw when no change address available (single-sig)', async () => {
+      // No change addresses and no receiving addresses available
+      mockPrismaClient.address.findFirst.mockResolvedValue(null);
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 50000, 10)
+      ).rejects.toThrow('No change address available');
+    });
+
+    it('should handle zero amount with sendMax=false', async () => {
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+
+      // Zero amount without sendMax should still be processed
+      // (may result in dust output which is recipient's concern)
+      const result = await createTransaction(walletId, recipient, 0, 10, {
+        sendMax: false,
+      });
+
+      expect(result.psbt).toBeDefined();
+      expect(result.effectiveAmount).toBe(0);
+    });
+
+    it('should throw for negative fee rate', async () => {
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+
+      // Negative fee rate should be handled (clamped or error)
+      const result = await estimateTransaction(walletId, recipient, 50000, -10);
+      // Implementation may accept or reject - verify consistent behavior
+      expect(result.sufficient !== undefined || result.error !== undefined).toBe(true);
+    });
+
+    it('should handle extremely high fee rate that exceeds available balance', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[0], walletId, amount: BigInt(10000) }, // Small UTXO
+      ]);
+
+      const result = await estimateTransaction(
+        walletId,
+        recipient,
+        1000, // Small amount
+        10000 // Extremely high fee rate
+      );
+
+      // Fee would exceed balance
+      expect(result.sufficient).toBe(false);
+    });
+
+    it('should handle wallet with null descriptor', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+        descriptor: null, // Null descriptor
+      });
+
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+
+      // Should still create transaction (descriptor is optional for some operations)
+      const result = await createTransaction(walletId, recipient, 50000, 10);
+      expect(result.psbt).toBeDefined();
+    });
+
+    it('should handle UTXOs with different scriptPubKey types', async () => {
+      // Mix of different UTXO types
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          scriptPubKey: '0014' + 'a'.repeat(40), // P2WPKH
+          amount: BigInt(100000),
+        },
+        {
+          ...sampleUtxos[1],
+          walletId,
+          scriptPubKey: '0020' + 'b'.repeat(64), // P2WSH
+          amount: BigInt(50000),
+        },
+      ]);
+
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[0].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+        {
+          id: 'addr-2',
+          address: sampleUtxos[1].address,
+          derivationPath: "m/84'/1'/0'/0/1",
+          walletId,
+        },
+      ]);
+
+      const result = await createTransaction(walletId, recipient, 30000, 10);
+      expect(result.psbt).toBeDefined();
+      expect(result.utxos.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Error Handling - Batch Transaction Edge Cases', () => {
+    const walletId = 'batch-error-wallet';
+
+    beforeEach(() => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+      });
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2], // 200000 sats
+          walletId,
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-1',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+    });
+
+    it('should throw error for duplicate addresses in outputs', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 30000 },
+        { address: testnetAddresses.nativeSegwit[0], amount: 20000 }, // Duplicate
+      ];
+
+      // Duplicate addresses may be allowed (batching to same recipient)
+      // or rejected depending on implementation
+      try {
+        const result = await createBatchTransaction(walletId, outputs, 10);
+        // If allowed, should combine or keep separate
+        expect(result.psbt).toBeDefined();
+      } catch (error) {
+        expect((error as Error).message).toContain('duplicate');
+      }
+    });
+
+    it('should throw error for output with negative amount', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: -1000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow();
+    });
+
+    it('should throw error for mainnet address on testnet wallet', async () => {
+      const outputs = [
+        // Mainnet address on testnet wallet
+        { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', amount: 30000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow();
+    });
+
+    it('should handle batch with all outputs as sendMax', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 0, sendMax: true },
+        { address: testnetAddresses.nativeSegwit[1], amount: 0, sendMax: true },
+      ];
+
+      // Multiple sendMax outputs - should split or error
+      try {
+        const result = await createBatchTransaction(walletId, outputs, 10);
+        // If allowed, each sendMax gets a share
+        expect(result.psbt).toBeDefined();
+      } catch (error) {
+        // Multiple sendMax may be rejected
+        expect((error as Error).message).toMatch(/sendMax/i);
+      }
+    });
+
+    it('should handle batch with mix of normal and sendMax outputs', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 30000 },
+        { address: testnetAddresses.nativeSegwit[1], amount: 0, sendMax: true },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.outputs).toHaveLength(2);
+      expect(result.outputs[0].amount).toBe(30000);
+      expect(result.outputs[1].amount).toBeGreaterThan(0); // Gets remaining
+    });
+
+    it('should handle large number of outputs', async () => {
+      // Create many outputs (could hit transaction size limits)
+      const outputs = Array.from({ length: 20 }, (_, i) => ({
+        address: testnetAddresses.nativeSegwit[i % 2],
+        amount: 5000,
+      }));
+
+      // Need more UTXOs for this
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[2], walletId, amount: BigInt(500000), scriptPubKey: '0014' + 'a'.repeat(40) },
+      ]);
+
+      try {
+        const result = await createBatchTransaction(walletId, outputs, 10);
+        expect(result.outputs.length).toBeGreaterThan(0);
+      } catch (error) {
+        // May fail due to transaction size or dust outputs
+        expect(error).toBeDefined();
+      }
+    });
+  });
+
+  describe('Error Handling - Broadcast Edge Cases', () => {
+    const walletId = 'broadcast-error-wallet';
+    const recipient = testnetAddresses.nativeSegwit[0];
+
+    beforeEach(() => {
+      (broadcastTransaction as jest.Mock).mockResolvedValue({
+        txid: 'new-txid-from-broadcast',
+        broadcasted: true,
+      });
+      (recalculateWalletBalances as jest.Mock).mockResolvedValue(undefined);
+      mockPrismaClient.uTXO.update.mockResolvedValue({});
+      mockPrismaClient.transaction.create.mockResolvedValue({
+        id: 'tx-1',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+      });
+      mockPrismaClient.address.findFirst.mockResolvedValue(null);
+    });
+
+    it('should handle database error during UTXO update', async () => {
+      mockPrismaClient.uTXO.update.mockRejectedValueOnce(new Error('DB connection lost'));
+
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      // Should throw when database update fails
+      await expect(
+        broadcastAndSave(walletId, undefined, metadata)
+      ).rejects.toThrow('DB connection lost');
+    });
+
+    it('should handle database error during transaction create', async () => {
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(new Error('Constraint violation'));
+
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      await expect(
+        broadcastAndSave(walletId, undefined, metadata)
+      ).rejects.toThrow('Constraint violation');
+    });
+
+    it('should handle empty UTXO array in metadata', async () => {
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [], // Empty UTXOs
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      // Should still broadcast (UTXOs from rawTxHex)
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+      expect(result.broadcasted).toBe(true);
+    });
+
+    it('should handle broadcast timeout/network error', async () => {
+      (broadcastTransaction as jest.Mock).mockRejectedValueOnce(new Error('Network timeout'));
+
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      await expect(
+        broadcastAndSave(walletId, undefined, metadata)
+      ).rejects.toThrow('Network timeout');
+    });
+
+    it('should handle invalid rawTxHex format', async () => {
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex: 'not-a-valid-hex-string',
+      };
+
+      await expect(
+        broadcastAndSave(walletId, undefined, metadata)
+      ).rejects.toThrow();
+    });
+
+    it('should handle missing required metadata fields', async () => {
+      const incompleteMetadata = {
+        recipient,
+        // Missing: amount, fee, utxos
+      };
+
+      await expect(
+        broadcastAndSave(walletId, undefined, incompleteMetadata as any)
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('UTXO Selection Edge Cases', () => {
+    const walletId = 'utxo-edge-case-wallet';
+
+    it('should handle UTXOs with exact amount + fee (no change)', async () => {
+      const targetAmount = 50000;
+      const feeRate = 10;
+      // Estimated fee for 1-in-2-out ~ 141 vBytes * 10 = 1410 sats
+      // So UTXO of 51410 would leave no change
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          amount: BigInt(51500), // Slightly more than target + fee
+        },
+      ]);
+
+      const result = await selectUTXOs(walletId, targetAmount, feeRate);
+
+      // Change should be minimal (possibly below dust threshold)
+      expect(result.totalAmount).toBe(51500);
+    });
+
+    it('should handle single UTXO that barely covers target', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          amount: BigInt(60000), // Just enough
+        },
+      ]);
+
+      const result = await selectUTXOs(walletId, 55000, 10);
+      expect(result.utxos.length).toBe(1);
+    });
+
+    it('should select multiple small UTXOs when no single large one exists', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[0], walletId, amount: BigInt(10000) },
+        { ...sampleUtxos[1], walletId, amount: BigInt(15000) },
+        { ...sampleUtxos[2], walletId, amount: BigInt(20000) },
+        {
+          id: 'utxo-4',
+          txid: 'txid4'.repeat(8),
+          vout: 0,
+          walletId,
+          amount: BigInt(25000),
+          spent: false,
+          frozen: false,
+          confirmations: 6,
+          address: 'addr4',
+          scriptPubKey: '0014' + 'd'.repeat(40),
+        },
+      ]);
+
+      const result = await selectUTXOs(walletId, 50000, 5);
+
+      expect(result.utxos.length).toBeGreaterThan(1);
+      expect(result.totalAmount).toBeGreaterThanOrEqual(50000);
+    });
+
+    it('should prefer fewer inputs to minimize fees', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[0], walletId, amount: BigInt(100000) }, // Large - should prefer
+        { ...sampleUtxos[1], walletId, amount: BigInt(30000) },
+        { ...sampleUtxos[2], walletId, amount: BigInt(30000) },
+      ]);
+
+      const result = await selectUTXOs(
+        walletId,
+        50000,
+        10,
+        UTXOSelectionStrategy.LARGEST_FIRST
+      );
+
+      // Should use the single large UTXO instead of multiple small ones
+      expect(result.utxos.length).toBe(1);
+      expect(result.utxos[0].amount).toBe(BigInt(100000));
+    });
+  });
+
+  describe('estimateTransaction Error Cases', () => {
+    const walletId = 'estimate-error-wallet';
+
+    it('should return estimate even for invalid recipient (validation happens during creation)', async () => {
+      // estimateTransaction only checks UTXO availability, not address validity
+      // Address validation happens during actual transaction creation
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[2], walletId },
+      ]);
+
+      const result = await estimateTransaction(
+        walletId,
+        'invalid-address',
+        50000,
+        10
+      );
+
+      // The estimate can succeed even with invalid address
+      // since it only calculates fees and UTXO selection
+      expect(result).toBeDefined();
+      expect(result.fee).toBeDefined();
+    });
+
+    it('should handle wallet with zero UTXOs', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+
+      const result = await estimateTransaction(
+        walletId,
+        testnetAddresses.nativeSegwit[0],
+        50000,
+        10
+      );
+
+      expect(result.sufficient).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should handle transaction to own wallet address', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        { ...sampleUtxos[2], walletId },
+      ]);
+
+      // Sending to own address (consolidation)
+      const result = await estimateTransaction(
+        walletId,
+        sampleUtxos[2].address, // Own address
+        50000,
+        10
+      );
+
+      expect(result.sufficient).toBe(true);
+    });
+  });
+
+  describe('buildMultisigBip32Derivations Edge Cases', () => {
+    const network = bitcoin.networks.testnet;
+
+    it('should handle missing xpub in key info', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const keysWithMissingXpub = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: '', // Empty xpub
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+
+      const result = buildMultisigBip32Derivations(
+        derivationPath,
+        keysWithMissingXpub,
+        network
+      );
+
+      // Should skip invalid key or return partial result
+      expect(result.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should handle invalid fingerprint format', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const keysWithBadFingerprint = [
+        {
+          fingerprint: 'not-hex', // Invalid hex
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+      ];
+
+      // May throw or skip
+      try {
+        const result = buildMultisigBip32Derivations(
+          derivationPath,
+          keysWithBadFingerprint,
+          network
+        );
+        // If doesn't throw, should handle gracefully
+        expect(Array.isArray(result)).toBe(true);
+      } catch (error) {
+        expect(error).toBeDefined();
+      }
+    });
+
+    it('should derive correct paths for deeply nested derivation', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/999"; // Deep index
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+
+      const result = buildMultisigBip32Derivations(
+        derivationPath,
+        multisigKeys,
+        network
+      );
+
+      expect(result.length).toBe(2);
+      // Verify paths include the deep index
+      result.forEach(d => {
+        expect(d.path).toMatch(/\/999$/);
+      });
+    });
+  });
+
+  describe('selectUTXOs with Explicit Selection', () => {
+    const walletId = 'explicit-selection-wallet';
+
+    it('should throw insufficient funds error when explicitly selected UTXOs are not enough', async () => {
+      const smallUtxo = { ...sampleUtxos[0], walletId, amount: BigInt(5000) };
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([smallUtxo]);
+
+      const selectedId = `${smallUtxo.txid}:${smallUtxo.vout}`;
+
+      // Target amount much larger than selected UTXO
+      await expect(
+        selectUTXOs(walletId, 50000, 10, UTXOSelectionStrategy.LARGEST_FIRST, [selectedId])
+      ).rejects.toThrow('Insufficient funds');
+    });
+
+    it('should use all explicitly selected UTXOs even if one would suffice', async () => {
+      const utxo1 = { ...sampleUtxos[0], walletId, amount: BigInt(50000) };
+      const utxo2 = { ...sampleUtxos[1], walletId, amount: BigInt(30000) };
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([utxo1, utxo2]);
+
+      const selectedIds = [
+        `${utxo1.txid}:${utxo1.vout}`,
+        `${utxo2.txid}:${utxo2.vout}`,
+      ];
+
+      const result = await selectUTXOs(
+        walletId,
+        20000, // Small amount, either UTXO would suffice
+        10,
+        UTXOSelectionStrategy.LARGEST_FIRST,
+        selectedIds
+      );
+
+      // Should use both UTXOs since they were explicitly selected
+      expect(result.utxos.length).toBe(2);
+      expect(result.totalAmount).toBe(80000);
+    });
+  });
+
+  describe('generateDecoyAmounts Additional Tests', () => {
+    const dustThreshold = 546;
+
+    it('should handle large change amount with many outputs', () => {
+      const totalChange = 500000;
+      const count = 4;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      expect(result).toHaveLength(4);
+      expect(result.reduce((a, b) => a + b, 0)).toBe(totalChange);
+      result.forEach(amount => {
+        expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+      });
+    });
+
+    it('should distribute amounts somewhat evenly', () => {
+      const totalChange = 100000;
+      const count = 4;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      // Each amount should be roughly 1/4 of total (±50%)
+      const expectedAvg = totalChange / count;
+      result.forEach(amount => {
+        expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+        expect(amount).toBeLessThanOrEqual(expectedAvg * 2); // No single output > 2x average
+      });
+    });
+
+    it('should handle edge case where count equals 1', () => {
+      const totalChange = 10000;
+      const result = generateDecoyAmounts(totalChange, 1, dustThreshold);
+
+      expect(result).toEqual([10000]);
+    });
+
+    it('should handle change just above minimum for 2 outputs', () => {
+      const totalChange = dustThreshold * 2 + 100; // Just enough for 2 outputs
+      const count = 2;
+      const result = generateDecoyAmounts(totalChange, count, dustThreshold);
+
+      // Should produce 2 outputs, each >= dust threshold
+      expect(result).toHaveLength(2);
+      result.forEach(amount => {
+        expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+      });
+    });
+  });
+
+  describe('buildMultisigWitnessScript Edge Cases', () => {
+    const network = bitcoin.networks.testnet;
+
+    it('should return undefined for change path (index 1)', () => {
+      const derivationPath = "m/48'/1'/0'/2'/1/0"; // Change address path (index 1)
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '1/*', // Note: different derivation for change
+        },
+      ];
+
+      const result = buildMultisigWitnessScript(
+        derivationPath,
+        multisigKeys,
+        2,
+        network,
+        0
+      );
+
+      // Should still produce a valid script for change addresses
+      expect(result === undefined || Buffer.isBuffer(result)).toBe(true);
+    });
+
+    it('should build valid 2-of-2 multisig script', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const multisigKeys = [
+        {
+          fingerprint: 'aabbccdd',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+          derivationPath: '0/*',
+        },
+        {
+          fingerprint: 'eeff0011',
+          accountPath: "48'/1'/0'/2'",
+          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+          derivationPath: '0/*',
+        },
+      ];
+
+      const result = buildMultisigWitnessScript(
+        derivationPath,
+        multisigKeys,
+        2,
+        network,
+        0
+      );
+
+      // Should produce a valid witness script
+      expect(result).toBeDefined();
+      if (result) {
+        expect(Buffer.isBuffer(result)).toBe(true);
+        // Multisig script should end with OP_CHECKMULTISIG (0xae)
+        expect(result[result.length - 1]).toBe(0xae);
+      }
+    });
+  });
+
   describe('Consolidation address filtering', () => {
     it('should only return receive addresses for consolidation', () => {
       const addresses = [

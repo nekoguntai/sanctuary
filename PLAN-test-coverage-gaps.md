@@ -1,8 +1,12 @@
 # Test Coverage Gaps - Implementation Plan
 
 Created: 2026-01-04
-Updated: 2026-01-05
-Status: **Phases 1, 3, 4 Complete**
+Updated: 2026-01-06
+Status: **Phases 1, 2, 3, 4 Complete** (Task 4.1, 4.2 deferred)
+
+> **Note:** A follow-up analysis identified additional gaps in API route coverage.
+> See `docs/TEST_COVERAGE_ANALYSIS.md` for the expanded plan addressing API routes,
+> import/export handlers, and infrastructure tests.
 
 ## Progress Summary
 

@@ -51,8 +51,8 @@ services:
   # ============================================
   backend-test:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
       target: deps
     container_name: sanctuary-backend-test
     working_dir: /app
@@ -70,11 +70,12 @@ services:
       - ./server/jest.config.js:/app/jest.config.js:ro
       - ./server/tsconfig.json:/app/tsconfig.json:ro
       - ./server/prisma:/app/prisma:ro
+      - ./shared:/shared:ro
     command: >
       sh -c "
         npx prisma generate &&
         npx prisma migrate deploy &&
-        npm run test:unit -- --ci
+        npm test -- --ci
       "
     networks:
       - test-network
@@ -84,8 +85,8 @@ services:
   # ============================================
   backend-coverage:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
       target: deps
     container_name: sanctuary-backend-coverage
     working_dir: /app
@@ -104,6 +105,7 @@ services:
       - ./server/tsconfig.json:/app/tsconfig.json:ro
       - ./server/prisma:/app/prisma:ro
       - ./server/coverage:/app/coverage
+      - ./shared:/shared:ro
     command: >
       sh -c "
         npx prisma generate &&

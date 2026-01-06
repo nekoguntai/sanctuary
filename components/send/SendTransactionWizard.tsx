@@ -123,11 +123,12 @@ function WizardContent({
   }, [currentStep, state.isDraftMode, actions]);
 
   // Auto-create transaction when entering review step (not for draft mode)
+  // Don't retry if there's already an error (prevents infinite loop on API failure)
   useEffect(() => {
-    if (currentStep === 'review' && !state.isDraftMode && !actions.txData && !actions.isCreating && isReadyToSign) {
+    if (currentStep === 'review' && !state.isDraftMode && !actions.txData && !actions.isCreating && !actions.error && isReadyToSign) {
       actions.createTransaction();
     }
-  }, [currentStep, state.isDraftMode, actions.txData, actions.isCreating, isReadyToSign]);
+  }, [currentStep, state.isDraftMode, actions.txData, actions.isCreating, actions.error, isReadyToSign]);
 
   // Handle sign & broadcast (single-sig flow)
   const handleSignAndBroadcast = useCallback(async () => {

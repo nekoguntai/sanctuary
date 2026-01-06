@@ -491,6 +491,26 @@ export function OutputsStep() {
         </div>
       </div>
 
+      {/* No Spendable UTXOs Warning */}
+      {spendableUtxos.length === 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+          <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-rose-700 dark:text-rose-300">
+              No spendable funds available
+            </p>
+            <p className="text-sm text-rose-600 dark:text-rose-400 mt-1">
+              {draftLocked.length > 0
+                ? `All UTXOs are locked by pending transactions or drafts. Wait for pending transactions to confirm or delete drafts to release the funds.`
+                : manuallyFrozen.length > 0
+                  ? `All UTXOs are frozen. Unfreeze coins to make them spendable.`
+                  : `This wallet has no confirmed UTXOs to spend.`
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Fee Warnings */}
       {feeWarnings.length > 0 && (
         <div className="space-y-2">

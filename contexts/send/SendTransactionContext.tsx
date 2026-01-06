@@ -213,7 +213,15 @@ export function SendTransactionProvider({
   // NAVIGATION
   // ========================================================================
 
-  const canGoNext = useMemo(() => canProceedToNextStep(state), [state]);
+  const canGoNext = useMemo(() => {
+    const stepValid = canProceedToNextStep(state);
+    // Additional check: on outputs step, require at least one spendable UTXO to proceed
+    // This prevents users from reaching the review step with nothing to spend
+    if (state.currentStep === 'outputs' && spendableUtxos.length === 0) {
+      return false;
+    }
+    return stepValid;
+  }, [state, spendableUtxos.length]);
 
   const canGoBack = useMemo(() => {
     const currentIndex = WIZARD_STEPS.indexOf(state.currentStep);

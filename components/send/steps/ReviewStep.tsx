@@ -708,13 +708,18 @@ export function ReviewStep({
       )}
 
       {/* Signing panel for single-sig */}
-      {!isMultiSig && (txData || unsignedPsbt) && (
+      {!isMultiSig && (txData || unsignedPsbt) && (() => {
+        const hasAirgapDevice = devices.some(d => getDeviceCapabilities(d.type).methods.includes('airgap'));
+        const hasQrDevice = devices.some(d => getDeviceCapabilities(d.type).methods.includes('qr'));
+        return (
         <div className="surface-secondary rounded-xl p-4 space-y-3">
           <h3 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
             Sign Transaction
           </h3>
           <p className="text-xs text-sanctuary-500">
-            Sign with your hardware wallet via USB or use air-gap signing with a PSBT file.
+            {hasAirgapDevice || hasQrDevice
+              ? 'Sign with your hardware wallet via USB, QR code, or PSBT file.'
+              : 'Sign with your hardware wallet via USB.'}
           </p>
           <div className="flex flex-wrap gap-2">
             {/* USB signing for single-sig - show button for each USB-capable device */}
@@ -743,7 +748,7 @@ export function ReviewStep({
                 ) : (
                   <Usb className="w-4 h-4 mr-2" />
                 )}
-                {signingDeviceId === device.id ? 'Signing...' : `Sign with ${device.label}`}
+                {signingDeviceId === device.id ? 'Signing...' : `USB (${device.label})`}
               </Button>
             ))}
             {/* QR signing for single-sig - show button for each QR-capable device */}
@@ -762,22 +767,30 @@ export function ReviewStep({
                 QR Sign ({device.label})
               </Button>
             ))}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onDownloadPsbt}
-            >
-              <FileDown className="w-4 h-4 mr-2" />
-              Download PSBT
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Signed
-            </Button>
+            {/* PSBT file download/upload - only show if at least one device supports airgap */}
+            {devices.some(d => {
+              const caps = getDeviceCapabilities(d.type);
+              return caps.methods.includes('airgap');
+            }) && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onDownloadPsbt}
+                >
+                  <FileDown className="w-4 h-4 mr-2" />
+                  Download PSBT
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Signed
+                </Button>
+              </>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -793,7 +806,8 @@ export function ReviewStep({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Validation Warnings */}
       {!isReadyToSign && (

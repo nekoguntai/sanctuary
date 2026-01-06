@@ -233,10 +233,12 @@ describe('Blockchain Service - Transaction Detection', () => {
 
       mockPrisma.wallet.findUnique.mockResolvedValue(testWallet);
       mockPrisma.address.findMany.mockResolvedValue(addresses);
+      mockPrisma.address.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.transaction.findMany.mockResolvedValue([]);
       mockPrisma.transaction.createMany.mockResolvedValue({ count: 1 });
       mockPrisma.uTXO.findMany.mockResolvedValue([]);
       mockPrisma.uTXO.createMany.mockResolvedValue({ count: 0 });
+      mockPrisma.uTXO.updateMany.mockResolvedValue({ count: 0 });
 
       // Batched payout with multiple outputs to same wallet
       const batchedTx = {

@@ -8,7 +8,7 @@
 import {
   validateSatoshiAmount,
   getTrezorScriptType,
-  isNonStandardPath,
+  isBip48MultisigPath,
   getAccountPathPrefix,
   buildTrezorMultisig,
   convertToStandardXpub,
@@ -207,35 +207,35 @@ describe('getTrezorScriptType', () => {
   });
 });
 
-describe('isNonStandardPath', () => {
+describe('isBip48MultisigPath', () => {
   describe('BIP-48 multisig paths', () => {
     it('returns true for BIP-48 paths with m/ prefix', () => {
-      expect(isNonStandardPath("m/48'/0'/0'/2'")).toBe(true);
-      expect(isNonStandardPath("m/48'/0'/0'/1'/0/5")).toBe(true);
-      expect(isNonStandardPath("m/48'/1'/0'/2'/0/0")).toBe(true);
+      expect(isBip48MultisigPath("m/48'/0'/0'/2'")).toBe(true);
+      expect(isBip48MultisigPath("m/48'/0'/0'/1'/0/5")).toBe(true);
+      expect(isBip48MultisigPath("m/48'/1'/0'/2'/0/0")).toBe(true);
     });
 
     it('returns true for BIP-48 paths without m/ prefix', () => {
-      expect(isNonStandardPath("48'/0'/0'/2'")).toBe(true);
-      expect(isNonStandardPath("48'/0'/0'/1'/0/5")).toBe(true);
+      expect(isBip48MultisigPath("48'/0'/0'/2'")).toBe(true);
+      expect(isBip48MultisigPath("48'/0'/0'/1'/0/5")).toBe(true);
     });
   });
 
-  describe('Standard paths', () => {
+  describe('Non-BIP-48 paths', () => {
     it('returns false for BIP-44 paths', () => {
-      expect(isNonStandardPath("m/44'/0'/0'/0/0")).toBe(false);
+      expect(isBip48MultisigPath("m/44'/0'/0'/0/0")).toBe(false);
     });
 
     it('returns false for BIP-49 paths', () => {
-      expect(isNonStandardPath("m/49'/0'/0'/0/0")).toBe(false);
+      expect(isBip48MultisigPath("m/49'/0'/0'/0/0")).toBe(false);
     });
 
     it('returns false for BIP-84 paths', () => {
-      expect(isNonStandardPath("m/84'/0'/0'/0/0")).toBe(false);
+      expect(isBip48MultisigPath("m/84'/0'/0'/0/0")).toBe(false);
     });
 
     it('returns false for BIP-86 paths', () => {
-      expect(isNonStandardPath("m/86'/0'/0'/0/0")).toBe(false);
+      expect(isBip48MultisigPath("m/86'/0'/0'/0/0")).toBe(false);
     });
   });
 });

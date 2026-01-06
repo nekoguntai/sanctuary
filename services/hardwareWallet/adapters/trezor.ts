@@ -153,13 +153,18 @@ export const getTrezorScriptType = (path: string): 'SPENDADDRESS' | 'SPENDP2SHWI
 };
 
 /**
- * Check if a path is a non-standard path that requires unlocking.
- * Trezor's safety checks block non-standard derivation paths by default to prevent
- * accidental use of unusual paths that could lead to lost funds. BIP-48 multisig
- * paths require explicit unlocking via TrezorConnect.unlockPath() before signing.
+ * Check if a path is a BIP-48 multisig path.
+ * BIP-48 paths (m/48'/...) are used for multisig wallets and are considered
+ * "non-standard" by Trezor's safety checks.
+ *
+ * NOTE: TrezorConnect.unlockPath() does NOT work for BIP-48 paths - it was designed
+ * for SLIP-26 (Cardano-style) derivation. BIP-48 multisig paths are validated through
+ * the multisig structure provided in inputs/outputs, not through unlockPath.
+ *
+ * To sign with BIP-48 paths, users need to set Safety Checks to "Prompt" in Trezor Suite.
  * @internal Exported for testing
  */
-export const isNonStandardPath = (path: string): boolean => {
+export const isBip48MultisigPath = (path: string): boolean => {
   // Check for both apostrophe notation (') and h notation
   return path.startsWith("m/48'") || path.startsWith("48'") ||
          path.startsWith("m/48h") || path.startsWith("48h");
@@ -819,9 +824,7 @@ export class TrezorAdapter implements DeviceAdapter {
       // Fetch reference transactions
       const refTxs = await fetchRefTxs(psbt);
 
-      // Check if we need to unlock non-standard paths (BIP-48 multisig)
       // Get the derivation path from the first input (after fingerprint matching)
-      let unlockPathParam: { address_n: number[]; mac?: string } | undefined;
       let accountPath = request.accountPath || request.inputPaths?.[0];
 
       // Try to get account path from first input's bip32Derivation (more reliable for multisig)
@@ -839,32 +842,15 @@ export class TrezorAdapter implements DeviceAdapter {
         accountPath = matchingDerivation.path;
       }
 
-      if (accountPath && isNonStandardPath(accountPath)) {
-        // Normalize to apostrophe notation (TrezorConnect expects this)
-        const normalizedAccountPath = accountPath.replace(/h/g, "'");
-        const pathToUnlock = getAccountPathPrefix(normalizedAccountPath);
-        log.info('Unlocking non-standard path for multisig', { path: pathToUnlock, accountPath, normalizedAccountPath });
-
-        try {
-          const unlockResult = await TrezorConnect.unlockPath({
-            path: pathToUnlock,
-          });
-
-          if (unlockResult.success && unlockResult.payload.mac) {
-            unlockPathParam = {
-              address_n: pathToAddressN(pathToUnlock),
-              mac: unlockResult.payload.mac,
-            };
-            log.info('Path unlocked successfully');
-          } else if (!unlockResult.success) {
-            const errorPayload = unlockResult.payload as { error?: string };
-            log.warn('Failed to unlock path, proceeding without unlock', {
-              error: errorPayload.error
-            });
-          }
-        } catch (unlockError) {
-          log.warn('Error unlocking path, proceeding without unlock', { error: unlockError });
-        }
+      // Log if this is a BIP-48 multisig path
+      // NOTE: We don't call TrezorConnect.unlockPath() for BIP-48 because it was designed
+      // for SLIP-26 (Cardano) paths, not BIP-48. For BIP-48 multisig, Trezor validates
+      // through the multisig structure. Users need Safety Checks set to "Prompt" in Trezor Suite.
+      if (accountPath && isBip48MultisigPath(accountPath)) {
+        log.info('BIP-48 multisig path detected - validation via multisig structure', {
+          accountPath,
+          note: 'If signing fails, ensure Safety Checks is set to "Prompt" in Trezor Suite'
+        });
       }
 
       log.info('Calling TrezorConnect.signTransaction', {
@@ -872,7 +858,6 @@ export class TrezorAdapter implements DeviceAdapter {
         outputCount: outputs.length,
         refTxCount: refTxs.length,
         coin,
-        hasUnlockPath: !!unlockPathParam,
       });
 
       // Sign with Trezor
@@ -882,7 +867,6 @@ export class TrezorAdapter implements DeviceAdapter {
         refTxs: refTxs.length > 0 ? refTxs : undefined,
         coin,
         push: false,
-        unlockPath: unlockPathParam,
       });
 
       if (!result.success) {

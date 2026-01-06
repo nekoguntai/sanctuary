@@ -290,6 +290,62 @@ Recommended order based on risk and dependency:
 
 ---
 
+## Phase 5 - API Integration Tests and Redundancy Cleanup
+
+### Task 5.1: Admin API Integration Tests [DONE]
+**File:** `server/tests/integration/flows/admin.integration.test.ts`
+- [x] User management (CRUD, validation, cascade deletes)
+- [x] Group management (CRUD, member management)
+- [x] Audit logging verification
+- [x] Access control integration (group membership → wallet access)
+- **Result:** 48 new integration tests added
+
+### Task 5.2: Transaction Unit Test Redundancy Cleanup [DEFERRED]
+**File:** `server/tests/unit/api/transactions.test.ts`
+
+Analysis findings:
+- 75 unit tests with heavy mocking (131 mockPrismaClient usages)
+- 32 integration tests now provide real database coverage
+- ~50% of unit tests are redundant with integration tests
+
+**Tests to KEEP** (testing logic, not mocks):
+- Confirmation Calculation (3 tests) - pure math
+- BigInt Serialization (5 tests) - serialization logic
+- Running Balance (2 tests) - business logic
+- Input Validation (4 tests) - validation rules
+- Error handling scenarios
+
+**Tests to REMOVE** (redundant with integration):
+- GET /transactions - basic CRUD covered by integration
+- GET /pending - covered by integration
+- GET /export - covered by integration
+- GET /utxos - covered by integration
+- POST /recalculate - covered by integration
+- PATCH freeze - covered by integration
+
+**Recommendation:** ~30-40 tests can be removed (~50% reduction)
+**Status:** Deferred to avoid risk, integration tests provide better coverage
+
+### Task 5.3: WebSocket Integration Tests [DEFERRED]
+**Analysis:** WebSocket already has comprehensive unit tests (634 lines) covering:
+- Configuration and limits
+- JWT authentication
+- Wallet access validation
+- Event channel mapping
+- Message format validation
+- Subscription validation
+- Gateway HMAC challenge-response
+- Close codes
+
+**Coverage gap reason:** Unit tests test logic in isolation; integration would require HTTP server with WebSocket upgrade. Given thorough unit coverage, this is lower priority.
+
+**Potential future integration tests:**
+- [ ] Full connection lifecycle with real WS client
+- [ ] Multi-instance broadcasting via Redis bridge
+- [ ] Load testing with many concurrent connections
+
+---
+
 ## Notes
 
 - All repository tests should use a test database with transaction rollback

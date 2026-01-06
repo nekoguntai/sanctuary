@@ -124,6 +124,41 @@ The repository has pre-commit hooks that run AI agents to analyze changes:
 
 Review the agent recommendations and address any concerns before pushing.
 
+## Version Management
+
+Version numbers must stay in sync across multiple files. The pre-commit hook will **block commits** if versions are mismatched.
+
+### Version locations
+
+| File | Description |
+|------|-------------|
+| `package.json` | Root package (frontend) |
+| `server/package.json` | Backend API |
+| `gateway/package.json` | Mobile API gateway |
+| `sanctuary/umbrel-app.yml` | Umbrel app store package |
+
+### Bumping versions
+
+Use the version bump script to update all files at once:
+
+```bash
+# Check if versions are in sync
+./scripts/bump-version.sh --check
+
+# Bump to explicit version
+./scripts/bump-version.sh 0.8.0
+
+# Semantic version bumps
+./scripts/bump-version.sh patch   # 0.7.19 -> 0.7.20
+./scripts/bump-version.sh minor   # 0.7.19 -> 0.8.0
+./scripts/bump-version.sh major   # 0.7.19 -> 1.0.0
+```
+
+### When to bump versions
+
+- **Before release**: Bump version, commit, tag, and push
+- **After fixing version mismatch**: Run `./scripts/bump-version.sh <current-root-version>` to sync all files
+
 ## Extensibility & Perpetual Operation Principles
 
 When implementing features, always consider extensibility and long-running operation patterns. This project is designed to run continuously for extended periods.

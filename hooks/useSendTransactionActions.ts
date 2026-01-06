@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as bitcoin from 'bitcoinjs-lib';
 import * as transactionsApi from '../src/api/transactions';
 import * as draftsApi from '../src/api/drafts';
 import * as payjoinApi from '../src/api/payjoin';
@@ -134,7 +135,7 @@ export interface UseSendTransactionActionsResult {
   broadcastTransaction: (signedPsbt?: string, rawTxHex?: string) => Promise<boolean>;
   saveDraft: (label?: string) => Promise<string | null>;
   downloadPsbt: () => void;
-  uploadSignedPsbt: (file: File, deviceId?: string) => Promise<void>;
+  uploadSignedPsbt: (file: File, deviceId?: string, deviceFingerprint?: string) => Promise<void>;
   processQrSignedPsbt: (signedPsbt: string, deviceId: string) => void;
   markDeviceSigned: (deviceId: string) => void;
   clearError: () => void;
@@ -424,14 +425,46 @@ export function useSendTransactionActions({
 
     const psbtToUse = signedPsbt || unsignedPsbt;
     // Use passed rawTxHex, or fall back to stored signedRawTx from Trezor signing
-    const rawTxToUse = rawTxHex || signedRawTx;
+    // IMPORTANT: For multisig, do NOT use rawTxHex - it only contains one device's signature
+    // The PSBT path handles combining signatures from multiple devices
+    const isMultisig = isMultisigType(wallet.type);
+    const rawTxToUse = isMultisig ? undefined : (rawTxHex || signedRawTx);
 
     if (!psbtToUse && !rawTxToUse) {
       setError('No signed transaction available');
       return false;
     }
 
-    log.info('Broadcasting transaction', { hasPsbt: !!psbtToUse, hasRawTx: !!rawTxToUse });
+    log.info('Broadcasting transaction', {
+      hasPsbt: !!psbtToUse,
+      hasRawTx: !!rawTxToUse,
+      isMultisig,
+      rawTxSkipped: isMultisig && !!(rawTxHex || signedRawTx),
+    });
+
+    // Log PSBT signature details for debugging
+    if (psbtToUse && isMultisig) {
+      try {
+        const debugPsbt = bitcoin.Psbt.fromBase64(psbtToUse);
+        for (let i = 0; i < debugPsbt.data.inputs.length; i++) {
+          const input = debugPsbt.data.inputs[i];
+          if (input.partialSig) {
+            log.info('BROADCAST PSBT SIGNATURES', {
+              inputIndex: i,
+              signatureCount: input.partialSig.length,
+              signatures: input.partialSig.map(ps => ({
+                pubkeyPrefix: ps.pubkey.slice(0, 8).toString('hex'),
+                sigLength: ps.signature.length,
+                sigHexStart: ps.signature.slice(0, 10).toString('hex'),
+                sigHexEnd: ps.signature.slice(-5).toString('hex'),
+              })),
+            });
+          }
+        }
+      } catch (parseError) {
+        log.warn('Failed to parse PSBT for debug', { error: parseError });
+      }
+    }
 
     setIsBroadcasting(true);
     setError(null);
@@ -653,7 +686,7 @@ export function useSendTransactionActions({
 
   // Upload signed PSBT (supports both binary and base64 formats)
   // deviceId is optional - for multisig, pass the device ID to track which device signed
-  const uploadSignedPsbt = useCallback(async (file: File, deviceId?: string): Promise<void> => {
+  const uploadSignedPsbt = useCallback(async (file: File, deviceId?: string, deviceFingerprint?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -683,18 +716,122 @@ export function useSendTransactionActions({
           // Use provided deviceId or fallback to 'psbt-signed' for single-sig
           const effectiveDeviceId = deviceId || 'psbt-signed';
 
-          log.debug('Uploaded signed PSBT', {
+          console.log('[uploadSignedPsbt] Uploaded', {
             preview: base64Psbt.substring(0, 50) + '...',
-            deviceId: effectiveDeviceId
+            deviceId: effectiveDeviceId,
+            deviceFingerprint,
+            hasExistingPsbt: !!unsignedPsbt,
+            existingPsbtLength: unsignedPsbt?.length || 0,
+            walletType: wallet.type,
+            isMultisig: isMultisigType(wallet.type),
           });
-          setUnsignedPsbt(base64Psbt); // Now contains signed PSBT
+
+          // Validate uploaded PSBT has a signature from the expected device
+          if (deviceFingerprint && isMultisigType(wallet.type)) {
+            try {
+              const uploadedPsbt = bitcoin.Psbt.fromBase64(base64Psbt);
+              let hasSignatureFromDevice = false;
+
+              // Check each input for a signature from the expected device
+              for (const input of uploadedPsbt.data.inputs) {
+                if (input.partialSig && input.bip32Derivation) {
+                  for (const ps of input.partialSig) {
+                    // Find the bip32Derivation entry for this pubkey
+                    const derivation = input.bip32Derivation.find(d =>
+                      d.pubkey.equals(ps.pubkey)
+                    );
+                    if (derivation) {
+                      const sigFingerprint = derivation.masterFingerprint.toString('hex');
+                      console.log('[uploadSignedPsbt] Signature fingerprint check', {
+                        sigFingerprint,
+                        expectedFingerprint: deviceFingerprint,
+                        matches: sigFingerprint === deviceFingerprint,
+                      });
+                      if (sigFingerprint === deviceFingerprint) {
+                        hasSignatureFromDevice = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+                if (hasSignatureFromDevice) break;
+              }
+
+              if (!hasSignatureFromDevice) {
+                const error = `This PSBT does not contain a signature from the selected device (${deviceFingerprint}). Please upload the correct file.`;
+                log.error('Uploaded PSBT missing expected signature', { deviceFingerprint });
+                reject(new Error(error));
+                return;
+              }
+              console.log('[uploadSignedPsbt] Signature validation passed');
+            } catch (validationError) {
+              console.warn('[uploadSignedPsbt] Could not validate signature', validationError);
+              // Continue anyway if validation fails - might be a format issue
+            }
+          }
+
+          // For multisig, combine new signatures with existing PSBT instead of replacing
+          let combinedPsbt = base64Psbt;
+          if (unsignedPsbt && isMultisigType(wallet.type)) {
+            console.log('[uploadSignedPsbt] Will combine PSBTs');
+            try {
+              const existingPsbtObj = bitcoin.Psbt.fromBase64(unsignedPsbt);
+              const newPsbtObj = bitcoin.Psbt.fromBase64(base64Psbt);
+
+              // Count signatures before combining
+              let existingSigCount = 0;
+              let newSigCount = 0;
+              const existingPubkeys: string[] = [];
+              const newPubkeys: string[] = [];
+              for (const input of existingPsbtObj.data.inputs) {
+                if (input.partialSig) {
+                  existingSigCount += input.partialSig.length;
+                  input.partialSig.forEach(ps => existingPubkeys.push(ps.pubkey.toString('hex').substring(0, 16)));
+                }
+              }
+              for (const input of newPsbtObj.data.inputs) {
+                if (input.partialSig) {
+                  newSigCount += input.partialSig.length;
+                  input.partialSig.forEach(ps => newPubkeys.push(ps.pubkey.toString('hex').substring(0, 16)));
+                }
+              }
+
+              console.log('[uploadSignedPsbt] Combining', {
+                existingSigCount,
+                newSigCount,
+                existingPubkeys,
+                newPubkeys,
+                sameKey: existingPubkeys[0] === newPubkeys[0]
+              });
+
+              // Combine PSBTs - this merges partial signatures from both
+              existingPsbtObj.combine(newPsbtObj);
+
+              // Count total signatures after combining
+              let totalSigs = 0;
+              for (const input of existingPsbtObj.data.inputs) {
+                if (input.partialSig) totalSigs += input.partialSig.length;
+              }
+
+              console.log('[uploadSignedPsbt] Combined', { totalSignatures: totalSigs });
+              combinedPsbt = existingPsbtObj.toBase64();
+            } catch (combineError) {
+              console.error('[uploadSignedPsbt] Combine failed', combineError);
+              // Fall back to just using the new PSBT
+              combinedPsbt = base64Psbt;
+            }
+          } else {
+            console.log('[uploadSignedPsbt] Not combining - no existing PSBT or not multisig');
+          }
+
+          setUnsignedPsbt(combinedPsbt);
           setSignedDevices(prev => new Set([...prev, effectiveDeviceId]));
 
           // Persist signature to draft if we're in draft mode
           if (state.draftId) {
             try {
               await draftsApi.updateDraft(walletId, state.draftId, {
-                signedPsbtBase64: base64Psbt,
+                signedPsbtBase64: combinedPsbt,
                 signedDeviceId: effectiveDeviceId,
               });
               log.info('Uploaded PSBT signature persisted to draft', {
@@ -714,19 +851,59 @@ export function useSendTransactionActions({
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsArrayBuffer(file);
     });
-  }, [state.draftId, walletId]);
+  }, [state.draftId, walletId, unsignedPsbt, wallet.type]);
 
   // Process QR-scanned signed PSBT
   const processQrSignedPsbt = useCallback(async (signedPsbt: string, deviceId: string) => {
     log.info('Processing QR-signed PSBT', { deviceId, psbtLength: signedPsbt.length });
-    setUnsignedPsbt(signedPsbt);
+
+    // For multisig, combine new signatures with existing PSBT instead of replacing
+    let combinedPsbt = signedPsbt;
+    if (unsignedPsbt && isMultisigType(wallet.type)) {
+      try {
+        const existingPsbtObj = bitcoin.Psbt.fromBase64(unsignedPsbt);
+        const newPsbtObj = bitcoin.Psbt.fromBase64(signedPsbt);
+
+        // Count signatures before combining
+        let existingSigCount = 0;
+        let newSigCount = 0;
+        for (const input of existingPsbtObj.data.inputs) {
+          if (input.partialSig) existingSigCount += input.partialSig.length;
+        }
+        for (const input of newPsbtObj.data.inputs) {
+          if (input.partialSig) newSigCount += input.partialSig.length;
+        }
+
+        log.info('Combining PSBTs', { existingSigCount, newSigCount });
+
+        // Combine PSBTs - this merges partial signatures from both
+        existingPsbtObj.combine(newPsbtObj);
+
+        // Count total signatures after combining
+        let totalSigs = 0;
+        for (const input of existingPsbtObj.data.inputs) {
+          if (input.partialSig) totalSigs += input.partialSig.length;
+        }
+
+        log.info('Combined PSBT', { totalSignatures: totalSigs });
+        combinedPsbt = existingPsbtObj.toBase64();
+      } catch (combineError) {
+        log.warn('Failed to combine PSBTs, using new PSBT', {
+          error: combineError instanceof Error ? combineError.message : String(combineError),
+        });
+        // Fall back to just using the new PSBT
+        combinedPsbt = signedPsbt;
+      }
+    }
+
+    setUnsignedPsbt(combinedPsbt);
     setSignedDevices(prev => new Set([...prev, deviceId]));
 
     // Persist signature to draft if we're in draft mode
     if (state.draftId) {
       try {
         await draftsApi.updateDraft(walletId, state.draftId, {
-          signedPsbtBase64: signedPsbt,
+          signedPsbtBase64: combinedPsbt,
           signedDeviceId: deviceId,
         });
         log.info('QR signature persisted to draft', { draftId: state.draftId, deviceId });
@@ -734,7 +911,7 @@ export function useSendTransactionActions({
         log.warn('Failed to persist QR signature to draft', { error: persistErr });
       }
     }
-  }, [state.draftId, walletId]);
+  }, [state.draftId, walletId, unsignedPsbt, wallet.type]);
 
   // Mark device as signed
   const markDeviceSigned = useCallback((deviceId: string) => {

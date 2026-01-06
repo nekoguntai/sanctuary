@@ -13,6 +13,7 @@ import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight
 import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { withTimeout } from '../utils/async';
 import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
@@ -778,9 +779,9 @@ class SyncService {
         success: true,
         ...result,
       };
-    } catch (error: any) {
-      const errorMessage = error.message || 'Unknown error';
-      log.error(`[SYNC] Sync failed for wallet ${walletId}:`, errorMessage);
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, 'Unknown error');
+      log.error(`[SYNC] Sync failed for wallet ${walletId}:`, { error: errorMessage });
 
       // Check if we should retry
       if (retryCount < syncConfig.maxRetryAttempts) {
@@ -842,7 +843,7 @@ class SyncService {
       walletSyncsTotal.inc({ status: 'failure' });
 
       // Record in dead letter queue for visibility
-      await recordSyncFailure(walletId, error, syncConfig.maxRetryAttempts, {
+      await recordSyncFailure(walletId, errorMessage, syncConfig.maxRetryAttempts, {
         lastError: errorMessage,
       });
 

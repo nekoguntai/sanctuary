@@ -257,20 +257,52 @@ export async function updateDraft(
       const existingPsbtObj = bitcoin.Psbt.fromBase64(existingPsbt);
       const newPsbtObj = bitcoin.Psbt.fromBase64(data.signedPsbtBase64);
 
+      // Log signature state BEFORE combining
+      const existingSigs: string[] = [];
+      const newSigs: string[] = [];
+      for (const input of existingPsbtObj.data.inputs) {
+        if (input.partialSig) {
+          for (const ps of input.partialSig) {
+            existingSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+          }
+        }
+      }
+      for (const input of newPsbtObj.data.inputs) {
+        if (input.partialSig) {
+          for (const ps of input.partialSig) {
+            newSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+          }
+        }
+      }
+
+      log.info('PSBT combine - before', {
+        draftId,
+        existingSource: existingDraft.signedPsbtBase64 ? 'signedPsbt' : 'unsignedPsbt',
+        existingSigCount: existingSigs.length,
+        existingSigPubkeys: existingSigs,
+        newSigCount: newSigs.length,
+        newSigPubkeys: newSigs,
+      });
+
       // Combine PSBTs - this merges partial signatures from both
       existingPsbtObj.combine(newPsbtObj);
 
       // Count total signatures after combining
       let totalSigs = 0;
+      const combinedSigs: string[] = [];
       for (const input of existingPsbtObj.data.inputs) {
         if (input.partialSig) {
           totalSigs += input.partialSig.length;
+          for (const ps of input.partialSig) {
+            combinedSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+          }
         }
       }
 
-      log.info('Combined PSBTs for multisig', {
+      log.info('PSBT combine - after', {
         draftId,
         totalSignatures: totalSigs,
+        combinedSigPubkeys: combinedSigs,
       });
 
       updateData.signedPsbtBase64 = existingPsbtObj.toBase64();

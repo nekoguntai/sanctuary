@@ -14,6 +14,7 @@ import { z } from 'zod';
 import config, { getConfig } from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('ELECTRUM');
 
@@ -147,21 +148,33 @@ interface ElectrumConfig {
 }
 
 /**
- * Transaction input from decoded raw transaction
- */
-export interface TransactionInput {
-  txid: string;
-  vout: number;
-  sequence: number;
-}
-
-/**
  * Script public key info in transaction output
  */
 export interface ScriptPubKey {
   hex: string;
   address?: string;
   addresses: string[];
+}
+
+/**
+ * Previous output reference in transaction input (verbose mode)
+ */
+export interface PrevOut {
+  value: number;
+  scriptPubKey: ScriptPubKey;
+}
+
+/**
+ * Transaction input from decoded raw transaction
+ */
+export interface TransactionInput {
+  txid: string;
+  vout: number;
+  sequence: number;
+  coinbase?: string; // For coinbase transactions
+  scriptSig?: { hex: string; asm?: string };
+  txinwitness?: string[];
+  prevout?: PrevOut; // Available in verbose mode
 }
 
 /**
@@ -188,6 +201,7 @@ export interface TransactionDetails {
   vout: TransactionOutput[];
   hex: string;
   blockhash?: string;
+  blockheight?: number;
   confirmations?: number;
   time?: number;
   blocktime?: number;
@@ -1074,10 +1088,10 @@ class ElectrumClient extends EventEmitter {
         // Decode raw transactions since we're using non-verbose mode
         results = results.map(rawTx => this.decodeRawTransaction(rawTx));
         break;
-      } catch (error: any) {
+      } catch (error) {
         lastError = error;
         // If timeout, retry after delay
-        if (error.message?.includes('timeout')) {
+        if (getErrorMessage(error).includes('timeout')) {
           log.warn(`Batch transaction fetch timeout, attempt ${attempt + 1}/${MAX_RETRIES + 1}`);
           if (attempt < MAX_RETRIES) {
             await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));

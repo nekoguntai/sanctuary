@@ -17,9 +17,11 @@ import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { unlockUtxosForDraft } from '../draftLockService';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { eventService } from '../eventService';
 import { mapWithConcurrency } from '../../utils/async';
 import { transactionBroadcastsTotal } from '../../observability/metrics';
+import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 
 const log = createLogger('TRANSACTION');
 
@@ -31,7 +33,7 @@ async function getDustThreshold(): Promise<number> {
   const setting = await prisma.systemSetting.findUnique({
     where: { key: 'dustThreshold' },
   });
-  return setting ? JSON.parse(setting.value) : DEFAULT_DUST_THRESHOLD;
+  return safeJsonParse(setting?.value, SystemSettingSchemas.number, DEFAULT_DUST_THRESHOLD, 'dustThreshold');
 }
 
 /**
@@ -362,29 +364,81 @@ function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
     throw new Error(`Input #${inputIndex} witnessScript is not a valid multisig script`);
   }
 
-  // Log detailed info for debugging
+  // Verify partialSig pubkeys are in witnessScript - only log mismatches
   const partialSigPubkeys = input.partialSig.map(ps => ps.pubkey.toString('hex'));
   const scriptPubkeyHexes = scriptPubkeys.map(pk => pk.toString('hex'));
 
-  log.info('Multisig finalization - detailed debug', {
-    inputIndex,
-    m,
-    n,
-    partialSigCount: input.partialSig.length,
-    scriptPubkeyCount: scriptPubkeys.length,
-    partialSigPubkeys: partialSigPubkeys.map(pk => pk.substring(0, 16) + '...'),
-    scriptPubkeys: scriptPubkeyHexes.map(pk => pk.substring(0, 16) + '...'),
-    witnessScriptHex: witnessScript.toString('hex').substring(0, 40) + '...',
-  });
+  for (const sigPubkey of partialSigPubkeys) {
+    if (!scriptPubkeyHexes.includes(sigPubkey)) {
+      log.error('Signature pubkey not found in witnessScript', {
+        inputIndex,
+        sigPubkey,
+        scriptPubkeys: scriptPubkeyHexes,
+      });
+    }
+  }
+
+  // Warn if missing witnessUtxo (needed for sighash)
+  if (!input.witnessUtxo) {
+    log.warn('Missing witnessUtxo for input', { inputIndex });
+  }
+
+  // Verify each signature before finalization
+  for (const ps of input.partialSig) {
+    const pubkeyHex = ps.pubkey.toString('hex');
+    try {
+      // Decode the DER signature to extract r, s values
+      const sighashType = ps.signature[ps.signature.length - 1];
+      const derSig = ps.signature.slice(0, -1);
+
+      // Parse DER signature: 0x30 [total-len] 0x02 [r-len] [r] 0x02 [s-len] [s]
+      let offset = 2; // Skip 0x30 and length byte
+      const rLen = derSig[offset + 1];
+      const r = derSig.slice(offset + 2, offset + 2 + rLen);
+      offset = offset + 2 + rLen;
+      const sLen = derSig[offset + 1];
+      const s = derSig.slice(offset + 2, offset + 2 + sLen);
+
+      // Convert to 64-byte compact format (pad r and s to 32 bytes each)
+      const rPadded = r.length > 32 ? r.slice(-32) : Buffer.concat([Buffer.alloc(32 - r.length), r]);
+      const sPadded = s.length > 32 ? s.slice(-32) : Buffer.concat([Buffer.alloc(32 - s.length), s]);
+      const compactSig = Buffer.concat([rPadded, sPadded]);
+
+      // Compute the sighash that should have been signed
+      // For P2WSH, we use the witnessScript as scriptCode
+      // We need to use the transaction from the PSBT
+      const tx = psbt.data.globalMap.unsignedTx as unknown as { toBuffer(): Buffer };
+      const txForSighash = bitcoin.Transaction.fromBuffer(tx.toBuffer());
+      const sighash = txForSighash.hashForWitnessV0(
+        inputIndex,
+        witnessScript,
+        input.witnessUtxo!.value,
+        sighashType
+      );
+
+      // Verify the signature - only log if invalid
+      const isValid = ecc.verify(sighash, ps.pubkey, compactSig);
+      if (!isValid) {
+        log.error('Invalid signature detected during multisig finalization', {
+          inputIndex,
+          pubkey: pubkeyHex,
+          sighashHex: sighash.toString('hex'),
+          sigHex: ps.signature.toString('hex'),
+        });
+      }
+    } catch (verifyError) {
+      log.warn('Signature verification error', {
+        inputIndex,
+        pubkey: pubkeyHex.substring(0, 16) + '...',
+        error: (verifyError as Error).message,
+      });
+    }
+  }
 
   // Create a map of pubkey hex to signature
   const sigMap = new Map<string, Buffer>();
   for (const ps of input.partialSig) {
     sigMap.set(ps.pubkey.toString('hex'), ps.signature);
-    log.debug('Added signature for pubkey', {
-      pubkey: ps.pubkey.toString('hex').substring(0, 16) + '...',
-      sigLength: ps.signature.length,
-    });
   }
 
   // Sort signatures according to pubkey order in the witnessScript
@@ -598,9 +652,12 @@ export async function selectUTXOs(
   const thresholdSetting = await prisma.systemSetting.findUnique({
     where: { key: 'confirmationThreshold' },
   });
-  const confirmationThreshold = thresholdSetting
-    ? JSON.parse(thresholdSetting.value)
-    : DEFAULT_CONFIRMATION_THRESHOLD;
+  const confirmationThreshold = safeJsonParse(
+    thresholdSetting?.value,
+    SystemSettingSchemas.number,
+    DEFAULT_CONFIRMATION_THRESHOLD,
+    'confirmationThreshold'
+  );
 
   // Get available UTXOs (exclude frozen, unconfirmed, and locked-by-draft UTXOs)
   let utxos = await prisma.uTXO.findMany({
@@ -1445,6 +1502,16 @@ export async function broadcastAndSave(
   txid: string;
   broadcasted: boolean;
 }> {
+  // Log which broadcast path we're taking
+  log.info('broadcastAndSave called', {
+    hasSignedPsbtBase64: !!signedPsbtBase64,
+    signedPsbtBase64Length: signedPsbtBase64?.length || 0,
+    hasRawTxHex: !!metadata.rawTxHex,
+    rawTxHexLength: metadata.rawTxHex?.length || 0,
+    recipient: metadata.recipient,
+    draftId: metadata.draftId,
+  });
+
   let rawTx: string;
   let txid: string;
 
@@ -1959,7 +2026,7 @@ export async function estimateTransaction(
       changeAmount: selection.changeAmount,
       sufficient: true,
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       fee: 0,
       totalCost: amount,
@@ -1967,7 +2034,7 @@ export async function estimateTransaction(
       outputCount: 1,
       changeAmount: 0,
       sufficient: false,
-      error: error.message,
+      error: getErrorMessage(error),
     };
   }
 }
@@ -2108,9 +2175,12 @@ export async function createBatchTransaction(
   const thresholdSetting = await prisma.systemSetting.findUnique({
     where: { key: 'confirmationThreshold' },
   });
-  const confirmationThreshold = thresholdSetting
-    ? JSON.parse(thresholdSetting.value)
-    : DEFAULT_CONFIRMATION_THRESHOLD;
+  const confirmationThreshold = safeJsonParse(
+    thresholdSetting?.value,
+    SystemSettingSchemas.number,
+    DEFAULT_CONFIRMATION_THRESHOLD,
+    'confirmationThreshold'
+  );
 
   // Get available UTXOs (respecting confirmation threshold and draft locks)
   let utxos = await prisma.uTXO.findMany({

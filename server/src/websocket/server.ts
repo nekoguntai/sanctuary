@@ -22,6 +22,7 @@ import { checkWalletAccess } from '../services/wallet';
 import config from '../config';
 import type { ClientMessage, BroadcastEvent, ServerEvent } from './events';
 import { redisBridge } from './redisBridge';
+import { parseClientMessage, parseGatewayMessage } from './schemas';
 import {
   websocketConnections,
   websocketMessagesTotal,
@@ -399,53 +400,51 @@ export class SanctauryWebSocketServer {
       }
     }
 
-    try {
-      const message: WebSocketMessage = JSON.parse(data.toString());
+    const result = parseClientMessage(data.toString());
 
-      switch (message.type) {
-        case 'auth':
-          this.handleAuth(client, message.data);
-          break;
+    if (!result.success) {
+      log.warn('Invalid WebSocket message', { error: result.error });
+      return;
+    }
 
-        case 'subscribe':
-          this.handleSubscribe(client, message.data);
-          break;
+    const message = result.data;
 
-        case 'unsubscribe':
-          this.handleUnsubscribe(client, message.data);
-          break;
+    switch (message.type) {
+      case 'auth':
+        this.handleAuth(client, message.data);
+        break;
 
-        case 'subscribe_batch':
-          this.handleSubscribeBatch(client, message.data);
-          break;
+      case 'subscribe':
+        this.handleSubscribe(client, message.data);
+        break;
 
-        case 'unsubscribe_batch':
-          this.handleUnsubscribeBatch(client, message.data);
-          break;
+      case 'unsubscribe':
+        this.handleUnsubscribe(client, message.data);
+        break;
 
-        case 'ping':
-          this.sendToClient(client, { type: 'pong' });
-          break;
+      case 'subscribe_batch':
+        this.handleSubscribeBatch(client, message.data);
+        break;
 
-        default:
-          log.warn('Unknown message type', { type: message.type });
-      }
-    } catch (err) {
-      log.error('Failed to parse WebSocket message', { error: String(err) });
+      case 'unsubscribe_batch':
+        this.handleUnsubscribeBatch(client, message.data);
+        break;
+
+      case 'ping':
+        this.sendToClient(client, { type: 'pong' });
+        break;
+
+      case 'pong':
+        // Client pong response, no action needed
+        break;
     }
   }
 
   /**
    * Handle authentication via message (more secure than URL token)
    */
-  private async handleAuth(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
-    if (!data?.token || typeof data.token !== 'string') {
-      this.sendToClient(client, {
-        type: 'error',
-        data: { message: 'Authentication token required' },
-      });
-      return;
-    }
+  private async handleAuth(client: AuthenticatedWebSocket, data: { token: string }) {
+    const { token } = data;
 
     // Don't allow re-authentication
     if (client.userId) {
@@ -457,7 +456,7 @@ export class SanctauryWebSocketServer {
     }
 
     try {
-      const decoded = await verifyToken(data.token);
+      const decoded = await verifyToken(token);
       const userId = decoded.userId;
 
       // Check per-user connection limit
@@ -504,12 +503,7 @@ export class SanctauryWebSocketServer {
    * Handle subscription request
    * SECURITY: Validates that user has access to wallet-specific channels
    */
-  private async handleSubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
-    if (!data?.channel || typeof data.channel !== 'string') {
-      log.warn('Subscribe request missing channel');
-      return;
-    }
-
+  private async handleSubscribe(client: AuthenticatedWebSocket, data: { channel: string }) {
     const { channel } = data;
 
     // Check subscription limit
@@ -587,9 +581,7 @@ export class SanctauryWebSocketServer {
   /**
    * Handle unsubscribe request
    */
-  private handleUnsubscribe(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
-    if (!data?.channel || typeof data.channel !== 'string') return;
-
+  private handleUnsubscribe(client: AuthenticatedWebSocket, data: { channel: string }) {
     const { channel } = data;
 
     // Only process if actually subscribed
@@ -620,22 +612,12 @@ export class SanctauryWebSocketServer {
    * Handle batch subscribe request (scalable subscription for many channels)
    * Reduces message count from O(N) to O(1) for N channels
    */
-  private async handleSubscribeBatch(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
-    if (!data?.channels || !Array.isArray(data.channels)) {
-      this.sendToClient(client, {
-        type: 'error',
-        data: { message: 'Channels array required for batch subscribe' },
-      });
-      return;
-    }
-
-    const channels = data.channels as string[];
+  private async handleSubscribeBatch(client: AuthenticatedWebSocket, data: { channels: string[] }) {
+    const { channels } = data;
     const subscribed: string[] = [];
     const errors: { channel: string; reason: string }[] = [];
 
     for (const channel of channels) {
-      if (typeof channel !== 'string') continue;
-
       // Check subscription limit
       if (client.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CONNECTION) {
         errors.push({ channel, reason: 'Subscription limit reached' });
@@ -691,21 +673,11 @@ export class SanctauryWebSocketServer {
   /**
    * Handle batch unsubscribe request
    */
-  private handleUnsubscribeBatch(client: AuthenticatedWebSocket, data: Record<string, unknown> | undefined) {
-    if (!data?.channels || !Array.isArray(data.channels)) {
-      this.sendToClient(client, {
-        type: 'error',
-        data: { message: 'Channels array required for batch unsubscribe' },
-      });
-      return;
-    }
-
-    const channels = data.channels as string[];
+  private handleUnsubscribeBatch(client: AuthenticatedWebSocket, data: { channels: string[] }) {
+    const { channels } = data;
     const unsubscribed: string[] = [];
 
     for (const channel of channels) {
-      if (typeof channel !== 'string') continue;
-
       if (!client.subscriptions.has(channel)) continue;
 
       client.subscriptions.delete(channel);
@@ -1209,20 +1181,23 @@ export class GatewayWebSocketServer {
     // Track incoming gateway message metric
     websocketMessagesTotal.inc({ type: 'gateway', direction: 'in' });
 
-    try {
-      const message = JSON.parse(data.toString());
+    const result = parseGatewayMessage(data.toString());
 
-      if (message.type === 'auth_response') {
-        this.handleAuthResponse(client, message.response);
-      } else if (client.isAuthenticated) {
-        // Handle other message types only if authenticated
-        log.debug('Gateway message received', { type: message.type });
-      } else {
-        log.warn('Unauthenticated gateway message rejected');
-        client.close(4002, 'Authentication required');
-      }
-    } catch (err) {
-      log.error('Failed to parse gateway message', { error: String(err) });
+    if (!result.success) {
+      log.warn('Invalid gateway message', { error: result.error });
+      return;
+    }
+
+    const message = result.data;
+
+    if (message.type === 'auth_response' && 'response' in message) {
+      this.handleAuthResponse(client, message.response);
+    } else if (client.isAuthenticated) {
+      // Handle other message types only if authenticated
+      log.debug('Gateway message received', { type: message.type });
+    } else {
+      log.warn('Unauthenticated gateway message rejected');
+      client.close(4002, 'Authentication required');
     }
   }
 

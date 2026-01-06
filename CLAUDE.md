@@ -193,3 +193,82 @@ When implementing features, always consider extensibility and long-running opera
 | Process functions | `processImportedAccounts()` | Handle imports with conflict detection |
 | Reset functions | `resetImportState()` | Clean up all related state |
 | useMemo for filtering | `compatibleDevices` | Efficient derived state |
+
+## TypeScript Coding Standards
+
+### Error Handling
+
+**NEVER use `catch (error: any)`** - always use `catch (error)` with proper type narrowing:
+
+```typescript
+// GOOD - use getErrorMessage utility for safe error message extraction
+import { getErrorMessage } from '../utils/errors';
+
+try {
+  // ...
+} catch (error) {
+  log.error('Operation failed', { error: getErrorMessage(error) });
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: getErrorMessage(error, 'Default fallback message'),
+  });
+}
+
+// BAD - never use error: any
+try {
+  // ...
+} catch (error: any) {
+  res.status(500).json({ message: error.message });  // Don't do this
+}
+```
+
+For Prisma-specific error handling, use the `isPrismaError` type guard:
+```typescript
+import { isPrismaError } from '../utils/errors';
+
+if (isPrismaError(error) && error.code === 'P2002') {
+  // Handle unique constraint violation
+}
+```
+
+### JSON Parsing
+
+**NEVER use raw `JSON.parse`** for system settings or user-provided data. Use the safe parsing utilities:
+
+```typescript
+// GOOD - use safeJsonParse with Zod schema validation
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
+
+const threshold = safeJsonParse(
+  setting?.value,
+  SystemSettingSchemas.number,
+  DEFAULT_THRESHOLD,  // fallback value
+  'settingName'       // for logging
+);
+
+// BAD - raw JSON.parse can throw and accepts any type
+const data = JSON.parse(setting?.value || '{}');  // Don't do this
+```
+
+### WebSocket Message Validation
+
+Use Zod schemas for validating WebSocket messages:
+
+```typescript
+// See server/src/websocket/schemas.ts for client message validation
+import { parseClientMessage } from '../websocket/schemas';
+
+const result = parseClientMessage(rawMessage);
+if (!result.success) {
+  log.warn('Invalid message', { error: result.error });
+  return;
+}
+// result.data is now typed
+```
+
+### Type Annotations
+
+- Avoid using `any` type - prefer `unknown` when type is uncertain
+- Add explicit type annotations to function parameters and return types
+- Use discriminated unions for message types
+- Define interfaces for all API response shapes

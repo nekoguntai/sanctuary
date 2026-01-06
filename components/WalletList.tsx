@@ -186,8 +186,8 @@ export const WalletList: React.FC = () => {
       if (!result[tx.walletId]) {
         result[tx.walletId] = { net: 0, count: 0, hasIncoming: false, hasOutgoing: false };
       }
-      // Net is positive for incoming, negative for outgoing
-      result[tx.walletId].net += tx.type === 'received' ? tx.amount : -tx.amount;
+      // Amount is already signed (negative for sent, positive for received)
+      result[tx.walletId].net += tx.amount;
       result[tx.walletId].count++;
       if (tx.type === 'received') {
         result[tx.walletId].hasIncoming = true;

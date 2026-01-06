@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { getPriceService } from '../services/price';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -27,11 +28,11 @@ router.get('/', async (req: Request, res: Response) => {
     );
 
     res.json(price);
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Get price error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to fetch price',
+      message: getErrorMessage(error, 'Failed to fetch price'),
     });
   }
 });
@@ -55,7 +56,7 @@ router.get('/multiple', async (req: Request, res: Response) => {
     const prices = await priceService.getPrices(currencyList);
 
     res.json(prices);
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Get multiple prices error', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -76,11 +77,11 @@ router.get('/from/:provider', async (req: Request, res: Response) => {
     const price = await priceService.getPriceFrom(provider, currency as string);
 
     res.json(price);
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Get price from provider error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to fetch price from provider',
+      message: getErrorMessage(error, 'Failed to fetch price from provider'),
     });
   }
 });
@@ -107,11 +108,11 @@ router.post('/convert/to-fiat', async (req: Request, res: Response) => {
       fiatAmount,
       currency,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Convert to fiat error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to convert to fiat',
+      message: getErrorMessage(error, 'Failed to convert to fiat'),
     });
   }
 });
@@ -138,11 +139,11 @@ router.post('/convert/to-sats', async (req: Request, res: Response) => {
       currency,
       sats,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Convert to sats error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to convert to sats',
+      message: getErrorMessage(error, 'Failed to convert to sats'),
     });
   }
 });
@@ -273,11 +274,11 @@ router.get('/historical', async (req: Request, res: Response) => {
       price,
       provider: 'coingecko',
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Get historical price error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to fetch historical price',
+      message: getErrorMessage(error, 'Failed to fetch historical price'),
     });
   }
 });
@@ -311,11 +312,11 @@ router.get('/history', async (req: Request, res: Response) => {
       })),
       provider: 'coingecko',
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[PRICE] Get price history error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to fetch price history',
+      message: getErrorMessage(error, 'Failed to fetch price history'),
     });
   }
 });

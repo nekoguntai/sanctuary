@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import net from 'net';
 import tls from 'tls';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 const router = Router();
 const log = createLogger('NODE');
@@ -123,7 +124,7 @@ async function testElectrumConnection(config: ElectrumTestConfig): Promise<{ suc
         }
       });
 
-      socket.on('error', (error: any) => {
+      socket.on('error', (error: Error) => {
         clearTimeout(timeout);
         handleError(`Connection failed: ${error.message}`);
       });
@@ -133,8 +134,8 @@ async function testElectrumConnection(config: ElectrumTestConfig): Promise<{ suc
         handleError('Connection timeout');
       });
 
-    } catch (error: any) {
-      handleError(`Connection error: ${error.message}`);
+    } catch (error) {
+      handleError(`Connection error: ${getErrorMessage(error)}`);
     }
   });
 }

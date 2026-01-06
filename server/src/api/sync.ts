@@ -10,6 +10,7 @@ import { rateLimitByUser } from '../middleware/rateLimit';
 import { getSyncService } from '../services/syncService';
 import { walletRepository, transactionRepository, addressRepository } from '../repositories';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { walletLogBuffer } from '../services/walletLogBuffer';
 
 const router = Router();
@@ -47,11 +48,11 @@ router.post('/wallet/:walletId', rateLimitByUser('sync:trigger'), async (req: Re
       newUtxos: result.utxos,
       error: result.error,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Sync wallet error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Sync wallet error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to sync wallet',
+      message: getErrorMessage(error, 'Failed to sync wallet'),
     });
   }
 });
@@ -86,11 +87,11 @@ router.post('/queue/:walletId', rateLimitByUser('sync:trigger'), async (req: Req
       queuePosition: status.queuePosition,
       syncInProgress: status.syncInProgress,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Queue sync error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Queue sync error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to queue sync',
+      message: getErrorMessage(error, 'Failed to queue sync'),
     });
   }
 });
@@ -118,11 +119,11 @@ router.get('/status/:walletId', async (req: Request, res: Response) => {
     const status = await syncService.getSyncStatus(walletId);
 
     res.json(status);
-  } catch (error: any) {
-    log.error('[SYNC_API] Get sync status error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Get sync status error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to get sync status',
+      message: getErrorMessage(error, 'Failed to get sync status'),
     });
   }
 });
@@ -150,11 +151,11 @@ router.get('/logs/:walletId', async (req: Request, res: Response) => {
     const logs = walletLogBuffer.get(walletId);
 
     res.json({ logs });
-  } catch (error: any) {
-    log.error('[SYNC_API] Get sync logs error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Get sync logs error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to get sync logs',
+      message: getErrorMessage(error, 'Failed to get sync logs'),
     });
   }
 });
@@ -175,11 +176,11 @@ router.post('/user', rateLimitByUser('sync:batch'), async (req: Request, res: Re
       success: true,
       message: 'All wallets queued for sync',
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Queue user wallets error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Queue user wallets error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to queue wallets',
+      message: getErrorMessage(error, 'Failed to queue wallets'),
     });
   }
 });
@@ -210,11 +211,11 @@ router.post('/reset/:walletId', async (req: Request, res: Response) => {
       success: true,
       message: 'Sync state reset',
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Reset sync error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Reset sync error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to reset sync state',
+      message: getErrorMessage(error, 'Failed to reset sync state'),
     });
   }
 });
@@ -263,11 +264,11 @@ router.post('/resync/:walletId', rateLimitByUser('sync:trigger'), async (req: Re
       message: `Cleared ${deletedCount} transactions. Full resync queued.`,
       deletedTransactions: deletedCount,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Resync error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Resync error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to resync wallet',
+      message: getErrorMessage(error, 'Failed to resync wallet'),
     });
   }
 });
@@ -314,11 +315,11 @@ router.post('/network/:network', rateLimitByUser('sync:batch'), async (req: Requ
       queued: walletIds.length,
       walletIds,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Queue network wallets error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Queue network wallets error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to queue network wallets',
+      message: getErrorMessage(error, 'Failed to queue network wallets'),
     });
   }
 });
@@ -397,11 +398,11 @@ router.post('/network/:network/resync', rateLimitByUser('sync:batch'), async (re
       deletedTransactions: totalDeletedTxs,
       clearedStuckFlags: stuckWallets.length,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Resync network wallets error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Resync network wallets error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to resync network wallets',
+      message: getErrorMessage(error, 'Failed to resync network wallets'),
     });
   }
 });
@@ -446,11 +447,11 @@ router.get('/network/:network/status', async (req: Request, res: Response) => {
       pending,
       lastSyncAt,
     });
-  } catch (error: any) {
-    log.error('[SYNC_API] Get network sync status error:', error);
+  } catch (error) {
+    log.error('[SYNC_API] Get network sync status error:', { error: String(error) });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to get network sync status',
+      message: getErrorMessage(error, 'Failed to get network sync status'),
     });
   }
 });

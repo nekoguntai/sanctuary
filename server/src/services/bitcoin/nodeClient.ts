@@ -16,6 +16,7 @@ import {
 } from './electrumPool';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('NODE_CLIENT');
 
@@ -397,10 +398,10 @@ export async function testNodeConfig(config: NodeConfig): Promise<{
       message: `Connected to Electrum server at block ${height}${verboseStatus}`,
       info: { blockHeight: height, supportsVerbose },
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       success: false,
-      message: `Connection failed: ${error.message}`,
+      message: `Connection failed: ${getErrorMessage(error)}`,
     };
   }
 }

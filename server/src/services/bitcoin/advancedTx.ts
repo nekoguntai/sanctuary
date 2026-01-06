@@ -16,7 +16,9 @@ import { parseDescriptor } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { DEFAULT_DUST_THRESHOLD } from '../../constants';
+import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -37,7 +39,7 @@ async function getDustThreshold(): Promise<number> {
   const setting = await prisma.systemSetting.findUnique({
     where: { key: 'dustThreshold' },
   });
-  return setting ? JSON.parse(setting.value) : DEFAULT_DUST_THRESHOLD;
+  return safeJsonParse(setting?.value, SystemSettingSchemas.number, DEFAULT_DUST_THRESHOLD, 'dustThreshold');
 }
 
 /**
@@ -138,10 +140,10 @@ export async function canReplaceTransaction(txid: string): Promise<{
       currentFeeRate,
       minNewFeeRate,
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       replaceable: false,
-      reason: error.message || 'Failed to check transaction',
+      reason: getErrorMessage(error, 'Failed to check transaction'),
     };
   }
 }

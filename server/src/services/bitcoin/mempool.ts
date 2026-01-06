@@ -10,6 +10,7 @@ import axios from 'axios';
 import config from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('MEMPOOL');
 
@@ -93,8 +94,8 @@ export async function getRecentBlocks(count: number = 10): Promise<MempoolBlock[
 
     // Return only the requested number of blocks
     return response.data.slice(0, count);
-  } catch (error: any) {
-    log.error('Failed to fetch recent blocks', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch recent blocks', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch recent blocks from mempool.space');
   }
 }
@@ -110,8 +111,8 @@ export async function getMempoolInfo(): Promise<MempoolInfo> {
     });
 
     return response.data;
-  } catch (error: any) {
-    log.error('Failed to fetch mempool info', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch mempool info', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch mempool info from mempool.space');
   }
 }
@@ -157,8 +158,8 @@ export async function getRecommendedFees(): Promise<FeeEstimates> {
           minimumFee: formatFee(minimumFee),
         };
       }
-    } catch (projectedError: any) {
-      log.debug('Projected blocks failed, trying recommended endpoint', { error: projectedError.message });
+    } catch (projectedError) {
+      log.debug('Projected blocks failed, trying recommended endpoint', { error: getErrorMessage(projectedError) });
     }
 
     // Fallback to recommended endpoint (returns integers)
@@ -173,8 +174,8 @@ export async function getRecommendedFees(): Promise<FeeEstimates> {
       economyFee: response.data.economyFee,
       minimumFee: response.data.minimumFee,
     };
-  } catch (error: any) {
-    log.error('Failed to fetch fee estimates', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch fee estimates', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch fee estimates from mempool.space');
   }
 }
@@ -190,8 +191,8 @@ export async function getBlock(hash: string): Promise<MempoolBlock> {
     });
 
     return response.data;
-  } catch (error: any) {
-    log.error('Failed to fetch block', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch block', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch block from mempool.space');
   }
 }
@@ -208,8 +209,8 @@ export async function getBlockAtHeight(height: number): Promise<string> {
 
     // Returns block hash
     return response.data;
-  } catch (error: any) {
-    log.error('Failed to fetch block at height', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch block at height', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch block at height from mempool.space');
   }
 }
@@ -225,8 +226,8 @@ export async function getTipHeight(): Promise<number> {
     });
 
     return response.data;
-  } catch (error: any) {
-    log.error('Failed to fetch tip height', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch tip height', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch tip height from mempool.space');
   }
 }
@@ -255,8 +256,8 @@ export async function getProjectedMempoolBlocks(): Promise<ProjectedMempoolBlock
     });
 
     return response.data;
-  } catch (error: any) {
-    log.error('Failed to fetch projected mempool blocks', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch projected mempool blocks', { error: getErrorMessage(error) });
     throw new Error('Failed to fetch projected mempool blocks from mempool.space');
   }
 }
@@ -395,10 +396,10 @@ export async function getBlocksAndMempool() {
           blocksCount: mempoolBlocks.length,
           additionalBlocks: queuedBlocksSummary?.blockCount || 0,
         });
-      } catch (projectedError: any) {
+      } catch (projectedError) {
         // Fall back to simple algorithm if projected blocks API fails
         log.warn('Projected blocks API failed, falling back to simple algorithm', {
-          error: projectedError.message,
+          error: getErrorMessage(projectedError),
         });
         return getBlocksAndMempoolSimple(blocks, mempoolInfo, fees, mempoolSizeMB);
       }
@@ -476,8 +477,8 @@ export async function getBlocksAndMempool() {
       },
       queuedBlocksSummary,
     };
-  } catch (error: any) {
-    log.error('Failed to fetch blocks and mempool', { error: error.message });
+  } catch (error) {
+    log.error('Failed to fetch blocks and mempool', { error: getErrorMessage(error) });
     throw error;
   }
 }

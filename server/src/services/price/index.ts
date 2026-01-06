@@ -8,6 +8,7 @@
 import { LRUCache } from 'lru-cache';
 import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import {
   createPriceProviderRegistry,
   initializePriceProviders,
@@ -308,9 +309,9 @@ class PriceService {
       log.debug(`Fetched historical price from ${priceData.provider}: ${priceData.price} ${priceData.currency}`);
 
       return priceData.price;
-    } catch (error: any) {
-      log.error('Failed to fetch historical price', { error: error.message });
-      throw new Error(`Failed to fetch historical price: ${error.message}`);
+    } catch (error) {
+      log.error('Failed to fetch historical price', { error: getErrorMessage(error) });
+      throw new Error(`Failed to fetch historical price: ${getErrorMessage(error)}`);
     }
   }
 
@@ -352,9 +353,9 @@ class PriceService {
       log.debug(`Fetched price history: ${priceHistory.length} data points`);
 
       return priceHistory;
-    } catch (error: any) {
-      log.error('Failed to fetch price history', { error: error.message });
-      throw new Error(`Failed to fetch price history: ${error.message}`);
+    } catch (error) {
+      log.error('Failed to fetch price history', { error: getErrorMessage(error) });
+      throw new Error(`Failed to fetch price history: ${getErrorMessage(error)}`);
     }
   }
 

@@ -19,6 +19,7 @@ import {
   walletSharingRepository,
 } from '../repositories';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage, isPrismaError } from '../utils/errors';
 import { balanceHistoryCache } from '../utils/cache';
 import { exportFormatRegistry, type WalletExportData } from '../services/export';
 import { isValidScriptType, scriptTypeRegistry } from '../services/scriptTypes';
@@ -104,11 +105,11 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(wallet);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Create wallet error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create wallet',
+      message: getErrorMessage(error, 'Failed to create wallet'),
     });
   }
 });
@@ -157,7 +158,7 @@ router.patch('/:id', requireWalletAccess('owner'), async (req: Request, res: Res
     });
 
     res.json(wallet);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Update wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -178,7 +179,7 @@ router.delete('/:id', requireWalletAccess('owner'), async (req: Request, res: Re
     await walletService.deleteWallet(walletId, userId);
 
     res.status(204).send();
-  } catch (error: any) {
+  } catch (error) {
     log.error('Delete wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -199,7 +200,7 @@ router.get('/:id/stats', requireWalletAccess('view'), async (req: Request, res: 
     const stats = await walletService.getWalletStats(walletId, userId);
 
     res.json(stats);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Get wallet stats error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -277,7 +278,7 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
       timeframe,
       ...result,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Get balance history error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -357,7 +358,7 @@ router.get('/:id/export/labels', requireWalletAccess('view'), async (req: Reques
 
     // Send as newline-separated JSON
     res.send(lines.join('\n'));
-  } catch (error: any) {
+  } catch (error) {
     log.error('Export labels error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -437,7 +438,7 @@ router.get('/:id/export/formats', requireWalletAccess('view'), async (req: Reque
     }));
 
     res.json({ formats });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Get export formats error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -495,7 +496,7 @@ router.get('/:id/export', requireWalletAccess('view'), async (req: Request, res:
         message: exportError.message || 'Failed to export wallet in the specified format',
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     log.error('Export wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -553,7 +554,7 @@ router.post('/:id/addresses', requireWalletAccess('edit'), async (req: Request, 
     const address = await walletService.generateAddress(walletId, userId);
 
     res.status(201).json({ address });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Generate address error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -582,7 +583,7 @@ router.post('/:id/devices', requireWalletAccess('edit'), async (req: Request, re
     await walletService.addDeviceToWallet(walletId, deviceId, userId, signerIndex);
 
     res.status(201).json({ message: 'Device added to wallet' });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Add device error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -603,11 +604,11 @@ router.post('/:id/repair', requireWalletAccess('owner'), async (req: Request, re
     const result = await walletService.repairWalletDescriptor(walletId, userId);
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Repair wallet error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to repair wallet',
+      message: getErrorMessage(error, 'Failed to repair wallet'),
     });
   }
 });
@@ -682,11 +683,11 @@ router.post('/validate-xpub', async (req: Request, res: Response) => {
       fingerprint: fingerprintStr,
       accountPath: accountPathStr,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Validate xpub error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to validate xpub',
+      message: getErrorMessage(error, 'Failed to validate xpub'),
     });
   }
 });
@@ -750,7 +751,7 @@ router.post('/:id/share/group', requireWalletAccess('owner'), async (req: Reques
       groupName: wallet.group?.name || null,
       groupRole: wallet.groupRole,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Share with group error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -817,7 +818,7 @@ router.post('/:id/share/user', requireWalletAccess('owner'), async (req: Request
       message: 'User added to wallet',
       devicesToShare: devicesToShare.length > 0 ? devicesToShare : undefined,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Share with user error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -858,7 +859,7 @@ router.delete('/:id/share/user/:targetUserId', requireWalletAccess('owner'), asy
       success: true,
       message: 'User removed from wallet',
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Remove user error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -896,7 +897,7 @@ router.get('/:id/share', requireWalletAccess('view'), async (req: Request, res: 
         role: wu.role,
       })),
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Get share info error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
@@ -954,11 +955,11 @@ router.post('/import/validate', async (req: Request, res: Response) => {
     });
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Import validate error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to validate import data',
+      message: getErrorMessage(error, 'Failed to validate import data'),
     });
   }
 });
@@ -994,20 +995,23 @@ router.post('/import', async (req: Request, res: Response) => {
     });
 
     res.status(201).json(result);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Import wallet error', { error });
 
     // Check for unique constraint violation (duplicate fingerprint)
-    if (error.code === 'P2002' && error.meta?.target?.includes('fingerprint')) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'A device with this fingerprint already exists for another user',
-      });
+    if (isPrismaError(error) && error.code === 'P2002') {
+      const target = error.meta?.target;
+      if (Array.isArray(target) && target.includes('fingerprint')) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: 'A device with this fingerprint already exists for another user',
+        });
+      }
     }
 
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to import wallet',
+      message: getErrorMessage(error, 'Failed to import wallet'),
     });
   }
 });

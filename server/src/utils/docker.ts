@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from './logger';
+import { getErrorMessage } from './errors';
 
 const log = createLogger('DOCKER');
 
@@ -219,9 +220,9 @@ export async function createOllamaContainer(): Promise<{ success: boolean; messa
     const errorText = await startResponse.text();
     log.warn('Failed to start Ollama container', { status: startResponse.status, error: errorText });
     return { success: false, message: `Container created but failed to start: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error creating Ollama container', { error });
-    return { success: false, message: error.message || 'Failed to create Ollama container' };
+    return { success: false, message: getErrorMessage(error, 'Failed to create Ollama container') };
   }
 }
 
@@ -258,9 +259,9 @@ export async function startOllama(): Promise<{ success: boolean; message: string
     const errorText = await response.text();
     log.warn('Failed to start Ollama', { status: response.status, error: errorText });
     return { success: false, message: `Failed to start Ollama: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error starting Ollama', { error });
-    return { success: false, message: error.message || 'Failed to start Ollama' };
+    return { success: false, message: getErrorMessage(error, 'Failed to start Ollama') };
   }
 }
 
@@ -296,9 +297,9 @@ export async function stopOllama(): Promise<{ success: boolean; message: string 
     const errorText = await response.text();
     log.warn('Failed to stop Ollama', { status: response.status, error: errorText });
     return { success: false, message: `Failed to stop Ollama: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error stopping Ollama', { error });
-    return { success: false, message: error.message || 'Failed to stop Ollama' };
+    return { success: false, message: getErrorMessage(error, 'Failed to stop Ollama') };
   }
 }
 
@@ -501,9 +502,9 @@ export async function createTorContainer(): Promise<{ success: boolean; message:
     const errorText = await startResponse.text();
     log.warn('Failed to start Tor container', { status: startResponse.status, error: errorText });
     return { success: false, message: `Container created but failed to start: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error creating Tor container', { error });
-    return { success: false, message: error.message || 'Failed to create Tor container' };
+    return { success: false, message: getErrorMessage(error, 'Failed to create Tor container') };
   }
 }
 
@@ -540,9 +541,9 @@ export async function startTor(): Promise<{ success: boolean; message: string }>
     const errorText = await response.text();
     log.warn('Failed to start Tor', { status: response.status, error: errorText });
     return { success: false, message: `Failed to start Tor: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error starting Tor', { error });
-    return { success: false, message: error.message || 'Failed to start Tor' };
+    return { success: false, message: getErrorMessage(error, 'Failed to start Tor') };
   }
 }
 
@@ -578,8 +579,8 @@ export async function stopTor(): Promise<{ success: boolean; message: string }> 
     const errorText = await response.text();
     log.warn('Failed to stop Tor', { status: response.status, error: errorText });
     return { success: false, message: `Failed to stop Tor: ${errorText}` };
-  } catch (error: any) {
+  } catch (error) {
     log.error('Error stopping Tor', { error });
-    return { success: false, message: error.message || 'Failed to stop Tor' };
+    return { success: false, message: getErrorMessage(error, 'Failed to stop Tor') };
   }
 }

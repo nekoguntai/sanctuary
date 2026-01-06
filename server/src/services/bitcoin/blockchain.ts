@@ -7,7 +7,7 @@
 
 import { getNodeClient } from './nodeClient';
 import { getElectrumPool } from './electrumPool';
-import type { TransactionDetails } from './electrum';
+import type { TransactionDetails, TransactionOutput, TransactionInput } from './electrum';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
@@ -80,7 +80,7 @@ export async function syncAddress(addressId: string): Promise<{
 
     // Helper to check if output matches our address
     // Handles both legacy format (addresses array) and segwit format (address singular)
-    const outputMatchesAddress = (out: any, address: string): boolean => {
+    const outputMatchesAddress = (out: TransactionOutput, address: string): boolean => {
       if (out.scriptPubKey?.address === address) return true;
       if (out.scriptPubKey?.addresses?.includes(address)) return true;
       return false;
@@ -146,11 +146,11 @@ export async function syncAddress(addressId: string): Promise<{
         continue;
       }
 
-      const outputs = txDetails.vout || [];
-      const inputs = txDetails.vin || [];
+      const outputs: TransactionOutput[] = txDetails.vout || [];
+      const inputs: TransactionInput[] = txDetails.vin || [];
 
       // Check if this address received funds (is in outputs)
-      const isReceived = outputs.some((out: any) =>
+      const isReceived = outputs.some((out) =>
         outputMatchesAddress(out, addressRecord.address)
       );
 
@@ -209,10 +209,8 @@ export async function syncAddress(addressId: string): Promise<{
 
         if (!existingReceivedTx) {
           const amount = outputs
-            .filter((out: any) =>
-              outputMatchesAddress(out, addressRecord.address)
-            )
-            .reduce((sum: number, out: any) => sum + Math.round(out.value * 100000000), 0);
+            .filter((out) => outputMatchesAddress(out, addressRecord.address))
+            .reduce((sum, out) => sum + Math.round(out.value * 100000000), 0);
 
           // Create receive transaction record
           await prisma.transaction.create({
@@ -633,8 +631,9 @@ export async function broadcastTransaction(rawTx: string): Promise<{
       txid,
       broadcasted: true,
     };
-  } catch (error: any) {
-    throw new Error(`Failed to broadcast transaction: ${error.message}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to broadcast transaction: ${message}`);
   }
 }
 

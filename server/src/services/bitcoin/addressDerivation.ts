@@ -8,6 +8,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import bs58check from 'bs58check';
+import { getErrorMessage } from '../../utils/errors';
 
 const bip32 = BIP32Factory(ecc);
 
@@ -585,10 +586,10 @@ export function validateXpub(xpub: string, network: 'mainnet' | 'testnet' | 'reg
     }
 
     return { valid: true, scriptType };
-  } catch (error: any) {
+  } catch (error) {
     return {
       valid: false,
-      error: error.message || 'Invalid xpub format',
+      error: getErrorMessage(error, 'Invalid xpub format'),
     };
   }
 }

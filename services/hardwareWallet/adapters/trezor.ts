@@ -761,8 +761,26 @@ export class TrezorAdapter implements DeviceAdapter {
           }
         }
 
+        // Log the complete Trezor input for debugging
+        log.info('TREZOR INPUT BUILT', {
+          inputIdx: idx,
+          prevHash: trezorInput.prev_hash,
+          prevIndex: trezorInput.prev_index,
+          amount: trezorInput.amount,
+          sequence: trezorInput.sequence,
+          scriptType: trezorInput.script_type,
+          hasMultisig: !!trezorInput.multisig,
+          addressN: trezorInput.address_n,
+          // Log witnessUtxo from PSBT for comparison
+          psbtWitnessUtxoValue: input.witnessUtxo?.value,
+          psbtWitnessUtxoScript: input.witnessUtxo?.script?.toString('hex'),
+        });
+
         return trezorInput;
       });
+
+      // Check if this is a multisig transaction (for signature extraction later)
+      const isMultisig = psbt.data.inputs.some(input => isMultisigInput(input));
 
       // Build Trezor outputs
       const outputs = psbt.txOutputs.map((output, idx) => {
@@ -824,6 +842,33 @@ export class TrezorAdapter implements DeviceAdapter {
       // Fetch reference transactions
       const refTxs = await fetchRefTxs(psbt);
 
+      // Verify PSBT witnessUtxo values match refTx outputs (only log mismatches)
+      for (let i = 0; i < psbt.txInputs.length; i++) {
+        const txInput = psbt.txInputs[i];
+        const psbtInput = psbt.data.inputs[i];
+        const txid = Buffer.from(txInput.hash).reverse().toString('hex');
+        const vout = txInput.index;
+
+        const refTx = refTxs.find(rt => rt.hash === txid);
+        if (refTx && refTx.bin_outputs && psbtInput.witnessUtxo) {
+          const refOutput = refTx.bin_outputs[vout];
+          if (refOutput) {
+            const psbtAmount = psbtInput.witnessUtxo.value;
+            const refAmount = refOutput.amount;
+
+            if (psbtAmount !== refAmount) {
+              log.error('Input amount mismatch between PSBT and reference transaction', {
+                inputIndex: i,
+                txid,
+                vout,
+                psbtAmount,
+                refAmount,
+              });
+            }
+          }
+        }
+      }
+
       // Get the derivation path from the first input (after fingerprint matching)
       let accountPath = request.accountPath || request.inputPaths?.[0];
 
@@ -842,31 +887,20 @@ export class TrezorAdapter implements DeviceAdapter {
         accountPath = matchingDerivation.path;
       }
 
-      // Log if this is a BIP-48 multisig path
-      // NOTE: We don't call TrezorConnect.unlockPath() for BIP-48 because it was designed
-      // for SLIP-26 (Cardano) paths, not BIP-48. For BIP-48 multisig, Trezor validates
-      // through the multisig structure. Users need Safety Checks set to "Prompt" in Trezor Suite.
-      if (accountPath && isBip48MultisigPath(accountPath)) {
-        log.info('BIP-48 multisig path detected - validation via multisig structure', {
-          accountPath,
-          note: 'If signing fails, ensure Safety Checks is set to "Prompt" in Trezor Suite'
-        });
-      }
-
-      log.info('Calling TrezorConnect.signTransaction', {
-        inputCount: inputs.length,
-        outputCount: outputs.length,
-        refTxCount: refTxs.length,
-        coin,
-      });
+      // Get PSBT transaction details for version/locktime to pass to Trezor
+      const psbtTx = psbt.data.globalMap.unsignedTx as unknown as { toBuffer(): Buffer };
+      const txFromPsbt = bitcoin.Transaction.fromBuffer(psbtTx.toBuffer());
 
       // Sign with Trezor
+      // CRITICAL: Pass version and locktime from PSBT to ensure sighash matches
       const result = await TrezorConnect.signTransaction({
         inputs,
         outputs,
         refTxs: refTxs.length > 0 ? refTxs : undefined,
         coin,
         push: false,
+        version: txFromPsbt.version,
+        locktime: txFromPsbt.locktime,
       });
 
       if (!result.success) {
@@ -874,16 +908,157 @@ export class TrezorAdapter implements DeviceAdapter {
         throw new Error(errorMsg);
       }
 
-      log.info('Trezor signing successful', {
-        signedTxLength: result.payload.serializedTx?.length,
-      });
-
       // Trezor returns fully signed raw transaction
       const signedTxHex = result.payload.serializedTx;
 
+      // Validate Trezor's signed transaction matches PSBT (only log mismatches)
+      if (signedTxHex) {
+        const signedTx = bitcoin.Transaction.fromHex(signedTxHex);
+
+        // Check version/locktime match
+        if (txFromPsbt.version !== signedTx.version) {
+          log.error('Transaction version mismatch - Trezor signed different version', {
+            psbtVersion: txFromPsbt.version,
+            trezorVersion: signedTx.version,
+          });
+        }
+        if (txFromPsbt.locktime !== signedTx.locktime) {
+          log.error('Transaction locktime mismatch', {
+            psbtLocktime: txFromPsbt.locktime,
+            trezorLocktime: signedTx.locktime,
+          });
+        }
+
+        // Check outputs match
+        for (let i = 0; i < Math.min(txFromPsbt.outs.length, signedTx.outs.length); i++) {
+          const psbtOut = txFromPsbt.outs[i];
+          const trezorOut = signedTx.outs[i];
+          if (psbtOut.value !== trezorOut.value || !psbtOut.script.equals(trezorOut.script)) {
+            log.error('Output mismatch between PSBT and Trezor signed transaction', {
+              outputIndex: i,
+              psbtValue: psbtOut.value,
+              trezorValue: trezorOut.value,
+              psbtScriptHex: psbtOut.script.toString('hex'),
+              trezorScriptHex: trezorOut.script.toString('hex'),
+            });
+          }
+        }
+
+        // Check inputs match
+        for (let i = 0; i < Math.min(txFromPsbt.ins.length, signedTx.ins.length); i++) {
+          const psbtIn = txFromPsbt.ins[i];
+          const trezorIn = signedTx.ins[i];
+          if (!psbtIn.hash.equals(trezorIn.hash) || psbtIn.index !== trezorIn.index || psbtIn.sequence !== trezorIn.sequence) {
+            log.error('Input mismatch between PSBT and Trezor signed transaction', {
+              inputIndex: i,
+              psbtPrevHash: Buffer.from(psbtIn.hash).reverse().toString('hex'),
+              trezorPrevHash: Buffer.from(trezorIn.hash).reverse().toString('hex'),
+              psbtPrevIndex: psbtIn.index,
+              trezorPrevIndex: trezorIn.index,
+              psbtSequence: psbtIn.sequence,
+              trezorSequence: trezorIn.sequence,
+            });
+          }
+        }
+      }
+
+      // For multisig: extract signatures from the signed transaction and add to PSBT
+      if (isMultisig && signedTxHex) {
+        try {
+          const signedTx = bitcoin.Transaction.fromHex(signedTxHex);
+
+          // Process each input to extract Trezor's signature
+          for (let i = 0; i < signedTx.ins.length; i++) {
+            const witness = signedTx.ins[i].witness;
+            const psbtInput = psbt.data.inputs[i];
+
+            if (witness && witness.length > 0 && psbtInput.witnessScript) {
+              // For P2WSH multisig, witness is: [OP_0, sig1, sig2, ..., witnessScript]
+              // OP_0 is empty buffer for CHECKMULTISIG bug
+              // Last item is the witnessScript
+              // Middle items are signatures
+
+              const witnessScript = psbtInput.witnessScript;
+
+              // Verify Trezor's witnessScript matches PSBT's
+              const trezorWitnessScript = witness[witness.length - 1];
+              if (!witnessScript.equals(trezorWitnessScript)) {
+                log.error('WitnessScript mismatch - Trezor signed with different script', {
+                  inputIndex: i,
+                  psbtWitnessScriptHex: witnessScript.toString('hex'),
+                  trezorWitnessScriptHex: trezorWitnessScript.toString('hex'),
+                });
+              }
+
+              // Extract pubkeys from witnessScript
+              // Format: OP_M [pubkey1] [pubkey2] ... OP_N OP_CHECKMULTISIG
+              const pubkeys: Buffer[] = [];
+              let offset = 1; // Skip OP_M
+              while (offset < witnessScript.length - 2) {
+                const len = witnessScript[offset];
+                if (len === 0x21 || len === 0x41) { // Compressed (33) or uncompressed (65) pubkey
+                  offset++;
+                  pubkeys.push(witnessScript.slice(offset, offset + len));
+                  offset += len;
+                } else if (len >= 0x51 && len <= 0x60) {
+                  // OP_N (number of keys) - we're done
+                  break;
+                } else {
+                  offset++;
+                }
+              }
+
+              // Signatures are in witness[1] to witness[length-2] (skip OP_0 and witnessScript)
+              const signatures = witness.slice(1, witness.length - 1).filter(sig => sig.length > 0);
+
+              // Find Trezor's pubkey using bip32Derivation and device fingerprint
+              let trezorPubkey: Buffer | null = null;
+              if (deviceFingerprintBuffer && psbtInput.bip32Derivation) {
+                const trezorDerivation = psbtInput.bip32Derivation.find(d =>
+                  d.masterFingerprint.equals(deviceFingerprintBuffer)
+                );
+                if (trezorDerivation) {
+                  trezorPubkey = trezorDerivation.pubkey;
+                }
+              }
+
+              // Add signature to Trezor's pubkey
+              if (trezorPubkey && signatures.length > 0) {
+                const sig = signatures[0]; // Trezor's rawTx should have exactly 1 sig for this input
+
+                // Check if this pubkey already has a signature
+                const existingSig = psbtInput.partialSig?.find(
+                  ps => ps.pubkey.equals(trezorPubkey!)
+                );
+                if (!existingSig) {
+                  if (!psbtInput.partialSig) {
+                    psbtInput.partialSig = [];
+                  }
+                  psbtInput.partialSig.push({
+                    pubkey: trezorPubkey,
+                    signature: sig,
+                  });
+                }
+              } else {
+                log.warn('Could not match Trezor signature to pubkey', {
+                  inputIndex: i,
+                  hasTrezorPubkey: !!trezorPubkey,
+                  signaturesFound: signatures.length,
+                });
+              }
+            }
+          }
+        } catch (extractError) {
+          log.warn('Failed to extract signatures from Trezor rawTx', {
+            error: extractError instanceof Error ? extractError.message : String(extractError),
+          });
+          // Continue without extraction - rawTx is still available as fallback
+        }
+      }
+
       return {
-        psbt: psbt.toBase64(), // Original PSBT for reference
-        rawTx: signedTxHex, // Fully signed transaction ready to broadcast
+        psbt: psbt.toBase64(), // PSBT with partial signatures for multisig
+        rawTx: signedTxHex, // Fully signed transaction (for single-sig direct broadcast)
         signatures: inputs.length,
       };
     } catch (error) {

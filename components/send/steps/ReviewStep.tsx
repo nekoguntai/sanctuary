@@ -78,7 +78,7 @@ export interface ReviewStepProps {
   payjoinStatus?: 'idle' | 'attempting' | 'success' | 'failed';
   onCreateTransaction?: () => Promise<TransactionData | null>;
   onDownloadPsbt?: () => void;
-  onUploadSignedPsbt?: (file: File, deviceId?: string) => Promise<void>;
+  onUploadSignedPsbt?: (file: File, deviceId?: string, deviceFingerprint?: string) => Promise<void>;
   onSignWithDevice?: (device: Device) => Promise<boolean>;
   onMarkDeviceSigned?: (deviceId: string) => void;
   onProcessQrSignedPsbt?: (signedPsbt: string, deviceId: string) => void;
@@ -313,15 +313,28 @@ export function ReviewStep({
 
   // Handle per-device file upload (multisig)
   const handleDeviceFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    const fingerprint = device?.fingerprint;
+    console.log('[ReviewStep] handleDeviceFileUpload called', { deviceId, fingerprint, hasFile: !!event.target.files?.[0], hasCallback: !!onUploadSignedPsbt });
     const file = event.target.files?.[0];
     if (file && onUploadSignedPsbt) {
+      console.log('[ReviewStep] Calling onUploadSignedPsbt', { fileName: file.name, fileSize: file.size, fingerprint });
       setUploadingDeviceId(deviceId);
       try {
-        // Pass deviceId to track which device signed - the hook handles marking as signed
-        await onUploadSignedPsbt(file, deviceId);
+        // Pass deviceId and fingerprint to validate and track which device signed
+        await onUploadSignedPsbt(file, deviceId, fingerprint);
+        console.log('[ReviewStep] onUploadSignedPsbt completed');
+      } catch (err: unknown) {
+        console.error('[ReviewStep] onUploadSignedPsbt failed', err);
+        // Show error to user
+        if (err instanceof Error) {
+          alert(err.message);
+        }
       } finally {
         setUploadingDeviceId(null);
       }
+    } else {
+      console.log('[ReviewStep] Upload skipped - no file or no callback');
     }
     // Reset input
     const inputRef = deviceFileInputRefs.current[deviceId];

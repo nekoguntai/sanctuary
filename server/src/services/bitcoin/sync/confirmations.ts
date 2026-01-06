@@ -13,6 +13,7 @@ import { getBlockHeight, getBlockTimestamp } from '../utils/blockHeight';
 import { walletLog } from '../../../websocket/notifications';
 import { recalculateWalletBalances } from '../utils/balanceCalculation';
 import { getConfig } from '../../../config';
+import { safeJsonParse, SystemSettingSchemas } from '../../../utils/safeJson';
 
 const log = createLogger('CONFIRMATIONS');
 
@@ -76,9 +77,12 @@ export async function updateTransactionConfirmations(walletId: string): Promise<
   const deepThresholdSetting = await prisma.systemSetting.findUnique({
     where: { key: 'deepConfirmationThreshold' },
   });
-  const deepConfirmationThreshold = deepThresholdSetting
-    ? JSON.parse(deepThresholdSetting.value)
-    : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
+  const deepConfirmationThreshold = safeJsonParse(
+    deepThresholdSetting?.value,
+    SystemSettingSchemas.number,
+    DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
+    'deepConfirmationThreshold'
+  );
 
   const transactions = await prisma.transaction.findMany({
     where: {

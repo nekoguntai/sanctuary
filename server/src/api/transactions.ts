@@ -18,9 +18,10 @@ import { validateAddress } from '../services/bitcoin/utils';
 import { checkWalletAccess, checkWalletEditAccess } from '../services/wallet';
 import { recalculateWalletBalances, getCachedBlockHeight, type Network } from '../services/bitcoin/blockchain';
 import { createLogger } from '../utils/logger';
-import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../utils/errors';
+import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero, getErrorMessage } from '../utils/errors';
 import { INITIAL_ADDRESS_COUNT, MIN_FEE_RATE } from '../constants';
 import { transactionStatsCache, getOrCompute } from '../utils/cache';
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 
 const log = createLogger('TRANSACTIONS');
 
@@ -938,9 +939,12 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
     const thresholdSetting = await prisma.systemSetting.findUnique({
       where: { key: 'confirmationThreshold' },
     });
-    const confirmationThreshold = thresholdSetting
-      ? JSON.parse(thresholdSetting.value)
-      : 3; // Default to 3
+    const confirmationThreshold = safeJsonParse(
+      thresholdSetting?.value,
+      SystemSettingSchemas.number,
+      3, // Default to 3
+      'confirmationThreshold'
+    );
 
     const utxos = await prisma.uTXO.findMany({
       where: {
@@ -1388,11 +1392,11 @@ router.post('/wallets/:walletId/transactions/create', requireWalletAccess('edit'
       effectiveAmount: txData.effectiveAmount, // The actual amount being sent
       decoyOutputs: txData.decoyOutputs, // Decoy change outputs (if enabled)
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Create transaction error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create transaction',
+      message: getErrorMessage(error, 'Failed to create transaction'),
     });
   }
 });
@@ -1504,11 +1508,11 @@ router.post('/wallets/:walletId/transactions/batch', requireWalletAccess('edit')
       inputPaths: txData.inputPaths,
       outputs: txData.outputs, // Final outputs with resolved amounts
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Create batch transaction error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create batch transaction',
+      message: getErrorMessage(error, 'Failed to create batch transaction'),
     });
   }
 });
@@ -1567,13 +1571,13 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
     });
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Broadcast transaction error', { error });
 
     // Audit log failed broadcast
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
       success: false,
-      errorMsg: error.message,
+      errorMsg: getErrorMessage(error),
       details: {
         walletId: req.walletId,
         recipient: req.body?.recipient,
@@ -1583,7 +1587,7 @@ router.post('/wallets/:walletId/transactions/broadcast', requireWalletAccess('ed
 
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to broadcast transaction',
+      message: getErrorMessage(error, 'Failed to broadcast transaction'),
     });
   }
 });
@@ -1654,11 +1658,11 @@ router.post('/wallets/:walletId/psbt/create', requireWalletAccess('edit'), async
       changeAddress: txData.changeAddress,
       utxos: txData.utxos,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('Create PSBT error', { error });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create PSBT',
+      message: getErrorMessage(error, 'Failed to create PSBT'),
     });
   }
 });
@@ -1716,13 +1720,13 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
       txid: result.txid,
       broadcasted: result.broadcasted,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('PSBT broadcast error', { error });
 
     // Audit log failed broadcast
     await auditService.logFromRequest(req, AuditAction.TRANSACTION_BROADCAST_FAILED, AuditCategory.WALLET, {
       success: false,
-      errorMsg: error.message,
+      errorMsg: getErrorMessage(error),
       details: {
         walletId: req.walletId,
       },
@@ -1730,7 +1734,7 @@ router.post('/wallets/:walletId/psbt/broadcast', requireWalletAccess('edit'), as
 
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to broadcast transaction',
+      message: getErrorMessage(error, 'Failed to broadcast transaction'),
     });
   }
 });
@@ -1841,11 +1845,11 @@ router.post('/wallets/:walletId/transactions/estimate', requireWalletAccess('vie
     );
 
     res.json(estimate);
-  } catch (error: any) {
+  } catch (error) {
     log.error('Estimate transaction error', { error });
     res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message || 'Failed to estimate transaction',
+      message: getErrorMessage(error, 'Failed to estimate transaction'),
     });
   }
 });

@@ -16,6 +16,7 @@ import { validatePasswordStrength } from '../utils/password';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../services/bitcoin/nodeClient';
 import { reloadElectrumServers } from '../services/bitcoin/electrumPool';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { encrypt } from '../utils/encryption';
 import { getAllCacheStats } from '../utils/cache';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD, DEFAULT_DUST_THRESHOLD, DEFAULT_DRAFT_EXPIRATION_DAYS, DEFAULT_AI_ENABLED, DEFAULT_AI_ENDPOINT, DEFAULT_AI_MODEL } from '../constants';
@@ -392,12 +393,12 @@ router.post('/node-config/test', authenticate, requireAdmin, async (req: Request
         message: result.message,
       });
     }
-  } catch (error: any) {
+  } catch (error) {
     log.error('[ADMIN] Test connection error', { error: String(error) });
     res.status(500).json({
       success: false,
       error: 'Internal Server Error',
-      message: error.message || 'Failed to test node connection',
+      message: getErrorMessage(error, 'Failed to test node connection'),
     });
   }
 });
@@ -495,12 +496,12 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
       exitIp,
       isTorExit,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[ADMIN] Tor verification failed', { error: String(error) });
     res.status(500).json({
       success: false,
       error: 'Tor Verification Failed',
-      message: error.message || 'Failed to verify Tor connection',
+      message: getErrorMessage(error, 'Failed to verify Tor connection'),
     });
   }
 });

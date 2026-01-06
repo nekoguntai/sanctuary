@@ -11,6 +11,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { INPUT_VBYTES, OUTPUT_VBYTES, OVERHEAD_VBYTES } from './constants';
+import { getErrorMessage } from '../../utils/errors';
 
 // Import and re-export shared utilities
 import {
@@ -40,10 +41,10 @@ export function validateAddress(
     const networkObj = getNetwork(network);
     bitcoin.address.toOutputScript(address, networkObj);
     return { valid: true };
-  } catch (error: any) {
+  } catch (error) {
     return {
       valid: false,
-      error: error.message || 'Invalid Bitcoin address',
+      error: getErrorMessage(error, 'Invalid Bitcoin address'),
     };
   }
 }

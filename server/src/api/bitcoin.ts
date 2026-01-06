@@ -13,7 +13,9 @@ import { getElectrumPoolAsync, getPoolConfig, isPoolEnabled } from '../services/
 import * as mempool from '../services/bitcoin/mempool';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../constants';
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 
 const router = Router();
 const log = createLogger('BITCOIN');
@@ -93,12 +95,18 @@ router.get('/status', async (req: Request, res: Response) => {
       prisma.systemSetting.findUnique({ where: { key: 'confirmationThreshold' } }),
       prisma.systemSetting.findUnique({ where: { key: 'deepConfirmationThreshold' } }),
     ]);
-    const confirmationThreshold = thresholdSetting
-      ? JSON.parse(thresholdSetting.value)
-      : DEFAULT_CONFIRMATION_THRESHOLD;
-    const deepConfirmationThreshold = deepThresholdSetting
-      ? JSON.parse(deepThresholdSetting.value)
-      : DEFAULT_DEEP_CONFIRMATION_THRESHOLD;
+    const confirmationThreshold = safeJsonParse(
+      thresholdSetting?.value,
+      SystemSettingSchemas.number,
+      DEFAULT_CONFIRMATION_THRESHOLD,
+      'confirmationThreshold'
+    );
+    const deepConfirmationThreshold = safeJsonParse(
+      deepThresholdSetting?.value,
+      SystemSettingSchemas.number,
+      DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
+      'deepConfirmationThreshold'
+    );
 
     res.json({
       connected: true,
@@ -121,10 +129,10 @@ router.get('/status', async (req: Request, res: Response) => {
         stats: poolStats,
       } : null,
     });
-  } catch (error: any) {
+  } catch (error) {
     res.json({
       connected: false,
-      error: error.message,
+      error: getErrorMessage(error),
     });
   }
 });
@@ -414,11 +422,11 @@ router.post('/broadcast', authenticate, async (req: Request, res: Response) => {
     const result = await blockchain.broadcastTransaction(rawTx);
 
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     log.error('[BITCOIN] Broadcast error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to broadcast transaction',
+      message: getErrorMessage(error, 'Failed to broadcast transaction'),
     });
   }
 });
@@ -629,11 +637,11 @@ router.post('/transaction/:txid/rbf', authenticate, async (req: Request, res: Re
       outputs: result.outputs,
       inputPaths: result.inputPaths,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[BITCOIN] RBF creation error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create RBF transaction',
+      message: getErrorMessage(error, 'Failed to create RBF transaction'),
     });
   }
 });
@@ -697,11 +705,11 @@ router.post('/transaction/cpfp', authenticate, async (req: Request, res: Respons
       parentFeeRate: result.parentFeeRate,
       effectiveFeeRate: result.effectiveFeeRate,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[BITCOIN] CPFP creation error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create CPFP transaction',
+      message: getErrorMessage(error, 'Failed to create CPFP transaction'),
     });
   }
 });
@@ -775,11 +783,11 @@ router.post('/transaction/batch', authenticate, async (req: Request, res: Respon
       savedFees: result.savedFees,
       recipientCount: recipients.length,
     });
-  } catch (error: any) {
+  } catch (error) {
     log.error('[BITCOIN] Batch transaction error', { error: String(error) });
     res.status(400).json({
       error: 'Bad Request',
-      message: error.message || 'Failed to create batch transaction',
+      message: getErrorMessage(error, 'Failed to create batch transaction'),
     });
   }
 });

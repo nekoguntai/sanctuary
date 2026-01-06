@@ -149,48 +149,81 @@ export const QRSigningModal: React.FC<QRSigningModalProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
+    // First try reading as binary (for Coldcard and other devices that output binary PSBTs)
+    const binaryReader = new FileReader();
+    binaryReader.onload = (e) => {
+      const buffer = e.target?.result as ArrayBuffer;
+      const bytes = new Uint8Array(buffer);
 
-      // Try to parse as base64 PSBT
-      try {
-        // Check if file contains base64 data
-        const base64Match = content.match(/^[A-Za-z0-9+/=]+$/);
-        if (base64Match) {
-          const decoded = atob(content);
-          if (decoded.startsWith('psbt')) {
-            log.info('Loaded signed PSBT from file');
-            onSignedPsbt(content);
+      // Check for PSBT magic bytes: "psbt" + 0xff
+      const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+      if (magic === 'psbt' && bytes[4] === 0xff) {
+        // Valid binary PSBT - convert to base64
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        log.info('Loaded binary PSBT from file', { size: bytes.length });
+        onSignedPsbt(base64);
+        handleClose();
+        return;
+      }
+
+      // Not binary PSBT, try reading as text
+      const textReader = new FileReader();
+      textReader.onload = (textEvent) => {
+        const content = (textEvent.target?.result as string).trim();
+
+        try {
+          // Check if file contains base64 data
+          const base64Match = content.match(/^[A-Za-z0-9+/=\s]+$/);
+          if (base64Match) {
+            const cleanBase64 = content.replace(/\s/g, '');
+            const decoded = atob(cleanBase64);
+            if (decoded.startsWith('psbt')) {
+              log.info('Loaded base64 PSBT from file');
+              onSignedPsbt(cleanBase64);
+              handleClose();
+              return;
+            }
+          }
+
+          // Try hex format
+          const hexMatch = content.match(/^[0-9a-fA-F\s]+$/);
+          if (hexMatch) {
+            const cleanHex = content.replace(/\s/g, '');
+            const hexBytes = new Uint8Array(cleanHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+            let binary = '';
+            for (let i = 0; i < hexBytes.length; i++) {
+              binary += String.fromCharCode(hexBytes[i]);
+            }
+            const base64 = btoa(binary);
+            log.info('Converted hex PSBT to base64');
+            onSignedPsbt(base64);
             handleClose();
             return;
           }
-        }
 
-        // Try hex format
-        const hexMatch = content.match(/^[0-9a-fA-F]+$/);
-        if (hexMatch) {
-          // Convert hex to base64
-          const bytes = new Uint8Array(content.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-          const base64 = btoa(String.fromCharCode(...bytes));
-          log.info('Converted hex PSBT to base64');
-          onSignedPsbt(base64);
-          handleClose();
-          return;
+          setScanError('Invalid PSBT file format. Expected binary PSBT, base64, or hex.');
+        } catch (error) {
+          log.error('Failed to parse PSBT file', { error });
+          setScanError('Failed to parse PSBT file');
         }
+      };
 
-        setScanError('Invalid PSBT file format');
-      } catch (error) {
-        log.error('Failed to parse PSBT file', { error });
-        setScanError('Failed to parse PSBT file');
-      }
+      textReader.onerror = () => {
+        setScanError('Failed to read file as text');
+      };
+
+      textReader.readAsText(file);
     };
 
-    reader.onerror = () => {
+    binaryReader.onerror = () => {
       setScanError('Failed to read file');
     };
 
-    reader.readAsText(file);
+    binaryReader.readAsArrayBuffer(file);
     event.target.value = '';
   }, [onSignedPsbt, handleClose]);
 

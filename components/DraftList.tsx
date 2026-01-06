@@ -304,8 +304,60 @@ export const DraftList: React.FC<DraftListProps> = ({
 
   const handleUploadPsbt = async (draftId: string, file: File) => {
     try {
-      const text = await file.text();
-      const signedPsbt = text.trim();
+      // Read file as binary first to detect format
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      let signedPsbt: string;
+
+      // Check for PSBT magic bytes: "psbt" + 0xff
+      const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+      if (magic === 'psbt' && bytes[4] === 0xff) {
+        // Binary PSBT - convert to base64
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        signedPsbt = btoa(binary);
+        log.info('Loaded binary PSBT from file', { size: bytes.length });
+      } else {
+        // Try reading as text (base64 or hex)
+        const text = await file.text();
+        const content = text.trim();
+
+        // Check if it's base64
+        const base64Match = content.match(/^[A-Za-z0-9+/=\s]+$/);
+        if (base64Match) {
+          const cleanBase64 = content.replace(/\s/g, '');
+          // Validate it's a valid PSBT by checking magic bytes after decode
+          try {
+            const decoded = atob(cleanBase64);
+            if (decoded.startsWith('psbt')) {
+              signedPsbt = cleanBase64;
+              log.info('Loaded base64 PSBT from file');
+            } else {
+              throw new Error('Not a valid PSBT (missing magic bytes)');
+            }
+          } catch {
+            throw new Error('Invalid base64 PSBT file');
+          }
+        } else {
+          // Check if it's hex
+          const hexMatch = content.match(/^[0-9a-fA-F\s]+$/);
+          if (hexMatch) {
+            const cleanHex = content.replace(/\s/g, '');
+            const hexBytes = new Uint8Array(cleanHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+            let binary = '';
+            for (let i = 0; i < hexBytes.length; i++) {
+              binary += String.fromCharCode(hexBytes[i]);
+            }
+            signedPsbt = btoa(binary);
+            log.info('Converted hex PSBT to base64');
+          } else {
+            throw new Error('Invalid PSBT file format. Expected binary, base64, or hex.');
+          }
+        }
+      }
 
       // Update the draft with the signed PSBT
       const draft = drafts.find(d => d.id === draftId);

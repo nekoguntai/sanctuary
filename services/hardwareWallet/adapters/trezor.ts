@@ -156,6 +156,21 @@ export function buildTrezorMultisig(
     return undefined;
   }
 
+  // Log xpubMap for debugging - show fingerprint comparison to diagnose mismatch
+  const psbtFingerprints = bip32Derivations.map(d => d.masterFingerprint.toString('hex').toLowerCase());
+  const xpubFingerprints = xpubMap ? Object.keys(xpubMap) : [];
+  const matchingFingerprints = psbtFingerprints.filter(fp => xpubFingerprints.includes(fp));
+  const missingInXpubMap = psbtFingerprints.filter(fp => !xpubFingerprints.includes(fp));
+
+  log.info('buildTrezorMultisig called', {
+    hasXpubMap: !!xpubMap,
+    xpubMapFingerprints: xpubFingerprints,
+    psbtFingerprints: psbtFingerprints,
+    matchingFingerprints: matchingFingerprints,
+    missingInXpubMap: missingInXpubMap,
+    allMatch: missingInXpubMap.length === 0,
+  });
+
   try {
     // Parse m-of-n from witnessScript
     // Format: OP_M <pubkey1> <pubkey2> ... OP_N OP_CHECKMULTISIG

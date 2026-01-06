@@ -290,6 +290,7 @@ export function useSendTransactionActions({
         walletType: wallet.type,
         isMultisig: isMultisigType(wallet.type),
         hasDescriptor: !!wallet.descriptor,
+        descriptorPreview: wallet.descriptor ? wallet.descriptor.substring(0, 200) + '...' : 'N/A',
         hasXpubs: !!multisigXpubs,
         xpubFingerprints: multisigXpubs ? Object.keys(multisigXpubs) : [],
       });
@@ -351,6 +352,7 @@ export function useSendTransactionActions({
         walletType: wallet.type,
         isMultisig: isMultisigType(wallet.type),
         hasDescriptor: !!wallet.descriptor,
+        descriptorPreview: wallet.descriptor ? wallet.descriptor.substring(0, 200) + '...' : 'N/A',
         hasXpubs: !!multisigXpubs,
         xpubFingerprints: multisigXpubs ? Object.keys(multisigXpubs) : [],
       });

@@ -8,6 +8,7 @@
 
 import TrezorConnect from '@trezor/connect-web';
 import * as bitcoin from 'bitcoinjs-lib';
+import bs58check from 'bs58check';
 import apiClient from '../../../src/api/client';
 import { createLogger } from '../../../utils/logger';
 import type {
@@ -76,7 +77,6 @@ export function convertToStandardXpub(extendedPubKey: string): string {
 
   try {
     // Decode base58check
-    const bs58check = require('bs58check');
     const data = bs58check.decode(extendedPubKey);
 
     // First 4 bytes are version

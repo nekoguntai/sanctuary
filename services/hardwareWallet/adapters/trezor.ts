@@ -526,9 +526,30 @@ export class TrezorAdapter implements DeviceAdapter {
         scriptType = getTrezorScriptType(request.inputPaths[0]);
       }
 
-      // Determine coin based on path
-      const isTestnet = (request.accountPath || request.inputPaths?.[0] || '').includes("/1'/");
+      // Determine coin based on path - check multiple sources for testnet indicator
+      // BIP-44/48/84 use coin_type 1' for testnet, 0' for mainnet
+      // Pattern: m/purpose'/coin_type'/... where coin_type is the second component
+      let isTestnet = false;
+
+      // First try request paths
+      const pathToCheck = request.accountPath || request.inputPaths?.[0] || '';
+      if (pathToCheck.includes("/1'/") || pathToCheck.includes("/1h/")) {
+        isTestnet = true;
+      }
+
+      // If no path in request, check bip32Derivation from first input
+      if (!pathToCheck && psbt.data.inputs[0]?.bip32Derivation?.[0]?.path) {
+        const derivPath = psbt.data.inputs[0].bip32Derivation[0].path;
+        // Check for testnet coin type (second hardened component = 1)
+        // e.g., m/48'/1'/0'/2' or 48h/1h/0h/2h
+        if (derivPath.includes("/1'/") || derivPath.includes("/1h/")) {
+          isTestnet = true;
+        }
+        log.info('Detected network from PSBT bip32Derivation', { derivPath, isTestnet });
+      }
+
       const coin = isTestnet ? 'Testnet' : 'Bitcoin';
+      log.info('Using coin type for signing', { coin, isTestnet, pathToCheck });
 
       // Multisig PSBTs contain bip32Derivation entries for ALL cosigners in each input/output.
       // Trezor requires we use the derivation path that belongs to THIS device (matched by
@@ -632,11 +653,26 @@ export class TrezorAdapter implements DeviceAdapter {
             scriptType === 'SPENDP2SHWITNESS' ? 'PAYTOP2SHWITNESS' as const :
             scriptType === 'SPENDTAPROOT' ? 'PAYTOTAPROOT' as const : 'PAYTOWITNESS' as const;
 
-          return {
+          const changeOutput: any = {
             address_n: pathToAddressN(matchingDerivation.path),
             amount: validateSatoshiAmount(output.value, `Output ${idx}`),
             script_type: outputScriptType,
           };
+
+          // Add multisig structure for multisig change outputs
+          if (psbtOutput.bip32Derivation && psbtOutput.bip32Derivation.length > 1 && psbtOutput.witnessScript) {
+            const multisig = buildTrezorMultisig(psbtOutput.witnessScript, psbtOutput.bip32Derivation, request.multisigXpubs);
+            if (multisig) {
+              changeOutput.multisig = multisig;
+              log.info('Built multisig structure for change output', {
+                outputIdx: idx,
+                m: multisig.m,
+                pubkeyCount: multisig.pubkeys.length,
+              });
+            }
+          }
+
+          return changeOutput;
         } else {
           const address = bitcoin.address.fromOutputScript(
             output.script,

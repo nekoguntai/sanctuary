@@ -561,9 +561,14 @@ export function useSendTransactionActions({
       let draftId: string;
 
       if (state.draftId) {
-        // Update existing draft - only update signed PSBT if it differs from original
+        // Update existing draft
+        // Note: For Trezor, the PSBT may not change (raw tx is returned instead),
+        // so we check signedDevices to detect if signing happened
+        const hasSignatures = signedDevices.size > 0 || unsignedPsbt !== currentTxData.psbtBase64;
         await draftsApi.updateDraft(walletId, state.draftId, {
-          signedPsbtBase64: unsignedPsbt !== currentTxData.psbtBase64 ? unsignedPsbt || undefined : undefined,
+          // Only include signature data if signing has occurred
+          signedPsbtBase64: hasSignatures && unsignedPsbt ? unsignedPsbt : undefined,
+          signedDeviceId: signedDevices.size > 0 ? Array.from(signedDevices)[0] : undefined,
         });
         draftId = state.draftId;
         showSuccess('Draft updated successfully', 'Draft Saved');
@@ -572,16 +577,18 @@ export function useSendTransactionActions({
         const result = await draftsApi.createDraft(walletId, draftRequest);
         draftId = result.id;
 
-        // If we have a signed PSBT (different from original), save it immediately
+        // If signing has occurred, save the signed state immediately
         // This handles the case where user signs first, then clicks "save draft"
-        if (unsignedPsbt && unsignedPsbt !== currentTxData.psbtBase64) {
+        // Note: For Trezor, PSBT may be unchanged but signedDevices will be populated
+        const hasSignatures = signedDevices.size > 0 || (unsignedPsbt && unsignedPsbt !== currentTxData.psbtBase64);
+        if (hasSignatures && unsignedPsbt) {
           log.info('Saving signed PSBT to newly created draft', {
             draftId,
             signedDevices: Array.from(signedDevices),
+            psbtChanged: unsignedPsbt !== currentTxData.psbtBase64,
           });
           await draftsApi.updateDraft(walletId, draftId, {
             signedPsbtBase64: unsignedPsbt,
-            // Use the first signed device if available
             signedDeviceId: signedDevices.size > 0 ? Array.from(signedDevices)[0] : undefined,
           });
         }

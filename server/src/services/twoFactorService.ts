@@ -44,13 +44,17 @@ export function generateBackupCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < BACKUP_CODE_COUNT; i++) {
     // Generate 8 character alphanumeric code
-    const code = crypto
-      .randomBytes(BACKUP_CODE_LENGTH)
-      .toString('base64')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .substring(0, BACKUP_CODE_LENGTH)
-      .toUpperCase();
-    codes.push(code);
+    // Use more bytes to ensure we have enough chars after filtering non-alphanumeric
+    let code = '';
+    while (code.length < BACKUP_CODE_LENGTH) {
+      const chunk = crypto
+        .randomBytes(BACKUP_CODE_LENGTH * 2) // Generate extra to account for filtering
+        .toString('base64')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase();
+      code += chunk;
+    }
+    codes.push(code.substring(0, BACKUP_CODE_LENGTH));
   }
   return codes;
 }

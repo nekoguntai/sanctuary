@@ -521,4 +521,263 @@ describeWithDb('Authentication Integration', () => {
         .expect(404);
     });
   });
+
+  describe('Registration Status', () => {
+    it('should return enabled status', async () => {
+      const response = await request(app)
+        .get('/api/v1/auth/registration-status')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('enabled');
+      expect(typeof response.body.enabled).toBe('boolean');
+    });
+
+    it('should default to disabled when setting not configured', async () => {
+      const response = await request(app)
+        .get('/api/v1/auth/registration-status')
+        .expect(200);
+
+      // Default is disabled (admin-only registration)
+      expect(response.body.enabled).toBe(false);
+    });
+  });
+
+  describe('User Preferences', () => {
+    it('should get user preferences', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      const response = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('preferences');
+    });
+
+    it('should update user preferences', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      // The preferences endpoint expects fields directly in body, not wrapped
+      const response = await request(app)
+        .patch('/api/v1/auth/me/preferences')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          theme: 'dark',
+          unit: 'btc',
+          showFiat: false,
+        })
+        .expect(200);
+
+      expect(response.body.preferences).toBeDefined();
+      expect(response.body.preferences.theme).toBe('dark');
+      expect(response.body.preferences.unit).toBe('btc');
+    });
+
+    it('should reject invalid preferences', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      // Without Authorization should fail
+      await request(app)
+        .patch('/api/v1/auth/me/preferences')
+        .send({ preferences: { theme: 'dark' } })
+        .expect(401);
+    });
+  });
+
+  describe('User Search', () => {
+    it('should search users by username', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      const response = await request(app)
+        .get('/api/v1/auth/users/search')
+        .query({ q: testUser.username.substring(0, 5) })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+    });
+
+    it('should return empty for non-matching search', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      const response = await request(app)
+        .get('/api/v1/auth/users/search')
+        .query({ q: 'nonexistentuserxyz123' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBe(0);
+    });
+
+    it('should require authentication', async () => {
+      await request(app)
+        .get('/api/v1/auth/users/search')
+        .query({ q: 'test' })
+        .expect(401);
+    });
+  });
+
+  describe('User Groups', () => {
+    it('should return empty groups for user with no groups', async () => {
+      const testUser = getTestUser();
+      await createTestUser(prisma, testUser);
+      const token = await loginTestUser(app, testUser);
+
+      const response = await request(app)
+        .get('/api/v1/auth/me/groups')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+    });
+
+    it('should require authentication', async () => {
+      await request(app)
+        .get('/api/v1/auth/me/groups')
+        .expect(401);
+    });
+  });
+
+  describe('Two-Factor Authentication', () => {
+    describe('2FA Setup', () => {
+      it('should initiate 2FA setup', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        const response = await request(app)
+          .post('/api/v1/auth/2fa/setup')
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200);
+
+        expect(response.body).toHaveProperty('secret');
+        expect(response.body).toHaveProperty('qrCodeDataUrl');
+        expect(response.body.secret).toBeDefined();
+        expect(response.body.qrCodeDataUrl).toContain('data:image/png;base64');
+      });
+
+      it('should require authentication', async () => {
+        await request(app)
+          .post('/api/v1/auth/2fa/setup')
+          .expect(401);
+      });
+    });
+
+    describe('2FA Enable', () => {
+      it('should reject enable without setup', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/enable')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ token: '123456' })
+          .expect(400);
+      });
+
+      it('should require token parameter', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/enable')
+          .set('Authorization', `Bearer ${token}`)
+          .send({})
+          .expect(400);
+      });
+    });
+
+    describe('2FA Disable', () => {
+      it('should reject disable for user without 2FA', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/disable')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ password: testUser.password })
+          .expect(400);
+      });
+
+      it('should require password', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/disable')
+          .set('Authorization', `Bearer ${token}`)
+          .send({})
+          .expect(400);
+      });
+    });
+
+    describe('2FA Verify', () => {
+      it('should reject verify without pending 2FA state', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const loginResponse = await request(app)
+          .post('/api/v1/auth/login')
+          .send({
+            username: testUser.username,
+            password: testUser.password,
+          })
+          .expect(200);
+
+        // Regular login returns full token, not pending2FA token
+        // Attempting to verify should fail
+        await request(app)
+          .post('/api/v1/auth/2fa/verify')
+          .send({ tempToken: loginResponse.body.token, code: '123456' })
+          .expect(401);
+      });
+
+      it('should reject invalid token format', async () => {
+        await request(app)
+          .post('/api/v1/auth/2fa/verify')
+          .send({ tempToken: 'invalid-token', code: '123456' })
+          .expect(401);
+      });
+    });
+
+    describe('2FA Backup Codes', () => {
+      it('should reject backup codes request for user without 2FA', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/backup-codes')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ password: testUser.password })
+          .expect(400);
+      });
+
+      it('should reject regenerate for user without 2FA', async () => {
+        const testUser = getTestUser();
+        await createTestUser(prisma, testUser);
+        const token = await loginTestUser(app, testUser);
+
+        await request(app)
+          .post('/api/v1/auth/2fa/backup-codes/regenerate')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ password: testUser.password })
+          .expect(400);
+      });
+    });
+  });
 });

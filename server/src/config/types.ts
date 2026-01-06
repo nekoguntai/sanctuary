@@ -39,8 +39,43 @@ export interface SecurityConfig {
 }
 
 export interface RateLimitConfig {
+  // Authentication policies
   loginAttempts: number;
+  loginWindowSeconds: number;
+  registerAttempts: number;
+  registerWindowSeconds: number;
+  twoFaAttempts: number;
+  twoFaWindowSeconds: number;
   passwordChangeAttempts: number;
+  passwordChangeWindowSeconds: number;
+
+  // API policies
+  apiDefaultLimit: number;
+  apiHeavyLimit: number;
+  apiPublicLimit: number;
+
+  // Sync policies
+  syncTriggerLimit: number;
+  syncBatchLimit: number;
+
+  // Transaction policies
+  txCreateLimit: number;
+  txBroadcastLimit: number;
+
+  // AI policies
+  aiAnalyzeLimit: number;
+  aiSummarizeLimit: number;
+  aiWindowSeconds: number;
+
+  // Admin policies
+  adminDefaultLimit: number;
+
+  // PayJoin policies
+  payjoinCreateLimit: number;
+
+  // WebSocket policies
+  wsConnectLimit: number;
+  wsMessageLimit: number;
 }
 
 export interface BitcoinRpcConfig {

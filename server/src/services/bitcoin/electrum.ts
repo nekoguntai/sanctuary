@@ -10,11 +10,93 @@ import tls from 'tls';
 import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { SocksClient, SocksClientOptions } from 'socks';
+import { z } from 'zod';
 import config, { getConfig } from '../../config';
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ELECTRUM');
+
+// ==============================================================================
+// ZOD SCHEMAS FOR ELECTRUM RESPONSE VALIDATION
+// ==============================================================================
+
+/**
+ * Electrum JSON-RPC response schema
+ */
+const ElectrumResponseSchema = z.object({
+  jsonrpc: z.string(),
+  result: z.unknown().optional(),
+  error: z.object({
+    code: z.number(),
+    message: z.string(),
+  }).optional(),
+  id: z.union([z.number(), z.null()]),
+  method: z.string().optional(),
+  params: z.array(z.unknown()).optional(),
+});
+
+/**
+ * Address balance response schema
+ */
+const AddressBalanceSchema = z.object({
+  confirmed: z.number(),
+  unconfirmed: z.number(),
+});
+
+/**
+ * Address history item schema
+ */
+const HistoryItemSchema = z.object({
+  tx_hash: z.string().length(64),
+  height: z.number(),
+});
+
+/**
+ * UTXO item schema
+ */
+const UtxoItemSchema = z.object({
+  tx_hash: z.string().length(64),
+  tx_pos: z.number().int().min(0),
+  height: z.number(),
+  value: z.number().int().min(0), // Satoshis
+});
+
+/**
+ * Server version response schema (array format)
+ */
+const ServerVersionSchema = z.tuple([z.string(), z.string()]);
+
+/**
+ * Block headers subscribe response schema
+ */
+const HeadersSubscribeSchema = z.object({
+  height: z.number().int().min(0),
+  hex: z.string(),
+});
+
+/**
+ * Safe validation helper that logs warnings for invalid data
+ */
+function validateResponse<T>(
+  schema: z.ZodType<T>,
+  data: unknown,
+  context: string
+): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    log.warn(`Electrum response validation failed: ${context}`, {
+      errors: result.error.issues.map(e => ({
+        path: e.path.join('.'),
+        message: e.message,
+      })),
+      dataPreview: JSON.stringify(data).substring(0, 200),
+    });
+    // Throw to let caller handle - invalid data shouldn't be silently used
+    throw new Error(`Invalid Electrum response for ${context}: ${result.error.issues[0]?.message}`);
+  }
+  return result.data;
+}
 
 // Get electrum client configuration from centralized config
 function getElectrumClientConfig() {
@@ -667,9 +749,10 @@ class ElectrumClient extends EventEmitter {
     }
 
     const result = await this.request('server.version', ['Sanctuary', '1.4']);
+    const validated = validateResponse(ServerVersionSchema, result, 'getServerVersion');
     this.serverVersion = {
-      server: result[0],
-      protocol: result[1],
+      server: validated[0],
+      protocol: validated[1],
     };
     return this.serverVersion;
   }
@@ -688,10 +771,7 @@ class ElectrumClient extends EventEmitter {
   async getAddressBalance(address: string): Promise<{ confirmed: number; unconfirmed: number }> {
     const scriptHash = this.addressToScriptHash(address);
     const result = await this.request('blockchain.scripthash.get_balance', [scriptHash]);
-    return {
-      confirmed: result.confirmed,
-      unconfirmed: result.unconfirmed,
-    };
+    return validateResponse(AddressBalanceSchema, result, `getAddressBalance(${address})`);
   }
 
   /**
@@ -699,7 +779,8 @@ class ElectrumClient extends EventEmitter {
    */
   async getAddressHistory(address: string): Promise<Array<{ tx_hash: string; height: number }>> {
     const scriptHash = this.addressToScriptHash(address);
-    return this.request('blockchain.scripthash.get_history', [scriptHash]);
+    const result = await this.request('blockchain.scripthash.get_history', [scriptHash]);
+    return validateResponse(z.array(HistoryItemSchema), result, `getAddressHistory(${address})`);
   }
 
   /**
@@ -712,7 +793,8 @@ class ElectrumClient extends EventEmitter {
     value: number;
   }>> {
     const scriptHash = this.addressToScriptHash(address);
-    return this.request('blockchain.scripthash.listunspent', [scriptHash]);
+    const result = await this.request('blockchain.scripthash.listunspent', [scriptHash]);
+    return validateResponse(z.array(UtxoItemSchema), result, `getAddressUTXOs(${address})`);
   }
 
   /**
@@ -856,7 +938,7 @@ class ElectrumClient extends EventEmitter {
   async subscribeHeaders(): Promise<{ height: number; hex: string }> {
     this.subscribedHeaders = true;
     const result = await this.request('blockchain.headers.subscribe');
-    return result;
+    return validateResponse(HeadersSubscribeSchema, result, 'subscribeHeaders');
   }
 
   /**

@@ -140,15 +140,8 @@ export const DEFAULT_AI_ENDPOINT = '';
  */
 export const DEFAULT_AI_MODEL = '';
 
-/**
- * AI API rate limiting window in milliseconds
- */
-export const AI_RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-
-/**
- * AI API maximum requests per window
- */
-export const AI_RATE_LIMIT_MAX_REQUESTS = 10;
+// AI rate limits are now configured in config/index.ts (rateLimit.aiAnalyzeLimit, etc.)
+// and can be overridden via RATE_LIMIT_AI_* environment variables
 
 // ============================================================================
 // WALLET LOG BUFFER CONSTANTS

@@ -15,7 +15,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { aiService } from '../services/aiService';
 import { createLogger } from '../utils/logger';
 import rateLimit from 'express-rate-limit';
-import { AI_RATE_LIMIT_WINDOW_MS, AI_RATE_LIMIT_MAX_REQUESTS } from '../constants';
+import { getConfig } from '../config';
 import * as os from 'os';
 import { execSync } from 'child_process';
 
@@ -23,9 +23,11 @@ const router = Router();
 const log = createLogger('AI-API');
 
 // Rate limiting: prevent abuse of AI endpoints
+// Uses config values which can be overridden via RATE_LIMIT_AI_* environment variables
+const config = getConfig();
 const aiRateLimiter = rateLimit({
-  windowMs: AI_RATE_LIMIT_WINDOW_MS,
-  max: AI_RATE_LIMIT_MAX_REQUESTS,
+  windowMs: config.rateLimit.aiWindowSeconds * 1000,
+  max: config.rateLimit.aiAnalyzeLimit, // Default 20 per minute
   message: 'Too many AI requests, please try again later',
   standardHeaders: true,
   legacyHeaders: false,

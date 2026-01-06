@@ -267,6 +267,74 @@ export function buildMultisigWitnessScript(
 }
 
 /**
+ * Check if a witnessScript is a multisig script (OP_CHECKMULTISIG or OP_CHECKMULTISIGVERIFY)
+ * Returns { isMultisig: boolean, m: number, n: number } if it is multisig
+ */
+function parseMultisigScript(witnessScript: Buffer): { isMultisig: boolean; m: number; n: number; pubkeys: Buffer[] } {
+  const OPS = bitcoin.script.OPS;
+  const decompiled = bitcoin.script.decompile(witnessScript);
+
+  if (!decompiled || decompiled.length < 4) {
+    return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+  }
+
+  // Last element should be OP_CHECKMULTISIG (174) or OP_CHECKMULTISIGVERIFY (175)
+  const lastOp = decompiled[decompiled.length - 1];
+  if (lastOp !== OPS.OP_CHECKMULTISIG && lastOp !== OPS.OP_CHECKMULTISIGVERIFY) {
+    return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+  }
+
+  // First element is M (required signatures) - can be OP_1-OP_16 (81-96) or small int
+  const mValue = decompiled[0];
+  let m: number;
+  if (typeof mValue === 'number') {
+    // OP_1 = 81, OP_16 = 96, so m = opcode - 80
+    if (mValue >= 81 && mValue <= 96) {
+      m = mValue - 80;
+    } else if (mValue >= 1 && mValue <= 16) {
+      // Could be a raw small integer
+      m = mValue;
+    } else {
+      return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+    }
+  } else {
+    return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+  }
+
+  // Second-to-last element is N (total pubkeys)
+  const nValue = decompiled[decompiled.length - 2];
+  let n: number;
+  if (typeof nValue === 'number') {
+    if (nValue >= 81 && nValue <= 96) {
+      n = nValue - 80;
+    } else if (nValue >= 1 && nValue <= 16) {
+      n = nValue;
+    } else {
+      return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+    }
+  } else {
+    return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+  }
+
+  // Extract pubkeys (between M and N)
+  const pubkeys: Buffer[] = [];
+  for (let i = 1; i < decompiled.length - 2; i++) {
+    const item = decompiled[i];
+    if (Buffer.isBuffer(item) && (item.length === 33 || item.length === 65)) {
+      pubkeys.push(item);
+    }
+  }
+
+  // Validate: number of pubkeys should match N
+  if (pubkeys.length !== n) {
+    log.warn('Multisig script pubkey count mismatch', { expected: n, actual: pubkeys.length });
+    return { isMultisig: false, m: 0, n: 0, pubkeys: [] };
+  }
+
+  return { isMultisig: true, m, n, pubkeys };
+}
+
+/**
  * Finalize a multisig P2WSH input.
  *
  * For multisig, we need to:
@@ -285,28 +353,19 @@ function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
     throw new Error(`Input #${inputIndex} has no partial signatures`);
   }
 
-  // Extract pubkeys from the witnessScript (multisig script)
-  // The witnessScript format is: OP_M <pubkey1> <pubkey2> ... <pubkeyN> OP_N OP_CHECKMULTISIG
   const witnessScript = input.witnessScript;
 
-  // Use bitcoin.script to decode the witnessScript
-  const decompiled = bitcoin.script.decompile(witnessScript);
-  if (!decompiled) {
-    throw new Error(`Input #${inputIndex} could not decompile witnessScript`);
-  }
+  // Parse and validate the multisig script
+  const { isMultisig, m, n, pubkeys: scriptPubkeys } = parseMultisigScript(witnessScript);
 
-  // Extract pubkeys from the decompiled script (skip M, skip N and OP_CHECKMULTISIG)
-  // Format: [M, pubkey1, pubkey2, ..., pubkeyN, N, OP_CHECKMULTISIG]
-  const scriptPubkeys: Buffer[] = [];
-  for (let i = 1; i < decompiled.length - 2; i++) {
-    const item = decompiled[i];
-    if (Buffer.isBuffer(item) && item.length === 33) {
-      scriptPubkeys.push(item);
-    }
+  if (!isMultisig) {
+    throw new Error(`Input #${inputIndex} witnessScript is not a valid multisig script`);
   }
 
   log.debug('Multisig finalization', {
     inputIndex,
+    m,
+    n,
     partialSigCount: input.partialSig.length,
     scriptPubkeyCount: scriptPubkeys.length,
   });
@@ -330,8 +389,14 @@ function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
     throw new Error(`Input #${inputIndex} no matching signatures found for witnessScript pubkeys`);
   }
 
+  // Validate we have exactly M signatures
+  if (orderedSigs.length !== m) {
+    throw new Error(`Input #${inputIndex} has ${orderedSigs.length} signatures but needs exactly ${m} for ${m}-of-${n} multisig`);
+  }
+
   log.debug('Multisig ordered signatures', {
     inputIndex,
+    requiredSigs: m,
     orderedSigCount: orderedSigs.length,
   });
 
@@ -343,14 +408,17 @@ function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
     witnessScript,
   ];
 
-  // Set the final witness
+  // Set the final witness and clear partial data
   psbt.updateInput(inputIndex, {
     finalScriptWitness: witnessStackToScriptWitness(witnessStack),
+    // Note: We don't clear partialSig/witnessScript here because updateInput
+    // with finalScriptWitness should be sufficient for extractTransaction
   });
 
   log.info('Multisig input finalized', {
     inputIndex,
     signatureCount: orderedSigs.length,
+    multisigType: `${m}-of-${n}`,
   });
 }
 
@@ -1377,10 +1445,17 @@ export async function broadcastAndSave(
           continue;
         }
 
-        // Check if this is a multisig input (has witnessScript with partialSig)
+        // Check if this is a multisig input
         if (input.witnessScript && input.partialSig && input.partialSig.length > 0) {
-          // Custom multisig finalization
-          finalizeMultisigInput(psbt, i);
+          // Parse script to check if it's actually multisig
+          const { isMultisig } = parseMultisigScript(input.witnessScript);
+          if (isMultisig) {
+            // Custom multisig finalization
+            finalizeMultisigInput(psbt, i);
+          } else {
+            // P2WSH but not multisig - try standard finalization
+            psbt.finalizeInput(i);
+          }
         } else {
           // Standard single-sig finalization
           psbt.finalizeInput(i);

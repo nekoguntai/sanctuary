@@ -105,8 +105,43 @@ function loadConfig(): CombinedConfig {
     },
 
     rateLimit: {
-      loginAttempts: parseInt(process.env.LOGIN_RATE_LIMIT || '5', 10),
-      passwordChangeAttempts: parseInt(process.env.PASSWORD_CHANGE_RATE_LIMIT || '5', 10),
+      // Authentication policies
+      loginAttempts: parseInt(process.env.RATE_LIMIT_LOGIN || '5', 10),
+      loginWindowSeconds: parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW || '900', 10), // 15 minutes
+      registerAttempts: parseInt(process.env.RATE_LIMIT_REGISTER || '10', 10),
+      registerWindowSeconds: parseInt(process.env.RATE_LIMIT_REGISTER_WINDOW || '3600', 10), // 1 hour
+      twoFaAttempts: parseInt(process.env.RATE_LIMIT_2FA || '10', 10),
+      twoFaWindowSeconds: parseInt(process.env.RATE_LIMIT_2FA_WINDOW || '900', 10), // 15 minutes
+      passwordChangeAttempts: parseInt(process.env.RATE_LIMIT_PASSWORD_CHANGE || '5', 10),
+      passwordChangeWindowSeconds: parseInt(process.env.RATE_LIMIT_PASSWORD_CHANGE_WINDOW || '900', 10), // 15 minutes
+
+      // API policies (per minute unless specified)
+      apiDefaultLimit: parseInt(process.env.RATE_LIMIT_API_DEFAULT || '1000', 10),
+      apiHeavyLimit: parseInt(process.env.RATE_LIMIT_API_HEAVY || '100', 10),
+      apiPublicLimit: parseInt(process.env.RATE_LIMIT_API_PUBLIC || '60', 10),
+
+      // Sync policies (per minute)
+      syncTriggerLimit: parseInt(process.env.RATE_LIMIT_SYNC_TRIGGER || '10', 10),
+      syncBatchLimit: parseInt(process.env.RATE_LIMIT_SYNC_BATCH || '5', 10),
+
+      // Transaction policies (per minute)
+      txCreateLimit: parseInt(process.env.RATE_LIMIT_TX_CREATE || '30', 10),
+      txBroadcastLimit: parseInt(process.env.RATE_LIMIT_TX_BROADCAST || '20', 10),
+
+      // AI policies (per minute)
+      aiAnalyzeLimit: parseInt(process.env.RATE_LIMIT_AI_ANALYZE || '20', 10),
+      aiSummarizeLimit: parseInt(process.env.RATE_LIMIT_AI_SUMMARIZE || '10', 10),
+      aiWindowSeconds: parseInt(process.env.RATE_LIMIT_AI_WINDOW || '60', 10),
+
+      // Admin policies (per minute)
+      adminDefaultLimit: parseInt(process.env.RATE_LIMIT_ADMIN_DEFAULT || '500', 10),
+
+      // PayJoin policies (per minute)
+      payjoinCreateLimit: parseInt(process.env.RATE_LIMIT_PAYJOIN_CREATE || '10', 10),
+
+      // WebSocket policies (per minute)
+      wsConnectLimit: parseInt(process.env.RATE_LIMIT_WS_CONNECT || '10', 10),
+      wsMessageLimit: parseInt(process.env.RATE_LIMIT_WS_MESSAGE || '100', 10),
     },
 
     bitcoin,

@@ -571,6 +571,21 @@ export function useSendTransactionActions({
         // Create new draft
         const result = await draftsApi.createDraft(walletId, draftRequest);
         draftId = result.id;
+
+        // If we have a signed PSBT (different from original), save it immediately
+        // This handles the case where user signs first, then clicks "save draft"
+        if (unsignedPsbt && unsignedPsbt !== currentTxData.psbtBase64) {
+          log.info('Saving signed PSBT to newly created draft', {
+            draftId,
+            signedDevices: Array.from(signedDevices),
+          });
+          await draftsApi.updateDraft(walletId, draftId, {
+            signedPsbtBase64: unsignedPsbt,
+            // Use the first signed device if available
+            signedDeviceId: signedDevices.size > 0 ? Array.from(signedDevices)[0] : undefined,
+          });
+        }
+
         showSuccess('Transaction saved as draft', 'Draft Saved');
       }
 
@@ -587,7 +602,7 @@ export function useSendTransactionActions({
     } finally {
       setIsSavingDraft(false);
     }
-  }, [walletId, txData, unsignedPsbt, state, createTransaction, showSuccess, navigate]);
+  }, [walletId, txData, unsignedPsbt, signedDevices, state, createTransaction, showSuccess, navigate]);
 
   // Download PSBT file (binary format - required by most hardware wallets)
   const downloadPsbt = useCallback(() => {

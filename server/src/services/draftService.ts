@@ -6,6 +6,7 @@
  */
 
 import type { DraftTransaction, Prisma } from '@prisma/client';
+import * as bitcoin from 'bitcoinjs-lib';
 import prisma from '../models/prisma';
 import { draftRepository, DraftStatus } from '../repositories';
 import { requireWalletAccess, checkWalletAccess } from './accessControl';
@@ -248,7 +249,39 @@ export async function updateDraft(
   } = {};
 
   if (data.signedPsbtBase64 !== undefined) {
-    updateData.signedPsbtBase64 = data.signedPsbtBase64;
+    // For multisig: combine new signatures with existing ones
+    // This is critical for m-of-n multisig where multiple signers need to add signatures
+    const existingPsbt = existingDraft.signedPsbtBase64 || existingDraft.psbtBase64;
+
+    try {
+      const existingPsbtObj = bitcoin.Psbt.fromBase64(existingPsbt);
+      const newPsbtObj = bitcoin.Psbt.fromBase64(data.signedPsbtBase64);
+
+      // Combine PSBTs - this merges partial signatures from both
+      existingPsbtObj.combine(newPsbtObj);
+
+      // Count total signatures after combining
+      let totalSigs = 0;
+      for (const input of existingPsbtObj.data.inputs) {
+        if (input.partialSig) {
+          totalSigs += input.partialSig.length;
+        }
+      }
+
+      log.info('Combined PSBTs for multisig', {
+        draftId,
+        totalSignatures: totalSigs,
+      });
+
+      updateData.signedPsbtBase64 = existingPsbtObj.toBase64();
+    } catch (combineError) {
+      // If combining fails (e.g., incompatible PSBTs), log and use the new one
+      log.warn('Failed to combine PSBTs, using new PSBT directly', {
+        draftId,
+        error: combineError instanceof Error ? combineError.message : String(combineError),
+      });
+      updateData.signedPsbtBase64 = data.signedPsbtBase64;
+    }
   }
 
   if (data.signedDeviceId) {

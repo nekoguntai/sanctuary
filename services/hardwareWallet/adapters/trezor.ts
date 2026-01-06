@@ -377,10 +377,19 @@ export class TrezorAdapter implements DeviceAdapter {
           showOnTrezor: false,
         });
         if (fpResult.success) {
-          fingerprint = fpResult.payload.fingerprint?.toString(16).padStart(8, '0');
+          const rawFp = fpResult.payload.fingerprint;
+          // Handle unsigned 32-bit conversion (fingerprint can be > 2^31)
+          const unsignedFp = rawFp !== undefined ? (rawFp >>> 0) : undefined;
+          fingerprint = unsignedFp?.toString(16).padStart(8, '0');
+          log.info('Trezor fingerprint obtained', {
+            rawFingerprint: rawFp,
+            unsignedFingerprint: unsignedFp,
+            hexFingerprint: fingerprint,
+            xpubPrefix: fpResult.payload.xpub?.substring(0, 20),
+          });
         }
-      } catch {
-        log.warn('Could not get fingerprint from Trezor');
+      } catch (fpError) {
+        log.warn('Could not get fingerprint from Trezor', { error: fpError });
       }
 
       // Determine model name
@@ -476,18 +485,24 @@ export class TrezorAdapter implements DeviceAdapter {
         throw new Error(errorMsg);
       }
 
-      const { xpub, fingerprint } = result.payload;
-      const fpHex = fingerprint?.toString(16).padStart(8, '0') || this.connection.fingerprint || '';
+      const { xpub, fingerprint: parentFingerprint } = result.payload;
+
+      // IMPORTANT: Trezor's getPublicKey returns the PARENT fingerprint of the requested path,
+      // not the master fingerprint. For BIP-174 PSBTs and wallet descriptors, we need the
+      // MASTER fingerprint. Use the connection fingerprint (obtained from m/0' during connect).
+      const masterFp = this.connection.fingerprint;
+      const parentFpHex = parentFingerprint?.toString(16).padStart(8, '0');
 
       log.info('Got Trezor xpub', {
         path,
         xpubPrefix: xpub.substring(0, 15),
-        fingerprint: fpHex,
+        masterFingerprint: masterFp,
+        parentFingerprint: parentFpHex,
       });
 
       return {
         xpub,
-        fingerprint: fpHex,
+        fingerprint: masterFp || parentFpHex || '', // Prefer master fingerprint
         path,
       };
     } catch (error) {

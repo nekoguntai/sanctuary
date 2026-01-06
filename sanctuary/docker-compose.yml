@@ -9,7 +9,7 @@ services:
       PROXY_AUTH_ADD: "false"
 
   web:
-    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.7.17@sha256:2c203117c1f1a6fa94fe68e11f9ed49e6deabcf2612caed25711f89beb504931
+    image: ghcr.io/n-narusegawa/sanctuary-frontend:v0.7.18@sha256:e0544687c2562ab9cde7a215fe06e8c4923794a6c7a1c64ba90ec5cd84e51d4e
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -23,7 +23,7 @@ services:
         ipv4_address: $APP_SANCTUARY_WEB_IP
 
   server:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.17@sha256:3c66c36dd36e433399e576a36cb1ac5269d7206998a906af32ac252765ccdc52
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.18@sha256:ff7cce81eaa48d3f152980d7523cdb34de214f3476ee2e8d3294182efa98587a
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
@@ -73,7 +73,7 @@ services:
         ipv4_address: $APP_SANCTUARY_DB_IP
 
   migrate:
-    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.17@sha256:3c66c36dd36e433399e576a36cb1ac5269d7206998a906af32ac252765ccdc52
+    image: ghcr.io/n-narusegawa/sanctuary-backend:v0.7.18@sha256:ff7cce81eaa48d3f152980d7523cdb34de214f3476ee2e8d3294182efa98587a
     restart: "no"
     depends_on:
       db:

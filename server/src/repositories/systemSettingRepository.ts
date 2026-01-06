@@ -6,6 +6,7 @@
 
 import prisma from '../models/prisma';
 import type { SystemSetting } from '@prisma/client';
+import { safeJsonParseUntyped } from '../utils/safeJson';
 
 /**
  * Well-known system setting keys
@@ -100,11 +101,7 @@ export async function getJson<T>(
 ): Promise<T | undefined> {
   const value = await getValue(key);
   if (value === null) return defaultValue;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return defaultValue;
-  }
+  return safeJsonParseUntyped<T | undefined>(value, defaultValue, `systemSetting:${key}`);
 }
 
 /**

@@ -23,6 +23,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
 
   const currentPasswordRef = useRef<HTMLInputElement>(null);
 
+  // Password requirement checks
+  const passwordChecks = {
+    minLength: newPassword.length >= 8,
+    hasUppercase: /[A-Z]/.test(newPassword),
+    hasLowercase: /[a-z]/.test(newPassword),
+    hasNumber: /[0-9]/.test(newPassword),
+  };
+  const allRequirementsMet = Object.values(passwordChecks).every(Boolean);
+
   // Auto-focus the current password field when the modal opens
   useEffect(() => {
     if (currentPasswordRef.current) {
@@ -40,8 +49,8 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!allRequirementsMet) {
+      setError('Password does not meet all requirements');
       return;
     }
 
@@ -143,7 +152,6 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
                 className="w-full px-4 py-3 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 placeholder="Enter new password"
                 required
-                minLength={8}
               />
               <button
                 type="button"
@@ -153,9 +161,28 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
                 {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-xs text-sanctuary-500 mt-1">
-              Minimum 8 characters. Use a mix of letters, numbers, and symbols for better security.
-            </p>
+            {/* Password Requirements Checklist */}
+            <div className="mt-3 p-3 bg-sanctuary-50 dark:bg-sanctuary-800/50 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
+              <p className="text-xs font-medium text-sanctuary-600 dark:text-sanctuary-400 mb-2">Password Requirements:</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className={`flex items-center text-xs ${passwordChecks.minLength ? 'text-green-600 dark:text-green-400' : 'text-sanctuary-400 dark:text-sanctuary-500'}`}>
+                  {passwordChecks.minLength ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <X className="w-3.5 h-3.5 mr-1.5" />}
+                  <span>8+ characters</span>
+                </div>
+                <div className={`flex items-center text-xs ${passwordChecks.hasUppercase ? 'text-green-600 dark:text-green-400' : 'text-sanctuary-400 dark:text-sanctuary-500'}`}>
+                  {passwordChecks.hasUppercase ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <X className="w-3.5 h-3.5 mr-1.5" />}
+                  <span>Uppercase letter</span>
+                </div>
+                <div className={`flex items-center text-xs ${passwordChecks.hasLowercase ? 'text-green-600 dark:text-green-400' : 'text-sanctuary-400 dark:text-sanctuary-500'}`}>
+                  {passwordChecks.hasLowercase ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <X className="w-3.5 h-3.5 mr-1.5" />}
+                  <span>Lowercase letter</span>
+                </div>
+                <div className={`flex items-center text-xs ${passwordChecks.hasNumber ? 'text-green-600 dark:text-green-400' : 'text-sanctuary-400 dark:text-sanctuary-500'}`}>
+                  {passwordChecks.hasNumber ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <X className="w-3.5 h-3.5 mr-1.5" />}
+                  <span>Number</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -170,7 +197,6 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
                 className="w-full px-4 py-3 pr-12 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-sanctuary-900 dark:text-sanctuary-100"
                 placeholder="Confirm new password"
                 required
-                minLength={8}
               />
               <button
                 type="button"
@@ -207,7 +233,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
               type="submit"
               className="w-full justify-center"
               isLoading={isChangingPassword}
-              disabled={!currentPassword || !newPassword || !confirmPassword || newPassword.length < 8}
+              disabled={!currentPassword || !newPassword || !confirmPassword || !allRequirementsMet}
             >
               {isChangingPassword ? 'Changing Password...' : 'Change Password'}
             </Button>

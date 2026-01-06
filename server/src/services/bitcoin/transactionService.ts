@@ -267,6 +267,139 @@ export function buildMultisigWitnessScript(
 }
 
 /**
+ * Finalize a multisig P2WSH input.
+ *
+ * For multisig, we need to:
+ * 1. Get all partial signatures from the PSBT input
+ * 2. Sort them according to the pubkey order in the witnessScript
+ * 3. Build the witness: [OP_0] [sig1] [sig2] ... [witnessScript]
+ */
+function finalizeMultisigInput(psbt: bitcoin.Psbt, inputIndex: number): void {
+  const input = psbt.data.inputs[inputIndex];
+
+  if (!input.witnessScript) {
+    throw new Error(`Input #${inputIndex} missing witnessScript for multisig finalization`);
+  }
+
+  if (!input.partialSig || input.partialSig.length === 0) {
+    throw new Error(`Input #${inputIndex} has no partial signatures`);
+  }
+
+  // Extract pubkeys from the witnessScript (multisig script)
+  // The witnessScript format is: OP_M <pubkey1> <pubkey2> ... <pubkeyN> OP_N OP_CHECKMULTISIG
+  const witnessScript = input.witnessScript;
+
+  // Use bitcoin.script to decode the witnessScript
+  const decompiled = bitcoin.script.decompile(witnessScript);
+  if (!decompiled) {
+    throw new Error(`Input #${inputIndex} could not decompile witnessScript`);
+  }
+
+  // Extract pubkeys from the decompiled script (skip M, skip N and OP_CHECKMULTISIG)
+  // Format: [M, pubkey1, pubkey2, ..., pubkeyN, N, OP_CHECKMULTISIG]
+  const scriptPubkeys: Buffer[] = [];
+  for (let i = 1; i < decompiled.length - 2; i++) {
+    const item = decompiled[i];
+    if (Buffer.isBuffer(item) && item.length === 33) {
+      scriptPubkeys.push(item);
+    }
+  }
+
+  log.debug('Multisig finalization', {
+    inputIndex,
+    partialSigCount: input.partialSig.length,
+    scriptPubkeyCount: scriptPubkeys.length,
+  });
+
+  // Create a map of pubkey hex to signature
+  const sigMap = new Map<string, Buffer>();
+  for (const ps of input.partialSig) {
+    sigMap.set(ps.pubkey.toString('hex'), ps.signature);
+  }
+
+  // Sort signatures according to pubkey order in the witnessScript
+  const orderedSigs: Buffer[] = [];
+  for (const pubkey of scriptPubkeys) {
+    const sig = sigMap.get(pubkey.toString('hex'));
+    if (sig) {
+      orderedSigs.push(sig);
+    }
+  }
+
+  if (orderedSigs.length === 0) {
+    throw new Error(`Input #${inputIndex} no matching signatures found for witnessScript pubkeys`);
+  }
+
+  log.debug('Multisig ordered signatures', {
+    inputIndex,
+    orderedSigCount: orderedSigs.length,
+  });
+
+  // Build the witness stack: [OP_0 (empty buffer)] [sig1] [sig2] ... [witnessScript]
+  // The empty buffer at the start is for the CHECKMULTISIG bug
+  const witnessStack = [
+    Buffer.alloc(0), // OP_0 (dummy element for CHECKMULTISIG bug)
+    ...orderedSigs,
+    witnessScript,
+  ];
+
+  // Set the final witness
+  psbt.updateInput(inputIndex, {
+    finalScriptWitness: witnessStackToScriptWitness(witnessStack),
+  });
+
+  log.info('Multisig input finalized', {
+    inputIndex,
+    signatureCount: orderedSigs.length,
+  });
+}
+
+/**
+ * Convert a witness stack to the serialized format needed for finalScriptWitness.
+ * This is the standard BIP-141 witness serialization.
+ */
+function witnessStackToScriptWitness(witness: Buffer[]): Buffer {
+  let buffer = Buffer.allocUnsafe(0);
+
+  function writeSlice(slice: Buffer) {
+    buffer = Buffer.concat([buffer, slice]);
+  }
+
+  function writeVarInt(i: number) {
+    if (i < 0xfd) {
+      writeSlice(Buffer.from([i]));
+    } else if (i <= 0xffff) {
+      writeSlice(Buffer.from([0xfd]));
+      const buf = Buffer.allocUnsafe(2);
+      buf.writeUInt16LE(i, 0);
+      writeSlice(buf);
+    } else if (i <= 0xffffffff) {
+      writeSlice(Buffer.from([0xfe]));
+      const buf = Buffer.allocUnsafe(4);
+      buf.writeUInt32LE(i, 0);
+      writeSlice(buf);
+    } else {
+      writeSlice(Buffer.from([0xff]));
+      const buf = Buffer.allocUnsafe(8);
+      buf.writeBigUInt64LE(BigInt(i), 0);
+      writeSlice(buf);
+    }
+  }
+
+  function writeVarSlice(slice: Buffer) {
+    writeVarInt(slice.length);
+    writeSlice(slice);
+  }
+
+  writeVarInt(witness.length);
+  for (const w of witness) {
+    writeVarSlice(w);
+  }
+
+  return buffer;
+}
+
+/**
  * Generate realistic-looking decoy amounts from a total change amount
  * Amounts avoid round numbers and vary in magnitude to look like real payments
  * Exported for testing
@@ -1235,7 +1368,24 @@ export async function broadcastAndSave(
 
     // Only finalize if not already finalized
     if (!allFinalized) {
-      psbt.finalizeAllInputs();
+      // Use custom finalizer for multisig inputs
+      for (let i = 0; i < psbt.data.inputs.length; i++) {
+        const input = psbt.data.inputs[i];
+
+        // Skip already finalized inputs
+        if (input.finalScriptSig || input.finalScriptWitness) {
+          continue;
+        }
+
+        // Check if this is a multisig input (has witnessScript with partialSig)
+        if (input.witnessScript && input.partialSig && input.partialSig.length > 0) {
+          // Custom multisig finalization
+          finalizeMultisigInput(psbt, i);
+        } else {
+          // Standard single-sig finalization
+          psbt.finalizeInput(i);
+        }
+      }
     }
     const tx = psbt.extractTransaction();
     rawTx = tx.toHex();

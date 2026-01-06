@@ -64,6 +64,53 @@ interface ElectrumConfig {
   batchRequestTimeoutMs?: number; // Optional: batch request timeout (default: 60000ms, higher for Tor)
 }
 
+/**
+ * Transaction input from decoded raw transaction
+ */
+export interface TransactionInput {
+  txid: string;
+  vout: number;
+  sequence: number;
+}
+
+/**
+ * Script public key info in transaction output
+ */
+export interface ScriptPubKey {
+  hex: string;
+  address?: string;
+  addresses: string[];
+}
+
+/**
+ * Transaction output from decoded raw transaction
+ */
+export interface TransactionOutput {
+  value: number; // In BTC
+  n: number;
+  scriptPubKey: ScriptPubKey;
+}
+
+/**
+ * Decoded transaction details
+ */
+export interface TransactionDetails {
+  txid: string;
+  hash: string;
+  version: number;
+  size: number;
+  vsize?: number;
+  weight?: number;
+  locktime: number;
+  vin: TransactionInput[];
+  vout: TransactionOutput[];
+  hex: string;
+  blockhash?: string;
+  confirmations?: number;
+  time?: number;
+  blocktime?: number;
+}
+
 // Timeout defaults are loaded from config but cached for performance
 // These are fallbacks if config isn't available during initial module load
 function getDefaultTimeouts() {
@@ -673,7 +720,7 @@ class ElectrumClient extends EventEmitter {
    * Note: verbose=true is not supported by all servers (e.g., Blockstream's electrs)
    * We now default to non-verbose mode and decode locally to avoid error/retry overhead
    */
-  async getTransaction(txid: string, verbose: boolean = false): Promise<any> {
+  async getTransaction(txid: string, verbose: boolean = false): Promise<TransactionDetails> {
     // Always use non-verbose mode since most electrs servers don't support verbose
     // This avoids the error/retry overhead and extra round trips
     const rawTx = await this.request('blockchain.transaction.get', [txid, false]);
@@ -683,7 +730,7 @@ class ElectrumClient extends EventEmitter {
   /**
    * Decode raw transaction hex to structured format
    */
-  private decodeRawTransaction(rawTx: string): any {
+  private decodeRawTransaction(rawTx: string): TransactionDetails {
     const bitcoin = require('bitcoinjs-lib');
 
     try {

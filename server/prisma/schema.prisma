@@ -531,7 +531,7 @@ model NodeConfig {
   // ========================================
   // MAINNET SETTINGS (always enabled)
   // ========================================
-  mainnetMode              String  @default("pool") // "singleton" | "pool"
+  mainnetMode              String  @default("singleton") // "singleton" | "pool"
   mainnetSingletonHost     String? // Used when mainnetMode = "singleton"
   mainnetSingletonPort     Int?
   mainnetSingletonSsl      Boolean @default(true)

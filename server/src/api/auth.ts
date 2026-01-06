@@ -24,6 +24,7 @@ import { revokeToken, revokeAllUserTokens } from '../services/tokenRevocation';
 import * as refreshTokenService from '../services/refreshTokenService';
 import { hashToken } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 
 const log = createLogger('AUTH');
 
@@ -112,14 +113,9 @@ router.get('/registration-status', async (req: Request, res: Response) => {
     });
 
     // Default to disabled if setting doesn't exist (admin-only)
-    let enabled = false;
-    if (setting) {
-      try {
-        enabled = JSON.parse(setting.value);
-      } catch {
-        enabled = false;
-      }
-    }
+    const enabled = setting
+      ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
+      : false;
 
     res.json({ enabled });
   } catch (error) {
@@ -140,14 +136,9 @@ router.post('/register', registerLimiter, async (req: Request, res: Response) =>
       where: { key: 'registrationEnabled' },
     });
 
-    let registrationEnabled = false;
-    if (setting) {
-      try {
-        registrationEnabled = JSON.parse(setting.value);
-      } catch {
-        registrationEnabled = false;
-      }
-    }
+    const registrationEnabled = setting
+      ? safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'registrationEnabled')
+      : false;
 
     if (!registrationEnabled) {
       return res.status(403).json({

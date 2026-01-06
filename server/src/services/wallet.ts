@@ -13,6 +13,7 @@ import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
 import { INITIAL_ADDRESS_COUNT } from '../constants';
 import { hookRegistry, Operations } from './hooks';
+import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
 
 const log = createLogger('WALLET');
 
@@ -161,10 +162,10 @@ export async function createWallet(
   // Validate multi-sig parameters
   if (input.type === 'multi_sig') {
     if (!input.quorum || !input.totalSigners) {
-      throw new Error('Quorum and totalSigners required for multi-sig wallets');
+      throw new ValidationError('Quorum and totalSigners required for multi-sig wallets');
     }
     if (input.quorum > input.totalSigners) {
-      throw new Error('Quorum cannot exceed total signers');
+      throw new ValidationError('Quorum cannot exceed total signers');
     }
   }
 
@@ -185,15 +186,15 @@ export async function createWallet(
     });
 
     if (devices.length !== input.deviceIds.length) {
-      throw new Error('One or more devices not found or not owned by user');
+      throw new NotFoundError('One or more devices not found or not owned by user');
     }
 
     // Validate device count for wallet type
     if (input.type === 'single_sig' && devices.length !== 1) {
-      throw new Error('Single-sig wallet requires exactly 1 device');
+      throw new ValidationError('Single-sig wallet requires exactly 1 device');
     }
     if (input.type === 'multi_sig' && devices.length < 2) {
-      throw new Error('Multi-sig wallet requires at least 2 devices');
+      throw new ValidationError('Multi-sig wallet requires at least 2 devices');
     }
 
     // Determine purpose based on wallet type
@@ -609,7 +610,7 @@ export async function updateWallet(
   });
 
   if (!walletUser) {
-    throw new Error('Only wallet owners can update wallet');
+    throw new ForbiddenError('Only wallet owners can update wallet');
   }
 
   const wallet = await prisma.wallet.update({
@@ -670,7 +671,7 @@ export async function deleteWallet(walletId: string, userId: string): Promise<vo
   });
 
   if (!walletUser) {
-    throw new Error('Only wallet owners can delete wallet');
+    throw new ForbiddenError('Only wallet owners can delete wallet');
   }
 
   // Unsubscribe from address notifications to prevent memory leak
@@ -718,7 +719,7 @@ export async function addDeviceToWallet(
   });
 
   if (!wallet) {
-    throw new Error('Wallet not found or access denied');
+    throw new NotFoundError('Wallet not found or access denied');
   }
 
   // Check device belongs to user
@@ -730,13 +731,13 @@ export async function addDeviceToWallet(
   });
 
   if (!device) {
-    throw new Error('Device not found');
+    throw new NotFoundError('Device');
   }
 
   // Check if device is already attached to this wallet
   const existingLink = wallet.devices.find(wd => wd.deviceId === deviceId);
   if (existingLink) {
-    throw new Error('Device is already linked to this wallet');
+    throw new ConflictError('Device is already linked to this wallet');
   }
 
   // Add device to wallet
@@ -817,7 +818,7 @@ export async function generateAddress(
   });
 
   if (!wallet) {
-    throw new Error('Wallet not found');
+    throw new NotFoundError('Wallet');
   }
 
   // Get next index
@@ -825,7 +826,7 @@ export async function generateAddress(
 
   // Check if wallet has descriptor or xpub
   if (!wallet.descriptor) {
-    throw new Error(
+    throw new ValidationError(
       'Wallet does not have a descriptor. Cannot derive addresses. ' +
       'Please import wallet with xpub or descriptor.'
     );
@@ -900,7 +901,7 @@ export async function repairWalletDescriptor(
   });
 
   if (!wallet) {
-    throw new Error('Wallet not found or access denied');
+    throw new NotFoundError('Wallet not found or access denied');
   }
 
   if (wallet.descriptor) {
@@ -1035,7 +1036,7 @@ export async function getWalletStats(walletId: string, userId: string) {
   });
 
   if (!wallet) {
-    throw new Error('Wallet not found');
+    throw new NotFoundError('Wallet');
   }
 
   // Use aggregate queries for all statistics (efficient for wallets with many records)

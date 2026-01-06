@@ -10,9 +10,19 @@
  */
 
 import prisma from '../models/prisma';
+import type { Prisma, OwnershipTransfer } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 import { checkWalletOwnerAccess } from './wallet';
 import { checkDeviceOwnerAccess } from './deviceAccess';
+
+/** Prisma transaction client type */
+type PrismaTx = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+
+/** OwnershipTransfer with user relations */
+type TransferWithUsers = OwnershipTransfer & {
+  fromUser?: { id: string; username: string } | null;
+  toUser?: { id: string; username: string } | null;
+};
 
 const log = createLogger('TRANSFER');
 
@@ -119,10 +129,13 @@ async function checkResourceOwnership(
 /**
  * Format transfer for response (include user info and resource name)
  */
-async function formatTransfer(transfer: any): Promise<Transfer> {
-  const resourceName = await getResourceName(transfer.resourceType, transfer.resourceId);
+async function formatTransfer(transfer: TransferWithUsers): Promise<Transfer> {
+  const resourceType = transfer.resourceType as ResourceType;
+  const resourceName = await getResourceName(resourceType, transfer.resourceId);
   return {
     ...transfer,
+    resourceType,
+    status: transfer.status as TransferStatus,
     resourceName,
     fromUser: transfer.fromUser ? {
       id: transfer.fromUser.id,
@@ -291,6 +304,10 @@ export async function acceptTransfer(
     },
   });
 
+  if (!updated) {
+    throw new Error('Transfer not found after update');
+  }
+
   log.info('Transfer accepted', {
     transferId,
     by: recipientId,
@@ -350,6 +367,10 @@ export async function declineTransfer(
     },
   });
 
+  if (!updated) {
+    throw new Error('Transfer not found after update');
+  }
+
   log.info('Transfer declined', {
     transferId,
     by: recipientId,
@@ -408,6 +429,10 @@ export async function cancelTransfer(
       toUser: { select: { id: true, username: true } },
     },
   });
+
+  if (!updated) {
+    throw new Error('Transfer not found after update');
+  }
 
   log.info('Transfer cancelled', {
     transferId,
@@ -482,6 +507,10 @@ export async function confirmTransfer(
     },
   });
 
+  if (!updated) {
+    throw new Error('Transfer not found after update');
+  }
+
   log.info('Transfer confirmed and executed', {
     transferId,
     resourceType: transfer.resourceType,
@@ -496,7 +525,7 @@ export async function confirmTransfer(
 /**
  * Execute wallet ownership transfer (uses existing transaction)
  */
-async function executeWalletTransferTx(tx: any, transfer: any): Promise<void> {
+async function executeWalletTransferTx(tx: PrismaTx, transfer: OwnershipTransfer): Promise<void> {
   const walletId = transfer.resourceId;
 
   // 1. Find current owner's WalletUser record
@@ -555,19 +584,9 @@ async function executeWalletTransferTx(tx: any, transfer: any): Promise<void> {
 }
 
 /**
- * Execute wallet ownership transfer (standalone with own transaction)
- * @deprecated Use executeWalletTransferTx with an existing transaction
- */
-async function executeWalletTransfer(transfer: any): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await executeWalletTransferTx(tx, transfer);
-  });
-}
-
-/**
  * Execute device ownership transfer (uses existing transaction)
  */
-async function executeDeviceTransferTx(tx: any, transfer: any): Promise<void> {
+async function executeDeviceTransferTx(tx: PrismaTx, transfer: OwnershipTransfer): Promise<void> {
   const deviceId = transfer.resourceId;
 
   // 1. Find current owner's DeviceUser record
@@ -627,16 +646,6 @@ async function executeDeviceTransferTx(tx: any, transfer: any): Promise<void> {
   });
 }
 
-/**
- * Execute device ownership transfer (standalone with own transaction)
- * @deprecated Use executeDeviceTransferTx with an existing transaction
- */
-async function executeDeviceTransfer(transfer: any): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await executeDeviceTransferTx(tx, transfer);
-  });
-}
-
 // ========================================
 // QUERY FUNCTIONS
 // ========================================
@@ -651,7 +660,7 @@ export async function getUserTransfers(
   const { role = 'all', status = 'all', resourceType } = filters;
 
   // Build where clause
-  const where: any = {};
+  const where: Prisma.OwnershipTransferWhereInput = {};
 
   // Role filter
   if (role === 'initiator') {

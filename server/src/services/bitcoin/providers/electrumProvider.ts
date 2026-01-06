@@ -14,7 +14,7 @@
  * ```
  */
 
-import ElectrumClient from '../electrum';
+import ElectrumClient, { type TransactionInput, type TransactionOutput } from '../electrum';
 import { createLogger } from '../../../utils/logger';
 import { traceExternalCall } from '../../../utils/tracing';
 import type {
@@ -212,29 +212,32 @@ export class ElectrumProvider implements INetworkProvider {
 
   async getTransaction(txid: string, verbose: boolean = true): Promise<RawTransaction | string> {
     return traceExternalCall('electrum', 'getTransaction', async () => {
+      // Note: ElectrumClient.getTransaction always returns decoded TransactionDetails
+      // regardless of the verbose flag (it decodes locally to avoid server compatibility issues)
       const tx = await this.client.getTransaction(txid, verbose);
 
       if (!verbose) {
-        return tx; // Returns hex string
+        // When caller wants hex, return the raw hex from the decoded transaction
+        return tx.hex;
       }
 
-      // Map to our interface
+      // Map to our RawTransaction interface
       return {
         txid: tx.txid,
         hash: tx.hash || tx.txid,
         version: tx.version,
         size: tx.size,
-        vsize: tx.vsize,
-        weight: tx.weight,
+        vsize: tx.vsize ?? tx.size,
+        weight: tx.weight ?? tx.size * 4,
         locktime: tx.locktime,
-        vin: tx.vin.map((input: any) => ({
+        vin: tx.vin.map((input) => ({
           txid: input.txid,
           vout: input.vout,
-          scriptSig: input.scriptSig?.hex,
+          scriptSig: undefined,
           sequence: input.sequence,
-          witness: input.txinwitness,
+          witness: undefined,
         })),
-        vout: tx.vout.map((output: any) => ({
+        vout: tx.vout.map((output) => ({
           value: BigInt(Math.round(output.value * 100000000)),
           scriptPubKey: output.scriptPubKey.hex,
           address: output.scriptPubKey.address,
@@ -249,29 +252,31 @@ export class ElectrumProvider implements INetworkProvider {
   }
 
   async getTransactions(txids: string[], verbose: boolean = true): Promise<Map<string, RawTransaction | string>> {
+    // Note: ElectrumClient.getTransactionsBatch always returns decoded TransactionDetails
     const results = await this.client.getTransactionsBatch(txids, verbose);
     const mapped = new Map<string, RawTransaction | string>();
 
     for (const [txid, tx] of results) {
       if (!verbose) {
-        mapped.set(txid, tx);
+        // When caller wants hex, return the raw hex from the decoded transaction
+        mapped.set(txid, tx.hex);
       } else {
         mapped.set(txid, {
           txid: tx.txid,
           hash: tx.hash || tx.txid,
           version: tx.version,
           size: tx.size,
-          vsize: tx.vsize,
-          weight: tx.weight,
+          vsize: tx.vsize ?? tx.size,
+          weight: tx.weight ?? tx.size * 4,
           locktime: tx.locktime,
-          vin: tx.vin.map((input: any) => ({
+          vin: tx.vin.map((input: TransactionInput) => ({
             txid: input.txid,
             vout: input.vout,
-            scriptSig: input.scriptSig?.hex,
+            scriptSig: undefined,
             sequence: input.sequence,
-            witness: input.txinwitness,
+            witness: undefined,
           })),
-          vout: tx.vout.map((output: any) => ({
+          vout: tx.vout.map((output: TransactionOutput) => ({
             value: BigInt(Math.round(output.value * 100000000)),
             scriptPubKey: output.scriptPubKey.hex,
             address: output.scriptPubKey.address,

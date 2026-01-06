@@ -7,6 +7,7 @@
 
 import { getNodeClient } from './nodeClient';
 import { getElectrumPool } from './electrumPool';
+import type { TransactionDetails } from './electrum';
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
@@ -678,7 +679,7 @@ export async function getFeeEstimates(): Promise<{
 /**
  * Get transaction details from blockchain
  */
-export async function getTransactionDetails(txid: string): Promise<any> {
+export async function getTransactionDetails(txid: string): Promise<TransactionDetails> {
   const client = await getNodeClient();
 
 

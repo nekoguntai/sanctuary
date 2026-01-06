@@ -18,6 +18,7 @@ import {
   OutputsStep,
   ReviewStep,
 } from './steps';
+import { isMultisigType } from '../../types';
 import type { Wallet, UTXO, Device, FeeEstimate } from '../../types';
 import type { BlockData, QueuedBlocksSummary } from '../../src/api/bitcoin';
 import type { SerializableTransactionState, WalletAddress } from '../../contexts/send/types';
@@ -186,7 +187,7 @@ function WizardContent({
   }, [actions]);
 
   // Check if multi-sig
-  const isMultiSig = wallet.type === 'Multi Sig' || wallet.type === 'multi_sig';
+  const isMultiSig = isMultisigType(wallet.type);
 
   // Render current step
   const renderStep = () => {

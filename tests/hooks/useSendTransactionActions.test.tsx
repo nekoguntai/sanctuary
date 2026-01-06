@@ -10,7 +10,8 @@ import { useSendTransactionActions } from '../../hooks/useSendTransactionActions
 import * as transactionsApi from '../../src/api/transactions';
 import * as draftsApi from '../../src/api/drafts';
 import * as payjoinApi from '../../src/api/payjoin';
-import type { Wallet, WalletType } from '../../types';
+import { WalletType } from '../../types';
+import type { Wallet } from '../../types';
 import type { TransactionState } from '../../contexts/send/types';
 
 // Mock the APIs
@@ -79,7 +80,7 @@ vi.mock('../../contexts/CurrencyContext', () => ({
 const mockWallet: Wallet = {
   id: 'test-wallet',
   name: 'Test Wallet',
-  type: 'Single Sig' as WalletType,
+  type: WalletType.SINGLE_SIG,
   balance: 100000,
   scriptType: 'native_segwit',
   derivationPath: "m/84'/0'/0'",

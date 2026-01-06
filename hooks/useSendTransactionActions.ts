@@ -17,6 +17,7 @@ import { useHardwareWallet } from './useHardwareWallet';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { queryClient } from '../providers/QueryProvider';
 import { createLogger } from '../utils/logger';
+import { isMultisigType } from '../types';
 import type { Wallet, UTXO, Device } from '../types';
 import type { TransactionState } from '../contexts/send/types';
 import type { CreateDraftRequest } from '../src/api/drafts';
@@ -44,21 +45,45 @@ function getHardwareWalletType(deviceType: string): DeviceType | null {
  * Returns a map of fingerprint (lowercase) -> xpub for Trezor multisig signing
  */
 function extractXpubsFromDescriptor(descriptor: string | undefined): Record<string, string> | undefined {
-  if (!descriptor) return undefined;
+  if (!descriptor) {
+    log.warn('extractXpubsFromDescriptor: No descriptor provided');
+    return undefined;
+  }
+
+  log.info('extractXpubsFromDescriptor: Parsing descriptor', {
+    descriptorLength: descriptor.length,
+    descriptorPreview: descriptor.substring(0, 100) + '...',
+  });
 
   // Match patterns like [fingerprint/path]xpub...
   // Handles sortedmulti, wsh, sh-wsh descriptors
-  const keyRegex = /\[([a-fA-F0-9]{8})\/[^\]]+\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)/g;
+  // The xpub can contain any base58 character (alphanumeric except 0, O, I, l)
+  const keyRegex = /\[([a-fA-F0-9]{8})\/[^\]]+\]([xyztuvYZTUV]pub[1-9A-HJ-NP-Za-km-z]+)/g;
   const xpubMap: Record<string, string> = {};
 
   let match;
   while ((match = keyRegex.exec(descriptor)) !== null) {
     const fingerprint = match[1].toLowerCase();
     const xpub = match[2];
+    log.info('extractXpubsFromDescriptor: Found xpub', {
+      fingerprint,
+      xpubPrefix: xpub.substring(0, 20),
+      xpubLength: xpub.length,
+    });
     xpubMap[fingerprint] = xpub;
   }
 
-  return Object.keys(xpubMap).length > 0 ? xpubMap : undefined;
+  if (Object.keys(xpubMap).length === 0) {
+    log.warn('extractXpubsFromDescriptor: No xpubs found in descriptor');
+    return undefined;
+  }
+
+  log.info('extractXpubsFromDescriptor: Extracted xpubs', {
+    fingerprints: Object.keys(xpubMap),
+    count: Object.keys(xpubMap).length,
+  });
+
+  return xpubMap;
 }
 
 export interface TransactionData {
@@ -257,9 +282,17 @@ export function useSendTransactionActions({
 
     try {
       // For multisig wallets, extract xpubs from descriptor for Trezor signing
-      const multisigXpubs = wallet.type === 'multi_sig'
+      const multisigXpubs = isMultisigType(wallet.type)
         ? extractXpubsFromDescriptor(wallet.descriptor)
         : undefined;
+
+      log.info('signWithHardwareWallet: Prepared for signing', {
+        walletType: wallet.type,
+        isMultisig: isMultisigType(wallet.type),
+        hasDescriptor: !!wallet.descriptor,
+        hasXpubs: !!multisigXpubs,
+        xpubFingerprints: multisigXpubs ? Object.keys(multisigXpubs) : [],
+      });
 
       const signResult = await hardwareWallet.signPSBT(
         txData.psbtBase64,
@@ -309,15 +342,18 @@ export function useSendTransactionActions({
       // Sign the PSBT
       const inputPaths = txData?.inputPaths || [];
       // For multisig wallets, extract xpubs from descriptor for Trezor signing
-      const multisigXpubs = wallet.type === 'multi_sig'
+      const multisigXpubs = isMultisigType(wallet.type)
         ? extractXpubsFromDescriptor(wallet.descriptor)
         : undefined;
 
-      if (multisigXpubs) {
-        log.info('Extracted xpubs from descriptor for multisig signing', {
-          fingerprints: Object.keys(multisigXpubs),
-        });
-      }
+      log.info('signWithDevice: Prepared for signing', {
+        deviceId: device.id,
+        walletType: wallet.type,
+        isMultisig: isMultisigType(wallet.type),
+        hasDescriptor: !!wallet.descriptor,
+        hasXpubs: !!multisigXpubs,
+        xpubFingerprints: multisigXpubs ? Object.keys(multisigXpubs) : [],
+      });
 
       const signResult = await hardwareWallet.signPSBT(psbtToSign, inputPaths, multisigXpubs);
 

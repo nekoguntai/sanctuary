@@ -32,6 +32,7 @@ import { STEP_LABELS } from '../../../contexts/send/types';
 import { lookupAddresses, type AddressLookupResult } from '../../../src/api/bitcoin';
 import type { WizardStep } from '../../../contexts/send/types';
 import type { TransactionData } from '../../../hooks/useSendTransactionActions';
+import { isMultisigType } from '../../../types';
 import type { Device } from '../../../types';
 
 const log = createLogger('ReviewStep');
@@ -280,7 +281,7 @@ export function ReviewStep({
   };
 
   // Check if multi-sig
-  const isMultiSig = wallet.type === 'Multi Sig' || wallet.type === 'multi_sig';
+  const isMultiSig = isMultisigType(wallet.type);
 
   // Debug logging
   log.debug('Review step state', {

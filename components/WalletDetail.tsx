@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN } from '../types';
+import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN, isMultisigType, getWalletTypeLabel } from '../types';
 import { satsToBTC, btcToSats, formatBTC } from '@shared/utils/bitcoin';
 import * as walletsApi from '../src/api/wallets';
 import * as transactionsApi from '../src/api/transactions';
@@ -1565,8 +1565,8 @@ export const WalletDetail: React.FC = () => {
           {/* Row 1: Badges */}
           <div className="flex flex-wrap gap-1.5 mb-2">
              {/* Wallet Type Badge */}
-             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${wallet.type === 'Multi Sig' ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
-               {wallet.type === 'Multi Sig' ? `${getQuorumM(wallet.quorum)}/${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Sig'}
+             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${isMultisigType(wallet.type) ? 'bg-warning-100 text-warning-800 border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20' : 'bg-success-100 text-success-800 border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20'}`}>
+               {isMultisigType(wallet.type) ? `${getQuorumM(wallet.quorum)}/${getQuorumN(wallet.quorum, wallet.totalSigners)} Multisig` : 'Single Sig'}
              </span>
              {/* Network Badge - only show if not mainnet */}
              {wallet.network && wallet.network !== 'mainnet' && (
@@ -2806,7 +2806,7 @@ export const WalletDetail: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">Export Options</p>
-                        <p className="text-xs text-sanctuary-500">QR code, JSON backup, descriptor, labels{wallet.type === 'Multi Sig' ? ', device setup' : ''}</p>
+                        <p className="text-xs text-sanctuary-500">QR code, JSON backup, descriptor, labels{isMultisigType(wallet.type) ? ', device setup' : ''}</p>
                       </div>
                       <Button
                         variant="secondary"
@@ -2879,7 +2879,7 @@ export const WalletDetail: React.FC = () => {
                    <Tag className="w-4 h-4 mx-auto mb-1" />
                    Labels
                  </button>
-                 {wallet.type === 'Multi Sig' && (
+                 {isMultisigType(wallet.type) && (
                    <button onClick={() => setExportTab('device')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'device' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
                      <HardDrive className="w-4 h-4 mx-auto mb-1" />
                      Device
@@ -2891,7 +2891,7 @@ export const WalletDetail: React.FC = () => {
                {exportTab === 'qr' && (
                   <div className="w-full">
                     {/* QR Format Selector - only show for multisig */}
-                    {wallet.type === 'Multi Sig' && devices.length > 0 && (
+                    {isMultisigType(wallet.type) && devices.length > 0 && (
                       <div className="flex gap-2 mb-4 justify-center">
                         <button
                           onClick={() => setQrFormat('passport')}
@@ -2935,7 +2935,7 @@ export const WalletDetail: React.FC = () => {
                     <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center overflow-auto max-h-[500px]">
                       <QRCodeSVG
                         value={
-                          wallet.type === 'Multi Sig' && qrFormat === 'passport' && devices.length > 0
+                          isMultisigType(wallet.type) && qrFormat === 'passport' && devices.length > 0
                             ? generateMultisigConfigText(
                                 wallet.name,
                                 getQuorumM(wallet.quorum),
@@ -2953,12 +2953,12 @@ export const WalletDetail: React.FC = () => {
                         level="M"
                       />
                       <p className="text-center text-xs text-sanctuary-400 mt-2">
-                        {wallet.type === 'Multi Sig' && qrFormat === 'passport'
+                        {isMultisigType(wallet.type) && qrFormat === 'passport'
                           ? 'Coldcard/Passport compatible format'
                           : 'Scan to import into another device'}
                       </p>
                     </div>
-                    {wallet.type === 'Multi Sig' && qrFormat === 'passport' && devices.length === 0 && (
+                    {isMultisigType(wallet.type) && qrFormat === 'passport' && devices.length === 0 && (
                       <p className="text-center text-xs text-amber-500 mt-2">
                         Note: No devices found. Using raw descriptor format instead.
                       </p>

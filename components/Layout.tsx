@@ -24,7 +24,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
-import { WalletType, HardwareDevice } from '../types';
+import { WalletType, HardwareDevice, isMultisigType } from '../types';
 import { useUser } from '../contexts/UserContext';
 import { Wallet as ApiWallet } from '../src/api/wallets';
 import { Device as ApiDevice } from '../src/api/devices';
@@ -322,7 +322,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                  <div className="pl-11 py-2 text-xs text-sanctuary-400 italic">No wallets created</div>
               )}
               {[...wallets].sort((a, b) => a.name.localeCompare(b.name)).map(w => {
-                const isMultisig = w.type === 'multi_sig' || w.type === WalletType.MULTI_SIG;
+                const isMultisig = isMultisigType(w.type);
                 const walletType = isMultisig ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
                 // Use semantic colors (success/warning) to respect theme settings
                 const activeColor = isMultisig ? 'text-warning-700 dark:text-warning-400' : 'text-success-700 dark:text-success-400';

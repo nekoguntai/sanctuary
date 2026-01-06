@@ -10,16 +10,40 @@
 // ============================================================================
 
 /**
- * WalletType enum for UI display purposes (icons, labels)
- * Values are human-readable display strings
+ * WalletType enum - values match API/database format
  */
 export enum WalletType {
-  SINGLE_SIG = 'Single Sig',
-  MULTI_SIG = 'Multi Sig',
+  SINGLE_SIG = 'single_sig',
+  MULTI_SIG = 'multi_sig',
 }
 
 /**
- * API wallet type - what the backend returns
+ * Display labels for wallet types (for UI rendering)
+ */
+export const WALLET_TYPE_LABELS: Record<WalletType, string> = {
+  [WalletType.SINGLE_SIG]: 'Single Sig',
+  [WalletType.MULTI_SIG]: 'Multisig',
+};
+
+/**
+ * Helper to get display label for a wallet type
+ */
+export function getWalletTypeLabel(type: WalletType | string | undefined): string {
+  if (!type) return 'Unknown';
+  if (type === WalletType.MULTI_SIG || type === 'multi_sig') return WALLET_TYPE_LABELS[WalletType.MULTI_SIG];
+  if (type === WalletType.SINGLE_SIG || type === 'single_sig') return WALLET_TYPE_LABELS[WalletType.SINGLE_SIG];
+  return type as string;
+}
+
+/**
+ * Helper to check if wallet type is multisig
+ */
+export function isMultisigType(type: WalletType | string | undefined): boolean {
+  return type === WalletType.MULTI_SIG || type === 'multi_sig';
+}
+
+/**
+ * @deprecated Use WalletType directly - values now match API format
  */
 export type ApiWalletType = 'single_sig' | 'multi_sig';
 

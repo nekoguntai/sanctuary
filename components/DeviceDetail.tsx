@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount } from '@keystonehq/bc-ur-registry';
 import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount } from '../types';
+import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount, isMultisigType } from '../types';
 import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup, addDeviceAccount, DeviceAccountInput } from '../src/api/devices';
 import { parseDeviceJson, DeviceAccount as ParsedDeviceAccount } from '../services/deviceParsers';
 import { hardwareWalletService, isSecureContext, DeviceType } from '../services/hardwareWallet';
@@ -1617,7 +1617,7 @@ export const DeviceDetail: React.FC = () => {
                ) : (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                        {wallets.map(w => {
-                           const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
+                           const isMultisig = isMultisigType(w.type);
                            const badgeClass = isMultisig
                               ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'
                               : 'bg-success-100 text-success-800 border border-success-200 dark:bg-success-500/10 dark:text-success-300 dark:border-success-500/20';

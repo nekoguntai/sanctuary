@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Wallet, Transaction, WalletType, WalletNetwork } from '../types';
+import { Wallet, Transaction, WalletType, WalletNetwork, isMultisigType } from '../types';
 import { NetworkTabs, TabNetwork } from './NetworkTabs';
 import { satsToBTC, formatBTC } from '@shared/utils/bitcoin';
 
@@ -965,7 +965,7 @@ export const Dashboard: React.FC = () => {
                      </tr>
                   )}
                   {filteredWallets.map((w, idx) => {
-                     const isMultisig = w.type === WalletType.MULTI_SIG || w.type === 'multi_sig';
+                     const isMultisig = isMultisigType(w.type);
                      const dotColorClass = distributionColors[idx % distributionColors.length];
 
                      const badgeClass = isMultisig

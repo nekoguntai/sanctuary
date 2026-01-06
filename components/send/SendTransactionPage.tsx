@@ -10,7 +10,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { SendTransactionWizard } from './SendTransactionWizard';
-import { Wallet, UTXO, FeeEstimate, WalletType, Device } from '../../types';
+import { Wallet, UTXO, FeeEstimate, WalletType, Device, isMultisigType } from '../../types';
 import { getQuorumM, getQuorumN } from '../../types';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
@@ -85,8 +85,8 @@ export const SendTransactionPage: React.FC = () => {
           return;
         }
 
-        // Convert API wallet to Wallet type
-        const walletType = apiWallet.type === 'multi_sig' ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
+        // Convert API wallet to Wallet type (enum values now match API values)
+        const walletType = isMultisigType(apiWallet.type) ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
         const formattedWallet: Wallet = {
           id: apiWallet.id,
           name: apiWallet.name,
@@ -189,7 +189,7 @@ export const SendTransactionPage: React.FC = () => {
         );
 
         // If no matches and this is a multisig, try to match by fingerprint from descriptor
-        if (walletDeviceList.length === 0 && apiWallet.type === 'multi_sig' && apiWallet.descriptor) {
+        if (walletDeviceList.length === 0 && isMultisigType(apiWallet.type) && apiWallet.descriptor) {
           // Extract fingerprints from descriptor (format: [fingerprint/path])
           const fingerprintMatches = apiWallet.descriptor.match(/\[([a-f0-9]{8})\//gi);
           if (fingerprintMatches) {

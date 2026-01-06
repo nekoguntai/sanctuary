@@ -347,9 +347,13 @@ export async function warmCaches(config: CacheWarmConfig = {}): Promise<{
     warmingTasks.push(
       (async () => {
         try {
-          // Feature flags are cached by featureFlagService.getAll() during initialization
-          // Just log that we're relying on that
-          warmed.push('featureFlags');
+          const { getFeatureFlagService } = await import('../featureFlags');
+          const flags = await getFeatureFlagService().getAllStatus();
+          if (flags.length > 0) {
+            warmed.push('featureFlags');
+          } else {
+            failed.push('featureFlags');
+          }
         } catch (error) {
           log.warn('Failed to warm feature flags cache', { error });
           failed.push('featureFlags');

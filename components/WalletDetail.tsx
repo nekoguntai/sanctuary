@@ -95,7 +95,7 @@ const WalletTelegramSettings: React.FC<{ walletId: string }> = ({ walletId }) =>
     enabled: false,
     notifyReceived: true,
     notifySent: true,
-    notifyConsolidation: false,
+    notifyConsolidation: true,
     notifyDraft: true,
   });
   const [loading, setLoading] = useState(true);

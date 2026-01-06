@@ -19,8 +19,8 @@ import type { SyncContext, TransactionCreateData, TxInputCreateData, TxOutputCre
 
 const log = createLogger('SYNC-TX');
 
-/** Number of transactions to process per batch */
-const TX_BATCH_SIZE = 10;
+/** Number of transactions to process per batch (optimized for Electrum server limits) */
+const TX_BATCH_SIZE = 25;
 
 /**
  * Helper to check if output matches an address
@@ -93,6 +93,34 @@ export async function processTransactionsPhase(ctx: SyncContext): Promise<SyncCo
 
     const batchTxidSet = new Set(batchTxids.filter(txid => txDetailsCache.has(txid)));
 
+    // Step 1b: Batch prefetch previous transactions for inputs (avoids N+1 queries)
+    const prevTxidsNeeded = new Set<string>();
+    for (const txid of batchTxidSet) {
+      const txDetails = txDetailsCache.get(txid);
+      if (!txDetails?.vin) continue;
+      for (const input of txDetails.vin) {
+        if (input.coinbase) continue;
+        // Only need to fetch if no inline prevout and not already cached
+        if (!input.prevout?.scriptPubKey && input.txid && !txDetailsCache.has(input.txid)) {
+          prevTxidsNeeded.add(input.txid);
+        }
+      }
+    }
+
+    if (prevTxidsNeeded.size > 0) {
+      const prevTxidsArray = Array.from(prevTxidsNeeded);
+      walletLog(walletId, 'debug', 'SYNC', `Prefetching ${prevTxidsArray.length} previous transactions for input resolution...`);
+      try {
+        const prevBatchResults = await client.getTransactionsBatch(prevTxidsArray, true);
+        for (const [txid, details] of prevBatchResults) {
+          txDetailsCache.set(txid, details);
+        }
+      } catch (error) {
+        log.warn(`[SYNC] Batch prev tx fetch failed, will fall back to individual requests`, { error: String(error) });
+        // Individual fallback happens in the processing loop below if cache miss
+      }
+    }
+
     // Step 2: Process transactions in this batch
     const transactionsToCreate: TransactionCreateData[] = [];
 
@@ -133,12 +161,15 @@ export async function processTransactionsPhase(ctx: SyncContext): Promise<SyncCo
             inputAddr = input.prevout.scriptPubKey.address ||
               (input.prevout.scriptPubKey.addresses && input.prevout.scriptPubKey.addresses[0]);
           } else if (input.txid && input.vout !== undefined) {
+            // Use prefetched prev tx from cache (Step 1b)
             const prevTx = txDetailsCache.get(input.txid);
             if (prevTx && prevTx.vout && prevTx.vout[input.vout]) {
               const prevOutput = prevTx.vout[input.vout];
               inputAddr = prevOutput.scriptPubKey?.address ||
                 (prevOutput.scriptPubKey?.addresses && prevOutput.scriptPubKey.addresses[0]);
-            } else {
+            } else if (!prevTx) {
+              // Cache miss - fallback to individual fetch (should be rare after batch prefetch)
+              log.debug(`[SYNC] Cache miss for prev tx ${input.txid.slice(0, 8)}..., fetching individually`);
               try {
                 const fetchedPrevTx = await client.getTransaction(input.txid);
                 if (fetchedPrevTx && fetchedPrevTx.vout && fetchedPrevTx.vout[input.vout]) {

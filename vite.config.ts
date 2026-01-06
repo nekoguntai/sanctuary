@@ -40,6 +40,22 @@ export default defineConfig(() => {
           output: {
             // Preserve module execution order
             preserveModules: false,
+            // Conservative manual chunk splitting - only proven-safe libraries
+            // Previous attempt (commit 0ff0bc0) failed because:
+            // - lucide-react: barrel exports don't initialize properly when split
+            // - recharts: complex internal redux/d3 state
+            // - @ngraveio/bc-ur + @keystonehq: circular dependencies
+            manualChunks: {
+              // React core - designed for code splitting, very safe
+              'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+              // Data fetching - standalone, no complex init
+              'vendor-query': ['@tanstack/react-query'],
+            },
+            // DO NOT add to chunks (known problematic):
+            // - lucide-react (barrel export pattern breaks)
+            // - recharts (internal redux/d3 state)
+            // - @ngraveio/bc-ur, @keystonehq/* (circular deps)
+            // - Hardware wallet SDKs (WASM/complex init)
           },
         },
         // Don't tree-shake regenerator-runtime side effects

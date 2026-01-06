@@ -16,6 +16,7 @@ const otelPromise = initializeOpenTelemetry();
 import express, { Express, Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import compression from 'compression';
 import { createServer } from 'http';
 import config from './config';
 import authRoutes from './api/auth';
@@ -59,7 +60,7 @@ import { i18nService } from './i18n/i18nService';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
 import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock } from './infrastructure';
 import { shutdownElectrumPool } from './services/bitcoin/electrumPool';
-import { cache } from './services/cache/cacheService';
+import { cache, warmCaches } from './services/cache/cacheService';
 import { walletLogBuffer } from './services/walletLogBuffer';
 import { deadLetterQueue } from './services/deadLetterQueue';
 import { initializeCacheInvalidation, shutdownCacheInvalidation } from './services/cacheInvalidation';
@@ -131,6 +132,19 @@ app.use(helmet({
 app.use(cors({
   origin: config.nodeEnv === 'development' ? true : config.clientUrl,
   credentials: true,
+}));
+
+// Response compression (gzip/deflate) - reduces API response sizes by 60-80%
+app.use(compression({
+  // Only compress responses > 1KB
+  threshold: 1024,
+  // Skip compression if client doesn't support it
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  },
 }));
 
 // Body parsing (200MB limit for backup/restore operations with large wallets)
@@ -270,73 +284,76 @@ const backgroundServices: ServiceDefinition[] = [
 // Run database connection and migrations before starting server
 (async () => {
   try {
+    const startupTimer = Date.now();
+
     // Wait for OpenTelemetry initialization (if enabled)
     await otelPromise;
 
-    // Connect to database with retry logic
+    // Connect to database with retry logic (required first)
     await connectWithRetry();
 
-    // Start database health check and auto-reconnection
-    startDatabaseHealthCheck();
+    // Phase 1: Initialize services that only need database (parallel)
+    log.info('Initializing core services...');
+    await Promise.all([
+      // These run in parallel - no interdependencies
+      (async () => { startDatabaseHealthCheck(); })(),
+      (async () => { initializeRevocationService(); })(),
+      (async () => { metricsService.initialize(); })(),
+      initializeRedis(), // Redis init
+    ]);
 
-    // Initialize token revocation service
-    initializeRevocationService();
-
-    // Initialize Redis infrastructure (cache, event bus)
-    await initializeRedis();
-
-    // Initialize Redis WebSocket bridge for cross-instance broadcasting
-    await initializeRedisBridge();
-
-    // Initialize cache invalidation (subscribes to event bus)
-    initializeCacheInvalidation();
-
-    // Initialize rate limit service (uses Redis if available)
-    rateLimitService.initialize();
-
-    // Start dead letter queue for tracking persistent failures
-    deadLetterQueue.start();
-
-    // Initialize job queue (uses Redis for persistent job storage)
-    await jobQueue.initialize();
+    // Phase 2: Initialize services that need Redis (parallel)
+    log.info('Initializing Redis-dependent services...');
+    await Promise.all([
+      initializeRedisBridge(),
+      (async () => { initializeCacheInvalidation(); })(),
+      (async () => { rateLimitService.initialize(); })(),
+      (async () => { deadLetterQueue.start(); })(),
+      jobQueue.initialize(),
+    ]);
 
     // Register maintenance jobs
     for (const job of maintenanceJobs) {
       jobQueue.register(job);
     }
 
-    // Schedule recurring maintenance jobs if queue is available
-    if (jobQueue.isAvailable()) {
-      // Hourly cleanups
-      await jobQueue.schedule('cleanup:expired-drafts', {}, { cron: '0 * * * *' });
-      await jobQueue.schedule('cleanup:expired-transfers', {}, { cron: '30 * * * *' });
+    // Phase 3: Schedule jobs + initialize remaining services (parallel)
+    log.info('Scheduling jobs and finalizing services...');
+    await Promise.all([
+      // Job scheduling (only if queue available)
+      (async () => {
+        if (jobQueue.isAvailable()) {
+          // Hourly cleanups
+          await jobQueue.schedule('cleanup:expired-drafts', {}, { cron: '0 * * * *' });
+          await jobQueue.schedule('cleanup:expired-transfers', {}, { cron: '30 * * * *' });
 
-      // Daily cleanups
-      await jobQueue.schedule('cleanup:audit-logs', { retentionDays: 90 }, { cron: '0 2 * * *' });
-      await jobQueue.schedule('cleanup:price-data', { retentionDays: 30 }, { cron: '0 3 * * *' });
-      await jobQueue.schedule('cleanup:fee-estimates', { retentionDays: 7 }, { cron: '0 4 * * *' });
-      await jobQueue.schedule('cleanup:expired-tokens', {}, { cron: '0 5 * * *' });
+          // Daily cleanups
+          await jobQueue.schedule('cleanup:audit-logs', { retentionDays: 90 }, { cron: '0 2 * * *' });
+          await jobQueue.schedule('cleanup:price-data', { retentionDays: 30 }, { cron: '0 3 * * *' });
+          await jobQueue.schedule('cleanup:fee-estimates', { retentionDays: 7 }, { cron: '0 4 * * *' });
+          await jobQueue.schedule('cleanup:expired-tokens', {}, { cron: '0 5 * * *' });
 
-      // Weekly maintenance (Sunday at 3 AM)
-      await jobQueue.schedule('maintenance:weekly-vacuum', {}, { cron: '0 3 * * 0' });
+          // Weekly maintenance (Sunday at 3 AM)
+          await jobQueue.schedule('maintenance:weekly-vacuum', {}, { cron: '0 3 * * 0' });
 
-      // Monthly cleanup (1st of month at 4 AM)
-      await jobQueue.schedule('maintenance:monthly-cleanup', {}, { cron: '0 4 1 * *' });
+          // Monthly cleanup (1st of month at 4 AM)
+          await jobQueue.schedule('maintenance:monthly-cleanup', {}, { cron: '0 4 1 * *' });
 
-      log.info('Scheduled recurring maintenance jobs');
-    }
+          log.info('Scheduled recurring maintenance jobs');
+        }
+      })(),
+      i18nService.initialize(),
+      featureFlagService.initialize(),
+    ]);
 
-    // Initialize metrics service
-    metricsService.initialize();
-
-    // Initialize i18n service (English, Japanese, Spanish)
-    await i18nService.initialize();
-
-    // Initialize feature flag service (sync env defaults to database)
-    await featureFlagService.initialize();
+    log.info(`Service initialization completed in ${Date.now() - startupTimer}ms`);
 
     log.info('Checking database migrations...');
     const migrationResult = await migrationService.runMigrations();
+
+    // Warm caches after all services are initialized (reduces cold-start latency)
+    // This runs before server starts accepting requests
+    await warmCaches();
 
     if (!migrationResult.success) {
       log.error('Database migration failed - server may not function correctly', {

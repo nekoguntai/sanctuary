@@ -89,8 +89,25 @@ export function createMockTransaction(options: {
     value: number;
     address: string;
   }>;
+  /** Set to true to create a coinbase transaction (mining reward) */
+  coinbase?: boolean;
 }): MockElectrumTransaction {
   const txid = options.txid || 'a'.repeat(64);
+
+  // Coinbase transactions have a special input structure
+  const vin = options.coinbase
+    ? [{ coinbase: true }] // Coinbase input has no txid/vout
+    : (options.inputs || []).map((input) => ({
+        txid: input.txid,
+        vout: input.vout,
+        prevout: {
+          value: input.value,
+          scriptPubKey: {
+            hex: '0014' + 'a'.repeat(40),
+            address: input.address,
+          },
+        },
+      }));
 
   return {
     txid,
@@ -98,17 +115,7 @@ export function createMockTransaction(options: {
     blockheight: options.blockheight,
     confirmations: options.confirmations || 0,
     time: options.blockheight ? Date.now() / 1000 - (800000 - options.blockheight) * 600 : undefined,
-    vin: (options.inputs || []).map((input) => ({
-      txid: input.txid,
-      vout: input.vout,
-      prevout: {
-        value: input.value,
-        scriptPubKey: {
-          hex: '0014' + 'a'.repeat(40),
-          address: input.address,
-        },
-      },
-    })),
+    vin,
     vout: (options.outputs || []).map((output, index) => ({
       value: output.value,
       n: index,

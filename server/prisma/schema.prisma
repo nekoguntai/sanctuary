@@ -307,6 +307,7 @@ model Address {
 
   @@index([walletId]) // For address listing queries
   @@index([walletId, used])
+  @@index([walletId, used, index]) // For unused address lookup (gap limit)
   @@map("addresses")
 }
 
@@ -432,6 +433,7 @@ model UTXO {
   @@index([walletId]) // For balance calculations
   @@index([walletId, spent])
   @@index([walletId, frozen]) // For UTXO selection excluding frozen
+  @@index([walletId, spent, frozen, amount]) // For coin selection queries
   @@map("utxos")
 }
 

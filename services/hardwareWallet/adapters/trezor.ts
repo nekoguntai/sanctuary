@@ -530,26 +530,45 @@ export class TrezorAdapter implements DeviceAdapter {
       // BIP-44/48/84 use coin_type 1' for testnet, 0' for mainnet
       // Pattern: m/purpose'/coin_type'/... where coin_type is the second component
       let isTestnet = false;
+      let networkSource = 'default';
 
       // First try request paths
       const pathToCheck = request.accountPath || request.inputPaths?.[0] || '';
-      if (pathToCheck.includes("/1'/") || pathToCheck.includes("/1h/")) {
-        isTestnet = true;
+      if (pathToCheck) {
+        if (pathToCheck.includes("/1'/") || pathToCheck.includes("/1h/")) {
+          isTestnet = true;
+          networkSource = 'request.path';
+        } else if (pathToCheck.includes("/0'/") || pathToCheck.includes("/0h/")) {
+          networkSource = 'request.path';
+        }
       }
 
-      // If no path in request, check bip32Derivation from first input
-      if (!pathToCheck && psbt.data.inputs[0]?.bip32Derivation?.[0]?.path) {
-        const derivPath = psbt.data.inputs[0].bip32Derivation[0].path;
+      // Always check bip32Derivation from first input as fallback/confirmation
+      const firstInputDeriv = psbt.data.inputs[0]?.bip32Derivation?.[0];
+      if (firstInputDeriv?.path) {
+        const derivPath = firstInputDeriv.path;
         // Check for testnet coin type (second hardened component = 1)
         // e.g., m/48'/1'/0'/2' or 48h/1h/0h/2h
-        if (derivPath.includes("/1'/") || derivPath.includes("/1h/")) {
+        const testnetMatch = derivPath.match(/^m?\/?\d+[h']\/1[h']\//);
+        const mainnetMatch = derivPath.match(/^m?\/?\d+[h']\/0[h']\//);
+
+        if (testnetMatch) {
           isTestnet = true;
+          networkSource = 'bip32Derivation';
+        } else if (mainnetMatch && networkSource === 'default') {
+          networkSource = 'bip32Derivation';
         }
-        log.info('Detected network from PSBT bip32Derivation', { derivPath, isTestnet });
+
+        log.info('Network detection from PSBT', {
+          derivPath,
+          testnetMatch: !!testnetMatch,
+          mainnetMatch: !!mainnetMatch,
+          isTestnet
+        });
       }
 
       const coin = isTestnet ? 'Testnet' : 'Bitcoin';
-      log.info('Using coin type for signing', { coin, isTestnet, pathToCheck });
+      log.info('Using coin type for signing', { coin, isTestnet, networkSource, pathToCheck: pathToCheck || '(empty)' });
 
       // Multisig PSBTs contain bip32Derivation entries for ALL cosigners in each input/output.
       // Trezor requires we use the derivation path that belongs to THIS device (matched by
@@ -559,6 +578,28 @@ export class TrezorAdapter implements DeviceAdapter {
       const deviceFingerprintBuffer = deviceFingerprint
         ? Buffer.from(deviceFingerprint, 'hex')
         : null;
+
+      // For multisig, verify this device is actually a cosigner
+      const firstInput = psbt.data.inputs[0];
+      if (firstInput?.bip32Derivation && firstInput.bip32Derivation.length > 1 && deviceFingerprintBuffer) {
+        const isCosigner = firstInput.bip32Derivation.some(d =>
+          d.masterFingerprint.equals(deviceFingerprintBuffer)
+        );
+        if (!isCosigner) {
+          const cosignerFingerprints = firstInput.bip32Derivation.map(d =>
+            d.masterFingerprint.toString('hex')
+          );
+          log.error('Device is not a cosigner for this multisig wallet', {
+            deviceFingerprint,
+            cosignerFingerprints,
+          });
+          throw new Error(
+            `This Trezor (${deviceFingerprint}) is not a cosigner for this multisig wallet. ` +
+            `Expected one of: ${cosignerFingerprints.join(', ')}. ` +
+            `Please connect the correct device.`
+          );
+        }
+      }
 
       // Build Trezor inputs
       const inputs = psbt.data.inputs.map((input, idx) => {
@@ -696,7 +737,7 @@ export class TrezorAdapter implements DeviceAdapter {
       let accountPath = request.accountPath || request.inputPaths?.[0];
 
       // Try to get account path from first input's bip32Derivation (more reliable for multisig)
-      const firstInput = psbt.data.inputs[0];
+      // Note: firstInput was already defined earlier for cosigner verification
       if (firstInput?.bip32Derivation && firstInput.bip32Derivation.length > 0) {
         let matchingDerivation = firstInput.bip32Derivation[0];
         if (deviceFingerprintBuffer && firstInput.bip32Derivation.length > 1) {

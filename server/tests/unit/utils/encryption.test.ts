@@ -301,6 +301,34 @@ describe('Encryption Utilities', () => {
   });
 
   describe('encryption salt configuration', () => {
+    it('should use default salt and warn when ENCRYPTION_SALT is not set', () => {
+      const originalSalt = process.env.ENCRYPTION_SALT;
+      delete process.env.ENCRYPTION_SALT;
+
+      // Mock console.warn to capture warnings
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        // Get fresh module without salt
+        const { encrypt, decrypt } = getEncryptionModule();
+        const plaintext = 'test with default salt';
+        const encrypted = encrypt(plaintext);
+        const decrypted = decrypt(encrypted);
+
+        expect(decrypted).toBe(plaintext);
+        // Verify security warning was logged
+        expect(warnSpy).toHaveBeenCalled();
+        expect(warnSpy.mock.calls.some(call =>
+          call[0]?.includes?.('SECURITY WARNING') || call[0]?.includes?.('ENCRYPTION_SALT')
+        )).toBe(true);
+      } finally {
+        warnSpy.mockRestore();
+        if (originalSalt) {
+          process.env.ENCRYPTION_SALT = originalSalt;
+        }
+      }
+    });
+
     it('should use custom ENCRYPTION_SALT when set', () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
       process.env.ENCRYPTION_SALT = 'custom-test-salt-value';

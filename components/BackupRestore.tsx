@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   Shield,
+  FileText,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import type { SanctuaryBackup, ValidationResult, EncryptionKeysResponse } from '../src/api/admin';
@@ -98,6 +99,39 @@ export const BackupRestore: React.FC = () => {
     } catch (error) {
       log.error('Failed to copy to clipboard', { error });
     }
+  };
+
+  /**
+   * Download encryption keys as a text file
+   */
+  const downloadEncryptionKeys = () => {
+    if (!encryptionKeys) return;
+
+    const content = `# Sanctuary Encryption Keys
+# Generated: ${new Date().toISOString()}
+#
+# IMPORTANT: Keep this file secure! These keys are required to restore
+# encrypted data (node passwords, 2FA secrets) on a new Sanctuary instance.
+#
+# To use these keys on a new instance:
+# 1. Add these lines to your .env file BEFORE restoring from backup
+# 2. Restart Sanctuary
+# 3. Then restore your backup
+#
+
+ENCRYPTION_KEY=${encryptionKeys.encryptionKey}
+ENCRYPTION_SALT=${encryptionKeys.encryptionSalt}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sanctuary-encryption-keys-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   /**
@@ -658,27 +692,37 @@ export const BackupRestore: React.FC = () => {
                 </div>
               </div>
 
-              {/* Copy both */}
-              <Button
-                variant="secondary"
-                onClick={() => copyToClipboard(
-                  `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
-                  'both'
-                )}
-                className="w-full"
-              >
-                {copiedKey === 'both' ? (
-                  <>
-                    <Check className="w-4 h-4 mr-2 text-success-500" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 mr-2" />
-                    Copy Both Keys
-                  </>
-                )}
-              </Button>
+              {/* Copy and Download buttons */}
+              <div className="flex space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => copyToClipboard(
+                    `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
+                    'both'
+                  )}
+                  className="flex-1"
+                >
+                  {copiedKey === 'both' ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2 text-success-500" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Both
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={downloadEncryptionKeys}
+                  className="flex-1"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Download .txt
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="text-sm text-red-500">Failed to load encryption keys</div>
@@ -821,26 +865,36 @@ export const BackupRestore: React.FC = () => {
                   </div>
                 </div>
 
-                <Button
-                  variant="secondary"
-                  onClick={() => copyToClipboard(
-                    `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
-                    'modal-both'
-                  )}
-                  className="w-full"
-                >
-                  {copiedKey === 'modal-both' ? (
-                    <>
-                      <Check className="w-4 h-4 mr-2 text-success-500" />
-                      Copied to Clipboard!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copy Both Keys
-                    </>
-                  )}
-                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => copyToClipboard(
+                      `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
+                      'modal-both'
+                    )}
+                    className="flex-1"
+                  >
+                    {copiedKey === 'modal-both' ? (
+                      <>
+                        <Check className="w-4 h-4 mr-2 text-success-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy Both
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={downloadEncryptionKeys}
+                    className="flex-1"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Download .txt
+                  </Button>
+                </div>
               </div>
 
               {/* Don't show again checkbox */}

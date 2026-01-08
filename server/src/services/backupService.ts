@@ -19,10 +19,17 @@
  *
  * Sensitive Data in Backups:
  *   - User password hashes (bcrypt) - Already hashed, relatively safe
- *   - Node configuration passwords (AES-256-GCM encrypted)
- *   - 2FA secrets and backup codes (stored encrypted)
+ *   - Node configuration passwords (AES-256-GCM encrypted with ENCRYPTION_KEY)
+ *   - 2FA TOTP secrets (AES-256-GCM encrypted with ENCRYPTION_KEY + ENCRYPTION_SALT)
+ *   - 2FA backup codes (bcrypt hashed, safe)
  *   - Wallet descriptors and xpubs (sensitive financial data)
  *   - Transaction history and addresses
+ *
+ * Cross-Instance Restore Behavior:
+ *   When restoring to an instance with different ENCRYPTION_KEY or ENCRYPTION_SALT:
+ *   - Node passwords: Cleared with warning, user must re-enter
+ *   - 2FA secrets: Cleared with warning, user must re-setup 2FA
+ *   - All other data: Restored normally
  *
  * Recommendation:
  *   While password hashes and node passwords are already protected, we recommend:
@@ -475,6 +482,35 @@ export class BackupService {
                     );
                     // Clear the password so user knows to re-enter it
                     return { ...record, password: null };
+                  }
+                }
+                return record;
+              });
+            }
+
+            // Special handling for user - check if encrypted 2FA secrets can be decrypted
+            if (table === 'user') {
+              processedRecords = processedRecords.map((record) => {
+                if (record.twoFactorSecret && isEncrypted(record.twoFactorSecret)) {
+                  try {
+                    // Try to decrypt with current ENCRYPTION_KEY/ENCRYPTION_SALT
+                    decrypt(record.twoFactorSecret);
+                    // If successful, keep the 2FA secret
+                  } catch (error) {
+                    // Can't decrypt - 2FA secret was encrypted with different key/salt
+                    log.warn('[BACKUP] 2FA secret cannot be decrypted (different ENCRYPTION_KEY/SALT)', {
+                      username: record.username,
+                    });
+                    warnings.push(
+                      `2FA for user "${record.username}" could not be restored (encrypted with different key). User will need to re-setup 2FA.`
+                    );
+                    // Clear 2FA settings so user can re-setup
+                    return {
+                      ...record,
+                      twoFactorEnabled: false,
+                      twoFactorSecret: null,
+                      twoFactorBackupCodes: null,
+                    };
                   }
                 }
                 return record;

@@ -119,7 +119,7 @@ Open **https://localhost:8443** and accept the certificate warning.
 2. Fetches the latest release tag from GitHub
 3. Clones the repository and checks out the release
 4. Generates self-signed SSL certificates (for hardware wallet support)
-5. Generates secure random secrets (JWT_SECRET and ENCRYPTION_KEY)
+5. Generates secure random secrets (JWT_SECRET, ENCRYPTION_KEY, ENCRYPTION_SALT, GATEWAY_SECRET)
 6. Builds and starts the Docker containers
 7. Creates a default `admin` user with password `sanctuary` (must be changed on first login)
 8. Saves your configuration to `.env` for future restarts
@@ -400,7 +400,8 @@ docker compose up -d
 
 The setup script automatically generates secure random values for:
 - `JWT_SECRET` - Authentication tokens
-- `ENCRYPTION_KEY` - Encrypts sensitive data
+- `ENCRYPTION_KEY` - Encrypts sensitive data (node passwords, 2FA secrets)
+- `ENCRYPTION_SALT` - Salt for key derivation (required in production)
 - `GATEWAY_SECRET` - Internal service communication
 - `POSTGRES_PASSWORD` - Database password
 
@@ -575,6 +576,10 @@ JWT_SECRET=your-secret-key-here
 
 # Encryption key for sensitive data like node passwords (generate a random string, min 32 chars)
 ENCRYPTION_KEY=your-encryption-key-here
+
+# Encryption salt for key derivation (generate with: openssl rand -base64 16)
+# Required in production - used with ENCRYPTION_KEY to derive encryption keys
+ENCRYPTION_SALT=your-encryption-salt-here
 
 # Gateway secret for mobile API authentication (generate a random string, min 32 chars)
 GATEWAY_SECRET=your-gateway-secret-here
@@ -1022,6 +1027,23 @@ To restore:
 - Transaction labels and address labels
 - Groups and sharing permissions
 - Audit logs
+
+### Cross-Instance Restore Behavior
+
+When restoring a backup to a **different Sanctuary instance** (with different `ENCRYPTION_KEY` or `ENCRYPTION_SALT`), some encrypted data cannot be decrypted. The restore process handles this gracefully:
+
+| Data | Same Instance | Different Instance |
+|------|---------------|-------------------|
+| Wallets & transactions | ✓ Restored | ✓ Restored |
+| User accounts | ✓ Restored | ✓ Restored |
+| User passwords | ✓ Restored | ✓ Restored (bcrypt hashed) |
+| Transaction labels | ✓ Restored | ✓ Restored |
+| Node config passwords | ✓ Restored | ⚠️ Cleared (re-enter in settings) |
+| 2FA secrets | ✓ Restored | ⚠️ Cleared (users re-setup 2FA) |
+
+**Warnings are shown** after restore if any encrypted data couldn't be migrated.
+
+**Best practice for server migration:** Copy `ENCRYPTION_KEY` and `ENCRYPTION_SALT` from your old `.env` file to the new instance before restoring the backup. This preserves all encrypted data.
 
 ### Command-Line Backup
 

@@ -1382,7 +1382,7 @@ router.get('/encryption-keys', authenticate, requireAdmin, async (req: Request, 
     const encryptionSalt = process.env.ENCRYPTION_SALT || '';
 
     // Audit this access since it's sensitive
-    await auditService.logFromRequest(req, AuditAction.SETTINGS_VIEW, AuditCategory.SYSTEM, {
+    await auditService.logFromRequest(req, AuditAction.ENCRYPTION_KEYS_VIEW, AuditCategory.ADMIN, {
       details: { action: 'view_encryption_keys' },
     });
 

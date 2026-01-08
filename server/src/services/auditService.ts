@@ -69,6 +69,7 @@ export enum AuditAction {
   NODE_CONFIG_CREATE = 'admin.node_config_create',
   NODE_CONFIG_DELETE = 'admin.node_config_delete',
   SYSTEM_SETTING_UPDATE = 'admin.system_setting_update',
+  ENCRYPTION_KEYS_VIEW = 'admin.encryption_keys_view',
 
   // Group management
   GROUP_CREATE = 'admin.group_create',

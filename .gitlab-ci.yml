@@ -433,114 +433,85 @@ build-dev-backend:
 
 # ===========================================
 # Docker Build Stage - Release Images (tags)
+# Uses QEMU emulation for multi-arch builds on amd64 runners
 # ===========================================
 .release_build_template:
   stage: build
-  extends: .docker_template
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - apk add --no-cache bash curl git jq
+    - docker info
+    # Set up QEMU for multi-platform builds
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    # Set up buildx
+    - docker buildx create --use --name multiarch --driver docker-container
+    - docker buildx inspect --bootstrap
   rules:
     - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
 
-build-release-frontend-amd64:
+build-release-frontend:
   extends: .release_build_template
-  tags:
-    - amd64
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Build and push multi-arch image with buildx
     - |
-      docker build \
-        --platform linux/amd64 \
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
         --tag $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-amd64 \
-        --file ./Dockerfile \
-        .
-    - docker push $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-amd64
-
-build-release-frontend-arm64:
-  extends: .release_build_template
-  tags:
-    - arm64
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - |
-      docker build \
-        --platform linux/arm64 \
         --tag $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-arm64 \
+        --tag $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG} \
         --file ./Dockerfile \
+        --push \
         .
-    - docker push $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-arm64
 
-build-release-backend-amd64:
+build-release-backend:
   extends: .release_build_template
-  tags:
-    - amd64
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Build and push multi-arch image with buildx
     - |
-      docker build \
-        --platform linux/amd64 \
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
         --tag $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-amd64 \
-        --file ./server/Dockerfile \
-        .
-    - docker push $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-amd64
-
-build-release-backend-arm64:
-  extends: .release_build_template
-  tags:
-    - arm64
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - |
-      docker build \
-        --platform linux/arm64 \
         --tag $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-arm64 \
+        --tag $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG} \
         --file ./server/Dockerfile \
+        --push \
         .
-    - docker push $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-arm64
 
 # ===========================================
-# Manifest Stage - Multi-arch manifests
+# Manifest Stage - Update :latest tags and save digests
+# (Multi-arch manifests are created by buildx in the build stage)
 # ===========================================
 create-manifests:
   stage: manifest
   extends: .docker_template
   needs:
-    - build-release-frontend-amd64
-    - build-release-frontend-arm64
-    - build-release-backend-amd64
-    - build-release-backend-arm64
+    - build-release-frontend
+    - build-release-backend
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - VERSION=${CI_COMMIT_TAG#v}
-    # Create frontend manifest
-    - |
-      docker manifest create $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG} \
-        $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-amd64 \
-        $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-arm64
-    - docker manifest push $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}
-    # Create backend manifest
-    - |
-      docker manifest create $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG} \
-        $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-amd64 \
-        $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-arm64
-    - docker manifest push $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}
     # Update :latest for stable releases
     - |
       if [[ "$VERSION" != *-rc* && "$VERSION" != *-alpha* && "$VERSION" != *-beta* ]]; then
-        docker manifest create $CI_REGISTRY_IMAGE/frontend:latest \
-          $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-amd64 \
-          $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}-linux-arm64
-        docker manifest push $CI_REGISTRY_IMAGE/frontend:latest
+        # Pull and retag as latest
+        docker pull $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG}
+        docker tag $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG} $CI_REGISTRY_IMAGE/frontend:latest
+        docker push $CI_REGISTRY_IMAGE/frontend:latest
 
-        docker manifest create $CI_REGISTRY_IMAGE/backend:latest \
-          $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-amd64 \
-          $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}-linux-arm64
-        docker manifest push $CI_REGISTRY_IMAGE/backend:latest
+        docker pull $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG}
+        docker tag $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG} $CI_REGISTRY_IMAGE/backend:latest
+        docker push $CI_REGISTRY_IMAGE/backend:latest
 
         echo "Updated :latest tags"
       fi
     # Save digests for release notes
     - |
-      FRONTEND_DIGEST=$(docker manifest inspect $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG} -v | jq -r '.Descriptor.digest')
-      BACKEND_DIGEST=$(docker manifest inspect $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG} -v | jq -r '.Descriptor.digest')
+      FRONTEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $CI_REGISTRY_IMAGE/frontend:${CI_COMMIT_TAG} 2>/dev/null | cut -d'@' -f2 || echo "")
+      BACKEND_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $CI_REGISTRY_IMAGE/backend:${CI_COMMIT_TAG} 2>/dev/null | cut -d'@' -f2 || echo "")
       echo "FRONTEND_DIGEST=$FRONTEND_DIGEST" >> build.env
       echo "BACKEND_DIGEST=$BACKEND_DIGEST" >> build.env
       echo "VERSION=$VERSION" >> build.env

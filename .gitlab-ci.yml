@@ -469,6 +469,9 @@ build-dev-backend:
   variables:
     # Disable TLS for buildx compatibility with docker-container driver
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_VERIFY: ""
+    DOCKER_CERT_PATH: ""
   before_script:
     - apk add --no-cache bash curl git jq
     - docker info

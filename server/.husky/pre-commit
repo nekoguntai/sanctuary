@@ -30,9 +30,10 @@ echo "${YELLOW}Running pre-commit checks...${NC}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # =============================================
-# Version Sync Check
+# Version Sync Check & Auto-Fix
 # =============================================
 # Verify all package.json and umbrel-app.yml versions are in sync
+# If mismatched, automatically sync to root package.json version
 
 check_version_sync() {
     cd "$REPO_ROOT"
@@ -47,19 +48,30 @@ check_version_sync() {
 
     if [ "$ROOT_VER" != "$SERVER_VER" ] || [ "$ROOT_VER" != "$GATEWAY_VER" ] || [ "$ROOT_VER" != "$UMBREL_VER" ]; then
         echo ""
-        echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo "${RED}⚠️  Version Mismatch Detected${NC}"
-        echo "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo "${YELLOW}🔄 Version Mismatch Detected - Auto-syncing...${NC}"
+        echo "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        echo "  package.json:           $ROOT_VER"
-        echo "  server/package.json:    $SERVER_VER"
-        echo "  gateway/package.json:   $GATEWAY_VER"
+        echo "  package.json:             $ROOT_VER"
+        echo "  server/package.json:      $SERVER_VER"
+        echo "  gateway/package.json:     $GATEWAY_VER"
         echo "  sanctuary/umbrel-app.yml: $UMBREL_VER"
         echo ""
-        echo "${YELLOW}Run: ./scripts/bump-version.sh $ROOT_VER${NC}"
-        echo "${YELLOW}To bypass: git commit --no-verify${NC}"
+        echo "${CYAN}Syncing all versions to $ROOT_VER...${NC}"
+
+        # Run the bump script to sync versions
+        if ./scripts/bump-version.sh "$ROOT_VER" > /dev/null 2>&1; then
+            echo "${GREEN}✓ Versions synced to $ROOT_VER${NC}"
+
+            # Stage the updated version files
+            git add package.json server/package.json gateway/package.json sanctuary/umbrel-app.yml
+            echo "${GREEN}✓ Version files staged for commit${NC}"
+        else
+            echo "${RED}Failed to sync versions. Please run manually:${NC}"
+            echo "${YELLOW}  ./scripts/bump-version.sh $ROOT_VER${NC}"
+            exit 1
+        fi
         echo ""
-        exit 1
     fi
 }
 

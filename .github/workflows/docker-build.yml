@@ -54,6 +54,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Generate platform-specific README
+        run: |
+          chmod +x scripts/generate-readme.sh
+          ./scripts/generate-readme.sh github
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

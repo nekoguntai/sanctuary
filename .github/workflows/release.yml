@@ -244,6 +244,11 @@ jobs:
         with:
           ref: ${{ needs.wait-for-install-tests.outputs.sha }}
 
+      - name: Generate platform-specific README
+        run: |
+          chmod +x scripts/generate-readme.sh
+          ./scripts/generate-readme.sh github
+
       - name: Get version
         id: version
         run: |

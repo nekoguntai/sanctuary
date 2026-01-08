@@ -163,10 +163,36 @@ echo -e "${GREEN}Setup complete!${NC}"
 echo
 echo -e "${BLUE}Your .env file has been created with secure random secrets.${NC}"
 echo
-echo "Next steps:"
-echo "  1. Start Sanctuary:"
-echo "     docker compose up -d"
-echo
-echo "  2. Open https://localhost:8443"
+
+# Ask to start services
+if [ -t 0 ]; then
+    read -p "Start Sanctuary now? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        echo ""
+        echo "Starting Sanctuary..."
+        echo -e "${YELLOW}Note: First-time build may take 2-5 minutes.${NC}"
+        echo ""
+        cd "$PROJECT_DIR"
+        docker compose up -d --build
+        echo ""
+        echo -e "${GREEN}Sanctuary is starting!${NC}"
+        echo ""
+        echo "  Open: https://localhost:8443"
+        echo "  Default login: admin / sanctuary"
+        echo ""
+        echo -e "${YELLOW}Accept the self-signed certificate warning in your browser.${NC}"
+    else
+        echo "To start later, run:"
+        echo "  docker compose up -d"
+        echo ""
+        echo "Then open https://localhost:8443"
+    fi
+else
+    echo "To start Sanctuary, run:"
+    echo "  docker compose up -d"
+    echo ""
+    echo "Then open https://localhost:8443"
+fi
 echo
 echo -e "${YELLOW}Note: Your secrets are stored in .env - keep this file secure!${NC}"

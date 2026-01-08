@@ -9,6 +9,8 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing-only';
 process.env.JWT_EXPIRES_IN = '1h';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-characters';
+process.env.ENCRYPTION_SALT = 'test-encryption-salt';
 
 // Mock the logger to prevent console spam during tests
 jest.mock('../src/utils/logger', () => ({

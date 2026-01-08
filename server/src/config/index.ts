@@ -242,6 +242,22 @@ function validateConfig(config: CombinedConfig): void {
     if (!config.database.url) {
       throw new Error('DATABASE_URL is required in production');
     }
+
+    // M4: Require encryption salt in production for better security isolation
+    if (!config.security.encryptionSalt) {
+      throw new Error(
+        'ENCRYPTION_SALT is required in production. ' +
+        'Generate one with: openssl rand -base64 16'
+      );
+    }
+
+    // M6: Require gateway secret in production for authenticated internal communication
+    if (!config.security.gatewaySecret) {
+      throw new Error(
+        'GATEWAY_SECRET is required in production. ' +
+        'Generate one with: openssl rand -base64 32'
+      );
+    }
   }
 }
 

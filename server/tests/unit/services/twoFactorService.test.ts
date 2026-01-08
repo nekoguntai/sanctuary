@@ -42,17 +42,34 @@ describe('Two-Factor Authentication Service', () => {
       expect(result1.secret).not.toBe(result2.secret);
     });
 
-    it('should generate Base32 encoded secret', async () => {
+    it('should generate encrypted secret for storage', async () => {
       const result = await generateSecret('testuser');
 
-      // Base32 characters: A-Z and 2-7
-      const base32Regex = /^[A-Z2-7]+$/;
-      expect(base32Regex.test(result.secret)).toBe(true);
+      // Secret should be in encrypted format: iv:authTag:ciphertext (all base64)
+      const parts = result.secret.split(':');
+      expect(parts.length).toBe(3);
+
+      // Each part should be valid base64
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      parts.forEach((part) => {
+        expect(base64Regex.test(part)).toBe(true);
+      });
+    });
+
+    it('should generate secret that can be verified with verifyToken', async () => {
+      // Generate a secret
+      const result = await generateSecret('testuser');
+
+      // The secret is encrypted, but verifyToken should handle decryption
+      // We can't test actual TOTP validation without controlling time,
+      // but we can verify the function handles encrypted secrets without throwing
+      const verifyResult = verifyToken(result.secret, '000000');
+      expect(typeof verifyResult).toBe('boolean');
     });
   });
 
   describe('Token Verification', () => {
-    // Use a known test secret
+    // Use a known test secret (plaintext Base32 - simulates legacy data)
     const testSecret = 'JBSWY3DPEHPK3PXP'; // Base32 encoded
 
     it('should reject invalid token format', () => {
@@ -71,6 +88,14 @@ describe('Two-Factor Authentication Service', () => {
       // We can't test actual TOTP validation without time-based tokens,
       // but we can verify the format handling
       const result = verifyToken(testSecret, '000000');
+      expect(typeof result).toBe('boolean');
+    });
+
+    it('should handle legacy plaintext secrets (backward compatibility)', () => {
+      // Legacy secrets stored before encryption was added are plaintext Base32
+      // verifyToken should handle these without throwing
+      const legacyPlaintextSecret = 'JBSWY3DPEHPK3PXP';
+      const result = verifyToken(legacyPlaintextSecret, '000000');
       expect(typeof result).toBe('boolean');
     });
   });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
-import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye, EyeOff, Info } from 'lucide-react';
+import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye, EyeOff, Info, Check } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
 import { useErrorHandler } from '../hooks/useErrorHandler';
@@ -393,7 +393,7 @@ export const UsersGroups: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter password (min 6 characters)"
+                    placeholder="Enter password"
                     className="w-full px-3 py-2 pr-10 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <button
@@ -403,6 +403,25 @@ export const UsersGroups: React.FC = () => {
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
+                </div>
+                {/* Password Requirements */}
+                <div className="mt-2 text-xs text-sanctuary-500 dark:text-sanctuary-400 space-y-0.5">
+                  <div className={newPassword.length >= 8 ? 'text-green-600 dark:text-green-400' : ''}>
+                    <Check className={`w-3 h-3 inline mr-1 ${newPassword.length >= 8 ? 'opacity-100' : 'opacity-0'}`} />
+                    At least 8 characters
+                  </div>
+                  <div className={/[A-Z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                    <Check className={`w-3 h-3 inline mr-1 ${/[A-Z]/.test(newPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                    One uppercase letter
+                  </div>
+                  <div className={/[a-z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                    <Check className={`w-3 h-3 inline mr-1 ${/[a-z]/.test(newPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                    One lowercase letter
+                  </div>
+                  <div className={/[0-9]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                    <Check className={`w-3 h-3 inline mr-1 ${/[0-9]/.test(newPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                    One number
+                  </div>
                 </div>
               </div>
 
@@ -485,6 +504,27 @@ export const UsersGroups: React.FC = () => {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {/* Password Requirements - shown when entering new password */}
+                {editPassword && (
+                  <div className="mt-2 text-xs text-sanctuary-500 dark:text-sanctuary-400 space-y-0.5">
+                    <div className={editPassword.length >= 8 ? 'text-green-600 dark:text-green-400' : ''}>
+                      <Check className={`w-3 h-3 inline mr-1 ${editPassword.length >= 8 ? 'opacity-100' : 'opacity-0'}`} />
+                      At least 8 characters
+                    </div>
+                    <div className={/[A-Z]/.test(editPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                      <Check className={`w-3 h-3 inline mr-1 ${/[A-Z]/.test(editPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                      One uppercase letter
+                    </div>
+                    <div className={/[a-z]/.test(editPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                      <Check className={`w-3 h-3 inline mr-1 ${/[a-z]/.test(editPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                      One lowercase letter
+                    </div>
+                    <div className={/[0-9]/.test(editPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                      <Check className={`w-3 h-3 inline mr-1 ${/[0-9]/.test(editPassword) ? 'opacity-100' : 'opacity-0'}`} />
+                      One number
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

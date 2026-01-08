@@ -103,8 +103,11 @@ export function rateLimit(policyName: string, options?: { message?: string }): R
       next();
     } catch (error) {
       log.error('Rate limit middleware error', { policy: policyName, error });
-      // Fail open - allow request on error
-      next();
+      // Fail closed - block request on error for security
+      res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Rate limiting service temporarily unavailable. Please try again.',
+      });
     }
   };
 }
@@ -134,11 +137,15 @@ export function rateLimitByUser(policyName: string, options?: { message?: string
         if (!result.allowed) {
           return sendRateLimitResponse(res, result, message);
         }
+        return next();
       } catch (error) {
         log.error('Rate limit middleware error', { policy: policyName, error });
+        // Fail closed - block request on error for security
+        return res.status(503).json({
+          error: 'Service Unavailable',
+          message: 'Rate limiting service temporarily unavailable. Please try again.',
+        });
       }
-
-      return next();
     }
 
     const key = `user:${userId}`;
@@ -154,7 +161,11 @@ export function rateLimitByUser(policyName: string, options?: { message?: string
       next();
     } catch (error) {
       log.error('Rate limit middleware error', { policy: policyName, error });
-      next();
+      // Fail closed - block request on error for security
+      res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Rate limiting service temporarily unavailable. Please try again.',
+      });
     }
   };
 }
@@ -188,7 +199,11 @@ export function rateLimitByIpAndKey(
       next();
     } catch (error) {
       log.error('Rate limit middleware error', { policy: policyName, error });
-      next();
+      // Fail closed - block request on error for security
+      res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Rate limiting service temporarily unavailable. Please try again.',
+      });
     }
   };
 }
@@ -220,7 +235,11 @@ export function rateLimitByKey(
       next();
     } catch (error) {
       log.error('Rate limit middleware error', { policy: policyName, error });
-      next();
+      // Fail closed - block request on error for security
+      res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Rate limiting service temporarily unavailable. Please try again.',
+      });
     }
   };
 }

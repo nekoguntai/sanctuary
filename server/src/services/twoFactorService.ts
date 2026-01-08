@@ -2,6 +2,7 @@ import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { encrypt, decryptIfEncrypted } from '../utils/encryption';
 
 // Configure TOTP settings
 authenticator.options = {
@@ -14,24 +15,31 @@ const BACKUP_CODE_LENGTH = 8;
 
 /**
  * Generate a new TOTP secret and QR code for 2FA setup
+ * Returns the encrypted secret for secure database storage
  */
 export async function generateSecret(username: string): Promise<{
   secret: string;
   qrCodeDataUrl: string;
 }> {
-  const secret = authenticator.generateSecret();
-  const otpauthUrl = authenticator.keyuri(username, ISSUER, secret);
+  const plaintextSecret = authenticator.generateSecret();
+  const otpauthUrl = authenticator.keyuri(username, ISSUER, plaintextSecret);
   const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
 
-  return { secret, qrCodeDataUrl };
+  // Encrypt the secret before returning for storage
+  const encryptedSecret = encrypt(plaintextSecret);
+
+  return { secret: encryptedSecret, qrCodeDataUrl };
 }
 
 /**
  * Verify a TOTP token against a secret
+ * Handles both encrypted secrets (new) and plaintext secrets (legacy) for backward compatibility
  */
 export function verifyToken(secret: string, token: string): boolean {
   try {
-    return authenticator.verify({ token, secret });
+    // Decrypt the secret if it's encrypted, otherwise use as-is (backward compatibility)
+    const plaintextSecret = decryptIfEncrypted(secret);
+    return authenticator.verify({ token, secret: plaintextSecret });
   } catch {
     return false;
   }

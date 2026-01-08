@@ -192,6 +192,7 @@ services:
 
       # Encryption (for sensitive data like node passwords)
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT:-sanctuary-node-config}
 
       # Gateway secret (for gateway WebSocket connection)
       GATEWAY_SECRET: ${GATEWAY_SECRET:-}

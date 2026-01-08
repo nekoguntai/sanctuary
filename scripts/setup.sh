@@ -65,11 +65,13 @@ echo -e "${GREEN}Generating secure secrets...${NC}"
 
 JWT_SECRET=$(generate_secret)
 ENCRYPTION_KEY=$(generate_secret)
+ENCRYPTION_SALT=$(openssl rand -base64 16 2>/dev/null || generate_password)
 GATEWAY_SECRET=$(generate_secret)
 POSTGRES_PASSWORD=$(generate_password)
 
 echo "  - JWT_SECRET: generated"
 echo "  - ENCRYPTION_KEY: generated"
+echo "  - ENCRYPTION_SALT: generated"
 echo "  - GATEWAY_SECRET: generated"
 echo "  - POSTGRES_PASSWORD: generated"
 echo
@@ -92,6 +94,9 @@ JWT_SECRET=$JWT_SECRET
 
 # Encryption key for sensitive data (node passwords, etc.)
 ENCRYPTION_KEY=$ENCRYPTION_KEY
+
+# Encryption salt for key derivation (required in production)
+ENCRYPTION_SALT=$ENCRYPTION_SALT
 
 # Gateway secret for internal service communication
 GATEWAY_SECRET=$GATEWAY_SECRET

@@ -384,6 +384,12 @@ main() {
             echo -e "${GREEN}✓${NC} Generated missing GATEWAY_SECRET"
             UPDATED_ENV=true
         fi
+        if [ -z "$ENCRYPTION_SALT" ]; then
+            ENCRYPTION_SALT=$(openssl rand -base64 16)
+            echo "ENCRYPTION_SALT=$ENCRYPTION_SALT" >> "$ENV_FILE"
+            echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_SALT"
+            UPDATED_ENV=true
+        fi
         if [ -z "$POSTGRES_PASSWORD" ]; then
             POSTGRES_PASSWORD=$(generate_secret | head -c 24)
             echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> "$ENV_FILE"
@@ -406,6 +412,10 @@ main() {
             GATEWAY_SECRET=$(generate_secret)
             echo -e "${GREEN}✓${NC} Generated missing GATEWAY_SECRET"
         fi
+        if [ -z "$ENCRYPTION_SALT" ]; then
+            ENCRYPTION_SALT=$(openssl rand -base64 16)
+            echo -e "${GREEN}✓${NC} Generated missing ENCRYPTION_SALT"
+        fi
         if [ -z "$POSTGRES_PASSWORD" ]; then
             POSTGRES_PASSWORD=$(generate_secret | head -c 24)
             echo -e "${GREEN}✓${NC} Generated missing POSTGRES_PASSWORD"
@@ -414,6 +424,7 @@ main() {
         JWT_SECRET=$(generate_secret)
         ENCRYPTION_KEY=$(generate_secret)
         GATEWAY_SECRET=$(generate_secret)
+        ENCRYPTION_SALT=$(openssl rand -base64 16)
         POSTGRES_PASSWORD=$(generate_secret | head -c 24)
         echo -e "${GREEN}✓${NC} Generated secure secrets"
     fi

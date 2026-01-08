@@ -19,7 +19,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { createLogger } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger';
 
 const log = createLogger('beacon-client');
 
@@ -33,10 +33,29 @@ export interface BeaconClientConfig {
   timeoutMs?: number;
 }
 
+/**
+ * Submarine swap status values:
+ * - 'created'     - Swap created, waiting for on-chain deposit
+ * - 'pending'     - On-chain transaction detected, waiting for confirmations
+ * - 'confirmed'   - On-chain transaction confirmed, Lightning payment in progress
+ * - 'completed'   - Lightning payment successful, swap finished
+ * - 'expired'     - Swap expired before completion (refund available)
+ * - 'refunded'    - On-chain funds returned to refund address
+ * - 'failed'      - Swap failed (e.g., Lightning payment failed after on-chain confirm)
+ */
+export type BeaconSwapStatus =
+  | 'created'
+  | 'pending'
+  | 'confirmed'
+  | 'completed'
+  | 'expired'
+  | 'refunded'
+  | 'failed';
+
 export interface BeaconSwap {
   id: string;
   type: 'normal' | 'reverse';
-  status: string;
+  status: BeaconSwapStatus;
   createdAt: number;
   expiresAt: number;
   onchain?: {
@@ -62,22 +81,38 @@ export interface BeaconSwap {
   };
 }
 
+/**
+ * Invoice status values:
+ * - 'pending'  - Invoice created, awaiting payment
+ * - 'settled'  - Payment received and settled
+ * - 'expired'  - Invoice expired without payment
+ */
+export type BeaconInvoiceStatus = 'pending' | 'settled' | 'expired';
+
 export interface BeaconInvoice {
   paymentHash: string;
   paymentRequest: string;
   amountMsat: string | null;
   description: string;
   expiresAt: number;
-  status: string;
+  status: BeaconInvoiceStatus;
   settledAt?: number;
 }
+
+/**
+ * Payment status values:
+ * - 'pending'   - Payment initiated, in progress
+ * - 'succeeded' - Payment completed successfully
+ * - 'failed'    - Payment failed (see failureReason for details)
+ */
+export type BeaconPaymentStatus = 'pending' | 'succeeded' | 'failed';
 
 export interface BeaconPayment {
   paymentHash: string;
   paymentPreimage?: string;
   amountMsat: string;
   feeMsat: string;
-  status: string;
+  status: BeaconPaymentStatus;
   createdAt: number;
   settledAt?: number;
   failureReason?: string;
@@ -143,6 +178,8 @@ export class BeaconClient {
           log.error('Beacon API error', {
             code: apiError.code,
             message: apiError.message,
+            path: error.config?.url,
+            method: error.config?.method?.toUpperCase(),
           });
           throw new BeaconApiError(apiError.code, apiError.message);
         }
@@ -184,6 +221,24 @@ export class BeaconClient {
    *
    * Returns an on-chain address. When user sends BTC to this address,
    * Beacon will pay the Lightning invoice.
+   *
+   * @param params.type - 'normal' for on-chain→Lightning, 'reverse' for Lightning→on-chain
+   * @param params.invoice - Lightning invoice to pay (required for normal swaps)
+   * @param params.amountSats - Amount in satoshis (required for reverse swaps)
+   * @param params.refundAddress - Bitcoin address for refunds if swap fails/expires.
+   *   Must be a valid address for the configured network (mainnet/testnet/signet).
+   *   Supported formats: P2WPKH (bc1q...), P2WSH (bc1q...), P2TR (bc1p...), P2PKH (1...), P2SH (3...)
+   *
+   * @returns BeaconSwap with on-chain deposit address and swap details
+   *
+   * @example
+   * // Pay a Lightning invoice from cold storage
+   * const swap = await beacon.createSwap({
+   *   type: 'normal',
+   *   invoice: 'lnbc1000n1...',
+   *   refundAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+   * });
+   * // Send BTC to swap.onchain.address, then monitor swap.status
    */
   async createSwap(params: {
     type: 'normal' | 'reverse';
@@ -402,4 +457,12 @@ export function getBeaconClient(): BeaconClient | null {
  */
 export function isBeaconEnabled(): boolean {
   return !!process.env.BEACON_URL && !!process.env.BEACON_API_KEY;
+}
+
+/**
+ * Reset the Beacon client singleton.
+ * Useful for testing or when credentials change at runtime.
+ */
+export function resetBeaconClient(): void {
+  beaconClientInstance = null;
 }

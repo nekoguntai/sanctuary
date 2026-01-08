@@ -71,6 +71,7 @@ jest.mock('../../../src/services/auditService', () => ({
     GROUP_MEMBER_REMOVE: 'admin.group_member_remove',
     NODE_CONFIG_UPDATE: 'admin.node_config_update',
     SYSTEM_SETTING_UPDATE: 'admin.system_setting_update',
+    ENCRYPTION_KEYS_VIEW: 'admin.encryption_keys_view',
     BACKUP_CREATE: 'backup.create',
     BACKUP_RESTORE: 'backup.restore',
   },
@@ -1646,6 +1647,146 @@ describe('Admin API', () => {
           const response = getResponse();
           expect(response.statusCode).toBe(400);
           expect(response.body.message).toContain('validation failed');
+        }
+      });
+    });
+  });
+
+  // ========================================
+  // ENCRYPTION KEYS
+  // ========================================
+
+  describe('Encryption Keys', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      // Reset environment variables before each test
+      process.env = { ...originalEnv };
+      process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-long!';
+      process.env.ENCRYPTION_SALT = 'test-encryption-salt-value';
+    });
+
+    afterAll(() => {
+      // Restore original environment
+      process.env = originalEnv;
+    });
+
+    describe('GET /encryption-keys', () => {
+      it('should return encryption keys for admin users', async () => {
+        const req = createMockRequest({
+          user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+        });
+        const { res, getResponse } = createMockResponse();
+
+        const handler = adminRouter.stack.find((layer: any) =>
+          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
+        )?.route?.stack?.[2]?.handle;
+
+        if (handler) {
+          await handler(req, res);
+          const response = getResponse();
+          expect(response.statusCode).toBe(200);
+          expect(response.body.encryptionKey).toBe('test-encryption-key-32-chars-long!');
+          expect(response.body.encryptionSalt).toBe('test-encryption-salt-value');
+          expect(response.body.hasEncryptionKey).toBe(true);
+          expect(response.body.hasEncryptionSalt).toBe(true);
+        }
+      });
+
+      it('should audit log the access', async () => {
+        mockAuditLogFromRequest.mockClear();
+
+        const req = createMockRequest({
+          user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+        });
+        const { res } = createMockResponse();
+
+        const handler = adminRouter.stack.find((layer: any) =>
+          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
+        )?.route?.stack?.[2]?.handle;
+
+        if (handler) {
+          await handler(req, res);
+          expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+            req,
+            'admin.encryption_keys_view',
+            'admin',
+            expect.objectContaining({
+              details: { action: 'view_encryption_keys' },
+            })
+          );
+        }
+      });
+
+      it('should return empty strings and false flags when keys are not set', async () => {
+        // Clear the environment variables
+        delete process.env.ENCRYPTION_KEY;
+        delete process.env.ENCRYPTION_SALT;
+
+        const req = createMockRequest({
+          user: { userId: 'admin-1', username: 'admin', isAdmin: true },
+        });
+        const { res, getResponse } = createMockResponse();
+
+        const handler = adminRouter.stack.find((layer: any) =>
+          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
+        )?.route?.stack?.[2]?.handle;
+
+        if (handler) {
+          await handler(req, res);
+          const response = getResponse();
+          expect(response.statusCode).toBe(200);
+          expect(response.body.encryptionKey).toBe('');
+          expect(response.body.encryptionSalt).toBe('');
+          expect(response.body.hasEncryptionKey).toBe(false);
+          expect(response.body.hasEncryptionSalt).toBe(false);
+        }
+      });
+
+      it('should reject non-admin users with 403', async () => {
+        const req = createMockRequest({
+          user: { userId: 'user-1', username: 'regularuser', isAdmin: false },
+        });
+        const { res, getResponse } = createMockResponse();
+
+        // For non-admin, the requireAdmin middleware (stack[1]) should reject
+        const middlewareStack = adminRouter.stack.find((layer: any) =>
+          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
+        )?.route?.stack;
+
+        if (middlewareStack && middlewareStack[1]) {
+          const requireAdminMiddleware = middlewareStack[1].handle;
+          const next = createMockNext();
+
+          await requireAdminMiddleware(req, res, next);
+          const response = getResponse();
+
+          // requireAdmin should return 403 for non-admin
+          expect(response.statusCode).toBe(403);
+          expect(response.body.error).toBe('Forbidden');
+        }
+      });
+
+      it('should reject unauthenticated requests with 401', async () => {
+        const req = createMockRequest({
+          // No user attached - unauthenticated
+        });
+        const { res, getResponse } = createMockResponse();
+
+        // For unauthenticated, the authenticate middleware (stack[0]) should reject
+        const middlewareStack = adminRouter.stack.find((layer: any) =>
+          layer.route?.path === '/encryption-keys' && layer.route?.methods?.get
+        )?.route?.stack;
+
+        if (middlewareStack && middlewareStack[0]) {
+          const authenticateMiddleware = middlewareStack[0].handle;
+          const next = createMockNext();
+
+          await authenticateMiddleware(req, res, next);
+          const response = getResponse();
+
+          // authenticate should return 401 for unauthenticated
+          expect(response.statusCode).toBe(401);
         }
       });
     });

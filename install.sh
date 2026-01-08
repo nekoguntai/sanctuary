@@ -3,12 +3,16 @@
 # Sanctuary Bitcoin Wallet - Install Script
 # ============================================
 #
-# One-liner installation:
+# One-liner installation (GitHub):
 #   curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
 #
+# One-liner installation (GitLab):
+#   curl -fsSL https://gitlab.com/n-narusegawa/sanctuary/-/raw/main/install.sh | bash
+#
 # Or download and run:
-#   wget -O install.sh https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh
-#   chmod +x install.sh && ./install.sh
+#   ./install.sh                    # Auto-detect source from git remote
+#   ./install.sh --source github    # Force GitHub
+#   ./install.sh --source gitlab    # Force GitLab
 #
 # ============================================
 
@@ -21,8 +25,84 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# ============================================
+# Platform detection and configuration
+# ============================================
+detect_source() {
+    # Check if --source argument was provided
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --source)
+                SOURCE="$2"
+                shift 2
+                ;;
+            --source=*)
+                SOURCE="${1#*=}"
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    # If source specified, use it
+    if [ -n "$SOURCE" ]; then
+        case "$SOURCE" in
+            github|GitHub)
+                echo "github"
+                return
+                ;;
+            gitlab|GitLab)
+                echo "gitlab"
+                return
+                ;;
+            *)
+                echo -e "${YELLOW}Unknown source '$SOURCE', auto-detecting...${NC}" >&2
+                ;;
+        esac
+    fi
+
+    # Auto-detect from existing git remote
+    if [ -d ".git" ] || [ -d "$INSTALL_DIR/.git" ]; then
+        local remote_url
+        if [ -d ".git" ]; then
+            remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+        else
+            remote_url=$(git -C "$INSTALL_DIR" config --get remote.origin.url 2>/dev/null || true)
+        fi
+
+        if echo "$remote_url" | grep -qi "gitlab"; then
+            echo "gitlab"
+            return
+        elif echo "$remote_url" | grep -qi "github"; then
+            echo "github"
+            return
+        fi
+    fi
+
+    # Default to GitHub
+    echo "github"
+}
+
+# Detect source platform
+SOURCE_PLATFORM=$(detect_source "$@")
+
+# Set platform-specific URLs
+case "$SOURCE_PLATFORM" in
+    gitlab)
+        REPO_URL="https://gitlab.com/n-narusegawa/sanctuary.git"
+        API_URL="https://gitlab.com/api/v4/projects/n-narusegawa%2Fsanctuary/releases"
+        PLATFORM_NAME="GitLab"
+        ;;
+    github|*)
+        REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
+        API_URL="https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest"
+        PLATFORM_NAME="GitHub"
+        ;;
+esac
+
 # Configuration
-REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
 INSTALL_DIR="${SANCTUARY_DIR:-$HOME/sanctuary}"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 HTTP_PORT="${HTTP_PORT:-8080}"
@@ -32,9 +112,21 @@ SKIP_GIT_CHECKOUT="${SKIP_GIT_CHECKOUT:-false}"  # Set to 'true' in CI to skip v
 # Get latest release tag
 # ============================================
 get_latest_release() {
-    # Try GitHub API first (most reliable)
+    local tag=""
+
+    # Try platform-specific API first
     if command -v curl &> /dev/null; then
-        local tag=$(curl -fsSL "https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+        case "$SOURCE_PLATFORM" in
+            gitlab)
+                # GitLab API returns array of releases, get first (latest) tag_name
+                tag=$(curl -fsSL "$API_URL" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4)
+                ;;
+            github|*)
+                # GitHub API returns single release object
+                tag=$(curl -fsSL "$API_URL" 2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+                ;;
+        esac
+
         if [ -n "$tag" ]; then
             echo "$tag"
             return 0
@@ -42,7 +134,7 @@ get_latest_release() {
     fi
 
     # Fallback: use git ls-remote to get latest tag
-    local tag=$(git ls-remote --tags --sort=-v:refname "$REPO_URL" 2>/dev/null | head -1 | sed 's/.*refs\/tags\///' | sed 's/\^{}//')
+    tag=$(git ls-remote --tags --sort=-v:refname "$REPO_URL" 2>/dev/null | head -1 | sed 's/.*refs\/tags\///' | sed 's/\^{}//')
     if [ -n "$tag" ]; then
         echo "$tag"
         return 0
@@ -59,6 +151,8 @@ echo -e "${BLUE}║${NC}              ${GREEN}Sanctuary Bitcoin Wallet${NC}     
 echo -e "${BLUE}║${NC}           Your keys, your coins, your server.             ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}✓${NC} Source: ${PLATFORM_NAME} (${REPO_URL})"
 echo ""
 
 # ============================================

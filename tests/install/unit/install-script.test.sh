@@ -192,8 +192,18 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Platform detection (simplified for testing)
+SOURCE_PLATFORM="${SOURCE_PLATFORM:-github}"
+case "$SOURCE_PLATFORM" in
+    gitlab)
+        REPO_URL="https://gitlab.com/n-narusegawa/sanctuary.git"
+        ;;
+    github|*)
+        REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
+        ;;
+esac
+
 # Configuration
-REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
 INSTALL_DIR="${SANCTUARY_DIR:-$HOME/sanctuary}"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 HTTP_PORT="${HTTP_PORT:-8080}"

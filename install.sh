@@ -4,10 +4,10 @@
 # ============================================
 #
 # One-liner installation (GitHub):
-#   curl -fsSL https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nekoguntai/sanctuary/main/install.sh | bash
 #
 # One-liner installation (GitLab):
-#   curl -fsSL https://gitlab.com/n-narusegawa/sanctuary/-/raw/main/install.sh | bash
+#   curl -fsSL https://gitlab.com/narusegawa-nekoworks/sanctuary/-/raw/main/install.sh | bash
 #
 # Or download and run:
 #   ./install.sh                    # Auto-detect source from git remote
@@ -91,13 +91,13 @@ SOURCE_PLATFORM=$(detect_source "$@")
 # Set platform-specific URLs
 case "$SOURCE_PLATFORM" in
     gitlab)
-        REPO_URL="https://gitlab.com/n-narusegawa/sanctuary.git"
-        API_URL="https://gitlab.com/api/v4/projects/n-narusegawa%2Fsanctuary/releases"
+        REPO_URL="https://gitlab.com/narusegawa-nekoworks/sanctuary.git"
+        API_URL="https://gitlab.com/api/v4/projects/narusegawa-nekoworks%2Fsanctuary/releases"
         PLATFORM_NAME="GitLab"
         ;;
     github|*)
-        REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
-        API_URL="https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest"
+        REPO_URL="https://github.com/nekoguntai/sanctuary.git"
+        API_URL="https://api.github.com/repos/nekoguntai/sanctuary/releases/latest"
         PLATFORM_NAME="GitHub"
         ;;
 esac

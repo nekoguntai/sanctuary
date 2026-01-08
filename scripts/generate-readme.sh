@@ -18,15 +18,15 @@ fi
 
 case "$PLATFORM" in
     github)
-        REPO_URL="https://github.com/n-narusegawa/sanctuary"
-        CLONE_URL="https://github.com/n-narusegawa/sanctuary.git"
-        RAW_URL="https://raw.githubusercontent.com/n-narusegawa/sanctuary/main"
+        REPO_URL="https://github.com/nekoguntai/sanctuary"
+        CLONE_URL="https://github.com/nekoguntai/sanctuary.git"
+        RAW_URL="https://raw.githubusercontent.com/nekoguntai/sanctuary/main"
         PLATFORM_NAME="GitHub"
         ;;
     gitlab)
-        REPO_URL="https://gitlab.com/n-narusegawa/sanctuary"
-        CLONE_URL="https://gitlab.com/n-narusegawa/sanctuary.git"
-        RAW_URL="https://gitlab.com/n-narusegawa/sanctuary/-/raw/main"
+        REPO_URL="https://gitlab.com/narusegawa-nekoworks/sanctuary"
+        CLONE_URL="https://gitlab.com/narusegawa-nekoworks/sanctuary.git"
+        RAW_URL="https://gitlab.com/narusegawa-nekoworks/sanctuary/-/raw/main"
         PLATFORM_NAME="GitLab"
         ;;
     *)

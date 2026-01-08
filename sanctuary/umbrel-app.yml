@@ -2,7 +2,7 @@ manifestVersion: 1
 id: sanctuary
 name: Sanctuary
 tagline: Self-hosted Bitcoin wallet coordinator for hardware wallets
-icon: https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/sanctuary/images/icon.svg
+icon: https://raw.githubusercontent.com/nekoguntai/sanctuary/main/sanctuary/images/icon.svg
 category: bitcoin
 version: "0.7.27"
 description: >-
@@ -60,16 +60,16 @@ description: >-
   Sanctuary never sees, stores, or transmits private keys. Your keys stay on
   your hardware wallet where they belong.
 developer: Sanctuary
-website: https://github.com/n-narusegawa/sanctuary
+website: https://github.com/nekoguntai/sanctuary
 dependencies:
   - electrs
-repo: https://github.com/n-narusegawa/sanctuary
-support: https://github.com/n-narusegawa/sanctuary/issues
+repo: https://github.com/nekoguntai/sanctuary
+support: https://github.com/nekoguntai/sanctuary/issues
 port: 3010
 gallery: []
 path: ""
 defaultUsername: "admin"
 defaultPassword: "sanctuary"
-releaseNotes: "Version 0.7.27 released on 2026-01-08. See https://github.com/n-narusegawa/sanctuary/releases/tag/v0.7.20 for details."
-submitter: n-narusegawa
+releaseNotes: "Version 0.7.27 released on 2026-01-08. See https://github.com/nekoguntai/sanctuary/releases/tag/v0.7.20 for details."
+submitter: nekoguntai
 submission: https://github.com/getumbrel/umbrel-apps/pull/XXXX

@@ -660,8 +660,8 @@ update-umbrel:
       sed -i "s/^releaseNotes: .*/releaseNotes: \"Version $VERSION released on $RELEASE_DATE. See https:\/\/gitlab.com\/${CI_PROJECT_PATH}\/-\/releases\/v$VERSION for details.\"/" sanctuary/umbrel-app.yml
 
       # Update docker-compose.yml with new image tags
-      sed -i "s|ghcr.io/n-narusegawa/sanctuary-frontend:[^[:space:]]*|${CI_REGISTRY_IMAGE}/frontend:v$VERSION@$FRONTEND_DIGEST|g" sanctuary/docker-compose.yml
-      sed -i "s|ghcr.io/n-narusegawa/sanctuary-backend:[^[:space:]]*|${CI_REGISTRY_IMAGE}/backend:v$VERSION@$BACKEND_DIGEST|g" sanctuary/docker-compose.yml
+      sed -i "s|ghcr.io/nekoguntai/sanctuary-frontend:[^[:space:]]*|${CI_REGISTRY_IMAGE}/frontend:v$VERSION@$FRONTEND_DIGEST|g" sanctuary/docker-compose.yml
+      sed -i "s|ghcr.io/nekoguntai/sanctuary-backend:[^[:space:]]*|${CI_REGISTRY_IMAGE}/backend:v$VERSION@$BACKEND_DIGEST|g" sanctuary/docker-compose.yml
 
       # Also handle GitLab registry URLs if they exist
       sed -i "s|${CI_REGISTRY_IMAGE}/frontend:[^[:space:]]*|${CI_REGISTRY_IMAGE}/frontend:v$VERSION@$FRONTEND_DIGEST|g" sanctuary/docker-compose.yml

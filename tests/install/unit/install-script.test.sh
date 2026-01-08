@@ -196,10 +196,10 @@ NC='\033[0m'
 SOURCE_PLATFORM="${SOURCE_PLATFORM:-github}"
 case "$SOURCE_PLATFORM" in
     gitlab)
-        REPO_URL="https://gitlab.com/n-narusegawa/sanctuary.git"
+        REPO_URL="https://gitlab.com/narusegawa-nekoworks/sanctuary.git"
         ;;
     github|*)
-        REPO_URL="https://github.com/n-narusegawa/sanctuary.git"
+        REPO_URL="https://github.com/nekoguntai/sanctuary.git"
         ;;
 esac
 
@@ -259,7 +259,7 @@ has_openssl() {
 # Get latest release (simplified for testing)
 get_latest_release() {
     if command -v curl &> /dev/null; then
-        local tag=$(curl -fsSL "https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+        local tag=$(curl -fsSL "https://api.github.com/repos/nekoguntai/sanctuary/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | cut -d'"' -f4)
         if [ -n "$tag" ]; then
             echo "$tag"
             return 0

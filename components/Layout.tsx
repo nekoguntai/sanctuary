@@ -620,7 +620,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                 </h3>
                 <div className="space-y-2">
                   <a
-                    href="https://github.com/n-narusegawa/sanctuary"
+                    href="https://github.com/nekoguntai/sanctuary"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between p-3 rounded-lg surface-secondary hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 transition-colors"
@@ -634,7 +634,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     <ExternalLink className="h-4 w-4 text-sanctuary-400" />
                   </a>
                   <a
-                    href="https://github.com/n-narusegawa/sanctuary/releases"
+                    href="https://github.com/nekoguntai/sanctuary/releases"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between p-3 rounded-lg surface-secondary hover:bg-sanctuary-100 dark:hover:bg-sanctuary-700 transition-colors"

@@ -7,7 +7,7 @@ This document outlines strategies for structuring Beacon as a separate GitHub pr
 ### Option 1: Separate Repository (Recommended)
 
 ```
-github.com/n-narusegawa/
+github.com/nekoguntai/
 ├── sanctuary/          # Main Sanctuary repo (existing)
 └── beacon/             # New Lightning service repo
 ```
@@ -28,7 +28,7 @@ github.com/n-narusegawa/
 ### Option 2: Monorepo with Workspaces
 
 ```
-github.com/n-narusegawa/sanctuary/
+github.com/nekoguntai/sanctuary/
 ├── packages/
 │   ├── sanctuary-server/     # Current server/
 │   ├── sanctuary-frontend/   # Current frontend
@@ -58,7 +58,7 @@ github.com/n-narusegawa/sanctuary/
 Publish shared types that both projects use:
 
 ```
-github.com/n-narusegawa/sanctuary-types/
+github.com/nekoguntai/sanctuary-types/
 ├── src/
 │   ├── lightning.ts      # Lightning/Beacon types
 │   ├── bitcoin.ts        # Bitcoin types
@@ -98,7 +98,7 @@ cd beacon
 # Initialize as separate git repo
 rm -rf .git  # If nested
 git init
-git remote add origin git@github.com:n-narusegawa/beacon.git
+git remote add origin git@github.com:nekoguntai/beacon.git
 
 # Initial commit
 git add .
@@ -136,10 +136,10 @@ paths:
 ### Step 1: Create the Beacon Repository
 
 ```bash
-# On GitHub, create: n-narusegawa/beacon
+# On GitHub, create: nekoguntai/beacon
 
 # Clone and set up
-git clone git@github.com:n-narusegawa/beacon.git
+git clone git@github.com:nekoguntai/beacon.git
 cd beacon
 
 # Copy files from sanctuary/beacon/
@@ -233,8 +233,8 @@ jobs:
       - name: Push to GitHub Container Registry
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker tag beacon:${{ github.ref_name }} ghcr.io/n-narusegawa/beacon:${{ github.ref_name }}
-          docker push ghcr.io/n-narusegawa/beacon:${{ github.ref_name }}
+          docker tag beacon:${{ github.ref_name }} ghcr.io/nekoguntai/beacon:${{ github.ref_name }}
+          docker push ghcr.io/nekoguntai/beacon:${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -250,9 +250,9 @@ In Sanctuary, remove the `beacon/` directory and update docker-compose to pull f
 ```yaml
 services:
   beacon:
-    image: ghcr.io/n-narusegawa/beacon:latest
+    image: ghcr.io/nekoguntai/beacon:latest
     # or for specific version:
-    # image: ghcr.io/n-narusegawa/beacon:v1.0.0
+    # image: ghcr.io/nekoguntai/beacon:v1.0.0
     environment:
       - SANCTUARY_API_URL=http://backend:3000
       - SANCTUARY_API_KEY=${BEACON_API_KEY}
@@ -333,7 +333,7 @@ If you want to keep beacon in sanctuary for convenience:
 
 ```bash
 cd sanctuary
-git submodule add git@github.com:n-narusegawa/beacon.git beacon
+git submodule add git@github.com:nekoguntai/beacon.git beacon
 git commit -m "Add beacon as submodule"
 ```
 

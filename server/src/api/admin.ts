@@ -1713,7 +1713,7 @@ router.get('/version', async (req: Request, res: Response) => {
     if (!releaseCache || (now - releaseCache.checkedAt) > RELEASE_CACHE_TTL) {
       try {
         const response = await fetch(
-          'https://api.github.com/repos/n-narusegawa/sanctuary/releases/latest',
+          'https://api.github.com/repos/nekoguntai/sanctuary/releases/latest',
           {
             headers: {
               'Accept': 'application/vnd.github.v3+json',
@@ -1764,7 +1764,7 @@ router.get('/version', async (req: Request, res: Response) => {
       currentVersion,
       latestVersion,
       updateAvailable,
-      releaseUrl: releaseCache?.releaseUrl || `https://github.com/n-narusegawa/sanctuary/releases`,
+      releaseUrl: releaseCache?.releaseUrl || `https://github.com/nekoguntai/sanctuary/releases`,
       releaseName: releaseCache?.releaseName || '',
       publishedAt: releaseCache?.publishedAt || '',
       releaseNotes: releaseCache?.body || '',

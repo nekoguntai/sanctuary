@@ -16,7 +16,7 @@ import { invalidateAIStatusCache } from '../hooks/useAIStatus';
 const log = createLogger('AISettings');
 
 // URL to fetch popular models list
-const POPULAR_MODELS_URL = 'https://raw.githubusercontent.com/n-narusegawa/sanctuary/main/config/popular-models.json';
+const POPULAR_MODELS_URL = 'https://raw.githubusercontent.com/nekoguntai/sanctuary/main/config/popular-models.json';
 
 interface PopularModel {
   name: string;

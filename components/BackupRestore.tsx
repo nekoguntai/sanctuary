@@ -5,7 +5,7 @@
  * Accessible from Administration > Backup & Restore in the sidebar.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/Button';
 import {
   Database,
@@ -19,13 +19,21 @@ import {
   User,
   Layers,
   X,
+  Key,
+  Copy,
+  Eye,
+  EyeOff,
+  Shield,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
-import type { SanctuaryBackup, ValidationResult } from '../src/api/admin';
+import type { SanctuaryBackup, ValidationResult, EncryptionKeysResponse } from '../src/api/admin';
 import { createLogger } from '../utils/logger';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
 
 const log = createLogger('BackupRestore');
+
+// Local storage key for "don't show again" preference
+const BACKUP_MODAL_DISMISSED_KEY = 'sanctuary_backup_modal_dismissed';
 
 type BackupTab = 'backup' | 'restore';
 
@@ -51,7 +59,46 @@ export const BackupRestore: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
+  // Encryption keys state
+  const [encryptionKeys, setEncryptionKeys] = useState<EncryptionKeysResponse | null>(null);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+  const [showEncryptionKey, setShowEncryptionKey] = useState(false);
+  const [showEncryptionSalt, setShowEncryptionSalt] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Post-backup modal state
+  const [showBackupCompleteModal, setShowBackupCompleteModal] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch encryption keys on mount
+  useEffect(() => {
+    const fetchEncryptionKeys = async () => {
+      try {
+        const keys = await adminApi.getEncryptionKeys();
+        setEncryptionKeys(keys);
+      } catch (error) {
+        log.error('Failed to fetch encryption keys', { error });
+      } finally {
+        setIsLoadingKeys(false);
+      }
+    };
+    fetchEncryptionKeys();
+  }, []);
+
+  /**
+   * Copy text to clipboard
+   */
+  const copyToClipboard = async (text: string, keyName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(keyName);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch (error) {
+      log.error('Failed to copy to clipboard', { error });
+    }
+  };
 
   /**
    * Create and download a backup
@@ -84,6 +131,13 @@ export const BackupRestore: React.FC = () => {
 
       setBackupSuccess(true);
       setDescription('');
+
+      // Show backup complete modal if not dismissed
+      const isDismissed = localStorage.getItem(BACKUP_MODAL_DISMISSED_KEY) === 'true';
+      if (!isDismissed) {
+        setShowBackupCompleteModal(true);
+      }
+
       setTimeout(() => setBackupSuccess(false), 5000);
     } catch (error) {
       log.error('Backup failed', { error });
@@ -524,6 +578,114 @@ export const BackupRestore: React.FC = () => {
       </div>
       )}
 
+      {/* Encryption Keys Section */}
+      <div className="surface-elevated rounded-2xl border border-warning-200 dark:border-warning-800 overflow-hidden">
+        <div className="p-4 border-b border-warning-100 dark:border-warning-800 bg-warning-50 dark:bg-warning-900/20">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-warning-100 dark:bg-warning-800/50 rounded-lg">
+              <Key className="w-5 h-5 text-warning-600 dark:text-warning-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-medium text-sanctuary-900 dark:text-sanctuary-100">Encryption Keys</h3>
+              <p className="text-xs text-sanctuary-500 dark:text-sanctuary-400">Required for restoring backups on a new instance</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="flex items-start space-x-3 p-3 rounded-lg bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800">
+            <Shield className="w-4 h-4 text-warning-600 dark:text-warning-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-warning-700 dark:text-warning-300">
+              <strong>Important:</strong> These keys encrypt your node passwords and 2FA secrets.
+              Without them, encrypted data cannot be restored on a new Sanctuary instance.
+              <strong className="block mt-1">Back up these keys along with your backup file!</strong>
+            </div>
+          </div>
+
+          {isLoadingKeys ? (
+            <div className="text-sm text-sanctuary-500">Loading encryption keys...</div>
+          ) : encryptionKeys ? (
+            <div className="space-y-3">
+              {/* ENCRYPTION_KEY */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400">
+                  ENCRYPTION_KEY
+                </label>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-1 font-mono text-sm bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg px-3 py-2 text-sanctuary-900 dark:text-sanctuary-100 overflow-x-auto">
+                    {showEncryptionKey ? encryptionKeys.encryptionKey : '••••••••••••••••••••••••••••••••'}
+                  </div>
+                  <button
+                    onClick={() => setShowEncryptionKey(!showEncryptionKey)}
+                    className="p-2 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                    title={showEncryptionKey ? 'Hide' : 'Show'}
+                  >
+                    {showEncryptionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(encryptionKeys.encryptionKey, 'key')}
+                    className="p-2 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    {copiedKey === 'key' ? <Check className="w-4 h-4 text-success-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* ENCRYPTION_SALT */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400">
+                  ENCRYPTION_SALT
+                </label>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-1 font-mono text-sm bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg px-3 py-2 text-sanctuary-900 dark:text-sanctuary-100 overflow-x-auto">
+                    {showEncryptionSalt ? encryptionKeys.encryptionSalt : '••••••••••••••••••••••••'}
+                  </div>
+                  <button
+                    onClick={() => setShowEncryptionSalt(!showEncryptionSalt)}
+                    className="p-2 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                    title={showEncryptionSalt ? 'Hide' : 'Show'}
+                  >
+                    {showEncryptionSalt ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(encryptionKeys.encryptionSalt, 'salt')}
+                    className="p-2 rounded-lg hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 text-sanctuary-500 hover:text-sanctuary-700 dark:hover:text-sanctuary-300 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    {copiedKey === 'salt' ? <Check className="w-4 h-4 text-success-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Copy both */}
+              <Button
+                variant="secondary"
+                onClick={() => copyToClipboard(
+                  `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
+                  'both'
+                )}
+                className="w-full"
+              >
+                {copiedKey === 'both' ? (
+                  <>
+                    <Check className="w-4 h-4 mr-2 text-success-500" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Both Keys
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="text-sm text-red-500">Failed to load encryption keys</div>
+          )}
+        </div>
+      </div>
+
       {/* Info Box */}
       <div className="surface-secondary rounded-xl p-4 border border-sanctuary-200 dark:border-sanctuary-700">
         <h4 className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">
@@ -536,6 +698,7 @@ export const BackupRestore: React.FC = () => {
               <li>• Backups can be restored to this or another Sanctuary instance</li>
               <li>• Passwords are stored as secure hashes and remain protected</li>
               <li>• Consider creating regular backups before major changes</li>
+              <li>• <strong>Node passwords and 2FA secrets are encrypted</strong> - save your encryption keys!</li>
             </>
           ) : (
             <>
@@ -543,6 +706,7 @@ export const BackupRestore: React.FC = () => {
               <li>• Backups from older versions can be restored to newer versions</li>
               <li>• You will be logged out after restore and need to log in again</li>
               <li>• The restore process cannot be undone - create a backup first</li>
+              <li>• <strong>To restore encrypted data</strong>, ensure ENCRYPTION_KEY and ENCRYPTION_SALT match the original instance</li>
             </>
           )}
         </ul>
@@ -605,6 +769,104 @@ export const BackupRestore: React.FC = () => {
                   Confirm Restore
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backup Complete Modal - Encryption Key Reminder */}
+      {showBackupCompleteModal && encryptionKeys && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 w-full max-w-lg mx-4 overflow-hidden">
+            <div className="p-6 border-b border-sanctuary-100 dark:border-sanctuary-800 bg-warning-50 dark:bg-warning-900/20">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-warning-100 dark:bg-warning-800/50 rounded-lg">
+                  <Key className="w-5 h-5 text-warning-600 dark:text-warning-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">
+                    Backup Downloaded Successfully
+                  </h3>
+                  <p className="text-sm text-sanctuary-500">Don't forget your encryption keys!</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-start space-x-3 p-3 rounded-lg bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800">
+                <AlertTriangle className="w-5 h-5 text-warning-600 dark:text-warning-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-warning-700 dark:text-warning-300">
+                  <strong>To restore this backup on a new instance, you'll need these encryption keys.</strong>
+                  <p className="mt-1">Without them, node passwords and 2FA settings cannot be restored.</p>
+                </div>
+              </div>
+
+              {/* Keys Display */}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400">
+                    ENCRYPTION_KEY
+                  </label>
+                  <div className="font-mono text-xs bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg px-3 py-2 text-sanctuary-900 dark:text-sanctuary-100 break-all">
+                    {encryptionKeys.encryptionKey}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-sanctuary-500 dark:text-sanctuary-400">
+                    ENCRYPTION_SALT
+                  </label>
+                  <div className="font-mono text-xs bg-sanctuary-100 dark:bg-sanctuary-800 rounded-lg px-3 py-2 text-sanctuary-900 dark:text-sanctuary-100 break-all">
+                    {encryptionKeys.encryptionSalt}
+                  </div>
+                </div>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => copyToClipboard(
+                    `ENCRYPTION_KEY=${encryptionKeys.encryptionKey}\nENCRYPTION_SALT=${encryptionKeys.encryptionSalt}`,
+                    'modal-both'
+                  )}
+                  className="w-full"
+                >
+                  {copiedKey === 'modal-both' ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2 text-success-500" />
+                      Copied to Clipboard!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Both Keys
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Don't show again checkbox */}
+              <label className="flex items-center space-x-2 text-sm text-sanctuary-600 dark:text-sanctuary-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={dontShowAgain}
+                  onChange={(e) => setDontShowAgain(e.target.checked)}
+                  className="rounded border-sanctuary-300 dark:border-sanctuary-600 text-primary-600 focus:ring-primary-500"
+                />
+                <span>Don't show this reminder again</span>
+              </label>
+
+              <Button
+                onClick={() => {
+                  if (dontShowAgain) {
+                    localStorage.setItem(BACKUP_MODAL_DISMISSED_KEY, 'true');
+                  }
+                  setShowBackupCompleteModal(false);
+                  setDontShowAgain(false);
+                }}
+                className="w-full"
+              >
+                <Check className="w-4 h-4 mr-2" />
+                I've Saved My Keys
+              </Button>
             </div>
           </div>
         </div>

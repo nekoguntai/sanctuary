@@ -1364,6 +1364,44 @@ import { backupService, SanctuaryBackup } from '../services/backupService';
 import { auditService, AuditAction, AuditCategory, getClientInfo } from '../services/auditService';
 
 /**
+ * GET /api/v1/admin/encryption-keys
+ * Get the encryption keys needed for backup restoration (admin only)
+ *
+ * These keys are required to restore encrypted data (node passwords, 2FA secrets)
+ * when migrating to a new instance.
+ *
+ * Response:
+ *   - encryptionKey: string - The ENCRYPTION_KEY from environment
+ *   - encryptionSalt: string - The ENCRYPTION_SALT from environment
+ *   - hasEncryptionKey: boolean - Whether ENCRYPTION_KEY is set
+ *   - hasEncryptionSalt: boolean - Whether ENCRYPTION_SALT is set
+ */
+router.get('/encryption-keys', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const encryptionKey = process.env.ENCRYPTION_KEY || '';
+    const encryptionSalt = process.env.ENCRYPTION_SALT || '';
+
+    // Audit this access since it's sensitive
+    await auditService.logFromRequest(req, AuditAction.SETTINGS_VIEW, AuditCategory.SYSTEM, {
+      details: { action: 'view_encryption_keys' },
+    });
+
+    res.json({
+      encryptionKey,
+      encryptionSalt,
+      hasEncryptionKey: encryptionKey.length > 0,
+      hasEncryptionSalt: encryptionSalt.length > 0,
+    });
+  } catch (error) {
+    log.error('[ADMIN] Failed to get encryption keys', { error: String(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to retrieve encryption keys',
+    });
+  }
+});
+
+/**
  * POST /api/v1/admin/backup
  * Create a database backup (admin only)
  *

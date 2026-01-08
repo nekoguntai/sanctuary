@@ -20,11 +20,171 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# ============================================
+# Prerequisite Check Functions
+# ============================================
+# Track check results
+PREREQ_ERRORS=""
+PREREQ_WARNINGS=""
+
+# Check if Docker is installed
+check_docker_installed() {
+    if command -v docker &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Docker is installed"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Docker is not installed"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker not installed${NC}
+    Install Docker:
+    - Windows/Mac: https://www.docker.com/products/docker-desktop
+    - Linux: curl -fsSL https://get.docker.com | sh
+"
+        return 1
+    fi
+}
+
+# Check if user can access Docker (daemon running + permissions)
+check_docker_access() {
+    # Skip if docker isn't installed
+    if ! command -v docker &> /dev/null; then
+        return 1
+    fi
+
+    if docker info &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Docker daemon is accessible"
+        return 0
+    fi
+
+    # Docker command exists but can't connect - diagnose why
+    if [ -e /var/run/docker.sock ]; then
+        # Socket exists but no permission
+        echo -e "${RED}✗${NC} Cannot access Docker (permission denied)"
+
+        # Check if user is in docker group
+        if groups 2>/dev/null | grep -qw docker; then
+            # User is in docker group but still can't access - group not active
+            PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker group membership not active${NC}
+    You are in the 'docker' group but it hasn't taken effect yet.
+    Fix: Log out and back in, or run:
+      newgrp docker
+    Then run this script again.
+"
+        else
+            # User is not in docker group
+            PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}User not in docker group${NC}
+    Your user '$(whoami)' is not in the 'docker' group.
+    Fix: Run these commands:
+      sudo usermod -aG docker \$USER
+      newgrp docker   # Or log out and back in
+    Then run this script again.
+"
+        fi
+        return 1
+    else
+        # Socket doesn't exist - daemon not running
+        echo -e "${RED}✗${NC} Docker daemon is not running"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker daemon not running${NC}
+    The Docker service is not started.
+    Fix: Start Docker:
+      sudo systemctl start docker
+      sudo systemctl enable docker  # Optional: start on boot
+    Then run this script again.
+"
+        return 1
+    fi
+}
+
+# Check for Docker Compose v2
+check_docker_compose() {
+    # Skip if docker isn't accessible
+    if ! docker info &> /dev/null 2>&1; then
+        return 1
+    fi
+
+    if docker compose version &> /dev/null; then
+        local version=$(docker compose version --short 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✓${NC} Docker Compose v2 is available (${version})"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Docker Compose v2 is not available"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker Compose v2 not available${NC}
+    Sanctuary requires Docker Compose v2 (the 'docker compose' command).
+    Fix: Update Docker Desktop, or install the compose plugin:
+      sudo apt-get update && sudo apt-get install docker-compose-plugin
+"
+        return 1
+    fi
+}
+
+# Check if OpenSSL is available
+check_openssl() {
+    if command -v openssl &> /dev/null; then
+        echo -e "${GREEN}✓${NC} OpenSSL is available"
+        return 0
+    else
+        echo -e "${YELLOW}⚠${NC} OpenSSL not found (optional)"
+        PREREQ_WARNINGS="${PREREQ_WARNINGS}
+  ${YELLOW}OpenSSL not installed${NC}
+    SSL certificates cannot be generated without OpenSSL.
+    HTTPS will not work, and hardware wallets require HTTPS.
+    Fix: Install OpenSSL:
+    - Linux: sudo apt install openssl
+    - Mac: brew install openssl
+"
+        return 1
+    fi
+}
+
+# Run all prerequisite checks
+run_prerequisite_checks() {
+    echo "Checking prerequisites..."
+    echo ""
+
+    # Run all checks (they accumulate errors/warnings)
+    check_docker_installed
+    check_docker_access
+    check_docker_compose
+    check_openssl
+
+    echo ""
+
+    # Show any warnings (non-fatal)
+    if [ -n "$PREREQ_WARNINGS" ]; then
+        echo -e "${YELLOW}Warnings:${NC}"
+        echo -e "$PREREQ_WARNINGS"
+    fi
+
+    # Show any errors (fatal)
+    if [ -n "$PREREQ_ERRORS" ]; then
+        echo -e "${RED}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${RED}Prerequisites not met. Please fix these issues:${NC}"
+        echo -e "$PREREQ_ERRORS"
+        echo -e "${RED}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+        exit 1
+    fi
+
+    echo -e "${GREEN}All prerequisites met!${NC}"
+    echo ""
+}
+
+# ============================================
+# Main Script
+# ============================================
+
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════╗"
 echo "║           Sanctuary Setup Script                  ║"
 echo "╚═══════════════════════════════════════════════════╝"
 echo -e "${NC}"
+
+# Run prerequisite checks first
+run_prerequisite_checks
 
 # Check if .env already exists
 if [ -f "$ENV_FILE" ]; then
@@ -195,4 +355,32 @@ else
     echo "Then open https://localhost:8443"
 fi
 echo
-echo -e "${YELLOW}Note: Your secrets are stored in .env - keep this file secure!${NC}"
+
+# ============================================
+# Critical: Backup Reminder
+# ============================================
+echo -e "${RED}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${RED}║${NC}  ${YELLOW}⚠  IMPORTANT: Back up your encryption keys!${NC}              ${RED}║${NC}"
+echo -e "${RED}╚═══════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "Your encryption keys are stored in: ${GREEN}$ENV_FILE${NC}"
+echo ""
+echo "These keys encrypt sensitive data (2FA secrets, node passwords)."
+echo -e "${RED}If lost, encrypted data cannot be recovered!${NC}"
+echo ""
+echo -e "${YELLOW}Critical secrets to back up:${NC}"
+echo "┌─────────────────────────────────────────────────────────────┐"
+echo "│ ENCRYPTION_KEY=$ENCRYPTION_KEY"
+echo "│ ENCRYPTION_SALT=$ENCRYPTION_SALT"
+echo "└─────────────────────────────────────────────────────────────┘"
+echo ""
+echo "Back up options:"
+echo "  1. Copy the .env file to a secure location"
+echo "  2. Save the keys above to a password manager"
+echo "  3. Print and store in a safe place"
+echo ""
+echo -e "${YELLOW}Note:${NC} You'll need these keys if you:"
+echo "  - Restore from a backup on a new system"
+echo "  - Reinstall Sanctuary"
+echo "  - Move to a different server"
+echo ""

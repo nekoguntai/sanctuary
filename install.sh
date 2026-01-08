@@ -62,71 +62,186 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # ============================================
-# Check prerequisites
+# Prerequisite Check Functions
 # ============================================
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        echo -e "${RED}Error: Docker is not installed.${NC}"
-        echo ""
-        echo "Please install Docker first:"
-        echo "  - Windows/Mac: https://www.docker.com/products/docker-desktop"
-        echo "  - Linux: curl -fsSL https://get.docker.com | sh"
-        echo ""
-        exit 1
-    fi
+# These functions check requirements and store results for summary display.
+# They don't exit immediately - we collect all failures first.
 
-    if ! docker info &> /dev/null; then
-        echo -e "${RED}Error: Cannot connect to Docker daemon.${NC}"
-        echo ""
-        if [ -e /var/run/docker.sock ]; then
-            echo "The Docker socket exists but you don't have permission to access it."
-            echo "To fix this, add your user to the docker group:"
-            echo ""
-            echo "  sudo usermod -aG docker \$USER"
-            echo "  newgrp docker   # Apply immediately, or log out and back in"
-            echo ""
-            echo "Then run this installer again."
-        else
-            echo "Please start Docker and try again:"
-            echo "  sudo systemctl start docker"
-        fi
-        exit 1
-    fi
+# Track check results
+PREREQ_ERRORS=""
+PREREQ_WARNINGS=""
 
-    # Check for docker compose (v2)
-    if ! docker compose version &> /dev/null; then
-        echo -e "${RED}Error: Docker Compose v2 is not available.${NC}"
-        echo ""
-        echo "Please update Docker or install Docker Compose plugin."
-        exit 1
-    fi
-
-    echo -e "${GREEN}✓${NC} Docker is installed and running"
-}
-
-check_openssl() {
-    if ! command -v openssl &> /dev/null; then
-        echo -e "${YELLOW}Warning: OpenSSL not found.${NC}"
-        # Try to install openssl on Debian/Ubuntu
-        if command -v apt-get &> /dev/null; then
-            echo "  Attempting to install OpenSSL..."
-            if sudo apt-get update -qq && sudo apt-get install -y -qq openssl >/dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} OpenSSL installed successfully"
-                return 0
-            else
-                echo -e "${YELLOW}  Could not install OpenSSL automatically.${NC}"
-            fi
-        fi
-        echo -e "${YELLOW}  SSL certificates cannot be generated without OpenSSL.${NC}"
+# Check if Docker is installed
+check_docker_installed() {
+    if command -v docker &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Docker is installed"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Docker is not installed"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker not installed${NC}
+    Install Docker:
+    - Windows/Mac: https://www.docker.com/products/docker-desktop
+    - Linux: curl -fsSL https://get.docker.com | sh
+"
         return 1
     fi
-    echo -e "${GREEN}✓${NC} OpenSSL is available"
-    return 0
+}
+
+# Check if user can access Docker (daemon running + permissions)
+check_docker_access() {
+    # Skip if docker isn't installed
+    if ! command -v docker &> /dev/null; then
+        return 1
+    fi
+
+    if docker info &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Docker daemon is accessible"
+        return 0
+    fi
+
+    # Docker command exists but can't connect - diagnose why
+    if [ -e /var/run/docker.sock ]; then
+        # Socket exists but no permission
+        echo -e "${RED}✗${NC} Cannot access Docker (permission denied)"
+
+        # Check if user is in docker group
+        if groups 2>/dev/null | grep -qw docker; then
+            # User is in docker group but still can't access - group not active
+            PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker group membership not active${NC}
+    You are in the 'docker' group but it hasn't taken effect yet.
+    Fix: Log out and back in, or run:
+      newgrp docker
+    Then run this installer again.
+"
+        else
+            # User is not in docker group
+            PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}User not in docker group${NC}
+    Your user '$(whoami)' is not in the 'docker' group.
+    Fix: Run these commands:
+      sudo usermod -aG docker \$USER
+      newgrp docker   # Or log out and back in
+    Then run this installer again.
+"
+        fi
+        return 1
+    else
+        # Socket doesn't exist - daemon not running
+        echo -e "${RED}✗${NC} Docker daemon is not running"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker daemon not running${NC}
+    The Docker service is not started.
+    Fix: Start Docker:
+      sudo systemctl start docker
+      sudo systemctl enable docker  # Optional: start on boot
+    Then run this installer again.
+"
+        return 1
+    fi
+}
+
+# Check for Docker Compose v2
+check_docker_compose() {
+    # Skip if docker isn't accessible
+    if ! docker info &> /dev/null 2>&1; then
+        return 1
+    fi
+
+    if docker compose version &> /dev/null; then
+        local version=$(docker compose version --short 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✓${NC} Docker Compose v2 is available (${version})"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Docker Compose v2 is not available"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Docker Compose v2 not available${NC}
+    Sanctuary requires Docker Compose v2 (the 'docker compose' command).
+    Fix: Update Docker Desktop, or install the compose plugin:
+      sudo apt-get update && sudo apt-get install docker-compose-plugin
+"
+        return 1
+    fi
+}
+
+# Check if Git is installed
+check_git_installed() {
+    if command -v git &> /dev/null; then
+        echo -e "${GREEN}✓${NC} Git is installed"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Git is not installed"
+        PREREQ_ERRORS="${PREREQ_ERRORS}
+  ${RED}Git not installed${NC}
+    Git is required to download Sanctuary.
+    Fix: Install Git:
+    - Windows: https://git-scm.com/download/win
+    - Mac: brew install git
+    - Linux: sudo apt install git
+"
+        return 1
+    fi
+}
+
+# Check if OpenSSL is available
+check_openssl() {
+    if command -v openssl &> /dev/null; then
+        echo -e "${GREEN}✓${NC} OpenSSL is available"
+        return 0
+    else
+        echo -e "${YELLOW}⚠${NC} OpenSSL not found (optional)"
+        PREREQ_WARNINGS="${PREREQ_WARNINGS}
+  ${YELLOW}OpenSSL not installed${NC}
+    SSL certificates cannot be generated without OpenSSL.
+    HTTPS will not work, and hardware wallets require HTTPS.
+    Fix: Install OpenSSL:
+    - Linux: sudo apt install openssl
+    - Mac: brew install openssl
+"
+        return 1
+    fi
 }
 
 # Check if openssl is available (returns 0/1, no output)
 has_openssl() {
     command -v openssl &> /dev/null
+}
+
+# ============================================
+# Run All Prerequisite Checks
+# ============================================
+run_prerequisite_checks() {
+    echo "Checking prerequisites..."
+    echo ""
+
+    # Run all checks (they accumulate errors/warnings)
+    check_docker_installed
+    check_docker_access
+    check_docker_compose
+    check_git_installed
+    check_openssl
+
+    echo ""
+
+    # Show any warnings (non-fatal)
+    if [ -n "$PREREQ_WARNINGS" ]; then
+        echo -e "${YELLOW}Warnings:${NC}"
+        echo -e "$PREREQ_WARNINGS"
+    fi
+
+    # Show any errors (fatal)
+    if [ -n "$PREREQ_ERRORS" ]; then
+        echo -e "${RED}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${RED}Prerequisites not met. Please fix these issues:${NC}"
+        echo -e "$PREREQ_ERRORS"
+        echo -e "${RED}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
+        exit 1
+    fi
+
+    echo -e "${GREEN}All prerequisites met!${NC}"
+    echo ""
 }
 
 # ============================================
@@ -214,20 +329,6 @@ check_architecture() {
     esac
 }
 
-check_git() {
-    if ! command -v git &> /dev/null; then
-        echo -e "${RED}Error: Git is not installed.${NC}"
-        echo ""
-        echo "Please install Git first:"
-        echo "  - Windows: https://git-scm.com/download/win"
-        echo "  - Mac: brew install git"
-        echo "  - Linux: sudo apt install git"
-        echo ""
-        exit 1
-    fi
-    echo -e "${GREEN}✓${NC} Git is installed"
-}
-
 # ============================================
 # Generate random JWT secret
 # ============================================
@@ -247,13 +348,13 @@ generate_secret() {
 # Main installation
 # ============================================
 main() {
-    echo "Checking prerequisites..."
-    echo ""
+    # Run all prerequisite checks first (exits if critical checks fail)
+    run_prerequisite_checks
 
-    check_docker
-    check_git
-    check_openssl  # Display status message
+    # Store OpenSSL availability for later use
     HAS_OPENSSL=$(has_openssl && echo "yes" || echo "no")
+
+    # Run optional resource/environment checks (warnings only)
     check_disk_space "$HOME"
     check_memory
     check_wsl
@@ -647,8 +748,35 @@ ENVEOF
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    echo -e "${GREEN}Tip:${NC} Your secrets have been saved to .env"
+    # ============================================
+    # Critical: Backup Reminder
+    # ============================================
+    echo -e "${RED}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║${NC}  ${YELLOW}⚠  IMPORTANT: Back up your encryption keys!${NC}              ${RED}║${NC}"
+    echo -e "${RED}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    echo "Your encryption keys are stored in: ${GREEN}$INSTALL_DIR/.env${NC}"
+    echo ""
+    echo "These keys encrypt sensitive data (2FA secrets, node passwords)."
+    echo -e "${RED}If lost, encrypted data cannot be recovered!${NC}"
+    echo ""
+    echo -e "${YELLOW}Critical secrets to back up:${NC}"
+    echo "┌─────────────────────────────────────────────────────────────┐"
+    echo "│ ENCRYPTION_KEY=$ENCRYPTION_KEY"
+    echo "│ ENCRYPTION_SALT=$ENCRYPTION_SALT"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "Back up options:"
+    echo "  1. Copy the .env file to a secure location"
+    echo "  2. Save the keys above to a password manager"
+    echo "  3. Print and store in a safe place"
+    echo ""
+    echo -e "${YELLOW}Note:${NC} You'll need these keys if you:"
+    echo "  - Restore from a backup on a new system"
+    echo "  - Reinstall Sanctuary"
+    echo "  - Move to a different server"
+    echo ""
+
     echo "Common commands:"
     echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
     echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"

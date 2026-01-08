@@ -162,7 +162,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPass
               </button>
             </div>
             {/* Password Requirements Checklist */}
-            <div className="mt-3 p-3 bg-sanctuary-50 dark:bg-sanctuary-800/50 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
+            <div className="mt-3 p-3 surface-muted rounded-lg border border-sanctuary-200 dark:border-sanctuary-700">
               <p className="text-xs font-medium text-sanctuary-600 dark:text-sanctuary-400 mb-2">Password Requirements:</p>
               <div className="grid grid-cols-2 gap-1.5">
                 <div className={`flex items-center text-xs ${passwordChecks.minLength ? 'text-green-600 dark:text-green-400' : 'text-sanctuary-400 dark:text-sanctuary-500'}`}>

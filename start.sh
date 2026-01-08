@@ -95,24 +95,79 @@ check_ssl_expiry() {
 # Run SSL check (suppress errors for missing cert - handled at startup)
 check_ssl_expiry 2>/dev/null || true
 
-# Check Docker permissions
-if ! docker info &>/dev/null; then
-    echo "Error: Cannot connect to Docker daemon."
-    echo ""
-    if [ -e /var/run/docker.sock ]; then
-        echo "The Docker socket exists but you don't have permission to access it."
-        echo "To fix this, add your user to the docker group:"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Check Docker prerequisites
+check_docker_prerequisites() {
+    local has_errors=false
+
+    # Check if docker command exists
+    if ! command -v docker &>/dev/null; then
+        echo -e "${RED}✗${NC} Docker is not installed"
         echo ""
-        echo "  sudo usermod -aG docker \$USER"
-        echo "  newgrp docker   # Apply immediately, or log out and back in"
+        echo "  Install Docker:"
+        echo "    - Windows/Mac: https://www.docker.com/products/docker-desktop"
+        echo "    - Linux: curl -fsSL https://get.docker.com | sh"
         echo ""
-    else
-        echo "Make sure Docker is installed and running:"
-        echo "  sudo systemctl start docker"
-        echo ""
+        exit 1
     fi
-    exit 1
-fi
+
+    # Check if we can connect to Docker
+    if ! docker info &>/dev/null; then
+        if [ -e /var/run/docker.sock ]; then
+            # Socket exists but no permission
+            echo -e "${RED}✗${NC} Cannot access Docker (permission denied)"
+            echo ""
+
+            # Check if user is in docker group
+            if groups 2>/dev/null | grep -qw docker; then
+                # User is in docker group but still can't access - group not active
+                echo "  You are in the 'docker' group but it hasn't taken effect yet."
+                echo ""
+                echo "  Fix: Log out and back in, or run:"
+                echo "    newgrp docker"
+                echo ""
+            else
+                # User is not in docker group
+                echo "  Your user '$(whoami)' is not in the 'docker' group."
+                echo ""
+                echo "  Fix: Run these commands:"
+                echo "    sudo usermod -aG docker \$USER"
+                echo "    newgrp docker   # Or log out and back in"
+                echo ""
+            fi
+            echo "  Then run this script again."
+            echo ""
+        else
+            # Socket doesn't exist - daemon not running
+            echo -e "${RED}✗${NC} Docker daemon is not running"
+            echo ""
+            echo "  Fix: Start Docker:"
+            echo "    sudo systemctl start docker"
+            echo "    sudo systemctl enable docker  # Optional: start on boot"
+            echo ""
+        fi
+        exit 1
+    fi
+
+    # Check Docker Compose v2
+    if ! docker compose version &>/dev/null; then
+        echo -e "${RED}✗${NC} Docker Compose v2 is not available"
+        echo ""
+        echo "  Sanctuary requires Docker Compose v2 (the 'docker compose' command)."
+        echo "  Fix: Update Docker Desktop, or install the compose plugin:"
+        echo "    sudo apt-get update && sudo apt-get install docker-compose-plugin"
+        echo ""
+        exit 1
+    fi
+}
+
+# Run Docker checks
+check_docker_prerequisites
 
 # Check if local images exist - if not, we need to build
 NEED_BUILD="no"

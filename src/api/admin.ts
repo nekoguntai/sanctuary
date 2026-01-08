@@ -197,6 +197,26 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>): P
 // ========================================
 
 /**
+ * Encryption keys response
+ */
+export interface EncryptionKeysResponse {
+  encryptionKey: string;
+  encryptionSalt: string;
+  hasEncryptionKey: boolean;
+  hasEncryptionSalt: boolean;
+}
+
+/**
+ * Get the encryption keys for backup restoration (admin only)
+ *
+ * These keys are required when restoring a backup to a new instance.
+ * Without matching keys, encrypted data (node passwords, 2FA) cannot be restored.
+ */
+export async function getEncryptionKeys(): Promise<EncryptionKeysResponse> {
+  return apiClient.get<EncryptionKeysResponse>('/admin/encryption-keys');
+}
+
+/**
  * Backup metadata structure
  */
 export interface BackupMeta {

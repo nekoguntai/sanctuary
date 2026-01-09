@@ -2650,21 +2650,16 @@ router.get('/monitoring/grafana', authenticate, requireAdmin, async (req: Reques
       false
     );
 
-    // Get password source hint (don't expose full password)
+    // Get password info (admin-only endpoint, so full password is ok)
     const encryptionKey = process.env.ENCRYPTION_KEY || '';
     const grafanaPassword = process.env.GRAFANA_PASSWORD;
     const passwordSource = grafanaPassword ? 'GRAFANA_PASSWORD' : 'ENCRYPTION_KEY';
-    // Show first 4 chars as hint, or indicate if not set
-    const passwordHint = grafanaPassword
-      ? `${grafanaPassword.substring(0, 4)}...`
-      : encryptionKey.length > 0
-        ? `${encryptionKey.substring(0, 4)}...`
-        : '(not set)';
+    const password = grafanaPassword || encryptionKey || '';
 
     res.json({
       username: 'admin',
       passwordSource,
-      passwordHint,
+      password,
       anonymousAccess,
       // Note: changing anonymous access requires container restart
       anonymousAccessNote: 'Changing anonymous access requires restarting the Grafana container',

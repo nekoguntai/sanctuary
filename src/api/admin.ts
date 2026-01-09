@@ -664,7 +664,7 @@ export async function updateMonitoringServiceUrl(
 export interface GrafanaConfig {
   username: string;
   passwordSource: 'GRAFANA_PASSWORD' | 'ENCRYPTION_KEY';
-  passwordHint: string;
+  password: string;
   anonymousAccess: boolean;
   anonymousAccessNote: string;
 }

@@ -22,6 +22,8 @@ import {
   EyeOff,
   User,
   ShieldOff,
+  Copy,
+  Check,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import type { MonitoringService, MonitoringServicesResponse, GrafanaConfig } from '../src/api/admin';
@@ -72,7 +74,7 @@ const StatusBadge: React.FC<{ status?: MonitoringService['status'] }> = ({ statu
  */
 interface ServiceCredentials {
   username: string;
-  passwordHint: string;
+  password: string;
   passwordSource: string;
   hasAuth: boolean;
 }
@@ -91,6 +93,15 @@ const ServiceCard: React.FC<{
 }> = ({ service, onEditUrl, hostname, credentials, anonymousAccess, onToggleAnonymous, isTogglingAnonymous }) => {
   const Icon = iconMap[service.icon] || Activity;
   const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPassword = async () => {
+    if (credentials?.password) {
+      await navigator.clipboard.writeText(credentials.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   // Generate actual URL by replacing {host} placeholder
   const actualUrl = service.url.includes('{host}')
@@ -132,20 +143,27 @@ const ServiceCard: React.FC<{
                   <span>Password:</span>
                 </div>
                 <div className="flex items-center space-x-1">
-                  <span className="font-mono text-sanctuary-900 dark:text-sanctuary-100">
-                    {showPassword ? credentials.passwordHint : '••••••••'}
+                  <span className="font-mono text-sanctuary-900 dark:text-sanctuary-100 max-w-[120px] truncate">
+                    {showPassword ? credentials.password : '••••••••'}
                   </span>
                   <button
                     onClick={() => setShowPassword(!showPassword)}
                     className="p-1 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
-                    title={showPassword ? 'Hide password hint' : 'Show password hint'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    onClick={handleCopyPassword}
+                    className="p-1 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                    title={copied ? 'Copied!' : 'Copy password'}
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
               <p className="text-[10px] text-sanctuary-400 mt-1">
-                Password from {credentials.passwordSource} environment variable
+                From {credentials.passwordSource} environment variable
               </p>
 
               {/* Anonymous access toggle for Grafana */}
@@ -291,7 +309,7 @@ export const Monitoring: React.FC = () => {
     if (serviceId === 'grafana' && grafanaConfig) {
       return {
         username: grafanaConfig.username,
-        passwordHint: grafanaConfig.passwordHint,
+        password: grafanaConfig.password,
         passwordSource: grafanaConfig.passwordSource,
         hasAuth: true,
       };
@@ -300,7 +318,7 @@ export const Monitoring: React.FC = () => {
     if (serviceId === 'prometheus' || serviceId === 'jaeger') {
       return {
         username: '',
-        passwordHint: '',
+        password: '',
         passwordSource: '',
         hasAuth: false,
       };

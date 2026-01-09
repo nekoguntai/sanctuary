@@ -5,7 +5,7 @@
  * with status indicators and configurable URLs.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Activity,
   BarChart3,
@@ -94,12 +94,25 @@ const ServiceCard: React.FC<{
   const Icon = iconMap[service.icon] || Activity;
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopyPassword = async () => {
     if (credentials?.password) {
       await navigator.clipboard.writeText(credentials.password);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     }
   };
 

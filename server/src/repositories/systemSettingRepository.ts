@@ -35,6 +35,11 @@ export const SystemSettingKeys = {
   // Rate limiting
   RATE_LIMIT_REQUESTS: 'rateLimit.requests',
   RATE_LIMIT_WINDOW_MS: 'rateLimit.windowMs',
+
+  // Monitoring URL overrides
+  MONITORING_GRAFANA_URL: 'monitoring.grafanaUrl',
+  MONITORING_PROMETHEUS_URL: 'monitoring.prometheusUrl',
+  MONITORING_JAEGER_URL: 'monitoring.jaegerUrl',
 } as const;
 
 export type SystemSettingKey = typeof SystemSettingKeys[keyof typeof SystemSettingKeys];

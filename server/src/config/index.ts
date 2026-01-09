@@ -208,6 +208,13 @@ function loadConfig(): CombinedConfig {
       level: parseLogLevel(),
     },
 
+    monitoring: {
+      grafanaPort: parseInt(process.env.GRAFANA_PORT || '3000', 10),
+      prometheusPort: parseInt(process.env.PROMETHEUS_PORT || '9090', 10),
+      jaegerPort: parseInt(process.env.JAEGER_UI_PORT || '16686', 10),
+      tracingEnabled: process.env.OTEL_TRACING_ENABLED === 'true',
+    },
+
     features: loadFeatureFlags(),
 
     // Legacy flat properties for backward compatibility

@@ -22,6 +22,7 @@ import {
   Bell,
   AlertTriangle,
   Brain,
+  Activity,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from './ui/CustomIcons';
 import { WalletType, HardwareDevice, isMultisigType } from '../types';
@@ -427,6 +428,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                   to="/admin/ai"
                   label="AI Assistant"
                   icon={<Brain className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/monitoring"
+                  label="Monitoring"
+                  icon={<Activity className="w-3 h-3" />}
                 />
               </div>
             )}

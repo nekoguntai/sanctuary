@@ -24,6 +24,7 @@ const Variables = lazy(() => import('./components/Variables').then(m => ({ defau
 const BackupRestore = lazy(() => import('./components/BackupRestore').then(m => ({ default: m.BackupRestore })));
 const AuditLogs = lazy(() => import('./components/AuditLogs').then(m => ({ default: m.AuditLogs })));
 const AISettings = lazy(() => import('./components/AISettings'));
+const Monitoring = lazy(() => import('./components/Monitoring'));
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -124,6 +125,7 @@ const AppRoutes: React.FC = () => {
             <Route path="/admin/backup" element={<BackupRestore />} />
             <Route path="/admin/audit-logs" element={<AuditLogs />} />
             <Route path="/admin/ai" element={<AISettings />} />
+            <Route path="/admin/monitoring" element={<Monitoring />} />
             <Route path="/admin" element={<Navigate to="/admin/settings" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

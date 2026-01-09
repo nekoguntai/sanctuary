@@ -607,3 +607,49 @@ export interface WebSocketStats {
 export async function getWebSocketStats(): Promise<WebSocketStats> {
   return apiClient.get<WebSocketStats>('/admin/websocket/stats');
 }
+
+// ========================================
+// MONITORING SERVICES
+// ========================================
+
+/**
+ * Monitoring service information
+ */
+export interface MonitoringService {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  defaultPort: number;
+  icon: string;
+  isCustomUrl: boolean;
+  status?: 'unknown' | 'healthy' | 'unhealthy';
+}
+
+/**
+ * Monitoring services response
+ */
+export interface MonitoringServicesResponse {
+  enabled: boolean;
+  services: MonitoringService[];
+}
+
+/**
+ * Get monitoring services configuration (admin only)
+ */
+export async function getMonitoringServices(checkHealth = false): Promise<MonitoringServicesResponse> {
+  const params = checkHealth ? '?checkHealth=true' : '';
+  return apiClient.get<MonitoringServicesResponse>(`/admin/monitoring/services${params}`);
+}
+
+/**
+ * Update custom URL for a monitoring service (admin only)
+ */
+export async function updateMonitoringServiceUrl(
+  serviceId: string,
+  customUrl: string | null
+): Promise<{ success: boolean }> {
+  return apiClient.put<{ success: boolean }>(`/admin/monitoring/services/${serviceId}`, {
+    customUrl,
+  });
+}

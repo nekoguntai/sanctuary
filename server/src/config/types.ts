@@ -172,6 +172,16 @@ export interface LoggingConfig {
 }
 
 /**
+ * Monitoring stack configuration (Grafana, Prometheus, Jaeger)
+ */
+export interface MonitoringConfig {
+  grafanaPort: number;
+  prometheusPort: number;
+  jaegerPort: number;
+  tracingEnabled: boolean;
+}
+
+/**
  * Experimental features that may change or be removed
  */
 export interface ExperimentalFeatures {
@@ -233,6 +243,7 @@ export interface AppConfig {
   push: PushNotificationConfig;
   docker: DockerConfig;
   logging: LoggingConfig;
+  monitoring: MonitoringConfig;
   features: FeatureFlags;
 }
 

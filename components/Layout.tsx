@@ -671,7 +671,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-sanctuary-500 uppercase">Bitcoin</span>
                       <button
-                        onClick={() => copyToClipboard('bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq', 'btc')}
+                        onClick={() => copyToClipboard('bc1qhxsgrh8v3awf3pyc42847z2e7zgygqe05lgekn', 'btc')}
                         className="flex items-center space-x-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         {copiedAddress === 'btc' ? (
@@ -689,10 +689,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, darkMode, toggleTheme 
                     </div>
                     <div className="flex flex-col items-center space-y-2">
                       <div className="bg-white p-2 rounded-lg">
-                        <QRCodeSVG value="bitcoin:bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq" size={128} level="L" />
+                        <QRCodeSVG value="bitcoin:bc1qhxsgrh8v3awf3pyc42847z2e7zgygqe05lgekn" size={128} level="L" />
                       </div>
                       <code className="text-xs text-sanctuary-600 dark:text-sanctuary-400 break-all font-mono text-center">
-                        bc1qzmc3dq08dermpth02xa437d3fx99n7e6wyhmhq
+                        bc1qhxsgrh8v3awf3pyc42847z2e7zgygqe05lgekn
                       </code>
                     </div>
                   </div>

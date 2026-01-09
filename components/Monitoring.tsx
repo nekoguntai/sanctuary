@@ -116,7 +116,7 @@ const ServiceCard: React.FC<{
 
       {/* Credentials section */}
       {credentials && (
-        <div className="mt-3 p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700">
+        <div className="mt-3 p-3 rounded-lg bg-sanctuary-100 dark:bg-sanctuary-900 border border-sanctuary-200 dark:border-sanctuary-700">
           {credentials.hasAuth ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">

@@ -98,7 +98,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sanctuary_electrum_pool_size",
+          "expr": "sum(sanctuary_electrum_pool_connections{state=\"total\"})",
           "refId": "A"
         }
       ],
@@ -155,7 +155,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sanctuary_electrum_pool_healthy_connections",
+          "expr": "sum(sanctuary_electrum_server_healthy)",
           "refId": "A"
         }
       ],
@@ -277,7 +277,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "avg(sanctuary_electrum_connection_latency_ms)",
+          "expr": "histogram_quantile(0.5, sum(rate(sanctuary_electrum_pool_acquisition_duration_seconds_bucket[5m])) by (le)) * 1000",
           "refId": "A"
         }
       ],
@@ -356,12 +356,12 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sanctuary_electrum_pool_size",
+          "expr": "sum(sanctuary_electrum_pool_connections{state=\"total\"})",
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "sanctuary_electrum_pool_healthy_connections",
+          "expr": "sum(sanctuary_electrum_server_healthy)",
           "legendFormat": "Healthy",
           "refId": "B"
         }
@@ -441,7 +441,7 @@
       "pluginVersion": "10.2.0",
       "targets": [
         {
-          "expr": "sanctuary_electrum_connection_latency_ms",
+          "expr": "histogram_quantile(0.95, sum(rate(sanctuary_electrum_pool_acquisition_duration_seconds_bucket[5m])) by (le, network)) * 1000",
           "legendFormat": "{{server}}",
           "refId": "A"
         }

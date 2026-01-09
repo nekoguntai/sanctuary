@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Draft Transaction API Tests
  *
@@ -18,27 +19,27 @@ import {
 } from '../../helpers/testUtils';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock wallet service
-jest.mock('../../../src/services/wallet', () => ({
-  getWalletById: jest.fn(),
-  checkWalletAccess: jest.fn().mockResolvedValue(true),
+vi.mock('../../../src/services/wallet', () => ({
+  getWalletById: vi.fn(),
+  checkWalletAccess: vi.fn().mockResolvedValue(true),
 }));
 
 // Mock draft lock service
-jest.mock('../../../src/services/draftLockService', () => ({
-  lockUtxosForDraft: jest.fn(),
-  resolveUtxoIds: jest.fn(),
-  unlockUtxosForDraft: jest.fn(),
+vi.mock('../../../src/services/draftLockService', () => ({
+  lockUtxosForDraft: vi.fn(),
+  resolveUtxoIds: vi.fn(),
+  unlockUtxosForDraft: vi.fn(),
 }));
 
 // Mock notification service
-jest.mock('../../../src/services/notifications/notificationService', () => ({
-  notifyNewDraft: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../src/services/notifications/notificationService', () => ({
+  notifyNewDraft: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as walletService from '../../../src/services/wallet';
@@ -47,7 +48,7 @@ import * as draftLockService from '../../../src/services/draftLockService';
 describe('Draft Transaction API', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /wallets/:walletId/drafts', () => {
@@ -76,20 +77,20 @@ describe('Draft Transaction API', () => {
 
     beforeEach(() => {
       // Default: wallet exists and user has signer role
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'signer',
       });
 
       // Default: UTXOs resolve successfully
-      (draftLockService.resolveUtxoIds as jest.Mock).mockResolvedValue({
+      (draftLockService.resolveUtxoIds as Mock).mockResolvedValue({
         found: ['utxo-id-1', 'utxo-id-2'],
         notFound: [],
       });
 
       // Default: locking succeeds
-      (draftLockService.lockUtxosForDraft as jest.Mock).mockResolvedValue({
+      (draftLockService.lockUtxosForDraft as Mock).mockResolvedValue({
         success: true,
         lockedCount: 2,
         failedUtxoIds: [],
@@ -167,7 +168,7 @@ describe('Draft Transaction API', () => {
 
     it('should return 409 Conflict when UTXOs are already locked', async () => {
       // UTXOs are locked by another draft
-      (draftLockService.lockUtxosForDraft as jest.Mock).mockResolvedValue({
+      (draftLockService.lockUtxosForDraft as Mock).mockResolvedValue({
         success: false,
         lockedCount: 0,
         failedUtxoIds: ['txid-aaa:0'],
@@ -234,7 +235,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should return 403 for viewer role', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'viewer', // Viewer cannot create drafts
@@ -256,7 +257,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should return 404 when wallet not found', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue(null);
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
 
       const { res, getResponse } = createMockResponse();
 
@@ -293,7 +294,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should warn when some UTXOs are not found', async () => {
-      (draftLockService.resolveUtxoIds as jest.Mock).mockResolvedValue({
+      (draftLockService.resolveUtxoIds as Mock).mockResolvedValue({
         found: ['utxo-id-1'],
         notFound: ['txid-missing:99'], // One UTXO not found
       });
@@ -322,7 +323,7 @@ describe('Draft Transaction API', () => {
     const userId = 'user-123';
 
     it('should return all drafts for a wallet', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
       });
@@ -385,7 +386,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should return empty array when no drafts exist', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
       });
@@ -410,7 +411,7 @@ describe('Draft Transaction API', () => {
     const userId = 'user-123';
 
     it('should return a specific draft', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
       });
@@ -457,7 +458,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should return 404 when draft not found', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
       });
@@ -488,7 +489,7 @@ describe('Draft Transaction API', () => {
     const userId = 'user-123';
 
     beforeEach(() => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'signer',
@@ -596,7 +597,7 @@ describe('Draft Transaction API', () => {
     });
 
     it('should return 403 for viewer role', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'viewer',
@@ -639,7 +640,7 @@ describe('Draft Transaction API', () => {
     const userId = 'user-123';
 
     beforeEach(() => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'owner',
@@ -683,7 +684,7 @@ describe('Draft Transaction API', () => {
         status: 'unsigned',
       });
 
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'signer', // Not owner, but is the creator
@@ -709,7 +710,7 @@ describe('Draft Transaction API', () => {
         status: 'unsigned',
       });
 
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({
+      (walletService.getWalletById as Mock).mockResolvedValue({
         id: walletId,
         name: 'Test Wallet',
         userRole: 'signer', // Not owner
@@ -1072,7 +1073,7 @@ describe('Draft Transaction API', () => {
     });
 
     beforeEach(() => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue(createMultisigWallet(2, 3));
+      (walletService.getWalletById as Mock).mockResolvedValue(createMultisigWallet(2, 3));
     });
 
     describe('Partial Signature Tracking', () => {
@@ -1415,7 +1416,7 @@ describe('Draft Transaction API', () => {
 
     describe('Role-based Access for Multisig', () => {
       it('should allow signer role to add signatures', async () => {
-        (walletService.getWalletById as jest.Mock).mockResolvedValue({
+        (walletService.getWalletById as Mock).mockResolvedValue({
           ...createMultisigWallet(2, 3),
           userRole: 'signer',
         });
@@ -1429,7 +1430,7 @@ describe('Draft Transaction API', () => {
       });
 
       it('should allow owner role to add signatures', async () => {
-        (walletService.getWalletById as jest.Mock).mockResolvedValue({
+        (walletService.getWalletById as Mock).mockResolvedValue({
           ...createMultisigWallet(2, 3),
           userRole: 'owner',
         });
@@ -1442,7 +1443,7 @@ describe('Draft Transaction API', () => {
       });
 
       it('should prevent viewer role from adding signatures', async () => {
-        (walletService.getWalletById as jest.Mock).mockResolvedValue({
+        (walletService.getWalletById as Mock).mockResolvedValue({
           ...createMultisigWallet(2, 3),
           userRole: 'viewer',
         });

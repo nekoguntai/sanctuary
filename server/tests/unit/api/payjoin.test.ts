@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Payjoin API Routes Tests (CRITICAL)
  *
@@ -45,7 +46,7 @@ function createRawBodyRequest(options: {
     headers: mockHeaders,
     user: options.user,
     ip: options.ip || '127.0.0.1',
-    get: jest.fn((header: string): string | undefined => {
+    get: vi.fn((header: string): string | undefined => {
       return mockHeaders[header.toLowerCase()];
     }),
     protocol: 'https',
@@ -55,27 +56,27 @@ function createRawBodyRequest(options: {
 type Request = import('express').Request;
 
 // Mock Prisma before importing router
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock payjoin service
-jest.mock('../../../src/services/payjoinService', () => ({
-  processPayjoinRequest: jest.fn(),
-  parseBip21Uri: jest.fn(),
-  generateBip21Uri: jest.fn(),
-  attemptPayjoinSend: jest.fn(),
+vi.mock('../../../src/services/payjoinService', () => ({
+  processPayjoinRequest: vi.fn(),
+  parseBip21Uri: vi.fn(),
+  generateBip21Uri: vi.fn(),
+  attemptPayjoinSend: vi.fn(),
   PayjoinErrors: {
     VERSION_UNSUPPORTED: 'version-unsupported',
     UNAVAILABLE: 'unavailable',
@@ -86,8 +87,8 @@ jest.mock('../../../src/services/payjoinService', () => ({
 }));
 
 // Mock authentication middleware
-jest.mock('../../../src/middleware/auth', () => ({
-  authenticate: jest.fn((req, res, next) => {
+vi.mock('../../../src/middleware/auth', () => ({
+  authenticate: vi.fn((req, res, next) => {
     if (req.headers?.authorization) {
       req.user = { userId: 'user-123', username: 'testuser', isAdmin: false };
       next();
@@ -115,7 +116,7 @@ const PROPOSAL_PSBT_BASE64 = 'cHNidP8BAHECAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaG
 describe('Payjoin API Routes', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /:addressId (BIP78 Receiver Endpoint)', () => {
@@ -130,9 +131,9 @@ describe('Payjoin API Routes', () => {
       // Simulate the route handler logic
       const { v } = req.query as { v?: string };
       if (v !== '1') {
-        (res.status as jest.Mock)(400);
-        (res as any).type = jest.fn().mockReturnValue(res);
-        (res.send as jest.Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
+        (res.status as Mock)(400);
+        (res as any).type = vi.fn().mockReturnValue(res);
+        (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
       }
 
       const response = getResponse();
@@ -151,9 +152,9 @@ describe('Payjoin API Routes', () => {
       // Simulate the route handler logic
       const originalPsbt = typeof req.body === 'string' ? req.body : '';
       if (!originalPsbt || originalPsbt.length === 0) {
-        (res.status as jest.Mock)(400);
-        (res as any).type = jest.fn().mockReturnValue(res);
-        (res.send as jest.Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
+        (res.status as Mock)(400);
+        (res as any).type = vi.fn().mockReturnValue(res);
+        (res.send as Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
       }
 
       const response = getResponse();
@@ -162,7 +163,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return valid proposal PSBT on success', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
@@ -186,8 +187,8 @@ describe('Payjoin API Routes', () => {
         );
 
         if (result.success) {
-          (res as any).type = jest.fn().mockReturnValue(res);
-          (res.send as jest.Mock)(result.proposalPsbt);
+          (res as any).type = vi.fn().mockReturnValue(res);
+          (res.send as Mock)(result.proposalPsbt);
         }
       }
 
@@ -196,7 +197,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return text/plain content type on error', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: false,
         error: PayjoinErrors.NOT_ENOUGH_MONEY,
         errorMessage: 'No suitable UTXOs',
@@ -209,7 +210,7 @@ describe('Payjoin API Routes', () => {
       });
       const { res, getResponse } = createMockResponse();
 
-      const typeSpy = jest.fn().mockReturnValue(res);
+      const typeSpy = vi.fn().mockReturnValue(res);
       (res as any).type = typeSpy;
 
       // Simulate the route handler logic
@@ -220,16 +221,16 @@ describe('Payjoin API Routes', () => {
       );
 
       if (!result.success) {
-        (res.status as jest.Mock)(400);
+        (res.status as Mock)(400);
         typeSpy('text/plain');
-        (res.send as jest.Mock)(result.error);
+        (res.send as Mock)(result.error);
       }
 
       expect(typeSpy).toHaveBeenCalledWith('text/plain');
     });
 
     it('should use minfeerate query parameter', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
@@ -256,7 +257,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should default minfeerate to 1 if not provided', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
@@ -283,7 +284,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return 500 on internal error', async () => {
-      (processPayjoinRequest as jest.Mock).mockRejectedValue(
+      (processPayjoinRequest as Mock).mockRejectedValue(
         new Error('Internal error')
       );
 
@@ -301,9 +302,9 @@ describe('Payjoin API Routes', () => {
           1
         );
       } catch {
-        (res.status as jest.Mock)(500);
-        (res as any).type = jest.fn().mockReturnValue(res);
-        (res.send as jest.Mock)(PayjoinErrors.RECEIVER_ERROR);
+        (res.status as Mock)(500);
+        (res as any).type = vi.fn().mockReturnValue(res);
+        (res.send as Mock)(PayjoinErrors.RECEIVER_ERROR);
       }
 
       const response = getResponse();
@@ -321,9 +322,9 @@ describe('Payjoin API Routes', () => {
 
       const { v } = req.query as { v?: string };
       if (v !== '1') {
-        (res.status as jest.Mock)(400);
-        (res as any).type = jest.fn().mockReturnValue(res);
-        (res.send as jest.Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
+        (res.status as Mock)(400);
+        (res as any).type = vi.fn().mockReturnValue(res);
+        (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
       }
 
       const response = getResponse();
@@ -348,8 +349,8 @@ describe('Payjoin API Routes', () => {
 
       // Simulate auth middleware
       if (!req.headers?.authorization) {
-        (res.status as jest.Mock)(401);
-        (res.json as jest.Mock)({ error: 'Unauthorized' });
+        (res.status as Mock)(401);
+        (res.json as Mock)({ error: 'Unauthorized' });
       }
 
       const response = getResponse();
@@ -371,8 +372,8 @@ describe('Payjoin API Routes', () => {
       });
 
       if (!address) {
-        (res.status as jest.Mock)(404);
-        (res.json as jest.Mock)({ error: 'Address not found or access denied' });
+        (res.status as Mock)(404);
+        (res.json as Mock)({ error: 'Address not found or access denied' });
       }
 
       const response = getResponse();
@@ -381,7 +382,7 @@ describe('Payjoin API Routes', () => {
 
     it('should generate valid BIP21 URI with Payjoin endpoint', async () => {
       mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as jest.Mock).mockReturnValue(
+      (generateBip21Uri as Mock).mockReturnValue(
         `bitcoin:${TEST_ADDRESS}?pj=${encodeURIComponent(TEST_PAYJOIN_URL)}`
       );
 
@@ -392,7 +393,7 @@ describe('Payjoin API Routes', () => {
         user: { userId: 'user-123', username: 'testuser', isAdmin: false },
       });
       (req as any).protocol = 'https';
-      (req as any).get = jest.fn().mockReturnValue('example.com');
+      (req as any).get = vi.fn().mockReturnValue('example.com');
 
       const { res, getResponse } = createMockResponse();
 
@@ -408,7 +409,7 @@ describe('Payjoin API Routes', () => {
           payjoinUrl,
         });
 
-        (res.json as jest.Mock)({
+        (res.json as Mock)({
           uri,
           address: address.address,
           payjoinUrl,
@@ -424,7 +425,7 @@ describe('Payjoin API Routes', () => {
 
     it('should include amount when provided', async () => {
       mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as jest.Mock).mockReturnValue(
+      (generateBip21Uri as Mock).mockReturnValue(
         `bitcoin:${TEST_ADDRESS}?amount=0.001&pj=${encodeURIComponent(TEST_PAYJOIN_URL)}`
       );
 
@@ -448,7 +449,7 @@ describe('Payjoin API Routes', () => {
           payjoinUrl: TEST_PAYJOIN_URL,
         });
 
-        (res.json as jest.Mock)({ uri });
+        (res.json as Mock)({ uri });
       }
 
       expect(generateBip21Uri).toHaveBeenCalledWith(
@@ -459,7 +460,7 @@ describe('Payjoin API Routes', () => {
 
     it('should include label and message when provided', async () => {
       mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as jest.Mock).mockReturnValue('bitcoin:...');
+      (generateBip21Uri as Mock).mockReturnValue('bitcoin:...');
 
       const req = createMockRequest({
         params: { addressId: TEST_ADDRESS_ID },
@@ -481,7 +482,7 @@ describe('Payjoin API Routes', () => {
           payjoinUrl: TEST_PAYJOIN_URL,
         });
 
-        (res.json as jest.Mock)({ uri: 'bitcoin:...' });
+        (res.json as Mock)({ uri: 'bitcoin:...' });
       }
 
       expect(generateBip21Uri).toHaveBeenCalledWith(
@@ -503,8 +504,8 @@ describe('Payjoin API Routes', () => {
       const { res, getResponse } = createMockResponse();
 
       if (!req.headers?.authorization) {
-        (res.status as jest.Mock)(401);
-        (res.json as jest.Mock)({ error: 'Unauthorized' });
+        (res.status as Mock)(401);
+        (res.json as Mock)({ error: 'Unauthorized' });
       }
 
       const response = getResponse();
@@ -520,8 +521,8 @@ describe('Payjoin API Routes', () => {
       const { res, getResponse } = createMockResponse();
 
       if (!req.body?.uri || typeof req.body.uri !== 'string') {
-        (res.status as jest.Mock)(400);
-        (res.json as jest.Mock)({ error: 'URI is required' });
+        (res.status as Mock)(400);
+        (res.json as Mock)({ error: 'URI is required' });
       }
 
       const response = getResponse();
@@ -529,7 +530,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should parse valid BIP21 URI and return components', async () => {
-      (parseBip21Uri as jest.Mock).mockReturnValue({
+      (parseBip21Uri as Mock).mockReturnValue({
         address: TEST_ADDRESS,
         amount: 100000,
         label: 'Test',
@@ -546,7 +547,7 @@ describe('Payjoin API Routes', () => {
 
       if (req.body?.uri) {
         const parsed = parseBip21Uri(req.body.uri);
-        (res.json as jest.Mock)({
+        (res.json as Mock)({
           address: parsed.address,
           amount: parsed.amount,
           label: parsed.label,
@@ -563,7 +564,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should indicate hasPayjoin: false when no pj parameter', async () => {
-      (parseBip21Uri as jest.Mock).mockReturnValue({
+      (parseBip21Uri as Mock).mockReturnValue({
         address: TEST_ADDRESS,
         amount: 100000,
         payjoinUrl: undefined,
@@ -578,7 +579,7 @@ describe('Payjoin API Routes', () => {
 
       if (req.body?.uri) {
         const parsed = parseBip21Uri(req.body.uri);
-        (res.json as jest.Mock)({
+        (res.json as Mock)({
           address: parsed.address,
           hasPayjoin: !!parsed.payjoinUrl,
         });
@@ -589,7 +590,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should handle invalid URI format', async () => {
-      (parseBip21Uri as jest.Mock).mockImplementation(() => {
+      (parseBip21Uri as Mock).mockImplementation(() => {
         throw new Error('Invalid URI format');
       });
 
@@ -603,8 +604,8 @@ describe('Payjoin API Routes', () => {
       try {
         parseBip21Uri(req.body?.uri);
       } catch {
-        (res.status as jest.Mock)(400);
-        (res.json as jest.Mock)({ error: 'Invalid URI format' });
+        (res.status as Mock)(400);
+        (res.json as Mock)({ error: 'Invalid URI format' });
       }
 
       const response = getResponse();
@@ -621,8 +622,8 @@ describe('Payjoin API Routes', () => {
       const { res, getResponse } = createMockResponse();
 
       if (!req.headers?.authorization) {
-        (res.status as jest.Mock)(401);
-        (res.json as jest.Mock)({ error: 'Unauthorized' });
+        (res.status as Mock)(401);
+        (res.json as Mock)({ error: 'Unauthorized' });
       }
 
       const response = getResponse();
@@ -638,8 +639,8 @@ describe('Payjoin API Routes', () => {
       const { res, getResponse } = createMockResponse();
 
       if (!req.body?.psbt || !req.body?.payjoinUrl) {
-        (res.status as jest.Mock)(400);
-        (res.json as jest.Mock)({ error: 'psbt and payjoinUrl are required' });
+        (res.status as Mock)(400);
+        (res.json as Mock)({ error: 'psbt and payjoinUrl are required' });
       }
 
       const response = getResponse();
@@ -647,7 +648,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should attempt Payjoin and return proposal', async () => {
-      (attemptPayjoinSend as jest.Mock).mockResolvedValue({
+      (attemptPayjoinSend as Mock).mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
         isPayjoin: true,
@@ -666,7 +667,7 @@ describe('Payjoin API Routes', () => {
           req.body.payjoinUrl,
           [0]
         );
-        (res.json as jest.Mock)(result);
+        (res.json as Mock)(result);
       }
 
       const response = getResponse();
@@ -676,7 +677,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return failure response when Payjoin fails', async () => {
-      (attemptPayjoinSend as jest.Mock).mockResolvedValue({
+      (attemptPayjoinSend as Mock).mockResolvedValue({
         success: false,
         isPayjoin: false,
         error: 'Endpoint returned error',
@@ -695,7 +696,7 @@ describe('Payjoin API Routes', () => {
           req.body.payjoinUrl,
           [0]
         );
-        (res.json as jest.Mock)(result);
+        (res.json as Mock)(result);
       }
 
       const response = getResponse();
@@ -705,7 +706,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should handle internal errors', async () => {
-      (attemptPayjoinSend as jest.Mock).mockRejectedValue(
+      (attemptPayjoinSend as Mock).mockRejectedValue(
         new Error('Network failure')
       );
 
@@ -723,8 +724,8 @@ describe('Payjoin API Routes', () => {
           [0]
         );
       } catch {
-        (res.status as jest.Mock)(500);
-        (res.json as jest.Mock)({ error: 'Payjoin attempt failed' });
+        (res.status as Mock)(500);
+        (res.json as Mock)({ error: 'Payjoin attempt failed' });
       }
 
       const response = getResponse();
@@ -732,7 +733,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should assume first input is sender by default', async () => {
-      (attemptPayjoinSend as jest.Mock).mockResolvedValue({
+      (attemptPayjoinSend as Mock).mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
         isPayjoin: true,
@@ -762,16 +763,16 @@ describe('Payjoin API Routes', () => {
     it('should return version-unsupported for wrong version', async () => {
       const { res, getResponse } = createMockResponse();
 
-      (res.status as jest.Mock)(400);
-      (res as any).type = jest.fn().mockReturnValue(res);
-      (res.send as jest.Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
+      (res.status as Mock)(400);
+      (res as any).type = vi.fn().mockReturnValue(res);
+      (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
 
       const response = getResponse();
       expect(response.body).toBe('version-unsupported');
     });
 
     it('should return unavailable when address not found', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: false,
         error: PayjoinErrors.UNAVAILABLE,
         errorMessage: 'Address not found',
@@ -787,7 +788,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return not-enough-money when no UTXOs', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: false,
         error: PayjoinErrors.NOT_ENOUGH_MONEY,
         errorMessage: 'No suitable UTXOs',
@@ -803,7 +804,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return original-psbt-rejected for invalid PSBT', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: false,
         error: PayjoinErrors.ORIGINAL_PSBT_REJECTED,
         errorMessage: 'PSBT has no inputs',
@@ -819,7 +820,7 @@ describe('Payjoin API Routes', () => {
     });
 
     it('should return receiver-error for internal errors', async () => {
-      (processPayjoinRequest as jest.Mock).mockResolvedValue({
+      (processPayjoinRequest as Mock).mockResolvedValue({
         success: false,
         error: PayjoinErrors.RECEIVER_ERROR,
         errorMessage: 'Unknown error',
@@ -860,8 +861,8 @@ describe('Payjoin API Routes', () => {
 
       // This endpoint requires auth
       if (!req.headers?.authorization) {
-        (res.status as jest.Mock)(401);
-        (res.json as jest.Mock)({ error: 'Unauthorized' });
+        (res.status as Mock)(401);
+        (res.json as Mock)({ error: 'Unauthorized' });
       }
 
       const response = getResponse();
@@ -891,8 +892,8 @@ describe('Payjoin API Routes', () => {
       });
 
       if (!address) {
-        (res.status as jest.Mock)(404);
-        (res.json as jest.Mock)({ error: 'Address not found or access denied' });
+        (res.status as Mock)(404);
+        (res.json as Mock)({ error: 'Address not found or access denied' });
       }
 
       const response = getResponse();
@@ -911,9 +912,9 @@ describe('Payjoin API Routes', () => {
 
       const originalPsbt = typeof req.body === 'string' ? req.body : (req.body as any)?.toString?.();
       if (!originalPsbt || originalPsbt.length === 0) {
-        (res.status as jest.Mock)(400);
-        (res as any).type = jest.fn().mockReturnValue(res);
-        (res.send as jest.Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
+        (res.status as Mock)(400);
+        (res as any).type = vi.fn().mockReturnValue(res);
+        (res.send as Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
       }
 
       const response = getResponse();

@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Transaction API Routes Tests
  *
@@ -18,38 +19,41 @@ import {
   randomAddress,
 } from '../../helpers/testUtils';
 
-// Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
-}));
+// Mock Prisma with async factory to handle hoisting
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
 
 // Mock blockchain service
-jest.mock('../../../src/services/bitcoin/blockchain', () => ({
-  getBlockHeight: jest.fn().mockResolvedValue(850000),
-  getCachedBlockHeight: jest.fn().mockReturnValue(850000),
-  broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
+vi.mock('../../../src/services/bitcoin/blockchain', () => ({
+  getBlockHeight: vi.fn().mockResolvedValue(850000),
+  getCachedBlockHeight: vi.fn().mockReturnValue(850000),
+  broadcastTransaction: vi.fn().mockResolvedValue('mock-txid'),
 }));
 
 // Mock wallet service
-jest.mock('../../../src/services/wallet', () => ({
-  checkWalletAccess: jest.fn().mockResolvedValue(true),
-  checkWalletEditAccess: jest.fn().mockResolvedValue(true),
+vi.mock('../../../src/services/wallet', () => ({
+  checkWalletAccess: vi.fn().mockResolvedValue(true),
+  checkWalletEditAccess: vi.fn().mockResolvedValue(true),
 }));
 
 // Mock address derivation
-jest.mock('../../../src/services/bitcoin/addressDerivation', () => ({
-  generateNextAddress: jest.fn().mockResolvedValue({
+vi.mock('../../../src/services/bitcoin/addressDerivation', () => ({
+  generateNextAddress: vi.fn().mockResolvedValue({
     address: 'tb1qtest123',
     derivationPath: "m/84'/1'/0'/0/0",
   }),
 }));
 
 // Mock audit service
-jest.mock('../../../src/services/auditService', () => ({
+vi.mock('../../../src/services/auditService', () => ({
   auditService: {
-    log: jest.fn().mockResolvedValue(undefined),
-    logFromRequest: jest.fn().mockResolvedValue(undefined),
+    log: vi.fn().mockResolvedValue(undefined),
+    logFromRequest: vi.fn().mockResolvedValue(undefined),
   },
   AuditAction: {
     TRANSACTION_BROADCAST: 'TRANSACTION_BROADCAST',
@@ -61,13 +65,17 @@ jest.mock('../../../src/services/auditService', () => ({
 }));
 
 // Mock fetch for mempool.space API
-global.fetch = jest.fn();
+global.fetch = vi.fn();
+
+// Import mocked modules for use in tests
+import * as blockchain from '../../../src/services/bitcoin/blockchain';
+import * as addressDerivation from '../../../src/services/bitcoin/addressDerivation';
 
 describe('Transactions API', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
+    vi.clearAllMocks();
+    (global.fetch as Mock).mockReset();
   });
 
   describe('GET /wallets/:walletId/transactions', () => {
@@ -121,8 +129,8 @@ describe('Transactions API', () => {
 
       const { res, getResponse } = createMockResponse();
 
-      // Import the handler
-      const { getBlockHeight } = require('../../../src/services/bitcoin/blockchain');
+      // Use the imported blockchain module
+      const { getBlockHeight } = blockchain;
 
       // Simulate route handler logic
       const transactions = await mockPrismaClient.transaction.findMany({
@@ -223,7 +231,7 @@ describe('Transactions API', () => {
       ]);
 
       // Mock mempool.space API response
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: async () => ({ weight: 560, fee: 500 }),
       });
@@ -327,7 +335,7 @@ describe('Transactions API', () => {
       ]);
 
       // Mock API failure
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      (global.fetch as Mock).mockRejectedValue(new Error('Network error'));
 
       // Should not throw - gracefully handle the error
       const { res, getResponse } = createMockResponse();
@@ -1445,7 +1453,7 @@ describe('Transactions API', () => {
       mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
 
       // Mock mempool.space API to also fail (transaction not found publicly)
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: false,
         status: 404,
       });
@@ -1525,7 +1533,7 @@ describe('Transactions API', () => {
       mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
 
       // Mock mempool.space API success
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => mockHex,
       });
@@ -1628,11 +1636,11 @@ describe('Transactions API', () => {
 
   describe('POST /wallets/:walletId/transactions/create', () => {
     const mockTransactionService = {
-      createTransaction: jest.fn(),
+      createTransaction: vi.fn(),
     };
 
     beforeEach(() => {
-      jest.doMock('../../../src/services/bitcoin/transactionService', () => mockTransactionService);
+      vi.doMock('../../../src/services/bitcoin/transactionService', () => mockTransactionService);
       mockTransactionService.createTransaction.mockReset();
     });
 
@@ -1826,7 +1834,7 @@ describe('Transactions API', () => {
 
   describe('POST /wallets/:walletId/transactions/batch', () => {
     const mockTransactionService = {
-      createBatchTransaction: jest.fn(),
+      createBatchTransaction: vi.fn(),
     };
 
     beforeEach(() => {
@@ -1974,8 +1982,6 @@ describe('Transactions API', () => {
   });
 
   describe('POST /wallets/:walletId/transactions/broadcast', () => {
-    const mockBlockchain = require('../../../src/services/bitcoin/blockchain');
-
     it('should broadcast signed PSBT successfully', async () => {
       const walletId = 'wallet-123';
       const signedPsbtBase64 = 'cHNidP8BAHsCAAAAAQ...signed...';
@@ -1986,7 +1992,7 @@ describe('Transactions API', () => {
         network: 'testnet',
       });
 
-      mockBlockchain.broadcastTransaction.mockResolvedValue(txid);
+      vi.mocked(blockchain.broadcastTransaction).mockResolvedValue(txid);
 
       mockPrismaClient.transaction.create.mockResolvedValue({
         id: 'tx-new',
@@ -2000,7 +2006,7 @@ describe('Transactions API', () => {
       const { res, getResponse } = createMockResponse();
 
       // Simulate successful broadcast
-      const broadcastedTxid = await mockBlockchain.broadcastTransaction('signed-hex');
+      const broadcastedTxid = await vi.mocked(blockchain.broadcastTransaction)('signed-hex');
       res.json!({
         success: true,
         txid: broadcastedTxid,
@@ -2016,11 +2022,11 @@ describe('Transactions API', () => {
       const rawTxHex = '0200000001abc...';
       const txid = randomTxid();
 
-      mockBlockchain.broadcastTransaction.mockResolvedValue(txid);
+      vi.mocked(blockchain.broadcastTransaction).mockResolvedValue(txid);
 
       const { res, getResponse } = createMockResponse();
 
-      const broadcastedTxid = await mockBlockchain.broadcastTransaction(rawTxHex);
+      const broadcastedTxid = await vi.mocked(blockchain.broadcastTransaction)(rawTxHex);
       res.json!({
         success: true,
         txid: broadcastedTxid,
@@ -2049,14 +2055,14 @@ describe('Transactions API', () => {
     });
 
     it('should handle broadcast failure gracefully', async () => {
-      mockBlockchain.broadcastTransaction.mockRejectedValue(
+      vi.mocked(blockchain.broadcastTransaction).mockRejectedValue(
         new Error('Transaction rejected: insufficient fee')
       );
 
       const { res, getResponse } = createMockResponse();
 
       try {
-        await mockBlockchain.broadcastTransaction('invalid-hex');
+        await vi.mocked(blockchain.broadcastTransaction)('invalid-hex');
         res.json!({ success: true });
       } catch (error) {
         res.status!(400).json!({
@@ -2075,7 +2081,7 @@ describe('Transactions API', () => {
       const txid = randomTxid();
       const recipient = randomAddress();
 
-      mockBlockchain.broadcastTransaction.mockResolvedValue(txid);
+      vi.mocked(blockchain.broadcastTransaction).mockResolvedValue(txid);
       mockPrismaClient.transaction.create.mockResolvedValue({
         id: 'tx-new',
         txid,
@@ -2390,8 +2396,6 @@ describe('Transactions API', () => {
   });
 
   describe('POST /wallets/:walletId/addresses/generate', () => {
-    const mockAddressDerivation = require('../../../src/services/bitcoin/addressDerivation');
-
     it('should generate new receive address', async () => {
       const walletId = 'wallet-123';
       const newAddress = randomAddress();
@@ -2402,7 +2406,7 @@ describe('Transactions API', () => {
         descriptor: "wpkh([abc123/84'/1'/0']tpub.../*)",
       });
 
-      mockAddressDerivation.generateNextAddress.mockResolvedValue({
+      vi.mocked(addressDerivation).generateNextAddress.mockResolvedValue({
         address: newAddress,
         derivationPath: "m/84'/1'/0'/0/5",
       });
@@ -2418,7 +2422,7 @@ describe('Transactions API', () => {
 
       const { res, getResponse } = createMockResponse();
 
-      const generated = await mockAddressDerivation.generateNextAddress();
+      const generated = await vi.mocked(addressDerivation).generateNextAddress();
       res.json!({
         address: generated.address,
         derivationPath: generated.derivationPath,
@@ -2434,14 +2438,14 @@ describe('Transactions API', () => {
       const walletId = 'wallet-123';
       const newAddress = randomAddress();
 
-      mockAddressDerivation.generateNextAddress.mockResolvedValue({
+      vi.mocked(addressDerivation).generateNextAddress.mockResolvedValue({
         address: newAddress,
         derivationPath: "m/84'/1'/0'/1/3",
       });
 
       const { res, getResponse } = createMockResponse();
 
-      const generated = await mockAddressDerivation.generateNextAddress();
+      const generated = await vi.mocked(addressDerivation).generateNextAddress();
       res.json!({
         address: generated.address,
         derivationPath: generated.derivationPath,

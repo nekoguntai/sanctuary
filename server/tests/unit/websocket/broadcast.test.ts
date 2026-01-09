@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Broadcast Helpers Tests
  *
@@ -20,18 +21,18 @@ import {
 } from '../../../src/websocket/broadcast';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock the WebSocket server
-const mockBroadcast = jest.fn();
-const mockGetStats = jest.fn().mockReturnValue({
+const mockBroadcast = vi.fn();
+const mockGetStats = vi.fn().mockReturnValue({
   clients: 5,
   maxClients: 10000,
   subscriptions: 15,
@@ -46,15 +47,15 @@ const mockGetStats = jest.fn().mockReturnValue({
     maxSubscriptionsPerConnection: 500,
   },
 });
-const mockIsGatewayConnected = jest.fn().mockReturnValue(false);
-const mockSendEvent = jest.fn();
+const mockIsGatewayConnected = vi.fn().mockReturnValue(false);
+const mockSendEvent = vi.fn();
 
-jest.mock('../../../src/websocket/server', () => ({
-  getWebSocketServer: jest.fn(() => ({
+vi.mock('../../../src/websocket/server', () => ({
+  getWebSocketServer: vi.fn(() => ({
     broadcast: mockBroadcast,
     getStats: mockGetStats,
   })),
-  getGatewayWebSocketServer: jest.fn(() => ({
+  getGatewayWebSocketServer: vi.fn(() => ({
     isGatewayConnected: mockIsGatewayConnected,
     sendEvent: mockSendEvent,
   })),
@@ -62,7 +63,7 @@ jest.mock('../../../src/websocket/server', () => ({
 
 describe('Broadcast Helpers', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('broadcastTransaction', () => {

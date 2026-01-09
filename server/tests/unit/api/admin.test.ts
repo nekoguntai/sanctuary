@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Admin API Tests
  *
@@ -23,13 +24,13 @@ import {
 import * as bcrypt from 'bcryptjs';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock config
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   __esModule: true,
   default: {
     jwtSecret: 'test-jwt-secret-key-for-testing-only',
@@ -42,17 +43,17 @@ jest.mock('../../../src/config', () => ({
 }));
 
 // Mock audit service
-const mockAuditLog = jest.fn().mockResolvedValue(undefined);
-const mockAuditLogFromRequest = jest.fn().mockResolvedValue(undefined);
-const mockAuditQuery = jest.fn().mockResolvedValue({ logs: [], total: 0 });
-const mockAuditGetStats = jest.fn().mockResolvedValue({
+const mockAuditLog = vi.fn().mockResolvedValue(undefined);
+const mockAuditLogFromRequest = vi.fn().mockResolvedValue(undefined);
+const mockAuditQuery = vi.fn().mockResolvedValue({ logs: [], total: 0 });
+const mockAuditGetStats = vi.fn().mockResolvedValue({
   totalEvents: 0,
   byAction: {},
   byCategory: {},
   byUser: {},
 });
 
-jest.mock('../../../src/services/auditService', () => ({
+vi.mock('../../../src/services/auditService', () => ({
   auditService: {
     log: mockAuditLog,
     logFromRequest: mockAuditLogFromRequest,
@@ -81,15 +82,15 @@ jest.mock('../../../src/services/auditService', () => ({
     BACKUP: 'backup',
     SYSTEM: 'system',
   },
-  getClientInfo: jest.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
+  getClientInfo: vi.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
 }));
 
 // Mock backup service
-const mockCreateBackup = jest.fn();
-const mockValidateBackup = jest.fn();
-const mockRestoreFromBackup = jest.fn();
+const mockCreateBackup = vi.fn();
+const mockValidateBackup = vi.fn();
+const mockRestoreFromBackup = vi.fn();
 
-jest.mock('../../../src/services/backupService', () => ({
+vi.mock('../../../src/services/backupService', () => ({
   backupService: {
     createBackup: mockCreateBackup,
     validateBackup: mockValidateBackup,
@@ -98,30 +99,30 @@ jest.mock('../../../src/services/backupService', () => ({
 }));
 
 // Mock node client
-const mockTestNodeConfig = jest.fn();
-const mockResetNodeClient = jest.fn();
+const mockTestNodeConfig = vi.fn();
+const mockResetNodeClient = vi.fn();
 
-jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
+vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
   testNodeConfig: mockTestNodeConfig,
   resetNodeClient: mockResetNodeClient,
 }));
 
 // Mock electrum pool
-const mockReloadElectrumServers = jest.fn();
+const mockReloadElectrumServers = vi.fn();
 
-jest.mock('../../../src/services/bitcoin/electrumPool', () => ({
+vi.mock('../../../src/services/bitcoin/electrumPool', () => ({
   reloadElectrumServers: mockReloadElectrumServers,
 }));
 
 // Mock encryption
-jest.mock('../../../src/utils/encryption', () => ({
-  encrypt: jest.fn((data: string) => `encrypted_${data}`),
-  decrypt: jest.fn((data: string) => data.replace('encrypted_', '')),
+vi.mock('../../../src/utils/encryption', () => ({
+  encrypt: vi.fn((data: string) => `encrypted_${data}`),
+  decrypt: vi.fn((data: string) => data.replace('encrypted_', '')),
 }));
 
 // Mock password validation
-jest.mock('../../../src/utils/password', () => ({
-  validatePasswordStrength: jest.fn((password: string) => {
+vi.mock('../../../src/utils/password', () => ({
+  validatePasswordStrength: vi.fn((password: string) => {
     if (password.length < 8) {
       return { valid: false, errors: ['Password must be at least 8 characters'] };
     }
@@ -130,17 +131,17 @@ jest.mock('../../../src/utils/password', () => ({
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
-  createLogger: jest.fn(() => ({
-    info: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    debug: jest.fn(),
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
   })),
 }));
 
 // Mock constants
-jest.mock('../../../src/constants', () => ({
+vi.mock('../../../src/constants', () => ({
   DEFAULT_CONFIRMATION_THRESHOLD: 2,
   DEFAULT_DEEP_CONFIRMATION_THRESHOLD: 6,
   DEFAULT_DUST_THRESHOLD: 546,
@@ -151,17 +152,17 @@ jest.mock('../../../src/constants', () => ({
 }));
 
 // Mock websocket server to prevent import chain to tiny-secp256k1
-jest.mock('../../../src/websocket/server', () => ({
-  getWebSocketServer: jest.fn(() => null),
-  getRateLimitEvents: jest.fn(() => []),
+vi.mock('../../../src/websocket/server', () => ({
+  getWebSocketServer: vi.fn(() => null),
+  getRateLimitEvents: vi.fn(() => []),
 }));
 
 // Mock fs for version check - include all methods Prisma needs
-jest.mock('fs', () => {
-  const actual = jest.requireActual('fs');
+vi.mock('fs', () => {
+  const actual = vi.importActual('fs');
   return {
     ...actual,
-    readFileSync: jest.fn(() => JSON.stringify({ version: '1.0.0' })),
+    readFileSync: vi.fn(() => JSON.stringify({ version: '1.0.0' })),
   };
 });
 
@@ -176,7 +177,7 @@ describe('Admin API', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   // ========================================
@@ -1933,7 +1934,7 @@ describe('Admin API', () => {
     describe('GET /version', () => {
       it('should return current version info', async () => {
         // Mock fetch for GitHub API
-        global.fetch = jest.fn().mockResolvedValue({
+        global.fetch = vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
             tag_name: 'v1.1.0',
@@ -1962,7 +1963,7 @@ describe('Admin API', () => {
       });
 
       it('should handle GitHub API failure gracefully', async () => {
-        global.fetch = jest.fn().mockRejectedValue(new Error('Network error')) as any;
+        global.fetch = vi.fn().mockRejectedValue(new Error('Network error')) as any;
 
         const req = createMockRequest({});
         const { res, getResponse } = createMockResponse();

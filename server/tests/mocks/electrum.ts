@@ -1,3 +1,4 @@
+import { vi, Mock, Mock } from 'vitest';
 /**
  * Electrum Client Mock
  *
@@ -48,29 +49,29 @@ export interface MockAddressHistory {
 
 // Create the mock Electrum client
 export const mockElectrumClient = {
-  connect: jest.fn().mockResolvedValue(undefined),
-  disconnect: jest.fn().mockResolvedValue(undefined),
-  isConnected: jest.fn().mockReturnValue(true),
+  connect: vi.fn().mockResolvedValue(undefined),
+  disconnect: vi.fn().mockResolvedValue(undefined),
+  isConnected: vi.fn().mockReturnValue(true),
 
   // Transaction methods
-  getTransaction: jest.fn().mockResolvedValue(null),
-  getTransactionsBatch: jest.fn().mockResolvedValue(new Map()),
-  broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
+  getTransaction: vi.fn().mockResolvedValue(null),
+  getTransactionsBatch: vi.fn().mockResolvedValue(new Map()),
+  broadcastTransaction: vi.fn().mockResolvedValue('mock-txid'),
 
   // Address methods
-  getAddressHistory: jest.fn().mockResolvedValue([]),
-  getAddressHistoryBatch: jest.fn().mockResolvedValue(new Map()),
-  getAddressBalance: jest.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
-  getAddressUTXOs: jest.fn().mockResolvedValue([]),
-  getAddressUTXOsBatch: jest.fn().mockResolvedValue(new Map()),
-  subscribeAddress: jest.fn().mockResolvedValue('subscription-id'),
+  getAddressHistory: vi.fn().mockResolvedValue([]),
+  getAddressHistoryBatch: vi.fn().mockResolvedValue(new Map()),
+  getAddressBalance: vi.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
+  getAddressUTXOs: vi.fn().mockResolvedValue([]),
+  getAddressUTXOsBatch: vi.fn().mockResolvedValue(new Map()),
+  subscribeAddress: vi.fn().mockResolvedValue('subscription-id'),
 
   // Block methods
-  getBlockHeight: jest.fn().mockResolvedValue(800000),
-  getBlockHeader: jest.fn().mockResolvedValue('0'.repeat(160)),
+  getBlockHeight: vi.fn().mockResolvedValue(800000),
+  getBlockHeader: vi.fn().mockResolvedValue('0'.repeat(160)),
 
   // Fee estimation
-  estimateFee: jest.fn().mockResolvedValue(10),
+  estimateFee: vi.fn().mockResolvedValue(10),
 };
 
 // Helper to create mock transaction
@@ -157,7 +158,7 @@ export function createMockAddressHistory(options: {
 export function resetElectrumMocks(): void {
   Object.values(mockElectrumClient).forEach((method) => {
     if (typeof method === 'function' && 'mockClear' in method) {
-      (method as jest.Mock).mockClear();
+      (method as Mock).mockClear();
     }
   });
 }
@@ -195,19 +196,19 @@ export function setupElectrumMockReturns(config: {
 
 // Mock Electrum Pool
 export const mockElectrumPool = {
-  initialize: jest.fn().mockResolvedValue(undefined),
-  shutdown: jest.fn().mockResolvedValue(undefined),
-  acquire: jest.fn().mockImplementation(() =>
+  initialize: vi.fn().mockResolvedValue(undefined),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+  acquire: vi.fn().mockImplementation(() =>
     Promise.resolve({
       client: mockElectrumClient,
-      release: jest.fn(),
-      withClient: jest.fn().mockImplementation((fn: (client: typeof mockElectrumClient) => Promise<unknown>) =>
+      release: vi.fn(),
+      withClient: vi.fn().mockImplementation((fn: (client: typeof mockElectrumClient) => Promise<unknown>) =>
         fn(mockElectrumClient)
       ),
     })
   ),
-  getSubscriptionConnection: jest.fn().mockResolvedValue(mockElectrumClient),
-  getPoolStats: jest.fn().mockReturnValue({
+  getSubscriptionConnection: vi.fn().mockResolvedValue(mockElectrumClient),
+  getPoolStats: vi.fn().mockReturnValue({
     totalConnections: 2,
     activeConnections: 1,
     idleConnections: 1,
@@ -231,20 +232,20 @@ export const mockElectrumPool = {
       },
     ],
   }),
-  isPoolInitialized: jest.fn().mockReturnValue(true),
-  isHealthy: jest.fn().mockReturnValue(true),
-  getEffectiveMinConnections: jest.fn().mockReturnValue(1),
-  getEffectiveMaxConnections: jest.fn().mockReturnValue(5),
-  setServers: jest.fn(),
-  getServers: jest.fn().mockReturnValue([]),
-  reloadServers: jest.fn().mockResolvedValue(undefined),
+  isPoolInitialized: vi.fn().mockReturnValue(true),
+  isHealthy: vi.fn().mockReturnValue(true),
+  getEffectiveMinConnections: vi.fn().mockReturnValue(1),
+  getEffectiveMaxConnections: vi.fn().mockReturnValue(5),
+  setServers: vi.fn(),
+  getServers: vi.fn().mockReturnValue([]),
+  reloadServers: vi.fn().mockResolvedValue(undefined),
 };
 
 // Reset all Electrum Pool mocks
 export function resetElectrumPoolMocks(): void {
   Object.values(mockElectrumPool).forEach((method) => {
     if (typeof method === 'function' && 'mockClear' in method) {
-      (method as jest.Mock).mockClear();
+      (method as Mock).mockClear();
     }
   });
 }

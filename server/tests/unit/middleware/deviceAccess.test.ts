@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Device Access Control Middleware Tests
  *
@@ -13,25 +14,25 @@ import {
 } from '../../helpers/testUtils';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock device access service
-jest.mock('../../../src/services/deviceAccess', () => ({
-  checkDeviceAccess: jest.fn(),
-  checkDeviceOwnerAccess: jest.fn(),
-  getUserDeviceRole: jest.fn(),
+vi.mock('../../../src/services/deviceAccess', () => ({
+  checkDeviceAccess: vi.fn(),
+  checkDeviceOwnerAccess: vi.fn(),
+  getUserDeviceRole: vi.fn(),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -50,15 +51,15 @@ describe('Device Access Middleware', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('requireDeviceAccess - View Level', () => {
     const middleware = requireDeviceAccess('view');
 
     it('should allow access when user has view permission', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('viewer');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('viewer');
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -75,8 +76,8 @@ describe('Device Access Middleware', () => {
     });
 
     it('should allow access for owner role', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('owner');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -92,7 +93,7 @@ describe('Device Access Middleware', () => {
     });
 
     it('should deny access when user has no permission', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(false);
+      (checkDeviceAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -145,8 +146,8 @@ describe('Device Access Middleware', () => {
     const middleware = requireDeviceAccess('owner');
 
     it('should allow owner access only for owner', async () => {
-      (checkDeviceOwnerAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('owner');
+      (checkDeviceOwnerAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -162,7 +163,7 @@ describe('Device Access Middleware', () => {
     });
 
     it('should deny owner access for viewer', async () => {
-      (checkDeviceOwnerAccess as jest.Mock).mockResolvedValue(false);
+      (checkDeviceOwnerAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -181,8 +182,8 @@ describe('Device Access Middleware', () => {
 
   describe('Parameter Handling', () => {
     it('should accept deviceId from params.id', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('viewer');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('viewer');
 
       const middleware = requireDeviceAccess('view');
       const req = createMockRequest({
@@ -198,8 +199,8 @@ describe('Device Access Middleware', () => {
     });
 
     it('should accept deviceId from params.deviceId', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('viewer');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('viewer');
 
       const middleware = requireDeviceAccess('view');
       const req = createMockRequest({
@@ -217,7 +218,7 @@ describe('Device Access Middleware', () => {
 
   describe('Error Handling', () => {
     it('should return 500 on database error', async () => {
-      (checkDeviceAccess as jest.Mock).mockRejectedValue(new Error('Database error'));
+      (checkDeviceAccess as Mock).mockRejectedValue(new Error('Database error'));
 
       const middleware = requireDeviceAccess('view');
       const req = createMockRequest({
@@ -238,9 +239,9 @@ describe('Device Access Middleware', () => {
 
   describe('Role Hierarchy', () => {
     it('owner should have all access levels', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (checkDeviceOwnerAccess as jest.Mock).mockResolvedValue(true);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('owner');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (checkDeviceOwnerAccess as Mock).mockResolvedValue(true);
+      (getUserDeviceRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: deviceId },
@@ -263,9 +264,9 @@ describe('Device Access Middleware', () => {
     });
 
     it('viewer should only have view access', async () => {
-      (checkDeviceAccess as jest.Mock).mockResolvedValue(true);
-      (checkDeviceOwnerAccess as jest.Mock).mockResolvedValue(false);
-      (getUserDeviceRole as jest.Mock).mockResolvedValue('viewer');
+      (checkDeviceAccess as Mock).mockResolvedValue(true);
+      (checkDeviceOwnerAccess as Mock).mockResolvedValue(false);
+      (getUserDeviceRole as Mock).mockResolvedValue('viewer');
 
       const req = createMockRequest({
         params: { id: deviceId },

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Electrum Server CRUD API Tests
  *
@@ -8,24 +9,24 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the node client
-jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  resetNodeClient: jest.fn().mockResolvedValue(undefined),
-  getElectrumPool: jest.fn().mockReturnValue(null),
+vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
+  resetNodeClient: vi.fn().mockResolvedValue(undefined),
+  getElectrumPool: vi.fn().mockReturnValue(null),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 

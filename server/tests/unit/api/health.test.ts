@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Health API Tests
  *
@@ -9,34 +10,34 @@ import request from 'supertest';
 import express, { Express } from 'express';
 
 // Mock dependencies
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: {
-    $queryRaw: jest.fn(),
+    $queryRaw: vi.fn(),
   },
 }));
 
-jest.mock('../../../src/services/circuitBreaker', () => ({
+vi.mock('../../../src/services/circuitBreaker', () => ({
   circuitBreakerRegistry: {
-    getAllHealth: jest.fn(),
-    getOverallStatus: jest.fn(),
+    getAllHealth: vi.fn(),
+    getOverallStatus: vi.fn(),
   },
 }));
 
-jest.mock('../../../src/services/syncService', () => ({
-  getSyncService: jest.fn(),
+vi.mock('../../../src/services/syncService', () => ({
+  getSyncService: vi.fn(),
 }));
 
-jest.mock('../../../src/websocket/server', () => ({
-  getWebSocketServer: jest.fn(),
+vi.mock('../../../src/websocket/server', () => ({
+  getWebSocketServer: vi.fn(),
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -59,10 +60,10 @@ describe('Health API', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Mock process.memoryUsage to return low memory values (under 500MB threshold)
-    process.memoryUsage = jest.fn().mockReturnValue({
+    process.memoryUsage = vi.fn().mockReturnValue({
       heapUsed: 100 * 1024 * 1024,   // 100MB
       heapTotal: 200 * 1024 * 1024,  // 200MB
       rss: 300 * 1024 * 1024,        // 300MB
@@ -71,10 +72,10 @@ describe('Health API', () => {
     }) as unknown as typeof process.memoryUsage;
 
     // Default healthy mocks
-    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ 1: 1 }]);
-    (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([]);
-    (circuitBreakerRegistry.getOverallStatus as jest.Mock).mockReturnValue('healthy');
-    (getSyncService as jest.Mock).mockReturnValue({
+    (prisma.$queryRaw as Mock).mockResolvedValue([{ 1: 1 }]);
+    (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([]);
+    (circuitBreakerRegistry.getOverallStatus as Mock).mockReturnValue('healthy');
+    (getSyncService as Mock).mockReturnValue({
       getHealthMetrics: () => ({
         isRunning: true,
         queueLength: 0,
@@ -82,7 +83,7 @@ describe('Health API', () => {
         subscribedAddresses: 100,
       }),
     });
-    (getWebSocketServer as jest.Mock).mockReturnValue({
+    (getWebSocketServer as Mock).mockReturnValue({
       getStats: () => ({
         clients: 5,
         maxClients: 100,
@@ -110,7 +111,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded status when database is unhealthy', async () => {
-      (prisma.$queryRaw as jest.Mock).mockRejectedValue(new Error('Connection refused'));
+      (prisma.$queryRaw as Mock).mockRejectedValue(new Error('Connection refused'));
 
       const response = await request(app).get('/api/v1/health');
 
@@ -121,7 +122,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when sync service is not running', async () => {
-      (getSyncService as jest.Mock).mockReturnValue({
+      (getSyncService as Mock).mockReturnValue({
         getHealthMetrics: () => ({
           isRunning: false,
           queueLength: 0,
@@ -139,7 +140,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when sync queue appears stalled', async () => {
-      (getSyncService as jest.Mock).mockReturnValue({
+      (getSyncService as Mock).mockReturnValue({
         getHealthMetrics: () => ({
           isRunning: true,
           queueLength: 15,
@@ -156,7 +157,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when WebSocket server is not initialized', async () => {
-      (getWebSocketServer as jest.Mock).mockReturnValue(null);
+      (getWebSocketServer as Mock).mockReturnValue(null);
 
       const response = await request(app).get('/api/v1/health');
 
@@ -179,7 +180,7 @@ describe('Health API', () => {
     });
 
     it('should handle WebSocket stats error gracefully', async () => {
-      (getWebSocketServer as jest.Mock).mockReturnValue({
+      (getWebSocketServer as Mock).mockReturnValue({
         getStats: () => {
           throw new Error('Stats unavailable');
         },
@@ -219,7 +220,7 @@ describe('Health API', () => {
     });
 
     it('should respond even when other components are unhealthy', async () => {
-      (prisma.$queryRaw as jest.Mock).mockRejectedValue(new Error('Database down'));
+      (prisma.$queryRaw as Mock).mockRejectedValue(new Error('Database down'));
 
       const response = await request(app).get('/api/v1/health/live');
 
@@ -237,7 +238,7 @@ describe('Health API', () => {
     });
 
     it('should return not ready when database is unhealthy', async () => {
-      (prisma.$queryRaw as jest.Mock).mockRejectedValue(new Error('Connection timeout'));
+      (prisma.$queryRaw as Mock).mockRejectedValue(new Error('Connection timeout'));
 
       const response = await request(app).get('/api/v1/health/ready');
 
@@ -249,8 +250,8 @@ describe('Health API', () => {
 
   describe('GET /api/v1/health/circuits', () => {
     it('should return empty circuits when none registered', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([]);
-      (circuitBreakerRegistry.getOverallStatus as jest.Mock).mockReturnValue('healthy');
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([]);
+      (circuitBreakerRegistry.getOverallStatus as Mock).mockReturnValue('healthy');
 
       const response = await request(app).get('/api/v1/health/circuits');
 
@@ -265,8 +266,8 @@ describe('Health API', () => {
         { name: 'mempool-api', state: 'open', failures: 5, successes: 0 },
       ];
 
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue(mockCircuits);
-      (circuitBreakerRegistry.getOverallStatus as jest.Mock).mockReturnValue('degraded');
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue(mockCircuits);
+      (circuitBreakerRegistry.getOverallStatus as Mock).mockReturnValue('degraded');
 
       const response = await request(app).get('/api/v1/health/circuits');
 
@@ -280,7 +281,7 @@ describe('Health API', () => {
 
   describe('Electrum Health Check', () => {
     it('should return healthy when no electrum circuit breaker exists', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([]);
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([]);
 
       const response = await request(app).get('/api/v1/health');
 
@@ -289,7 +290,7 @@ describe('Health API', () => {
     });
 
     it('should return unhealthy when electrum circuit is open', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         {
           name: 'electrum-mainnet',
           state: 'open',
@@ -307,7 +308,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when electrum circuit is half-open', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         {
           name: 'electrum-testnet',
           state: 'half-open',
@@ -323,7 +324,7 @@ describe('Health API', () => {
     });
 
     it('should return healthy when electrum circuit is closed', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         {
           name: 'electrum-signet',
           state: 'closed',
@@ -341,7 +342,7 @@ describe('Health API', () => {
 
   describe('Circuit Breaker Health Check', () => {
     it('should return healthy when no circuit breakers registered', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([]);
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([]);
 
       const response = await request(app).get('/api/v1/health');
 
@@ -350,7 +351,7 @@ describe('Health API', () => {
     });
 
     it('should return unhealthy when all circuits are open', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         { name: 'service-a', state: 'open' },
         { name: 'service-b', state: 'open' },
       ]);
@@ -362,7 +363,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when some circuits are open', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         { name: 'service-a', state: 'open' },
         { name: 'service-b', state: 'closed' },
       ]);
@@ -374,7 +375,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when some circuits are half-open', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         { name: 'service-a', state: 'half-open' },
         { name: 'service-b', state: 'closed' },
       ]);
@@ -386,7 +387,7 @@ describe('Health API', () => {
     });
 
     it('should return healthy when all circuits are closed', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         { name: 'service-a', state: 'closed' },
         { name: 'service-b', state: 'closed' },
         { name: 'service-c', state: 'closed' },
@@ -402,7 +403,7 @@ describe('Health API', () => {
 
   describe('Overall Status Determination', () => {
     it('should return unhealthy when database is unhealthy', async () => {
-      (prisma.$queryRaw as jest.Mock).mockRejectedValue(new Error('DB error'));
+      (prisma.$queryRaw as Mock).mockRejectedValue(new Error('DB error'));
 
       const response = await request(app).get('/api/v1/health');
 
@@ -410,7 +411,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when non-database component is unhealthy', async () => {
-      (circuitBreakerRegistry.getAllHealth as jest.Mock).mockReturnValue([
+      (circuitBreakerRegistry.getAllHealth as Mock).mockReturnValue([
         { name: 'electrum', state: 'open', failures: 10, lastFailure: '2025-01-01' },
       ]);
 
@@ -421,7 +422,7 @@ describe('Health API', () => {
     });
 
     it('should return degraded when any component is degraded', async () => {
-      (getSyncService as jest.Mock).mockReturnValue({
+      (getSyncService as Mock).mockReturnValue({
         getHealthMetrics: () => ({
           isRunning: false,
           queueLength: 0,
@@ -444,7 +445,7 @@ describe('Health API', () => {
 
   describe('Error Handling', () => {
     it('should handle sync service errors gracefully', async () => {
-      (getSyncService as jest.Mock).mockImplementation(() => {
+      (getSyncService as Mock).mockImplementation(() => {
         throw new Error('Sync service not available');
       });
 
@@ -456,7 +457,7 @@ describe('Health API', () => {
     });
 
     it('should handle non-Error exceptions in database check', async () => {
-      (prisma.$queryRaw as jest.Mock).mockRejectedValue('String error');
+      (prisma.$queryRaw as Mock).mockRejectedValue('String error');
 
       const response = await request(app).get('/api/v1/health');
 

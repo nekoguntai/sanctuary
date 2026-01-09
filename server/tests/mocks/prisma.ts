@@ -1,3 +1,4 @@
+import { vi, Mock, Mock } from 'vitest';
 /**
  * Prisma Client Mock
  *
@@ -9,19 +10,19 @@ import { PrismaClient } from '@prisma/client';
 
 // Create mock implementations for all Prisma model methods
 const createModelMock = () => ({
-  findMany: jest.fn().mockResolvedValue([]),
-  findFirst: jest.fn().mockResolvedValue(null),
-  findUnique: jest.fn().mockResolvedValue(null),
-  create: jest.fn().mockImplementation((data) => Promise.resolve({ id: 'mock-id', ...data.data })),
-  createMany: jest.fn().mockResolvedValue({ count: 0 }),
-  update: jest.fn().mockImplementation((data) => Promise.resolve({ id: data.where.id, ...data.data })),
-  updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-  delete: jest.fn().mockResolvedValue(null),
-  deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-  upsert: jest.fn().mockImplementation((data) => Promise.resolve({ id: 'mock-id', ...data.create })),
-  count: jest.fn().mockResolvedValue(0),
-  aggregate: jest.fn().mockResolvedValue({}),
-  groupBy: jest.fn().mockResolvedValue([]),
+  findMany: vi.fn().mockResolvedValue([]),
+  findFirst: vi.fn().mockResolvedValue(null),
+  findUnique: vi.fn().mockResolvedValue(null),
+  create: vi.fn().mockImplementation((data) => Promise.resolve({ id: 'mock-id', ...data.data })),
+  createMany: vi.fn().mockResolvedValue({ count: 0 }),
+  update: vi.fn().mockImplementation((data) => Promise.resolve({ id: data.where.id, ...data.data })),
+  updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+  delete: vi.fn().mockResolvedValue(null),
+  deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+  upsert: vi.fn().mockImplementation((data) => Promise.resolve({ id: 'mock-id', ...data.create })),
+  count: vi.fn().mockResolvedValue(0),
+  aggregate: vi.fn().mockResolvedValue({}),
+  groupBy: vi.fn().mockResolvedValue([]),
 });
 
 // Create the mock Prisma client
@@ -58,7 +59,7 @@ export const mockPrismaClient = {
   deviceAccount: createModelMock(),
 
   // Transaction method
-  $transaction: jest.fn().mockImplementation(async (callback) => {
+  $transaction: vi.fn().mockImplementation(async (callback) => {
     if (typeof callback === 'function') {
       return callback(mockPrismaClient);
     }
@@ -67,10 +68,10 @@ export const mockPrismaClient = {
   }),
 
   // Connection methods
-  $connect: jest.fn().mockResolvedValue(undefined),
-  $disconnect: jest.fn().mockResolvedValue(undefined),
-  $executeRaw: jest.fn().mockResolvedValue(0),
-  $queryRaw: jest.fn().mockResolvedValue([]),
+  $connect: vi.fn().mockResolvedValue(undefined),
+  $disconnect: vi.fn().mockResolvedValue(undefined),
+  $executeRaw: vi.fn().mockResolvedValue(0),
+  $queryRaw: vi.fn().mockResolvedValue([]),
 };
 
 // Type assertion for compatibility
@@ -99,11 +100,11 @@ export function resetPrismaMocks(): void {
     if (typeof model === 'object' && model !== null && !key.startsWith('$')) {
       Object.entries(model).forEach(([method, fn]) => {
         if (typeof fn === 'function' && 'mockReset' in fn) {
-          (fn as jest.Mock).mockReset();
+          (fn as Mock).mockReset();
           // Restore default implementation
           const defaultImpl = (defaultModelImplementations as any)[method];
           if (defaultImpl) {
-            (fn as jest.Mock).mockImplementation(defaultImpl);
+            (fn as Mock).mockImplementation(defaultImpl);
           }
         }
       });
@@ -111,8 +112,8 @@ export function resetPrismaMocks(): void {
   });
 
   // Reset $transaction to its default implementation
-  (mockPrismaClient.$transaction as jest.Mock).mockReset();
-  (mockPrismaClient.$transaction as jest.Mock).mockImplementation(async (callback) => {
+  (mockPrismaClient.$transaction as Mock).mockReset();
+  (mockPrismaClient.$transaction as Mock).mockImplementation(async (callback) => {
     if (typeof callback === 'function') {
       return callback(mockPrismaClient);
     }
@@ -121,14 +122,14 @@ export function resetPrismaMocks(): void {
   });
 
   // Reset other $ methods
-  (mockPrismaClient.$connect as jest.Mock).mockReset();
-  (mockPrismaClient.$connect as jest.Mock).mockResolvedValue(undefined);
-  (mockPrismaClient.$disconnect as jest.Mock).mockReset();
-  (mockPrismaClient.$disconnect as jest.Mock).mockResolvedValue(undefined);
-  (mockPrismaClient.$executeRaw as jest.Mock).mockReset();
-  (mockPrismaClient.$executeRaw as jest.Mock).mockResolvedValue(0);
-  (mockPrismaClient.$queryRaw as jest.Mock).mockReset();
-  (mockPrismaClient.$queryRaw as jest.Mock).mockResolvedValue([]);
+  (mockPrismaClient.$connect as Mock).mockReset();
+  (mockPrismaClient.$connect as Mock).mockResolvedValue(undefined);
+  (mockPrismaClient.$disconnect as Mock).mockReset();
+  (mockPrismaClient.$disconnect as Mock).mockResolvedValue(undefined);
+  (mockPrismaClient.$executeRaw as Mock).mockReset();
+  (mockPrismaClient.$executeRaw as Mock).mockResolvedValue(0);
+  (mockPrismaClient.$queryRaw as Mock).mockReset();
+  (mockPrismaClient.$queryRaw as Mock).mockResolvedValue([]);
 }
 
 // Helper to set up common mock returns

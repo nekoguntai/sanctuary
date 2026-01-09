@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Blockchain Service Unit Tests
  *
@@ -9,140 +10,140 @@
  * - Balance calculation and correction
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Mock Prisma with proper typing
 const mockPrisma = {
   wallet: {
-    findUnique: jest.fn<any>(),
-    findMany: jest.fn<any>(),
+    findUnique: vi.fn<any>(),
+    findMany: vi.fn<any>(),
   },
   address: {
-    findUnique: jest.fn<any>(),
-    findMany: jest.fn<any>(),
-    updateMany: jest.fn<any>(),
-    createMany: jest.fn<any>(),
-    update: jest.fn<any>(),
+    findUnique: vi.fn<any>(),
+    findMany: vi.fn<any>(),
+    updateMany: vi.fn<any>(),
+    createMany: vi.fn<any>(),
+    update: vi.fn<any>(),
   },
   transaction: {
-    findUnique: jest.fn<any>(),
-    findFirst: jest.fn<any>(),
-    findMany: jest.fn<any>(),
-    create: jest.fn<any>(),
-    createMany: jest.fn<any>(),
-    update: jest.fn<any>(),
-    updateMany: jest.fn<any>(),
-    delete: jest.fn<any>(),
+    findUnique: vi.fn<any>(),
+    findFirst: vi.fn<any>(),
+    findMany: vi.fn<any>(),
+    create: vi.fn<any>(),
+    createMany: vi.fn<any>(),
+    update: vi.fn<any>(),
+    updateMany: vi.fn<any>(),
+    delete: vi.fn<any>(),
   },
   transactionInput: {
-    createMany: jest.fn<any>(),
+    createMany: vi.fn<any>(),
   },
   transactionOutput: {
-    createMany: jest.fn<any>(),
-    updateMany: jest.fn<any>(),
+    createMany: vi.fn<any>(),
+    updateMany: vi.fn<any>(),
   },
   uTXO: {
-    findUnique: jest.fn<any>(),
-    findMany: jest.fn<any>(),
-    create: jest.fn<any>(),
-    createMany: jest.fn<any>(),
-    update: jest.fn<any>(),
-    updateMany: jest.fn<any>(),
-    delete: jest.fn<any>(),
+    findUnique: vi.fn<any>(),
+    findMany: vi.fn<any>(),
+    create: vi.fn<any>(),
+    createMany: vi.fn<any>(),
+    update: vi.fn<any>(),
+    updateMany: vi.fn<any>(),
+    delete: vi.fn<any>(),
   },
   draftUtxoLock: {
-    findMany: jest.fn<any>(),
+    findMany: vi.fn<any>(),
   },
   draftTransaction: {
-    deleteMany: jest.fn<any>(),
+    deleteMany: vi.fn<any>(),
   },
   addressLabel: {
-    findMany: jest.fn<any>(),
+    findMany: vi.fn<any>(),
   },
   transactionLabel: {
-    createMany: jest.fn<any>(),
+    createMany: vi.fn<any>(),
   },
-  $transaction: jest.fn<any>((operations: any[]) => Promise.all(operations)),
+  $transaction: vi.fn<any>((operations: any[]) => Promise.all(operations)),
 };
 
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrisma,
 }));
 
 // Mock node client with proper typing
 const mockNodeClient = {
-  getAddressHistory: jest.fn<any>(),
-  getAddressHistoryBatch: jest.fn<any>(),
-  getTransaction: jest.fn<any>(),
-  getTransactionsBatch: jest.fn<any>(),
-  getAddressUTXOs: jest.fn<any>(),
-  getAddressUTXOsBatch: jest.fn<any>(),
-  getAddressBalance: jest.fn<any>(),
-  broadcastTransaction: jest.fn<any>(),
-  estimateFee: jest.fn<any>(),
-  subscribeAddress: jest.fn<any>(),
-  isConnected: jest.fn<any>(() => true),
-  connect: jest.fn<any>(),
+  getAddressHistory: vi.fn<any>(),
+  getAddressHistoryBatch: vi.fn<any>(),
+  getTransaction: vi.fn<any>(),
+  getTransactionsBatch: vi.fn<any>(),
+  getAddressUTXOs: vi.fn<any>(),
+  getAddressUTXOsBatch: vi.fn<any>(),
+  getAddressBalance: vi.fn<any>(),
+  broadcastTransaction: vi.fn<any>(),
+  estimateFee: vi.fn<any>(),
+  subscribeAddress: vi.fn<any>(),
+  isConnected: vi.fn<any>(() => true),
+  connect: vi.fn<any>(),
 };
 
-jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn(() => Promise.resolve(mockNodeClient)),
+vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn(() => Promise.resolve(mockNodeClient)),
 }));
 
 // Mock electrum pool with proper typing
 const mockElectrumPool = {
-  isProxyEnabled: jest.fn<any>(() => false),
+  isProxyEnabled: vi.fn<any>(() => false),
 };
 
-jest.mock('../../../src/services/bitcoin/electrumPool', () => ({
-  getElectrumPool: jest.fn(() => mockElectrumPool),
+vi.mock('../../../src/services/bitcoin/electrumPool', () => ({
+  getElectrumPool: vi.fn(() => mockElectrumPool),
 }));
 
 // Mock block height utilities
-jest.mock('../../../src/services/bitcoin/utils/blockHeight', () => ({
-  getCachedBlockHeight: jest.fn(() => 800000),
-  setCachedBlockHeight: jest.fn(),
-  getBlockHeight: jest.fn(() => Promise.resolve(800000)),
-  getBlockTimestamp: jest.fn(() => Promise.resolve(new Date('2024-01-01T00:00:00Z'))),
+vi.mock('../../../src/services/bitcoin/utils/blockHeight', () => ({
+  getCachedBlockHeight: vi.fn(() => 800000),
+  setCachedBlockHeight: vi.fn(),
+  getBlockHeight: vi.fn(() => Promise.resolve(800000)),
+  getBlockTimestamp: vi.fn(() => Promise.resolve(new Date('2024-01-01T00:00:00Z'))),
 }));
 
 // Mock address derivation with proper typing
-const mockDeriveAddress = jest.fn<any>();
-jest.mock('../../../src/services/bitcoin/addressDerivation', () => ({
+const mockDeriveAddress = vi.fn<any>();
+vi.mock('../../../src/services/bitcoin/addressDerivation', () => ({
   deriveAddressFromDescriptor: mockDeriveAddress,
 }));
 
 // Mock notifications
-jest.mock('../../../src/websocket/notifications', () => ({
-  walletLog: jest.fn(),
-  getNotificationService: jest.fn(() => ({
-    broadcastTransactionNotification: jest.fn(),
+vi.mock('../../../src/websocket/notifications', () => ({
+  walletLog: vi.fn(),
+  getNotificationService: vi.fn(() => ({
+    broadcastTransactionNotification: vi.fn(),
   })),
 }));
 
-jest.mock('../../../src/services/notifications/notificationService', () => ({
-  notifyNewTransactions: jest.fn(() => Promise.resolve()),
+vi.mock('../../../src/services/notifications/notificationService', () => ({
+  notifyNewTransactions: vi.fn(() => Promise.resolve()),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
-  createLogger: jest.fn(() => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   })),
 }));
 
 // Mock constants
-jest.mock('../../../src/constants', () => ({
+vi.mock('../../../src/constants', () => ({
   ADDRESS_GAP_LIMIT: 20,
 }));
 
 describe('Blockchain Service - Transaction Detection', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('received transaction detection', () => {
@@ -487,7 +488,7 @@ describe('Blockchain Service - Transaction Detection', () => {
 
 describe('Blockchain Service - UTXO Management', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('UTXO creation', () => {
@@ -711,7 +712,7 @@ describe('Blockchain Service - UTXO Management', () => {
 
 describe('Blockchain Service - Address Discovery (Gap Limit)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('ensureGapLimit', () => {
@@ -850,7 +851,7 @@ describe('Blockchain Service - Address Discovery (Gap Limit)', () => {
 
 describe('Blockchain Service - Balance Calculation', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('correctMisclassifiedConsolidations', () => {
@@ -992,7 +993,7 @@ describe('Blockchain Service - Balance Calculation', () => {
 
 describe('Blockchain Service - Broadcasting', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('broadcastTransaction', () => {
@@ -1074,7 +1075,7 @@ describe('Blockchain Service - Broadcasting', () => {
 
 describe('Blockchain Service - Address Validation', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('checkAddress', () => {
@@ -1113,7 +1114,7 @@ describe('Blockchain Service - Address Validation', () => {
 
 describe('Blockchain Service - Reorg Handling', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('block reorganization', () => {

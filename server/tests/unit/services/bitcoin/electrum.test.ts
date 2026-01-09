@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * ElectrumClient Network-Aware Tests
  *
@@ -9,16 +10,16 @@
 import { ElectrumClient, getElectrumClientForNetwork } from '../../../../src/services/bitcoin/electrum';
 
 // Mock the net and tls modules
-jest.mock('net');
-jest.mock('tls');
+vi.mock('net');
+vi.mock('tls');
 
 // Mock Prisma
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: {
-    nodeConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+    nodeConfig: { findFirst: vi.fn().mockResolvedValue(null) },
     electrumServer: {
-      findMany: jest.fn().mockResolvedValue([
+      findMany: vi.fn().mockResolvedValue([
         {
           id: 'test-server',
           label: 'Test Server',
@@ -30,18 +31,18 @@ jest.mock('../../../../src/models/prisma', () => ({
           priority: 0,
         },
       ]),
-      update: jest.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
     },
   },
 }));
 
 // Mock logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 

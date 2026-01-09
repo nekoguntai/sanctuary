@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Redis WebSocket Bridge Tests
  *
@@ -7,18 +8,18 @@
 import { redisBridge, initializeRedisBridge, shutdownRedisBridge } from '../../../src/websocket/redisBridge';
 
 // Mock Redis module - Redis not connected
-jest.mock('../../../src/infrastructure/redis', () => ({
-  getRedisClient: jest.fn(() => null),
-  isRedisConnected: jest.fn(() => false),
+vi.mock('../../../src/infrastructure/redis', () => ({
+  getRedisClient: vi.fn(() => null),
+  isRedisConnected: vi.fn(() => false),
 }));
 
 // Mock logger to avoid console noise
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -111,7 +112,7 @@ describe('RedisWebSocketBridge', () => {
 
   describe('setBroadcastHandler', () => {
     it('should accept a broadcast handler', () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       expect(() => {
         redisBridge.setBroadcastHandler(handler);
@@ -119,8 +120,8 @@ describe('RedisWebSocketBridge', () => {
     });
 
     it('should allow overwriting handler', () => {
-      const handler1 = jest.fn();
-      const handler2 = jest.fn();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
 
       redisBridge.setBroadcastHandler(handler1);
       redisBridge.setBroadcastHandler(handler2);
@@ -225,7 +226,7 @@ describe('RedisWebSocketBridge', () => {
     });
 
     it('should handle handler without throwing when inactive', () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
       redisBridge.setBroadcastHandler(handler);
 
       // Publishing when inactive should not call handler

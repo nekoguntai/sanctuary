@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Hook Registry Tests
  *
@@ -8,12 +9,12 @@ import { HookRegistry } from '../../../../src/services/hooks/registry';
 import { HookPriorities, Operations } from '../../../../src/services/hooks/types';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -21,7 +22,7 @@ describe('HookRegistry', () => {
   describe('before/after registration', () => {
     it('should register a before hook', () => {
       const registry = new HookRegistry();
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       const hookId = registry.before('wallet:create', handler);
 
@@ -32,7 +33,7 @@ describe('HookRegistry', () => {
 
     it('should register an after hook', () => {
       const registry = new HookRegistry();
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       const hookId = registry.after('wallet:create', handler);
 
@@ -140,7 +141,7 @@ describe('HookRegistry', () => {
 
     it('should pass context to hooks', async () => {
       const registry = new HookRegistry();
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       registry.before('test', handler);
 
@@ -185,8 +186,8 @@ describe('HookRegistry', () => {
 
     it('should skip disabled hooks', async () => {
       const registry = new HookRegistry();
-      const enabledHandler = jest.fn();
-      const disabledHandler = jest.fn();
+      const enabledHandler = vi.fn();
+      const disabledHandler = vi.fn();
 
       registry.before('test', enabledHandler, { enabled: true });
       registry.before('test', disabledHandler, { enabled: false });
@@ -222,7 +223,7 @@ describe('HookRegistry', () => {
   describe('executeAfter', () => {
     it('should execute after hooks with result context', async () => {
       const registry = new HookRegistry();
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       registry.after('test', handler);
 
@@ -244,7 +245,7 @@ describe('HookRegistry', () => {
 
     it('should execute after hooks with error context', async () => {
       const registry = new HookRegistry();
-      const handler = jest.fn();
+      const handler = vi.fn();
       const error = new Error('Operation failed');
 
       registry.after('test', handler);
@@ -278,13 +279,13 @@ describe('HookRegistry', () => {
   describe('wrap', () => {
     it('should wrap operation with before/after hooks', async () => {
       const registry = new HookRegistry();
-      const beforeHandler = jest.fn();
-      const afterHandler = jest.fn();
+      const beforeHandler = vi.fn();
+      const afterHandler = vi.fn();
 
       registry.before('test', beforeHandler);
       registry.after('test', afterHandler);
 
-      const operation = jest.fn().mockResolvedValue('result');
+      const operation = vi.fn().mockResolvedValue('result');
 
       const result = await registry.wrap('test', { input: 'data' }, operation);
 
@@ -301,7 +302,7 @@ describe('HookRegistry', () => {
 
       registry.before('test', (ctx) => ({ ...(ctx.payload as object), modified: true }));
 
-      const operation = jest.fn().mockResolvedValue('result');
+      const operation = vi.fn().mockResolvedValue('result');
 
       await registry.wrap('test', { original: true }, operation);
 
@@ -310,12 +311,12 @@ describe('HookRegistry', () => {
 
     it('should execute after hooks on error', async () => {
       const registry = new HookRegistry();
-      const afterHandler = jest.fn();
+      const afterHandler = vi.fn();
 
       registry.after('test', afterHandler);
 
       const error = new Error('Operation failed');
-      const operation = jest.fn().mockRejectedValue(error);
+      const operation = vi.fn().mockRejectedValue(error);
 
       await expect(registry.wrap('test', {}, operation)).rejects.toThrow('Operation failed');
 
@@ -331,8 +332,8 @@ describe('HookRegistry', () => {
 
     it('should pass userId through context', async () => {
       const registry = new HookRegistry();
-      const beforeHandler = jest.fn();
-      const afterHandler = jest.fn();
+      const beforeHandler = vi.fn();
+      const afterHandler = vi.fn();
 
       registry.before('test', beforeHandler);
       registry.after('test', afterHandler);

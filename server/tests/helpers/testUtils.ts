@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Test Utilities
  *
@@ -37,7 +38,7 @@ export function createMockRequest(options: {
     headers: mockHeaders,
     user: options.user,
     ip: options.ip || '127.0.0.1',
-    get: jest.fn((header: string): string | undefined => {
+    get: vi.fn((header: string): string | undefined => {
       return mockHeaders[header.toLowerCase()];
     }),
   };
@@ -56,21 +57,21 @@ export function createMockResponse(): {
   let responseBody: any = null;
 
   const res: Partial<Response> = {
-    status: jest.fn().mockImplementation((code: number) => {
+    status: vi.fn().mockImplementation((code: number) => {
       statusCode = code;
       return res;
     }),
-    json: jest.fn().mockImplementation((body: any) => {
+    json: vi.fn().mockImplementation((body: any) => {
       responseBody = body;
       return res;
     }),
-    send: jest.fn().mockImplementation((body: any) => {
+    send: vi.fn().mockImplementation((body: any) => {
       responseBody = body;
       return res;
     }),
-    end: jest.fn().mockReturnThis(),
-    setHeader: jest.fn().mockReturnThis(),
-    cookie: jest.fn().mockReturnThis(),
+    end: vi.fn().mockReturnThis(),
+    setHeader: vi.fn().mockReturnThis(),
+    cookie: vi.fn().mockReturnThis(),
   };
 
   return {
@@ -83,7 +84,7 @@ export function createMockResponse(): {
  * Create a mock next function
  */
 export function createMockNext(): NextFunction {
-  return jest.fn();
+  return vi.fn();
 }
 
 /**
@@ -205,9 +206,9 @@ export async function withSuppressedConsole<T>(
   const originalWarn = console.warn;
   const originalError = console.error;
 
-  console.log = jest.fn();
-  console.warn = jest.fn();
-  console.error = jest.fn();
+  console.log = vi.fn();
+  console.warn = vi.fn();
+  console.error = vi.fn();
 
   try {
     return await fn();

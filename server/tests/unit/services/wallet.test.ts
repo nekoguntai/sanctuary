@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Wallet Service Tests
  *
@@ -8,34 +9,38 @@
 
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
+// Hoist mock variables for use in vi.mock() factories
+const { mockBuildDescriptorFromDevices, mockLogWarn } = vi.hoisted(() => ({
+  mockBuildDescriptorFromDevices: vi.fn(),
+  mockLogWarn: vi.fn(),
+}));
+
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock descriptor builder
-const mockBuildDescriptorFromDevices = jest.fn();
-jest.mock('../../../src/services/bitcoin/descriptorBuilder', () => ({
+vi.mock('../../../src/services/bitcoin/descriptorBuilder', () => ({
   buildDescriptorFromDevices: (...args: any[]) => mockBuildDescriptorFromDevices(...args),
 }));
 
 // Mock address derivation
-jest.mock('../../../src/services/bitcoin/addressDerivation', () => ({
-  deriveAddressFromDescriptor: jest.fn().mockReturnValue({
+vi.mock('../../../src/services/bitcoin/addressDerivation', () => ({
+  deriveAddressFromDescriptor: vi.fn().mockReturnValue({
     address: 'bc1qmockaddress',
     derivationPath: "m/84'/0'/0'/0/0",
   }),
 }));
 
 // Mock logger
-const mockLogWarn = jest.fn();
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
+    info: vi.fn(),
     warn: mockLogWarn,
-    error: jest.fn(),
-    debug: jest.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -45,7 +50,7 @@ import { createWallet } from '../../../src/services/wallet';
 describe('Wallet Service', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockBuildDescriptorFromDevices.mockReturnValue({
       descriptor: 'wpkh([abc12345/84h/0h/0h]xpub...)',
       fingerprint: 'abc12345',

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Advanced Transaction Tests (RBF/CPFP)
  *
@@ -9,19 +10,19 @@ import { mockElectrumClient, resetElectrumMocks, createMockTransaction } from '.
 import { sampleUtxos, testnetAddresses, sampleTransactions } from '../../../fixtures/bitcoin';
 
 // Mock Prisma
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock Electrum client
-jest.mock('../../../../src/services/bitcoin/electrum', () => ({
-  getElectrumClient: jest.fn().mockReturnValue(mockElectrumClient),
+vi.mock('../../../../src/services/bitcoin/electrum', () => ({
+  getElectrumClient: vi.fn().mockReturnValue(mockElectrumClient),
 }));
 
 // Mock nodeClient - canReplaceTransaction uses getNodeClient
-jest.mock('../../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue(mockElectrumClient),
+vi.mock('../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue(mockElectrumClient),
 }));
 
 // Import after mocks

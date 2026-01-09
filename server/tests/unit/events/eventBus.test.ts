@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Event Bus Tests
  *
@@ -7,12 +8,12 @@
 import { createTestEventBus } from '../../../src/events/eventBus';
 
 // Mock logger to avoid console noise
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -21,17 +22,17 @@ describe('EventBus', () => {
 
   beforeEach(() => {
     testBus = createTestEventBus();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   describe('basic event emission', () => {
     it('should emit and receive events', async () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       testBus.on('wallet:synced', handler);
       testBus.emit('wallet:synced', {
@@ -43,7 +44,7 @@ describe('EventBus', () => {
       });
 
       // Wait for async handler
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       expect(handler).toHaveBeenCalledTimes(1);
       expect(handler).toHaveBeenCalledWith(expect.objectContaining({
@@ -53,8 +54,8 @@ describe('EventBus', () => {
     });
 
     it('should support multiple listeners for same event', async () => {
-      const handler1 = jest.fn();
-      const handler2 = jest.fn();
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
 
       testBus.on('wallet:created', handler1);
       testBus.on('wallet:created', handler2);
@@ -67,20 +68,20 @@ describe('EventBus', () => {
         network: 'mainnet',
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       expect(handler1).toHaveBeenCalledTimes(1);
       expect(handler2).toHaveBeenCalledTimes(1);
     });
 
     it('should unsubscribe when unsubscribe function is called', async () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       const unsubscribe = testBus.on('wallet:deleted', handler);
 
       // First emit - should be received
       testBus.emit('wallet:deleted', { walletId: 'w1', userId: 'u1' });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1);
 
       // Unsubscribe
@@ -88,12 +89,12 @@ describe('EventBus', () => {
 
       // Second emit - should not be received
       testBus.emit('wallet:deleted', { walletId: 'w2', userId: 'u1' });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1); // Still 1
     });
 
     it('should handle once listeners correctly', async () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       testBus.once('transaction:broadcast', handler);
 
@@ -103,7 +104,7 @@ describe('EventBus', () => {
         txid: 'tx1',
         rawTx: '0100...',
       });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1);
 
       // Second emit - should not be received (once)
@@ -112,7 +113,7 @@ describe('EventBus', () => {
         txid: 'tx2',
         rawTx: '0100...',
       });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       expect(handler).toHaveBeenCalledTimes(1); // Still 1
     });
   });
@@ -136,7 +137,7 @@ describe('EventBus', () => {
         environment: 'test',
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await emitPromise;
 
       // Both handlers should have completed
@@ -148,7 +149,7 @@ describe('EventBus', () => {
 
   describe('error handling', () => {
     it('should catch errors in handlers without crashing', async () => {
-      const successHandler = jest.fn();
+      const successHandler = vi.fn();
 
       testBus.on('wallet:syncFailed', () => {
         throw new Error('Handler error');
@@ -161,7 +162,7 @@ describe('EventBus', () => {
         retryCount: 0,
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       // The other handler should still have been called
       expect(successHandler).toHaveBeenCalled();
@@ -178,7 +179,7 @@ describe('EventBus', () => {
         ipAddress: '127.0.0.1',
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       const metrics = testBus.getMetrics();
       expect(metrics.errors['user:login']).toBe(1);
@@ -217,7 +218,7 @@ describe('EventBus', () => {
       });
 
       // Wait for all handlers to complete
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       expect(results).toHaveLength(5);
       // Concurrency should be limited (default is 10, so with 5 handlers all should run)
@@ -269,7 +270,7 @@ describe('EventBus', () => {
       expect(currentStatus.available).toBeLessThanOrEqual(10);
 
       // Wait for completion
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       // Should be back to full availability
       const finalStatus = testBus.getConcurrencyStatus();
@@ -337,7 +338,7 @@ describe('EventBus', () => {
         throw new Error('test');
       });
       testBus.emit('user:logout', { userId: 'u1' });
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       // Verify counts exist
       let metrics = testBus.getMetrics();
@@ -393,7 +394,7 @@ describe('EventBus', () => {
 
   describe('type safety', () => {
     it('should enforce correct event payloads', async () => {
-      const handler = jest.fn();
+      const handler = vi.fn();
 
       // This tests that the TypeScript types are correctly applied
       // The handler should receive the correct payload type
@@ -411,7 +412,7 @@ describe('EventBus', () => {
         hash: '000000000000000000...',
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       expect(handler).toHaveBeenCalledWith({
         network: 'mainnet',

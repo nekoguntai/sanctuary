@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Memory Monitor Tests
  *
@@ -125,10 +126,10 @@ describe('Memory Monitor', () => {
     it('should call next for normal requests', () => {
       const req = { path: '/api/wallets' };
       const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
       };
-      const next = jest.fn();
+      const next = vi.fn();
 
       // Set high thresholds to ensure normal state
       updateConfig({ criticalThreshold: 100, elevatedThreshold: 99 });
@@ -142,10 +143,10 @@ describe('Memory Monitor', () => {
     it('should always allow health endpoint', () => {
       const req = { path: '/health' };
       const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
       };
-      const next = jest.fn();
+      const next = vi.fn();
 
       memoryPressureMiddleware(req, res, next);
 

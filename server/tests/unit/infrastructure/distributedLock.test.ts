@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Distributed Lock Tests
  *
@@ -16,21 +17,21 @@ import {
 } from '../../../src/infrastructure/distributedLock';
 
 // Mock Redis module
-jest.mock('../../../src/infrastructure/redis', () => ({
-  getRedisClient: jest.fn(() => null),
-  isRedisConnected: jest.fn(() => false),
+vi.mock('../../../src/infrastructure/redis', () => ({
+  getRedisClient: vi.fn(() => null),
+  isRedisConnected: vi.fn(() => false),
 }));
 
 describe('DistributedLock', () => {
   beforeEach(() => {
     // Clean up any locks from previous tests
     shutdownDistributedLock();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
     shutdownDistributedLock();
   });
 
@@ -75,11 +76,11 @@ describe('DistributedLock', () => {
       });
 
       // Advance time and release the first lock
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
       await releaseLock(lock1!);
 
       // Advance time for retry to acquire
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       const lock2 = await waitPromise;
       expect(lock2).not.toBeNull();
@@ -96,7 +97,7 @@ describe('DistributedLock', () => {
       });
 
       // Advance time past the wait timeout
-      await jest.advanceTimersByTimeAsync(150);
+      await vi.advanceTimersByTimeAsync(150);
 
       const lock2 = await lockPromise;
       expect(lock2).toBeNull();
@@ -107,7 +108,7 @@ describe('DistributedLock', () => {
       expect(lock).not.toBeNull();
 
       // Advance time past TTL expiry
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       // Should be able to acquire now
       const lock2 = await acquireLock('test:key:expire', 5000);
@@ -272,7 +273,7 @@ describe('DistributedLock', () => {
       expect(lock).not.toBeNull();
 
       // Advance time past expiry
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       const locked = await isLocked('test:check:expired');
       expect(locked).toBe(false);
@@ -335,7 +336,7 @@ describe('DistributedLock', () => {
       ]);
 
       // Advance timers to ensure all operations complete
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       const results = await resultsPromise;
 
       const successes = results.filter(r => r.success);

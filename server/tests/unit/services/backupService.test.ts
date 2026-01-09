@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Backup Service Tests
  *
@@ -10,36 +11,37 @@ import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 import { sampleUsers, sampleWallets } from '../../fixtures/bitcoin';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock migration service
-jest.mock('../../../src/services/migrationService', () => ({
+vi.mock('../../../src/services/migrationService', () => ({
   migrationService: {
-    getSchemaVersion: jest.fn().mockResolvedValue(1),
+    getSchemaVersion: vi.fn().mockResolvedValue(1),
   },
-  getExpectedSchemaVersion: jest.fn().mockReturnValue(1),
+  getExpectedSchemaVersion: vi.fn().mockReturnValue(1),
 }));
 
 // Mock encryption
-jest.mock('../../../src/utils/encryption', () => ({
-  isEncrypted: jest.fn().mockReturnValue(false),
-  decrypt: jest.fn().mockImplementation((v) => v),
+vi.mock('../../../src/utils/encryption', () => ({
+  isEncrypted: vi.fn().mockReturnValue(false),
+  decrypt: vi.fn().mockImplementation((v) => v),
 }));
 
 import { BackupService, SanctuaryBackup, BackupMeta } from '../../../src/services/backupService';
+import * as encryption from '../../../src/utils/encryption';
 
 describe('BackupService', () => {
   let backupService: BackupService;
@@ -47,7 +49,7 @@ describe('BackupService', () => {
   beforeEach(() => {
     backupService = new BackupService();
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('validateBackup', () => {
@@ -1363,9 +1365,8 @@ describe('Node Config Password Handling', () => {
 
   it('should warn when node config password cannot be decrypted', async () => {
     // Mock isEncrypted to return true
-    const encryption = require('../../../src/utils/encryption');
-    encryption.isEncrypted.mockReturnValue(true);
-    encryption.decrypt.mockImplementation(() => {
+    vi.mocked(encryption.isEncrypted).mockReturnValue(true);
+    vi.mocked(encryption.decrypt).mockImplementation(() => {
       throw new Error('Decryption failed: wrong key');
     });
 
@@ -1453,9 +1454,8 @@ describe('User 2FA Secret Handling', () => {
 
   it('should warn and clear 2FA when secret cannot be decrypted', async () => {
     // Mock isEncrypted to return true for 2FA secret
-    const encryption = require('../../../src/utils/encryption');
-    encryption.isEncrypted.mockReturnValue(true);
-    encryption.decrypt.mockImplementation(() => {
+    vi.mocked(encryption.isEncrypted).mockReturnValue(true);
+    vi.mocked(encryption.decrypt).mockImplementation(() => {
       throw new Error('Decryption failed: wrong key/salt');
     });
 
@@ -1527,15 +1527,14 @@ describe('User 2FA Secret Handling', () => {
     expect(capturedUserData[0].twoFactorBackupCodes).toBeNull();
 
     // Reset mocks
-    encryption.isEncrypted.mockReturnValue(false);
-    encryption.decrypt.mockImplementation((v: any) => v);
+    vi.mocked(encryption.isEncrypted).mockReturnValue(false);
+    vi.mocked(encryption.decrypt).mockImplementation((v: any) => v);
   });
 
   it('should preserve 2FA when secret can be decrypted', async () => {
     // Mock isEncrypted to return true, but decrypt succeeds
-    const encryption = require('../../../src/utils/encryption');
-    encryption.isEncrypted.mockReturnValue(true);
-    encryption.decrypt.mockReturnValue('decrypted-secret');
+    vi.mocked(encryption.isEncrypted).mockReturnValue(true);
+    vi.mocked(encryption.decrypt).mockReturnValue('decrypted-secret');
 
     const backup: SanctuaryBackup = {
       meta: {

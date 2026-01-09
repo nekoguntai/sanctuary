@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Export Format Registry Tests
  *
@@ -8,12 +9,12 @@ import { ExportFormatRegistry } from '../../../../src/services/export/registry';
 import type { ExportFormatHandler, WalletExportData, ExportResult } from '../../../../src/services/export/types';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -48,7 +49,7 @@ function createMockHandler(overrides: Partial<ExportFormatHandler> = {}): Export
     description: 'A mock format for testing',
     fileExtension: '.mock',
     mimeType: 'application/mock',
-    export: jest.fn().mockReturnValue({
+    export: vi.fn().mockReturnValue({
       content: '{"mock": true}',
       mimeType: 'application/mock',
       filename: 'test.mock',
@@ -209,7 +210,7 @@ describe('ExportFormatRegistry', () => {
       };
       const handler = createMockHandler({
         id: 'json',
-        export: jest.fn().mockReturnValue(mockResult),
+        export: vi.fn().mockReturnValue(mockResult),
       });
 
       registry.register(handler);

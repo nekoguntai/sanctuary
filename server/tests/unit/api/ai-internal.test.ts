@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * AI Internal API Tests
  *
@@ -16,23 +17,23 @@ import {
 import { Request, Response, NextFunction } from 'express';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
 // Mock authenticate middleware
-const mockAuthenticate = jest.fn((req: Request, res: Response, next: NextFunction) => {
+const mockAuthenticate = vi.fn((req: Request, res: Response, next: NextFunction) => {
   if (req.user) {
     next();
   } else {
@@ -40,14 +41,14 @@ const mockAuthenticate = jest.fn((req: Request, res: Response, next: NextFunctio
   }
 });
 
-jest.mock('../../../src/middleware/auth', () => ({
+vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => mockAuthenticate(req, res, next),
 }));
 
 describe('AI Internal API', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('restrictToInternalNetwork Middleware', () => {

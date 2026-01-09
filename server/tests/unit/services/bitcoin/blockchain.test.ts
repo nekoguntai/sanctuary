@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Blockchain Service Tests
  *
@@ -15,39 +16,39 @@ import {
 import { sampleUtxos, sampleWallets, testnetAddresses } from '../../../fixtures/bitcoin';
 
 // Mock Prisma
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock node client
-jest.mock('../../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue(mockElectrumClient),
+vi.mock('../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue(mockElectrumClient),
 }));
 
 // Mock utils
-jest.mock('../../../../src/services/bitcoin/utils', () => ({
-  validateAddress: jest.fn().mockReturnValue({ valid: true }),
-  parseTransaction: jest.fn(),
-  getNetwork: jest.fn().mockReturnValue(require('bitcoinjs-lib').networks.testnet),
+vi.mock('../../../../src/services/bitcoin/utils', () => ({
+  validateAddress: vi.fn().mockReturnValue({ valid: true }),
+  parseTransaction: vi.fn(),
+  getNetwork: vi.fn().mockReturnValue(require('bitcoinjs-lib').networks.testnet),
 }));
 
 // Mock notifications
-jest.mock('../../../../src/websocket/notifications', () => ({
-  walletLog: jest.fn(),
-  getNotificationService: jest.fn().mockReturnValue({
-    broadcastTransactionNotification: jest.fn(),
+vi.mock('../../../../src/websocket/notifications', () => ({
+  walletLog: vi.fn(),
+  getNotificationService: vi.fn().mockReturnValue({
+    broadcastTransactionNotification: vi.fn(),
   }),
 }));
 
 // Mock notification service
-jest.mock('../../../../src/services/notifications/notificationService', () => ({
-  notifyNewTransactions: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../../src/services/notifications/notificationService', () => ({
+  notifyNewTransactions: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock address derivation
-jest.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
-  deriveAddressFromDescriptor: jest.fn().mockImplementation((descriptor, index, options) => {
+vi.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
+  deriveAddressFromDescriptor: vi.fn().mockImplementation((descriptor, index, options) => {
     const change = options?.change ? 1 : 0;
     return {
       address: `tb1q_test_${change}_${index}`,

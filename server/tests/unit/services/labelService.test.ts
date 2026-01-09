@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Label Service Tests
  *
@@ -6,43 +7,43 @@
  */
 
 // Mock dependencies before imports
-jest.mock('../../../src/repositories', () => ({
+vi.mock('../../../src/repositories', () => ({
   labelRepository: {
-    findByWalletId: jest.fn(),
-    findByIdWithAssociations: jest.fn(),
-    findByNameInWallet: jest.fn(),
-    findByIdInWallet: jest.fn(),
-    isNameTakenByOther: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    remove: jest.fn(),
-    getLabelsForTransaction: jest.fn(),
-    findManyByIdsInWallet: jest.fn(),
-    addLabelsToTransaction: jest.fn(),
-    replaceTransactionLabels: jest.fn(),
-    removeLabelFromTransaction: jest.fn(),
-    getLabelsForAddress: jest.fn(),
-    addLabelsToAddress: jest.fn(),
-    replaceAddressLabels: jest.fn(),
-    removeLabelFromAddress: jest.fn(),
+    findByWalletId: vi.fn(),
+    findByIdWithAssociations: vi.fn(),
+    findByNameInWallet: vi.fn(),
+    findByIdInWallet: vi.fn(),
+    isNameTakenByOther: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    getLabelsForTransaction: vi.fn(),
+    findManyByIdsInWallet: vi.fn(),
+    addLabelsToTransaction: vi.fn(),
+    replaceTransactionLabels: vi.fn(),
+    removeLabelFromTransaction: vi.fn(),
+    getLabelsForAddress: vi.fn(),
+    addLabelsToAddress: vi.fn(),
+    replaceAddressLabels: vi.fn(),
+    removeLabelFromAddress: vi.fn(),
   },
 }));
 
-jest.mock('../../../src/services/accessControl', () => ({
-  requireWalletAccess: jest.fn(),
-  requireWalletEditAccess: jest.fn(),
-  requireTransactionAccess: jest.fn(),
-  requireTransactionEditAccess: jest.fn(),
-  requireAddressAccess: jest.fn(),
-  requireAddressEditAccess: jest.fn(),
+vi.mock('../../../src/services/accessControl', () => ({
+  requireWalletAccess: vi.fn(),
+  requireWalletEditAccess: vi.fn(),
+  requireTransactionAccess: vi.fn(),
+  requireTransactionEditAccess: vi.fn(),
+  requireAddressAccess: vi.fn(),
+  requireAddressEditAccess: vi.fn(),
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -78,9 +79,9 @@ describe('LabelService', () => {
   const labelId = 'label-789';
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (requireWalletAccess as jest.Mock).mockResolvedValue(undefined);
-    (requireWalletEditAccess as jest.Mock).mockResolvedValue(undefined);
+    vi.clearAllMocks();
+    (requireWalletAccess as Mock).mockResolvedValue(undefined);
+    (requireWalletEditAccess as Mock).mockResolvedValue(undefined);
   });
 
   describe('Label CRUD Operations', () => {
@@ -90,7 +91,7 @@ describe('LabelService', () => {
           { id: 'label-1', name: 'Work', color: '#ff0000', _count: { transactions: 2, addresses: 1 } },
           { id: 'label-2', name: 'Personal', color: '#00ff00', _count: { transactions: 0, addresses: 3 } },
         ];
-        (labelRepository.findByWalletId as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.findByWalletId as Mock).mockResolvedValue(mockLabels);
 
         const result = await getLabelsForWallet(walletId, userId);
 
@@ -99,7 +100,7 @@ describe('LabelService', () => {
       });
 
       it('should throw if user lacks wallet access', async () => {
-        (requireWalletAccess as jest.Mock).mockRejectedValue(new Error('Access denied'));
+        (requireWalletAccess as Mock).mockRejectedValue(new Error('Access denied'));
 
         await expect(getLabelsForWallet(walletId, userId)).rejects.toThrow('Access denied');
       });
@@ -114,7 +115,7 @@ describe('LabelService', () => {
           transactions: [{ id: 'tx-1' }],
           addresses: [{ id: 'addr-1' }],
         };
-        (labelRepository.findByIdWithAssociations as jest.Mock).mockResolvedValue(mockLabel);
+        (labelRepository.findByIdWithAssociations as Mock).mockResolvedValue(mockLabel);
 
         const result = await getLabel(walletId, labelId, userId);
 
@@ -122,7 +123,7 @@ describe('LabelService', () => {
       });
 
       it('should throw NotFoundError if label does not exist', async () => {
-        (labelRepository.findByIdWithAssociations as jest.Mock).mockResolvedValue(null);
+        (labelRepository.findByIdWithAssociations as Mock).mockResolvedValue(null);
 
         await expect(getLabel(walletId, labelId, userId)).rejects.toThrow(NotFoundError);
       });
@@ -131,8 +132,8 @@ describe('LabelService', () => {
     describe('createLabel', () => {
       it('should create a new label', async () => {
         const mockLabel = { id: labelId, name: 'Work', color: '#ff0000', walletId };
-        (labelRepository.findByNameInWallet as jest.Mock).mockResolvedValue(null);
-        (labelRepository.create as jest.Mock).mockResolvedValue(mockLabel);
+        (labelRepository.findByNameInWallet as Mock).mockResolvedValue(null);
+        (labelRepository.create as Mock).mockResolvedValue(mockLabel);
 
         const result = await createLabel(walletId, userId, { name: 'Work', color: '#ff0000' });
 
@@ -146,14 +147,14 @@ describe('LabelService', () => {
       });
 
       it('should throw ConflictError for duplicate name', async () => {
-        (labelRepository.findByNameInWallet as jest.Mock).mockResolvedValue({ id: 'existing' });
+        (labelRepository.findByNameInWallet as Mock).mockResolvedValue({ id: 'existing' });
 
         await expect(createLabel(walletId, userId, { name: 'Work' })).rejects.toThrow(ConflictError);
       });
 
       it('should trim label name', async () => {
-        (labelRepository.findByNameInWallet as jest.Mock).mockResolvedValue(null);
-        (labelRepository.create as jest.Mock).mockResolvedValue({ id: labelId, name: 'Work' });
+        (labelRepository.findByNameInWallet as Mock).mockResolvedValue(null);
+        (labelRepository.create as Mock).mockResolvedValue({ id: labelId, name: 'Work' });
 
         await createLabel(walletId, userId, { name: '  Work  ' });
 
@@ -165,9 +166,9 @@ describe('LabelService', () => {
       it('should update a label', async () => {
         const existingLabel = { id: labelId, name: 'Old Name', color: '#000000' };
         const updatedLabel = { id: labelId, name: 'New Name', color: '#ffffff' };
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue(existingLabel);
-        (labelRepository.isNameTakenByOther as jest.Mock).mockResolvedValue(false);
-        (labelRepository.update as jest.Mock).mockResolvedValue(updatedLabel);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue(existingLabel);
+        (labelRepository.isNameTakenByOther as Mock).mockResolvedValue(false);
+        (labelRepository.update as Mock).mockResolvedValue(updatedLabel);
 
         const result = await updateLabel(walletId, labelId, userId, { name: 'New Name', color: '#ffffff' });
 
@@ -175,22 +176,22 @@ describe('LabelService', () => {
       });
 
       it('should throw NotFoundError if label does not exist', async () => {
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue(null);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
         await expect(updateLabel(walletId, labelId, userId, { name: 'New' })).rejects.toThrow(NotFoundError);
       });
 
       it('should throw ConflictError if new name is taken', async () => {
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue({ id: labelId, name: 'Old' });
-        (labelRepository.isNameTakenByOther as jest.Mock).mockResolvedValue(true);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue({ id: labelId, name: 'Old' });
+        (labelRepository.isNameTakenByOther as Mock).mockResolvedValue(true);
 
         await expect(updateLabel(walletId, labelId, userId, { name: 'Taken' })).rejects.toThrow(ConflictError);
       });
 
       it('should not check for duplicate if name unchanged', async () => {
         const existingLabel = { id: labelId, name: 'Same Name' };
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue(existingLabel);
-        (labelRepository.update as jest.Mock).mockResolvedValue(existingLabel);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue(existingLabel);
+        (labelRepository.update as Mock).mockResolvedValue(existingLabel);
 
         await updateLabel(walletId, labelId, userId, { name: 'Same Name' });
 
@@ -200,8 +201,8 @@ describe('LabelService', () => {
 
     describe('deleteLabel', () => {
       it('should delete a label', async () => {
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue({ id: labelId });
-        (labelRepository.remove as jest.Mock).mockResolvedValue(undefined);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue({ id: labelId });
+        (labelRepository.remove as Mock).mockResolvedValue(undefined);
 
         await deleteLabel(walletId, labelId, userId);
 
@@ -209,7 +210,7 @@ describe('LabelService', () => {
       });
 
       it('should throw NotFoundError if label does not exist', async () => {
-        (labelRepository.findByIdInWallet as jest.Mock).mockResolvedValue(null);
+        (labelRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
         await expect(deleteLabel(walletId, labelId, userId)).rejects.toThrow(NotFoundError);
       });
@@ -220,14 +221,14 @@ describe('LabelService', () => {
     const transactionId = 'tx-123';
 
     beforeEach(() => {
-      (requireTransactionAccess as jest.Mock).mockResolvedValue(undefined);
-      (requireTransactionEditAccess as jest.Mock).mockResolvedValue({ walletId });
+      (requireTransactionAccess as Mock).mockResolvedValue(undefined);
+      (requireTransactionEditAccess as Mock).mockResolvedValue({ walletId });
     });
 
     describe('getTransactionLabels', () => {
       it('should return labels for a transaction', async () => {
         const mockLabels = [{ id: 'label-1', name: 'Income' }];
-        (labelRepository.getLabelsForTransaction as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForTransaction as Mock).mockResolvedValue(mockLabels);
 
         const result = await getTransactionLabels(transactionId, userId);
 
@@ -240,8 +241,8 @@ describe('LabelService', () => {
       it('should add labels to a transaction', async () => {
         const labelIds = ['label-1', 'label-2'];
         const mockLabels = [{ id: 'label-1' }, { id: 'label-2' }];
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue(mockLabels);
-        (labelRepository.getLabelsForTransaction as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForTransaction as Mock).mockResolvedValue(mockLabels);
 
         const result = await addTransactionLabels(transactionId, userId, labelIds);
 
@@ -254,7 +255,7 @@ describe('LabelService', () => {
       });
 
       it('should throw ValidationError if some labels not found', async () => {
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue([{ id: 'label-1' }]);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
 
         await expect(addTransactionLabels(transactionId, userId, ['label-1', 'label-2'])).rejects.toThrow(ValidationError);
       });
@@ -264,8 +265,8 @@ describe('LabelService', () => {
       it('should replace all labels on a transaction', async () => {
         const labelIds = ['label-1'];
         const mockLabels = [{ id: 'label-1' }];
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue(mockLabels);
-        (labelRepository.getLabelsForTransaction as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForTransaction as Mock).mockResolvedValue(mockLabels);
 
         const result = await replaceTransactionLabels(transactionId, userId, labelIds);
 
@@ -274,7 +275,7 @@ describe('LabelService', () => {
       });
 
       it('should allow empty labelIds to clear all labels', async () => {
-        (labelRepository.getLabelsForTransaction as jest.Mock).mockResolvedValue([]);
+        (labelRepository.getLabelsForTransaction as Mock).mockResolvedValue([]);
 
         const result = await replaceTransactionLabels(transactionId, userId, []);
 
@@ -301,14 +302,14 @@ describe('LabelService', () => {
     const addressId = 'addr-123';
 
     beforeEach(() => {
-      (requireAddressAccess as jest.Mock).mockResolvedValue(undefined);
-      (requireAddressEditAccess as jest.Mock).mockResolvedValue({ walletId });
+      (requireAddressAccess as Mock).mockResolvedValue(undefined);
+      (requireAddressEditAccess as Mock).mockResolvedValue({ walletId });
     });
 
     describe('getAddressLabels', () => {
       it('should return labels for an address', async () => {
         const mockLabels = [{ id: 'label-1', name: 'Savings' }];
-        (labelRepository.getLabelsForAddress as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForAddress as Mock).mockResolvedValue(mockLabels);
 
         const result = await getAddressLabels(addressId, userId);
 
@@ -321,8 +322,8 @@ describe('LabelService', () => {
       it('should add labels to an address', async () => {
         const labelIds = ['label-1', 'label-2'];
         const mockLabels = [{ id: 'label-1' }, { id: 'label-2' }];
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue(mockLabels);
-        (labelRepository.getLabelsForAddress as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForAddress as Mock).mockResolvedValue(mockLabels);
 
         const result = await addAddressLabels(addressId, userId, labelIds);
 
@@ -335,7 +336,7 @@ describe('LabelService', () => {
       });
 
       it('should throw ValidationError if some labels not found', async () => {
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue([{ id: 'label-1' }]);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
 
         await expect(addAddressLabels(addressId, userId, ['label-1', 'label-2'])).rejects.toThrow(ValidationError);
       });
@@ -345,8 +346,8 @@ describe('LabelService', () => {
       it('should replace all labels on an address', async () => {
         const labelIds = ['label-1'];
         const mockLabels = [{ id: 'label-1' }];
-        (labelRepository.findManyByIdsInWallet as jest.Mock).mockResolvedValue(mockLabels);
-        (labelRepository.getLabelsForAddress as jest.Mock).mockResolvedValue(mockLabels);
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue(mockLabels);
+        (labelRepository.getLabelsForAddress as Mock).mockResolvedValue(mockLabels);
 
         const result = await replaceAddressLabels(addressId, userId, labelIds);
 
@@ -355,7 +356,7 @@ describe('LabelService', () => {
       });
 
       it('should allow empty labelIds to clear all labels', async () => {
-        (labelRepository.getLabelsForAddress as jest.Mock).mockResolvedValue([]);
+        (labelRepository.getLabelsForAddress as Mock).mockResolvedValue([]);
 
         const result = await replaceAddressLabels(addressId, userId, []);
 

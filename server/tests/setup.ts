@@ -1,9 +1,11 @@
 /**
- * Jest Test Setup
+ * Vitest Test Setup
  *
  * Global test configuration and setup that runs before each test file.
  * Sets up environment variables, mocks, and global test utilities.
  */
+
+import { vi, beforeEach, expect } from 'vitest';
 
 // Set test environment variables before any imports
 process.env.NODE_ENV = 'test';
@@ -13,31 +15,31 @@ process.env.ENCRYPTION_KEY = 'test-encryption-key-32-characters';
 process.env.ENCRYPTION_SALT = 'test-encryption-salt';
 
 // Mock the logger to prevent console spam during tests
-jest.mock('../src/utils/logger', () => ({
+vi.mock('../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock the requestContext
-jest.mock('../src/utils/requestContext', () => ({
+vi.mock('../src/utils/requestContext', () => ({
   requestContext: {
-    setUser: jest.fn(),
-    getUser: jest.fn(() => ({ userId: 'test-user-id', username: 'testuser' })),
-    clear: jest.fn(),
+    setUser: vi.fn(),
+    getUser: vi.fn(() => ({ userId: 'test-user-id', username: 'testuser' })),
+    clear: vi.fn(),
   },
 }));
 
 // Global test utilities
 beforeEach(() => {
   // Clear all mocks before each test
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
-// Extend Jest matchers with custom matchers
+// Extend Vitest matchers with custom matchers
 expect.extend({
   /**
    * Custom matcher to check if a value is a valid Bitcoin address format
@@ -100,13 +102,16 @@ expect.extend({
 });
 
 // Type declarations for custom matchers
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeValidBitcoinAddress(): R;
-      toBeValidTxid(): R;
-      toBeValidPsbt(): R;
-    }
+declare module 'vitest' {
+  interface Assertion<T = unknown> {
+    toBeValidBitcoinAddress(): T;
+    toBeValidTxid(): T;
+    toBeValidPsbt(): T;
+  }
+  interface AsymmetricMatchersContaining {
+    toBeValidBitcoinAddress(): unknown;
+    toBeValidTxid(): unknown;
+    toBeValidPsbt(): unknown;
   }
 }
 
@@ -114,10 +119,10 @@ declare global {
 if (!process.env.DEBUG) {
   global.console = {
     ...console,
-    log: jest.fn() as any,
-    debug: jest.fn() as any,
-    info: jest.fn() as any,
-    warn: jest.fn() as any,
+    log: vi.fn() as unknown as Console['log'],
+    debug: vi.fn() as unknown as Console['debug'],
+    info: vi.fn() as unknown as Console['info'],
+    warn: vi.fn() as unknown as Console['warn'],
     // Keep error for debugging test failures
     error: console.error,
   };

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Service Registry Tests
  *
@@ -11,12 +12,12 @@ import {
 } from '../../../src/services/registry';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -26,7 +27,7 @@ describe('ServiceRegistry', () => {
   describe('register', () => {
     it('should register a service', () => {
       const registry = createTestRegistry();
-      const mockService = { doSomething: jest.fn() };
+      const mockService = { doSomething: vi.fn() };
 
       registry.register('testService', mockService);
 
@@ -35,7 +36,7 @@ describe('ServiceRegistry', () => {
 
     it('should throw when registering duplicate service', () => {
       const registry = createTestRegistry();
-      const mockService = { doSomething: jest.fn() };
+      const mockService = { doSomething: vi.fn() };
 
       registry.register('testService', mockService);
 
@@ -57,7 +58,7 @@ describe('ServiceRegistry', () => {
   describe('get', () => {
     it('should retrieve a registered service', () => {
       const registry = createTestRegistry();
-      const mockService = { id: 'mock-123', doSomething: jest.fn() };
+      const mockService = { id: 'mock-123', doSomething: vi.fn() };
 
       registry.register('testService', mockService);
       const retrieved = registry.get<typeof mockService>('testService');
@@ -310,8 +311,8 @@ describe('createTestRegistry', () => {
   });
 
   it('should pre-populate with provided mocks', () => {
-    const mockSync = { triggerSync: jest.fn() };
-    const mockPrice = { getCurrentPrice: jest.fn() };
+    const mockSync = { triggerSync: vi.fn() };
+    const mockPrice = { getCurrentPrice: vi.fn() };
 
     const registry = createTestRegistry({
       sync: mockSync,

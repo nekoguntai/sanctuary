@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Feature Gate Middleware Tests
  *
@@ -15,12 +16,12 @@ import {
 } from '../../../src/middleware/featureGate';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -44,16 +45,16 @@ const mockFeatures = {
   },
 };
 
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   getConfig: () => ({
     features: mockFeatures,
   }),
 }));
 
 // Mock the featureFlagService to use our mockFeatures
-jest.mock('../../../src/services/featureFlagService', () => ({
+vi.mock('../../../src/services/featureFlagService', () => ({
   featureFlagService: {
-    isEnabled: jest.fn((flag: string) => {
+    isEnabled: vi.fn((flag: string) => {
       if (flag.startsWith('experimental.')) {
         const key = flag.replace('experimental.', '');
         return Promise.resolve(mockFeatures.experimental[key as keyof typeof mockFeatures.experimental] ?? false);
@@ -67,12 +68,12 @@ describe('Feature Gate Middleware', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let nextFunction: NextFunction;
-  let jsonMock: jest.Mock;
-  let statusMock: jest.Mock;
+  let jsonMock: Mock;
+  let statusMock: Mock;
 
   beforeEach(() => {
-    jsonMock = jest.fn();
-    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+    jsonMock = vi.fn();
+    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
 
     mockRequest = {
       path: '/test',
@@ -82,7 +83,7 @@ describe('Feature Gate Middleware', () => {
       status: statusMock,
       json: jsonMock,
     };
-    nextFunction = jest.fn();
+    nextFunction = vi.fn();
 
     // Reset feature flags to default state
     mockFeatures.hardwareWalletSigning = true;

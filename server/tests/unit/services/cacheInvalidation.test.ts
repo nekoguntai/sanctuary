@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Cache Invalidation Service Tests
  *
@@ -18,20 +19,20 @@ import {
 } from '../../../src/utils/cache';
 
 // Mock the cache utilities
-jest.mock('../../../src/utils/cache', () => ({
-  invalidateWalletCaches: jest.fn(),
-  blockHeightCache: { clear: jest.fn() },
-  priceCache: { clear: jest.fn() },
-  feeEstimateCache: { clear: jest.fn() },
+vi.mock('../../../src/utils/cache', () => ({
+  invalidateWalletCaches: vi.fn(),
+  blockHeightCache: { clear: vi.fn() },
+  priceCache: { clear: vi.fn() },
+  feeEstimateCache: { clear: vi.fn() },
 }));
 
 // Mock logger to avoid console noise
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -40,7 +41,7 @@ describe('CacheInvalidation', () => {
     // Clean up any previous initialization
     shutdownCacheInvalidation();
     // Clear all mock calls
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {

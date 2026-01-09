@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Draft Service Tests
  *
@@ -6,23 +7,23 @@
  */
 
 // Mock dependencies before imports
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: {
     systemSetting: {
-      findUnique: jest.fn(),
+      findUnique: vi.fn(),
     },
   },
 }));
 
-jest.mock('../../../src/repositories', () => ({
+vi.mock('../../../src/repositories', () => ({
   draftRepository: {
-    findByWalletId: jest.fn(),
-    findByIdInWallet: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    remove: jest.fn(),
-    deleteExpired: jest.fn(),
+    findByWalletId: vi.fn(),
+    findByIdInWallet: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    deleteExpired: vi.fn(),
   },
   DraftStatus: {
     UNSIGNED: 'unsigned',
@@ -31,34 +32,34 @@ jest.mock('../../../src/repositories', () => ({
   },
 }));
 
-jest.mock('../../../src/services/accessControl', () => ({
-  requireWalletAccess: jest.fn(),
-  checkWalletAccess: jest.fn(),
+vi.mock('../../../src/services/accessControl', () => ({
+  requireWalletAccess: vi.fn(),
+  checkWalletAccess: vi.fn(),
 }));
 
-jest.mock('../../../src/services/draftLockService', () => ({
-  lockUtxosForDraft: jest.fn(),
-  resolveUtxoIds: jest.fn(),
+vi.mock('../../../src/services/draftLockService', () => ({
+  lockUtxosForDraft: vi.fn(),
+  resolveUtxoIds: vi.fn(),
 }));
 
-jest.mock('../../../src/services/notifications/notificationService', () => ({
-  notifyNewDraft: jest.fn(),
+vi.mock('../../../src/services/notifications/notificationService', () => ({
+  notifyNewDraft: vi.fn(),
 }));
 
-jest.mock('../../../src/services/wallet', () => ({
-  getWalletById: jest.fn(),
+vi.mock('../../../src/services/wallet', () => ({
+  getWalletById: vi.fn(),
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
-jest.mock('../../../src/constants', () => ({
+vi.mock('../../../src/constants', () => ({
   DEFAULT_DRAFT_EXPIRATION_DAYS: 7,
 }));
 
@@ -105,15 +106,15 @@ describe('DraftService', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (walletService.getWalletById as jest.Mock).mockResolvedValue(mockWallet);
-    (notifyNewDraft as jest.Mock).mockResolvedValue(undefined);
+    vi.clearAllMocks();
+    (walletService.getWalletById as Mock).mockResolvedValue(mockWallet);
+    (notifyNewDraft as Mock).mockResolvedValue(undefined);
   });
 
   describe('getDraftsForWallet', () => {
     it('should return drafts for a wallet', async () => {
       const mockDrafts = [mockDraft, { ...mockDraft, id: 'draft-2' }];
-      (draftRepository.findByWalletId as jest.Mock).mockResolvedValue(mockDrafts);
+      (draftRepository.findByWalletId as Mock).mockResolvedValue(mockDrafts);
 
       const result = await getDraftsForWallet(walletId, userId);
 
@@ -122,7 +123,7 @@ describe('DraftService', () => {
     });
 
     it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue(null);
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
 
       await expect(getDraftsForWallet(walletId, userId)).rejects.toThrow(NotFoundError);
     });
@@ -130,7 +131,7 @@ describe('DraftService', () => {
 
   describe('getDraft', () => {
     it('should return a specific draft', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(mockDraft);
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
 
       const result = await getDraft(walletId, draftId, userId);
 
@@ -138,13 +139,13 @@ describe('DraftService', () => {
     });
 
     it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue(null);
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
 
       await expect(getDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
     });
 
     it('should throw NotFoundError if draft not found', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(null);
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
       await expect(getDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
     });
@@ -160,10 +161,10 @@ describe('DraftService', () => {
     };
 
     beforeEach(() => {
-      (draftRepository.create as jest.Mock).mockResolvedValue(mockDraft);
-      (resolveUtxoIds as jest.Mock).mockResolvedValue({ found: ['utxo-id-1'], notFound: [] });
-      (lockUtxosForDraft as jest.Mock).mockResolvedValue({ success: true, lockedCount: 1 });
-      (prisma.systemSetting.findUnique as jest.Mock).mockResolvedValue(null);
+      (draftRepository.create as Mock).mockResolvedValue(mockDraft);
+      (resolveUtxoIds as Mock).mockResolvedValue({ found: ['utxo-id-1'], notFound: [] });
+      (lockUtxosForDraft as Mock).mockResolvedValue({ success: true, lockedCount: 1 });
+      (prisma.systemSetting.findUnique as Mock).mockResolvedValue(null);
     });
 
     it('should create a draft with valid input', async () => {
@@ -187,7 +188,7 @@ describe('DraftService', () => {
     });
 
     it('should throw ForbiddenError for viewers', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
+      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
 
       await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(ForbiddenError);
     });
@@ -198,7 +199,7 @@ describe('DraftService', () => {
     });
 
     it('should throw ConflictError when UTXOs are already locked', async () => {
-      (lockUtxosForDraft as jest.Mock).mockResolvedValue({ success: false });
+      (lockUtxosForDraft as Mock).mockResolvedValue({ success: false });
 
       await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(ConflictError);
       expect(draftRepository.remove).toHaveBeenCalledWith(mockDraft.id);
@@ -215,7 +216,7 @@ describe('DraftService', () => {
     });
 
     it('should use custom expiration days from settings', async () => {
-      (prisma.systemSetting.findUnique as jest.Mock).mockResolvedValue({ value: '14' });
+      (prisma.systemSetting.findUnique as Mock).mockResolvedValue({ value: '14' });
 
       await createDraft(walletId, userId, validInput);
 
@@ -227,7 +228,7 @@ describe('DraftService', () => {
     });
 
     it('should allow signers to create drafts', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
+      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
 
       const result = await createDraft(walletId, userId, validInput);
 
@@ -237,8 +238,8 @@ describe('DraftService', () => {
 
   describe('updateDraft', () => {
     beforeEach(() => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(mockDraft);
-      (draftRepository.update as jest.Mock).mockResolvedValue({ ...mockDraft, status: 'partial' });
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
+      (draftRepository.update as Mock).mockResolvedValue({ ...mockDraft, status: 'partial' });
     });
 
     it('should update draft status', async () => {
@@ -257,7 +258,7 @@ describe('DraftService', () => {
     });
 
     it('should not duplicate signed device IDs', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue({
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue({
         ...mockDraft,
         signedDeviceIds: ['device-1'],
       });
@@ -270,13 +271,13 @@ describe('DraftService', () => {
     });
 
     it('should throw ForbiddenError for viewers', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
+      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'viewer' });
 
       await expect(updateDraft(walletId, draftId, userId, { status: 'signed' })).rejects.toThrow(ForbiddenError);
     });
 
     it('should throw NotFoundError if draft not found', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(null);
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
       await expect(updateDraft(walletId, draftId, userId, {})).rejects.toThrow(NotFoundError);
     });
@@ -297,8 +298,8 @@ describe('DraftService', () => {
 
   describe('deleteDraft', () => {
     beforeEach(() => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(mockDraft);
-      (draftRepository.remove as jest.Mock).mockResolvedValue(undefined);
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
+      (draftRepository.remove as Mock).mockResolvedValue(undefined);
     });
 
     it('should delete draft as creator', async () => {
@@ -309,7 +310,7 @@ describe('DraftService', () => {
 
     it('should delete draft as wallet owner', async () => {
       const differentUser = 'other-user';
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue({
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue({
         ...mockDraft,
         userId: 'original-creator',
       });
@@ -320,23 +321,23 @@ describe('DraftService', () => {
     });
 
     it('should throw ForbiddenError if not creator or owner', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue({
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue({
         ...mockDraft,
         userId: 'original-creator',
       });
-      (walletService.getWalletById as jest.Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
+      (walletService.getWalletById as Mock).mockResolvedValue({ ...mockWallet, userRole: 'signer' });
 
       await expect(deleteDraft(walletId, draftId, 'other-user')).rejects.toThrow(ForbiddenError);
     });
 
     it('should throw NotFoundError if wallet not found', async () => {
-      (walletService.getWalletById as jest.Mock).mockResolvedValue(null);
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
 
       await expect(deleteDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
     });
 
     it('should throw NotFoundError if draft not found', async () => {
-      (draftRepository.findByIdInWallet as jest.Mock).mockResolvedValue(null);
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(null);
 
       await expect(deleteDraft(walletId, draftId, userId)).rejects.toThrow(NotFoundError);
     });
@@ -344,7 +345,7 @@ describe('DraftService', () => {
 
   describe('deleteExpiredDrafts', () => {
     it('should delete expired drafts and return count', async () => {
-      (draftRepository.deleteExpired as jest.Mock).mockResolvedValue(5);
+      (draftRepository.deleteExpired as Mock).mockResolvedValue(5);
 
       const result = await deleteExpiredDrafts();
 
@@ -353,7 +354,7 @@ describe('DraftService', () => {
     });
 
     it('should return 0 when no expired drafts', async () => {
-      (draftRepository.deleteExpired as jest.Mock).mockResolvedValue(0);
+      (draftRepository.deleteExpired as Mock).mockResolvedValue(0);
 
       const result = await deleteExpiredDrafts();
 

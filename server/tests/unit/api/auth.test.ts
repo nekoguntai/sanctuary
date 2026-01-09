@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Authentication API Tests
  *
@@ -17,13 +18,13 @@ import {
 import * as bcrypt from 'bcryptjs';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock config
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   __esModule: true,
   default: {
     jwtSecret: 'test-jwt-secret-key-for-testing-only',
@@ -36,18 +37,18 @@ jest.mock('../../../src/config', () => ({
 }));
 
 // Mock token revocation service to prevent database initialization
-jest.mock('../../../src/services/tokenRevocation', () => ({
-  isTokenRevoked: jest.fn().mockResolvedValue(false),
-  revokeToken: jest.fn().mockResolvedValue(undefined),
-  initializeRevocationService: jest.fn(),
-  shutdownRevocationService: jest.fn(),
+vi.mock('../../../src/services/tokenRevocation', () => ({
+  isTokenRevoked: vi.fn().mockResolvedValue(false),
+  revokeToken: vi.fn().mockResolvedValue(undefined),
+  initializeRevocationService: vi.fn(),
+  shutdownRevocationService: vi.fn(),
 }));
 
 // Mock audit service
-jest.mock('../../../src/services/auditService', () => ({
+vi.mock('../../../src/services/auditService', () => ({
   auditService: {
-    log: jest.fn().mockResolvedValue(undefined),
-    logFromRequest: jest.fn().mockResolvedValue(undefined),
+    log: vi.fn().mockResolvedValue(undefined),
+    logFromRequest: vi.fn().mockResolvedValue(undefined),
   },
   AuditAction: {
     LOGIN: 'LOGIN',
@@ -64,7 +65,7 @@ jest.mock('../../../src/services/auditService', () => ({
   AuditCategory: {
     AUTH: 'AUTH',
   },
-  getClientInfo: jest.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
+  getClientInfo: vi.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
 }));
 
 // Import JWT utilities and password utilities after mocks

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Read Replica Tests
  *
@@ -16,13 +17,13 @@ import {
 } from '../../../src/infrastructure/readReplica';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => {
+vi.mock('../../../src/models/prisma', () => {
   const mockPrisma = {
-    $connect: jest.fn(),
-    $disconnect: jest.fn(),
-    $queryRaw: jest.fn().mockResolvedValue([{ ts: new Date() }]),
+    $connect: vi.fn(),
+    $disconnect: vi.fn(),
+    $queryRaw: vi.fn().mockResolvedValue([{ ts: new Date() }]),
     transaction: {
-      findMany: jest.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue([]),
     },
   };
   return { default: mockPrisma };
@@ -52,7 +53,7 @@ describe('Read Replica', () => {
   describe('withReadReplica', () => {
     it('should execute query with read client', async () => {
       const mockResult = [{ id: '1' }];
-      const queryFn = jest.fn().mockResolvedValue(mockResult);
+      const queryFn = vi.fn().mockResolvedValue(mockResult);
 
       const result = await withReadReplica(queryFn);
 
@@ -64,7 +65,7 @@ describe('Read Replica', () => {
   describe('withPrimary', () => {
     it('should execute query with primary client', async () => {
       const mockResult = { id: '1' };
-      const queryFn = jest.fn().mockResolvedValue(mockResult);
+      const queryFn = vi.fn().mockResolvedValue(mockResult);
 
       const result = await withPrimary(queryFn);
 
@@ -76,7 +77,7 @@ describe('Read Replica', () => {
   describe('executeAnalyticsQuery', () => {
     it('should execute query successfully', async () => {
       const mockResult = { count: 100 };
-      const queryFn = jest.fn().mockResolvedValue(mockResult);
+      const queryFn = vi.fn().mockResolvedValue(mockResult);
 
       const result = await executeAnalyticsQuery(queryFn);
 
@@ -84,7 +85,7 @@ describe('Read Replica', () => {
     });
 
     it('should timeout long-running queries', async () => {
-      const slowQuery = jest.fn().mockImplementation(
+      const slowQuery = vi.fn().mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 10000))
       );
 
@@ -94,7 +95,7 @@ describe('Read Replica', () => {
     });
 
     it('should clean up timeout on success', async () => {
-      const fastQuery = jest.fn().mockResolvedValue({ result: 'fast' });
+      const fastQuery = vi.fn().mockResolvedValue({ result: 'fast' });
 
       // Should not leave dangling timers
       const result = await executeAnalyticsQuery(fastQuery, { timeout: 5000 });

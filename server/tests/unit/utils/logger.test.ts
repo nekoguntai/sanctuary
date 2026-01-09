@@ -6,9 +6,9 @@
  */
 
 // Unmock logger since we're testing the actual implementation
-jest.unmock('../../../src/utils/logger');
-jest.unmock('../../../src/utils/requestContext');
-jest.unmock('../../../src/utils/redact');
+vi.unmock('../../../src/utils/logger');
+vi.unmock('../../../src/utils/requestContext');
+vi.unmock('../../../src/utils/redact');
 
 import { createLogger, setLogLevel, getConfiguredLogLevel, LogLevel } from '../../../src/utils/logger';
 

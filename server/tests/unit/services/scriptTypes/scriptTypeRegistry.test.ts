@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Script Type Registry Tests
  *
@@ -8,12 +9,12 @@ import { ScriptTypeRegistry } from '../../../../src/services/scriptTypes/registr
 import type { ScriptTypeHandler, DeviceKeyInfo, DescriptorBuildOptions } from '../../../../src/services/scriptTypes/types';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -26,10 +27,10 @@ function createMockHandler(overrides: Partial<ScriptTypeHandler> = {}): ScriptTy
     bip: 84,
     supportsMultisig: true,
     aliases: ['mock', 'test_segwit'],
-    getDerivationPath: jest.fn().mockReturnValue("m/84'/0'/0'"),
-    getMultisigDerivationPath: jest.fn().mockReturnValue("m/48'/0'/0'/2'"),
-    buildSingleSigDescriptor: jest.fn().mockReturnValue('wpkh([abcd1234/84h/0h/0h]xpub.../0/*)'),
-    buildMultiSigDescriptor: jest.fn().mockReturnValue('wsh(sortedmulti(2,[abcd1234]xpub...,[efgh5678]xpub.../0/*))'),
+    getDerivationPath: vi.fn().mockReturnValue("m/84'/0'/0'"),
+    getMultisigDerivationPath: vi.fn().mockReturnValue("m/48'/0'/0'/2'"),
+    buildSingleSigDescriptor: vi.fn().mockReturnValue('wpkh([abcd1234/84h/0h/0h]xpub.../0/*)'),
+    buildMultiSigDescriptor: vi.fn().mockReturnValue('wsh(sortedmulti(2,[abcd1234]xpub...,[efgh5678]xpub.../0/*))'),
     ...overrides,
   };
 }
@@ -341,10 +342,19 @@ describe('ScriptTypeRegistry', () => {
 });
 
 describe('Script Type Handler Integration', () => {
-  // Test with actual handlers to verify derivation paths
-  const { nativeSegwitHandler } = require('../../../../src/services/scriptTypes/handlers/nativeSegwit');
-  const { legacyHandler } = require('../../../../src/services/scriptTypes/handlers/legacy');
-  const { taprootHandler } = require('../../../../src/services/scriptTypes/handlers/taproot');
+  // Import actual handlers to verify derivation paths
+  let nativeSegwitHandler: any;
+  let legacyHandler: any;
+  let taprootHandler: any;
+
+  beforeAll(async () => {
+    const nativeSegwitModule = await import('../../../../src/services/scriptTypes/handlers/nativeSegwit');
+    const legacyModule = await import('../../../../src/services/scriptTypes/handlers/legacy');
+    const taprootModule = await import('../../../../src/services/scriptTypes/handlers/taproot');
+    nativeSegwitHandler = nativeSegwitModule.nativeSegwitHandler;
+    legacyHandler = legacyModule.legacyHandler;
+    taprootHandler = taprootModule.taprootHandler;
+  });
 
   describe('Native SegWit Handler', () => {
     it('should return correct BIP-84 derivation path', () => {

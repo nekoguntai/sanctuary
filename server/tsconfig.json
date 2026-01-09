@@ -14,7 +14,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["node", "jest"]
+    "types": ["node"]
   },
   "include": ["src/**/*", "../shared/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -525,19 +525,42 @@ export const repositories = createRepositories();
 /**
  * Create a mock Prisma client for testing
  * Returns a partial mock that can be customized per test
+ *
+ * @param mockFn - A mock function creator (e.g., vi.fn from Vitest)
+ *                 Defaults to a simple function that returns promises
  */
-export function createMockPrismaClient(): PrismaClientLike {
+export function createMockPrismaClient(
+  mockFn?: <T>(impl?: () => T) => (() => T) & { mockResolvedValue?: (val: T) => void; mockImplementation?: (fn: (...args: unknown[]) => T) => void }
+): PrismaClientLike {
+  // Default simple mock function if none provided
+  const createFn = mockFn || (<T>(impl?: () => T) => {
+    const fn = (..._args: unknown[]) => impl ? Promise.resolve(impl()) : Promise.resolve(null);
+    return fn as unknown as (() => T) & { mockResolvedValue?: (val: T) => void };
+  });
+
   const createMockModel = () => ({
-    findUnique: jest.fn().mockResolvedValue(null),
-    findFirst: jest.fn().mockResolvedValue(null),
-    findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue({}),
-    update: jest.fn().mockResolvedValue({}),
-    delete: jest.fn().mockResolvedValue({}),
-    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-    count: jest.fn().mockResolvedValue(0),
-    aggregate: jest.fn().mockResolvedValue({ _sum: { amount: BigInt(0) } }),
+    findUnique: createFn(() => null as unknown),
+    findFirst: createFn(() => null as unknown),
+    findMany: createFn(() => [] as unknown),
+    create: createFn(() => ({} as unknown)),
+    update: createFn(() => ({} as unknown)),
+    delete: createFn(() => ({} as unknown)),
+    deleteMany: createFn(() => ({ count: 0 } as unknown)),
+    updateMany: createFn(() => ({ count: 0 } as unknown)),
+    count: createFn(() => 0 as unknown),
+    aggregate: createFn(() => ({ _sum: { amount: BigInt(0) } } as unknown)),
+  });
+
+  const transactionFn = createFn();
+  const mockTransaction = (fn: (client: unknown) => unknown) => fn({
+    wallet: createMockModel(),
+    transaction: createMockModel(),
+    address: createMockModel(),
+    uTXO: createMockModel(),
+    user: createMockModel(),
+    label: createMockModel(),
+    transactionLabel: createMockModel(),
+    addressLabel: createMockModel(),
   });
 
   return {
@@ -551,15 +574,6 @@ export function createMockPrismaClient(): PrismaClientLike {
     label: createMockModel() as unknown as PrismaClient['label'],
     transactionLabel: createMockModel() as unknown as PrismaClient['transactionLabel'],
     addressLabel: createMockModel() as unknown as PrismaClient['addressLabel'],
-    $transaction: jest.fn().mockImplementation((fn) => fn({
-      wallet: createMockModel(),
-      transaction: createMockModel(),
-      address: createMockModel(),
-      uTXO: createMockModel(),
-      user: createMockModel(),
-      label: createMockModel(),
-      transactionLabel: createMockModel(),
-      addressLabel: createMockModel(),
-    })),
+    $transaction: transactionFn || mockTransaction,
   } as PrismaClientLike;
 }

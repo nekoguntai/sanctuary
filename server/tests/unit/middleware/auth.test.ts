@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Authentication Middleware Tests
  *
@@ -21,11 +22,11 @@ import {
 } from '../../helpers/testUtils';
 
 // Mock dependencies
-jest.mock('../../../src/utils/jwt');
-jest.mock('../../../src/services/tokenRevocation');
-jest.mock('../../../src/utils/requestContext', () => ({
+vi.mock('../../../src/utils/jwt');
+vi.mock('../../../src/services/tokenRevocation');
+vi.mock('../../../src/utils/requestContext', () => ({
   requestContext: {
-    setUser: jest.fn(),
+    setUser: vi.fn(),
   },
 }));
 
@@ -51,15 +52,15 @@ describe('Authentication Middleware', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('authenticate middleware', () => {
     describe('JWT Token Validation', () => {
       it('should pass authentication with valid token', async () => {
         const token = 'valid-jwt-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(validPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -81,8 +82,8 @@ describe('Authentication Middleware', () => {
 
       it('should reject expired token', async () => {
         const token = 'expired-jwt-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Token expired'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Token expired'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -102,8 +103,8 @@ describe('Authentication Middleware', () => {
 
       it('should reject token with invalid signature', async () => {
         const token = 'invalid-signature-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Invalid token'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Invalid token'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -122,8 +123,8 @@ describe('Authentication Middleware', () => {
 
       it('should reject malformed token', async () => {
         const token = 'malformed-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('jwt malformed'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('jwt malformed'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -141,7 +142,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should reject missing token', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: {},
@@ -161,8 +162,8 @@ describe('Authentication Middleware', () => {
 
       it('should reject token with wrong audience', async () => {
         const token = 'wrong-audience-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('jwt audience invalid'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('jwt audience invalid'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -181,8 +182,8 @@ describe('Authentication Middleware', () => {
 
       it('should reject revoked token', async () => {
         const token = 'revoked-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Token has been revoked'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Token has been revoked'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -203,8 +204,8 @@ describe('Authentication Middleware', () => {
     describe('Token Extraction', () => {
       it('should extract token from Authorization header with Bearer scheme', async () => {
         const token = 'valid-jwt-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(validPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -219,7 +220,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should handle missing Authorization header', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: {},
@@ -236,7 +237,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should handle undefined Authorization header', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: undefined as any },
@@ -261,8 +262,8 @@ describe('Authentication Middleware', () => {
           pending2FA: true,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(pending2FAPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(pending2FAPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -283,8 +284,8 @@ describe('Authentication Middleware', () => {
 
       it('should accept tokens without pending2FA flag', async () => {
         const token = 'normal-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(validPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -305,8 +306,8 @@ describe('Authentication Middleware', () => {
           pending2FA: false,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(payloadWithFalse2FA);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(payloadWithFalse2FA);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -323,7 +324,7 @@ describe('Authentication Middleware', () => {
 
     describe('Edge Cases', () => {
       it('should handle empty Authorization header', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: '' },
@@ -340,7 +341,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should handle "Bearer" without token', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: 'Bearer' },
@@ -357,7 +358,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should handle "Bearer " with space but no token', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: 'Bearer ' },
@@ -374,7 +375,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should handle non-Bearer authorization scheme', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: 'Basic dXNlcjpwYXNzd29yZA==' },
@@ -392,8 +393,8 @@ describe('Authentication Middleware', () => {
 
       it('should set user context for valid token', async () => {
         const token = 'valid-jwt-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(validPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -411,8 +412,8 @@ describe('Authentication Middleware', () => {
 
       it('should not set user context for invalid token', async () => {
         const token = 'invalid-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Invalid token'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Invalid token'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -433,8 +434,8 @@ describe('Authentication Middleware', () => {
           isAdmin: false,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(payloadWithoutJti);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(payloadWithoutJti);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -455,8 +456,8 @@ describe('Authentication Middleware', () => {
           usingDefaultPassword: true,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(payloadWithDefaultPassword);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(payloadWithDefaultPassword);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -579,8 +580,8 @@ describe('Authentication Middleware', () => {
     describe('Optional Authentication', () => {
       it('should attach user for valid token', async () => {
         const token = 'valid-jwt-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(validPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -601,7 +602,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should continue without user when token is missing', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: {},
@@ -618,8 +619,8 @@ describe('Authentication Middleware', () => {
 
       it('should continue without user when token is invalid', async () => {
         const token = 'invalid-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Invalid token'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Invalid token'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -636,8 +637,8 @@ describe('Authentication Middleware', () => {
 
       it('should continue without user when token is expired', async () => {
         const token = 'expired-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Token expired'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Token expired'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -658,8 +659,8 @@ describe('Authentication Middleware', () => {
           pending2FA: true,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(pending2FAPayload);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(pending2FAPayload);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -681,8 +682,8 @@ describe('Authentication Middleware', () => {
           pending2FA: false,
         };
 
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockResolvedValue(payloadWithFalse2FA);
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockResolvedValue(payloadWithFalse2FA);
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -701,7 +702,7 @@ describe('Authentication Middleware', () => {
       });
 
       it('should continue when Authorization header is empty', async () => {
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+        (extractTokenFromHeader as Mock).mockReturnValue(null);
 
         const req = createMockRequest({
           headers: { authorization: '' },
@@ -717,8 +718,8 @@ describe('Authentication Middleware', () => {
 
       it('should continue when token has wrong audience', async () => {
         const token = 'wrong-audience-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('jwt audience invalid'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('jwt audience invalid'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -734,8 +735,8 @@ describe('Authentication Middleware', () => {
 
       it('should continue when token is revoked', async () => {
         const token = 'revoked-token';
-        (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-        (verifyToken as jest.Mock).mockRejectedValue(new Error('Token has been revoked'));
+        (extractTokenFromHeader as Mock).mockReturnValue(token);
+        (verifyToken as Mock).mockRejectedValue(new Error('Token has been revoked'));
 
         const req = createMockRequest({
           headers: { authorization: `Bearer ${token}` },
@@ -754,8 +755,8 @@ describe('Authentication Middleware', () => {
   describe('Integration Scenarios', () => {
     it('should allow authenticated user to pass both authenticate and requireAdmin for admin', async () => {
       const token = 'admin-token';
-      (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-      (verifyToken as jest.Mock).mockResolvedValue(adminPayload);
+      (extractTokenFromHeader as Mock).mockReturnValue(token);
+      (verifyToken as Mock).mockResolvedValue(adminPayload);
 
       const req = createMockRequest({
         headers: { authorization: `Bearer ${token}` },
@@ -780,8 +781,8 @@ describe('Authentication Middleware', () => {
 
     it('should block non-admin user at requireAdmin even after successful authentication', async () => {
       const token = 'user-token';
-      (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-      (verifyToken as jest.Mock).mockResolvedValue(validPayload);
+      (extractTokenFromHeader as Mock).mockReturnValue(token);
+      (verifyToken as Mock).mockResolvedValue(validPayload);
 
       const req = createMockRequest({
         headers: { authorization: `Bearer ${token}` },
@@ -809,8 +810,8 @@ describe('Authentication Middleware', () => {
 
     it('should handle optionalAuth followed by requireAdmin correctly', async () => {
       const token = 'admin-token';
-      (extractTokenFromHeader as jest.Mock).mockReturnValue(token);
-      (verifyToken as jest.Mock).mockResolvedValue(adminPayload);
+      (extractTokenFromHeader as Mock).mockReturnValue(token);
+      (verifyToken as Mock).mockResolvedValue(adminPayload);
 
       const req = createMockRequest({
         headers: { authorization: `Bearer ${token}` },
@@ -834,7 +835,7 @@ describe('Authentication Middleware', () => {
     });
 
     it('should fail requireAdmin when optionalAuth did not attach user', async () => {
-      (extractTokenFromHeader as jest.Mock).mockReturnValue(null);
+      (extractTokenFromHeader as Mock).mockReturnValue(null);
 
       const req = createMockRequest({
         headers: {},

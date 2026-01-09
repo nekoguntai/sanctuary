@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Sync API Tests
  *
@@ -7,39 +8,42 @@
 import express from 'express';
 import request from 'supertest';
 
-// Mock repositories
-const mockWalletRepository = {
-  getIdsByNetwork: jest.fn(),
-  findByNetworkWithSyncStatus: jest.fn(),
-  resetSyncState: jest.fn(),
-};
+// Hoist mock variables for use in vi.mock() factories
+const {
+  mockWalletRepository,
+  mockTransactionRepository,
+  mockAddressRepository,
+  mockSyncService,
+} = vi.hoisted(() => ({
+  mockWalletRepository: {
+    getIdsByNetwork: vi.fn(),
+    findByNetworkWithSyncStatus: vi.fn(),
+    resetSyncState: vi.fn(),
+  },
+  mockTransactionRepository: {
+    deleteByWalletId: vi.fn(),
+  },
+  mockAddressRepository: {
+    resetUsedFlags: vi.fn(),
+  },
+  mockSyncService: {
+    queueSync: vi.fn(),
+    getSyncStatus: vi.fn(),
+  },
+}));
 
-const mockTransactionRepository = {
-  deleteByWalletId: jest.fn(),
-};
-
-const mockAddressRepository = {
-  resetUsedFlags: jest.fn(),
-};
-
-jest.mock('../../../src/repositories', () => ({
+vi.mock('../../../src/repositories', () => ({
   walletRepository: mockWalletRepository,
   transactionRepository: mockTransactionRepository,
   addressRepository: mockAddressRepository,
 }));
 
-// Mock sync service
-const mockSyncService = {
-  queueSync: jest.fn(),
-  getSyncStatus: jest.fn(),
-};
-
-jest.mock('../../../src/services/syncService', () => ({
+vi.mock('../../../src/services/syncService', () => ({
   getSyncService: () => mockSyncService,
 }));
 
 // Mock authentication middleware
-jest.mock('../../../src/middleware/auth', () => ({
+vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: express.Request, res: express.Response, next: express.NextFunction) => {
     (req as any).user = { userId: 'test-user-id', isAdmin: false };
     next();
@@ -47,24 +51,24 @@ jest.mock('../../../src/middleware/auth', () => ({
 }));
 
 // Mock rate limit middleware - pass through all requests
-jest.mock('../../../src/middleware/rateLimit', () => ({
+vi.mock('../../../src/middleware/rateLimit', () => ({
   rateLimitByUser: () => (req: express.Request, res: express.Response, next: express.NextFunction) => next(),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock wallet log buffer
-jest.mock('../../../src/services/walletLogBuffer', () => ({
+vi.mock('../../../src/services/walletLogBuffer', () => ({
   walletLogBuffer: {
-    get: jest.fn(() => []),
+    get: vi.fn(() => []),
   },
 }));
 
@@ -81,7 +85,7 @@ describe('Sync API - Network Endpoints', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /sync/network/:network', () => {

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * User Repository Integration Tests
  *
@@ -16,7 +17,7 @@ import {
 import { userRepository } from '../../../src/repositories/userRepository';
 
 // Mock the prisma import to use our test transaction
-jest.mock('../../../src/models/prisma', () => {
+vi.mock('../../../src/models/prisma', () => {
   return {
     __esModule: true,
     default: null, // Will be set per-test

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Sync Service Unit Tests
  *
@@ -9,50 +10,84 @@
  * - Real-time subscriptions
  */
 
-import { jest } from '@jest/globals';
+// Use vi.hoisted to define mocks that are used in vi.mock factories
+const {
+  mockPrismaClient,
+  mockSyncWallet,
+  mockUpdateTransactionConfirmations,
+  mockPopulateMissingTransactionFields,
+  mockGetBlockHeight,
+  mockSetCachedBlockHeight,
+  mockElectrumClient,
+  mockNotificationService,
+  mockAcquireLock,
+  mockReleaseLock,
+} = vi.hoisted(() => ({
+  mockPrismaClient: {
+    wallet: {
+      findUnique: vi.fn<any>(),
+      findMany: vi.fn<any>(),
+      update: vi.fn<any>(),
+      updateMany: vi.fn<any>(),
+    },
+    address: {
+      findMany: vi.fn<any>(),
+      findFirst: vi.fn<any>(),
+    },
+    transaction: {
+      findMany: vi.fn<any>(),
+      findFirst: vi.fn<any>(),
+    },
+    uTXO: {
+      aggregate: vi.fn<any>(),
+    },
+    refreshToken: {
+      findMany: vi.fn<any>(),
+    },
+    $transaction: vi.fn<any>(),
+  },
+  mockSyncWallet: vi.fn<any>(),
+  mockUpdateTransactionConfirmations: vi.fn<any>(),
+  mockPopulateMissingTransactionFields: vi.fn<any>(),
+  mockGetBlockHeight: vi.fn<any>(),
+  mockSetCachedBlockHeight: vi.fn<any>(),
+  mockElectrumClient: {
+    getServerVersion: vi.fn<any>(),
+    subscribeHeaders: vi.fn<any>(),
+    subscribeAddress: vi.fn<any>(),
+    subscribeAddressBatch: vi.fn<any>(),
+    unsubscribeAddress: vi.fn<any>(),
+    on: vi.fn<any>(),
+    removeAllListeners: vi.fn<any>(),
+  },
+  mockNotificationService: {
+    broadcastSyncStatus: vi.fn<any>(),
+    broadcastBalanceUpdate: vi.fn<any>(),
+    broadcastNewBlock: vi.fn<any>(),
+    broadcastConfirmationUpdate: vi.fn<any>(),
+    broadcastTransactionNotification: vi.fn<any>(),
+  },
+  mockAcquireLock: vi.fn<any>(),
+  mockReleaseLock: vi.fn<any>(),
+}));
 
-// Mock Prisma with proper typing
-const mockPrismaClient = {
-  wallet: {
-    findUnique: jest.fn<any>(),
-    findMany: jest.fn<any>(),
-    update: jest.fn<any>(),
-    updateMany: jest.fn<any>(),
-  },
-  address: {
-    findMany: jest.fn<any>(),
-    findFirst: jest.fn<any>(),
-  },
-  transaction: {
-    findMany: jest.fn<any>(),
-    findFirst: jest.fn<any>(),
-  },
-  uTXO: {
-    aggregate: jest.fn<any>(),
-  },
-  refreshToken: {
-    findMany: jest.fn<any>(),
-  },
-  $transaction: jest.fn<any>(),
-};
-
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock config
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   getConfig: () => ({
     sync: {
       intervalMs: 60000,
@@ -70,14 +105,7 @@ jest.mock('../../../src/config', () => ({
   }),
 }));
 
-// Mock blockchain functions with proper typing
-const mockSyncWallet = jest.fn<any>();
-const mockUpdateTransactionConfirmations = jest.fn<any>();
-const mockPopulateMissingTransactionFields = jest.fn<any>();
-const mockGetBlockHeight = jest.fn<any>();
-const mockSetCachedBlockHeight = jest.fn<any>();
-
-jest.mock('../../../src/services/bitcoin/blockchain', () => ({
+vi.mock('../../../src/services/bitcoin/blockchain', () => ({
   syncWallet: mockSyncWallet,
   updateTransactionConfirmations: mockUpdateTransactionConfirmations,
   populateMissingTransactionFields: mockPopulateMissingTransactionFields,
@@ -85,70 +113,46 @@ jest.mock('../../../src/services/bitcoin/blockchain', () => ({
   setCachedBlockHeight: mockSetCachedBlockHeight,
 }));
 
-// Mock node client with proper typing
-const mockElectrumClient = {
-  getServerVersion: jest.fn<any>(),
-  subscribeHeaders: jest.fn<any>(),
-  subscribeAddress: jest.fn<any>(),
-  subscribeAddressBatch: jest.fn<any>(),
-  unsubscribeAddress: jest.fn<any>(),
-  on: jest.fn<any>(),
-  removeAllListeners: jest.fn<any>(),
-};
-
-jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn<any>().mockResolvedValue(mockElectrumClient),
-  getElectrumClientIfActive: jest.fn<any>().mockResolvedValue(mockElectrumClient),
+vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn<any>().mockResolvedValue(mockElectrumClient),
+  getElectrumClientIfActive: vi.fn<any>().mockResolvedValue(mockElectrumClient),
 }));
 
-// Mock notifications with proper typing
-const mockNotificationService = {
-  broadcastSyncStatus: jest.fn<any>(),
-  broadcastBalanceUpdate: jest.fn<any>(),
-  broadcastNewBlock: jest.fn<any>(),
-  broadcastConfirmationUpdate: jest.fn<any>(),
-  broadcastTransactionNotification: jest.fn<any>(),
-};
-
-jest.mock('../../../src/websocket/notifications', () => ({
+vi.mock('../../../src/websocket/notifications', () => ({
   getNotificationService: () => mockNotificationService,
-  walletLog: jest.fn(),
+  walletLog: vi.fn(),
 }));
 
 // Mock event service
-jest.mock('../../../src/services/eventService', () => ({
+vi.mock('../../../src/services/eventService', () => ({
   eventService: {
-    emitNewBlock: jest.fn(),
-    emitWalletSyncStarted: jest.fn(),
-    emitWalletSynced: jest.fn(),
-    emitWalletSyncFailed: jest.fn(),
-    emitTransactionConfirmed: jest.fn(),
+    emitNewBlock: vi.fn(),
+    emitWalletSyncStarted: vi.fn(),
+    emitWalletSynced: vi.fn(),
+    emitWalletSyncFailed: vi.fn(),
+    emitTransactionConfirmed: vi.fn(),
   },
 }));
 
-// Mock distributed locking with proper typing
-const mockAcquireLock = jest.fn<any>();
-const mockReleaseLock = jest.fn<any>();
-
-jest.mock('../../../src/infrastructure', () => ({
+vi.mock('../../../src/infrastructure', () => ({
   acquireLock: mockAcquireLock,
   releaseLock: mockReleaseLock,
 }));
 
 // Mock dead letter queue
-jest.mock('../../../src/services/deadLetterQueue', () => ({
-  recordSyncFailure: jest.fn(),
+vi.mock('../../../src/services/deadLetterQueue', () => ({
+  recordSyncFailure: vi.fn(),
 }));
 
 // Mock metrics
-jest.mock('../../../src/observability/metrics', () => ({
-  walletSyncsTotal: { inc: jest.fn() },
-  walletSyncDuration: { observe: jest.fn() },
+vi.mock('../../../src/observability/metrics', () => ({
+  walletSyncsTotal: { inc: vi.fn() },
+  walletSyncDuration: { observe: vi.fn() },
 }));
 
 // Mock async utilities
-jest.mock('../../../src/utils/async', () => ({
-  withTimeout: jest.fn().mockImplementation((promise) => promise),
+vi.mock('../../../src/utils/async', () => ({
+  withTimeout: vi.fn().mockImplementation((promise) => promise),
 }));
 
 // Import after mocks
@@ -158,8 +162,8 @@ describe('SyncService', () => {
   let syncService: SyncService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
 
     // Get fresh instance
     syncService = getSyncService();
@@ -187,7 +191,7 @@ describe('SyncService', () => {
   });
 
   afterEach(async () => {
-    jest.useRealTimers();
+    vi.useRealTimers();
     // Clean up service
     await syncService.stop();
   });
@@ -613,7 +617,7 @@ describe('SyncService - Error Handling', () => {
   let syncService: SyncService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     syncService = getSyncService();
     syncService['isRunning'] = false;
     syncService['syncQueue'] = [];

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Audit Service Tests
  *
@@ -6,38 +7,38 @@
 
 import { createMockRequest } from '../../helpers/testUtils';
 
-// Mock repository functions - defined before jest.mock
-const mockCreate = jest.fn();
-const mockFindMany = jest.fn();
-const mockFindByUserId = jest.fn();
-const mockDeleteOlderThan = jest.fn();
-const mockCountByCategory = jest.fn();
-const mockCountByAction = jest.fn();
+// Mock repository functions - defined before vi.mock
+const mockCreate = vi.fn();
+const mockFindMany = vi.fn();
+const mockFindByUserId = vi.fn();
+const mockDeleteOlderThan = vi.fn();
+const mockCountByCategory = vi.fn();
+const mockCountByAction = vi.fn();
 
 // Mock the audit log repository
-jest.mock('../../../src/repositories', () => ({
+vi.mock('../../../src/repositories', () => ({
   auditLogRepository: {
     create: (...args: unknown[]) => mockCreate(...args),
     findMany: (...args: unknown[]) => mockFindMany(...args),
     findByUserId: (...args: unknown[]) => mockFindByUserId(...args),
-    findByCategory: jest.fn(),
-    findFailedActions: jest.fn(),
-    findRecent: jest.fn(),
+    findByCategory: vi.fn(),
+    findFailedActions: vi.fn(),
+    findRecent: vi.fn(),
     countByCategory: () => mockCountByCategory(),
     countByAction: () => mockCountByAction(),
     deleteOlderThan: (...args: unknown[]) => mockDeleteOlderThan(...args),
-    logSuccess: jest.fn(),
-    logFailure: jest.fn(),
+    logSuccess: vi.fn(),
+    logFailure: vi.fn(),
   },
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -50,7 +51,7 @@ import {
 
 describe('Audit Service', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockCreate.mockReset();
     mockFindMany.mockReset();
     mockFindByUserId.mockReset();

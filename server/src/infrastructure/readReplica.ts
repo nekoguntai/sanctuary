@@ -30,6 +30,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '../utils/logger';
+import prisma from '../models/prisma';
 
 const log = createLogger('ReadReplica');
 
@@ -103,9 +104,6 @@ export async function shutdownReadReplica(): Promise<void> {
  * Get read replica client (or primary if replica not available)
  */
 export function getReadClient(): PrismaClient {
-  // Lazy import to avoid circular dependency
-  const prisma = require('../models/prisma').default;
-
   if (isReplicaEnabled && readReplicaClient) {
     return readReplicaClient;
   }
@@ -116,7 +114,6 @@ export function getReadClient(): PrismaClient {
  * Get primary client (always returns main Prisma client)
  */
 export function getPrimaryClient(): PrismaClient {
-  const prisma = require('../models/prisma').default;
   return prisma;
 }
 

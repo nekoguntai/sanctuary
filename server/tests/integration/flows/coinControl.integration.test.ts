@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Coin Control Integration Tests (HIGH)
  *
@@ -13,18 +14,18 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma before importing services
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -81,7 +82,7 @@ const createTestUtxo = (overrides: Partial<{
 describe('Coin Control Integration Tests', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Complete Coin Control Flow', () => {

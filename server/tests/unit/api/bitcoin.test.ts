@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Bitcoin API Tests
  *
@@ -9,30 +10,26 @@ import request from 'supertest';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 import { mockElectrumClient, mockElectrumPool, resetElectrumMocks, resetElectrumPoolMocks } from '../../mocks/electrum';
 
+// Hoist mock variables for use in vi.mock() factories
+const { mockNodeClient } = vi.hoisted(() => ({
+  mockNodeClient: {
+    getElectrumClientIfActive: vi.fn(),
+    getNodeConfig: vi.fn(),
+    isConnected: vi.fn(),
+    getElectrumPool: vi.fn(),
+  },
+}));
+
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
-// Mock the node client
-const mockNodeClient = {
-  getElectrumClientIfActive: jest.fn().mockReturnValue(mockElectrumClient),
-  getNodeConfig: jest.fn().mockResolvedValue({
-    type: 'electrum',
-    host: 'electrum.example.com',
-    port: 50002,
-    useSsl: true,
-    poolEnabled: true,
-  }),
-  isConnected: jest.fn().mockReturnValue(true),
-  getElectrumPool: jest.fn().mockReturnValue(mockElectrumPool),
-};
-
-jest.mock('../../../src/services/bitcoin/nodeClient', () => mockNodeClient);
+vi.mock('../../../src/services/bitcoin/nodeClient', () => mockNodeClient);
 
 // Mock authentication middleware
-jest.mock('../../../src/middleware/auth', () => ({
+vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: express.Request, res: express.Response, next: express.NextFunction) => {
     (req as any).user = { id: 'test-user-id', isAdmin: false };
     next();
@@ -40,12 +37,12 @@ jest.mock('../../../src/middleware/auth', () => ({
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -65,7 +62,18 @@ describe('Bitcoin API', () => {
     resetPrismaMocks();
     resetElectrumMocks();
     resetElectrumPoolMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    // Set up default mock return values
+    mockNodeClient.getElectrumClientIfActive.mockReturnValue(mockElectrumClient);
+    mockNodeClient.getNodeConfig.mockResolvedValue({
+      type: 'electrum',
+      host: 'electrum.example.com',
+      port: 50002,
+      useSsl: true,
+      poolEnabled: true,
+    });
+    mockNodeClient.isConnected.mockReturnValue(true);
+    mockNodeClient.getElectrumPool.mockReturnValue(mockElectrumPool);
   });
 
   describe('GET /bitcoin/status', () => {

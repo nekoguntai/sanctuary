@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Sync Phase Tests
  *
@@ -13,38 +14,38 @@ import {
 } from '../../../../mocks/electrum';
 
 // Mock Prisma
-jest.mock('../../../../../src/models/prisma', () => ({
+vi.mock('../../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock node client
-jest.mock('../../../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue(mockElectrumClient),
+vi.mock('../../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue(mockElectrumClient),
 }));
 
 // Mock notifications
-jest.mock('../../../../../src/websocket/notifications', () => ({
-  walletLog: jest.fn(),
-  getNotificationService: jest.fn().mockReturnValue({
-    broadcastTransactionNotification: jest.fn(),
+vi.mock('../../../../../src/websocket/notifications', () => ({
+  walletLog: vi.fn(),
+  getNotificationService: vi.fn().mockReturnValue({
+    broadcastTransactionNotification: vi.fn(),
   }),
 }));
 
 // Mock notification service
-jest.mock('../../../../../src/services/notifications/notificationService', () => ({
-  notifyNewTransactions: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../../../src/services/notifications/notificationService', () => ({
+  notifyNewTransactions: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock balance calculation
-jest.mock('../../../../../src/services/bitcoin/utils/balanceCalculation', () => ({
-  recalculateWalletBalances: jest.fn().mockResolvedValue(undefined),
-  correctMisclassifiedConsolidations: jest.fn().mockResolvedValue(0),
+vi.mock('../../../../../src/services/bitcoin/utils/balanceCalculation', () => ({
+  recalculateWalletBalances: vi.fn().mockResolvedValue(undefined),
+  correctMisclassifiedConsolidations: vi.fn().mockResolvedValue(0),
 }));
 
 // Mock address derivation
-jest.mock('../../../../../src/services/bitcoin/addressDerivation', () => ({
-  deriveAddressFromDescriptor: jest.fn().mockImplementation((descriptor, index, options) => {
+vi.mock('../../../../../src/services/bitcoin/addressDerivation', () => ({
+  deriveAddressFromDescriptor: vi.fn().mockImplementation((descriptor, index, options) => {
     const change = options?.change ? 1 : 0;
     return {
       address: `tb1q_test_${change}_${index}`,
@@ -55,8 +56,8 @@ jest.mock('../../../../../src/services/bitcoin/addressDerivation', () => ({
 }));
 
 // Mock block height utility
-jest.mock('../../../../../src/services/bitcoin/utils/blockHeight', () => ({
-  getBlockTimestamp: jest.fn().mockResolvedValue(new Date('2024-01-15T12:00:00Z')),
+vi.mock('../../../../../src/services/bitcoin/utils/blockHeight', () => ({
+  getBlockTimestamp: vi.fn().mockResolvedValue(new Date('2024-01-15T12:00:00Z')),
 }));
 
 import {
@@ -563,7 +564,7 @@ describe('Sync Phases', () => {
     const walletId = 'test-wallet';
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       // Default mock for transaction operations
       mockPrismaClient.transaction.findMany.mockResolvedValue([]);
       mockPrismaClient.transaction.createMany.mockResolvedValue({ count: 0 });
@@ -1351,7 +1352,7 @@ describe('Sync Phases', () => {
     const walletId = 'test-wallet';
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should insert new UTXOs not in database', async () => {
@@ -1528,9 +1529,9 @@ describe('Sync Phases', () => {
     const walletId = 'test-wallet';
 
     beforeEach(() => {
-      jest.clearAllMocks();
-      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(0);
-      (recalculateWalletBalances as jest.Mock).mockResolvedValue(undefined);
+      vi.clearAllMocks();
+      (correctMisclassifiedConsolidations as Mock).mockResolvedValue(0);
+      (recalculateWalletBalances as Mock).mockResolvedValue(undefined);
     });
 
     it('should call correctMisclassifiedConsolidations with wallet ID', async () => {
@@ -1542,7 +1543,7 @@ describe('Sync Phases', () => {
     });
 
     it('should update stats when consolidations are corrected', async () => {
-      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(3);
+      (correctMisclassifiedConsolidations as Mock).mockResolvedValue(3);
 
       const ctx = createTestContext({ walletId });
       const result = await fixConsolidationsPhase(ctx);
@@ -1551,7 +1552,7 @@ describe('Sync Phases', () => {
     });
 
     it('should recalculate balances when consolidations are corrected', async () => {
-      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(2);
+      (correctMisclassifiedConsolidations as Mock).mockResolvedValue(2);
 
       const ctx = createTestContext({ walletId });
       await fixConsolidationsPhase(ctx);
@@ -1560,7 +1561,7 @@ describe('Sync Phases', () => {
     });
 
     it('should not recalculate balances when no corrections needed', async () => {
-      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(0);
+      (correctMisclassifiedConsolidations as Mock).mockResolvedValue(0);
 
       const ctx = createTestContext({ walletId });
       await fixConsolidationsPhase(ctx);
@@ -1569,7 +1570,7 @@ describe('Sync Phases', () => {
     });
 
     it('should return context with stats updated', async () => {
-      (correctMisclassifiedConsolidations as jest.Mock).mockResolvedValue(5);
+      (correctMisclassifiedConsolidations as Mock).mockResolvedValue(5);
 
       const ctx = createTestContext({ walletId });
       const result = await fixConsolidationsPhase(ctx);

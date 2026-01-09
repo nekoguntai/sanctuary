@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Device API Routes Tests
  *
@@ -11,13 +12,16 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma BEFORE other imports
-jest.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
-}));
+vi.mock('../../../src/models/prisma', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    default: prisma,
+  };
+});
 
 // Mock auth middleware to bypass JWT validation
-jest.mock('../../../src/middleware/auth', () => ({
+vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: any, res: any, next: any) => {
     req.user = { userId: 'test-user-id', username: 'testuser', isAdmin: false };
     next();
@@ -25,7 +29,7 @@ jest.mock('../../../src/middleware/auth', () => ({
 }));
 
 // Mock device access middleware
-jest.mock('../../../src/middleware/deviceAccess', () => ({
+vi.mock('../../../src/middleware/deviceAccess', () => ({
   requireDeviceAccess: () => (req: any, res: any, next: any) => {
     req.deviceRole = 'owner';
     req.deviceId = req.params.id;
@@ -34,22 +38,22 @@ jest.mock('../../../src/middleware/deviceAccess', () => ({
 }));
 
 // Mock device access service
-jest.mock('../../../src/services/deviceAccess', () => ({
-  getUserAccessibleDevices: jest.fn(),
-  getDeviceShareInfo: jest.fn(),
-  shareDeviceWithUser: jest.fn(),
-  removeUserFromDevice: jest.fn(),
-  shareDeviceWithGroup: jest.fn(),
-  checkDeviceOwnerAccess: jest.fn(),
+vi.mock('../../../src/services/deviceAccess', () => ({
+  getUserAccessibleDevices: vi.fn(),
+  getDeviceShareInfo: vi.fn(),
+  shareDeviceWithUser: vi.fn(),
+  removeUserFromDevice: vi.fn(),
+  shareDeviceWithGroup: vi.fn(),
+  checkDeviceOwnerAccess: vi.fn(),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -58,13 +62,13 @@ import request from 'supertest';
 import express from 'express';
 
 // Create test app - must import router AFTER mocks are set up
-const createTestApp = () => {
+const createTestApp = async () => {
   const app = express();
   app.use(express.json());
 
   // Import router dynamically after mocks
-  const devicesRouter = require('../../../src/api/devices').default;
-  app.use('/api/v1/devices', devicesRouter);
+  const devicesModule = await import('../../../src/api/devices');
+  app.use('/api/v1/devices', devicesModule.default);
 
   return app;
 };
@@ -72,13 +76,13 @@ const createTestApp = () => {
 describe('Devices API', () => {
   let app: express.Application;
 
-  beforeAll(() => {
-    app = createTestApp();
+  beforeAll(async () => {
+    app = await createTestApp();
   });
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /devices - Device Registration', () => {

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Async Utilities Tests
  *
@@ -15,12 +16,12 @@ import {
 
 describe('Async Utilities', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   describe('mapWithConcurrency', () => {
@@ -52,7 +53,7 @@ describe('Async Utilities', () => {
         3
       );
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await promise;
 
       expect(maxConcurrency).toBeLessThanOrEqual(3);
@@ -96,7 +97,7 @@ describe('Async Utilities', () => {
         return item;
       });
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await promise;
 
       expect(maxConcurrency).toBeLessThanOrEqual(5);
@@ -130,7 +131,7 @@ describe('Async Utilities', () => {
         5
       );
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await promise;
 
       expect(maxConcurrency).toBe(2);
@@ -195,7 +196,7 @@ describe('Async Utilities', () => {
         2
       );
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await promise;
 
       expect(maxConcurrency).toBeLessThanOrEqual(2);
@@ -232,7 +233,7 @@ describe('Async Utilities', () => {
       const promise = withTimeout(sleep(200).then(() => 'late'), 50);
 
       // Advance time to trigger the timeout (but not complete the sleep)
-      jest.advanceTimersByTime(51);
+      vi.advanceTimersByTime(51);
 
       await expect(promise).rejects.toThrow('Operation timed out');
     });
@@ -240,7 +241,7 @@ describe('Async Utilities', () => {
     it('should use custom error message', async () => {
       const promise = withTimeout(sleep(100), 10, 'Custom timeout message');
 
-      jest.advanceTimersByTime(11);
+      vi.advanceTimersByTime(11);
 
       await expect(promise).rejects.toThrow('Custom timeout message');
     });
@@ -255,7 +256,7 @@ describe('Async Utilities', () => {
       const promise = withTimeout(sleep(10), 0);
 
       // With fake timers, we need to advance to trigger setTimeout(0)
-      jest.advanceTimersByTime(1);
+      vi.advanceTimersByTime(1);
 
       await expect(promise).rejects.toThrow('Operation timed out');
     });
@@ -293,7 +294,7 @@ describe('Async Utilities', () => {
         { maxRetries: 3, delayMs: 10 }
       );
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('success');
@@ -313,7 +314,7 @@ describe('Async Utilities', () => {
       ).catch((e) => e);
 
       // Run timers and wait for the promise to settle
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       const error = await promise;
 
@@ -340,7 +341,7 @@ describe('Async Utilities', () => {
       // - First retry waits 20ms
       // - Second retry waits 40ms
       // - Third retry waits 80ms
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result).toBe('done');
@@ -363,7 +364,7 @@ describe('Async Utilities', () => {
         }
       ).catch((e) => e);
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       const error = await promise;
 
@@ -389,7 +390,7 @@ describe('Async Utilities', () => {
         }
       );
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
       await promise;
 
       expect(retryLogs).toEqual([
@@ -418,7 +419,7 @@ describe('Async Utilities', () => {
         throw new Error('Always fails');
       }).catch((e) => e);
 
-      await jest.runAllTimersAsync();
+      await vi.runAllTimersAsync();
 
       const error = await promise;
 
@@ -433,29 +434,29 @@ describe('Async Utilities', () => {
       const promise = sleep(50);
 
       // Sleep should not resolve until timers are advanced
-      jest.advanceTimersByTime(49);
-      expect(jest.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(49);
+      expect(vi.getTimerCount()).toBe(1);
 
-      jest.advanceTimersByTime(1);
+      vi.advanceTimersByTime(1);
       await promise;
 
       // Promise resolved after advancing 50ms
-      expect(jest.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should resolve with undefined', async () => {
       const promise = sleep(10);
-      jest.advanceTimersByTime(10);
+      vi.advanceTimersByTime(10);
       const result = await promise;
       expect(result).toBeUndefined();
     });
 
     it('should handle zero delay', async () => {
       const promise = sleep(0);
-      jest.advanceTimersByTime(0);
+      vi.advanceTimersByTime(0);
       await promise;
       // Should resolve immediately
-      expect(jest.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 });

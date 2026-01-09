@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Hooks Defaults Tests
  *
@@ -8,12 +9,12 @@ import { HookRegistry } from '../../../../src/services/hooks/registry';
 import { Operations } from '../../../../src/services/hooks/types';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 

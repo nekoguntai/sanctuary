@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * NodeClient Unit Tests
  *
@@ -7,46 +8,46 @@
 
 // Mock the pool and electrum client before imports
 const mockPool = {
-  initialize: jest.fn().mockResolvedValue(undefined),
-  shutdown: jest.fn().mockResolvedValue(undefined),
-  acquire: jest.fn().mockResolvedValue({
-    client: { getBlockHeight: jest.fn().mockResolvedValue(800000) },
-    release: jest.fn(),
+  initialize: vi.fn().mockResolvedValue(undefined),
+  shutdown: vi.fn().mockResolvedValue(undefined),
+  acquire: vi.fn().mockResolvedValue({
+    client: { getBlockHeight: vi.fn().mockResolvedValue(800000) },
+    release: vi.fn(),
   }),
-  getSubscriptionConnection: jest.fn().mockResolvedValue({
-    isConnected: jest.fn().mockReturnValue(true),
+  getSubscriptionConnection: vi.fn().mockResolvedValue({
+    isConnected: vi.fn().mockReturnValue(true),
   }),
-  getPoolStats: jest.fn().mockReturnValue({
+  getPoolStats: vi.fn().mockReturnValue({
     totalConnections: 2,
     activeConnections: 0,
     idleConnections: 2,
   }),
-  isPoolInitialized: jest.fn().mockReturnValue(true),
-  isHealthy: jest.fn().mockReturnValue(true),
-  setServers: jest.fn(),
-  reloadServers: jest.fn().mockResolvedValue(undefined),
+  isPoolInitialized: vi.fn().mockReturnValue(true),
+  isHealthy: vi.fn().mockReturnValue(true),
+  setServers: vi.fn(),
+  reloadServers: vi.fn().mockResolvedValue(undefined),
 };
 
-jest.mock('../../../../src/services/bitcoin/electrumPool', () => ({
-  ElectrumPool: jest.fn().mockImplementation(() => mockPool),
+vi.mock('../../../../src/services/bitcoin/electrumPool', () => ({
+  ElectrumPool: vi.fn().mockImplementation(() => mockPool),
 }));
 
 const mockElectrumClient = {
-  connect: jest.fn().mockResolvedValue(undefined),
-  disconnect: jest.fn(),
-  isConnected: jest.fn().mockReturnValue(true),
-  getBlockHeight: jest.fn().mockResolvedValue(800000),
+  connect: vi.fn().mockResolvedValue(undefined),
+  disconnect: vi.fn(),
+  isConnected: vi.fn().mockReturnValue(true),
+  getBlockHeight: vi.fn().mockResolvedValue(800000),
 };
 
-jest.mock('../../../../src/services/bitcoin/electrum', () => ({
-  ElectrumClient: jest.fn().mockImplementation(() => mockElectrumClient),
+vi.mock('../../../../src/services/bitcoin/electrum', () => ({
+  ElectrumClient: vi.fn().mockImplementation(() => mockElectrumClient),
 }));
 
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: {
     nodeConfig: {
-      findFirst: jest.fn().mockResolvedValue({
+      findFirst: vi.fn().mockResolvedValue({
         type: 'electrum',
         host: 'electrum.example.com',
         port: 50002,
@@ -58,23 +59,23 @@ jest.mock('../../../../src/models/prisma', () => ({
       }),
     },
     electrumServer: {
-      findMany: jest.fn().mockResolvedValue([]),
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }));
 
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 describe('NodeClient', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Pool Mode Configuration', () => {

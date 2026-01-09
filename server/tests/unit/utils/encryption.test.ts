@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Encryption Utilities Tests
  *
@@ -5,7 +6,7 @@
  * sensitive data like node configuration passwords.
  */
 
-describe('Encryption Utilities', () => {
+describe('Encryption Utilities', async () => {
   // Store original env before any changes
   const originalEnv = process.env.ENCRYPTION_KEY;
 
@@ -23,15 +24,15 @@ describe('Encryption Utilities', () => {
   });
 
   // Helper to get fresh module for each test group
-  const getEncryptionModule = () => {
+  const getEncryptionModule = async () => {
     // Clear module cache to get fresh module with current env
-    jest.resetModules();
-    return require('../../../src/utils/encryption');
+    vi.resetModules();
+    return await import('../../../src/utils/encryption');
   };
 
-  describe('encrypt', () => {
-    it('should encrypt a plaintext string', () => {
-      const { encrypt } = getEncryptionModule();
+  describe('encrypt', async () => {
+    it('should encrypt a plaintext string', async () => {
+      const { encrypt } = await getEncryptionModule();
       const plaintext = 'my secret password';
       const encrypted = encrypt(plaintext);
 
@@ -40,8 +41,8 @@ describe('Encryption Utilities', () => {
       expect(typeof encrypted).toBe('string');
     });
 
-    it('should produce different ciphertext for same plaintext (random IV)', () => {
-      const { encrypt } = getEncryptionModule();
+    it('should produce different ciphertext for same plaintext (random IV)', async () => {
+      const { encrypt } = await getEncryptionModule();
       const plaintext = 'same text twice';
       const encrypted1 = encrypt(plaintext);
       const encrypted2 = encrypt(plaintext);
@@ -49,8 +50,8 @@ describe('Encryption Utilities', () => {
       expect(encrypted1).not.toBe(encrypted2);
     });
 
-    it('should produce output in iv:authTag:ciphertext format', () => {
-      const { encrypt } = getEncryptionModule();
+    it('should produce output in iv:authTag:ciphertext format', async () => {
+      const { encrypt } = await getEncryptionModule();
       const plaintext = 'test data';
       const encrypted = encrypt(plaintext);
 
@@ -64,8 +65,8 @@ describe('Encryption Utilities', () => {
       expect(parts[2]).toMatch(base64Regex); // Ciphertext
     });
 
-    it('should handle empty string', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle empty string', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const encrypted = encrypt('');
       expect(encrypted).toBeDefined();
 
@@ -73,8 +74,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe('');
     });
 
-    it('should handle unicode characters', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle unicode characters', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'Password with unicode symbols!';
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -82,8 +83,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should handle special characters', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle special characters', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = '!@#$%^&*()_+-=[]{}|;:\'",.<>?/\\`~';
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -91,8 +92,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should handle long strings', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle long strings', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'A'.repeat(10000);
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -100,8 +101,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should handle JSON strings', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle JSON strings', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const jsonData = JSON.stringify({
         username: 'admin',
         password: 'secret123',
@@ -115,9 +116,9 @@ describe('Encryption Utilities', () => {
     });
   });
 
-  describe('decrypt', () => {
-    it('should decrypt an encrypted string', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+  describe('decrypt', async () => {
+    it('should decrypt an encrypted string', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'my secret password';
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -125,15 +126,15 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should throw error for invalid format (wrong number of parts)', () => {
-      const { decrypt } = getEncryptionModule();
+    it('should throw error for invalid format (wrong number of parts)', async () => {
+      const { decrypt } = await getEncryptionModule();
       expect(() => decrypt('invalid-string')).toThrow('Invalid encrypted string format');
       expect(() => decrypt('part1:part2')).toThrow('Invalid encrypted string format');
       expect(() => decrypt('part1:part2:part3:part4')).toThrow('Invalid encrypted string format');
     });
 
-    it('should throw error for tampered ciphertext', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should throw error for tampered ciphertext', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'test data';
       const encrypted = encrypt(plaintext);
       const parts = encrypted.split(':');
@@ -145,8 +146,8 @@ describe('Encryption Utilities', () => {
       expect(() => decrypt(tampered)).toThrow();
     });
 
-    it('should throw error for tampered auth tag', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should throw error for tampered auth tag', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'test data';
       const encrypted = encrypt(plaintext);
       const parts = encrypted.split(':');
@@ -158,63 +159,63 @@ describe('Encryption Utilities', () => {
       expect(() => decrypt(tampered)).toThrow();
     });
 
-    it('should throw error for invalid base64 in IV', () => {
-      const { decrypt } = getEncryptionModule();
+    it('should throw error for invalid base64 in IV', async () => {
+      const { decrypt } = await getEncryptionModule();
       expect(() => decrypt('!!!invalid!!!:dGVzdA==:dGVzdA==')).toThrow();
     });
   });
 
-  describe('isEncrypted', () => {
-    it('should return true for properly formatted encrypted strings', () => {
-      const { encrypt, isEncrypted } = getEncryptionModule();
+  describe('isEncrypted', async () => {
+    it('should return true for properly formatted encrypted strings', async () => {
+      const { encrypt, isEncrypted } = await getEncryptionModule();
       const encrypted = encrypt('test');
       expect(isEncrypted(encrypted)).toBe(true);
     });
 
-    it('should return false for null or undefined', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for null or undefined', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted(null as any)).toBe(false);
       expect(isEncrypted(undefined as any)).toBe(false);
     });
 
-    it('should return false for empty string', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for empty string', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted('')).toBe(false);
     });
 
-    it('should return false for plaintext', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for plaintext', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted('plaintext password')).toBe(false);
       expect(isEncrypted('simple string')).toBe(false);
     });
 
-    it('should return false for strings with wrong number of colons', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for strings with wrong number of colons', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted('no:colons:here:extra')).toBe(false);
       expect(isEncrypted('only:one')).toBe(false);
     });
 
-    it('should return false for non-base64 parts', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for non-base64 parts', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted('invalid!!!:invalid!!!:invalid!!!')).toBe(false);
     });
 
-    it('should return false for empty parts', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return false for empty parts', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       expect(isEncrypted('::dGVzdA==')).toBe(false);
       expect(isEncrypted('dGVzdA==::')).toBe(false);
     });
 
-    it('should return true for valid base64 format with colons', () => {
-      const { isEncrypted } = getEncryptionModule();
+    it('should return true for valid base64 format with colons', async () => {
+      const { isEncrypted } = await getEncryptionModule();
       // Valid base64 parts
       expect(isEncrypted('dGVzdA==:dGVzdA==:dGVzdA==')).toBe(true);
     });
   });
 
-  describe('decryptIfEncrypted', () => {
-    it('should decrypt encrypted values', () => {
-      const { encrypt, decryptIfEncrypted } = getEncryptionModule();
+  describe('decryptIfEncrypted', async () => {
+    it('should decrypt encrypted values', async () => {
+      const { encrypt, decryptIfEncrypted } = await getEncryptionModule();
       const plaintext = 'secret password';
       const encrypted = encrypt(plaintext);
 
@@ -222,16 +223,16 @@ describe('Encryption Utilities', () => {
       expect(result).toBe(plaintext);
     });
 
-    it('should return plaintext values unchanged', () => {
-      const { decryptIfEncrypted } = getEncryptionModule();
+    it('should return plaintext values unchanged', async () => {
+      const { decryptIfEncrypted } = await getEncryptionModule();
       const plaintext = 'not encrypted';
       const result = decryptIfEncrypted(plaintext);
 
       expect(result).toBe(plaintext);
     });
 
-    it('should handle legacy unencrypted passwords', () => {
-      const { decryptIfEncrypted } = getEncryptionModule();
+    it('should handle legacy unencrypted passwords', async () => {
+      const { decryptIfEncrypted } = await getEncryptionModule();
       // Simulates backward compatibility with pre-encryption passwords
       const legacyPassword = 'old-plaintext-password';
       const result = decryptIfEncrypted(legacyPassword);
@@ -239,8 +240,8 @@ describe('Encryption Utilities', () => {
       expect(result).toBe(legacyPassword);
     });
 
-    it('should handle strings that look like encrypted but are not valid', () => {
-      const { isEncrypted, decryptIfEncrypted } = getEncryptionModule();
+    it('should handle strings that look like encrypted but are not valid', async () => {
+      const { isEncrypted, decryptIfEncrypted } = await getEncryptionModule();
       // This has the format but invalid content
       const fakeEncrypted = 'YWJj:ZGVm:Z2hp';
 
@@ -252,18 +253,18 @@ describe('Encryption Utilities', () => {
     });
   });
 
-  describe('validateEncryptionKey', () => {
-    it('should not throw when encryption key is valid', () => {
-      const { validateEncryptionKey } = getEncryptionModule();
+  describe('validateEncryptionKey', async () => {
+    it('should not throw when encryption key is valid', async () => {
+      const { validateEncryptionKey } = await getEncryptionModule();
       expect(() => validateEncryptionKey()).not.toThrow();
     });
 
-    it('should throw error when ENCRYPTION_KEY is not set', () => {
+    it('should throw error when ENCRYPTION_KEY is not set', async () => {
       const originalKey = process.env.ENCRYPTION_KEY;
       delete process.env.ENCRYPTION_KEY;
 
       try {
-        const { validateEncryptionKey } = getEncryptionModule();
+        const { validateEncryptionKey } = await getEncryptionModule();
         expect(() => validateEncryptionKey()).toThrow(
           'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
         );
@@ -272,12 +273,12 @@ describe('Encryption Utilities', () => {
       }
     });
 
-    it('should throw error when ENCRYPTION_KEY is too short (< 32 chars)', () => {
+    it('should throw error when ENCRYPTION_KEY is too short (< 32 chars)', async () => {
       const originalKey = process.env.ENCRYPTION_KEY;
       process.env.ENCRYPTION_KEY = 'short-key-only-20-chars';
 
       try {
-        const { validateEncryptionKey } = getEncryptionModule();
+        const { validateEncryptionKey } = await getEncryptionModule();
         expect(() => validateEncryptionKey()).toThrow(
           'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
         );
@@ -287,9 +288,9 @@ describe('Encryption Utilities', () => {
     });
   });
 
-  describe('encryption key validation', () => {
-    it('should use consistent key derivation for encrypt/decrypt cycle', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+  describe('encryption key validation', async () => {
+    it('should use consistent key derivation for encrypt/decrypt cycle', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       // Verify that multiple encrypt/decrypt cycles work
       for (let i = 0; i < 5; i++) {
         const plaintext = `test message ${i}`;
@@ -300,17 +301,17 @@ describe('Encryption Utilities', () => {
     });
   });
 
-  describe('encryption salt configuration', () => {
-    it('should use default salt and warn when ENCRYPTION_SALT is not set', () => {
+  describe('encryption salt configuration', async () => {
+    it('should use default salt and warn when ENCRYPTION_SALT is not set', async () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
       delete process.env.ENCRYPTION_SALT;
 
       // Mock console.warn to capture warnings
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
         // Get fresh module without salt
-        const { encrypt, decrypt } = getEncryptionModule();
+        const { encrypt, decrypt } = await getEncryptionModule();
         const plaintext = 'test with default salt';
         const encrypted = encrypt(plaintext);
         const decrypted = decrypt(encrypted);
@@ -329,13 +330,13 @@ describe('Encryption Utilities', () => {
       }
     });
 
-    it('should use custom ENCRYPTION_SALT when set', () => {
+    it('should use custom ENCRYPTION_SALT when set', async () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
       process.env.ENCRYPTION_SALT = 'custom-test-salt-value';
 
       try {
         // Get fresh module with custom salt
-        const { encrypt, decrypt } = getEncryptionModule();
+        const { encrypt, decrypt } = await getEncryptionModule();
         const plaintext = 'test with custom salt';
         const encrypted = encrypt(plaintext);
         const decrypted = decrypt(encrypted);
@@ -350,13 +351,13 @@ describe('Encryption Utilities', () => {
       }
     });
 
-    it('should invalidate key cache when salt changes', () => {
+    it('should invalidate key cache when salt changes', async () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
 
       try {
         // Set initial salt and encrypt
         process.env.ENCRYPTION_SALT = 'initial-salt-value';
-        const module1 = getEncryptionModule();
+        const module1 = await getEncryptionModule();
         const plaintext = 'test cache invalidation';
         const encrypted = module1.encrypt(plaintext);
 
@@ -368,7 +369,7 @@ describe('Encryption Utilities', () => {
 
         // Get fresh module with new salt - decryption should fail because
         // the data was encrypted with a different derived key
-        const module2 = getEncryptionModule();
+        const module2 = await getEncryptionModule();
         expect(() => module2.decrypt(encrypted)).toThrow();
       } finally {
         if (originalSalt) {
@@ -379,13 +380,13 @@ describe('Encryption Utilities', () => {
       }
     });
 
-    it('should invalidate key cache within same module when salt changes', () => {
+    it('should invalidate key cache within same module when salt changes', async () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
 
       try {
         // Set initial salt
         process.env.ENCRYPTION_SALT = 'first-salt-for-cache-test';
-        const encryptionModule = getEncryptionModule();
+        const encryptionModule = await getEncryptionModule();
 
         // Encrypt with first salt - this caches the key
         const plaintext = 'test cache invalidation within module';
@@ -414,9 +415,9 @@ describe('Encryption Utilities', () => {
     });
   });
 
-  describe('edge cases and security', () => {
-    it('should handle newlines in plaintext', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+  describe('edge cases and security', async () => {
+    it('should handle newlines in plaintext', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'line1\nline2\r\nline3';
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -424,8 +425,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should handle null bytes in plaintext', () => {
-      const { encrypt, decrypt } = getEncryptionModule();
+    it('should handle null bytes in plaintext', async () => {
+      const { encrypt, decrypt } = await getEncryptionModule();
       const plaintext = 'before\x00after';
       const encrypted = encrypt(plaintext);
       const decrypted = decrypt(encrypted);
@@ -433,8 +434,8 @@ describe('Encryption Utilities', () => {
       expect(decrypted).toBe(plaintext);
     });
 
-    it('should produce deterministic output length based on input', () => {
-      const { encrypt } = getEncryptionModule();
+    it('should produce deterministic output length based on input', async () => {
+      const { encrypt } = await getEncryptionModule();
       // The ciphertext length should correlate with plaintext length
       const short = encrypt('a');
       const medium = encrypt('a'.repeat(100));

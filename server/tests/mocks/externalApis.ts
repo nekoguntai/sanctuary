@@ -1,3 +1,4 @@
+import { vi, Mock, Mock } from 'vitest';
 /**
  * External API Mocks
  *
@@ -32,8 +33,8 @@ export const mockTelegramUpdates = {
 };
 
 // Create Telegram API mock
-export function createTelegramApiMock(): jest.Mock {
-  return jest.fn().mockImplementation((url: string) => {
+export function createTelegramApiMock(): Mock {
+  return vi.fn().mockImplementation((url: string) => {
     if (url.includes('/sendMessage')) {
       return Promise.resolve({
         ok: true,
@@ -62,10 +63,10 @@ export const mockFCMResponse = {
 };
 
 export const mockFCMClient = {
-  sendMulticast: jest.fn().mockResolvedValue(mockFCMResponse),
-  send: jest.fn().mockResolvedValue('message-id'),
-  subscribeToTopic: jest.fn().mockResolvedValue({ successCount: 1, errors: [] }),
-  unsubscribeFromTopic: jest.fn().mockResolvedValue({ successCount: 1, errors: [] }),
+  sendMulticast: vi.fn().mockResolvedValue(mockFCMResponse),
+  send: vi.fn().mockResolvedValue('message-id'),
+  subscribeToTopic: vi.fn().mockResolvedValue({ successCount: 1, errors: [] }),
+  unsubscribeFromTopic: vi.fn().mockResolvedValue({ successCount: 1, errors: [] }),
 };
 
 // Helper to setup global fetch mock for Telegram
@@ -75,8 +76,8 @@ export function setupTelegramMock(): void {
 }
 
 // Helper to create failed Telegram response
-export function createTelegramErrorMock(errorMessage: string): jest.Mock {
-  return jest.fn().mockResolvedValue({
+export function createTelegramErrorMock(errorMessage: string): Mock {
+  return vi.fn().mockResolvedValue({
     ok: false,
     status: 400,
     json: () => Promise.resolve({
@@ -90,7 +91,7 @@ export function createTelegramErrorMock(errorMessage: string): jest.Mock {
 export function resetExternalApiMocks(): void {
   Object.values(mockFCMClient).forEach((method) => {
     if (typeof method === 'function' && 'mockClear' in method) {
-      (method as jest.Mock).mockClear();
+      (method as Mock).mockClear();
     }
   });
 }

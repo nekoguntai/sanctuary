@@ -1,3 +1,4 @@
+import { vi, Mock, Mock } from 'vitest';
 /**
  * Repository Mocks
  *
@@ -29,7 +30,7 @@ export interface MockAuditLogEntry {
 const mockAuditLogs: MockAuditLogEntry[] = [];
 
 export const mockAuditLogRepository = {
-  create: jest.fn().mockImplementation(async (input) => {
+  create: vi.fn().mockImplementation(async (input) => {
     const entry: MockAuditLogEntry = {
       id: `audit-${Date.now()}`,
       userId: input.userId || null,
@@ -47,7 +48,7 @@ export const mockAuditLogRepository = {
     return entry;
   }),
 
-  findMany: jest.fn().mockImplementation(async (filters) => {
+  findMany: vi.fn().mockImplementation(async (filters) => {
     return mockAuditLogs.filter((log) => {
       if (filters?.category && log.category !== filters.category) return false;
       if (filters?.userId && log.userId !== filters.userId) return false;
@@ -57,27 +58,27 @@ export const mockAuditLogRepository = {
     });
   }),
 
-  findForUser: jest.fn().mockImplementation(async (userId, options) => {
+  findForUser: vi.fn().mockImplementation(async (userId, options) => {
     const filtered = mockAuditLogs.filter((log) => log.userId === userId);
     const offset = options?.offset || 0;
     const limit = options?.limit || 50;
     return filtered.slice(offset, offset + limit);
   }),
 
-  getFailedLogins: jest.fn().mockImplementation(async (userId) => {
+  getFailedLogins: vi.fn().mockImplementation(async (userId) => {
     return mockAuditLogs.filter(
       (log) => log.userId === userId && log.action === 'auth.login' && !log.success
     );
   }),
 
-  getAdminActions: jest.fn().mockImplementation(async (options) => {
+  getAdminActions: vi.fn().mockImplementation(async (options) => {
     const filtered = mockAuditLogs.filter((log) => log.category === 'admin');
     const offset = options?.offset || 0;
     const limit = options?.limit || 50;
     return filtered.slice(offset, offset + limit);
   }),
 
-  deleteOlderThan: jest.fn().mockImplementation(async (date) => {
+  deleteOlderThan: vi.fn().mockImplementation(async (date) => {
     const initialLength = mockAuditLogs.length;
     const remaining = mockAuditLogs.filter((log) => log.createdAt > date);
     mockAuditLogs.length = 0;
@@ -85,7 +86,7 @@ export const mockAuditLogRepository = {
     return initialLength - remaining.length;
   }),
 
-  getStats: jest.fn().mockImplementation(async () => {
+  getStats: vi.fn().mockImplementation(async () => {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const recent = mockAuditLogs.filter((log) => log.createdAt > yesterday);
@@ -121,7 +122,7 @@ export interface MockSession {
 const mockSessions: MockSession[] = [];
 
 export const mockSessionRepository = {
-  createRefreshToken: jest.fn().mockImplementation(async (input) => {
+  createRefreshToken: vi.fn().mockImplementation(async (input) => {
     const session: MockSession = {
       id: `session-${Date.now()}`,
       userId: input.userId,
@@ -138,11 +139,11 @@ export const mockSessionRepository = {
     return session;
   }),
 
-  findRefreshToken: jest.fn().mockImplementation(async (token) => {
+  findRefreshToken: vi.fn().mockImplementation(async (token) => {
     return mockSessions.find((s) => s.tokenHash.includes(token.substring(0, 10))) || null;
   }),
 
-  updateLastUsed: jest.fn().mockImplementation(async (sessionId) => {
+  updateLastUsed: vi.fn().mockImplementation(async (sessionId) => {
     const session = mockSessions.find((s) => s.id === sessionId);
     if (session) {
       session.lastUsedAt = new Date();
@@ -150,7 +151,7 @@ export const mockSessionRepository = {
     return session || null;
   }),
 
-  deleteSession: jest.fn().mockImplementation(async (sessionId) => {
+  deleteSession: vi.fn().mockImplementation(async (sessionId) => {
     const index = mockSessions.findIndex((s) => s.id === sessionId);
     if (index >= 0) {
       mockSessions.splice(index, 1);
@@ -159,7 +160,7 @@ export const mockSessionRepository = {
     return false;
   }),
 
-  deleteByTokenHash: jest.fn().mockImplementation(async (tokenHash) => {
+  deleteByTokenHash: vi.fn().mockImplementation(async (tokenHash) => {
     const index = mockSessions.findIndex((s) => s.tokenHash === tokenHash);
     if (index >= 0) {
       mockSessions.splice(index, 1);
@@ -168,7 +169,7 @@ export const mockSessionRepository = {
     return false;
   }),
 
-  deleteAllForUser: jest.fn().mockImplementation(async (userId) => {
+  deleteAllForUser: vi.fn().mockImplementation(async (userId) => {
     const initialLength = mockSessions.length;
     const remaining = mockSessions.filter((s) => s.userId !== userId);
     mockSessions.length = 0;
@@ -176,17 +177,17 @@ export const mockSessionRepository = {
     return initialLength - remaining.length;
   }),
 
-  findByUserId: jest.fn().mockImplementation(async (userId) => {
+  findByUserId: vi.fn().mockImplementation(async (userId) => {
     return mockSessions.filter((s) => s.userId === userId);
   }),
 
-  countActiveForUser: jest.fn().mockImplementation(async (userId) => {
+  countActiveForUser: vi.fn().mockImplementation(async (userId) => {
     return mockSessions.filter(
       (s) => s.userId === userId && s.expiresAt > new Date()
     ).length;
   }),
 
-  deleteExpired: jest.fn().mockImplementation(async () => {
+  deleteExpired: vi.fn().mockImplementation(async () => {
     const now = new Date();
     const initialLength = mockSessions.length;
     const remaining = mockSessions.filter((s) => s.expiresAt > now);
@@ -203,7 +204,7 @@ export const mockSessionRepository = {
 const mockPushDevices: PushDevice[] = [];
 
 export const mockPushDeviceRepository = {
-  upsert: jest.fn().mockImplementation(async (input: PushDeviceUpsertInput) => {
+  upsert: vi.fn().mockImplementation(async (input: PushDeviceUpsertInput) => {
     const existing = mockPushDevices.find((d) => d.token === input.token);
     if (existing) {
       existing.lastUsedAt = new Date();
@@ -224,19 +225,19 @@ export const mockPushDeviceRepository = {
     return device;
   }),
 
-  findByToken: jest.fn().mockImplementation(async (token) => {
+  findByToken: vi.fn().mockImplementation(async (token) => {
     return mockPushDevices.find((d) => d.token === token) || null;
   }),
 
-  findById: jest.fn().mockImplementation(async (id) => {
+  findById: vi.fn().mockImplementation(async (id) => {
     return mockPushDevices.find((d) => d.id === id) || null;
   }),
 
-  findByUserId: jest.fn().mockImplementation(async (userId) => {
+  findByUserId: vi.fn().mockImplementation(async (userId) => {
     return mockPushDevices.filter((d) => d.userId === userId);
   }),
 
-  deleteByToken: jest.fn().mockImplementation(async (token) => {
+  deleteByToken: vi.fn().mockImplementation(async (token) => {
     const index = mockPushDevices.findIndex((d) => d.token === token);
     if (index >= 0) {
       mockPushDevices.splice(index, 1);
@@ -245,7 +246,7 @@ export const mockPushDeviceRepository = {
     return false;
   }),
 
-  deleteById: jest.fn().mockImplementation(async (id) => {
+  deleteById: vi.fn().mockImplementation(async (id) => {
     const index = mockPushDevices.findIndex((d) => d.id === id);
     if (index >= 0) {
       mockPushDevices.splice(index, 1);
@@ -254,7 +255,7 @@ export const mockPushDeviceRepository = {
     return false;
   }),
 
-  deleteAllForUser: jest.fn().mockImplementation(async (userId) => {
+  deleteAllForUser: vi.fn().mockImplementation(async (userId) => {
     const initialLength = mockPushDevices.length;
     const remaining = mockPushDevices.filter((d) => d.userId !== userId);
     mockPushDevices.length = 0;
@@ -270,15 +271,15 @@ export const mockPushDeviceRepository = {
 const mockSystemSettings: Map<string, unknown> = new Map();
 
 export const mockSystemSettingRepository = {
-  get: jest.fn().mockImplementation(async (key) => {
+  get: vi.fn().mockImplementation(async (key) => {
     return mockSystemSettings.get(key) ?? null;
   }),
 
-  set: jest.fn().mockImplementation(async (key, value) => {
+  set: vi.fn().mockImplementation(async (key, value) => {
     mockSystemSettings.set(key, value);
   }),
 
-  getMany: jest.fn().mockImplementation(async (keys) => {
+  getMany: vi.fn().mockImplementation(async (keys) => {
     const result: Record<string, unknown> = {};
     for (const key of keys) {
       const value = mockSystemSettings.get(key);
@@ -289,17 +290,17 @@ export const mockSystemSettingRepository = {
     return result;
   }),
 
-  setMany: jest.fn().mockImplementation(async (settings) => {
+  setMany: vi.fn().mockImplementation(async (settings) => {
     for (const [key, value] of Object.entries(settings)) {
       mockSystemSettings.set(key, value);
     }
   }),
 
-  delete: jest.fn().mockImplementation(async (key) => {
+  delete: vi.fn().mockImplementation(async (key) => {
     return mockSystemSettings.delete(key);
   }),
 
-  getAll: jest.fn().mockImplementation(async () => {
+  getAll: vi.fn().mockImplementation(async () => {
     return Object.fromEntries(mockSystemSettings);
   }),
 };
@@ -323,7 +324,7 @@ export interface MockDevice {
 const mockDevices: MockDevice[] = [];
 
 export const mockDeviceRepository = {
-  create: jest.fn().mockImplementation(async (input) => {
+  create: vi.fn().mockImplementation(async (input) => {
     const device: MockDevice = {
       id: `device-${Date.now()}`,
       type: input.type,
@@ -339,20 +340,20 @@ export const mockDeviceRepository = {
     return device;
   }),
 
-  findById: jest.fn().mockImplementation(async (id) => {
+  findById: vi.fn().mockImplementation(async (id) => {
     return mockDevices.find((d) => d.id === id) || null;
   }),
 
-  findByFingerprint: jest.fn().mockImplementation(async (fingerprint) => {
+  findByFingerprint: vi.fn().mockImplementation(async (fingerprint) => {
     return mockDevices.find((d) => d.fingerprint === fingerprint) || null;
   }),
 
-  findByUserId: jest.fn().mockImplementation(async (userId) => {
+  findByUserId: vi.fn().mockImplementation(async (userId) => {
     // In real implementation, this would join with DeviceUser
     return mockDevices;
   }),
 
-  update: jest.fn().mockImplementation(async (id, input) => {
+  update: vi.fn().mockImplementation(async (id, input) => {
     const device = mockDevices.find((d) => d.id === id);
     if (device) {
       Object.assign(device, input, { updatedAt: new Date() });
@@ -361,7 +362,7 @@ export const mockDeviceRepository = {
     return null;
   }),
 
-  delete: jest.fn().mockImplementation(async (id) => {
+  delete: vi.fn().mockImplementation(async (id) => {
     const index = mockDevices.findIndex((d) => d.id === id);
     if (index >= 0) {
       mockDevices.splice(index, 1);
@@ -389,31 +390,31 @@ export function resetRepositoryMocks(): void {
   // Reset all mock functions
   Object.values(mockAuditLogRepository).forEach((fn) => {
     if (typeof fn === 'function' && 'mockClear' in fn) {
-      (fn as jest.Mock).mockClear();
+      (fn as Mock).mockClear();
     }
   });
 
   Object.values(mockSessionRepository).forEach((fn) => {
     if (typeof fn === 'function' && 'mockClear' in fn) {
-      (fn as jest.Mock).mockClear();
+      (fn as Mock).mockClear();
     }
   });
 
   Object.values(mockPushDeviceRepository).forEach((fn) => {
     if (typeof fn === 'function' && 'mockClear' in fn) {
-      (fn as jest.Mock).mockClear();
+      (fn as Mock).mockClear();
     }
   });
 
   Object.values(mockSystemSettingRepository).forEach((fn) => {
     if (typeof fn === 'function' && 'mockClear' in fn) {
-      (fn as jest.Mock).mockClear();
+      (fn as Mock).mockClear();
     }
   });
 
   Object.values(mockDeviceRepository).forEach((fn) => {
     if (typeof fn === 'function' && 'mockClear' in fn) {
-      (fn as jest.Mock).mockClear();
+      (fn as Mock).mockClear();
     }
   });
 }

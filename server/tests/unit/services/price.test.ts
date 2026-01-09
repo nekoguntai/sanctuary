@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Price Service Tests
  *
@@ -8,16 +9,16 @@
 import axios from 'axios';
 
 // Mock axios before importing the module
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+vi.mock('axios');
+const mockedAxios = axios as Mocked<typeof axios>;
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -34,7 +35,7 @@ describe('Price Service', () => {
     priceService.clearCache();
     // Reset all circuit breakers to CLOSED state
     circuitBreakerRegistry.resetAll();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getPrice', () => {

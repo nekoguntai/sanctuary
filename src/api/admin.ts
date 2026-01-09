@@ -653,3 +653,34 @@ export async function updateMonitoringServiceUrl(
     customUrl,
   });
 }
+
+// ========================================
+// GRAFANA CONFIGURATION
+// ========================================
+
+/**
+ * Grafana configuration response
+ */
+export interface GrafanaConfig {
+  username: string;
+  passwordSource: 'GRAFANA_PASSWORD' | 'ENCRYPTION_KEY';
+  passwordHint: string;
+  anonymousAccess: boolean;
+  anonymousAccessNote: string;
+}
+
+/**
+ * Get Grafana configuration (admin only)
+ */
+export async function getGrafanaConfig(): Promise<GrafanaConfig> {
+  return apiClient.get<GrafanaConfig>('/admin/monitoring/grafana');
+}
+
+/**
+ * Update Grafana configuration (admin only)
+ */
+export async function updateGrafanaConfig(config: {
+  anonymousAccess?: boolean;
+}): Promise<{ success: boolean; message: string }> {
+  return apiClient.put<{ success: boolean; message: string }>('/admin/monitoring/grafana', config);
+}

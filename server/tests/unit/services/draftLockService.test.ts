@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Draft UTXO Lock Service Tests
  *
@@ -8,7 +9,7 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock the Prisma client before importing the service
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));

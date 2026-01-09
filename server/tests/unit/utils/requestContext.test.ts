@@ -3,7 +3,7 @@
  */
 
 // Unmock to test the real implementation (setup.ts mocks this globally)
-jest.unmock('../../../src/utils/requestContext');
+vi.unmock('../../../src/utils/requestContext');
 
 import { requestContext } from '../../../src/utils/requestContext';
 

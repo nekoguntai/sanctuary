@@ -15,6 +15,11 @@
 
 import { serviceRegistry, ServiceNames } from './registry';
 import { createLogger } from '../utils/logger';
+import { getSyncService } from './syncService';
+import { maintenanceService } from './maintenanceService';
+import { notificationChannelRegistry } from './notifications/channels';
+import { getPriceService } from './price';
+import * as tokenRevocationService from './tokenRevocation';
 
 const log = createLogger('SERVICES:INIT');
 
@@ -31,36 +36,20 @@ export async function initializeServices(): Promise<void> {
 
   log.info('Initializing services...');
 
-  // Register sync service (uses factory for lazy loading)
-  serviceRegistry.registerFactory(ServiceNames.SYNC, () => {
-    // Lazy load to avoid circular dependencies
-    const { getSyncService } = require('./syncService');
-    return getSyncService();
-  });
+  // Register sync service
+  serviceRegistry.registerFactory(ServiceNames.SYNC, () => getSyncService());
 
   // Register maintenance service
-  serviceRegistry.registerFactory(ServiceNames.MAINTENANCE, () => {
-    const { maintenanceService } = require('./maintenanceService');
-    return maintenanceService;
-  });
+  serviceRegistry.registerFactory(ServiceNames.MAINTENANCE, () => maintenanceService);
 
   // Register notification service
-  serviceRegistry.registerFactory(ServiceNames.NOTIFICATION, () => {
-    const { notificationChannelRegistry } = require('./notifications/channels');
-    return notificationChannelRegistry;
-  });
+  serviceRegistry.registerFactory(ServiceNames.NOTIFICATION, () => notificationChannelRegistry);
 
   // Register price service
-  serviceRegistry.registerFactory(ServiceNames.PRICE, () => {
-    const { getPriceService } = require('./price');
-    return getPriceService();
-  });
+  serviceRegistry.registerFactory(ServiceNames.PRICE, () => getPriceService());
 
   // Register token revocation service
-  serviceRegistry.registerFactory(ServiceNames.TOKEN_REVOCATION, () => {
-    const tokenRevocationService = require('./tokenRevocation');
-    return tokenRevocationService;
-  });
+  serviceRegistry.registerFactory(ServiceNames.TOKEN_REVOCATION, () => tokenRevocationService);
 
   // Freeze registry to prevent accidental modifications
   // Note: Mocks can still be set for testing

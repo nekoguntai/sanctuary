@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Notification Services Tests
  *
@@ -12,7 +13,7 @@ import { sampleUsers, sampleWallets, testnetAddresses } from '../../fixtures/bit
 const originalFetch = global.fetch;
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
@@ -81,7 +82,7 @@ describe('Notification Services', () => {
       });
 
       it('should handle network error', async () => {
-        global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+        global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
         const result = await sendTelegramMessage(
           'test-bot-token',
@@ -114,7 +115,7 @@ describe('Notification Services', () => {
 
     describe('getChatIdFromBot', () => {
       it('should extract chat ID from bot updates', async () => {
-        global.fetch = jest.fn().mockResolvedValue({
+        global.fetch = vi.fn().mockResolvedValue({
           ok: true,
           json: () => Promise.resolve({
             ok: true,
@@ -142,7 +143,7 @@ describe('Notification Services', () => {
       });
 
       it('should return error when no messages', async () => {
-        global.fetch = jest.fn().mockResolvedValue({
+        global.fetch = vi.fn().mockResolvedValue({
           ok: true,
           json: () => Promise.resolve({
             ok: true,
@@ -157,7 +158,7 @@ describe('Notification Services', () => {
       });
 
       it('should handle invalid bot token', async () => {
-        global.fetch = jest.fn().mockResolvedValue({
+        global.fetch = vi.fn().mockResolvedValue({
           ok: false,
           status: 401,
           json: () => Promise.resolve({
@@ -547,7 +548,7 @@ describe('Notification Services', () => {
 
     it('should continue if one channel fails', async () => {
       // Mock Telegram to fail
-      global.fetch = jest.fn().mockRejectedValue(new Error('Telegram error'));
+      global.fetch = vi.fn().mockRejectedValue(new Error('Telegram error'));
 
       // Should not throw
       await expect(

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Service Initialization Tests
  *
@@ -7,34 +8,34 @@
 import { serviceRegistry, ServiceNames } from '../../../src/services/registry';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock dependent services to prevent actual initialization
-jest.mock('../../../src/services/syncService', () => ({
-  getSyncService: jest.fn().mockReturnValue({ sync: jest.fn() }),
+vi.mock('../../../src/services/syncService', () => ({
+  getSyncService: vi.fn().mockReturnValue({ sync: vi.fn() }),
 }));
 
-jest.mock('../../../src/services/maintenanceService', () => ({
-  maintenanceService: { run: jest.fn() },
+vi.mock('../../../src/services/maintenanceService', () => ({
+  maintenanceService: { run: vi.fn() },
 }));
 
-jest.mock('../../../src/services/notifications/channels', () => ({
-  notificationChannelRegistry: { notify: jest.fn() },
+vi.mock('../../../src/services/notifications/channels', () => ({
+  notificationChannelRegistry: { notify: vi.fn() },
 }));
 
-jest.mock('../../../src/services/price', () => ({
-  getPriceService: jest.fn().mockReturnValue({ getPrice: jest.fn() }),
+vi.mock('../../../src/services/price', () => ({
+  getPriceService: vi.fn().mockReturnValue({ getPrice: vi.fn() }),
 }));
 
-jest.mock('../../../src/services/tokenRevocation', () => ({
-  revokeToken: jest.fn(),
+vi.mock('../../../src/services/tokenRevocation', () => ({
+  revokeToken: vi.fn(),
 }));
 
 // Import after mocks

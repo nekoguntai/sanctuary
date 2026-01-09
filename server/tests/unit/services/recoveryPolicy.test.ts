@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Recovery Policy Tests
  *
@@ -14,12 +15,12 @@ import {
 } from '../../../src/services/recoveryPolicy';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -34,7 +35,7 @@ describe('RecoveryPolicy', () => {
 
   describe('executeWithRecovery', () => {
     it('should succeed on first attempt', async () => {
-      const operation = jest.fn().mockResolvedValue('success');
+      const operation = vi.fn().mockResolvedValue('success');
 
       const result = await executeWithRecovery(fastPolicy, operation);
 
@@ -45,7 +46,7 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should retry and succeed on later attempt', async () => {
-      const operation = jest.fn()
+      const operation = vi.fn()
         .mockRejectedValueOnce(new Error('Fail 1'))
         .mockRejectedValueOnce(new Error('Fail 2'))
         .mockResolvedValue('success');
@@ -59,7 +60,7 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should fail after exhausting retries', async () => {
-      const operation = jest.fn().mockRejectedValue(new Error('Always fails'));
+      const operation = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       const result = await executeWithRecovery(fastPolicy, operation);
 
@@ -79,7 +80,7 @@ describe('RecoveryPolicy', () => {
         jitter: false,
       });
 
-      const operation = jest.fn()
+      const operation = vi.fn()
         .mockRejectedValueOnce(new Error('Fail'))
         .mockResolvedValue('success');
 
@@ -90,8 +91,8 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should call onRetry callback on each retry', async () => {
-      const onRetry = jest.fn();
-      const operation = jest.fn()
+      const onRetry = vi.fn();
+      const operation = vi.fn()
         .mockRejectedValueOnce(new Error('Fail 1'))
         .mockRejectedValueOnce(new Error('Fail 2'))
         .mockResolvedValue('success');
@@ -104,8 +105,8 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should call onExhausted callback when retries are exhausted', async () => {
-      const onExhausted = jest.fn();
-      const operation = jest.fn().mockRejectedValue(new Error('Always fails'));
+      const onExhausted = vi.fn();
+      const operation = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       await executeWithRecovery(fastPolicy, operation, { onExhausted });
 
@@ -121,8 +122,8 @@ describe('RecoveryPolicy', () => {
         jitter: false,
       });
 
-      const operation = jest.fn().mockRejectedValue(new Error('Main fails'));
-      const fallback = jest.fn().mockResolvedValue('fallback-result');
+      const operation = vi.fn().mockRejectedValue(new Error('Main fails'));
+      const fallback = vi.fn().mockResolvedValue('fallback-result');
 
       const result = await executeWithRecovery(policy, operation, { fallback });
 
@@ -140,8 +141,8 @@ describe('RecoveryPolicy', () => {
         jitter: false,
       });
 
-      const operation = jest.fn().mockRejectedValue(new Error('Main fails'));
-      const fallback = jest.fn().mockRejectedValue(new Error('Fallback fails'));
+      const operation = vi.fn().mockRejectedValue(new Error('Main fails'));
+      const fallback = vi.fn().mockRejectedValue(new Error('Fallback fails'));
 
       const result = await executeWithRecovery(policy, operation, { fallback });
 
@@ -150,7 +151,7 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should handle non-Error rejections', async () => {
-      const operation = jest.fn()
+      const operation = vi.fn()
         .mockRejectedValueOnce('string error')
         .mockResolvedValue('success');
 
@@ -173,7 +174,7 @@ describe('RecoveryPolicy', () => {
         delays.push(delayMs);
       };
 
-      const operation = jest.fn().mockRejectedValue(new Error('Fail'));
+      const operation = vi.fn().mockRejectedValue(new Error('Fail'));
 
       await executeWithRecovery(policy, operation, { onRetry });
 
@@ -195,7 +196,7 @@ describe('RecoveryPolicy', () => {
       const delays: number[] = [];
       let startTime = Date.now();
 
-      const operation = jest.fn().mockImplementation(() => {
+      const operation = vi.fn().mockImplementation(() => {
         const now = Date.now();
         if (delays.length > 0) {
           // This captures actual delay, not the nominal delay
@@ -231,7 +232,7 @@ describe('RecoveryPolicy', () => {
 
   describe('withRecovery', () => {
     it('should wrap a function with recovery logic', async () => {
-      const fn = jest.fn()
+      const fn = vi.fn()
         .mockRejectedValueOnce(new Error('Fail'))
         .mockResolvedValue('success');
 
@@ -243,7 +244,7 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should throw when all retries fail', async () => {
-      const fn = jest.fn().mockRejectedValue(new Error('Always fails'));
+      const fn = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       const wrappedFn = withRecovery(fn, fastPolicy);
 
@@ -251,7 +252,7 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should pass arguments to the wrapped function', async () => {
-      const fn = jest.fn().mockImplementation((a: number, b: string) =>
+      const fn = vi.fn().mockImplementation((a: number, b: string) =>
         Promise.resolve(`${a}-${b}`)
       );
 
@@ -263,9 +264,9 @@ describe('RecoveryPolicy', () => {
     });
 
     it('should call onRetry and onExhausted callbacks', async () => {
-      const onRetry = jest.fn();
-      const onExhausted = jest.fn();
-      const fn = jest.fn().mockRejectedValue(new Error('Fail'));
+      const onRetry = vi.fn();
+      const onExhausted = vi.fn();
+      const fn = vi.fn().mockRejectedValue(new Error('Fail'));
 
       const wrappedFn = withRecovery(fn, fastPolicy, { onRetry, onExhausted });
 

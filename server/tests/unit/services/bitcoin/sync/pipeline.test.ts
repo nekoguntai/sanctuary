@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Sync Pipeline Tests
  *
@@ -8,21 +9,21 @@ import { mockPrismaClient, resetPrismaMocks } from '../../../../mocks/prisma';
 import { mockElectrumClient, resetElectrumMocks } from '../../../../mocks/electrum';
 
 // Mock Prisma
-jest.mock('../../../../../src/models/prisma', () => ({
+vi.mock('../../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock node client
-jest.mock('../../../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue(mockElectrumClient),
+vi.mock('../../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue(mockElectrumClient),
 }));
 
 // Mock notifications
-jest.mock('../../../../../src/websocket/notifications', () => ({
-  walletLog: jest.fn(),
-  getNotificationService: jest.fn().mockReturnValue({
-    broadcastTransactionNotification: jest.fn(),
+vi.mock('../../../../../src/websocket/notifications', () => ({
+  walletLog: vi.fn(),
+  getNotificationService: vi.fn().mockReturnValue({
+    broadcastTransactionNotification: vi.fn(),
   }),
 }));
 
@@ -85,7 +86,7 @@ describe('Sync Pipeline', () => {
 
   describe('createPhase', () => {
     it('should create a phase with name and execute function', () => {
-      const execute = jest.fn().mockImplementation((ctx) => Promise.resolve(ctx));
+      const execute = vi.fn().mockImplementation((ctx) => Promise.resolve(ctx));
       const phase = createPhase('testPhase', execute);
 
       expect(phase.name).toBe('testPhase');

@@ -2639,4 +2639,77 @@ router.put('/monitoring/services/:serviceId', authenticate, requireAdmin, async 
   }
 });
 
+/**
+ * GET /api/v1/admin/monitoring/grafana
+ * Get Grafana configuration including credentials hint and anonymous access setting
+ */
+router.get('/monitoring/grafana', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const anonymousAccess = await systemSettingRepository.getBoolean(
+      SystemSettingKeys.GRAFANA_ANONYMOUS_ACCESS,
+      false
+    );
+
+    // Get password source hint (don't expose full password)
+    const encryptionKey = process.env.ENCRYPTION_KEY || '';
+    const grafanaPassword = process.env.GRAFANA_PASSWORD;
+    const passwordSource = grafanaPassword ? 'GRAFANA_PASSWORD' : 'ENCRYPTION_KEY';
+    // Show first 4 chars as hint, or indicate if not set
+    const passwordHint = grafanaPassword
+      ? `${grafanaPassword.substring(0, 4)}...`
+      : encryptionKey.length > 0
+        ? `${encryptionKey.substring(0, 4)}...`
+        : '(not set)';
+
+    res.json({
+      username: 'admin',
+      passwordSource,
+      passwordHint,
+      anonymousAccess,
+      // Note: changing anonymous access requires container restart
+      anonymousAccessNote: 'Changing anonymous access requires restarting the Grafana container',
+    });
+  } catch (error) {
+    log.error('[ADMIN] Get Grafana config error', { error: getErrorMessage(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Grafana configuration',
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/monitoring/grafana
+ * Update Grafana settings (anonymous access)
+ */
+router.put('/monitoring/grafana', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { anonymousAccess } = req.body;
+
+    if (typeof anonymousAccess === 'boolean') {
+      await systemSettingRepository.setBoolean(
+        SystemSettingKeys.GRAFANA_ANONYMOUS_ACCESS,
+        anonymousAccess
+      );
+      log.info('[ADMIN] Grafana anonymous access updated', {
+        anonymousAccess,
+        admin: req.user?.username,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: anonymousAccess
+        ? 'Anonymous access enabled. Restart Grafana container to apply.'
+        : 'Anonymous access disabled. Restart Grafana container to apply.',
+    });
+  } catch (error) {
+    log.error('[ADMIN] Update Grafana config error', { error: getErrorMessage(error) });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to update Grafana configuration',
+    });
+  }
+});
+
 export default router;

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * AI API Routes Tests
  *
@@ -16,43 +17,43 @@ import {
 import { Request, Response, NextFunction } from 'express';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
 // Mock AI service
 const mockAiService = {
-  isEnabled: jest.fn(),
-  isContainerAvailable: jest.fn(),
-  checkHealth: jest.fn(),
-  suggestTransactionLabel: jest.fn(),
-  executeNaturalQuery: jest.fn(),
-  detectOllama: jest.fn(),
-  listModels: jest.fn(),
-  pullModel: jest.fn(),
+  isEnabled: vi.fn(),
+  isContainerAvailable: vi.fn(),
+  checkHealth: vi.fn(),
+  suggestTransactionLabel: vi.fn(),
+  executeNaturalQuery: vi.fn(),
+  detectOllama: vi.fn(),
+  listModels: vi.fn(),
+  pullModel: vi.fn(),
 };
 
-jest.mock('../../../src/services/aiService', () => ({
+vi.mock('../../../src/services/aiService', () => ({
   aiService: mockAiService,
 }));
 
 // Mock rate limiter
-const mockRateLimiter = jest.fn((req: Request, res: Response, next: NextFunction) => next());
-jest.mock('express-rate-limit', () => () => mockRateLimiter);
+const mockRateLimiter = vi.fn((req: Request, res: Response, next: NextFunction) => next());
+vi.mock('express-rate-limit', () => () => mockRateLimiter);
 
 // Mock authenticate middleware
-const mockAuthenticate = jest.fn((req: Request, res: Response, next: NextFunction) => {
+const mockAuthenticate = vi.fn((req: Request, res: Response, next: NextFunction) => {
   if (req.headers.authorization) {
     // Check for admin header to simulate admin users
     const isAdmin = req.headers['x-test-admin'] === 'true';
@@ -64,7 +65,7 @@ const mockAuthenticate = jest.fn((req: Request, res: Response, next: NextFunctio
 });
 
 // Mock requireAdmin middleware
-const mockRequireAdmin = jest.fn((req: Request, res: Response, next: NextFunction) => {
+const mockRequireAdmin = vi.fn((req: Request, res: Response, next: NextFunction) => {
   if ((req as any).user?.isAdmin) {
     next();
   } else {
@@ -72,7 +73,7 @@ const mockRequireAdmin = jest.fn((req: Request, res: Response, next: NextFunctio
   }
 });
 
-jest.mock('../../../src/middleware/auth', () => ({
+vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => mockAuthenticate(req, res, next),
   requireAdmin: (req: Request, res: Response, next: NextFunction) => mockRequireAdmin(req, res, next),
 }));
@@ -80,7 +81,7 @@ jest.mock('../../../src/middleware/auth', () => ({
 describe('AI API Routes', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('GET /api/v1/ai/status', () => {

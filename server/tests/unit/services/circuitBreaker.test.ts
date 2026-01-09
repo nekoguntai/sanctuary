@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Circuit Breaker Tests
  *
@@ -20,7 +21,7 @@ describe('CircuitBreaker', () => {
   beforeEach(() => {
     // Clear and reset registry between tests
     circuitBreakerRegistry.clear();
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     circuit = new CircuitBreaker({
       name: 'test-circuit',
@@ -31,8 +32,8 @@ describe('CircuitBreaker', () => {
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
     circuitBreakerRegistry.resetAll();
   });
 
@@ -124,7 +125,7 @@ describe('CircuitBreaker', () => {
 
     it('should transition to half-open after recovery timeout', async () => {
       // Advance past recovery timeout
-      jest.advanceTimersByTime(1100);
+      vi.advanceTimersByTime(1100);
 
       // Next call should be allowed (circuit transitions to half-open)
       const result = await circuit.execute(async () => 'success');
@@ -138,7 +139,7 @@ describe('CircuitBreaker', () => {
     });
 
     it('should report as allowing requests after recovery timeout', async () => {
-      jest.advanceTimersByTime(1100);
+      vi.advanceTimersByTime(1100);
       expect(circuit.isAllowingRequests()).toBe(true);
     });
   });
@@ -155,7 +156,7 @@ describe('CircuitBreaker', () => {
       }
 
       // Advance past recovery timeout
-      jest.advanceTimersByTime(1100);
+      vi.advanceTimersByTime(1100);
 
       // Trigger transition to half-open with first success
       await circuit.execute(async () => 'success');
@@ -182,7 +183,7 @@ describe('CircuitBreaker', () => {
       ).rejects.toThrow();
 
       // Advance past recovery timeout
-      jest.advanceTimersByTime(150);
+      vi.advanceTimersByTime(150);
 
       // One success - now in half-open
       await testCircuit.execute(async () => 'success');

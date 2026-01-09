@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * AI Container Mock
  *
@@ -224,14 +225,14 @@ export function createAIContainerMock(options?: {
   healthy?: boolean;
   aiAvailable?: boolean;
   ollamaFound?: boolean;
-}): jest.Mock {
+}): Mock {
   const {
     healthy = true,
     aiAvailable = true,
     ollamaFound = true,
   } = options || {};
 
-  return jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+  return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method || 'GET';
     const body = init?.body ? JSON.parse(init.body as string) : {};
 
@@ -378,8 +379,8 @@ export function createAIContainerMock(options?: {
 /**
  * Create a mock for specific transaction label suggestions
  */
-export function createLabelSuggestionMock(suggestions: Record<string, string>): jest.Mock {
-  return jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+export function createLabelSuggestionMock(suggestions: Record<string, string>): Mock {
+  return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('/suggest-label') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string);
       const suggestion = suggestions[body.transactionId] || 'Transaction';
@@ -397,22 +398,22 @@ export function createLabelSuggestionMock(suggestions: Record<string, string>): 
 /**
  * Create a mock that simulates network failure
  */
-export function createNetworkFailureMock(): jest.Mock {
-  return jest.fn().mockRejectedValue(new Error('Network error: Connection refused'));
+export function createNetworkFailureMock(): Mock {
+  return vi.fn().mockRejectedValue(new Error('Network error: Connection refused'));
 }
 
 /**
  * Create a mock that simulates timeout
  */
-export function createTimeoutMock(): jest.Mock {
-  return jest.fn().mockRejectedValue(new Error('AbortError: The operation was aborted'));
+export function createTimeoutMock(): Mock {
+  return vi.fn().mockRejectedValue(new Error('AbortError: The operation was aborted'));
 }
 
 /**
  * Create a mock that returns errors for all endpoints
  */
-export function createErrorMock(statusCode: number = 500, errorMessage: string = 'Internal error'): jest.Mock {
-  return jest.fn().mockResolvedValue({
+export function createErrorMock(statusCode: number = 500, errorMessage: string = 'Internal error'): Mock {
+  return vi.fn().mockResolvedValue({
     ok: false,
     status: statusCode,
     json: () => Promise.resolve({ error: errorMessage }),
@@ -426,7 +427,7 @@ export function createErrorMock(statusCode: number = 500, errorMessage: string =
 /**
  * Reset all AI container mocks to default state
  */
-export function resetAIContainerMocks(...mocks: jest.Mock[]): void {
+export function resetAIContainerMocks(...mocks: Mock[]): void {
   mocks.forEach(mock => {
     if (mock && typeof mock.mockReset === 'function') {
       mock.mockReset();

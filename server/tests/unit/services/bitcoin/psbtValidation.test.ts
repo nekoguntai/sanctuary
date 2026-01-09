@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * PSBT Validation Utilities Tests (CRITICAL)
  *
@@ -28,12 +29,12 @@ import {
 } from '../../../../src/services/bitcoin/psbtValidation';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 

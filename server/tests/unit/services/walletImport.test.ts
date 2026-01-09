@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Wallet Import Service Unit Tests
  *
@@ -21,29 +22,29 @@ import * as walletImport from '../../../src/services/walletImport';
 import type { ParsedDescriptor, Network, ScriptType } from '../../../src/services/bitcoin/descriptorParser';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
 // Mock descriptor parser
-const mockParseImportInput = jest.fn();
-const mockParseDescriptorForImport = jest.fn();
-const mockParseJsonImport = jest.fn();
-const mockValidateDescriptor = jest.fn();
-const mockValidateJsonImport = jest.fn();
+const mockParseImportInput = vi.fn();
+const mockParseDescriptorForImport = vi.fn();
+const mockParseJsonImport = vi.fn();
+const mockValidateDescriptor = vi.fn();
+const mockValidateJsonImport = vi.fn();
 
-jest.mock('../../../src/services/bitcoin/descriptorParser', () => ({
+vi.mock('../../../src/services/bitcoin/descriptorParser', () => ({
   parseDescriptorForImport: (...args: any[]) => mockParseDescriptorForImport(...args),
   parseJsonImport: (...args: any[]) => mockParseJsonImport(...args),
   validateDescriptor: (...args: any[]) => mockValidateDescriptor(...args),
@@ -51,19 +52,19 @@ jest.mock('../../../src/services/bitcoin/descriptorParser', () => ({
 }));
 
 // Mock import format registry (parseImportInput is now imported from here)
-jest.mock('../../../src/services/import', () => ({
+vi.mock('../../../src/services/import', () => ({
   parseImportInput: (...args: any[]) => mockParseImportInput(...args),
 }));
 
 // Mock descriptor builder
-const mockBuildDescriptorFromDevices = jest.fn();
-jest.mock('../../../src/services/bitcoin/descriptorBuilder', () => ({
+const mockBuildDescriptorFromDevices = vi.fn();
+vi.mock('../../../src/services/bitcoin/descriptorBuilder', () => ({
   buildDescriptorFromDevices: (...args: any[]) => mockBuildDescriptorFromDevices(...args),
 }));
 
 // Mock address derivation
-const mockDeriveAddressFromDescriptor = jest.fn();
-jest.mock('../../../src/services/bitcoin/addressDerivation', () => ({
+const mockDeriveAddressFromDescriptor = vi.fn();
+vi.mock('../../../src/services/bitcoin/addressDerivation', () => ({
   deriveAddressFromDescriptor: (...args: any[]) => mockDeriveAddressFromDescriptor(...args),
 }));
 
@@ -87,7 +88,7 @@ describe('Wallet Import Service', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Default mock implementations
     mockBuildDescriptorFromDevices.mockReturnValue({

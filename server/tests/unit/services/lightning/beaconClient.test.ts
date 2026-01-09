@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * BeaconClient Unit Tests
  *
@@ -14,16 +15,16 @@ import {
 } from '../../../../src/services/lightning/beaconClient';
 
 // Mock axios
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+vi.mock('axios');
+const mockedAxios = axios as Mocked<typeof axios>;
 
 // Mock logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -34,11 +35,11 @@ describe('BeaconClient', () => {
   beforeEach(() => {
     // Create mock axios instance
     mockAxiosInstance = {
-      get: jest.fn(),
-      post: jest.fn(),
+      get: vi.fn(),
+      post: vi.fn(),
       interceptors: {
         response: {
-          use: jest.fn(),
+          use: vi.fn(),
         },
       },
     };
@@ -52,7 +53,7 @@ describe('BeaconClient', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -408,7 +409,7 @@ describe('Factory Functions', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     resetBeaconClient();
     process.env = { ...originalEnv };
   });

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Payjoin Integration Tests (CRITICAL)
  *
@@ -14,32 +15,32 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma before importing services
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock blockchain service
-jest.mock('../../../src/services/bitcoin/blockchain', () => ({
-  getBlockHeight: jest.fn().mockResolvedValue(850000),
-  broadcastTransaction: jest.fn().mockResolvedValue({ txid: 'mock-txid', broadcasted: true }),
+vi.mock('../../../src/services/bitcoin/blockchain', () => ({
+  getBlockHeight: vi.fn().mockResolvedValue(850000),
+  broadcastTransaction: vi.fn().mockResolvedValue({ txid: 'mock-txid', broadcasted: true }),
 }));
 
 // Mock node client
-jest.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue({
-    getTransaction: jest.fn().mockResolvedValue('0100000001...'),
-    broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
+vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue({
+    getTransaction: vi.fn().mockResolvedValue('0100000001...'),
+    broadcastTransaction: vi.fn().mockResolvedValue('mock-txid'),
   }),
 }));
 
@@ -131,7 +132,7 @@ function createRealisticPsbt(options: {
 describe('Payjoin Integration Tests', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Complete Payjoin Flow', () => {

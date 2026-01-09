@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Payjoin Service Tests (CRITICAL)
  *
@@ -15,39 +16,39 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock PSBT validation functions
-jest.mock('../../../src/services/bitcoin/psbtValidation', () => ({
-  parsePsbt: jest.fn(),
-  validatePsbtStructure: jest.fn().mockReturnValue({ valid: true, errors: [], warnings: [] }),
-  validatePayjoinProposal: jest.fn().mockReturnValue({ valid: true, errors: [], warnings: [] }),
-  getPsbtOutputs: jest.fn().mockReturnValue([]),
-  getPsbtInputs: jest.fn().mockReturnValue([]),
-  calculateFeeRate: jest.fn().mockReturnValue(10),
-  clonePsbt: jest.fn(),
+vi.mock('../../../src/services/bitcoin/psbtValidation', () => ({
+  parsePsbt: vi.fn(),
+  validatePsbtStructure: vi.fn().mockReturnValue({ valid: true, errors: [], warnings: [] }),
+  validatePayjoinProposal: vi.fn().mockReturnValue({ valid: true, errors: [], warnings: [] }),
+  getPsbtOutputs: vi.fn().mockReturnValue([]),
+  getPsbtInputs: vi.fn().mockReturnValue([]),
+  calculateFeeRate: vi.fn().mockReturnValue(10),
+  clonePsbt: vi.fn(),
 }));
 
 // Mock the network utils
-jest.mock('../../../src/services/bitcoin/utils', () => ({
-  getNetwork: jest.fn().mockReturnValue(bitcoin.networks.testnet),
+vi.mock('../../../src/services/bitcoin/utils', () => ({
+  getNetwork: vi.fn().mockReturnValue(bitcoin.networks.testnet),
 }));
 
 // Mock global fetch
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 import {
   parseBip21Uri,
@@ -73,8 +74,8 @@ const TEST_PAYJOIN_URL = 'https://example.com/payjoin';
 describe('Payjoin Service', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
+    vi.clearAllMocks();
+    (global.fetch as Mock).mockReset();
   });
 
   describe('parseBip21Uri', () => {
@@ -366,12 +367,12 @@ describe('Payjoin Service', () => {
 
     beforeEach(() => {
       // Reset mocks
-      (validatePsbtStructure as jest.Mock).mockReturnValue({ valid: true, errors: [], warnings: [] });
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (validatePsbtStructure as Mock).mockReturnValue({ valid: true, errors: [], warnings: [] });
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: TEST_ADDRESS_TESTNET, value: 80000 },
         { address: 'tb1q000000000000000000000000000000000000000', value: 10000 },
       ]);
-      (calculateFeeRate as jest.Mock).mockReturnValue(10);
+      (calculateFeeRate as Mock).mockReturnValue(10);
     });
 
     it('should return error for unknown address', async () => {
@@ -390,7 +391,7 @@ describe('Payjoin Service', () => {
 
     it('should reject invalid PSBT structure', async () => {
       mockPrismaClient.address.findUnique.mockResolvedValue(mockAddress);
-      (validatePsbtStructure as jest.Mock).mockReturnValue({
+      (validatePsbtStructure as Mock).mockReturnValue({
         valid: false,
         errors: ['PSBT has no inputs'],
         warnings: [],
@@ -409,13 +410,13 @@ describe('Payjoin Service', () => {
 
     it('should reject PSBT with no output to receiving address', async () => {
       mockPrismaClient.address.findUnique.mockResolvedValue(mockAddress);
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: 'tb1qdifferentaddress000000000000000000000000', value: 80000 },
       ]);
 
       // Need to mock parsePsbt
       const mockPsbt = createMockPsbt();
-      (parsePsbt as jest.Mock).mockReturnValue(mockPsbt);
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
 
       const result = await processPayjoinRequest(
         addressId,
@@ -433,8 +434,8 @@ describe('Payjoin Service', () => {
       mockPrismaClient.uTXO.findMany.mockResolvedValue([]); // No UTXOs
 
       const mockPsbt = createMockPsbt();
-      (parsePsbt as jest.Mock).mockReturnValue(mockPsbt);
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: TEST_ADDRESS_TESTNET, value: 80000 },
         { address: 'tb1qchange0000000000000000000000000000000', value: 10000 },
       ]);
@@ -451,11 +452,11 @@ describe('Payjoin Service', () => {
 
     it('should reject PSBT with fee rate below minimum', async () => {
       mockPrismaClient.address.findUnique.mockResolvedValue(mockAddress);
-      (calculateFeeRate as jest.Mock).mockReturnValue(0.5); // Below minimum of 1
+      (calculateFeeRate as Mock).mockReturnValue(0.5); // Below minimum of 1
 
       const mockPsbt = createMockPsbt();
-      (parsePsbt as jest.Mock).mockReturnValue(mockPsbt);
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: TEST_ADDRESS_TESTNET, value: 80000 },
       ]);
 
@@ -492,12 +493,12 @@ describe('Payjoin Service', () => {
     const proposalPsbt = 'cHNidP8BAHECAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8CrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GhAnAAAAAAAAFgAUdpn98MqGxRdMa7mGg0HhZKSL0BMAAAAAAAAA';
 
     it('should send PSBT to Payjoin endpoint', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: true,
         errors: [],
         warnings: [],
@@ -523,12 +524,12 @@ describe('Payjoin Service', () => {
     });
 
     it('should add v=1 query parameter', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: true,
         errors: [],
         warnings: [],
@@ -543,7 +544,7 @@ describe('Payjoin Service', () => {
     });
 
     it('should return error for HTTP error response', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: false,
         status: 400,
         text: async () => 'original-psbt-rejected',
@@ -561,12 +562,12 @@ describe('Payjoin Service', () => {
     });
 
     it('should return error for invalid proposal', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: false,
         errors: ['Sender output was removed'],
         warnings: [],
@@ -584,7 +585,7 @@ describe('Payjoin Service', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      (global.fetch as Mock).mockRejectedValue(new Error('Network error'));
 
       const result = await attemptPayjoinSend(
         originalPsbt,
@@ -610,7 +611,7 @@ describe('Payjoin Service', () => {
     });
 
     it('should handle timeout gracefully', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Request timeout'));
+      (global.fetch as Mock).mockRejectedValue(new Error('Request timeout'));
 
       const result = await attemptPayjoinSend(
         originalPsbt,
@@ -623,12 +624,12 @@ describe('Payjoin Service', () => {
     });
 
     it('should include warnings in successful response', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: true,
         errors: [],
         warnings: ['Fee increased by 25%'],
@@ -645,12 +646,12 @@ describe('Payjoin Service', () => {
     });
 
     it('should use mainnet network by default', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: true,
         errors: [],
         warnings: [],
@@ -667,12 +668,12 @@ describe('Payjoin Service', () => {
     });
 
     it('should use specified network', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         text: async () => proposalPsbt,
       });
 
-      (validatePayjoinProposal as jest.Mock).mockReturnValue({
+      (validatePayjoinProposal as Mock).mockReturnValue({
         valid: true,
         errors: [],
         warnings: [],
@@ -815,8 +816,8 @@ describe('Payjoin Service', () => {
 
     beforeEach(() => {
       mockPrismaClient.address.findUnique.mockResolvedValue(mockAddress);
-      (validatePsbtStructure as jest.Mock).mockReturnValue({ valid: true, errors: [], warnings: [] });
-      (calculateFeeRate as jest.Mock).mockReturnValue(10);
+      (validatePsbtStructure as Mock).mockReturnValue({ valid: true, errors: [], warnings: [] });
+      (calculateFeeRate as Mock).mockReturnValue(10);
     });
 
     it('should prefer UTXOs within 0.5x-2x of payment amount', async () => {
@@ -843,13 +844,13 @@ describe('Payjoin Service', () => {
       mockPrismaClient.uTXO.findMany.mockResolvedValue([optimalUtxo, largeUtxo]);
 
       const mockPsbt = createMockPsbt(paymentAmount);
-      (parsePsbt as jest.Mock).mockReturnValue(mockPsbt);
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: TEST_ADDRESS_TESTNET, value: paymentAmount },
       ]);
 
       // Mock clonePsbt to return a modifiable copy
-      (clonePsbt as jest.Mock).mockImplementation((psbt) => {
+      (clonePsbt as Mock).mockImplementation((psbt) => {
         const clone = new bitcoin.Psbt({ network: bitcoin.networks.testnet });
         // Add required structure
         clone.addInput({
@@ -904,8 +905,8 @@ describe('Payjoin Service', () => {
       mockPrismaClient.uTXO.findMany.mockResolvedValue([dustUtxo, validUtxo]);
 
       const mockPsbt = createMockPsbt(paymentAmount);
-      (parsePsbt as jest.Mock).mockReturnValue(mockPsbt);
-      (getPsbtOutputs as jest.Mock).mockReturnValue([
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
+      (getPsbtOutputs as Mock).mockReturnValue([
         { address: TEST_ADDRESS_TESTNET, value: paymentAmount },
       ]);
 

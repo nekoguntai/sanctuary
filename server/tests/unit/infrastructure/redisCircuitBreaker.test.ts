@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Redis Circuit Breaker Tests
  *
@@ -25,8 +26,8 @@ describe('CircuitBreaker', () => {
 
   describe('closed state', () => {
     it('should execute primary function when closed', async () => {
-      const primary = jest.fn().mockResolvedValue('primary-result');
-      const fallback = jest.fn().mockResolvedValue('fallback-result');
+      const primary = vi.fn().mockResolvedValue('primary-result');
+      const fallback = vi.fn().mockResolvedValue('fallback-result');
 
       const result = await breaker.execute(primary, fallback, 'test-op');
 
@@ -37,8 +38,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should use fallback on primary failure but stay closed', async () => {
-      const primary = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback-result');
+      const primary = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback-result');
 
       const result = await breaker.execute(primary, fallback, 'test-op');
 
@@ -48,8 +49,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should open after reaching failure threshold', async () => {
-      const primary = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback-result');
+      const primary = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback-result');
 
       // Execute until threshold reached
       for (let i = 0; i < 3; i++) {
@@ -63,8 +64,8 @@ describe('CircuitBreaker', () => {
   describe('open state', () => {
     beforeEach(async () => {
       // Force circuit to open state
-      const failing = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const failing = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       for (let i = 0; i < 3; i++) {
         await breaker.execute(failing, fallback, 'test');
@@ -72,8 +73,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should skip primary and use fallback immediately', async () => {
-      const primary = jest.fn().mockResolvedValue('primary');
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const primary = vi.fn().mockResolvedValue('primary');
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       const result = await breaker.execute(primary, fallback, 'test-op');
 
@@ -86,8 +87,8 @@ describe('CircuitBreaker', () => {
       // Wait for recovery timeout
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      const primary = jest.fn().mockResolvedValue('primary');
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const primary = vi.fn().mockResolvedValue('primary');
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       const result = await breaker.execute(primary, fallback, 'test-op');
 
@@ -100,8 +101,8 @@ describe('CircuitBreaker', () => {
   describe('half-open state', () => {
     beforeEach(async () => {
       // Force to open, then wait for half-open
-      const failing = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const failing = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       for (let i = 0; i < 3; i++) {
         await breaker.execute(failing, fallback, 'test');
@@ -111,8 +112,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should close after success threshold', async () => {
-      const primary = jest.fn().mockResolvedValue('primary');
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const primary = vi.fn().mockResolvedValue('primary');
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       // Execute success threshold times
       for (let i = 0; i < 2; i++) {
@@ -123,8 +124,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should reopen on failure', async () => {
-      const primary = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const primary = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       await breaker.execute(primary, fallback, 'test-op');
 
@@ -134,8 +135,8 @@ describe('CircuitBreaker', () => {
 
   describe('stats', () => {
     it('should track call statistics', async () => {
-      const primary = jest.fn().mockResolvedValue('primary');
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const primary = vi.fn().mockResolvedValue('primary');
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       await breaker.execute(primary, fallback, 'test');
       await breaker.execute(primary, fallback, 'test');
@@ -146,8 +147,8 @@ describe('CircuitBreaker', () => {
     });
 
     it('should track fallback calls', async () => {
-      const failing = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const failing = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       for (let i = 0; i < 3; i++) {
         await breaker.execute(failing, fallback, 'test');
@@ -173,8 +174,8 @@ describe('CircuitBreaker', () => {
 
   describe('reset', () => {
     it('should reset all statistics', async () => {
-      const failing = jest.fn().mockRejectedValue(new Error('fail'));
-      const fallback = jest.fn().mockResolvedValue('fallback');
+      const failing = vi.fn().mockRejectedValue(new Error('fail'));
+      const fallback = vi.fn().mockResolvedValue('fallback');
 
       for (let i = 0; i < 3; i++) {
         await breaker.execute(failing, fallback, 'test');
@@ -197,8 +198,8 @@ describe('Global Redis Circuit Breaker', () => {
   });
 
   it('should provide global circuit breaker function', async () => {
-    const primary = jest.fn().mockResolvedValue('redis-value');
-    const fallback = jest.fn().mockResolvedValue('local-value');
+    const primary = vi.fn().mockResolvedValue('redis-value');
+    const fallback = vi.fn().mockResolvedValue('local-value');
 
     const result = await withRedisCircuitBreaker(primary, fallback, 'cache-get');
 
@@ -207,8 +208,8 @@ describe('Global Redis Circuit Breaker', () => {
   });
 
   it('should track global stats', async () => {
-    const primary = jest.fn().mockResolvedValue('value');
-    const fallback = jest.fn().mockResolvedValue('fallback');
+    const primary = vi.fn().mockResolvedValue('value');
+    const fallback = vi.fn().mockResolvedValue('fallback');
 
     await withRedisCircuitBreaker(primary, fallback, 'test');
 

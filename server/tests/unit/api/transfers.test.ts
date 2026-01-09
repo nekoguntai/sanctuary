@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Transfers API Routes Tests
  *
@@ -18,22 +19,22 @@ import {
 } from '../../helpers/testUtils';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock transfer service
-const mockInitiateTransfer = jest.fn();
-const mockAcceptTransfer = jest.fn();
-const mockDeclineTransfer = jest.fn();
-const mockCancelTransfer = jest.fn();
-const mockConfirmTransfer = jest.fn();
-const mockGetUserTransfers = jest.fn();
-const mockGetTransfer = jest.fn();
-const mockGetTransferCounts = jest.fn();
+const mockInitiateTransfer = vi.fn();
+const mockAcceptTransfer = vi.fn();
+const mockDeclineTransfer = vi.fn();
+const mockCancelTransfer = vi.fn();
+const mockConfirmTransfer = vi.fn();
+const mockGetUserTransfers = vi.fn();
+const mockGetTransfer = vi.fn();
+const mockGetTransferCounts = vi.fn();
 
-jest.mock('../../../src/services/transferService', () => ({
+vi.mock('../../../src/services/transferService', () => ({
   initiateTransfer: (...args: any[]) => mockInitiateTransfer(...args),
   acceptTransfer: (...args: any[]) => mockAcceptTransfer(...args),
   declineTransfer: (...args: any[]) => mockDeclineTransfer(...args),
@@ -41,17 +42,17 @@ jest.mock('../../../src/services/transferService', () => ({
   confirmTransfer: (...args: any[]) => mockConfirmTransfer(...args),
   getUserTransfers: (...args: any[]) => mockGetUserTransfers(...args),
   getTransfer: (...args: any[]) => mockGetTransfer(...args),
-  getPendingIncomingCount: jest.fn().mockResolvedValue(0),
-  getAwaitingConfirmationCount: jest.fn().mockResolvedValue(0),
+  getPendingIncomingCount: vi.fn().mockResolvedValue(0),
+  getAwaitingConfirmationCount: vi.fn().mockResolvedValue(0),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -63,7 +64,7 @@ describe('Transfers API', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /transfers', () => {

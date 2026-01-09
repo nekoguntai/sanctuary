@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * ElectrumPool Unit Tests
  *
@@ -12,35 +13,37 @@ import {
   ElectrumPoolConfig,
 } from '../../../../src/services/bitcoin/electrumPool';
 
-// Mock the ElectrumClient
-jest.mock('../../../../src/services/bitcoin/electrum', () => ({
-  ElectrumClient: jest.fn().mockImplementation(() => ({
-    connect: jest.fn().mockResolvedValue(undefined),
-    disconnect: jest.fn(),
-    isConnected: jest.fn().mockReturnValue(true),
-    getServerVersion: jest.fn().mockResolvedValue({ server: 'test', protocol: '1.4' }),
-    getBlockHeight: jest.fn().mockResolvedValue(800000),
-    on: jest.fn(),
-    off: jest.fn(),
-  })),
-}));
+// Mock the ElectrumClient as a class
+vi.mock('../../../../src/services/bitcoin/electrum', () => {
+  // Create a mock class that can be instantiated with 'new'
+  const MockElectrumClient = vi.fn().mockImplementation(function(this: any) {
+    this.connect = vi.fn().mockResolvedValue(undefined);
+    this.disconnect = vi.fn();
+    this.isConnected = vi.fn().mockReturnValue(true);
+    this.getServerVersion = vi.fn().mockResolvedValue({ server: 'test', protocol: '1.4' });
+    this.getBlockHeight = vi.fn().mockResolvedValue(800000);
+    this.on = vi.fn();
+    this.off = vi.fn();
+  });
+  return { ElectrumClient: MockElectrumClient };
+});
 
 // Mock Prisma
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: {
-    nodeConfig: { findFirst: jest.fn().mockResolvedValue(null) },
-    electrumServer: { update: jest.fn().mockResolvedValue({}) },
+    nodeConfig: { findFirst: vi.fn().mockResolvedValue(null) },
+    electrumServer: { update: vi.fn().mockResolvedValue({}) },
   },
 }));
 
 // Mock logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -77,7 +80,7 @@ describe('ElectrumPool', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {

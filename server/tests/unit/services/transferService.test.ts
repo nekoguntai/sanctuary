@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Transfer Service Tests
  *
@@ -11,30 +12,30 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
 // Mock wallet service
-const mockCheckWalletOwnerAccess = jest.fn();
-jest.mock('../../../src/services/wallet', () => ({
+const mockCheckWalletOwnerAccess = vi.fn();
+vi.mock('../../../src/services/wallet', () => ({
   checkWalletOwnerAccess: (...args: any[]) => mockCheckWalletOwnerAccess(...args),
 }));
 
 // Mock device access service
-const mockCheckDeviceOwnerAccess = jest.fn();
-jest.mock('../../../src/services/deviceAccess', () => ({
+const mockCheckDeviceOwnerAccess = vi.fn();
+vi.mock('../../../src/services/deviceAccess', () => ({
   checkDeviceOwnerAccess: (...args: any[]) => mockCheckDeviceOwnerAccess(...args),
 }));
 
@@ -60,7 +61,7 @@ describe('Transfer Service', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Default: owner checks pass
     mockCheckWalletOwnerAccess.mockResolvedValue(true);
     mockCheckDeviceOwnerAccess.mockResolvedValue(true);
@@ -448,15 +449,15 @@ describe('Transfer Service', () => {
         // Create a tx mock with findUnique returning accepted status for validation
         const txMock = {
           ownershipTransfer: {
-            findUnique: jest.fn().mockResolvedValue(mockTransfer), // In-tx validation
-            update: jest.fn().mockResolvedValue(confirmedTransfer),
+            findUnique: vi.fn().mockResolvedValue(mockTransfer), // In-tx validation
+            update: vi.fn().mockResolvedValue(confirmedTransfer),
           },
           walletUser: {
-            findFirst: jest.fn()
+            findFirst: vi.fn()
               .mockResolvedValueOnce({ id: 'wu-owner', userId: ownerId, walletId, role: 'owner' })
               .mockResolvedValueOnce(null), // Recipient doesn't have access yet
-            create: jest.fn().mockResolvedValue({}),
-            update: jest.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+            update: vi.fn().mockResolvedValue({}),
           },
         };
         return callback(txMock);

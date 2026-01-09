@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Wallet Access Control Middleware Tests
  *
@@ -13,17 +14,17 @@ import {
 import { sampleWallets, sampleUsers } from '../../fixtures/bitcoin';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock wallet service
-jest.mock('../../../src/services/wallet', () => ({
-  checkWalletAccess: jest.fn(),
-  checkWalletEditAccess: jest.fn(),
-  checkWalletOwnerAccess: jest.fn(),
-  getUserWalletRole: jest.fn(),
+vi.mock('../../../src/services/wallet', () => ({
+  checkWalletAccess: vi.fn(),
+  checkWalletEditAccess: vi.fn(),
+  checkWalletOwnerAccess: vi.fn(),
+  getUserWalletRole: vi.fn(),
 }));
 
 // Import after mocks
@@ -42,15 +43,15 @@ describe('Wallet Access Middleware', () => {
 
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('requireWalletAccess - View Level', () => {
     const middleware = requireWalletAccess('view');
 
     it('should allow access when user has view permission', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('viewer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('viewer');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -67,8 +68,8 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should allow access for signer role', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('signer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('signer');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -84,8 +85,8 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should allow access for owner role', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('owner');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -101,7 +102,7 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should deny access when user has no permission', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(false);
+      (checkWalletAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -154,8 +155,8 @@ describe('Wallet Access Middleware', () => {
     const middleware = requireWalletAccess('edit');
 
     it('should allow edit access for signer', async () => {
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('signer');
+      (checkWalletEditAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('signer');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -170,8 +171,8 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should allow edit access for owner', async () => {
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('owner');
+      (checkWalletEditAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -186,7 +187,7 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should deny edit access for viewer', async () => {
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(false);
+      (checkWalletEditAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -207,8 +208,8 @@ describe('Wallet Access Middleware', () => {
     const middleware = requireWalletAccess('owner');
 
     it('should allow owner access only for owner', async () => {
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('owner');
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -224,7 +225,7 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should deny owner access for signer', async () => {
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(false);
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -241,7 +242,7 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should deny owner access for viewer', async () => {
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(false);
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(false);
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -260,8 +261,8 @@ describe('Wallet Access Middleware', () => {
 
   describe('Parameter Handling', () => {
     it('should accept walletId from params.id', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('viewer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('viewer');
 
       const middleware = requireWalletAccess('view');
       const req = createMockRequest({
@@ -277,8 +278,8 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should accept walletId from params.walletId', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('viewer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('viewer');
 
       const middleware = requireWalletAccess('view');
       const req = createMockRequest({
@@ -296,7 +297,7 @@ describe('Wallet Access Middleware', () => {
 
   describe('Error Handling', () => {
     it('should return 500 on database error', async () => {
-      (checkWalletAccess as jest.Mock).mockRejectedValue(new Error('Database error'));
+      (checkWalletAccess as Mock).mockRejectedValue(new Error('Database error'));
 
       const middleware = requireWalletAccess('view');
       const req = createMockRequest({
@@ -317,7 +318,7 @@ describe('Wallet Access Middleware', () => {
 
   describe('getWalletAccessRole Helper', () => {
     it('should return user role for wallet', async () => {
-      (getUserWalletRole as jest.Mock).mockResolvedValue('signer');
+      (getUserWalletRole as Mock).mockResolvedValue('signer');
 
       const role = await getWalletAccessRole(walletId, userId);
 
@@ -326,7 +327,7 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('should return null for no access', async () => {
-      (getUserWalletRole as jest.Mock).mockResolvedValue(null);
+      (getUserWalletRole as Mock).mockResolvedValue(null);
 
       const role = await getWalletAccessRole(walletId, userId);
 
@@ -336,10 +337,10 @@ describe('Wallet Access Middleware', () => {
 
   describe('Role Hierarchy', () => {
     it('owner should have all access levels', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(true);
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(true);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('owner');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (checkWalletEditAccess as Mock).mockResolvedValue(true);
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(true);
+      (getUserWalletRole as Mock).mockResolvedValue('owner');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -369,10 +370,10 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('signer should have view and edit but not owner access', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(true);
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(false);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('signer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (checkWalletEditAccess as Mock).mockResolvedValue(true);
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(false);
+      (getUserWalletRole as Mock).mockResolvedValue('signer');
 
       const req = createMockRequest({
         params: { id: walletId },
@@ -402,10 +403,10 @@ describe('Wallet Access Middleware', () => {
     });
 
     it('viewer should only have view access', async () => {
-      (checkWalletAccess as jest.Mock).mockResolvedValue(true);
-      (checkWalletEditAccess as jest.Mock).mockResolvedValue(false);
-      (checkWalletOwnerAccess as jest.Mock).mockResolvedValue(false);
-      (getUserWalletRole as jest.Mock).mockResolvedValue('viewer');
+      (checkWalletAccess as Mock).mockResolvedValue(true);
+      (checkWalletEditAccess as Mock).mockResolvedValue(false);
+      (checkWalletOwnerAccess as Mock).mockResolvedValue(false);
+      (getUserWalletRole as Mock).mockResolvedValue('viewer');
 
       const req = createMockRequest({
         params: { id: walletId },

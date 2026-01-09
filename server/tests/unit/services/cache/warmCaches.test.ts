@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Cache Warming Tests
  *
@@ -8,37 +9,37 @@
 import { warmCaches } from '../../../../src/services/cache/cacheService';
 
 // Mock the logger to avoid console noise
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
 // Mock metrics
-jest.mock('../../../../src/observability/metrics', () => ({
-  cacheOperationsTotal: { inc: jest.fn() },
+vi.mock('../../../../src/observability/metrics', () => ({
+  cacheOperationsTotal: { inc: vi.fn() },
 }));
 
 // Mock feature flags service
-const mockGetAllStatus = jest.fn();
-jest.mock('../../../../src/services/featureFlags', () => ({
+const mockGetAllStatus = vi.fn();
+vi.mock('../../../../src/services/featureFlags', () => ({
   getFeatureFlagService: () => ({
     getAllStatus: mockGetAllStatus,
   }),
 }));
 
 // Mock block height service
-const mockGetBlockHeight = jest.fn();
-jest.mock('../../../../src/services/bitcoin/utils/blockHeight', () => ({
+const mockGetBlockHeight = vi.fn();
+vi.mock('../../../../src/services/bitcoin/utils/blockHeight', () => ({
   getBlockHeight: () => mockGetBlockHeight(),
 }));
 
 // Mock price service
-const mockGetPrice = jest.fn();
-jest.mock('../../../../src/services/price', () => ({
+const mockGetPrice = vi.fn();
+vi.mock('../../../../src/services/price', () => ({
   getPriceService: () => ({
     getPrice: () => mockGetPrice(),
   }),
@@ -46,7 +47,7 @@ jest.mock('../../../../src/services/price', () => ({
 
 describe('warmCaches', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Set up default successful mocks
     mockGetAllStatus.mockResolvedValue([{ flag: 'test', enabled: true }]);
     mockGetBlockHeight.mockResolvedValue(850000);

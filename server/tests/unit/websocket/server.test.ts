@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * WebSocket Server Unit Tests
  *
@@ -16,13 +17,13 @@ import { EventEmitter } from 'events';
 import { createHmac } from 'crypto';
 
 // Mock dependencies before imports
-const mockVerifyToken = jest.fn();
-const mockCheckWalletAccess = jest.fn();
+const mockVerifyToken = vi.fn();
+const mockCheckWalletAccess = vi.fn();
 const mockLogger = {
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  debug: jest.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
 };
 
 // Mock config
@@ -31,19 +32,19 @@ const mockConfig = {
   jwtSecret: 'test-jwt-secret',
 };
 
-jest.mock('../../../src/utils/jwt', () => ({
+vi.mock('../../../src/utils/jwt', () => ({
   verifyToken: mockVerifyToken,
 }));
 
-jest.mock('../../../src/services/wallet', () => ({
+vi.mock('../../../src/services/wallet', () => ({
   checkWalletAccess: mockCheckWalletAccess,
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => mockLogger,
 }));
 
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   __esModule: true,
   default: mockConfig,
 }));
@@ -55,7 +56,7 @@ import {
 
 describe('WebSocket Server', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.MAX_WEBSOCKET_CONNECTIONS = '10000';
     process.env.MAX_WEBSOCKET_PER_USER = '10';
   });
@@ -342,7 +343,7 @@ describe('WebSocket Server', () => {
 
 describe('Gateway WebSocket Server', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockConfig.gatewaySecret = 'test-gateway-secret-key';
   });
 

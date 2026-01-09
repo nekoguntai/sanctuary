@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Event Versioning Tests
  *
@@ -19,12 +20,12 @@ import {
 } from '../../../src/websocket/eventVersioning';
 
 // Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 

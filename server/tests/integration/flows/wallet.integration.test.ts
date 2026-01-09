@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Wallet Lifecycle Integration Tests
  *
@@ -33,7 +34,7 @@ import { PrismaClient } from '@prisma/client';
 import { Express } from 'express';
 
 // Increase timeout for integration tests
-jest.setTimeout(30000);
+vi.setConfig(30000);
 
 // Skip all tests if no database is available
 const describeWithDb = canRunIntegrationTests() ? describe : describe.skip;
@@ -44,13 +45,13 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
   beforeAll(async () => {
     // Mock external services before importing routes
-    jest.doMock('../../../src/services/bitcoin/electrum', () => ({
-      getElectrumClient: jest.fn().mockResolvedValue({
-        connect: jest.fn().mockResolvedValue(undefined),
-        isConnected: jest.fn().mockReturnValue(true),
-        blockchainScripthash_getBalance: jest.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
-        blockchainScripthash_listunspent: jest.fn().mockResolvedValue([]),
-        blockchainScripthash_getHistory: jest.fn().mockResolvedValue([]),
+    vi.doMock('../../../src/services/bitcoin/electrum', () => ({
+      getElectrumClient: vi.fn().mockResolvedValue({
+        connect: vi.fn().mockResolvedValue(undefined),
+        isConnected: vi.fn().mockReturnValue(true),
+        blockchainScripthash_getBalance: vi.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
+        blockchainScripthash_listunspent: vi.fn().mockResolvedValue([]),
+        blockchainScripthash_getHistory: vi.fn().mockResolvedValue([]),
       }),
     }));
 
@@ -61,7 +62,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
   afterAll(async () => {
     resetTestApp();
     await teardownTestDatabase();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {

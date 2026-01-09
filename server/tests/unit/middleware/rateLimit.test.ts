@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Rate Limit Middleware Tests
  *
@@ -9,20 +10,20 @@ import { rateLimit, rateLimitByUser, rateLimitByIpAndKey, rateLimitByKey } from 
 import { rateLimitService } from '../../../src/services/rateLimiting';
 
 // Mock the rate limit service
-jest.mock('../../../src/services/rateLimiting', () => ({
+vi.mock('../../../src/services/rateLimiting', () => ({
   rateLimitService: {
-    consume: jest.fn(),
-    getPolicy: jest.fn().mockReturnValue({ message: 'Rate limit exceeded' }),
+    consume: vi.fn(),
+    getPolicy: vi.fn().mockReturnValue({ message: 'Rate limit exceeded' }),
   },
 }));
 
 // Mock logger to avoid console output during tests
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -30,14 +31,14 @@ describe('Rate Limit Middleware', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
   let mockNext: NextFunction;
-  let jsonMock: jest.Mock;
-  let setHeaderMock: jest.Mock;
-  let statusMock: jest.Mock;
+  let jsonMock: Mock;
+  let setHeaderMock: Mock;
+  let statusMock: Mock;
 
   beforeEach(() => {
-    jsonMock = jest.fn();
-    setHeaderMock = jest.fn();
-    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+    jsonMock = vi.fn();
+    setHeaderMock = vi.fn();
+    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
 
     mockReq = {
       headers: {},
@@ -52,14 +53,14 @@ describe('Rate Limit Middleware', () => {
       json: jsonMock,
     };
 
-    mockNext = jest.fn();
+    mockNext = vi.fn();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('rateLimit (by IP)', () => {
     it('should allow request when rate limit is not exceeded', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -74,7 +75,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should block request when rate limit is exceeded', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: false,
         limit: 100,
         remaining: 0,
@@ -90,7 +91,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should return 503 when rate limit service throws error (fail-closed)', async () => {
-      (rateLimitService.consume as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+      (rateLimitService.consume as Mock).mockRejectedValue(new Error('Redis connection failed'));
 
       const middleware = rateLimit('test-policy');
       await middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -106,7 +107,7 @@ describe('Rate Limit Middleware', () => {
 
   describe('rateLimitByUser', () => {
     it('should allow request when rate limit is not exceeded', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -123,7 +124,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should fall back to IP when no user ID', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -138,7 +139,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should return 503 when rate limit service throws error (fail-closed) - with user', async () => {
-      (rateLimitService.consume as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+      (rateLimitService.consume as Mock).mockRejectedValue(new Error('Redis connection failed'));
       (mockReq as any).user = { userId: 'user-123' };
 
       const middleware = rateLimitByUser('test-policy');
@@ -153,7 +154,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should return 503 when rate limit service throws error (fail-closed) - IP fallback', async () => {
-      (rateLimitService.consume as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+      (rateLimitService.consume as Mock).mockRejectedValue(new Error('Redis connection failed'));
 
       const middleware = rateLimitByUser('test-policy');
       await middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -165,7 +166,7 @@ describe('Rate Limit Middleware', () => {
 
   describe('rateLimitByIpAndKey', () => {
     it('should allow request when rate limit is not exceeded', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -182,7 +183,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should return 503 when rate limit service throws error (fail-closed)', async () => {
-      (rateLimitService.consume as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+      (rateLimitService.consume as Mock).mockRejectedValue(new Error('Redis connection failed'));
 
       const middleware = rateLimitByIpAndKey('test-policy', (req) => req.body?.username);
       await middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -194,7 +195,7 @@ describe('Rate Limit Middleware', () => {
 
   describe('rateLimitByKey', () => {
     it('should allow request when rate limit is not exceeded', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -209,7 +210,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should return 503 when rate limit service throws error (fail-closed)', async () => {
-      (rateLimitService.consume as jest.Mock).mockRejectedValue(new Error('Redis connection failed'));
+      (rateLimitService.consume as Mock).mockRejectedValue(new Error('Redis connection failed'));
 
       const middleware = rateLimitByKey('test-policy', () => 'custom-key');
       await middleware(mockReq as Request, mockRes as Response, mockNext);
@@ -226,7 +227,7 @@ describe('Rate Limit Middleware', () => {
   describe('Rate limit headers', () => {
     it('should set rate limit headers on successful request', async () => {
       const resetAt = Date.now() + 60000;
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: true,
         limit: 100,
         remaining: 99,
@@ -242,7 +243,7 @@ describe('Rate Limit Middleware', () => {
     });
 
     it('should set Retry-After header when rate limited', async () => {
-      (rateLimitService.consume as jest.Mock).mockResolvedValue({
+      (rateLimitService.consume as Mock).mockResolvedValue({
         allowed: false,
         limit: 100,
         remaining: 0,

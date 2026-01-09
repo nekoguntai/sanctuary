@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Security Audit Tests
  *
@@ -32,7 +33,7 @@ import * as bcrypt from 'bcryptjs';
 // ============================================================================
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
@@ -41,7 +42,7 @@ jest.mock('../../../src/models/prisma', () => ({
 const originalNodeEnv = process.env.NODE_ENV;
 
 // Mock config - we'll reset this for production tests
-jest.mock('../../../src/config', () => ({
+vi.mock('../../../src/config', () => ({
   __esModule: true,
   default: {
     jwtSecret: 'test-jwt-secret-key-for-testing-only',
@@ -51,10 +52,10 @@ jest.mock('../../../src/config', () => ({
 }));
 
 // Mock audit service
-jest.mock('../../../src/services/auditService', () => ({
+vi.mock('../../../src/services/auditService', () => ({
   auditService: {
-    log: jest.fn().mockResolvedValue(undefined),
-    logFromRequest: jest.fn().mockResolvedValue(undefined),
+    log: vi.fn().mockResolvedValue(undefined),
+    logFromRequest: vi.fn().mockResolvedValue(undefined),
   },
   AuditAction: {
     LOGIN: 'LOGIN',
@@ -67,7 +68,7 @@ jest.mock('../../../src/services/auditService', () => ({
     AUTH: 'AUTH',
     USER: 'USER',
   },
-  getClientInfo: jest.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
+  getClientInfo: vi.fn().mockReturnValue({ ipAddress: '127.0.0.1', userAgent: 'test' }),
 }));
 
 // Import utilities after mocks
@@ -76,7 +77,7 @@ import { validatePasswordStrength, hashPassword, verifyPassword } from '../../..
 describe('Security Audit Tests', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterAll(() => {

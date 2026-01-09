@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Wallet API Routes Tests
  *
@@ -16,41 +17,41 @@ import {
 } from '../../helpers/testUtils';
 
 // Mock Prisma
-jest.mock('../../../src/models/prisma', () => ({
+vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock wallet service
-const mockGetUserWallets = jest.fn();
-const mockCreateWallet = jest.fn();
-const mockUpdateWallet = jest.fn();
-const mockDeleteWallet = jest.fn();
-const mockRepairWalletDescriptor = jest.fn();
+const mockGetUserWallets = vi.fn();
+const mockCreateWallet = vi.fn();
+const mockUpdateWallet = vi.fn();
+const mockDeleteWallet = vi.fn();
+const mockRepairWalletDescriptor = vi.fn();
 
-jest.mock('../../../src/services/wallet', () => ({
+vi.mock('../../../src/services/wallet', () => ({
   getUserWallets: (...args: any[]) => mockGetUserWallets(...args),
   createWallet: (...args: any[]) => mockCreateWallet(...args),
   updateWallet: (...args: any[]) => mockUpdateWallet(...args),
   deleteWallet: (...args: any[]) => mockDeleteWallet(...args),
   repairWalletDescriptor: (...args: any[]) => mockRepairWalletDescriptor(...args),
-  checkWalletAccess: jest.fn().mockResolvedValue(true),
-  checkWalletEditAccess: jest.fn().mockResolvedValue(true),
+  checkWalletAccess: vi.fn().mockResolvedValue(true),
+  checkWalletEditAccess: vi.fn().mockResolvedValue(true),
 }));
 
 // Mock wallet import
-jest.mock('../../../src/services/walletImport', () => ({
-  importWallet: jest.fn(),
-  parseDescriptor: jest.fn(),
+vi.mock('../../../src/services/walletImport', () => ({
+  importWallet: vi.fn(),
+  parseDescriptor: vi.fn(),
 }));
 
 // Mock logger
-jest.mock('../../../src/utils/logger', () => ({
+vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -91,7 +92,7 @@ function buildWalletExportData(wallet: any) {
 describe('Wallets API', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('GET /wallets', () => {

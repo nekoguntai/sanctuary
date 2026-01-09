@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Import Format Registry Tests
  *
@@ -8,12 +9,12 @@ import { ImportFormatRegistry } from '../../../../src/services/import/registry';
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../../../../src/services/import/types';
 
 // Mock the logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
@@ -25,8 +26,8 @@ function createMockHandler(overrides: Partial<ImportFormatHandler> = {}): Import
     description: 'A mock handler for testing',
     priority: 50,
     fileExtensions: ['.txt'],
-    canHandle: jest.fn().mockReturnValue({ detected: false, confidence: 0 }),
-    parse: jest.fn().mockReturnValue({
+    canHandle: vi.fn().mockReturnValue({ detected: false, confidence: 0 }),
+    parse: vi.fn().mockReturnValue({
       parsed: {
         type: 'single_sig',
         scriptType: 'native_segwit',
@@ -144,12 +145,12 @@ describe('ImportFormatRegistry', () => {
       const nonDetecting = createMockHandler({
         id: 'non_detecting',
         priority: 90,
-        canHandle: jest.fn().mockReturnValue({ detected: false, confidence: 0 }),
+        canHandle: vi.fn().mockReturnValue({ detected: false, confidence: 0 }),
       });
       const detecting = createMockHandler({
         id: 'detecting',
         priority: 50,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
       });
 
       registry.register(nonDetecting);
@@ -166,7 +167,7 @@ describe('ImportFormatRegistry', () => {
       const registry = new ImportFormatRegistry();
       const handler = createMockHandler({
         id: 'non_detecting',
-        canHandle: jest.fn().mockReturnValue({ detected: false, confidence: 0 }),
+        canHandle: vi.fn().mockReturnValue({ detected: false, confidence: 0 }),
       });
 
       registry.register(handler);
@@ -183,7 +184,7 @@ describe('ImportFormatRegistry', () => {
       const lowPriority = createMockHandler({
         id: 'low',
         priority: 10,
-        canHandle: jest.fn().mockImplementation(() => {
+        canHandle: vi.fn().mockImplementation(() => {
           callOrder.push('low');
           return { detected: false, confidence: 0 };
         }),
@@ -191,7 +192,7 @@ describe('ImportFormatRegistry', () => {
       const highPriority = createMockHandler({
         id: 'high',
         priority: 90,
-        canHandle: jest.fn().mockImplementation(() => {
+        canHandle: vi.fn().mockImplementation(() => {
           callOrder.push('high');
           return { detected: false, confidence: 0 };
         }),
@@ -209,14 +210,14 @@ describe('ImportFormatRegistry', () => {
       const throwingHandler = createMockHandler({
         id: 'throwing',
         priority: 90,
-        canHandle: jest.fn().mockImplementation(() => {
+        canHandle: vi.fn().mockImplementation(() => {
           throw new Error('Handler error');
         }),
       });
       const workingHandler = createMockHandler({
         id: 'working',
         priority: 50,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
       });
 
       registry.register(throwingHandler);
@@ -234,12 +235,12 @@ describe('ImportFormatRegistry', () => {
       const handler1 = createMockHandler({
         id: 'handler1',
         priority: 50,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
       });
       const handler2 = createMockHandler({
         id: 'handler2',
         priority: 60,
-        canHandle: jest.fn().mockReturnValue({ detected: false, confidence: 20 }),
+        canHandle: vi.fn().mockReturnValue({ detected: false, confidence: 20 }),
       });
 
       registry.register(handler1);
@@ -257,12 +258,12 @@ describe('ImportFormatRegistry', () => {
       const lowConfidence = createMockHandler({
         id: 'low',
         priority: 90,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 30 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 30 }),
       });
       const highConfidence = createMockHandler({
         id: 'high',
         priority: 10,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 90 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 90 }),
       });
 
       registry.register(lowConfidence);
@@ -286,8 +287,8 @@ describe('ImportFormatRegistry', () => {
       };
       const handler = createMockHandler({
         id: 'parser',
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
-        parse: jest.fn().mockReturnValue({ parsed: mockParsed }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        parse: vi.fn().mockReturnValue({ parsed: mockParsed }),
       });
 
       registry.register(handler);
@@ -303,12 +304,12 @@ describe('ImportFormatRegistry', () => {
       const handler1 = createMockHandler({
         id: 'handler1',
         priority: 90,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 90 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 90 }),
       });
       const handler2 = createMockHandler({
         id: 'handler2',
         priority: 10,
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 10 }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 10 }),
       });
 
       registry.register(handler1);
@@ -325,7 +326,7 @@ describe('ImportFormatRegistry', () => {
       const registry = new ImportFormatRegistry();
       const handler = createMockHandler({
         id: 'non_detecting',
-        canHandle: jest.fn().mockReturnValue({ detected: false, confidence: 0 }),
+        canHandle: vi.fn().mockReturnValue({ detected: false, confidence: 0 }),
       });
 
       registry.register(handler);
@@ -347,8 +348,8 @@ describe('ImportFormatRegistry', () => {
       const registry = new ImportFormatRegistry();
       const handler = createMockHandler({
         id: 'validating',
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
-        validate: jest.fn().mockReturnValue({ valid: false, errors: ['Invalid device count'] }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        validate: vi.fn().mockReturnValue({ valid: false, errors: ['Invalid device count'] }),
       });
 
       registry.register(handler);
@@ -366,9 +367,9 @@ describe('ImportFormatRegistry', () => {
       };
       const handler = createMockHandler({
         id: 'validating',
-        canHandle: jest.fn().mockReturnValue({ detected: true, confidence: 80 }),
-        parse: jest.fn().mockReturnValue({ parsed: mockParsed }),
-        validate: jest.fn().mockReturnValue({ valid: true }),
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        parse: vi.fn().mockReturnValue({ parsed: mockParsed }),
+        validate: vi.fn().mockReturnValue({ valid: true }),
       });
 
       registry.register(handler);

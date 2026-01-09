@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Job Queue Tests
  *
@@ -39,7 +40,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'normal',
         data: { id: '1' },
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       };
 
       const result = queue.add(job);
@@ -54,7 +55,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'normal',
         data: { id: '1' },
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       };
 
       queue.add(job);
@@ -70,7 +71,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'low',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       };
 
       const highJob: Job = {
@@ -78,7 +79,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'high',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       };
 
       const criticalJob: Job = {
@@ -86,7 +87,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'critical',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       };
 
       // Add in reverse priority order
@@ -103,7 +104,7 @@ describe('JobQueue', () => {
 
   describe('processing', () => {
     it('should process jobs when started', async () => {
-      const handler = jest.fn().mockResolvedValue(undefined);
+      const handler = vi.fn().mockResolvedValue(undefined);
 
       queue.add({
         id: 'job-1',
@@ -203,7 +204,7 @@ describe('JobQueue', () => {
   describe('retry', () => {
     it('should retry failed jobs', async () => {
       let attempts = 0;
-      const handler = jest.fn().mockImplementation(async () => {
+      const handler = vi.fn().mockImplementation(async () => {
         attempts++;
         if (attempts < 2) {
           throw new Error('Simulated failure');
@@ -227,7 +228,7 @@ describe('JobQueue', () => {
     });
 
     it('should mark job as failed after max retries', async () => {
-      const handler = jest.fn().mockRejectedValue(new Error('Always fails'));
+      const handler = vi.fn().mockRejectedValue(new Error('Always fails'));
 
       queue.add({
         id: 'fail-job',
@@ -248,7 +249,7 @@ describe('JobQueue', () => {
 
   describe('timeout', () => {
     it('should timeout long-running jobs', async () => {
-      const handler = jest.fn().mockImplementation(
+      const handler = vi.fn().mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 10000))
       );
 
@@ -276,7 +277,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'low',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       });
 
       const result = queue.upgradePriority('upgrade-job', 'high');
@@ -292,7 +293,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'high',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       });
 
       const result = queue.upgradePriority('downgrade-job', 'low');
@@ -310,7 +311,7 @@ describe('JobQueue', () => {
           type: 'test',
           priority: 'normal',
           data: {},
-          handler: jest.fn().mockResolvedValue(undefined),
+          handler: vi.fn().mockResolvedValue(undefined),
         });
       }
 
@@ -328,7 +329,7 @@ describe('JobQueue', () => {
         type: 'test',
         priority: 'high',
         data: {},
-        handler: jest.fn().mockResolvedValue(undefined),
+        handler: vi.fn().mockResolvedValue(undefined),
       });
 
       const stats = queue.getStats();

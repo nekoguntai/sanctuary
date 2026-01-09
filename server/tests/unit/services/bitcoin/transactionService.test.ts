@@ -1,3 +1,4 @@
+import { vi, Mock } from 'vitest';
 /**
  * Transaction Service Tests
  *
@@ -9,80 +10,53 @@ import { mockPrismaClient, resetPrismaMocks } from '../../../mocks/prisma';
 import { sampleUtxos, sampleWallets, testnetAddresses, multisigKeyInfo } from '../../../fixtures/bitcoin';
 import * as bitcoin from 'bitcoinjs-lib';
 
+// Hoist mock variables for use in vi.mock() factories
+const { mockParseDescriptor } = vi.hoisted(() => ({
+  mockParseDescriptor: vi.fn(),
+}));
+
 // Mock the Prisma client before importing the service
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock the nodeClient - getTransaction returns raw hex string when verbose=false
-jest.mock('../../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: jest.fn().mockResolvedValue({
-    getTransaction: jest.fn().mockResolvedValue('0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000'),
-    broadcastTransaction: jest.fn().mockResolvedValue('mock-txid'),
-    getBlockHeight: jest.fn().mockResolvedValue(800000),
+vi.mock('../../../../src/services/bitcoin/nodeClient', () => ({
+  getNodeClient: vi.fn().mockResolvedValue({
+    getTransaction: vi.fn().mockResolvedValue('0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000'),
+    broadcastTransaction: vi.fn().mockResolvedValue('mock-txid'),
+    getBlockHeight: vi.fn().mockResolvedValue(800000),
   }),
 }));
 
 // Mock the electrum client
-jest.mock('../../../../src/services/bitcoin/electrum', () => ({
-  getElectrumClient: jest.fn().mockReturnValue({
-    connect: jest.fn().mockResolvedValue(undefined),
-    isConnected: jest.fn().mockReturnValue(true),
-    getTransaction: jest.fn().mockResolvedValue(null),
+vi.mock('../../../../src/services/bitcoin/electrum', () => ({
+  getElectrumClient: vi.fn().mockReturnValue({
+    connect: vi.fn().mockResolvedValue(undefined),
+    isConnected: vi.fn().mockReturnValue(true),
+    getTransaction: vi.fn().mockResolvedValue(null),
   }),
 }));
 
 // Mock blockchain service
-jest.mock('../../../../src/services/bitcoin/blockchain', () => ({
-  broadcastTransaction: jest.fn().mockResolvedValue({ txid: 'mock-txid', broadcasted: true }),
-  recalculateWalletBalances: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../../src/services/bitcoin/blockchain', () => ({
+  broadcastTransaction: vi.fn().mockResolvedValue({ txid: 'mock-txid', broadcasted: true }),
+  recalculateWalletBalances: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock address derivation - supports both single-sig and multisig
-// Using only 2 keys for 2-of-2 multisig (both keys are valid testnet tpubs)
-const mockParseDescriptor = jest.fn().mockImplementation((descriptor: string) => {
-  // Check if it's a multisig descriptor
-  if (descriptor.startsWith('wsh(sortedmulti(') || descriptor.startsWith('wsh(multi(')) {
-    return {
-      type: 'wsh-sortedmulti',
-      quorum: 2,
-      keys: [
-        {
-          fingerprint: 'aabbccdd',
-          accountPath: "48'/1'/0'/2'",
-          xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
-          derivationPath: '0/*',
-        },
-        {
-          fingerprint: 'eeff0011',
-          accountPath: "48'/1'/0'/2'",
-          xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
-          derivationPath: '0/*',
-        },
-      ],
-    };
-  }
-  // Single-sig descriptor
-  return {
-    type: 'wpkh',
-    xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
-    fingerprint: 'aabbccdd',
-    accountPath: "84'/1'/0'",
-  };
-});
-
-jest.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
+vi.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
   parseDescriptor: mockParseDescriptor,
-  convertToStandardXpub: jest.fn().mockImplementation((xpub: string) => {
+  convertToStandardXpub: vi.fn().mockImplementation((xpub: string) => {
     // Convert tpub to standard format (they're already standard in our test fixtures)
     return xpub;
   }),
 }));
 
 // Mock draft lock service
-jest.mock('../../../../src/services/draftLockService', () => ({
-  unlockUtxosForDraft: jest.fn().mockResolvedValue(0),
+vi.mock('../../../../src/services/draftLockService', () => ({
+  unlockUtxosForDraft: vi.fn().mockResolvedValue(0),
 }));
 
 // Now import the service after mocks are set up
@@ -100,6 +74,8 @@ import {
 } from '../../../../src/services/bitcoin/transactionService';
 import { estimateTransactionSize, calculateFee } from '../../../../src/services/bitcoin/utils';
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
+import * as draftLockService from '../../../../src/services/draftLockService';
+import * as nodeClient from '../../../../src/services/bitcoin/nodeClient';
 
 describe('Transaction Service', () => {
   beforeEach(() => {
@@ -113,6 +89,38 @@ describe('Transaction Service', () => {
         return Promise.resolve({ key: 'dustThreshold', value: '546' });
       }
       return Promise.resolve(null);
+    });
+    // Set up mockParseDescriptor implementation - supports both single-sig and multisig
+    // Using only 2 keys for 2-of-2 multisig (both keys are valid testnet tpubs)
+    mockParseDescriptor.mockImplementation((descriptor: string) => {
+      // Check if it's a multisig descriptor
+      if (descriptor.startsWith('wsh(sortedmulti(') || descriptor.startsWith('wsh(multi(')) {
+        return {
+          type: 'wsh-sortedmulti',
+          quorum: 2,
+          keys: [
+            {
+              fingerprint: 'aabbccdd',
+              accountPath: "48'/1'/0'/2'",
+              xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+              derivationPath: '0/*',
+            },
+            {
+              fingerprint: 'eeff0011',
+              accountPath: "48'/1'/0'/2'",
+              xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+              derivationPath: '0/*',
+            },
+          ],
+        };
+      }
+      // Single-sig descriptor
+      return {
+        type: 'wpkh',
+        xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+        fingerprint: 'aabbccdd',
+        accountPath: "84'/1'/0'",
+      };
     });
   });
 
@@ -615,13 +623,13 @@ describe('Transaction Service', () => {
 
     beforeEach(() => {
       // Reset broadcast mock
-      (broadcastTransaction as jest.Mock).mockResolvedValue({
+      (broadcastTransaction as Mock).mockResolvedValue({
         txid: 'new-txid-from-broadcast',
         broadcasted: true,
       });
 
       // Reset recalculateWalletBalances mock
-      (recalculateWalletBalances as jest.Mock).mockResolvedValue(undefined);
+      (recalculateWalletBalances as Mock).mockResolvedValue(undefined);
 
       // Mock UTXO update
       mockPrismaClient.uTXO.update.mockResolvedValue({});
@@ -769,7 +777,7 @@ describe('Transaction Service', () => {
     });
 
     it('should throw error when broadcast fails', async () => {
-      (broadcastTransaction as jest.Mock).mockResolvedValue({
+      (broadcastTransaction as Mock).mockResolvedValue({
         txid: null,
         broadcasted: false,
       });
@@ -803,7 +811,7 @@ describe('Transaction Service', () => {
     });
 
     it('should not call recalculateWalletBalances when broadcast fails', async () => {
-      (broadcastTransaction as jest.Mock).mockResolvedValue({
+      (broadcastTransaction as Mock).mockResolvedValue({
         txid: null,
         broadcasted: false,
       });
@@ -831,7 +839,7 @@ describe('Transaction Service', () => {
       // Note: The actual behavior depends on implementation - if recalculateWalletBalances
       // is called with await, errors will propagate. If it's fire-and-forget, they won't.
       // This test documents the expected behavior.
-      (recalculateWalletBalances as jest.Mock).mockRejectedValueOnce(new Error('Balance calculation failed'));
+      (recalculateWalletBalances as Mock).mockRejectedValueOnce(new Error('Balance calculation failed'));
 
       const metadata = {
         recipient,
@@ -1038,8 +1046,7 @@ describe('Transaction Service', () => {
         const draftId = 'draft-to-broadcast';
 
         // Mock the unlockUtxosForDraft function behavior
-        const { unlockUtxosForDraft } = require('../../../../src/services/draftLockService');
-        (unlockUtxosForDraft as jest.Mock).mockResolvedValue(2);
+        vi.mocked(draftLockService.unlockUtxosForDraft).mockResolvedValue(2);
 
         const metadata = {
           recipient,
@@ -1055,7 +1062,7 @@ describe('Transaction Service', () => {
 
         await broadcastAndSave(walletId, undefined, metadata);
 
-        expect(unlockUtxosForDraft).toHaveBeenCalledWith(draftId);
+        expect(draftLockService.unlockUtxosForDraft).toHaveBeenCalledWith(draftId);
       });
     });
   });
@@ -1674,8 +1681,7 @@ describe('Transaction Service', () => {
       await createTransaction(walletId, recipient, amount, feeRate);
 
       // getNodeClient should be called to fetch raw transaction
-      const { getNodeClient } = require('../../../../src/services/bitcoin/nodeClient');
-      expect(getNodeClient).toHaveBeenCalled();
+      expect(nodeClient.getNodeClient).toHaveBeenCalled();
     });
   });
 
@@ -2134,11 +2140,11 @@ describe('Transaction Service', () => {
     const recipient = testnetAddresses.nativeSegwit[0];
 
     beforeEach(() => {
-      (broadcastTransaction as jest.Mock).mockResolvedValue({
+      (broadcastTransaction as Mock).mockResolvedValue({
         txid: 'new-txid-from-broadcast',
         broadcasted: true,
       });
-      (recalculateWalletBalances as jest.Mock).mockResolvedValue(undefined);
+      (recalculateWalletBalances as Mock).mockResolvedValue(undefined);
       mockPrismaClient.uTXO.update.mockResolvedValue({});
       mockPrismaClient.transaction.create.mockResolvedValue({
         id: 'tx-1',
@@ -2197,7 +2203,7 @@ describe('Transaction Service', () => {
     });
 
     it('should handle broadcast timeout/network error', async () => {
-      (broadcastTransaction as jest.Mock).mockRejectedValueOnce(new Error('Network timeout'));
+      (broadcastTransaction as Mock).mockRejectedValueOnce(new Error('Network timeout'));
 
       const metadata = {
         recipient,

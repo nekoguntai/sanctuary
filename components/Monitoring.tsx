@@ -17,9 +17,14 @@ import {
   Info,
   AlertCircle,
   Loader2,
+  Key,
+  Eye,
+  EyeOff,
+  User,
+  ShieldOff,
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
-import type { MonitoringService, MonitoringServicesResponse } from '../src/api/admin';
+import type { MonitoringService, MonitoringServicesResponse, GrafanaConfig } from '../src/api/admin';
 import { createLogger } from '../utils/logger';
 import { Button } from './ui/Button';
 
@@ -63,14 +68,29 @@ const StatusBadge: React.FC<{ status?: MonitoringService['status'] }> = ({ statu
 };
 
 /**
+ * Credentials display for services that require authentication
+ */
+interface ServiceCredentials {
+  username: string;
+  passwordHint: string;
+  passwordSource: string;
+  hasAuth: boolean;
+}
+
+/**
  * Service card component
  */
 const ServiceCard: React.FC<{
   service: MonitoringService;
   onEditUrl: (service: MonitoringService) => void;
   hostname: string;
-}> = ({ service, onEditUrl, hostname }) => {
+  credentials?: ServiceCredentials;
+  anonymousAccess?: boolean;
+  onToggleAnonymous?: () => void;
+  isTogglingAnonymous?: boolean;
+}> = ({ service, onEditUrl, hostname, credentials, anonymousAccess, onToggleAnonymous, isTogglingAnonymous }) => {
   const Icon = iconMap[service.icon] || Activity;
+  const [showPassword, setShowPassword] = useState(false);
 
   // Generate actual URL by replacing {host} placeholder
   const actualUrl = service.url.includes('{host}')
@@ -93,6 +113,80 @@ const ServiceCard: React.FC<{
         </div>
         <StatusBadge status={service.status} />
       </div>
+
+      {/* Credentials section */}
+      {credentials && (
+        <div className="mt-3 p-3 rounded-lg bg-sanctuary-50 dark:bg-sanctuary-800/50 border border-sanctuary-200 dark:border-sanctuary-700">
+          {credentials.hasAuth ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center space-x-2 text-sanctuary-600 dark:text-sanctuary-400">
+                  <User className="w-3.5 h-3.5" />
+                  <span>Username:</span>
+                </div>
+                <span className="font-mono text-sanctuary-900 dark:text-sanctuary-100">{credentials.username}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center space-x-2 text-sanctuary-600 dark:text-sanctuary-400">
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Password:</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="font-mono text-sanctuary-900 dark:text-sanctuary-100">
+                    {showPassword ? credentials.passwordHint : '••••••••'}
+                  </span>
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="p-1 text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+                    title={showPassword ? 'Hide password hint' : 'Show password hint'}
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] text-sanctuary-400 mt-1">
+                Password from {credentials.passwordSource} environment variable
+              </p>
+
+              {/* Anonymous access toggle for Grafana */}
+              {onToggleAnonymous && (
+                <div className="mt-2 pt-2 border-t border-sanctuary-200 dark:border-sanctuary-700">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center space-x-2 text-sm text-sanctuary-600 dark:text-sanctuary-400">
+                      <ShieldOff className="w-3.5 h-3.5" />
+                      <span>Anonymous viewing</span>
+                    </div>
+                    <button
+                      onClick={onToggleAnonymous}
+                      disabled={isTogglingAnonymous}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        anonymousAccess
+                          ? 'bg-primary-600'
+                          : 'bg-sanctuary-300 dark:bg-sanctuary-600'
+                      } ${isTogglingAnonymous ? 'opacity-50' : ''}`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          anonymousAccess ? 'translate-x-4.5' : 'translate-x-1'
+                        }`}
+                        style={{ transform: anonymousAccess ? 'translateX(16px)' : 'translateX(4px)' }}
+                      />
+                    </button>
+                  </label>
+                  <p className="text-[9px] text-sanctuary-400 mt-1">
+                    Requires container restart to take effect
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 text-sm text-emerald-600 dark:text-emerald-400">
+              <ShieldOff className="w-4 h-4" />
+              <span>No authentication required</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center space-x-2 text-sm text-sanctuary-600 dark:text-sanctuary-400">
@@ -137,6 +231,10 @@ export const Monitoring: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Grafana config state
+  const [grafanaConfig, setGrafanaConfig] = useState<GrafanaConfig | null>(null);
+  const [isTogglingAnonymous, setIsTogglingAnonymous] = useState(false);
+
   // Edit URL modal state
   const [editingService, setEditingService] = useState<MonitoringService | null>(null);
   const [editUrl, setEditUrl] = useState('');
@@ -151,8 +249,14 @@ export const Monitoring: React.FC = () => {
     setError(null);
 
     try {
-      const result = await adminApi.getMonitoringServices(checkHealth);
-      setData(result);
+      const [servicesResult, grafanaResult] = await Promise.all([
+        adminApi.getMonitoringServices(checkHealth),
+        adminApi.getGrafanaConfig().catch(() => null), // Non-fatal if fails
+      ]);
+      setData(servicesResult);
+      if (grafanaResult) {
+        setGrafanaConfig(grafanaResult);
+      }
     } catch (err) {
       log.error('Failed to load monitoring services', { error: err });
       setError('Failed to load monitoring services');
@@ -165,6 +269,44 @@ export const Monitoring: React.FC = () => {
   useEffect(() => {
     loadServices(true); // Check health on initial load
   }, [loadServices]);
+
+  // Toggle anonymous access for Grafana
+  const handleToggleAnonymous = useCallback(async () => {
+    if (!grafanaConfig) return;
+
+    setIsTogglingAnonymous(true);
+    try {
+      const newValue = !grafanaConfig.anonymousAccess;
+      await adminApi.updateGrafanaConfig({ anonymousAccess: newValue });
+      setGrafanaConfig({ ...grafanaConfig, anonymousAccess: newValue });
+    } catch (err) {
+      log.error('Failed to toggle anonymous access', { error: err });
+    } finally {
+      setIsTogglingAnonymous(false);
+    }
+  }, [grafanaConfig]);
+
+  // Build credentials map for each service
+  const getCredentialsForService = useCallback((serviceId: string): ServiceCredentials | undefined => {
+    if (serviceId === 'grafana' && grafanaConfig) {
+      return {
+        username: grafanaConfig.username,
+        passwordHint: grafanaConfig.passwordHint,
+        passwordSource: grafanaConfig.passwordSource,
+        hasAuth: true,
+      };
+    }
+    // Prometheus and Jaeger don't have authentication by default
+    if (serviceId === 'prometheus' || serviceId === 'jaeger') {
+      return {
+        username: '',
+        passwordHint: '',
+        passwordSource: '',
+        hasAuth: false,
+      };
+    }
+    return undefined;
+  }, [grafanaConfig]);
 
   const handleEditUrl = (service: MonitoringService) => {
     setEditingService(service);
@@ -269,6 +411,10 @@ export const Monitoring: React.FC = () => {
               service={service}
               onEditUrl={handleEditUrl}
               hostname={hostname}
+              credentials={getCredentialsForService(service.id)}
+              anonymousAccess={service.id === 'grafana' ? grafanaConfig?.anonymousAccess : undefined}
+              onToggleAnonymous={service.id === 'grafana' ? handleToggleAnonymous : undefined}
+              isTogglingAnonymous={service.id === 'grafana' ? isTogglingAnonymous : undefined}
             />
           ))}
         </div>

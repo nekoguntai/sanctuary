@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Push Service Tests
  *
@@ -11,44 +12,44 @@
 import { mockPrismaClient, resetPrismaMocks } from '../../../mocks/prisma';
 
 // Mock Prisma
-jest.mock('../../../../src/models/prisma', () => ({
+vi.mock('../../../../src/models/prisma', () => ({
   __esModule: true,
   default: mockPrismaClient,
 }));
 
 // Mock dead letter queue
-jest.mock('../../../../src/services/deadLetterQueue', () => ({
-  recordPushFailure: jest.fn(),
+vi.mock('../../../../src/services/deadLetterQueue', () => ({
+  recordPushFailure: vi.fn(),
 }));
 
 // Mock providers module
 const mockProvider = {
   name: 'mock-provider',
-  send: jest.fn(),
-  isHealthy: jest.fn().mockResolvedValue(true),
+  send: vi.fn(),
+  isHealthy: vi.fn().mockResolvedValue(true),
 };
 
-const mockHasConfiguredProviders = jest.fn();
-const mockGetProviderForPlatform = jest.fn();
+const mockHasConfiguredProviders = vi.fn();
+const mockGetProviderForPlatform = vi.fn();
 
-jest.mock('../../../../src/services/push/providers', () => ({
-  createPushProviderRegistry: jest.fn(() => ({
+vi.mock('../../../../src/services/push/providers', () => ({
+  createPushProviderRegistry: vi.fn(() => ({
     getAll: () => [mockProvider],
-    getHealth: jest.fn().mockResolvedValue({ healthyProviders: 1, providers: [{ name: 'mock', healthy: true }] }),
-    shutdown: jest.fn(),
+    getHealth: vi.fn().mockResolvedValue({ healthyProviders: 1, providers: [{ name: 'mock', healthy: true }] }),
+    shutdown: vi.fn(),
   })),
-  initializePushProviders: jest.fn(),
+  initializePushProviders: vi.fn(),
   getProviderForPlatform: (...args: unknown[]) => mockGetProviderForPlatform(...args),
   hasConfiguredProviders: () => mockHasConfiguredProviders(),
 }));
 
 // Mock logger
-jest.mock('../../../../src/utils/logger', () => ({
+vi.mock('../../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   }),
 }));
 
@@ -63,7 +64,7 @@ import {
 describe('Push Service', () => {
   beforeEach(() => {
     resetPrismaMocks();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockHasConfiguredProviders.mockReturnValue(false);
     mockGetProviderForPlatform.mockReturnValue(null);
   });

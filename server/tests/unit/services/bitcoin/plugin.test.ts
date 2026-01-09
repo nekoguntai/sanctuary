@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Bitcoin Plugin Interface Tests
  *
@@ -28,14 +29,14 @@ function createMockBlockchainProvider(id: string, name: string): BlockchainProvi
     name,
     version: '1.0.0',
     type: 'blockchain',
-    initialize: jest.fn().mockResolvedValue(undefined),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    healthCheck: jest.fn().mockResolvedValue({ healthy: true }),
-    getAddressUtxos: jest.fn().mockResolvedValue([]),
-    getAddressHistory: jest.fn().mockResolvedValue([]),
-    getTransaction: jest.fn().mockResolvedValue(null),
-    broadcastTransaction: jest.fn().mockResolvedValue('txid'),
-    getBlockHeight: jest.fn().mockResolvedValue(800000),
+    initialize: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    healthCheck: vi.fn().mockResolvedValue({ healthy: true }),
+    getAddressUtxos: vi.fn().mockResolvedValue([]),
+    getAddressHistory: vi.fn().mockResolvedValue([]),
+    getTransaction: vi.fn().mockResolvedValue(null),
+    broadcastTransaction: vi.fn().mockResolvedValue('txid'),
+    getBlockHeight: vi.fn().mockResolvedValue(800000),
   };
 }
 
@@ -46,15 +47,15 @@ function createMockFeeEstimator(id: string, name: string): FeeEstimator {
     name,
     version: '1.0.0',
     type: 'fee',
-    initialize: jest.fn().mockResolvedValue(undefined),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    healthCheck: jest.fn().mockResolvedValue({ healthy: true }),
-    getEstimates: jest.fn().mockResolvedValue([
+    initialize: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    healthCheck: vi.fn().mockResolvedValue({ healthy: true }),
+    getEstimates: vi.fn().mockResolvedValue([
       { feeRate: 20, targetBlocks: 1 },
       { feeRate: 10, targetBlocks: 6 },
     ]),
-    getEstimateForTarget: jest.fn().mockResolvedValue(15),
-    getRecommendedFees: jest.fn().mockResolvedValue({
+    getEstimateForTarget: vi.fn().mockResolvedValue(15),
+    getRecommendedFees: vi.fn().mockResolvedValue({
       high: 20,
       medium: 10,
       low: 5,
@@ -70,15 +71,15 @@ function createMockPriceProvider(id: string, name: string): PriceProvider {
     name,
     version: '1.0.0',
     type: 'price',
-    initialize: jest.fn().mockResolvedValue(undefined),
-    shutdown: jest.fn().mockResolvedValue(undefined),
-    healthCheck: jest.fn().mockResolvedValue({ healthy: true }),
-    getCurrentPrice: jest.fn().mockResolvedValue({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    healthCheck: vi.fn().mockResolvedValue({ healthy: true }),
+    getCurrentPrice: vi.fn().mockResolvedValue({
       usd: 50000,
       change24h: 2.5,
       updatedAt: new Date(),
     }),
-    getHistoricalPrices: jest.fn().mockResolvedValue([
+    getHistoricalPrices: vi.fn().mockResolvedValue([
       { date: new Date(), price: 50000 },
     ]),
   };
@@ -260,7 +261,7 @@ describe('Bitcoin Plugin Registry', () => {
     it('should handle initialization errors gracefully', async () => {
       const failingProvider: BlockchainProvider = {
         ...createMockBlockchainProvider('fail', 'Failing'),
-        initialize: jest.fn().mockRejectedValue(new Error('Init failed')),
+        initialize: vi.fn().mockRejectedValue(new Error('Init failed')),
       };
 
       registerPlugin('blockchain', 'fail', failingProvider);
@@ -278,7 +279,7 @@ describe('Bitcoin Plugin Registry', () => {
       const healthy = createMockBlockchainProvider('healthy', 'Healthy');
       const unhealthy: BlockchainProvider = {
         ...createMockBlockchainProvider('unhealthy', 'Unhealthy'),
-        healthCheck: jest.fn().mockResolvedValue({ healthy: false, error: 'Connection lost' }),
+        healthCheck: vi.fn().mockResolvedValue({ healthy: false, error: 'Connection lost' }),
       };
 
       registerPlugin('blockchain', 'healthy', healthy);
@@ -293,7 +294,7 @@ describe('Bitcoin Plugin Registry', () => {
     it('should handle healthCheck errors', async () => {
       const throwing: BlockchainProvider = {
         ...createMockBlockchainProvider('throwing', 'Throwing'),
-        healthCheck: jest.fn().mockRejectedValue(new Error('Health check failed')),
+        healthCheck: vi.fn().mockRejectedValue(new Error('Health check failed')),
       };
 
       registerPlugin('blockchain', 'throwing', throwing);

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Repository Cache Layer Tests
  *
@@ -19,12 +20,12 @@ import {
 } from '../../../src/repositories/cache';
 
 // Mock the Redis infrastructure
-jest.mock('../../../src/infrastructure/redis', () => {
+vi.mock('../../../src/infrastructure/redis', () => {
   const cache = new Map<string, { value: any; expiresAt: number }>();
 
   return {
     getDistributedCache: () => ({
-      get: jest.fn(async (key: string) => {
+      get: vi.fn(async (key: string) => {
         const entry = cache.get(key);
         if (!entry) return null;
         if (Date.now() > entry.expiresAt) {
@@ -33,13 +34,13 @@ jest.mock('../../../src/infrastructure/redis', () => {
         }
         return entry.value;
       }),
-      set: jest.fn(async (key: string, value: any, ttl: number) => {
+      set: vi.fn(async (key: string, value: any, ttl: number) => {
         cache.set(key, { value, expiresAt: Date.now() + ttl * 1000 });
       }),
-      delete: jest.fn(async (key: string) => {
+      delete: vi.fn(async (key: string) => {
         return cache.delete(key);
       }),
-      deletePattern: jest.fn(async (pattern: string) => {
+      deletePattern: vi.fn(async (pattern: string) => {
         const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
         let count = 0;
         for (const key of cache.keys()) {
@@ -61,7 +62,7 @@ describe('Repository Cache', () => {
 
   describe('withCache', () => {
     it('should cache query results', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ id: '1', name: 'test' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1', name: 'test' });
 
       // First call - should execute query
       const result1 = await withCache('test-key', queryFn);
@@ -76,7 +77,7 @@ describe('Repository Cache', () => {
     });
 
     it('should respect TTL', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ value: 42 });
+      const queryFn = vi.fn().mockResolvedValue({ value: 42 });
 
       // Use very short TTL
       await withCache('ttl-test', queryFn, { ttl: 1 });
@@ -87,7 +88,7 @@ describe('Repository Cache', () => {
     });
 
     it('should support skipRead option', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ fresh: true });
+      const queryFn = vi.fn().mockResolvedValue({ fresh: true });
 
       // Initial cache
       await withCache('skip-test', queryFn);
@@ -100,7 +101,7 @@ describe('Repository Cache', () => {
     });
 
     it('should support skipWrite option', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ noCache: true });
+      const queryFn = vi.fn().mockResolvedValue({ noCache: true });
 
       const statsBeforeWrite = getCacheStats().writes;
       await withCache('no-write-test', queryFn, { skipWrite: true });
@@ -110,7 +111,7 @@ describe('Repository Cache', () => {
     });
 
     it('should support namespace option', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ namespaced: true });
+      const queryFn = vi.fn().mockResolvedValue({ namespaced: true });
 
       await withCache('key', queryFn, { namespace: 'test-ns' });
 
@@ -118,7 +119,7 @@ describe('Repository Cache', () => {
     });
 
     it('should not cache null results', async () => {
-      const queryFn = jest.fn().mockResolvedValue(null);
+      const queryFn = vi.fn().mockResolvedValue(null);
 
       await withCache('null-test', queryFn);
 
@@ -128,7 +129,7 @@ describe('Repository Cache', () => {
 
   describe('withArrayCache', () => {
     it('should cache array results', async () => {
-      const queryFn = jest.fn().mockResolvedValue([{ id: '1' }, { id: '2' }]);
+      const queryFn = vi.fn().mockResolvedValue([{ id: '1' }, { id: '2' }]);
 
       const result1 = await withArrayCache('array-test', queryFn);
       expect(result1).toHaveLength(2);
@@ -138,7 +139,7 @@ describe('Repository Cache', () => {
     });
 
     it('should not cache empty arrays', async () => {
-      const queryFn = jest.fn().mockResolvedValue([]);
+      const queryFn = vi.fn().mockResolvedValue([]);
 
       await withArrayCache('empty-array', queryFn);
 
@@ -148,7 +149,7 @@ describe('Repository Cache', () => {
 
   describe('invalidateCache', () => {
     it('should invalidate specific cache key', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ id: '1' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1' });
 
       await withCache('invalidate-test', queryFn);
       await invalidateCache('invalidate-test');
@@ -159,7 +160,7 @@ describe('Repository Cache', () => {
     });
 
     it('should support namespace in invalidation', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ id: '1' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1' });
 
       await withCache('key', queryFn, { namespace: 'ns' });
       await invalidateCache('key', 'ns');
@@ -171,7 +172,7 @@ describe('Repository Cache', () => {
 
   describe('invalidateCachePattern', () => {
     it('should invalidate matching keys', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ id: '1' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1' });
 
       await withCache('wallet:1:info', queryFn);
       await withCache('wallet:1:balance', queryFn);
@@ -188,7 +189,7 @@ describe('Repository Cache', () => {
     it('should track cache statistics', async () => {
       resetCacheStats();
 
-      const queryFn = jest.fn().mockResolvedValue({ id: '1' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1' });
 
       // Generate some activity
       await withCache('stats-test', queryFn);
@@ -224,7 +225,7 @@ describe('Repository Cache', () => {
 
   describe('invalidateWalletCache', () => {
     it('should invalidate all wallet-related cache', async () => {
-      const queryFn = jest.fn().mockResolvedValue({ id: '1' });
+      const queryFn = vi.fn().mockResolvedValue({ id: '1' });
 
       // Cache some wallet data
       await withCache('wallet:123:info', queryFn);
@@ -240,7 +241,7 @@ describe('Repository Cache', () => {
 
   describe('invalidateUserCache', () => {
     it('should invalidate user-related cache', async () => {
-      const queryFn = jest.fn().mockResolvedValue([{ id: '1' }]);
+      const queryFn = vi.fn().mockResolvedValue([{ id: '1' }]);
 
       await withCache('wallet:user:u1:list', queryFn);
 

@@ -9,11 +9,15 @@
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #
 # Access:
-#   - Grafana: http://localhost:3000 (admin/sanctuary)
-#   - Prometheus: http://localhost:9090
-#   - Jaeger UI: http://localhost:16686
+#   - Grafana: http://localhost:3000 (admin / ENCRYPTION_KEY)
+#   - Prometheus: http://localhost:9090 (no auth)
+#   - Jaeger UI: http://localhost:16686 (no auth)
 #   - Loki: http://localhost:3100 (internal)
 #   - Promtail: Collects logs automatically
+#
+# Environment Variables:
+#   - GRAFANA_PASSWORD: Override Grafana admin password (defaults to ENCRYPTION_KEY)
+#   - GRAFANA_ANONYMOUS_ENABLED: Set to "true" to allow viewing dashboards without login
 #
 # =============================================
 
@@ -215,6 +219,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-${ENCRYPTION_KEY:?ENCRYPTION_KEY required}}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
+      # Anonymous access - allows viewing dashboards without login
+      # Set GRAFANA_ANONYMOUS_ENABLED=true in .env to enable
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED:-false}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     volumes:

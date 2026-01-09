@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * Transaction API Integration Tests
  *
@@ -26,7 +27,7 @@ import { PrismaClient } from '@prisma/client';
 import { Express } from 'express';
 
 // Increase timeout for integration tests
-jest.setTimeout(30000);
+vi.setConfig(30000);
 
 // Skip all tests if no database is available
 const describeWithDb = canRunIntegrationTests() ? describe : describe.skip;
@@ -37,22 +38,22 @@ describeWithDb('Transaction API Integration', () => {
 
   beforeAll(async () => {
     // Mock external services before importing routes
-    jest.doMock('../../../src/services/bitcoin/electrum', () => ({
-      getElectrumClient: jest.fn().mockResolvedValue({
-        connect: jest.fn().mockResolvedValue(undefined),
-        isConnected: jest.fn().mockReturnValue(true),
-        blockchainScripthash_getBalance: jest.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
-        blockchainScripthash_listunspent: jest.fn().mockResolvedValue([]),
-        blockchainScripthash_getHistory: jest.fn().mockResolvedValue([]),
-        blockchainTransaction_broadcast: jest.fn().mockResolvedValue('mock-txid-123456'),
+    vi.doMock('../../../src/services/bitcoin/electrum', () => ({
+      getElectrumClient: vi.fn().mockResolvedValue({
+        connect: vi.fn().mockResolvedValue(undefined),
+        isConnected: vi.fn().mockReturnValue(true),
+        blockchainScripthash_getBalance: vi.fn().mockResolvedValue({ confirmed: 0, unconfirmed: 0 }),
+        blockchainScripthash_listunspent: vi.fn().mockResolvedValue([]),
+        blockchainScripthash_getHistory: vi.fn().mockResolvedValue([]),
+        blockchainTransaction_broadcast: vi.fn().mockResolvedValue('mock-txid-123456'),
       }),
     }));
 
     // Mock blockchain service functions
-    jest.doMock('../../../src/services/bitcoin/blockchain', () => ({
-      getCachedBlockHeight: jest.fn().mockReturnValue(800000),
-      recalculateWalletBalances: jest.fn().mockResolvedValue(undefined),
-      broadcastTransaction: jest.fn().mockResolvedValue({ txid: 'mock-broadcast-txid', broadcasted: true }),
+    vi.doMock('../../../src/services/bitcoin/blockchain', () => ({
+      getCachedBlockHeight: vi.fn().mockReturnValue(800000),
+      recalculateWalletBalances: vi.fn().mockResolvedValue(undefined),
+      broadcastTransaction: vi.fn().mockResolvedValue({ txid: 'mock-broadcast-txid', broadcasted: true }),
     }));
 
     prisma = await setupTestDatabase();
@@ -62,7 +63,7 @@ describeWithDb('Transaction API Integration', () => {
   afterAll(async () => {
     resetTestApp();
     await teardownTestDatabase();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {

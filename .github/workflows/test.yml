@@ -17,7 +17,7 @@ on:
       - 'package*.json'
       - 'server/package*.json'
       - 'vitest.config.ts'
-      - 'server/jest.config.js'
+      - 'server/vitest.config.ts'
       - '.github/workflows/test.yml'
   pull_request:
     branches:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   # ============================================
-  # Backend Tests (Jest + PostgreSQL)
+  # Backend Tests (Vitest + PostgreSQL)
   # ============================================
   backend-tests:
     name: Backend Tests
@@ -81,7 +81,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
-        run: npm run test:unit -- --ci --coverage --forceExit
+        run: npm run test:unit -- --coverage
 
       - name: Run integration tests
         env:
@@ -89,7 +89,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
-        run: npm run test:integration -- --ci
+        run: npm run test:integration
 
       - name: Upload backend coverage
         if: always()

@@ -1037,7 +1037,7 @@ router.get('/:id/telegram', requireWalletAccess('view'), async (req: Request, re
         enabled: false,
         notifyReceived: true,
         notifySent: true,
-        notifyConsolidation: false,
+        notifyConsolidation: true,
         notifyDraft: true,
       },
     });
@@ -1065,7 +1065,7 @@ router.patch('/:id/telegram', requireWalletAccess('view'), async (req: Request, 
       enabled: enabled ?? false,
       notifyReceived: notifyReceived ?? true,
       notifySent: notifySent ?? true,
-      notifyConsolidation: notifyConsolidation ?? false,
+      notifyConsolidation: notifyConsolidation ?? true,
       notifyDraft: notifyDraft ?? true,
     });
 

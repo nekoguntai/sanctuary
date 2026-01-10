@@ -261,53 +261,40 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             Your Browser                                     │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                        Sanctuary Web UI                                │  │
-│  │                  (WebUSB → Hardware Wallet)                            │  │
-│  └────────────────────────────────┬──────────────────────────────────────┘  │
-└───────────────────────────────────┼─────────────────────────────────────────┘
-                                    │ HTTPS (:8443)
-                                    │
-┌───────────────────────────────────▼─────────────────────────────────────────┐
-│                          Docker Compose Stack                                │
-│                                                                              │
-│  ┌─────────────┐      ┌─────────────┐      ┌───────────────┐                │
-│  │  Frontend   │      │   Backend   │◄────►│   PostgreSQL  │                │
-│  │   (nginx)   │─────►│  (Node.js)  │      │   (Database)  │                │
-│  │   :8443     │      │    :3001    │      │     :5432     │                │
-│  └─────────────┘      └──────┬──────┘      └───────────────┘                │
-│                              │ ▲                                             │
-│                              │ │ WebSocket                                   │
-│                              │ │                                             │
-│  ┌─────────────┐             │ │                                             │
-│  │   Gateway   │─────────────┘ │                                             │
-│  │  (Node.js)  │◄──────────────┘                                             │
-│  │    :4000    │                                                             │
-│  └──────┬──────┘                                                             │
-│         │                                                                    │
-└─────────┼────────────────────────────────────────────────────────────────────┘
-          │ HTTPS (:4000)                       │
-          │                                     │
-          ▼                                     ▼
-┌───────────────────┐              ┌─────────────────────────────┐
-│   Mobile Apps     │              │   Bitcoin Network Access     │
-│  (iOS / Android)  │              │      (Electrum Server)       │
-│                   │              └─────────────────────────────┘
-│  ┌─────┐ ┌─────┐  │
-│  │ iOS │ │ And │  │
-│  └─────┘ └─────┘  │
-└───────────────────┘
-```
+<p align="center">
+  <img src="assets/architecture.png" alt="Sanctuary Architecture Diagram" width="900" />
+</p>
+
+> The diagram source file is available at [`assets/architecture.drawio`](assets/architecture.drawio) and can be edited with [draw.io](https://app.diagrams.net/).
 
 **Components:**
-- **Frontend** — React-based web interface served via nginx (HTTPS for WebUSB)
-- **Backend** — Node.js API server handling wallet logic and blockchain queries
-- **Database** — PostgreSQL for storing wallet metadata, addresses, and transaction history
-- **Gateway** — API gateway for mobile apps with JWT auth, rate limiting, and push notifications
-- **WebUSB** — Direct browser-to-hardware-wallet communication (Ledger, Trezor)
+
+| Component | Port | Description |
+|-----------|------|-------------|
+| **Frontend** | :8443 | React-based web interface served via nginx (HTTPS for WebUSB) |
+| **Backend** | :3001 | Node.js API server handling wallet logic and user requests |
+| **Worker** | :3002 | Background job processor for syncing, notifications, and confirmations |
+| **Gateway** | :4000 | API gateway for mobile apps with JWT auth and rate limiting |
+| **Redis** | :6379 | Job queue (BullMQ) and distributed cache |
+| **PostgreSQL** | :5432 | Primary database for wallets, transactions, and user data |
+
+### Worker Process (Background Jobs)
+
+The worker runs as a dedicated container, separate from the API server, handling all background operations:
+
+| Job Type | Description |
+|----------|-------------|
+| **Electrum Manager** | Maintains persistent connections to Electrum servers with automatic reconnection. Subscribes to new blocks and address activity for real-time transaction detection. |
+| **Sync Jobs** | Wallet synchronization with the blockchain. Uses distributed locks to prevent duplicate syncs. Records block height for consistency tracking. |
+| **Notification Jobs** | Sends Telegram and push notifications with retry logic (exponential backoff). Handles delivery failures gracefully. |
+| **Confirmation Jobs** | Updates transaction confirmations when new blocks are mined. Triggers milestone notifications (1, 3, 6 confirmations). |
+
+**Why a separate worker?**
+- Runs 24/7 regardless of user sessions
+- Survives API server restarts without losing job state
+- Dedicated Electrum connections for real-time updates
+- Reliable notification delivery with persistent queue
+- Better resource isolation and monitoring
 
 ### Mobile API Gateway
 
@@ -362,14 +349,42 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 
 ## Requirements
 
-- **Docker** and **Docker Compose** (v2.0+)
-- A modern web browser (Chrome, Firefox, Edge, Brave)
-- 4GB RAM minimum, 6GB recommended (8GB+ if using local AI)
-- ~500MB disk space (plus blockchain index cache)
+### System Requirements
 
-Optional:
-- Hardware wallet (Ledger, Trezor, Coldcard, etc.)
-- Electrum server for self-sovereign blockchain access (Fulcrum, electrs, ElectrumX)
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| **RAM** | 4 GB | 6 GB (8 GB+ with local AI) |
+| **Disk** | 500 MB | 1 GB+ (includes logs and cache) |
+| **CPU** | 2 cores | 4 cores |
+
+### Software Requirements
+
+- **Docker** and **Docker Compose** v2.0+
+- A modern web browser:
+  - Chrome, Edge, or Brave (recommended for hardware wallets)
+  - Firefox or Safari (limited hardware wallet support)
+
+### Optional
+
+- **Hardware wallet** — Ledger, Trezor, BitBox02, Jade, Coldcard, Keystone, Passport
+- **Electrum server** — For self-sovereign blockchain access (Fulcrum, electrs, ElectrumX)
+- **Telegram bot** — For transaction notifications
+
+### Container Overview
+
+Sanctuary runs 6 containers by default:
+
+| Container | Purpose | Always Running |
+|-----------|---------|----------------|
+| `frontend` | Web UI (nginx) | Yes |
+| `backend` | API server | Yes |
+| `worker` | Background jobs | Yes |
+| `gateway` | Mobile API | Yes |
+| `redis` | Job queue & cache | Yes |
+| `postgres` | Database | Yes |
+
+Optional containers:
+- `ollama` — Local AI for transaction labeling (enabled with `--with-ai`)
 
 ## Installation
 
@@ -635,14 +650,23 @@ LOG_LEVEL=error docker compose up
 ```
 
 **Module prefixes:**
+
+*Backend API:*
 - `[WS]` — WebSocket server events
-- `[SYNC]` — Background sync service
 - `[BLOCKCHAIN]` — Blockchain/Electrum operations
 - `[WALLETS]` — Wallet API operations
-- `[NOTIFY]` — Real-time notification service
 - `[ADMIN]` — Admin API operations
 - `[BITCOIN]` — Bitcoin RPC/network operations
 - `[PRICE]` — Price feed service
+
+*Worker:*
+- `[Worker]` — Worker process lifecycle
+- `[ElectrumMgr]` — Electrum subscription manager
+- `[SyncJobs]` — Wallet sync job handlers
+- `[NotifyJobs]` — Notification job handlers
+- `[JobQueue]` — BullMQ job queue operations
+
+*Gateway:*
 - `[GATEWAY]` — Mobile API gateway operations
 - `[REQUEST]` — Gateway request logging
 - `[AUTH]` — Gateway authentication
@@ -1179,8 +1203,13 @@ sanctuary/
 │   ├── src/
 │   │   ├── api/       # REST API routes
 │   │   ├── services/  # Business logic
-│   │   └── models/    # Prisma database models
-│   └── prisma/        # Database schema and migrations
+│   │   ├── models/    # Prisma database models
+│   │   └── worker/    # Background job definitions
+│   │       ├── jobs/  # Job handlers (sync, notifications, confirmations)
+│   │       ├── electrumManager.ts    # Electrum subscription manager
+│   │       └── workerJobQueue.ts     # BullMQ job queue wrapper
+│   ├── prisma/        # Database schema and migrations
+│   └── worker.ts      # Worker process entry point
 ├── gateway/           # Mobile API gateway
 │   └── src/
 │       ├── middleware/ # Auth, rate limiting, logging
@@ -1190,6 +1219,7 @@ sanctuary/
 │   └── api/           # Frontend API client
 ├── services/          # Frontend services (hardware wallet, etc.)
 ├── themes/            # Color theme definitions
+├── assets/            # Logo, screenshots, architecture diagram
 ├── docker/            # Docker configuration files
 └── docker-compose.yml
 ```

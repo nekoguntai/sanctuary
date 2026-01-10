@@ -10,7 +10,6 @@ interface DashboardFeeEstimate {
   medium: number;
   slow: number;
 }
-import * as syncApi from '../src/api/sync';
 import * as adminApi from '../src/api/admin';
 import { TransactionList } from './TransactionList';
 import { BlockVisualizer } from './BlockVisualizer';
@@ -293,15 +292,6 @@ export const Dashboard: React.FC = () => {
   const refreshMempoolData = () => {
     refetchMempool();
   };
-
-  // Queue wallets for background sync on mount
-  useEffect(() => {
-    if (user && wallets.length > 0) {
-      syncApi.queueUserWallets('normal').catch(err => {
-        log.error('Failed to queue wallets for sync', { error: err });
-      });
-    }
-  }, [user, wallets.length]);
 
   // Subscribe to all wallet events (single batch message for efficiency)
   useEffect(() => {

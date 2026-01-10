@@ -737,6 +737,7 @@ export interface Wallet {
   createdAt?: string;
   // Sync metadata
   lastSyncedAt?: string | null;
+  lastSyncedBlockHeight?: number | null;
   lastSyncStatus?: 'success' | 'failed' | 'partial' | 'retrying' | string | null;
   syncInProgress?: boolean;
   // Sharing info
@@ -854,6 +855,7 @@ export interface WebSocketSyncData {
   inProgress?: boolean;
   status?: 'scanning' | 'complete' | 'error' | 'retry' | 'retrying' | 'success' | 'failed';
   lastSyncedAt?: string;
+  lastSyncedBlockHeight?: number | null;
   error?: string;
   retryCount?: number;
   maxRetries?: number;

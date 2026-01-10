@@ -107,10 +107,11 @@ model Wallet {
   groupRole String  @default("viewer") // Role for group members: owner, signer, viewer
 
   // Sync metadata - for caching layer
-  lastSyncedAt   DateTime? // Last successful full sync
-  lastSyncStatus String? // success, failed, partial
-  lastSyncError  String? // Error message if failed
-  syncInProgress Boolean   @default(false)
+  lastSyncedAt          DateTime? // Last successful full sync
+  lastSyncedBlockHeight Int?      // Block height at last successful sync
+  lastSyncStatus        String?   // success, failed, partial
+  lastSyncError         String?   // Error message if failed
+  syncInProgress        Boolean   @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

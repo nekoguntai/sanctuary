@@ -24,7 +24,7 @@ import {
   updateTransactionConfirmations,
   populateMissingTransactionFields,
 } from '../../services/bitcoin/sync/confirmations';
-import { setCachedBlockHeight } from '../../services/bitcoin/blockchain';
+import { setCachedBlockHeight, getCachedBlockHeight } from '../../services/bitcoin/blockchain';
 import { getConfig } from '../../config';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
@@ -62,6 +62,17 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
 
     log.info(`Syncing wallet ${walletId}`, { reason, jobId: job.id });
 
+    // Get wallet network for block height tracking
+    const wallet = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { network: true },
+    });
+
+    if (!wallet) {
+      log.warn(`Wallet ${walletId} not found, skipping sync`);
+      return { success: false, duration: 0, error: 'Wallet not found' };
+    }
+
     // Mark wallet as syncing
     await prisma.wallet.update({
       where: { id: walletId },
@@ -75,12 +86,17 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
       // Populate missing transaction fields
       await populateMissingTransactionFields(walletId);
 
-      // Update wallet metadata
+      // Get current block height for this network
+      const network = wallet.network as 'mainnet' | 'testnet' | 'signet' | 'regtest';
+      const currentBlockHeight = getCachedBlockHeight(network);
+
+      // Update wallet metadata with block height
       await prisma.wallet.update({
         where: { id: walletId },
         data: {
           syncInProgress: false,
           lastSyncedAt: new Date(),
+          lastSyncedBlockHeight: currentBlockHeight,
           lastSyncStatus: 'success',
           lastSyncError: null,
         },

@@ -1185,17 +1185,6 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  // Queue wallet for background sync when page loads
-  useEffect(() => {
-    if (id && user) {
-      // Queue this wallet for high-priority background sync
-      // Data is already loaded from DB cache, this updates it in background
-      syncApi.queueSync(id, 'high').catch(err => {
-        log.error('Failed to queue wallet sync', { error: err });
-      });
-    }
-  }, [id, user]);
-
   const handleLoadMoreAddresses = async () => {
       if (!id) return;
       setLoadingAddresses(true);

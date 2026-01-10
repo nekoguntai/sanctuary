@@ -244,6 +244,85 @@ services:
     memswap_limit: 2560M  # memory + 512M swap
 
   # ============================================
+  # Background Worker
+  # ============================================
+  # Dedicated process for background operations that run
+  # independently of the main API server:
+  # - Persistent Electrum subscriptions (real-time tx detection)
+  # - Wallet sync job processing
+  # - Notification delivery (Telegram, Push)
+  # - Transaction confirmation updates
+  #
+  # Uses the same image as backend with different entry point.
+  # ============================================
+  worker:
+    image: sanctuary-backend:local
+    pull_policy: never  # Use locally built image from backend service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      # Node.js memory settings
+      NODE_OPTIONS: "--max-old-space-size=1024"
+
+      # Server
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public&connection_limit=10&pool_timeout=30&connect_timeout=10
+
+      # Redis (required for job queue)
+      REDIS_URL: redis://redis:6379
+
+      # Worker-specific settings
+      WORKER_HEALTH_PORT: 3002
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+
+      # Bitcoin/Electrum
+      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
+      ELECTRUM_HOST: ${ELECTRUM_HOST:-electrum.blockstream.info}
+      ELECTRUM_PORT: ${ELECTRUM_PORT:-50002}
+      ELECTRUM_PROTOCOL: ${ELECTRUM_PROTOCOL:-ssl}
+
+      # Security (required for config validation)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT:-sanctuary-node-config}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
+
+    # Override the default command to start the worker
+    command: ["node", "dist/app/src/worker.js"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - sanctuary-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    mem_swappiness: 10
+    memswap_limit: 1280M  # memory + 256M swap
+
+  # ============================================
   # Database Migrations & Seeding (one-time run)
   # Uses the same image as backend (no rebuild)
   # ============================================

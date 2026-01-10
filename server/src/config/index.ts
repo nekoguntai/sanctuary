@@ -204,6 +204,11 @@ function loadConfig(): CombinedConfig {
       proxyUrl: process.env.DOCKER_PROXY_URL || 'http://docker-proxy:2375',
     },
 
+    worker: {
+      healthPort: parseInt(process.env.WORKER_HEALTH_PORT || '3002', 10),
+      concurrency: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
+    },
+
     logging: {
       level: parseLogLevel(),
     },

@@ -139,6 +139,11 @@ export const DockerConfigSchema = z.object({
   proxyUrl: z.string(),
 });
 
+export const WorkerConfigSchema = z.object({
+  healthPort: z.number().int().min(1).max(65535),
+  concurrency: z.number().int().min(1).max(50),
+});
+
 export const LoggingConfigSchema = z.object({
   level: LogLevelSchema,
 });
@@ -183,6 +188,7 @@ export const AppConfigSchema = z.object({
   websocket: WebSocketConfigSchema,
   push: PushNotificationConfigSchema,
   docker: DockerConfigSchema,
+  worker: WorkerConfigSchema,
   logging: LoggingConfigSchema,
   features: FeatureFlagsSchema,
 });

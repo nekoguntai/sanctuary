@@ -1,0 +1,314 @@
+/**
+ * Sanctuary Background Worker
+ *
+ * Dedicated process for background operations that run independently
+ * of the main API server. This worker handles:
+ *
+ * - Persistent Electrum subscriptions for real-time transaction detection
+ * - Wallet synchronization job processing
+ * - Notification delivery (Telegram, Push) with retries
+ * - Transaction confirmation updates
+ *
+ * Features:
+ * - Automatic Electrum reconnection with exponential backoff
+ * - BullMQ job queue with distributed locking
+ * - Health check endpoint for container orchestration
+ * - Graceful shutdown handling
+ */
+
+// Initialize OpenTelemetry tracing FIRST
+import { initializeOpenTelemetry } from './utils/tracing/otel';
+const otelPromise = initializeOpenTelemetry();
+
+import { getConfig } from './config';
+import { createLogger } from './utils/logger';
+import { connectWithRetry, disconnect } from './models/prisma';
+import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock } from './infrastructure';
+import { WorkerJobQueue } from './worker/workerJobQueue';
+import { ElectrumSubscriptionManager, type BitcoinNetwork } from './worker/electrumManager';
+import { startHealthServer, type HealthServerHandle } from './worker/healthServer';
+import { registerWorkerJobs } from './worker/jobs';
+import type { CheckStaleWalletsResult } from './worker/jobs/types';
+
+const log = createLogger('WORKER');
+
+// =============================================================================
+// Global State
+// =============================================================================
+
+let jobQueue: WorkerJobQueue | null = null;
+let electrumManager: ElectrumSubscriptionManager | null = null;
+let healthServer: HealthServerHandle | null = null;
+let isShuttingDown = false;
+
+// =============================================================================
+// Exception Handlers
+// =============================================================================
+
+process.on('uncaughtException', (error: Error) => {
+  log.error('Uncaught exception - worker will exit', {
+    error: error.message,
+    stack: error.stack,
+  });
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason: unknown) => {
+  log.error('Unhandled promise rejection in worker', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+
+// =============================================================================
+// Worker Startup
+// =============================================================================
+
+async function startWorker(): Promise<void> {
+  log.info('Starting Sanctuary Background Worker...');
+  const config = getConfig();
+
+  // Wait for OTEL initialization
+  await otelPromise;
+
+  // Connect to database
+  log.info('Connecting to database...');
+  await connectWithRetry();
+  log.info('Database connected');
+
+  // Initialize Redis (required for worker)
+  log.info('Connecting to Redis...');
+  await initializeRedis();
+  if (!isRedisConnected()) {
+    throw new Error('Redis is required for worker - check REDIS_URL');
+  }
+  log.info('Redis connected');
+
+  // Initialize job queue
+  log.info('Initializing job queue...');
+  const workerConcurrency = parseInt(process.env.WORKER_CONCURRENCY || '5', 10);
+
+  jobQueue = new WorkerJobQueue({
+    concurrency: workerConcurrency,
+    queues: ['sync', 'notifications', 'confirmations'],
+  });
+  await jobQueue.initialize();
+
+  // Register job handlers
+  registerWorkerJobs(jobQueue);
+  log.info('Job handlers registered', {
+    jobs: jobQueue.getRegisteredJobs(),
+  });
+
+  // Initialize Electrum subscription manager
+  log.info('Starting Electrum subscription manager...');
+  electrumManager = new ElectrumSubscriptionManager({
+    onNewBlock: handleNewBlock,
+    onAddressActivity: handleAddressActivity,
+  });
+  await electrumManager.start();
+
+  // Start health server
+  const healthPort = parseInt(process.env.WORKER_HEALTH_PORT || '3002', 10);
+  healthServer = startHealthServer({
+    port: healthPort,
+    healthProvider: {
+      getHealth: async () => ({
+        redis: isRedisConnected(),
+        electrum: electrumManager?.isConnected() ?? false,
+        jobQueue: jobQueue?.isHealthy() ?? false,
+      }),
+      getMetrics: async () => {
+        const queueHealth = await jobQueue?.getHealth();
+        const electrumMetrics = electrumManager?.getHealthMetrics();
+
+        return {
+          queues: queueHealth?.queues ?? {},
+          electrum: {
+            subscribedAddresses: electrumMetrics?.totalSubscribedAddresses ?? 0,
+            networks: electrumMetrics?.networks ?? {},
+          },
+        };
+      },
+    },
+  });
+
+  // Schedule recurring jobs
+  await scheduleRecurringJobs();
+
+  log.info('Sanctuary Background Worker started successfully', {
+    healthPort,
+    concurrency: workerConcurrency,
+    network: config.bitcoin.network,
+  });
+}
+
+// =============================================================================
+// Event Handlers
+// =============================================================================
+
+/**
+ * Handle new block event from Electrum
+ */
+function handleNewBlock(network: BitcoinNetwork, height: number, hash: string): void {
+  log.info(`New block on ${network}: ${height}`);
+
+  // Queue confirmation update job
+  jobQueue?.addJob('confirmations', 'update-confirmations', {
+    height,
+    hash,
+  }, {
+    priority: 1, // High priority
+    jobId: `confirmations:${height}`, // Deduplicate by height
+  }).catch(err => {
+    log.error('Failed to queue confirmation update job', { error: err });
+  });
+}
+
+/**
+ * Handle address activity event from Electrum
+ */
+function handleAddressActivity(network: BitcoinNetwork, walletId: string, address: string): void {
+  log.info(`Address activity on ${network}: ${address} (wallet: ${walletId})`);
+
+  // Queue high-priority sync job
+  jobQueue?.addJob('sync', 'sync-wallet', {
+    walletId,
+    priority: 'high',
+    reason: `address_activity:${address}`,
+  }, {
+    priority: 1, // High priority
+    jobId: `sync:${walletId}:${Date.now()}`, // Allow multiple syncs
+  }).catch(err => {
+    log.error('Failed to queue sync job', { error: err, walletId });
+  });
+}
+
+// =============================================================================
+// Scheduled Jobs
+// =============================================================================
+
+async function scheduleRecurringJobs(): Promise<void> {
+  if (!jobQueue) return;
+
+  const config = getConfig();
+
+  // Check for stale wallets every 5 minutes
+  // Use config sync interval converted to cron
+  const syncIntervalMs = config.sync.intervalMs;
+  const syncIntervalMinutes = Math.max(1, Math.floor(syncIntervalMs / 60000));
+
+  await jobQueue.scheduleRecurring(
+    'sync',
+    'check-stale-wallets',
+    {},
+    `*/${syncIntervalMinutes} * * * *` // Every N minutes
+  );
+
+  // Update confirmations every 2 minutes
+  const confirmationIntervalMs = config.sync.confirmationUpdateIntervalMs;
+  const confirmationIntervalMinutes = Math.max(1, Math.floor(confirmationIntervalMs / 60000));
+
+  await jobQueue.scheduleRecurring(
+    'confirmations',
+    'update-all-confirmations',
+    {},
+    `*/${confirmationIntervalMinutes} * * * *` // Every N minutes
+  );
+
+  log.info('Recurring jobs scheduled', {
+    staleCheckInterval: `${syncIntervalMinutes}m`,
+    confirmationUpdateInterval: `${confirmationIntervalMinutes}m`,
+  });
+
+  // Set up job result handler for stale wallet check
+  // This queues individual sync jobs for each stale wallet
+  setupStaleWalletHandler();
+}
+
+/**
+ * Set up handler for stale wallet check results
+ */
+function setupStaleWalletHandler(): void {
+  // The check-stale-wallets job returns wallet IDs, we need to queue sync jobs for them
+  // This is handled by listening for job completion
+
+  // For now, we'll rely on the job handler to return the list
+  // and the next iteration will pick them up
+  // A more sophisticated approach would use BullMQ's job events
+
+  // Note: The actual queueing of stale wallets is done inline in the job handler
+  // by calling addBulkJobs when the check-stale-wallets job completes
+}
+
+// =============================================================================
+// Graceful Shutdown
+// =============================================================================
+
+async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  log.info(`${signal} received, shutting down worker...`);
+
+  // Stop health server first
+  if (healthServer) {
+    try {
+      await healthServer.close();
+    } catch (err) {
+      log.error('Error closing health server', { error: err });
+    }
+  }
+
+  // Stop Electrum subscriptions
+  if (electrumManager) {
+    try {
+      await electrumManager.stop();
+    } catch (err) {
+      log.error('Error stopping Electrum manager', { error: err });
+    }
+  }
+
+  // Drain job queue
+  if (jobQueue) {
+    try {
+      await jobQueue.shutdown();
+    } catch (err) {
+      log.error('Error shutting down job queue', { error: err });
+    }
+  }
+
+  // Shutdown distributed locking
+  shutdownDistributedLock();
+
+  // Close Redis
+  try {
+    await shutdownRedis();
+  } catch (err) {
+    log.error('Error shutting down Redis', { error: err });
+  }
+
+  // Close database
+  try {
+    await disconnect();
+  } catch (err) {
+    log.error('Error disconnecting database', { error: err });
+  }
+
+  log.info('Worker shutdown complete');
+  process.exit(0);
+}
+
+// =============================================================================
+// Main
+// =============================================================================
+
+// Start the worker
+startWorker().catch((error) => {
+  log.error('Worker startup failed', { error: error.message, stack: error.stack });
+  process.exit(1);
+});
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

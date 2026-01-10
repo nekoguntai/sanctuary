@@ -93,13 +93,13 @@ export async function initializeRedis(): Promise<void> {
       },
     });
 
-    // Wait for connection
+    // Wait for connection to be ready (not just connected)
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Redis connection timeout'));
       }, 10000);
 
-      redisClient!.once('connect', () => {
+      redisClient!.once('ready', () => {
         clearTimeout(timeout);
         resolve();
       });
@@ -129,8 +129,8 @@ export async function initializeRedis(): Promise<void> {
     });
 
     await Promise.all([
-      new Promise<void>((resolve) => publisher.once('connect', resolve)),
-      new Promise<void>((resolve) => subscriber.once('connect', resolve)),
+      new Promise<void>((resolve) => publisher.once('ready', resolve)),
+      new Promise<void>((resolve) => subscriber.once('ready', resolve)),
     ]);
 
     distributedEventBus = new RedisEventBus(publisher, subscriber);

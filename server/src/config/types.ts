@@ -167,6 +167,16 @@ export interface DockerConfig {
   proxyUrl: string;
 }
 
+/**
+ * Background worker configuration
+ */
+export interface WorkerConfig {
+  /** Health check endpoint port (default: 3002) */
+  healthPort: number;
+  /** Job processing concurrency (default: 5) */
+  concurrency: number;
+}
+
 export interface LoggingConfig {
   level: LogLevel;
 }
@@ -242,6 +252,7 @@ export interface AppConfig {
   websocket: WebSocketConfig;
   push: PushNotificationConfig;
   docker: DockerConfig;
+  worker: WorkerConfig;
   logging: LoggingConfig;
   monitoring: MonitoringConfig;
   features: FeatureFlags;

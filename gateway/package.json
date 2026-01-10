@@ -1,6 +1,6 @@
 {
   "name": "sanctuary-gateway",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Public API gateway for Sanctuary mobile apps",
   "main": "dist/index.js",
   "scripts": {

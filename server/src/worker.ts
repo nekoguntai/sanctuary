@@ -39,7 +39,11 @@ const log = createLogger('WORKER');
 let jobQueue: WorkerJobQueue | null = null;
 let electrumManager: ElectrumSubscriptionManager | null = null;
 let healthServer: HealthServerHandle | null = null;
+let reconciliationTimer: NodeJS.Timeout | null = null;
 let isShuttingDown = false;
+
+// Reconciliation interval - clean up stale subscriptions every 15 minutes
+const RECONCILIATION_INTERVAL_MS = 15 * 60 * 1000;
 
 // =============================================================================
 // Exception Handlers
@@ -136,10 +140,37 @@ async function startWorker(): Promise<void> {
   // Schedule recurring jobs
   await scheduleRecurringJobs();
 
+  // Start periodic reconciliation of subscriptions
+  // This cleans up addresses from deleted wallets and subscribes to new ones
+  startReconciliationTimer();
+
   log.info('Sanctuary Background Worker started successfully', {
     healthPort,
     concurrency: workerConcurrency,
     network: config.bitcoin.network,
+    reconciliationInterval: `${RECONCILIATION_INTERVAL_MS / 60000}m`,
+  });
+}
+
+/**
+ * Start the periodic reconciliation timer
+ */
+function startReconciliationTimer(): void {
+  // Run reconciliation periodically
+  reconciliationTimer = setInterval(async () => {
+    if (isShuttingDown || !electrumManager) return;
+
+    try {
+      await electrumManager.reconcileSubscriptions();
+    } catch (error) {
+      log.error('Subscription reconciliation failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, RECONCILIATION_INTERVAL_MS);
+
+  log.info('Subscription reconciliation timer started', {
+    interval: `${RECONCILIATION_INTERVAL_MS / 60000}m`,
   });
 }
 
@@ -161,7 +192,11 @@ function handleNewBlock(network: BitcoinNetwork, height: number, hash: string): 
     priority: 1, // High priority
     jobId: `confirmations:${height}`, // Deduplicate by height
   }).catch(err => {
-    log.error('Failed to queue confirmation update job', { error: err });
+    log.error('Failed to queue confirmation update job', {
+      error: err instanceof Error ? err.message : String(err),
+      height,
+      network,
+    });
   });
 }
 
@@ -180,7 +215,12 @@ function handleAddressActivity(network: BitcoinNetwork, walletId: string, addres
     priority: 1, // High priority
     jobId: `sync:${walletId}:${Date.now()}`, // Allow multiple syncs
   }).catch(err => {
-    log.error('Failed to queue sync job', { error: err, walletId });
+    log.error('Failed to queue sync job', {
+      error: err instanceof Error ? err.message : String(err),
+      walletId,
+      address,
+      network,
+    });
   });
 }
 
@@ -250,6 +290,12 @@ async function shutdown(signal: string): Promise<void> {
   isShuttingDown = true;
 
   log.info(`${signal} received, shutting down worker...`);
+
+  // Stop reconciliation timer
+  if (reconciliationTimer) {
+    clearInterval(reconciliationTimer);
+    reconciliationTimer = null;
+  }
 
   // Stop health server first
   if (healthServer) {

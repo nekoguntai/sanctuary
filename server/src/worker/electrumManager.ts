@@ -299,49 +299,76 @@ export class ElectrumSubscriptionManager {
 
   /**
    * Subscribe to all wallet addresses across all networks
+   *
+   * Uses cursor-based pagination to handle large numbers of addresses
+   * without loading everything into memory at once.
    */
   private async subscribeAllAddresses(): Promise<void> {
     log.info('Subscribing to all wallet addresses...');
 
-    // Get all addresses with their wallet and network info
-    const addresses = await prisma.address.findMany({
-      select: {
-        address: true,
-        walletId: true,
-        wallet: { select: { network: true } },
-      },
-    });
+    const PAGE_SIZE = 1000;
+    let totalProcessed = 0;
+    let cursor: string | undefined;
 
-    // Group by network
-    const byNetwork = new Map<BitcoinNetwork, Array<{ address: string; walletId: string }>>();
-
-    for (const addr of addresses) {
-      const network = (addr.wallet.network || 'mainnet') as BitcoinNetwork;
-
-      if (!byNetwork.has(network)) {
-        byNetwork.set(network, []);
-      }
-      byNetwork.get(network)!.push({
-        address: addr.address,
-        walletId: addr.walletId,
+    // Process addresses in pages to avoid memory issues with large deployments
+    while (true) {
+      const addresses = await prisma.address.findMany({
+        select: {
+          id: true,
+          address: true,
+          walletId: true,
+          wallet: { select: { network: true } },
+        },
+        take: PAGE_SIZE,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        orderBy: { id: 'asc' },
       });
 
-      // Track address -> wallet mapping
-      this.addressToWallet.set(addr.address, {
-        walletId: addr.walletId,
-        network,
-      });
-    }
+      if (addresses.length === 0) break;
 
-    // Subscribe for each network
-    for (const [network, networkAddresses] of byNetwork) {
-      const state = this.networks.get(network);
-      if (!state?.connected) {
-        log.warn(`Cannot subscribe addresses for ${network} - not connected`);
-        continue;
+      // Group by network for this batch
+      const byNetwork = new Map<BitcoinNetwork, Array<{ address: string; walletId: string }>>();
+
+      for (const addr of addresses) {
+        const network = (addr.wallet.network || 'mainnet') as BitcoinNetwork;
+
+        if (!byNetwork.has(network)) {
+          byNetwork.set(network, []);
+        }
+        byNetwork.get(network)!.push({
+          address: addr.address,
+          walletId: addr.walletId,
+        });
+
+        // Track address -> wallet mapping
+        this.addressToWallet.set(addr.address, {
+          walletId: addr.walletId,
+          network,
+        });
       }
 
-      await this.subscribeAddressBatch(state, networkAddresses);
+      // Subscribe for each network in this batch
+      for (const [network, networkAddresses] of byNetwork) {
+        const state = this.networks.get(network);
+        if (!state?.connected) {
+          log.warn(`Cannot subscribe addresses for ${network} - not connected`);
+          continue;
+        }
+
+        await this.subscribeAddressBatch(state, networkAddresses);
+      }
+
+      totalProcessed += addresses.length;
+      cursor = addresses[addresses.length - 1].id;
+
+      // Log progress for large deployments
+      if (totalProcessed % 5000 === 0) {
+        log.info(`Subscription progress: ${totalProcessed} addresses processed`);
+      }
+
+      // If we got less than PAGE_SIZE, we're done
+      if (addresses.length < PAGE_SIZE) break;
     }
 
     log.info(`Subscribed to ${this.addressToWallet.size} addresses`);
@@ -498,6 +525,86 @@ export class ElectrumSubscriptionManager {
         this.scheduleReconnect(network);
       }
     }
+  }
+
+  /**
+   * Reconcile subscription state with database
+   *
+   * Removes addresses that no longer exist in the database and
+   * subscribes to any new addresses. This prevents unbounded memory
+   * growth from deleted wallets/addresses.
+   */
+  async reconcileSubscriptions(): Promise<{ removed: number; added: number }> {
+    log.info('Reconciling Electrum subscriptions with database...');
+
+    // Get all addresses from database
+    const dbAddresses = await prisma.address.findMany({
+      select: {
+        address: true,
+        walletId: true,
+        wallet: { select: { network: true } },
+      },
+    });
+
+    const dbAddressSet = new Set(dbAddresses.map(a => a.address));
+    let removed = 0;
+    let added = 0;
+
+    // Remove addresses that no longer exist in database
+    for (const [address, info] of this.addressToWallet) {
+      if (!dbAddressSet.has(address)) {
+        this.addressToWallet.delete(address);
+        const state = this.networks.get(info.network);
+        if (state) {
+          state.subscribedAddresses.delete(address);
+        }
+        removed++;
+      }
+    }
+
+    // Find and subscribe to new addresses
+    const newAddressesByNetwork = new Map<BitcoinNetwork, Array<{ address: string; walletId: string }>>();
+
+    for (const addr of dbAddresses) {
+      if (!this.addressToWallet.has(addr.address)) {
+        const network = (addr.wallet.network || 'mainnet') as BitcoinNetwork;
+
+        if (!newAddressesByNetwork.has(network)) {
+          newAddressesByNetwork.set(network, []);
+        }
+        newAddressesByNetwork.get(network)!.push({
+          address: addr.address,
+          walletId: addr.walletId,
+        });
+
+        // Track the new address
+        this.addressToWallet.set(addr.address, {
+          walletId: addr.walletId,
+          network,
+        });
+        added++;
+      }
+    }
+
+    // Subscribe to new addresses
+    for (const [network, addresses] of newAddressesByNetwork) {
+      const state = this.networks.get(network);
+      if (state?.connected && addresses.length > 0) {
+        await this.subscribeAddressBatch(state, addresses);
+      }
+    }
+
+    if (removed > 0 || added > 0) {
+      log.info('Subscription reconciliation complete', {
+        removed,
+        added,
+        totalSubscribed: this.addressToWallet.size,
+      });
+    } else {
+      log.debug('Subscription reconciliation complete - no changes');
+    }
+
+    return { removed, added };
   }
 
   /**

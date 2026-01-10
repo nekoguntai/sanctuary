@@ -135,11 +135,16 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
 // Check Stale Wallets Job
 // =============================================================================
 
+// Maximum number of stale wallets to process per job run
+// Prevents overwhelming the sync queue with too many jobs at once
+const MAX_STALE_WALLETS_PER_RUN = 50;
+
 /**
  * Check for stale wallets and queue sync jobs
  *
  * This is a scheduled job that runs periodically to find wallets
  * that haven't been synced recently and queue them for sync.
+ * Limited to MAX_STALE_WALLETS_PER_RUN to prevent queue flooding.
  */
 export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, CheckStaleWalletsResult> = {
   name: 'check-stale-wallets',
@@ -155,7 +160,8 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
 
     log.debug('Checking for stale wallets', { staleThresholdMs, cutoffTime });
 
-    // Find stale wallets
+    // Find stale wallets, prioritizing those never synced, then oldest first
+    // Limited to prevent queue flooding
     const staleWallets = await prisma.wallet.findMany({
       where: {
         OR: [
@@ -165,6 +171,10 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
         syncInProgress: false,
       },
       select: { id: true, name: true, lastSyncedAt: true },
+      orderBy: [
+        { lastSyncedAt: { sort: 'asc', nulls: 'first' } },
+      ],
+      take: MAX_STALE_WALLETS_PER_RUN,
     });
 
     if (staleWallets.length === 0) {
@@ -172,7 +182,7 @@ export const checkStaleWalletsJob: WorkerJobHandler<CheckStaleWalletsJobData, Ch
       return { staleWalletIds: [], queued: 0 };
     }
 
-    log.info(`Found ${staleWallets.length} stale wallets`);
+    log.info(`Found ${staleWallets.length} stale wallets (max: ${MAX_STALE_WALLETS_PER_RUN})`);
 
     // Return the wallet IDs - the worker will queue them
     // This is done in the worker entry point to avoid circular dependencies

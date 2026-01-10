@@ -533,24 +533,79 @@ export class ElectrumSubscriptionManager {
    * Removes addresses that no longer exist in the database and
    * subscribes to any new addresses. This prevents unbounded memory
    * growth from deleted wallets/addresses.
+   *
+   * Uses cursor-based pagination to handle large deployments without
+   * loading all addresses into memory at once.
    */
   async reconcileSubscriptions(): Promise<{ removed: number; added: number }> {
     log.info('Reconciling Electrum subscriptions with database...');
 
-    // Get all addresses from database
-    const dbAddresses = await prisma.address.findMany({
-      select: {
-        address: true,
-        walletId: true,
-        wallet: { select: { network: true } },
-      },
-    });
-
-    const dbAddressSet = new Set(dbAddresses.map(a => a.address));
+    const PAGE_SIZE = 2000;
+    const dbAddressSet = new Set<string>();
     let removed = 0;
     let added = 0;
+    let cursor: string | undefined;
 
-    // Remove addresses that no longer exist in database
+    // First pass: Paginate through database addresses
+    // - Build a set of all addresses (just strings, lightweight)
+    // - Find and subscribe to new addresses in batches
+    while (true) {
+      const addresses = await prisma.address.findMany({
+        select: {
+          id: true,
+          address: true,
+          walletId: true,
+          wallet: { select: { network: true } },
+        },
+        take: PAGE_SIZE,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        orderBy: { id: 'asc' },
+      });
+
+      if (addresses.length === 0) break;
+
+      // Collect new addresses to subscribe per network
+      const newAddressesByNetwork = new Map<BitcoinNetwork, Array<{ address: string; walletId: string }>>();
+
+      for (const addr of addresses) {
+        // Add to set for removal check later
+        dbAddressSet.add(addr.address);
+
+        // Check if this is a new address we need to track
+        if (!this.addressToWallet.has(addr.address)) {
+          const network = (addr.wallet.network || 'mainnet') as BitcoinNetwork;
+
+          if (!newAddressesByNetwork.has(network)) {
+            newAddressesByNetwork.set(network, []);
+          }
+          newAddressesByNetwork.get(network)!.push({
+            address: addr.address,
+            walletId: addr.walletId,
+          });
+
+          // Track the new address
+          this.addressToWallet.set(addr.address, {
+            walletId: addr.walletId,
+            network,
+          });
+          added++;
+        }
+      }
+
+      // Subscribe to new addresses in this batch
+      for (const [network, networkAddresses] of newAddressesByNetwork) {
+        const state = this.networks.get(network);
+        if (state?.connected && networkAddresses.length > 0) {
+          await this.subscribeAddressBatch(state, networkAddresses);
+        }
+      }
+
+      cursor = addresses[addresses.length - 1].id;
+      if (addresses.length < PAGE_SIZE) break;
+    }
+
+    // Second pass: Remove addresses that no longer exist in database
     for (const [address, info] of this.addressToWallet) {
       if (!dbAddressSet.has(address)) {
         this.addressToWallet.delete(address);
@@ -559,38 +614,6 @@ export class ElectrumSubscriptionManager {
           state.subscribedAddresses.delete(address);
         }
         removed++;
-      }
-    }
-
-    // Find and subscribe to new addresses
-    const newAddressesByNetwork = new Map<BitcoinNetwork, Array<{ address: string; walletId: string }>>();
-
-    for (const addr of dbAddresses) {
-      if (!this.addressToWallet.has(addr.address)) {
-        const network = (addr.wallet.network || 'mainnet') as BitcoinNetwork;
-
-        if (!newAddressesByNetwork.has(network)) {
-          newAddressesByNetwork.set(network, []);
-        }
-        newAddressesByNetwork.get(network)!.push({
-          address: addr.address,
-          walletId: addr.walletId,
-        });
-
-        // Track the new address
-        this.addressToWallet.set(addr.address, {
-          walletId: addr.walletId,
-          network,
-        });
-        added++;
-      }
-    }
-
-    // Subscribe to new addresses
-    for (const [network, addresses] of newAddressesByNetwork) {
-      const state = this.networks.get(network);
-      if (state?.connected && addresses.length > 0) {
-        await this.subscribeAddressBatch(state, addresses);
       }
     }
 

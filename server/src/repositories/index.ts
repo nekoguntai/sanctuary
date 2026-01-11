@@ -27,6 +27,7 @@ export { pushDeviceRepository, default as pushDeviceRepo } from './pushDeviceRep
 export { sessionRepository, default as sessionRepo } from './sessionRepository';
 export { auditLogRepository, default as auditLogRepo } from './auditLogRepository';
 export { systemSettingRepository, default as systemSettingRepo } from './systemSettingRepository';
+export { mobilePermissionRepository, default as mobilePermissionRepo } from './mobilePermissionRepository';
 
 // Re-export types
 export type {
@@ -77,3 +78,9 @@ export type {
 
 export { SystemSettingKeys } from './systemSettingRepository';
 export type { SystemSettingKey } from './systemSettingRepository';
+
+export type {
+  MobilePermissionCapability,
+  CreateMobilePermissionInput,
+  UpdateMobilePermissionInput,
+} from './mobilePermissionRepository';

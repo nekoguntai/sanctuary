@@ -116,3 +116,139 @@ export const authRateLimiter = rateLimit({
     });
   },
 });
+
+// =============================================================================
+// Mobile-Specific Rate Limiters
+// =============================================================================
+
+/**
+ * Transaction creation rate limiter
+ *
+ * Limits transaction creation/estimation to prevent abuse.
+ * Mobile users can create up to 10 transactions per minute.
+ */
+export const transactionCreateRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 transactions per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const authReq = req as AuthenticatedRequest;
+    return authReq.user?.userId || req.ip || 'unknown';
+  },
+  handler: (req, res) => {
+    const authReq = req as AuthenticatedRequest;
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', {
+      tier: 'transaction_create',
+      userId: authReq.user?.userId,
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent'],
+      severity: 'medium',
+    });
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Transaction creation rate limit exceeded (10/min). Please try again later.',
+      retryAfter: 60,
+    });
+  },
+});
+
+/**
+ * Transaction broadcast rate limiter
+ *
+ * Strictly limits broadcasting to prevent abuse and costly chain spam.
+ * Mobile users can broadcast up to 5 transactions per minute.
+ */
+export const broadcastRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 broadcasts per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const authReq = req as AuthenticatedRequest;
+    return authReq.user?.userId || req.ip || 'unknown';
+  },
+  handler: (req, res) => {
+    const authReq = req as AuthenticatedRequest;
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', {
+      tier: 'broadcast',
+      userId: authReq.user?.userId,
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent'],
+      severity: 'high',
+    });
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Broadcast rate limit exceeded (5/min). Please try again later.',
+      retryAfter: 60,
+    });
+  },
+});
+
+/**
+ * Device registration rate limiter
+ *
+ * Very strict limit on device registration to prevent abuse.
+ * Users can only register 3 new push notification devices per hour.
+ */
+export const deviceRegistrationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 device registrations per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const authReq = req as AuthenticatedRequest;
+    return authReq.user?.userId || req.ip || 'unknown';
+  },
+  handler: (req, res) => {
+    const authReq = req as AuthenticatedRequest;
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', {
+      tier: 'device_registration',
+      userId: authReq.user?.userId,
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent'],
+      severity: 'medium',
+    });
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Device registration rate limit exceeded (3/hr). Please try again later.',
+      retryAfter: 3600,
+    });
+  },
+});
+
+/**
+ * Address generation rate limiter
+ *
+ * Limits address generation to prevent address exhaustion attacks.
+ * Mobile users can generate up to 20 addresses per minute.
+ */
+export const addressGenerationRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 addresses per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const authReq = req as AuthenticatedRequest;
+    return authReq.user?.userId || req.ip || 'unknown';
+  },
+  handler: (req, res) => {
+    const authReq = req as AuthenticatedRequest;
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', {
+      tier: 'address_generation',
+      userId: authReq.user?.userId,
+      ip: req.ip,
+      path: req.path,
+      userAgent: req.headers['user-agent'],
+      severity: 'low',
+    });
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Address generation rate limit exceeded (20/min). Please try again later.',
+      retryAfter: 60,
+    });
+  },
+});

@@ -45,8 +45,15 @@ import { Router, Request, Response } from 'express';
 import { createProxyMiddleware, Options } from 'http-proxy-middleware';
 import { config } from '../config';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
-import { defaultRateLimiter } from '../middleware/rateLimit';
+import {
+  defaultRateLimiter,
+  transactionCreateRateLimiter,
+  broadcastRateLimiter,
+  deviceRegistrationRateLimiter,
+  addressGenerationRateLimiter,
+} from '../middleware/rateLimit';
 import { validateRequest } from '../middleware/validateRequest';
+import { requireMobilePermission } from '../middleware/mobilePermission';
 import { createLogger } from '../utils/logger';
 import { logSecurityEvent } from '../middleware/requestLogger';
 
@@ -111,6 +118,32 @@ const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
   { method: 'DELETE', pattern: /^\/api\/v1\/push\/unregister$/ },
   { method: 'GET', pattern: /^\/api\/v1\/push\/devices$/ },
   { method: 'DELETE', pattern: /^\/api\/v1\/push\/devices\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+
+  // Transaction building & broadcasting
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions\/create$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions\/estimate$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions\/broadcast$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/psbt\/create$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/psbt\/broadcast$/ },
+
+  // Hardware wallet device management
+  { method: 'GET', pattern: /^\/api\/v1\/devices$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/devices$/ },
+  { method: 'PATCH', pattern: /^\/api\/v1\/devices\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/devices\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+
+  // Draft transactions (multisig)
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/drafts$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/drafts\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/drafts\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/sign$/ },
+
+  // Mobile permissions
+  { method: 'GET', pattern: /^\/api\/v1\/mobile-permissions$/ },
+  { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/mobile-permissions$/ },
+  { method: 'PATCH', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/mobile-permissions$/ },
+  { method: 'PATCH', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/mobile-permissions\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/mobile-permissions\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/caps$/ },
+  { method: 'DELETE', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/mobile-permissions$/ },
 ];
 
 /**
@@ -201,7 +234,117 @@ const proxy = createProxyMiddleware(proxyOptions);
 router.post('/api/v1/auth/login', checkWhitelist, validateRequest, proxy);
 router.post('/api/v1/auth/refresh', checkWhitelist, validateRequest, proxy);
 
-// Protected routes (require auth)
+// =============================================================================
+// Protected routes with mobile permission checks
+// =============================================================================
+
+// Transaction operations
+router.post(
+  '/api/v1/wallets/:id/transactions/create',
+  authenticate,
+  transactionCreateRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('createTransaction'),
+  validateRequest,
+  proxy
+);
+
+router.post(
+  '/api/v1/wallets/:id/transactions/estimate',
+  authenticate,
+  transactionCreateRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('createTransaction'),
+  validateRequest,
+  proxy
+);
+
+router.post(
+  '/api/v1/wallets/:id/transactions/broadcast',
+  authenticate,
+  broadcastRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('broadcast'),
+  validateRequest,
+  proxy
+);
+
+// PSBT operations
+router.post(
+  '/api/v1/wallets/:id/psbt/create',
+  authenticate,
+  transactionCreateRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('createTransaction'),
+  validateRequest,
+  proxy
+);
+
+router.post(
+  '/api/v1/wallets/:id/psbt/broadcast',
+  authenticate,
+  broadcastRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('broadcast'),
+  validateRequest,
+  proxy
+);
+
+// Address generation
+router.post(
+  '/api/v1/wallets/:id/addresses/generate',
+  authenticate,
+  addressGenerationRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('generateAddress'),
+  validateRequest,
+  proxy
+);
+
+// Label management (create - has walletId in path)
+router.post(
+  '/api/v1/wallets/:id/labels',
+  authenticate,
+  defaultRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('manageLabels'),
+  validateRequest,
+  proxy
+);
+
+// Note: PATCH/DELETE /api/v1/labels/:id routes don't have walletId in path.
+// Permission checking for these is handled by the backend after looking up
+// which wallet the label belongs to.
+
+// Note: Device management routes (/api/v1/devices) are user-scoped, not wallet-scoped,
+// so they don't use mobile permission middleware. Access control is handled by the
+// backend based on user authentication.
+
+// Push notification device registration (strict rate limit)
+router.post(
+  '/api/v1/push/register',
+  authenticate,
+  deviceRegistrationRateLimiter,
+  checkWhitelist,
+  validateRequest,
+  proxy
+);
+
+// Draft signing (multisig)
+router.post(
+  '/api/v1/wallets/:id/drafts/:draftId/sign',
+  authenticate,
+  defaultRateLimiter,
+  checkWhitelist,
+  requireMobilePermission('signPsbt'),
+  validateRequest,
+  proxy
+);
+
+// =============================================================================
+// Protected routes (general - no special permission checks)
+// =============================================================================
+
 router.use(
   '/api/v1',
   authenticate,

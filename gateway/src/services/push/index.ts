@@ -167,6 +167,13 @@ export async function sendToDevices(
 }
 
 /**
+ * Format satoshis to BTC string
+ */
+function formatSats(sats: number): string {
+  return `${(sats / 100_000_000).toFixed(8)} BTC`;
+}
+
+/**
  * Format a transaction notification
  */
 export function formatTransactionNotification(
@@ -175,25 +182,25 @@ export function formatTransactionNotification(
   amount: number,
   txid: string
 ): PushNotification {
-  const amountBtc = (amount / 100_000_000).toFixed(8);
+  const amountBtc = formatSats(amount);
 
   switch (type) {
     case 'received':
       return {
         title: `Bitcoin Received`,
-        body: `${walletName}: +${amountBtc} BTC`,
+        body: `${walletName}: +${amountBtc}`,
         data: { type: 'transaction', txid, walletName },
       };
     case 'sent':
       return {
         title: `Bitcoin Sent`,
-        body: `${walletName}: -${amountBtc} BTC`,
+        body: `${walletName}: -${amountBtc}`,
         data: { type: 'transaction', txid, walletName },
       };
     case 'confirmed':
       return {
         title: `Transaction Confirmed`,
-        body: `${walletName}: ${amountBtc} BTC confirmed`,
+        body: `${walletName}: ${amountBtc} confirmed`,
         data: { type: 'confirmation', txid, walletName },
       };
     default:
@@ -202,5 +209,125 @@ export function formatTransactionNotification(
         body: 'New wallet activity',
         data: { type: 'unknown' },
       };
+  }
+}
+
+/**
+ * Format a broadcast notification
+ */
+export function formatBroadcastNotification(
+  success: boolean,
+  walletName: string,
+  txid: string,
+  error?: string
+): PushNotification {
+  if (success) {
+    return {
+      title: 'Transaction Broadcast',
+      body: `Transaction sent from ${walletName}`,
+      data: { type: 'broadcast_success', txid, walletName },
+    };
+  } else {
+    return {
+      title: 'Broadcast Failed',
+      body: error
+        ? `Failed to broadcast from ${walletName}: ${error}`
+        : `Failed to broadcast from ${walletName}`,
+      data: { type: 'broadcast_failed', txid, walletName, error: error || '' },
+    };
+  }
+}
+
+/**
+ * Format a PSBT signing required notification
+ */
+export function formatPsbtSigningNotification(
+  walletName: string,
+  draftId: string,
+  creatorName: string,
+  amount: number,
+  requiredSignatures: number,
+  currentSignatures: number
+): PushNotification {
+  const amountBtc = formatSats(amount);
+  const remaining = requiredSignatures - currentSignatures;
+
+  return {
+    title: 'Signature Required',
+    body: `${creatorName} needs your signature on ${walletName} (${amountBtc})`,
+    data: {
+      type: 'psbt_signing_required',
+      draftId,
+      walletName,
+      amount: amount.toString(),
+      requiredSignatures: requiredSignatures.toString(),
+      currentSignatures: currentSignatures.toString(),
+      remaining: remaining.toString(),
+    },
+  };
+}
+
+/**
+ * Format a draft created notification
+ */
+export function formatDraftCreatedNotification(
+  walletName: string,
+  draftId: string,
+  creatorName: string,
+  amount: number
+): PushNotification {
+  const amountBtc = formatSats(amount);
+
+  return {
+    title: 'New Draft Transaction',
+    body: `${creatorName} created a draft on ${walletName} for ${amountBtc}`,
+    data: {
+      type: 'draft_created',
+      draftId,
+      walletName,
+      creatorName,
+      amount: amount.toString(),
+    },
+  };
+}
+
+/**
+ * Format a draft approved notification
+ */
+export function formatDraftApprovedNotification(
+  walletName: string,
+  draftId: string,
+  signerName: string,
+  currentSignatures: number,
+  requiredSignatures: number
+): PushNotification {
+  const isComplete = currentSignatures >= requiredSignatures;
+
+  if (isComplete) {
+    return {
+      title: 'Transaction Ready',
+      body: `${signerName} signed the draft on ${walletName}. Ready to broadcast!`,
+      data: {
+        type: 'draft_approved',
+        draftId,
+        walletName,
+        signerName,
+        ready: 'true',
+      },
+    };
+  } else {
+    const remaining = requiredSignatures - currentSignatures;
+    return {
+      title: 'Draft Signed',
+      body: `${signerName} signed the draft on ${walletName}. ${remaining} more signature${remaining > 1 ? 's' : ''} needed.`,
+      data: {
+        type: 'draft_approved',
+        draftId,
+        walletName,
+        signerName,
+        ready: 'false',
+        remaining: remaining.toString(),
+      },
+    };
   }
 }

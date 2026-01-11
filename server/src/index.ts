@@ -37,6 +37,7 @@ import aiInternalRoutes from './api/ai-internal';
 import healthRoutes from './api/health';
 import transferRoutes from './api/transfers';
 import openApiRoutes from './api/openapi';
+import mobilePermissionsRoutes from './api/mobilePermissions';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { initializeRedisBridge, shutdownRedisBridge } from './websocket/redisBridge';
 import { notificationService } from './websocket/notifications';
@@ -206,6 +207,9 @@ app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1/transfers', transferRoutes);  // Ownership transfer routes
 app.use('/api/v1/ai', aiRoutes);  // AI-powered features (optional)
 app.use('/internal/ai', aiInternalRoutes);  // Internal AI endpoints (AI container only)
+app.use('/api/v1/mobile-permissions', mobilePermissionsRoutes);  // Mobile permissions
+app.use('/api/v1', mobilePermissionsRoutes);  // Wallet-scoped mobile permissions
+app.use('/', mobilePermissionsRoutes);  // Internal mobile permission endpoints
 // These routes are mounted at /api/v1 without a specific path - must come LAST
 app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
 app.use('/api/v1', labelRoutes);  // Label routes include various prefixes

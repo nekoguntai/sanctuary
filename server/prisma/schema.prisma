@@ -47,6 +47,9 @@ model User {
   transfersInitiated OwnershipTransfer[] @relation("TransfersInitiated")
   transfersReceived  OwnershipTransfer[] @relation("TransfersReceived")
 
+  // Mobile permissions
+  mobilePermissions  MobilePermission[]
+
   @@index([isAdmin]) // For admin user lookups
   @@map("users")
 }
@@ -125,6 +128,7 @@ model Wallet {
   labels            Label[]
   group             Group?             @relation(fields: [groupId], references: [id])
   draftTransactions DraftTransaction[]
+  mobilePermissions MobilePermission[]
 
   @@index([groupId])
   @@index([syncInProgress]) // For sync service startup & scheduling
@@ -846,6 +850,56 @@ model OwnershipTransfer {
   @@index([resourceType, resourceId, status]) // Check if resource has pending transfer
   @@index([status, expiresAt]) // Cleanup expired transfers
   @@map("ownership_transfers")
+}
+
+// ========================================
+// MOBILE PERMISSIONS
+// ========================================
+
+// Per-wallet mobile access restrictions
+// Mobile permissions act as additional restrictions on top of wallet roles
+// (i.e., effective permission = MIN(walletRole, mobilePermission, ownerMax))
+model MobilePermission {
+  id        String   @id @default(uuid())
+  walletId  String
+  userId    String
+
+  // View permissions (default to wallet role's maximum)
+  canViewBalance       Boolean @default(true)
+  canViewTransactions  Boolean @default(true)
+  canViewUtxos         Boolean @default(true)
+
+  // Transaction permissions
+  canCreateTransaction Boolean @default(true)
+  canBroadcast         Boolean @default(true)
+  canSignPsbt          Boolean @default(true)
+
+  // Address & label permissions
+  canGenerateAddress   Boolean @default(true)
+  canManageLabels      Boolean @default(true)
+
+  // Administrative permissions
+  canManageDevices     Boolean @default(true)
+  canShareWallet       Boolean @default(true)
+  canDeleteWallet      Boolean @default(true)
+
+  // Owner-set maximum permissions (JSON object of action -> boolean)
+  // If set, user cannot exceed these caps even with self-set permissions
+  ownerMaxPermissions  Json?
+
+  // Metadata
+  lastModifiedBy       String?  // userId who last modified
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  wallet    Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([walletId, userId])
+  @@index([userId])
+  @@index([walletId])
+  @@map("mobile_permissions")
 }
 
 // ========================================

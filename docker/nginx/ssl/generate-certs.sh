@@ -19,6 +19,10 @@ openssl req -x509 -nodes -days ${DAYS} -newkey rsa:2048 \
   -addext "subjectAltName=DNS:${DOMAIN},DNS:*.${DOMAIN},IP:127.0.0.1,IP:::1"
 
 if [ $? -eq 0 ]; then
+  # Set permissions so Docker containers can read the certificates
+  # The gateway container runs as non-root and needs read access
+  chmod 644 "${CERT_DIR}/privkey.pem" "${CERT_DIR}/fullchain.pem"
+
   echo "Certificates generated successfully:"
   echo "  - ${CERT_DIR}/fullchain.pem"
   echo "  - ${CERT_DIR}/privkey.pem"

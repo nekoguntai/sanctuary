@@ -552,6 +552,8 @@ main() {
         fi
     else
         echo -e "${GREEN}✓${NC} SSL certificates already exist"
+        # Ensure permissions allow Docker containers to read the certs
+        chmod 644 "$SSL_DIR/privkey.pem" "$SSL_DIR/fullchain.pem" 2>/dev/null || true
     fi
 
     echo ""

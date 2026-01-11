@@ -217,6 +217,11 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3001
+
       - name: Setup backend
         working-directory: server
         run: |

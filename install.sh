@@ -716,7 +716,7 @@ ENABLE_MONITORING=${ENABLE_MONITORING:-no}
 ENABLE_TOR=${ENABLE_TOR:-no}
 
 # Gateway TLS - enabled by default for secure mobile connections
-GATEWAY_TLS_ENABLED=true
+GATEWAY_TLS_ENABLED=${GATEWAY_TLS_ENABLED:-true}
 ENVEOF
 
     echo -e "${GREEN}✓${NC} Saved configuration to .env"

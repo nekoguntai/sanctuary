@@ -2,7 +2,7 @@
   "name": "sanctuary-server",
   "version": "0.8.1",
   "description": "Backend API server for Sanctuary Bitcoin Wallet",
-  "main": "dist/index.js",
+  "main": "dist/server/src/index.js",
   "prisma": {
     "seed": "node --experimental-specifier-resolution=node dist/prisma/seed.js"
   },
@@ -11,7 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "prebuild": "prisma generate",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/server/src/index.js",
     "pretest": "prisma generate",
     "test": "vitest",
     "test:run": "vitest run",

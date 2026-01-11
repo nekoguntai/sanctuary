@@ -544,6 +544,14 @@ describe('UserContext', () => {
   });
 
   describe('Theme application', () => {
+    beforeEach(async () => {
+      // Clear theme registry mocks before each theme test
+      const { themeRegistry } = await import('../../themes');
+      vi.mocked(themeRegistry.applyTheme).mockClear();
+      vi.mocked(themeRegistry.applyPattern).mockClear();
+      vi.mocked(themeRegistry.applyPatternOpacity).mockClear();
+    });
+
     it('applies user theme preferences', async () => {
       const { themeRegistry } = await import('../../themes');
 

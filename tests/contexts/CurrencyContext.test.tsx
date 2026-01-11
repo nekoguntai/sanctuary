@@ -1,0 +1,425 @@
+/**
+ * Tests for CurrencyContext
+ *
+ * Tests currency formatting, fiat price fetching, and user preferences.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import React from 'react';
+import {
+  CurrencyProvider,
+  useCurrency,
+  useCurrencyFormatter,
+  useBtcPrice,
+  useCurrencySettings,
+} from '../../contexts/CurrencyContext';
+import { UserProvider } from '../../contexts/UserContext';
+import * as priceApi from '../../src/api/price';
+import * as authApi from '../../src/api/auth';
+
+// Mock the APIs
+vi.mock('../../src/api/price', () => ({
+  getPrice: vi.fn(),
+}));
+
+vi.mock('../../src/api/auth', () => ({
+  isAuthenticated: vi.fn(() => false),
+  getCurrentUser: vi.fn(),
+  logout: vi.fn(),
+  login: vi.fn(),
+  register: vi.fn(),
+  updatePreferences: vi.fn(),
+}));
+
+// Test component that exposes context values
+function TestConsumer() {
+  const currency = useCurrency();
+
+  return (
+    <div>
+      <span data-testid="show-fiat">{currency.showFiat.toString()}</span>
+      <span data-testid="fiat-currency">{currency.fiatCurrency}</span>
+      <span data-testid="unit">{currency.unit}</span>
+      <span data-testid="btc-price">{currency.btcPrice ?? 'null'}</span>
+      <span data-testid="price-loading">{currency.priceLoading.toString()}</span>
+      <span data-testid="price-error">{currency.priceError ?? 'null'}</span>
+      <span data-testid="currency-symbol">{currency.currencySymbol}</span>
+      <span data-testid="formatted-sats">{currency.format(100000)}</span>
+      <span data-testid="formatted-fiat">{currency.formatFiat(100000) ?? 'null'}</span>
+      <span data-testid="fiat-value">{currency.getFiatValue(100000) ?? 'null'}</span>
+      <span data-testid="price-provider">{currency.priceProvider}</span>
+      <button data-testid="toggle-fiat" onClick={currency.toggleShowFiat}>Toggle Fiat</button>
+      <button data-testid="set-eur" onClick={() => currency.setFiatCurrency('EUR')}>Set EUR</button>
+      <button data-testid="set-btc" onClick={() => currency.setUnit('btc')}>Set BTC</button>
+      <button data-testid="refresh-price" onClick={currency.refreshPrice}>Refresh</button>
+    </div>
+  );
+}
+
+function renderWithProviders(ui: React.ReactNode) {
+  return render(
+    <UserProvider>
+      <CurrencyProvider>
+        {ui}
+      </CurrencyProvider>
+    </UserProvider>
+  );
+}
+
+describe('CurrencyContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    // Default mock responses
+    vi.mocked(priceApi.getPrice).mockResolvedValue({
+      price: 50000,
+      change24h: 2.5,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe('Provider initialization', () => {
+    it('initializes with default values', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('show-fiat')).toHaveTextContent('false');
+      expect(screen.getByTestId('fiat-currency')).toHaveTextContent('USD');
+      expect(screen.getByTestId('unit')).toHaveTextContent('sats');
+      expect(screen.getByTestId('currency-symbol')).toHaveTextContent('$');
+      expect(screen.getByTestId('price-provider')).toHaveTextContent('auto');
+    });
+
+    it('fetches price on mount', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledWith('USD', true);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('btc-price')).toHaveTextContent('50000');
+      });
+    });
+
+    it('sets price loading state', async () => {
+      // Delay price response
+      vi.mocked(priceApi.getPrice).mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve({
+          price: 50000,
+          change24h: 2.5,
+          timestamp: new Date().toISOString(),
+        }), 100))
+      );
+
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('price-loading')).toHaveTextContent('true');
+
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('price-loading')).toHaveTextContent('false');
+      });
+    });
+
+    it('handles price fetch error', async () => {
+      vi.mocked(priceApi.getPrice).mockRejectedValue(new Error('Network error'));
+
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('price-error')).toHaveTextContent('Failed to fetch price');
+      });
+
+      expect(screen.getByTestId('btc-price')).toHaveTextContent('null');
+    });
+  });
+
+  describe('Currency formatting', () => {
+    it('formats sats correctly', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('formatted-sats')).toHaveTextContent('100,000 sats');
+    });
+
+    it('formats as BTC when unit is btc', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      await user.click(screen.getByTestId('set-btc'));
+
+      expect(screen.getByTestId('formatted-sats')).toHaveTextContent('0.001 BTC');
+    });
+
+    it('returns null for fiat when showFiat is false', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('btc-price')).toHaveTextContent('50000');
+      });
+
+      expect(screen.getByTestId('formatted-fiat')).toHaveTextContent('null');
+    });
+
+    it('formats fiat when showFiat is true', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('btc-price')).toHaveTextContent('50000');
+      });
+
+      await user.click(screen.getByTestId('toggle-fiat'));
+
+      await waitFor(() => {
+        // 100000 sats = 0.001 BTC * 50000 = $50
+        expect(screen.getByTestId('formatted-fiat')).toHaveTextContent('$50.00');
+      });
+    });
+
+    it('shows placeholder when price unavailable', async () => {
+      vi.mocked(priceApi.getPrice).mockRejectedValue(new Error('No price'));
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('price-error')).not.toHaveTextContent('null');
+      });
+
+      await user.click(screen.getByTestId('toggle-fiat'));
+
+      expect(screen.getByTestId('formatted-fiat')).toHaveTextContent('-----');
+    });
+  });
+
+  describe('Currency settings', () => {
+    it('toggles showFiat', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('show-fiat')).toHaveTextContent('false');
+
+      await user.click(screen.getByTestId('toggle-fiat'));
+      expect(screen.getByTestId('show-fiat')).toHaveTextContent('true');
+
+      await user.click(screen.getByTestId('toggle-fiat'));
+      expect(screen.getByTestId('show-fiat')).toHaveTextContent('false');
+    });
+
+    it('changes fiat currency', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('fiat-currency')).toHaveTextContent('USD');
+      expect(screen.getByTestId('currency-symbol')).toHaveTextContent('$');
+
+      await user.click(screen.getByTestId('set-eur'));
+
+      expect(screen.getByTestId('fiat-currency')).toHaveTextContent('EUR');
+      expect(screen.getByTestId('currency-symbol')).toHaveTextContent('€');
+    });
+
+    it('changes bitcoin unit', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      expect(screen.getByTestId('unit')).toHaveTextContent('sats');
+
+      await user.click(screen.getByTestId('set-btc'));
+
+      expect(screen.getByTestId('unit')).toHaveTextContent('btc');
+    });
+
+    it('refetches price when currency changes', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledWith('USD', true);
+      });
+
+      await user.click(screen.getByTestId('set-eur'));
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledWith('EUR', true);
+      });
+    });
+  });
+
+  describe('Price refresh', () => {
+    it('refreshes price on demand', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledTimes(1);
+      });
+
+      await user.click(screen.getByTestId('refresh-price'));
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('auto-refreshes price every 60 seconds', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledTimes(1);
+      });
+
+      // Advance 60 seconds
+      await act(async () => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
+
+  describe('getFiatValue', () => {
+    it('calculates fiat value from sats', async () => {
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('btc-price')).toHaveTextContent('50000');
+      });
+
+      // 100000 sats = 0.001 BTC * 50000 = 50
+      expect(screen.getByTestId('fiat-value')).toHaveTextContent('50');
+    });
+
+    it('returns null when price unavailable', async () => {
+      vi.mocked(priceApi.getPrice).mockRejectedValue(new Error('No price'));
+
+      renderWithProviders(<TestConsumer />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('price-error')).not.toHaveTextContent('null');
+      });
+
+      expect(screen.getByTestId('fiat-value')).toHaveTextContent('null');
+    });
+  });
+
+  describe('Currency symbols', () => {
+    it.each([
+      ['USD', '$'],
+      ['EUR', '€'],
+      ['GBP', '£'],
+      ['JPY', '¥'],
+    ])('shows correct symbol for %s', async (currency, symbol) => {
+      const TestCurrencySymbol = () => {
+        const { setFiatCurrency, currencySymbol } = useCurrency();
+        React.useEffect(() => {
+          setFiatCurrency(currency as 'USD' | 'EUR' | 'GBP' | 'JPY');
+        }, []);
+        return <span data-testid="symbol">{currencySymbol}</span>;
+      };
+
+      renderWithProviders(<TestCurrencySymbol />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('symbol')).toHaveTextContent(symbol);
+      });
+    });
+  });
+
+  describe('useCurrency hook', () => {
+    it('throws when used outside provider', () => {
+      const TestComponent = () => {
+        useCurrency();
+        return null;
+      };
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => render(<TestComponent />)).toThrow(
+        'useCurrency must be used within CurrencyProvider'
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Specialized hooks', () => {
+    it('useCurrencyFormatter returns formatting functions', async () => {
+      const TestFormatter = () => {
+        const { format, formatFiat, currencySymbol, unit, showFiat } = useCurrencyFormatter();
+        return (
+          <div>
+            <span data-testid="format">{format(50000)}</span>
+            <span data-testid="symbol">{currencySymbol}</span>
+            <span data-testid="unit">{unit}</span>
+          </div>
+        );
+      };
+
+      renderWithProviders(<TestFormatter />);
+
+      expect(screen.getByTestId('format')).toHaveTextContent('50,000 sats');
+      expect(screen.getByTestId('symbol')).toHaveTextContent('$');
+      expect(screen.getByTestId('unit')).toHaveTextContent('sats');
+    });
+
+    it('useBtcPrice returns price data', async () => {
+      const TestPriceHook = () => {
+        const { btcPrice, priceChange24h, priceLoading, priceError } = useBtcPrice();
+        return (
+          <div>
+            <span data-testid="price">{btcPrice ?? 'null'}</span>
+            <span data-testid="change">{priceChange24h ?? 'null'}</span>
+            <span data-testid="loading">{priceLoading.toString()}</span>
+          </div>
+        );
+      };
+
+      renderWithProviders(<TestPriceHook />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('price')).toHaveTextContent('50000');
+        expect(screen.getByTestId('change')).toHaveTextContent('2.5');
+      });
+    });
+
+    it('useCurrencySettings returns settings', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      const TestSettings = () => {
+        const { showFiat, toggleShowFiat, fiatCurrency, unit, priceProvider, availableProviders } = useCurrencySettings();
+        return (
+          <div>
+            <span data-testid="showFiat">{showFiat.toString()}</span>
+            <span data-testid="fiat">{fiatCurrency}</span>
+            <span data-testid="unit">{unit}</span>
+            <span data-testid="provider">{priceProvider}</span>
+            <span data-testid="providers">{availableProviders.join(',')}</span>
+            <button data-testid="toggle" onClick={toggleShowFiat}>Toggle</button>
+          </div>
+        );
+      };
+
+      renderWithProviders(<TestSettings />);
+
+      expect(screen.getByTestId('showFiat')).toHaveTextContent('false');
+      expect(screen.getByTestId('providers')).toHaveTextContent('auto,coingecko,mempool,kraken,coinbase,binance');
+
+      await user.click(screen.getByTestId('toggle'));
+
+      expect(screen.getByTestId('showFiat')).toHaveTextContent('true');
+    });
+  });
+});

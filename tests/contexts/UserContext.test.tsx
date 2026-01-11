@@ -1,0 +1,584 @@
+/**
+ * Tests for UserContext
+ *
+ * Tests authentication, user management, and preference handling.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import React from 'react';
+import {
+  UserProvider,
+  useUser,
+  useAuth,
+  useCurrentUser,
+  useUserPreferences,
+  useTwoFactor,
+} from '../../contexts/UserContext';
+import * as authApi from '../../src/api/auth';
+import * as twoFactorApi from '../../src/api/twoFactor';
+import { ApiError } from '../../src/api/client';
+
+// Mock the APIs
+vi.mock('../../src/api/auth', () => ({
+  isAuthenticated: vi.fn(() => false),
+  getCurrentUser: vi.fn(),
+  logout: vi.fn(),
+  login: vi.fn(),
+  register: vi.fn(),
+  updatePreferences: vi.fn(),
+  requires2FA: vi.fn(() => false),
+}));
+
+vi.mock('../../src/api/twoFactor', () => ({
+  verify2FA: vi.fn(),
+}));
+
+// Mock theme registry
+vi.mock('../../themes', () => ({
+  themeRegistry: {
+    applyTheme: vi.fn(),
+    applyPattern: vi.fn(),
+    applyPatternOpacity: vi.fn(),
+  },
+}));
+
+const mockUser = {
+  id: 'user-1',
+  username: 'testuser',
+  email: 'test@example.com',
+  isAdmin: false,
+  preferences: {
+    darkMode: true,
+    unit: 'sats' as const,
+    fiatCurrency: 'USD' as const,
+    showFiat: false,
+    theme: 'sanctuary' as const,
+    background: 'minimal' as const,
+  },
+};
+
+// Test component that exposes context values
+function TestConsumer() {
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    error,
+    twoFactorPending,
+    login,
+    verify2FA,
+    cancel2FA,
+    register,
+    logout,
+    updatePreferences,
+    clearError,
+  } = useUser();
+
+  return (
+    <div>
+      <span data-testid="user">{user?.username ?? 'null'}</span>
+      <span data-testid="authenticated">{isAuthenticated.toString()}</span>
+      <span data-testid="loading">{isLoading.toString()}</span>
+      <span data-testid="error">{error ?? 'null'}</span>
+      <span data-testid="2fa-pending">{twoFactorPending ? 'yes' : 'no'}</span>
+      <button data-testid="login" onClick={() => login('testuser', 'password')}>Login</button>
+      <button data-testid="register" onClick={() => register('newuser', 'password', 'new@example.com')}>Register</button>
+      <button data-testid="logout" onClick={logout}>Logout</button>
+      <button data-testid="verify-2fa" onClick={() => verify2FA('123456')}>Verify 2FA</button>
+      <button data-testid="cancel-2fa" onClick={cancel2FA}>Cancel 2FA</button>
+      <button data-testid="update-prefs" onClick={() => updatePreferences({ darkMode: false })}>Update Prefs</button>
+      <button data-testid="clear-error" onClick={clearError}>Clear Error</button>
+    </div>
+  );
+}
+
+describe('UserContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset document classes
+    document.documentElement.classList.remove('dark');
+  });
+
+  describe('Provider initialization', () => {
+    it('initializes with unauthenticated state', async () => {
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(false);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      expect(screen.getByTestId('user')).toHaveTextContent('null');
+    });
+
+    it('checks for existing auth on mount', async () => {
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(authApi.getCurrentUser).toHaveBeenCalled();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+    });
+
+    it('handles auth check failure gracefully', async () => {
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockRejectedValue(new Error('Token expired'));
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(authApi.logout).toHaveBeenCalled();
+      });
+
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+    });
+
+    it('applies default dark theme when no user', async () => {
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(false);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+    });
+  });
+
+  describe('Login', () => {
+    it('logs in successfully', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.requires2FA).mockReturnValue(false);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+    });
+
+    it('handles login error', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockRejectedValue(new ApiError('Invalid credentials', 401));
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Invalid credentials');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      });
+    });
+
+    it('triggers 2FA flow when required', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.requires2FA).mockReturnValue(true);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('yes');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      });
+    });
+  });
+
+  describe('Two-Factor Authentication', () => {
+    it('verifies 2FA code successfully', async () => {
+      const user = userEvent.setup();
+
+      // First trigger 2FA
+      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.requires2FA).mockReturnValue(true);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('yes');
+      });
+
+      // Now verify 2FA
+      vi.mocked(twoFactorApi.verify2FA).mockResolvedValue({ user: mockUser });
+
+      await user.click(screen.getByTestId('verify-2fa'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('no');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+    });
+
+    it('handles 2FA verification failure', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.requires2FA).mockReturnValue(true);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('yes');
+      });
+
+      vi.mocked(twoFactorApi.verify2FA).mockRejectedValue(new ApiError('Invalid code', 400));
+
+      await user.click(screen.getByTestId('verify-2fa'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Invalid code');
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('yes'); // Still pending
+      });
+    });
+
+    it('cancels 2FA flow', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(authApi.login).mockResolvedValue({ tempToken: 'temp-token-123' });
+      vi.mocked(authApi.requires2FA).mockReturnValue(true);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('2fa-pending')).toHaveTextContent('yes');
+      });
+
+      await user.click(screen.getByTestId('cancel-2fa'));
+
+      expect(screen.getByTestId('2fa-pending')).toHaveTextContent('no');
+    });
+
+    it('returns error if verify2FA called without pending 2FA', async () => {
+      const user = userEvent.setup();
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('verify-2fa'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('No 2FA verification pending');
+      });
+    });
+  });
+
+  describe('Registration', () => {
+    it('registers successfully', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.register).mockResolvedValue({ user: mockUser });
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('register'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+    });
+
+    it('handles registration error', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.register).mockRejectedValue(new ApiError('Username taken', 409));
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('register'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Username taken');
+      });
+    });
+  });
+
+  describe('Logout', () => {
+    it('logs out user', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.requires2FA).mockReturnValue(false);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      // Login first
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      // Then logout
+      await user.click(screen.getByTestId('logout'));
+
+      expect(authApi.logout).toHaveBeenCalled();
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+      expect(screen.getByTestId('user')).toHaveTextContent('null');
+    });
+  });
+
+  describe('Preferences', () => {
+    it('updates preferences optimistically', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.requires2FA).mockReturnValue(false);
+      vi.mocked(authApi.updatePreferences).mockResolvedValue({
+        ...mockUser,
+        preferences: { ...mockUser.preferences, darkMode: false },
+      });
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('true');
+      });
+
+      await user.click(screen.getByTestId('update-prefs'));
+
+      await waitFor(() => {
+        expect(authApi.updatePreferences).toHaveBeenCalledWith(
+          expect.objectContaining({ darkMode: false })
+        );
+      });
+    });
+  });
+
+  describe('Error handling', () => {
+    it('clears error', async () => {
+      const user = userEvent.setup();
+      vi.mocked(authApi.login).mockRejectedValue(new ApiError('Error', 500));
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error')).toHaveTextContent('Error');
+      });
+
+      await user.click(screen.getByTestId('clear-error'));
+
+      expect(screen.getByTestId('error')).toHaveTextContent('null');
+    });
+  });
+
+  describe('useUser hook', () => {
+    it('throws when used outside provider', () => {
+      const TestComponent = () => {
+        useUser();
+        return null;
+      };
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => render(<TestComponent />)).toThrow(
+        'useUser must be used within UserProvider'
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Specialized hooks', () => {
+    it('useAuth returns auth-related values', async () => {
+      const user = userEvent.setup();
+
+      const TestAuth = () => {
+        const { isAuthenticated, isLoading, error, login, logout, register, clearError } = useAuth();
+        return (
+          <div>
+            <span data-testid="auth">{isAuthenticated.toString()}</span>
+            <span data-testid="loading">{isLoading.toString()}</span>
+            <button data-testid="login" onClick={() => login('user', 'pass')}>Login</button>
+          </div>
+        );
+      };
+
+      vi.mocked(authApi.login).mockResolvedValue({ user: mockUser });
+      vi.mocked(authApi.requires2FA).mockReturnValue(false);
+
+      render(<UserProvider><TestAuth /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('false');
+      });
+
+      expect(screen.getByTestId('auth')).toHaveTextContent('false');
+
+      await user.click(screen.getByTestId('login'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth')).toHaveTextContent('true');
+      });
+    });
+
+    it('useCurrentUser returns user object', async () => {
+      const TestCurrentUser = () => {
+        const user = useCurrentUser();
+        return <span data-testid="user">{user?.username ?? 'null'}</span>;
+      };
+
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
+
+      render(<UserProvider><TestCurrentUser /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+      });
+    });
+
+    it('useUserPreferences returns preferences', async () => {
+      const TestPrefs = () => {
+        const { preferences, updatePreferences } = useUserPreferences();
+        return (
+          <div>
+            <span data-testid="theme">{preferences?.theme ?? 'null'}</span>
+            <button data-testid="update" onClick={() => updatePreferences({ theme: 'forest' })}>
+              Update
+            </button>
+          </div>
+        );
+      };
+
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
+
+      render(<UserProvider><TestPrefs /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('theme')).toHaveTextContent('sanctuary');
+      });
+    });
+
+    it('useTwoFactor returns 2FA state', async () => {
+      const user = userEvent.setup();
+
+      const Test2FA = () => {
+        const { twoFactorPending, verify2FA, cancel2FA } = useTwoFactor();
+        return (
+          <div>
+            <span data-testid="pending">{twoFactorPending ? 'yes' : 'no'}</span>
+            <button data-testid="cancel" onClick={cancel2FA}>Cancel</button>
+          </div>
+        );
+      };
+
+      render(<UserProvider><Test2FA /></UserProvider>);
+
+      expect(screen.getByTestId('pending')).toHaveTextContent('no');
+    });
+  });
+
+  describe('Theme application', () => {
+    it('applies user theme preferences', async () => {
+      const { themeRegistry } = await import('../../themes');
+
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue(mockUser);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+      });
+
+      expect(themeRegistry.applyTheme).toHaveBeenCalledWith('sanctuary', 'dark', 0);
+      expect(themeRegistry.applyPattern).toHaveBeenCalledWith('minimal', 'sanctuary');
+    });
+
+    it('applies light mode when darkMode is false', async () => {
+      const { themeRegistry } = await import('../../themes');
+
+      const lightUser = {
+        ...mockUser,
+        preferences: { ...mockUser.preferences, darkMode: false },
+      };
+
+      vi.mocked(authApi.isAuthenticated).mockReturnValue(true);
+      vi.mocked(authApi.getCurrentUser).mockResolvedValue(lightUser);
+
+      render(<UserProvider><TestConsumer /></UserProvider>);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent('testuser');
+      });
+
+      expect(themeRegistry.applyTheme).toHaveBeenCalledWith('sanctuary', 'light', 0);
+      expect(document.documentElement.classList.contains('dark')).toBe(false);
+    });
+  });
+});

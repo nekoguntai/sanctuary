@@ -208,15 +208,15 @@ class MobilePermissionService {
 
     // Calculate effective permissions - role is now included in the query
     const results = permissions.map((perm) => {
-      // Extract role from the included walletUsers relation
-      const role = perm.wallet.walletUsers[0]?.role as WalletRole | undefined;
+      // Extract role from the included users relation
+      const role = perm.wallet.users[0]?.role as WalletRole | undefined;
       const effectivePermissions = calculateAllEffectivePermissions(
         role || 'viewer',
         perm
       );
 
-      // Remove the nested walletUsers from the response
-      const { walletUsers, ...walletData } = perm.wallet;
+      // Remove the nested users from the response
+      const { users, ...walletData } = perm.wallet;
 
       return {
         ...perm,

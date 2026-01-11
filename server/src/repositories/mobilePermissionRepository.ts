@@ -121,7 +121,7 @@ export async function findByUserIdWithWallet(userId: string) {
           name: true,
           type: true,
           network: true,
-          walletUsers: {
+          users: {
             where: { userId },
             select: { role: true },
             take: 1,

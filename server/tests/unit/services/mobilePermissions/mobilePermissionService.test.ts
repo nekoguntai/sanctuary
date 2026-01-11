@@ -369,7 +369,7 @@ describe('MobilePermissionService', () => {
             name: 'Test Wallet',
             type: 'single_sig',
             network: 'testnet',
-            walletUsers: [{ role: 'signer' }],
+            users: [{ role: 'signer' }],
           },
         },
       ];
@@ -385,7 +385,7 @@ describe('MobilePermissionService', () => {
       expect(result[0].effectivePermissions.viewBalance).toBe(true);
     });
 
-    it('should default to viewer role when walletUsers is empty', async () => {
+    it('should default to viewer role when users is empty', async () => {
       const mockPermsWithWallet = [
         {
           ...mockPermission,
@@ -394,7 +394,7 @@ describe('MobilePermissionService', () => {
             name: 'Test Wallet',
             type: 'single_sig',
             network: 'testnet',
-            walletUsers: [],
+            users: [],
           },
         },
       ];

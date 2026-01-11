@@ -1,6 +1,6 @@
 # Sanctuary Test Coverage Plan
 
-Last updated: 2026-01-05
+Last updated: 2026-01-11
 
 ## Executive Summary
 
@@ -248,3 +248,79 @@ Parallelize the 4000+ tests by type for faster CI feedback:
 | RBF Transactions | Medium - stuck funds | High - double-spend concerns | P2 |
 | Multisig Flow | High - signing failures | Medium - UX issues | P2 |
 | Hardware Wallet | Medium - device issues | Medium - compatibility | P3 |
+
+---
+
+## Frontend Coverage Improvement Plan
+
+### Current Frontend State (2026-01-11)
+
+| Metric | Current | Threshold | Buffer |
+|--------|---------|-----------|--------|
+| Lines | 19.07% | 18% | 1.07% |
+| Statements | 18.57% | 18% | 0.57% |
+| Functions | 14.70% | 14% | 0.70% |
+| Branches | 16.91% | 15% | 1.91% |
+
+**Status**: Very tight margins - any regression could break CI.
+
+### Tier 1: Quick Wins (~5% coverage boost)
+
+#### Contexts (0% coverage)
+- [ ] ServiceContext.tsx (12 lines)
+- [ ] SidebarContext.tsx (11 lines)
+- [ ] NotificationContext.tsx (47 lines)
+- [ ] SlotContext.tsx (65 lines)
+
+#### Hooks (0% coverage)
+- [ ] useCopyToClipboard.ts (10 lines)
+- [ ] useErrorHandler.ts (17 lines)
+- [ ] useDevices.ts (17 lines)
+- [ ] useBitcoin.ts (14 lines, 7%)
+
+#### Utils (0% coverage)
+- [ ] clipboard.ts (18 lines)
+- [ ] errorHandler.ts (13 lines)
+
+#### Small Components
+- [ ] ThemeProvider.tsx (9 lines, 0%)
+- [ ] NotificationBadge.tsx (11 lines, 0%)
+- [ ] Amount.tsx (12 lines, 8%)
+
+### Tier 2: Medium Effort (~4% more)
+
+- [ ] AppNotificationContext.tsx (118 lines, 0%)
+- [ ] Layout.tsx (93 lines, 0%)
+- [ ] WalletList.tsx (103 lines, 0%)
+- [ ] WalletStats.tsx (63 lines, 0%)
+- [ ] NotificationPanel.tsx (79 lines, 0%)
+- [ ] LabelManager.tsx (75 lines, 0%)
+
+### Tier 3: High Value (~6% more)
+
+- [ ] SendTransactionContext.tsx (104 lines, 0%)
+- [ ] useNotificationSound.ts (528 lines, 0%)
+- [ ] ImportWallet.tsx (295 lines, 0%)
+- [ ] WalletDetail.tsx (748 lines, 0%)
+
+### Frontend Threshold Targets
+
+After Tier 1 + 2:
+```typescript
+thresholds: {
+  branches: 20,
+  functions: 18,
+  lines: 25,
+  statements: 22,
+}
+```
+
+After all tiers:
+```typescript
+thresholds: {
+  branches: 25,
+  functions: 22,
+  lines: 30,
+  statements: 28,
+}
+```

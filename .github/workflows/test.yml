@@ -226,6 +226,34 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
 
+      - name: Build backend
+        working-directory: server
+        run: npm run build
+
+      - name: Start backend server
+        working-directory: server
+        run: npm run start &
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
+          JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
+          ENCRYPTION_KEY: test-encryption-key-32-chars-long!
+          NODE_ENV: test
+          PORT: 3001
+
+      - name: Wait for backend to be ready
+        run: |
+          echo "Waiting for backend server..."
+          for i in {1..30}; do
+            if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+              echo "Backend is ready!"
+              exit 0
+            fi
+            echo "Attempt $i: Backend not ready yet..."
+            sleep 2
+          done
+          echo "Backend failed to start"
+          exit 1
+
       - name: Run E2E tests
         run: npm run test:e2e -- --project=chromium
         env:
@@ -233,6 +261,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
+          VITE_API_URL: http://localhost:3001
 
       - name: Upload Playwright report
         if: always()

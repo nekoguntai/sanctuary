@@ -25,12 +25,12 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['**/*.d.ts', '**/index.ts'],
       thresholds: {
-        // Thresholds updated after Phase 2 test coverage implementation (2026-01-11)
-        // Current coverage: branches=40.89%, functions=46.7%, lines=45.54%, statements=45.62%
-        branches: 40,
-        functions: 45,
-        lines: 45,
-        statements: 45,
+        // Thresholds updated after Phase 3 test coverage implementation (2026-01-11)
+        // Current coverage: branches=43.09%, functions=48.83%, lines=48.01%, statements=48.05%
+        branches: 42,
+        functions: 48,
+        lines: 47,
+        statements: 47,
       },
     },
   },

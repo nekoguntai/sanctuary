@@ -274,7 +274,7 @@ Sanctuary is a **watch-only wallet coordinator** that helps you manage Bitcoin w
 | **Frontend** | :8443 | React-based web interface served via nginx (HTTPS for WebUSB) |
 | **Backend** | :3001 | Node.js API server handling wallet logic and user requests |
 | **Worker** | :3002 | Background job processor for syncing, notifications, and confirmations |
-| **Gateway** | :4000 | API gateway for mobile apps with JWT auth and rate limiting |
+| **Gateway** | :4000 | HTTPS API gateway for mobile apps with JWT auth and rate limiting |
 | **Redis** | :6379 | Job queue (BullMQ) and distributed cache |
 | **PostgreSQL** | :5432 | Primary database for wallets, transactions, and user data |
 
@@ -301,6 +301,7 @@ The worker runs as a dedicated container, separate from the API server, handling
 The gateway container provides a secure API for iOS and Android mobile apps:
 
 **Features:**
+- **Native TLS/HTTPS** — Handles TLS directly for secure mobile connections (enabled by default)
 - **JWT Authentication** — Same tokens as web app (shared secret)
 - **Route Whitelisting** — Only safe read/write endpoints exposed
 - **Rate Limiting** — 60 requests/min default, 5 login attempts/15min
@@ -336,6 +337,7 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 **Default ports:**
 - `HTTPS_PORT=8443` — Main application (https://localhost:8443)
 - `HTTP_PORT=8080` — Redirect to HTTPS
+- `GATEWAY_PORT=4000` — Mobile API gateway (https://your-server:4000)
 
 **Port requirements:**
 
@@ -343,9 +345,10 @@ Sanctuary uses HTTPS by default for hardware wallet compatibility:
 |---------|---------------|--------|
 | **USB wallets** (Ledger, Trezor, etc.) | HTTPS (8443) | WebUSB requires a secure context |
 | **QR Camera** | HTTPS (8443) | Camera access requires a secure context |
+| **Mobile API** | HTTPS (4000) | Gateway handles TLS directly for secure mobile connections |
 | **File import / SD card** | Any | No special browser API required |
 
-**Note:** Always use HTTPS (port 8443) for full hardware wallet support. HTTP access is limited to file-based workflows only.
+**Note:** Always use HTTPS (port 8443) for full hardware wallet support. HTTP access is limited to file-based workflows only. The gateway uses HTTPS by default (`GATEWAY_TLS_ENABLED=true`).
 
 ## Requirements
 
@@ -585,6 +588,9 @@ HTTP_PORT=8080
 
 # Gateway port for mobile apps (default: 4000)
 GATEWAY_PORT=4000
+
+# Gateway TLS - enabled by default for secure mobile connections
+GATEWAY_TLS_ENABLED=true
 
 # JWT secret for session tokens (generate a random string, min 32 chars)
 JWT_SECRET=your-secret-key-here

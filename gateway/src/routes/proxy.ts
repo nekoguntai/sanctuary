@@ -148,12 +148,16 @@ const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
 
 /**
  * Check if a request matches the whitelist
+ * Exported for testing
  */
-function isAllowedRoute(method: string, path: string): boolean {
+export function isAllowedRoute(method: string, path: string): boolean {
   return ALLOWED_ROUTES.some(
     (route) => route.method === method && route.pattern.test(path)
   );
 }
+
+// Export for testing
+export { ALLOWED_ROUTES };
 
 /**
  * Middleware to check if route is whitelisted
@@ -161,8 +165,10 @@ function isAllowedRoute(method: string, path: string): boolean {
  * SECURITY: Blocked routes are logged as security events.
  * Repeated attempts to access non-whitelisted routes may indicate
  * reconnaissance or an attempt to find vulnerabilities.
+ *
+ * Exported for testing
  */
-function checkWhitelist(req: Request, res: Response, next: () => void): void {
+export function checkWhitelist(req: Request, res: Response, next: () => void): void {
   const { method, path } = req;
   const authReq = req as AuthenticatedRequest;
 

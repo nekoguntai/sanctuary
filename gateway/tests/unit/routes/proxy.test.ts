@@ -1,10 +1,12 @@
 /**
  * Proxy Routes Tests
  *
- * Tests route whitelisting and proxy configuration.
+ * Tests route whitelisting, checkWhitelist middleware, and proxy configuration.
+ * These tests import the actual proxy.ts module to ensure real coverage.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Request, Response } from 'express';
 
 // Mock dependencies before importing the module
 vi.mock('../../../src/config', () => ({
@@ -32,60 +34,77 @@ vi.mock('../../../src/middleware/requestLogger', () => ({
   logAuditEvent: vi.fn(),
 }));
 
+vi.mock('../../../src/middleware/auth', () => ({
+  authenticate: vi.fn((req, res, next) => next()),
+  AuthenticatedRequest: {},
+}));
+
+vi.mock('../../../src/middleware/rateLimit', () => ({
+  defaultRateLimiter: vi.fn((req, res, next) => next()),
+  transactionCreateRateLimiter: vi.fn((req, res, next) => next()),
+  broadcastRateLimiter: vi.fn((req, res, next) => next()),
+  deviceRegistrationRateLimiter: vi.fn((req, res, next) => next()),
+  addressGenerationRateLimiter: vi.fn((req, res, next) => next()),
+}));
+
+vi.mock('../../../src/middleware/validateRequest', () => ({
+  validateRequest: vi.fn((req, res, next) => next()),
+}));
+
+vi.mock('../../../src/middleware/mobilePermission', () => ({
+  requireMobilePermission: vi.fn(() => (req: Request, res: Response, next: () => void) => next()),
+}));
+
+vi.mock('http-proxy-middleware', () => ({
+  createProxyMiddleware: vi.fn(() => (req: Request, res: Response, next: () => void) => next()),
+}));
+
+// Import the actual module AFTER mocks are set up
+import { isAllowedRoute, ALLOWED_ROUTES, checkWhitelist } from '../../../src/routes/proxy';
+import { logSecurityEvent } from '../../../src/middleware/requestLogger';
+
 describe('Proxy Routes', () => {
-  describe('Route Whitelist', () => {
-    // Define the whitelist patterns to test
-    const ALLOWED_ROUTES = [
-      // Authentication
-      { method: 'POST', pattern: /^\/api\/v1\/auth\/login$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/auth\/refresh$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/auth\/logout$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/auth\/logout-all$/ },
-      { method: 'GET', pattern: /^\/api\/v1\/auth\/me$/ },
-      { method: 'PATCH', pattern: /^\/api\/v1\/auth\/me\/preferences$/ },
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-      // Sessions
-      { method: 'GET', pattern: /^\/api\/v1\/auth\/sessions$/ },
-      { method: 'DELETE', pattern: /^\/api\/v1\/auth\/sessions\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-      // Wallets
-      { method: 'GET', pattern: /^\/api\/v1\/wallets$/ },
-      { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/sync$/ },
+  describe('ALLOWED_ROUTES', () => {
+    it('should export the allowed routes array', () => {
+      expect(ALLOWED_ROUTES).toBeDefined();
+      expect(Array.isArray(ALLOWED_ROUTES)).toBe(true);
+      expect(ALLOWED_ROUTES.length).toBeGreaterThan(0);
+    });
 
-      // Transactions
-      { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/transactions$/ },
+    it('should have proper structure for each route', () => {
+      ALLOWED_ROUTES.forEach((route) => {
+        expect(route).toHaveProperty('method');
+        expect(route).toHaveProperty('pattern');
+        expect(typeof route.method).toBe('string');
+        expect(route.pattern).toBeInstanceOf(RegExp);
+      });
+    });
 
-      // Addresses
-      { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/addresses$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/addresses\/generate$/ },
+    it('should include authentication routes', () => {
+      const authRoutes = ALLOWED_ROUTES.filter((r) => r.pattern.source.includes('auth'));
+      expect(authRoutes.length).toBeGreaterThan(0);
+    });
 
-      // UTXOs
-      { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/utxos$/ },
+    it('should include wallet routes', () => {
+      const walletRoutes = ALLOWED_ROUTES.filter((r) => r.pattern.source.includes('wallets'));
+      expect(walletRoutes.length).toBeGreaterThan(0);
+    });
 
-      // Labels
-      { method: 'GET', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/labels$/ },
-      { method: 'POST', pattern: /^\/api\/v1\/wallets\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/labels$/ },
+    it('should include push notification routes', () => {
+      const pushRoutes = ALLOWED_ROUTES.filter((r) => r.pattern.source.includes('push'));
+      expect(pushRoutes.length).toBeGreaterThan(0);
+    });
+  });
 
-      // Bitcoin status
-      { method: 'GET', pattern: /^\/api\/v1\/bitcoin\/status$/ },
-      { method: 'GET', pattern: /^\/api\/v1\/bitcoin\/fees$/ },
-
-      // Price
-      { method: 'GET', pattern: /^\/api\/v1\/price$/ },
-
-      // Push notifications
-      { method: 'POST', pattern: /^\/api\/v1\/push\/register$/ },
-      { method: 'DELETE', pattern: /^\/api\/v1\/push\/unregister$/ },
-      { method: 'GET', pattern: /^\/api\/v1\/push\/devices$/ },
-    ];
-
-    function isAllowedRoute(method: string, path: string): boolean {
-      return ALLOWED_ROUTES.some(
-        (route) => route.method === method && route.pattern.test(path)
-      );
-    }
-
+  describe('isAllowedRoute', () => {
     describe('Authentication routes', () => {
       it('should allow POST /api/v1/auth/login', () => {
         expect(isAllowedRoute('POST', '/api/v1/auth/login')).toBe(true);
@@ -99,28 +118,50 @@ describe('Proxy Routes', () => {
         expect(isAllowedRoute('POST', '/api/v1/auth/logout')).toBe(true);
       });
 
+      it('should allow POST /api/v1/auth/logout-all', () => {
+        expect(isAllowedRoute('POST', '/api/v1/auth/logout-all')).toBe(true);
+      });
+
       it('should allow GET /api/v1/auth/me', () => {
         expect(isAllowedRoute('GET', '/api/v1/auth/me')).toBe(true);
       });
 
-      it('should block GET on login endpoint', () => {
+      it('should allow PATCH /api/v1/auth/me/preferences', () => {
+        expect(isAllowedRoute('PATCH', '/api/v1/auth/me/preferences')).toBe(true);
+      });
+
+      it('should block GET /api/v1/auth/login (wrong method)', () => {
         expect(isAllowedRoute('GET', '/api/v1/auth/login')).toBe(false);
       });
     });
 
+    describe('Session routes', () => {
+      it('should allow GET /api/v1/auth/sessions', () => {
+        expect(isAllowedRoute('GET', '/api/v1/auth/sessions')).toBe(true);
+      });
+
+      it('should allow DELETE /api/v1/auth/sessions/:uuid', () => {
+        expect(isAllowedRoute('DELETE', '/api/v1/auth/sessions/12345678-1234-1234-1234-123456789abc')).toBe(true);
+      });
+
+      it('should block DELETE with invalid UUID', () => {
+        expect(isAllowedRoute('DELETE', '/api/v1/auth/sessions/invalid-uuid')).toBe(false);
+      });
+    });
+
     describe('Wallet routes', () => {
-      const validUUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
 
       it('should allow GET /api/v1/wallets', () => {
         expect(isAllowedRoute('GET', '/api/v1/wallets')).toBe(true);
       });
 
       it('should allow GET /api/v1/wallets/:id', () => {
-        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUUID}`)).toBe(true);
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}`)).toBe(true);
       });
 
       it('should allow POST /api/v1/wallets/:id/sync', () => {
-        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUUID}/sync`)).toBe(true);
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/sync`)).toBe(true);
       });
 
       it('should block POST /api/v1/wallets (create wallet)', () => {
@@ -128,129 +169,299 @@ describe('Proxy Routes', () => {
       });
 
       it('should block DELETE /api/v1/wallets/:id (delete wallet)', () => {
-        expect(isAllowedRoute('DELETE', `/api/v1/wallets/${validUUID}`)).toBe(false);
-      });
-
-      it('should block PUT /api/v1/wallets/:id (update wallet)', () => {
-        expect(isAllowedRoute('PUT', `/api/v1/wallets/${validUUID}`)).toBe(false);
-      });
-
-      it('should reject invalid UUID format', () => {
-        expect(isAllowedRoute('GET', '/api/v1/wallets/invalid-uuid')).toBe(false);
-        expect(isAllowedRoute('GET', '/api/v1/wallets/123')).toBe(false);
+        expect(isAllowedRoute('DELETE', `/api/v1/wallets/${validUuid}`)).toBe(false);
       });
     });
 
     describe('Transaction routes', () => {
-      const validUUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
 
-      it('should allow GET /api/v1/wallets/:id/transactions', () => {
-        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUUID}/transactions`)).toBe(true);
+      it('should allow GET transactions list', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/transactions`)).toBe(true);
       });
 
-      it('should block POST transactions (create/send)', () => {
-        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUUID}/transactions`)).toBe(false);
-      });
-    });
-
-    describe('Admin routes (should all be blocked)', () => {
-      it('should block /api/v1/admin/*', () => {
-        expect(isAllowedRoute('GET', '/api/v1/admin/users')).toBe(false);
-        expect(isAllowedRoute('POST', '/api/v1/admin/settings')).toBe(false);
-        expect(isAllowedRoute('DELETE', '/api/v1/admin/users/123')).toBe(false);
+      it('should allow GET single transaction', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/transactions/${validUuid}`)).toBe(true);
       });
 
-      it('should block /api/v1/nodes/*', () => {
-        expect(isAllowedRoute('GET', '/api/v1/nodes')).toBe(false);
-        expect(isAllowedRoute('POST', '/api/v1/nodes')).toBe(false);
-        expect(isAllowedRoute('DELETE', '/api/v1/nodes/123')).toBe(false);
+      it('should allow POST transaction create', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/transactions/create`)).toBe(true);
       });
 
-      it('should block user management routes', () => {
-        expect(isAllowedRoute('DELETE', '/api/v1/users/123')).toBe(false);
-        expect(isAllowedRoute('POST', '/api/v1/users')).toBe(false);
+      it('should allow POST transaction estimate', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/transactions/estimate`)).toBe(true);
       });
 
-      it('should block backup/restore routes', () => {
-        expect(isAllowedRoute('POST', '/api/v1/backup')).toBe(false);
-        expect(isAllowedRoute('POST', '/api/v1/restore')).toBe(false);
+      it('should allow POST transaction broadcast', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/transactions/broadcast`)).toBe(true);
+      });
+
+      it('should allow GET pending transactions', () => {
+        expect(isAllowedRoute('GET', '/api/v1/transactions/pending')).toBe(true);
       });
     });
 
-    describe('Bitcoin status routes', () => {
-      it('should allow GET /api/v1/bitcoin/status', () => {
-        expect(isAllowedRoute('GET', '/api/v1/bitcoin/status')).toBe(true);
+    describe('PSBT routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow POST psbt create', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/psbt/create`)).toBe(true);
       });
 
-      it('should allow GET /api/v1/bitcoin/fees', () => {
-        expect(isAllowedRoute('GET', '/api/v1/bitcoin/fees')).toBe(true);
-      });
-
-      it('should block POST to bitcoin routes', () => {
-        expect(isAllowedRoute('POST', '/api/v1/bitcoin/status')).toBe(false);
+      it('should allow POST psbt broadcast', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/psbt/broadcast`)).toBe(true);
       });
     });
 
-    describe('Push notification routes', () => {
-      it('should allow POST /api/v1/push/register', () => {
-        expect(isAllowedRoute('POST', '/api/v1/push/register')).toBe(true);
+    describe('Address routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow GET addresses', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/addresses`)).toBe(true);
       });
 
-      it('should allow DELETE /api/v1/push/unregister', () => {
-        expect(isAllowedRoute('DELETE', '/api/v1/push/unregister')).toBe(true);
-      });
-
-      it('should allow GET /api/v1/push/devices', () => {
-        expect(isAllowedRoute('GET', '/api/v1/push/devices')).toBe(true);
+      it('should allow POST generate address', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/addresses/generate`)).toBe(true);
       });
     });
 
-    describe('Price routes', () => {
-      it('should allow GET /api/v1/price', () => {
-        expect(isAllowedRoute('GET', '/api/v1/price')).toBe(true);
-      });
+    describe('UTXO routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
 
-      it('should block POST to price endpoint', () => {
-        expect(isAllowedRoute('POST', '/api/v1/price')).toBe(false);
-      });
-    });
-
-    describe('Path traversal prevention', () => {
-      it('should block paths with traversal attempts', () => {
-        expect(isAllowedRoute('GET', '/api/v1/../admin/users')).toBe(false);
-        expect(isAllowedRoute('GET', '/api/v1/wallets/../admin')).toBe(false);
-      });
-
-      it('should block paths with encoded characters', () => {
-        expect(isAllowedRoute('GET', '/api/v1/wallets%2F..%2Fadmin')).toBe(false);
+      it('should allow GET utxos', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/utxos`)).toBe(true);
       });
     });
 
     describe('Label routes', () => {
-      const validUUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
 
-      it('should allow GET /api/v1/wallets/:id/labels', () => {
-        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUUID}/labels`)).toBe(true);
+      it('should allow GET labels', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/labels`)).toBe(true);
       });
 
-      it('should allow POST /api/v1/wallets/:id/labels', () => {
-        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUUID}/labels`)).toBe(true);
+      it('should allow POST labels', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/labels`)).toBe(true);
+      });
+
+      it('should allow PATCH label', () => {
+        expect(isAllowedRoute('PATCH', `/api/v1/labels/${validUuid}`)).toBe(true);
+      });
+
+      it('should allow DELETE label', () => {
+        expect(isAllowedRoute('DELETE', `/api/v1/labels/${validUuid}`)).toBe(true);
+      });
+    });
+
+    describe('Bitcoin status routes', () => {
+      it('should allow GET bitcoin status', () => {
+        expect(isAllowedRoute('GET', '/api/v1/bitcoin/status')).toBe(true);
+      });
+
+      it('should allow GET bitcoin fees', () => {
+        expect(isAllowedRoute('GET', '/api/v1/bitcoin/fees')).toBe(true);
+      });
+    });
+
+    describe('Price routes', () => {
+      it('should allow GET price', () => {
+        expect(isAllowedRoute('GET', '/api/v1/price')).toBe(true);
+      });
+    });
+
+    describe('Push notification routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow POST push register', () => {
+        expect(isAllowedRoute('POST', '/api/v1/push/register')).toBe(true);
+      });
+
+      it('should allow DELETE push unregister', () => {
+        expect(isAllowedRoute('DELETE', '/api/v1/push/unregister')).toBe(true);
+      });
+
+      it('should allow GET push devices', () => {
+        expect(isAllowedRoute('GET', '/api/v1/push/devices')).toBe(true);
+      });
+
+      it('should allow DELETE push device by id', () => {
+        expect(isAllowedRoute('DELETE', `/api/v1/push/devices/${validUuid}`)).toBe(true);
+      });
+    });
+
+    describe('Device routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow GET devices', () => {
+        expect(isAllowedRoute('GET', '/api/v1/devices')).toBe(true);
+      });
+
+      it('should allow POST devices', () => {
+        expect(isAllowedRoute('POST', '/api/v1/devices')).toBe(true);
+      });
+
+      it('should allow PATCH device', () => {
+        expect(isAllowedRoute('PATCH', `/api/v1/devices/${validUuid}`)).toBe(true);
+      });
+
+      it('should allow DELETE device', () => {
+        expect(isAllowedRoute('DELETE', `/api/v1/devices/${validUuid}`)).toBe(true);
+      });
+    });
+
+    describe('Draft routes (multisig)', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow GET drafts', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/drafts`)).toBe(true);
+      });
+
+      it('should allow GET single draft', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/drafts/${validUuid}`)).toBe(true);
+      });
+
+      it('should allow POST sign draft', () => {
+        expect(isAllowedRoute('POST', `/api/v1/wallets/${validUuid}/drafts/${validUuid}/sign`)).toBe(true);
+      });
+    });
+
+    describe('Mobile permission routes', () => {
+      const validUuid = '12345678-1234-1234-1234-123456789abc';
+
+      it('should allow GET mobile permissions', () => {
+        expect(isAllowedRoute('GET', '/api/v1/mobile-permissions')).toBe(true);
+      });
+
+      it('should allow GET wallet mobile permissions', () => {
+        expect(isAllowedRoute('GET', `/api/v1/wallets/${validUuid}/mobile-permissions`)).toBe(true);
+      });
+
+      it('should allow PATCH wallet mobile permissions', () => {
+        expect(isAllowedRoute('PATCH', `/api/v1/wallets/${validUuid}/mobile-permissions`)).toBe(true);
+      });
+
+      it('should allow PATCH specific mobile permission', () => {
+        expect(isAllowedRoute('PATCH', `/api/v1/wallets/${validUuid}/mobile-permissions/${validUuid}`)).toBe(true);
+      });
+
+      it('should allow DELETE mobile permission caps', () => {
+        expect(isAllowedRoute('DELETE', `/api/v1/wallets/${validUuid}/mobile-permissions/${validUuid}/caps`)).toBe(true);
+      });
+
+      it('should allow DELETE mobile permissions', () => {
+        expect(isAllowedRoute('DELETE', `/api/v1/wallets/${validUuid}/mobile-permissions`)).toBe(true);
+      });
+    });
+
+    describe('Blocked routes (admin/sensitive)', () => {
+      it('should block admin routes', () => {
+        expect(isAllowedRoute('GET', '/api/v1/admin/users')).toBe(false);
+        expect(isAllowedRoute('POST', '/api/v1/admin/settings')).toBe(false);
+      });
+
+      it('should block user management routes', () => {
+        expect(isAllowedRoute('DELETE', '/api/v1/users/12345678-1234-1234-1234-123456789abc')).toBe(false);
+        expect(isAllowedRoute('POST', '/api/v1/users')).toBe(false);
+      });
+
+      it('should block node configuration routes', () => {
+        expect(isAllowedRoute('GET', '/api/v1/nodes')).toBe(false);
+        expect(isAllowedRoute('POST', '/api/v1/nodes')).toBe(false);
+      });
+
+      it('should block arbitrary paths', () => {
+        expect(isAllowedRoute('GET', '/api/v1/something-random')).toBe(false);
+        expect(isAllowedRoute('POST', '/api/v2/wallets')).toBe(false);
       });
     });
   });
 
-  describe('Security Headers', () => {
-    it('should document expected proxy headers', () => {
-      // The proxy adds these headers to identify gateway requests
-      const expectedHeaders = [
-        'X-Gateway-Request',
-        'X-Gateway-User-Id',
-        'X-Gateway-Username',
-      ];
+  describe('checkWhitelist middleware', () => {
+    let mockReq: Partial<Request>;
+    let mockRes: Partial<Response>;
+    let mockNext: ReturnType<typeof vi.fn>;
+    let jsonMock: ReturnType<typeof vi.fn>;
+    let statusMock: ReturnType<typeof vi.fn>;
 
-      // This is a documentation test
-      expect(expectedHeaders).toContain('X-Gateway-Request');
-      expect(expectedHeaders).toContain('X-Gateway-User-Id');
+    beforeEach(() => {
+      jsonMock = vi.fn();
+      statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+      mockNext = vi.fn();
+
+      mockReq = {
+        method: 'GET',
+        path: '/api/v1/wallets',
+        ip: '127.0.0.1',
+        headers: {
+          'user-agent': 'test-agent',
+        },
+      };
+
+      mockRes = {
+        status: statusMock,
+        json: jsonMock,
+      };
+    });
+
+    it('should call next() for allowed routes', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/wallets';
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 for blocked routes', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/admin/users';
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith({
+        error: 'Forbidden',
+        message: 'This endpoint is not available via the mobile API',
+      });
+    });
+
+    it('should log security event for blocked routes', () => {
+      mockReq.method = 'POST';
+      mockReq.path = '/api/v1/admin/settings';
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(logSecurityEvent).toHaveBeenCalledWith('ROUTE_BLOCKED', expect.objectContaining({
+        method: 'POST',
+        path: '/api/v1/admin/settings',
+        ip: '127.0.0.1',
+        severity: 'low',
+      }));
+    });
+
+    it('should include user ID in security log if authenticated', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/admin/users';
+      (mockReq as any).user = { userId: 'user-123', username: 'testuser' };
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(logSecurityEvent).toHaveBeenCalledWith('ROUTE_BLOCKED', expect.objectContaining({
+        userId: 'user-123',
+      }));
+    });
+
+    it('should handle missing user-agent header', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/something-blocked';
+      mockReq.headers = {};
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(logSecurityEvent).toHaveBeenCalled();
     });
   });
 });

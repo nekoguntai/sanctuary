@@ -155,10 +155,7 @@ function loadTlsCertificates(): https.ServerOptions | null {
     const cert = fs.readFileSync(config.tls.certPath, 'utf8');
     const key = fs.readFileSync(config.tls.keyPath, 'utf8');
 
-    log.info('TLS certificates loaded successfully', {
-      certPath: config.tls.certPath,
-      keyPath: config.tls.keyPath,
-    });
+    log.info('TLS certificates loaded successfully');
 
     return {
       cert,

@@ -20,7 +20,9 @@ openssl req -x509 -nodes -days ${DAYS} -newkey rsa:2048 \
 
 if [ $? -eq 0 ]; then
   # Set permissions so Docker containers can read the certificates
-  # The gateway container runs as non-root and needs read access
+  # The gateway container runs as non-root user and needs read access
+  # NOTE: For production, use proper certificates with restricted permissions
+  # and ensure your deployment handles certificate access securely
   chmod 644 "${CERT_DIR}/privkey.pem" "${CERT_DIR}/fullchain.pem"
 
   echo "Certificates generated successfully:"

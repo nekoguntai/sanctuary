@@ -714,6 +714,9 @@ HTTP_PORT=${HTTP_PORT:-8080}
 HTTPS_PORT=${HTTPS_PORT:-8443}
 ENABLE_MONITORING=${ENABLE_MONITORING:-no}
 ENABLE_TOR=${ENABLE_TOR:-no}
+
+# Gateway TLS - enabled by default for secure mobile connections
+GATEWAY_TLS_ENABLED=true
 ENVEOF
 
     echo -e "${GREEN}✓${NC} Saved configuration to .env"

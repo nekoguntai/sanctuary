@@ -277,6 +277,9 @@ HTTP_PORT=8080
 # Gateway port for mobile app
 GATEWAY_PORT=4000
 
+# Gateway TLS - enabled by default for secure mobile connections
+GATEWAY_TLS_ENABLED=true
+
 # ============================================
 # OPTIONAL - Bitcoin Network
 # ============================================

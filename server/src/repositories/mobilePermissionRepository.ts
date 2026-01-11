@@ -108,7 +108,8 @@ export async function findByWalletId(walletId: string): Promise<MobilePermission
 }
 
 /**
- * Find all mobile permissions for a user with wallet details
+ * Find all mobile permissions for a user with wallet details and role
+ * Includes the user's wallet role to avoid N+1 queries
  */
 export async function findByUserIdWithWallet(userId: string) {
   return prisma.mobilePermission.findMany({
@@ -120,11 +121,35 @@ export async function findByUserIdWithWallet(userId: string) {
           name: true,
           type: true,
           network: true,
+          walletUsers: {
+            where: { userId },
+            select: { role: true },
+            take: 1,
+          },
         },
       },
     },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/**
+ * Find mobile permissions for multiple users in a wallet (batch query)
+ * Used by getWalletPermissions to avoid N+1 queries
+ */
+export async function findByWalletIdAndUserIds(
+  walletId: string,
+  userIds: string[]
+): Promise<Map<string, MobilePermission>> {
+  const permissions = await prisma.mobilePermission.findMany({
+    where: {
+      walletId,
+      userId: { in: userIds },
+    },
+  });
+
+  // Return as a Map for O(1) lookup
+  return new Map(permissions.map((p) => [p.userId, p]));
 }
 
 /**
@@ -268,6 +293,7 @@ export const mobilePermissionRepository = {
   findByUserId,
   findByWalletId,
   findByUserIdWithWallet,
+  findByWalletIdAndUserIds,
   create,
   upsert,
   updateById,

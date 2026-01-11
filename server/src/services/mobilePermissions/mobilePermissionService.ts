@@ -187,7 +187,7 @@ class MobilePermissionService {
 
     // Determine if there are custom restrictions
     const hasCustomRestrictions = permission !== null;
-    const hasOwnerRestrictions = permission?.ownerMaxPermissions !== null;
+    const hasOwnerRestrictions = permission?.ownerMaxPermissions != null;
 
     return {
       walletId,
@@ -201,26 +201,30 @@ class MobilePermissionService {
 
   /**
    * Get all mobile permissions for a user with wallet details
+   * Optimized: includes wallet role in initial query to avoid N+1
    */
   async getUserMobilePermissions(userId: string) {
     const permissions = await mobilePermissionRepository.findByUserIdWithWallet(userId);
 
-    // Get wallet roles for each permission
-    const results = await Promise.all(
-      permissions.map(async (perm) => {
-        const role = await this.getWalletRole(perm.walletId, userId);
-        const effectivePermissions = calculateAllEffectivePermissions(
-          role as WalletRole,
-          perm
-        );
+    // Calculate effective permissions - role is now included in the query
+    const results = permissions.map((perm) => {
+      // Extract role from the included walletUsers relation
+      const role = perm.wallet.walletUsers[0]?.role as WalletRole | undefined;
+      const effectivePermissions = calculateAllEffectivePermissions(
+        role || 'viewer',
+        perm
+      );
 
-        return {
-          ...perm,
-          role,
-          effectivePermissions,
-        };
-      })
-    );
+      // Remove the nested walletUsers from the response
+      const { walletUsers, ...walletData } = perm.wallet;
+
+      return {
+        ...perm,
+        wallet: walletData,
+        role,
+        effectivePermissions,
+      };
+    });
 
     return results;
   }
@@ -360,6 +364,7 @@ class MobilePermissionService {
 
   /**
    * Get wallet permissions for all users in a wallet
+   * Optimized: batch fetches all permissions to avoid N+1 queries
    */
   async getWalletPermissions(walletId: string, requesterId: string) {
     // Verify requester has access
@@ -378,28 +383,30 @@ class MobilePermissionService {
       },
     });
 
-    // Get mobile permissions for each user
-    const results = await Promise.all(
-      walletUsers.map(async (wu) => {
-        const permission = await mobilePermissionRepository.findByWalletAndUser(
-          walletId,
-          wu.userId
-        );
-        const effectivePermissions = calculateAllEffectivePermissions(
-          wu.role as WalletRole,
-          permission
-        );
-
-        return {
-          userId: wu.userId,
-          username: wu.user.username,
-          role: wu.role,
-          effectivePermissions,
-          hasCustomRestrictions: permission !== null,
-          hasOwnerRestrictions: permission?.ownerMaxPermissions !== null,
-        };
-      })
+    // Batch fetch all mobile permissions for this wallet's users
+    const userIds = walletUsers.map((wu) => wu.userId);
+    const permissionsMap = await mobilePermissionRepository.findByWalletIdAndUserIds(
+      walletId,
+      userIds
     );
+
+    // Map results using the pre-fetched permissions
+    const results = walletUsers.map((wu) => {
+      const permission = permissionsMap.get(wu.userId) || null;
+      const effectivePermissions = calculateAllEffectivePermissions(
+        wu.role as WalletRole,
+        permission
+      );
+
+      return {
+        userId: wu.userId,
+        username: wu.user.username,
+        role: wu.role,
+        effectivePermissions,
+        hasCustomRestrictions: permission !== null,
+        hasOwnerRestrictions: permission?.ownerMaxPermissions != null,
+      };
+    });
 
     return results;
   }

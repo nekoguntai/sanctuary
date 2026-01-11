@@ -57,6 +57,7 @@ export const mockPrismaClient = {
   draftUtxoLock: createModelMock(),
   ownershipTransfer: createModelMock(),
   deviceAccount: createModelMock(),
+  mobilePermission: createModelMock(),
 
   // Transaction method
   $transaction: vi.fn().mockImplementation(async (callback) => {

@@ -77,6 +77,26 @@ vi.mock('../../../src/services/push', () => ({
     body: `${walletName}: ${amount} sats`,
     data: { type: type === 'confirmed' ? 'confirmation' : 'transaction', txid },
   })),
+  formatBroadcastNotification: vi.fn((success, walletName, txid, error) => ({
+    title: success ? 'Transaction Broadcast' : 'Broadcast Failed',
+    body: success ? `Transaction sent from ${walletName}` : `Failed: ${error || 'Unknown'}`,
+    data: { type: success ? 'broadcast_success' : 'broadcast_failed', txid },
+  })),
+  formatPsbtSigningNotification: vi.fn((walletName, draftId, creatorName, amount, required, current) => ({
+    title: 'Signature Required',
+    body: `${creatorName} needs your signature on ${walletName}`,
+    data: { type: 'psbt_signing_required', draftId },
+  })),
+  formatDraftCreatedNotification: vi.fn((walletName, draftId, creatorName, amount) => ({
+    title: 'New Draft Transaction',
+    body: `${creatorName} created a draft on ${walletName}`,
+    data: { type: 'draft_created', draftId },
+  })),
+  formatDraftApprovedNotification: vi.fn((walletName, draftId, signerName, current, required) => ({
+    title: current >= required ? 'Transaction Ready' : 'Draft Signed',
+    body: `${signerName} signed the draft on ${walletName}`,
+    data: { type: 'draft_approved', draftId },
+  })),
   sendToDevices: vi.fn().mockResolvedValue({
     success: 1,
     failed: 0,
@@ -402,6 +422,297 @@ describe('Backend Events Service', () => {
         'Test',
         50000,
         'abc123'
+      );
+    });
+
+    it('should handle broadcast_success event', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'broadcast_success',
+          walletId: 'wallet-1',
+          walletName: 'Main Wallet',
+          userId: 'user-123',
+          data: {
+            txid: 'tx123',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatBroadcastNotification).toHaveBeenCalledWith(
+        true,
+        'Main Wallet',
+        'tx123'
+      );
+      expect(push.sendToDevices).toHaveBeenCalled();
+    });
+
+    it('should handle broadcast_failed event', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'broadcast_failed',
+          walletId: 'wallet-1',
+          walletName: 'Main Wallet',
+          userId: 'user-123',
+          data: {
+            txid: 'tx456',
+            error: 'Insufficient funds',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatBroadcastNotification).toHaveBeenCalledWith(
+        false,
+        'Main Wallet',
+        'tx456',
+        'Insufficient funds'
+      );
+      expect(push.sendToDevices).toHaveBeenCalled();
+    });
+
+    it('should handle psbt_signing_required event', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'psbt_signing_required',
+          walletId: 'wallet-1',
+          walletName: 'Multisig Vault',
+          userId: 'user-123',
+          data: {
+            draftId: 'draft-789',
+            creatorName: 'Alice',
+            amount: 100000000,
+            requiredSignatures: 2,
+            currentSignatures: 1,
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatPsbtSigningNotification).toHaveBeenCalledWith(
+        'Multisig Vault',
+        'draft-789',
+        'Alice',
+        100000000,
+        2,
+        1
+      );
+      expect(push.sendToDevices).toHaveBeenCalled();
+    });
+
+    it('should handle draft_created event', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'draft_created',
+          walletId: 'wallet-1',
+          walletName: 'Business Wallet',
+          userId: 'user-123',
+          data: {
+            draftId: 'draft-456',
+            creatorName: 'Bob',
+            amount: 50000000,
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatDraftCreatedNotification).toHaveBeenCalledWith(
+        'Business Wallet',
+        'draft-456',
+        'Bob',
+        50000000
+      );
+      expect(push.sendToDevices).toHaveBeenCalled();
+    });
+
+    it('should handle draft_approved event', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'draft_approved',
+          walletId: 'wallet-1',
+          walletName: 'Vault',
+          userId: 'user-123',
+          data: {
+            draftId: 'draft-111',
+            signerName: 'Charlie',
+            currentSignatures: 2,
+            requiredSignatures: 2,
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatDraftApprovedNotification).toHaveBeenCalledWith(
+        'Vault',
+        'draft-111',
+        'Charlie',
+        2,
+        2
+      );
+      expect(push.sendToDevices).toHaveBeenCalled();
+    });
+
+    it('should not send psbt_signing_required without draftId or amount', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'psbt_signing_required',
+          walletId: 'wallet-1',
+          walletName: 'Vault',
+          userId: 'user-123',
+          data: {
+            // Missing draftId and amount
+            creatorName: 'Alice',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatPsbtSigningNotification).not.toHaveBeenCalled();
+      expect(push.sendToDevices).not.toHaveBeenCalled();
+    });
+
+    it('should not send draft_created without draftId or amount', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'draft_created',
+          walletId: 'wallet-1',
+          walletName: 'Vault',
+          userId: 'user-123',
+          data: {
+            // Missing draftId and amount
+            creatorName: 'Bob',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatDraftCreatedNotification).not.toHaveBeenCalled();
+      expect(push.sendToDevices).not.toHaveBeenCalled();
+    });
+
+    it('should not send draft_approved without draftId', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'draft_approved',
+          walletId: 'wallet-1',
+          walletName: 'Vault',
+          userId: 'user-123',
+          data: {
+            // Missing draftId
+            signerName: 'Charlie',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatDraftApprovedNotification).not.toHaveBeenCalled();
+      expect(push.sendToDevices).not.toHaveBeenCalled();
+    });
+
+    it('should use default wallet name when not provided', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'broadcast_success',
+          walletId: 'wallet-1',
+          // walletName not provided
+          userId: 'user-123',
+          data: {
+            txid: 'tx123',
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatBroadcastNotification).toHaveBeenCalledWith(
+        true,
+        'Wallet', // Default name
+        'tx123'
+      );
+    });
+
+    it('should use default creatorName when not provided for psbt_signing_required', async () => {
+      startBackendEvents();
+      const ws = wsInstances[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'event',
+        event: {
+          type: 'psbt_signing_required',
+          walletId: 'wallet-1',
+          walletName: 'Vault',
+          userId: 'user-123',
+          data: {
+            draftId: 'draft-123',
+            amount: 100000,
+            // creatorName not provided
+          },
+        },
+      });
+
+      await vi.runAllTimersAsync();
+
+      expect(push.formatPsbtSigningNotification).toHaveBeenCalledWith(
+        'Vault',
+        'draft-123',
+        'Someone', // Default name
+        100000,
+        2, // Default required
+        1  // Default current
       );
     });
   });

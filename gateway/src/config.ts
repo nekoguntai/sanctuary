@@ -19,6 +19,7 @@
  * - `TLS_ENABLED` - Enable HTTPS (default: false, set to 'true' to enable)
  * - `TLS_CERT_PATH` - Path to certificate file (fullchain.pem)
  * - `TLS_KEY_PATH` - Path to private key file (privkey.pem)
+ * - `TLS_CA_PATH` - Path to CA certificate chain file (optional, for intermediate certs)
  * - `TLS_MIN_VERSION` - Minimum TLS version (default: TLSv1.2)
  *
  * ### Backend Connection
@@ -57,6 +58,7 @@ export const config = {
     enabled: process.env.TLS_ENABLED === 'true',
     certPath: process.env.TLS_CERT_PATH || '/app/config/ssl/fullchain.pem',
     keyPath: process.env.TLS_KEY_PATH || '/app/config/ssl/privkey.pem',
+    caPath: process.env.TLS_CA_PATH || '', // Optional CA certificate chain
     minVersion: (process.env.TLS_MIN_VERSION || 'TLSv1.2') as 'TLSv1.2' | 'TLSv1.3',
   },
 

@@ -155,11 +155,19 @@ function loadTlsCertificates(): https.ServerOptions | null {
     const cert = fs.readFileSync(config.tls.certPath, 'utf8');
     const key = fs.readFileSync(config.tls.keyPath, 'utf8');
 
+    // Load optional CA certificate chain (for intermediate certificates)
+    let ca: string | undefined;
+    if (config.tls.caPath && fs.existsSync(config.tls.caPath)) {
+      ca = fs.readFileSync(config.tls.caPath, 'utf8');
+      log.info('TLS CA certificate chain loaded');
+    }
+
     log.info('TLS certificates loaded successfully');
 
     return {
       cert,
       key,
+      ca,
       minVersion: config.tls.minVersion,
       // Modern TLS settings
       ciphers: [

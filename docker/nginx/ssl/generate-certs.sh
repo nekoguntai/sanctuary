@@ -12,7 +12,8 @@ DAYS=365
 echo "Generating self-signed SSL certificate for: ${DOMAIN}"
 
 # Generate private key and certificate
-openssl req -x509 -nodes -days ${DAYS} -newkey rsa:2048 \
+# Using 4096-bit RSA for stronger security (recommended for production)
+openssl req -x509 -nodes -days ${DAYS} -newkey rsa:4096 \
   -keyout "${CERT_DIR}/privkey.pem" \
   -out "${CERT_DIR}/fullchain.pem" \
   -subj "/CN=${DOMAIN}/O=Sanctuary/C=US" \

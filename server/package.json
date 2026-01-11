@@ -78,6 +78,9 @@
     "zod": "^4.3.4"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/vitest-runner": "^8.7.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",

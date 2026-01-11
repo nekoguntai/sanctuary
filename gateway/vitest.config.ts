@@ -13,7 +13,6 @@ export default defineConfig({
     testTimeout: 10000,
     clearMocks: true,
     restoreMocks: true,
-    // JUnit reporter for CI
     reporters: ['default', 'junit'],
     outputFile: {
       junit: './junit.xml',
@@ -25,11 +24,10 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['**/*.d.ts', '**/index.ts'],
       thresholds: {
-        // Global thresholds - increased for better quality
-        branches: 40,
-        functions: 50,
-        lines: 50,
-        statements: 50,
+        branches: 60,
+        functions: 70,
+        lines: 70,
+        statements: 70,
       },
     },
   },

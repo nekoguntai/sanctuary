@@ -1,0 +1,280 @@
+/**
+ * Gateway Authentication Middleware Tests
+ *
+ * Tests HMAC signature verification and replay attack prevention.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Request, Response, NextFunction } from 'express';
+import { createHmac, createHash } from 'crypto';
+
+// Mock config
+vi.mock('../../../src/config', () => ({
+  default: {
+    gatewaySecret: 'test-gateway-secret-32-characters-min',
+  },
+}));
+
+// Mock logger
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+import { verifyGatewayRequest, generateGatewaySignature } from '../../../src/middleware/gatewayAuth';
+
+describe('Gateway Auth Middleware', () => {
+  let mockReq: Partial<Request>;
+  let mockRes: Partial<Response>;
+  let mockNext: NextFunction;
+  let jsonMock: ReturnType<typeof vi.fn>;
+  let statusMock: ReturnType<typeof vi.fn>;
+
+  const secret = 'test-gateway-secret-32-characters-min';
+
+  beforeEach(() => {
+    jsonMock = vi.fn();
+    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+
+    mockReq = {
+      method: 'GET',
+      path: '/api/v1/test',
+      headers: {},
+      body: {},
+    };
+
+    mockRes = {
+      status: statusMock,
+      json: jsonMock,
+    };
+
+    mockNext = vi.fn();
+  });
+
+  /**
+   * Helper to create valid signature headers
+   */
+  function createValidHeaders(
+    method: string,
+    path: string,
+    body: object = {}
+  ): { 'x-gateway-signature': string; 'x-gateway-timestamp': string } {
+    const { signature, timestamp } = generateGatewaySignature(method, path, body, secret);
+    return {
+      'x-gateway-signature': signature,
+      'x-gateway-timestamp': timestamp,
+    };
+  }
+
+  describe('verifyGatewayRequest', () => {
+    it('should reject requests without signature header', () => {
+      mockReq.headers = { 'x-gateway-timestamp': Date.now().toString() };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Forbidden',
+          message: 'Missing gateway authentication headers',
+        })
+      );
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests without timestamp header', () => {
+      mockReq.headers = { 'x-gateway-signature': 'some-signature' };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with expired timestamp', () => {
+      const oldTimestamp = (Date.now() - 6 * 60 * 1000).toString(); // 6 minutes ago
+      mockReq.headers = {
+        'x-gateway-signature': 'some-signature',
+        'x-gateway-timestamp': oldTimestamp,
+      };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Request timestamp expired or invalid',
+        })
+      );
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with future timestamp', () => {
+      const futureTimestamp = (Date.now() + 6 * 60 * 1000).toString(); // 6 minutes in future
+      mockReq.headers = {
+        'x-gateway-signature': 'some-signature',
+        'x-gateway-timestamp': futureTimestamp,
+      };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with invalid signature', () => {
+      mockReq.headers = {
+        'x-gateway-signature': 'invalid-signature-hex-value-that-is-definitely-wrong',
+        'x-gateway-timestamp': Date.now().toString(),
+      };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Invalid gateway signature',
+        })
+      );
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should accept requests with valid signature for GET', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/test';
+      mockReq.body = {};
+      mockReq.headers = createValidHeaders('GET', '/api/v1/test', {});
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should accept requests with valid signature for POST with body', () => {
+      const body = { username: 'test', password: 'secret' };
+      mockReq.method = 'POST';
+      mockReq.path = '/api/v1/auth/login';
+      mockReq.body = body;
+      mockReq.headers = createValidHeaders('POST', '/api/v1/auth/login', body);
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with tampered body', () => {
+      const originalBody = { amount: 100 };
+      const tamperedBody = { amount: 1000000 };
+
+      mockReq.method = 'POST';
+      mockReq.path = '/api/v1/transactions';
+      mockReq.body = tamperedBody; // Attacker changed the body
+      // But signature was created for original body
+      mockReq.headers = createValidHeaders('POST', '/api/v1/transactions', originalBody);
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with tampered path', () => {
+      mockReq.method = 'GET';
+      mockReq.path = '/api/v1/admin/users'; // Attacker changed path
+      // But signature was created for different path
+      mockReq.headers = createValidHeaders('GET', '/api/v1/users', {});
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should reject requests with tampered method', () => {
+      mockReq.method = 'DELETE'; // Attacker changed method
+      mockReq.path = '/api/v1/wallets/123';
+      // But signature was created for GET
+      mockReq.headers = createValidHeaders('GET', '/api/v1/wallets/123', {});
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should handle non-hex signature gracefully', () => {
+      mockReq.headers = {
+        'x-gateway-signature': 'not-valid-hex-!!',
+        'x-gateway-timestamp': Date.now().toString(),
+      };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should handle invalid timestamp format', () => {
+      mockReq.headers = {
+        'x-gateway-signature': 'abc123',
+        'x-gateway-timestamp': 'not-a-number',
+      };
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('generateGatewaySignature', () => {
+    it('should generate consistent signatures for same input', () => {
+      const result1 = generateGatewaySignature('GET', '/test', {}, secret);
+      const result2 = generateGatewaySignature('GET', '/test', {}, secret);
+
+      // Timestamps will differ, but we can verify format
+      expect(result1.signature).toMatch(/^[a-f0-9]{64}$/); // SHA256 hex
+      expect(result1.timestamp).toMatch(/^\d+$/); // Unix timestamp
+    });
+
+    it('should produce different signatures for different paths', () => {
+      const result1 = generateGatewaySignature('GET', '/path1', {}, secret);
+      const result2 = generateGatewaySignature('GET', '/path2', {}, secret);
+
+      // Even with close timestamps, paths differ so signatures should differ
+      // (unless generated in exact same millisecond which is very unlikely)
+      expect(result1.signature).not.toBe(result2.signature);
+    });
+
+    it('should produce different signatures for different bodies', () => {
+      const timestamp = Date.now().toString();
+      const body1 = { a: 1 };
+      const body2 = { a: 2 };
+
+      // Manually create signatures to control timestamp
+      const createSig = (body: object) => {
+        const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+        const message = `GET/test${timestamp}${bodyHash}`;
+        return createHmac('sha256', secret).update(message).digest('hex');
+      };
+
+      const sig1 = createSig(body1);
+      const sig2 = createSig(body2);
+
+      expect(sig1).not.toBe(sig2);
+    });
+
+    it('should include empty string for empty body hash', () => {
+      const result = generateGatewaySignature('GET', '/test', {}, secret);
+
+      // Should produce valid signature even with empty body
+      expect(result.signature).toMatch(/^[a-f0-9]{64}$/);
+    });
+  });
+});

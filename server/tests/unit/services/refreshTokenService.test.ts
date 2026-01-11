@@ -1,0 +1,379 @@
+/**
+ * Refresh Token Service Tests
+ *
+ * Tests refresh token creation, verification, rotation, and session management.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { faker } from '@faker-js/faker';
+
+// Hoist mocks to avoid reference before initialization
+const { mockSessionRepository } = vi.hoisted(() => {
+  const mockSessionRepository = {
+    createRefreshToken: vi.fn(),
+    findRefreshToken: vi.fn(),
+    findRefreshTokenById: vi.fn(),
+    findRefreshTokenByHash: vi.fn(),
+    revokeRefreshToken: vi.fn(),
+    deleteRefreshTokenById: vi.fn(),
+    revokeAllUserTokens: vi.fn(),
+    updateLastUsed: vi.fn(),
+    getSessionsForUser: vi.fn(),
+    deleteExpiredRefreshTokens: vi.fn(),
+    countActiveSessions: vi.fn(),
+  };
+  return { mockSessionRepository };
+});
+
+vi.mock('../../../src/repositories', () => ({
+  sessionRepository: mockSessionRepository,
+}));
+
+// Mock JWT utilities
+vi.mock('../../../src/utils/jwt', () => ({
+  generateRefreshToken: vi.fn((userId: string) => `refresh-token-for-${userId}`),
+  decodeToken: vi.fn(() => ({
+    exp: Math.floor(Date.now() / 1000) + 604800, // 7 days
+    userId: 'test-user',
+  })),
+}));
+
+// Mock logger
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+import {
+  createRefreshToken,
+  verifyRefreshTokenExists,
+  rotateRefreshToken,
+  revokeRefreshToken,
+  revokeSession,
+  revokeAllUserRefreshTokens,
+  getUserSessions,
+  cleanupExpiredRefreshTokens,
+  getActiveSessionCount,
+  DeviceInfo,
+} from '../../../src/services/refreshTokenService';
+
+describe('Refresh Token Service', () => {
+  const testUserId = faker.string.uuid();
+  const testToken = `refresh-token-for-${testUserId}`;
+  const testSessionId = faker.string.uuid();
+
+  const testDeviceInfo: DeviceInfo = {
+    deviceId: faker.string.uuid(),
+    deviceName: 'Test iPhone',
+    userAgent: 'Mozilla/5.0 (iPhone)',
+    ipAddress: faker.internet.ip(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('createRefreshToken', () => {
+    it('should create and store a refresh token', async () => {
+      mockSessionRepository.createRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        tokenHash: 'hashed-token',
+      });
+
+      const token = await createRefreshToken(testUserId, testDeviceInfo);
+
+      expect(token).toBe(testToken);
+      expect(mockSessionRepository.createRefreshToken).toHaveBeenCalledWith({
+        userId: testUserId,
+        token: testToken,
+        expiresAt: expect.any(Date),
+        deviceId: testDeviceInfo.deviceId,
+        deviceName: testDeviceInfo.deviceName,
+        userAgent: testDeviceInfo.userAgent,
+        ipAddress: testDeviceInfo.ipAddress,
+      });
+    });
+
+    it('should create token without device info', async () => {
+      mockSessionRepository.createRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+      });
+
+      const token = await createRefreshToken(testUserId);
+
+      expect(token).toBe(testToken);
+      expect(mockSessionRepository.createRefreshToken).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: testUserId,
+          deviceId: undefined,
+          deviceName: undefined,
+        })
+      );
+    });
+
+    it('should throw error on repository failure', async () => {
+      mockSessionRepository.createRefreshToken.mockRejectedValue(new Error('DB error'));
+
+      await expect(createRefreshToken(testUserId)).rejects.toThrow('DB error');
+    });
+  });
+
+  describe('verifyRefreshTokenExists', () => {
+    it('should return true for valid non-expired token', async () => {
+      mockSessionRepository.findRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
+      });
+      mockSessionRepository.updateLastUsed.mockResolvedValue(undefined);
+
+      const result = await verifyRefreshTokenExists(testToken);
+
+      expect(result).toBe(true);
+      expect(mockSessionRepository.updateLastUsed).toHaveBeenCalledWith(testToken);
+    });
+
+    it('should return false for non-existent token', async () => {
+      mockSessionRepository.findRefreshToken.mockResolvedValue(null);
+
+      const result = await verifyRefreshTokenExists(testToken);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false and revoke expired token', async () => {
+      mockSessionRepository.findRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        expiresAt: new Date(Date.now() - 3600000), // 1 hour ago (expired)
+      });
+      mockSessionRepository.revokeRefreshToken.mockResolvedValue(undefined);
+
+      const result = await verifyRefreshTokenExists(testToken);
+
+      expect(result).toBe(false);
+      expect(mockSessionRepository.revokeRefreshToken).toHaveBeenCalledWith(testToken);
+    });
+
+    it('should return false on error', async () => {
+      mockSessionRepository.findRefreshToken.mockRejectedValue(new Error('DB error'));
+
+      const result = await verifyRefreshTokenExists(testToken);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('rotateRefreshToken', () => {
+    it('should rotate token and return new token', async () => {
+      const oldToken = 'old-refresh-token';
+      mockSessionRepository.findRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        deviceId: testDeviceInfo.deviceId,
+        deviceName: testDeviceInfo.deviceName,
+      });
+      mockSessionRepository.revokeRefreshToken.mockResolvedValue(undefined);
+      mockSessionRepository.createRefreshToken.mockResolvedValue({
+        id: faker.string.uuid(),
+        userId: testUserId,
+      });
+
+      const newToken = await rotateRefreshToken(oldToken, testDeviceInfo);
+
+      expect(newToken).toBe(testToken);
+      expect(mockSessionRepository.revokeRefreshToken).toHaveBeenCalledWith(oldToken);
+    });
+
+    it('should return null for non-existent token', async () => {
+      mockSessionRepository.findRefreshToken.mockResolvedValue(null);
+
+      const result = await rotateRefreshToken('non-existent-token');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null on error', async () => {
+      mockSessionRepository.findRefreshToken.mockRejectedValue(new Error('DB error'));
+
+      const result = await rotateRefreshToken(testToken);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('revokeRefreshToken', () => {
+    it('should revoke token and return true', async () => {
+      mockSessionRepository.revokeRefreshToken.mockResolvedValue(undefined);
+
+      const result = await revokeRefreshToken(testToken);
+
+      expect(result).toBe(true);
+      expect(mockSessionRepository.revokeRefreshToken).toHaveBeenCalledWith(testToken);
+    });
+
+    it('should return false on error', async () => {
+      mockSessionRepository.revokeRefreshToken.mockRejectedValue(new Error('Not found'));
+
+      const result = await revokeRefreshToken(testToken);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('revokeSession', () => {
+    it('should revoke session belonging to user', async () => {
+      mockSessionRepository.findRefreshTokenById.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+      });
+      mockSessionRepository.deleteRefreshTokenById.mockResolvedValue(undefined);
+
+      const result = await revokeSession(testSessionId, testUserId);
+
+      expect(result).toBe(true);
+      expect(mockSessionRepository.deleteRefreshTokenById).toHaveBeenCalledWith(testSessionId);
+    });
+
+    it('should return false for session not found', async () => {
+      mockSessionRepository.findRefreshTokenById.mockResolvedValue(null);
+
+      const result = await revokeSession(testSessionId, testUserId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false for session belonging to another user', async () => {
+      mockSessionRepository.findRefreshTokenById.mockResolvedValue({
+        id: testSessionId,
+        userId: faker.string.uuid(), // Different user
+      });
+
+      const result = await revokeSession(testSessionId, testUserId);
+
+      expect(result).toBe(false);
+      expect(mockSessionRepository.deleteRefreshTokenById).not.toHaveBeenCalled();
+    });
+
+    it('should return false on error', async () => {
+      mockSessionRepository.findRefreshTokenById.mockRejectedValue(new Error('DB error'));
+
+      const result = await revokeSession(testSessionId, testUserId);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('revokeAllUserRefreshTokens', () => {
+    it('should revoke all user tokens and return count', async () => {
+      mockSessionRepository.revokeAllUserTokens.mockResolvedValue(5);
+
+      const count = await revokeAllUserRefreshTokens(testUserId);
+
+      expect(count).toBe(5);
+      expect(mockSessionRepository.revokeAllUserTokens).toHaveBeenCalledWith(testUserId);
+    });
+
+    it('should throw error on failure', async () => {
+      mockSessionRepository.revokeAllUserTokens.mockRejectedValue(new Error('DB error'));
+
+      await expect(revokeAllUserRefreshTokens(testUserId)).rejects.toThrow('DB error');
+    });
+  });
+
+  describe('getUserSessions', () => {
+    it('should return all user sessions', async () => {
+      const mockSessions = [
+        {
+          id: testSessionId,
+          deviceId: testDeviceInfo.deviceId,
+          deviceName: testDeviceInfo.deviceName,
+          userAgent: testDeviceInfo.userAgent,
+          ipAddress: testDeviceInfo.ipAddress,
+          createdAt: new Date(),
+          lastUsedAt: new Date(),
+          isCurrent: false,
+        },
+      ];
+      mockSessionRepository.getSessionsForUser.mockResolvedValue(mockSessions);
+
+      const sessions = await getUserSessions(testUserId);
+
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].id).toBe(testSessionId);
+      expect(sessions[0].deviceName).toBe(testDeviceInfo.deviceName);
+    });
+
+    it('should mark current session when hash provided', async () => {
+      const tokenHash = 'current-token-hash';
+      mockSessionRepository.findRefreshTokenByHash.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+      });
+      mockSessionRepository.getSessionsForUser.mockResolvedValue([
+        {
+          id: testSessionId,
+          isCurrent: true,
+          deviceId: null,
+          deviceName: null,
+          userAgent: null,
+          ipAddress: null,
+          createdAt: new Date(),
+          lastUsedAt: new Date(),
+        },
+      ]);
+
+      const sessions = await getUserSessions(testUserId, tokenHash);
+
+      expect(sessions[0].isCurrent).toBe(true);
+    });
+
+    it('should throw error on failure', async () => {
+      mockSessionRepository.getSessionsForUser.mockRejectedValue(new Error('DB error'));
+
+      await expect(getUserSessions(testUserId)).rejects.toThrow('DB error');
+    });
+  });
+
+  describe('cleanupExpiredRefreshTokens', () => {
+    it('should delete expired tokens and return count', async () => {
+      mockSessionRepository.deleteExpiredRefreshTokens.mockResolvedValue(10);
+
+      const count = await cleanupExpiredRefreshTokens();
+
+      expect(count).toBe(10);
+    });
+
+    it('should return 0 on error', async () => {
+      mockSessionRepository.deleteExpiredRefreshTokens.mockRejectedValue(new Error('DB error'));
+
+      const count = await cleanupExpiredRefreshTokens();
+
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('getActiveSessionCount', () => {
+    it('should return active session count', async () => {
+      mockSessionRepository.countActiveSessions.mockResolvedValue(3);
+
+      const count = await getActiveSessionCount(testUserId);
+
+      expect(count).toBe(3);
+    });
+
+    it('should return 0 on error', async () => {
+      mockSessionRepository.countActiveSessions.mockRejectedValue(new Error('DB error'));
+
+      const count = await getActiveSessionCount(testUserId);
+
+      expect(count).toBe(0);
+    });
+  });
+});

@@ -28,8 +28,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary', 'lcov'],
-      include: ['hooks/**/*.ts', 'components/**/*.tsx'],
+      include: ['hooks/**/*.ts', 'components/**/*.tsx', 'utils/**/*.ts', 'contexts/**/*.tsx'],
       reportsDirectory: './coverage',
+      thresholds: {
+        branches: 40,
+        functions: 50,
+        lines: 50,
+        statements: 50,
+      },
     },
     reporters: ['default', 'junit'],
     outputFile: {

@@ -4,323 +4,310 @@ Last updated: 2026-01-11
 
 ## Executive Summary
 
-**Current Coverage**: 59% server-side code coverage with ~4,100+ test cases.
+**Current Status**: Phase 1 (Gateway) and Phase 2 (Server) coverage improvements complete.
 
-The testing foundation is solid with excellent coverage in repositories, export/import services, and authorization. However, there are critical gaps in Bitcoin transaction handling and real-time features.
+| Package | Statements | Branches | Functions | Lines | Status |
+|---------|------------|----------|-----------|-------|--------|
+| **Server** | 45.74% / 45% | 41.01% / 40% | 46.80% / 45% | 45.67% / 45% | ✅ Passing |
+| **Gateway** | 75%+ / 70% | 75%+ / 60% | 66%+ / 60% | 80%+ / 75% | ✅ Passing |
+| **Frontend** | 54% / 50% | 48% / 45% | 52% / 50% | 54% / 50% | ✅ Passing |
 
----
-
-## Current Coverage by Area
-
-| Area | Coverage | Assessment |
-|------|----------|------------|
-| Repositories | 91% | Excellent |
-| Export Services | 93-100% | Excellent |
-| Import Services | 95% | Excellent |
-| Authorization | 91% | Excellent |
-| Middleware | 86% | Good |
-| UTXO Selection Strategies | 85% | Good |
-| Services (General) | 69% | Moderate |
-| Bitcoin Services | 60% | Needs Improvement |
-| Cache Services | 42% | Needs Improvement |
-| Bitcoin Sync | 28% | **Critical Gap** |
-| WebSocket | 24% | **Critical Gap** |
-| Push Providers | 24% | Low |
-| Admin API | 14% | **Critical Gap** |
+**Total Tests**: ~4,000+ across all packages
 
 ---
 
-## Priority 1: Critical (Immediate Attention)
+## Test Inventory
 
-### 1.1 Bitcoin Sync Pipeline Tests
-- **Current Coverage**: 28%
-- **Location**: `server/src/services/bitcoin/sync/`
-- **Risk**: Users could see incorrect balances, miss transactions, or experience UTXO state corruption
-- **Effort**: Large (3+ days)
+### Server Tests (122+ files, ~3,300 tests)
 
-**Files needing tests:**
-- `phases/reconcileUtxos.ts`
-- `phases/rbfCleanup.ts`
-- `addressDiscovery.ts`
-- `pipeline.ts`
+#### Unit Tests - API Routes (14 files)
+| File | Description |
+|------|-------------|
+| `admin.test.ts` | Admin user management endpoints |
+| `ai.test.ts` | AI assistant endpoints |
+| `ai-internal.test.ts` | Internal AI data endpoints |
+| `auth.test.ts` | Authentication flows |
+| `bitcoin.test.ts` | Bitcoin network info endpoints |
+| `devices.test.ts` | Device management |
+| `drafts.test.ts` | Transaction draft management |
+| `electrumServers.test.ts` | Electrum server config |
+| `health.test.ts` | Health check endpoints |
+| `payjoin.test.ts` | BIP78 PayJoin support |
+| `sync.test.ts` | Wallet synchronization |
+| `transactions.test.ts` | Transaction operations |
+| `transfers.test.ts` | Wallet ownership transfers |
+| `wallets.test.ts` | Wallet CRUD operations |
 
-**Test scenarios:**
-- UTXO reconciliation with conflicting states
-- Address gap limit detection
-- RBF transaction replacement cleanup
-- Sync pipeline error recovery
+#### Unit Tests - Services (51+ files)
+| Category | Files |
+|----------|-------|
+| **Bitcoin** | addressDerivation, advancedTx, blockchain, descriptorBuilder, descriptorParser, electrum, electrumPool, nodeClient, plugin, psbtValidation, transactionService, utils, sync/phases, sync/pipeline |
+| **Core** | accessControl, aiService, auditService, authorization, backupService, blockchainService, cacheInvalidation, circuitBreaker, deviceAccess, draftLockService, draftService, labelService, notifications, payjoinService, price, privacyService, recoveryPolicy, refreshTokenService, registry, startupManager, syncService, tokenRevocation, transferService, twoFactorService, utxoSelectionService, wallet, walletImport |
+| **i18n** | i18nService (NEW - 94.44% coverage) |
+| **Feature Flags** | featureFlagService (NEW - behavioral tests) |
+| **Export/Import** | coldcardHandler, exportRegistry, importRegistry |
+| **Hooks** | hookRegistry, hooksDefaults |
+| **Lightning** | beaconClient |
+| **Push** | pushService |
+| **Cache** | warmCaches |
+| **Script Types** | scriptTypeRegistry |
 
-### 1.2 WebSocket Server Tests
-- **Current Coverage**: 24%
-- **Risk**: Connection leaks, missed wallet updates, race conditions in multi-user signing
-- **Effort**: Medium (1-3 days)
+#### Unit Tests - Middleware (12 files)
+| File | Coverage | Description |
+|------|----------|-------------|
+| `apiVersion.test.ts` | High | API versioning |
+| `auth.test.ts` | High | JWT authentication |
+| `deviceAccess.test.ts` | High | Device permission checks |
+| `featureGate.test.ts` | High | Feature flag middleware |
+| `gatewayAuth.test.ts` | High | Gateway authentication |
+| `i18n.test.ts` (NEW) | 100% | Internationalization |
+| `metrics.test.ts` (NEW) | 100% | Prometheus metrics |
+| `pagination.test.ts` | High | Request pagination |
+| `rateLimit.test.ts` | High | Rate limiting |
+| `requestLogger.test.ts` (NEW) | 96.77% | Request logging |
+| `requestTimeout.test.ts` (NEW) | 100% | Request timeouts |
+| `walletAccess.test.ts` | High | Wallet permission checks |
 
-**Test scenarios:**
-- Connection lifecycle (connect, disconnect, reconnect)
-- Multi-client subscription management
-- PSBT signing coordination between devices
-- Message ordering and delivery guarantees
+#### Unit Tests - Utils (7 files)
+| File | Coverage | Description |
+|------|----------|-------------|
+| `async.test.ts` | 97.43% | Async utilities |
+| `encryption.test.ts` | 100% | Encryption helpers |
+| `logger.test.ts` | 77.01% | Logging utilities |
+| `redact.test.ts` | 100% | Data redaction |
+| `requestContext.test.ts` | 100% | Request context |
+| `apiResponse.test.ts` (NEW) | 100% | API response formatting |
+| `errors.test.ts` (NEW) | 87.5% | Error handling |
 
-### 1.3 Admin API Tests
-- **Current Coverage**: 14%
-- **Location**: `server/src/api/admin.ts`
-- **Risk**: Privilege escalation, unauthorized user creation/deletion
-- **Effort**: Medium (1-3 days)
+#### Unit Tests - Infrastructure (5 files)
+- distributedLock, jobQueue, memoryMonitor, readReplica, redisCircuitBreaker
 
-**38 endpoints needing coverage:**
-- User CRUD operations
-- Group management
-- System settings modification
-- Permission management
+#### Unit Tests - Repositories (7 files)
+- addressRepository, cache, deviceRepository, sessionRepository, transactionRepository, userRepository, walletRepository
 
----
+#### Unit Tests - WebSocket (5 files)
+- broadcast, eventVersioning, redisBridge, schemas, server
 
-## Priority 2: High (Next Sprint)
+#### Integration Tests (20 files)
+| Category | Files |
+|----------|-------|
+| **Flows** | admin, auth, coinControl, payjoin, security, transactions, wallet |
+| **Repositories** | address, auditLog, device, draft, label, pushDevice, session, systemSetting, transaction, user, utxo, wallet, walletSharing |
 
-### 2.1 RBF Transaction Tests
-- **Effort**: Medium (1-3 days)
-- **Location**: `server/src/services/bitcoin/advancedTx.ts`
-
-**Test scenarios:**
-- Creating RBF-enabled transactions
-- Fee bumping with correct sequence numbers
-- Handling conflicting transactions in mempool
-- Broadcast replacement validation
-
-### 2.2 Multisig Signing Flow Integration Tests
-- **Effort**: Large (3+ days)
-
-**Test scenarios:**
-- Quorum verification (m-of-n validation)
-- Partial signature aggregation
-- Cross-device signing coordination
-- Signature ordering for sortedmulti
-
-### 2.3 Electrum Pool Connection Management Tests
-- **Current Coverage**: 77 tests exist
-- **Effort**: Medium (1-3 days)
-
-**Additional scenarios needed:**
-- Connection failover between servers
-- Reconnection logic after network issues
-- Server health monitoring
-- Load balancing behavior
-
-### 2.4 Price Service Provider Failover Tests
-- **Current Coverage**: 78%
-- **Effort**: Small (< 1 day)
-
-**Test scenarios:**
-- API rate limit handling
-- Stale data detection
-- Provider rotation on failure
-- Cache invalidation
+#### Contract Tests (1 file)
+- `api.contract.test.ts` - API contract validation
 
 ---
 
-## Priority 3: Medium
+### Gateway Tests (9 files, ~150 tests)
 
-### 3.1 Hardware Wallet Integration Tests (Frontend)
-- **Location**: `services/hardwareWallet/`
-- **Effort**: Large (3+ days)
-
-**Devices to test:**
-- Ledger (Nano S/X, Stax, Flex)
-- Trezor (Model T, Safe 3/5/7)
-- ColdCard (MK4, Q)
-- BitBox02
-- Foundation Passport
-- Blockstream Jade
-
-### 3.2 Labels API Tests
-- **Location**: `server/src/api/labels.ts`
-- **Effort**: Small (< 1 day)
-
-**13 endpoints for:**
-- Address labeling
-- Transaction labeling
-- UTXO labeling
-- Conflict resolution
-
-### 3.3 Push Notification Provider Tests
-- **Current Coverage**: 24%
-- **Effort**: Medium (1-3 days)
-
-**Test scenarios:**
-- Firebase delivery
-- APNS delivery
-- Token management and expiry
-- Notification batching
-
-### 3.4 Transfer Service Edge Cases
-- **Effort**: Small (< 1 day)
-
-**Test scenarios:**
-- Partial transfers
-- Cancellation mid-transfer
-- Device access revocation
-
-### 3.5 Event Bus Redis Integration Tests
-- **Current Coverage**: 44%
-- **Effort**: Medium (1-3 days)
-
-**Test scenarios:**
-- Message ordering guarantees
-- Duplicate detection
-- Cluster failover
-- Split-brain scenarios
+| File | Tests | Coverage | Description |
+|------|-------|----------|-------------|
+| `middleware/auth.test.ts` | 15 | High | JWT token validation |
+| `middleware/rateLimit.test.ts` | 8 | High | Rate limiting |
+| `middleware/validateRequest.test.ts` | 31 | High | Request validation |
+| `middleware/requestLogger.test.ts` (NEW) | 17 | High | Request logging |
+| `routes/proxy.test.ts` | 31 | High | Route whitelist patterns |
+| `services/push.test.ts` | 18 | High | Push notification service |
+| `services/backendEvents.test.ts` (NEW) | 25+ | High | WebSocket/SSE events |
+| `services/push/fcm.test.ts` (NEW) | 15 | High | Firebase Cloud Messaging |
+| `services/push/apns.test.ts` (NEW) | 15 | High | Apple Push Notifications |
 
 ---
 
-## Priority 4: Low
+### Frontend Tests (107+ files, ~2,800 tests)
 
-### 4.1 AI Service Tests
-- **Effort**: Small (< 1 day)
-- Timeout handling
-- Model unavailability
-- Response validation
+#### Components (65+ files)
+| Category | Components |
+|----------|------------|
+| **Core UI** | Account, Dashboard, Layout, Login, Settings |
+| **Wallet** | WalletDetail, WalletList, WalletStats, CreateWallet, ImportWallet |
+| **Transactions** | TransactionList, TransactionActions, TransactionExportModal, BatchSend |
+| **Send Flow** | SendTransactionPage, SendTransactionWizard, OutputsStep, ReviewStep, FeeSelector, OutputRow, AdvancedOptions, TypeSelection, WizardNavigation |
+| **Devices** | DeviceList, DeviceDetail, DeviceSharing, ConnectDevice, HardwareWalletConnect |
+| **QR/Signing** | AnimatedQRCode, QRSigningModal |
+| **Privacy** | PrivacyBadge, PrivacyDetailPanel, PrivacyWarnings, SpendPrivacyCard, CoinControlPanel |
+| **AI** | AILabelSuggestion, AIQueryInput, AISettings |
+| **Admin** | UsersGroups, AuditLogs, Monitoring, SystemSettings, Variables |
+| **Network** | NetworkTabs, NetworkConnectionCard, NetworkSyncActions, NodeConfig, ElectrumServerSettings |
+| **Labels** | LabelManager, LabelSelector |
+| **Notifications** | NotificationBadge, NotificationPanel |
+| **Transfers** | TransferOwnershipModal, PendingTransfersPanel |
 
-### 4.2 Theme System Visual Regression Tests
-- **Effort**: Small (< 1 day)
-- Dark mode color inversion validation
-- Seasonal theme transitions
+#### Contexts (11 files)
+- AppNotificationContext, CurrencyContext, NotificationContext, ServiceContext, SidebarContext, SlotContext, UserContext
+- send/SendTransactionContext, send/reducer, sendTypes, stepValidation
 
-### 4.3 OpenAPI Contract Validation
-- **Effort**: Medium (1-3 days)
-- Expand to validate all 240 API endpoints against schema
+#### Hooks (11 files)
+- useAIStatus, useCopyToClipboard, useDelayedRender, useErrorHandler, useHardwareWallet, useNotificationSound, useSendTransactionActions, useWallets, useWebSocket
+- queries/useBitcoin, queries/useDevices
+
+#### Utils (10 files)
+- bip21Parser, clipboard, errorHandler, explorer, feeCalculation, formatters, logger, urPsbt, utxoAge, validateAddress
 
 ---
 
-## Test Infrastructure Improvements
+## Phase 1 Complete: Gateway Coverage (2026-01-11)
 
-### 1. Add E2E Test Suite (Playwright)
-Create end-to-end tests for critical flows:
-- First-time setup and admin creation
-- Single-sig wallet creation and receive address generation
-- Transaction creation, signing, and broadcast
-- Multisig quorum signing flow
-- Hardware wallet pairing
+**Improvement**: 15-20% → 75-80%
 
-### 2. Implement Test Data Builders
-Create builder patterns for complex Bitcoin test data:
+### New Test Files Created
+1. `gateway/tests/unit/services/backendEvents.test.ts` - WebSocket and SSE event handling
+2. `gateway/tests/unit/middleware/requestLogger.test.ts` - Request logging middleware
+3. `gateway/tests/unit/services/push/fcm.test.ts` - Firebase Cloud Messaging
+4. `gateway/tests/unit/services/push/apns.test.ts` - Apple Push Notifications
+
+### Updated Thresholds
 ```typescript
-const utxo = new UTXOBuilder()
-  .withValue(100000)
-  .confirmed(6)
-  .forWallet(testWalletId)
-  .build();
-
-const psbt = new PSBTBuilder()
-  .addInput(utxo)
-  .addOutput(address, 50000)
-  .withFeeRate(10)
-  .build();
-```
-
-### 3. Database Seeding Fixtures
-Standardize test database state for integration tests with consistent seed data.
-
-### 4. CI Test Splitting
-Parallelize the 4000+ tests by type for faster CI feedback:
-- Unit tests (parallel)
-- Integration tests (sequential with DB)
-- Contract tests (parallel)
-
----
-
-## Current Strengths
-
-1. **Excellent Security Testing**: Comprehensive coverage of password policies, token security, admin self-protection
-2. **Bitcoin-Specific Matchers**: Custom Jest matchers (`toBeValidBitcoinAddress`, `toBeValidTxid`, `toBeValidPsbt`)
-3. **BIP78 Payjoin Validation**: Thorough PSBT validation tests covering all BIP78 rules
-4. **Role-Based Access Testing**: Wallet integration tests verify owner/signer/viewer permissions
-5. **Transaction Reducer Tests**: Frontend send flow reducer has comprehensive state management tests
-
----
-
-## Risk Matrix
-
-| Gap | Business Impact | Technical Risk | Priority |
-|-----|-----------------|----------------|----------|
-| Sync Pipeline | High - incorrect balances | Critical - data corruption | P1 |
-| WebSocket | Medium - UX degradation | High - resource leaks | P1 |
-| Admin API | High - security | Critical - privilege escalation | P1 |
-| RBF Transactions | Medium - stuck funds | High - double-spend concerns | P2 |
-| Multisig Flow | High - signing failures | Medium - UX issues | P2 |
-| Hardware Wallet | Medium - device issues | Medium - compatibility | P3 |
-
----
-
-## Frontend Coverage Improvement Plan
-
-### Current Frontend State (2026-01-11)
-
-| Metric | Current | Threshold | Buffer |
-|--------|---------|-----------|--------|
-| Lines | 19.07% | 18% | 1.07% |
-| Statements | 18.57% | 18% | 0.57% |
-| Functions | 14.70% | 14% | 0.70% |
-| Branches | 16.91% | 15% | 1.91% |
-
-**Status**: Very tight margins - any regression could break CI.
-
-### Tier 1: Quick Wins (~5% coverage boost)
-
-#### Contexts (0% coverage)
-- [ ] ServiceContext.tsx (12 lines)
-- [ ] SidebarContext.tsx (11 lines)
-- [ ] NotificationContext.tsx (47 lines)
-- [ ] SlotContext.tsx (65 lines)
-
-#### Hooks (0% coverage)
-- [ ] useCopyToClipboard.ts (10 lines)
-- [ ] useErrorHandler.ts (17 lines)
-- [ ] useDevices.ts (17 lines)
-- [ ] useBitcoin.ts (14 lines, 7%)
-
-#### Utils (0% coverage)
-- [ ] clipboard.ts (18 lines)
-- [ ] errorHandler.ts (13 lines)
-
-#### Small Components
-- [ ] ThemeProvider.tsx (9 lines, 0%)
-- [ ] NotificationBadge.tsx (11 lines, 0%)
-- [ ] Amount.tsx (12 lines, 8%)
-
-### Tier 2: Medium Effort (~4% more)
-
-- [ ] AppNotificationContext.tsx (118 lines, 0%)
-- [ ] Layout.tsx (93 lines, 0%)
-- [ ] WalletList.tsx (103 lines, 0%)
-- [ ] WalletStats.tsx (63 lines, 0%)
-- [ ] NotificationPanel.tsx (79 lines, 0%)
-- [ ] LabelManager.tsx (75 lines, 0%)
-
-### Tier 3: High Value (~6% more)
-
-- [ ] SendTransactionContext.tsx (104 lines, 0%)
-- [ ] useNotificationSound.ts (528 lines, 0%)
-- [ ] ImportWallet.tsx (295 lines, 0%)
-- [ ] WalletDetail.tsx (748 lines, 0%)
-
-### Frontend Threshold Targets
-
-After Tier 1 + 2:
-```typescript
+// gateway/vitest.config.ts
 thresholds: {
-  branches: 20,
-  functions: 18,
-  lines: 25,
-  statements: 22,
+  branches: 70,
+  functions: 60,
+  lines: 75,
+  statements: 75,
 }
 ```
 
-After all tiers:
+---
+
+## Phase 2 Complete: Server Coverage (2026-01-11)
+
+**Improvement**: 40% → 45%+
+
+### New Test Files Created
+1. `server/tests/unit/middleware/requestTimeout.test.ts` - 22 tests, 100% coverage
+2. `server/tests/unit/middleware/requestLogger.test.ts` - 17 tests, 96.77% coverage
+3. `server/tests/unit/middleware/metrics.test.ts` - 18 tests, 100% coverage
+4. `server/tests/unit/middleware/i18n.test.ts` - 13 tests, 100% coverage
+5. `server/tests/unit/services/i18nService.test.ts` - 23 tests, 94.44% coverage
+6. `server/tests/unit/services/featureFlagService.test.ts` - 24 tests
+7. `server/tests/unit/utils/apiResponse.test.ts` - 36 tests, 100% coverage
+8. `server/tests/unit/utils/errors.test.ts` - 46 tests, 87.5% coverage
+
+### Updated Thresholds
 ```typescript
+// server/vitest.config.ts
 thresholds: {
-  branches: 25,
-  functions: 22,
-  lines: 30,
-  statements: 28,
+  branches: 40,
+  functions: 45,
+  lines: 45,
+  statements: 45,
 }
 ```
+
+---
+
+## Priority Areas for Future Improvement
+
+### Priority 1: Critical Gaps
+
+| Area | Current Coverage | Risk | Effort |
+|------|------------------|------|--------|
+| Bitcoin Sync Pipeline | 28% | Data corruption | Large |
+| WebSocket Server | 24% | Connection leaks | Medium |
+| Admin API | 14% | Security | Medium |
+
+### Priority 2: High Impact
+
+| Area | Current Coverage | Impact |
+|------|------------------|--------|
+| RBF Transactions | ~37% | Stuck funds |
+| Multisig Flow | Medium | Signing failures |
+| Electrum Pool | 77 tests | Connection resilience |
+
+### Priority 3: Medium
+
+- Hardware Wallet Integration (Frontend)
+- Labels API
+- Push Notification Providers
+- Event Bus Redis Integration
+
+---
+
+## Testing Patterns Reference
+
+### Vitest Mock Hoisting Pattern
+```typescript
+// Always use vi.hoisted() for mocks that need to be available during module loading
+const { mockFunction, mockService } = vi.hoisted(() => {
+  const mockFunction = vi.fn();
+  const mockService = {
+    method: vi.fn(),
+  };
+  return { mockFunction, mockService };
+});
+
+vi.mock('../path/to/module', () => ({
+  someFunction: mockFunction,
+  someService: mockService,
+}));
+```
+
+### Express Middleware Testing
+```typescript
+let req: any;
+let res: any;
+let next: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  req = { method: 'GET', path: '/api/test', headers: {} };
+  res = {
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn().mockReturnThis(),
+    setHeader: vi.fn(),
+  };
+  next = vi.fn();
+});
+```
+
+### Fake Timers for Timeout Testing
+```typescript
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+it('should timeout after duration', () => {
+  middleware(req, res, next);
+  vi.advanceTimersByTime(31000);
+  expect(res.status).toHaveBeenCalledWith(408);
+});
+```
+
+---
+
+## Running Tests
+
+```bash
+# Server tests
+cd server && npm run test
+cd server && npm run test:coverage
+
+# Gateway tests
+cd gateway && npm run test
+cd gateway && npm run test:coverage
+
+# Frontend tests
+npm run test
+npm run test:coverage
+
+# Run specific test file
+npm run test -- path/to/test.ts
+
+# Run with pattern matching
+npm run test -- --grep "middleware"
+```
+
+---
+
+## CI/CD Integration
+
+Tests run automatically on:
+- Pull request creation
+- Push to main branch
+- Scheduled nightly builds
+
+Coverage reports are generated and uploaded to the CI artifacts.

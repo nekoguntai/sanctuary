@@ -31,12 +31,12 @@ export default defineConfig({
       include: ['hooks/**/*.ts', 'components/**/*.tsx', 'utils/**/*.ts', 'contexts/**/*.tsx'],
       reportsDirectory: './coverage',
       thresholds: {
-        // Thresholds updated after comprehensive test coverage implementation (2026-01-11)
-        // Current coverage: branches=42.74%, functions=43.7%, lines=46.8%, statements=47.54%
-        branches: 40,
-        functions: 40,
-        lines: 45,
-        statements: 45,
+        // Thresholds updated after Batch 1-3 test coverage implementation (2026-01-11)
+        // Current coverage: branches=48.77%, functions=52.43%, lines=54.17%, statements=54.17%
+        branches: 45,
+        functions: 50,
+        lines: 50,
+        statements: 50,
       },
     },
     reporters: ['default', 'junit'],

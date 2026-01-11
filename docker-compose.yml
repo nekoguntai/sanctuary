@@ -424,6 +424,14 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 4000
 
+      # TLS/HTTPS Configuration
+      # Enable for secure mobile connections (recommended for production)
+      # Uses same certificates as nginx by default
+      TLS_ENABLED: ${GATEWAY_TLS_ENABLED:-false}
+      TLS_CERT_PATH: /app/config/ssl/fullchain.pem
+      TLS_KEY_PATH: /app/config/ssl/privkey.pem
+      TLS_MIN_VERSION: ${GATEWAY_TLS_MIN_VERSION:-TLSv1.2}
+
       # Backend connection (internal)
       BACKEND_URL: http://backend:3001
       BACKEND_WS_URL: ws://backend:3001
@@ -451,8 +459,13 @@ services:
       - ${FCM_SERVICE_ACCOUNT:-/dev/null}:/app/config/fcm-service-account.json:ro
       # Mount APNs key (optional) - create this file from Apple Developer Portal
       - ${APNS_KEY_FILE:-/dev/null}:/app/config/apns-key.p8:ro
+      # Mount SSL certificates for TLS (uses same certs as nginx)
+      # Only needed when GATEWAY_TLS_ENABLED=true
+      - ./docker/nginx/ssl:/app/config/ssl:ro
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      # Automatically uses https when TLS_ENABLED=true, http otherwise
+      # --no-check-certificate handles self-signed certs
+      test: ["CMD", "sh", "-c", "if [ \"$TLS_ENABLED\" = \"true\" ]; then wget --no-verbose --tries=1 --spider --no-check-certificate https://localhost:4000/health; else wget --no-verbose --tries=1 --spider http://localhost:4000/health; fi"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -15,6 +15,12 @@
  * - `GATEWAY_PORT` - Port to listen on (default: 4000)
  * - `NODE_ENV` - Environment mode (default: development)
  *
+ * ### TLS/HTTPS
+ * - `TLS_ENABLED` - Enable HTTPS (default: false, set to 'true' to enable)
+ * - `TLS_CERT_PATH` - Path to certificate file (fullchain.pem)
+ * - `TLS_KEY_PATH` - Path to private key file (privkey.pem)
+ * - `TLS_MIN_VERSION` - Minimum TLS version (default: TLSv1.2)
+ *
  * ### Backend Connection
  * - `BACKEND_URL` - Backend HTTP URL (default: http://backend:3000)
  * - `BACKEND_WS_URL` - Backend WebSocket URL (default: ws://backend:3000)
@@ -45,6 +51,14 @@ export const config = {
   // Server
   port: parseInt(process.env.GATEWAY_PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+
+  // TLS/HTTPS configuration
+  tls: {
+    enabled: process.env.TLS_ENABLED === 'true',
+    certPath: process.env.TLS_CERT_PATH || '/app/config/ssl/fullchain.pem',
+    keyPath: process.env.TLS_KEY_PATH || '/app/config/ssl/privkey.pem',
+    minVersion: (process.env.TLS_MIN_VERSION || 'TLSv1.2') as 'TLSv1.2' | 'TLSv1.3',
+  },
 
   // Backend connection (internal network)
   backendUrl: process.env.BACKEND_URL || 'http://backend:3000',
@@ -102,6 +116,20 @@ export function validateConfig(): void {
     warnings.push('GATEWAY_SECRET is not set - internal gateway authentication disabled');
   } else if (config.gatewaySecret.length < 32) {
     warnings.push('GATEWAY_SECRET is shorter than 32 characters');
+  }
+
+  // TLS validation
+  if (config.tls.enabled) {
+    // Certificate files are validated at startup in index.ts
+    // Here we just check the paths are configured
+    if (!config.tls.certPath) {
+      errors.push('TLS_CERT_PATH is required when TLS is enabled');
+    }
+    if (!config.tls.keyPath) {
+      errors.push('TLS_KEY_PATH is required when TLS is enabled');
+    }
+  } else if (config.nodeEnv === 'production') {
+    warnings.push('TLS is disabled in production - mobile connections will be unencrypted');
   }
 
   if (warnings.length > 0) {

@@ -3,11 +3,20 @@
  *
  * Public-facing gateway for mobile app access.
  * Handles authentication, rate limiting, and proxying to the backend.
+ *
+ * ## TLS Support
+ *
+ * The gateway supports HTTPS directly for secure mobile connections.
+ * Enable with TLS_ENABLED=true and provide certificate paths.
+ * This eliminates the need for a reverse proxy in front of the gateway.
  */
 
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import https from 'https';
+import http from 'http';
+import fs from 'fs';
 import { config, validateConfig } from './config';
 import { createLogger } from './utils/logger';
 import { requestLogger } from './middleware/requestLogger';
@@ -119,18 +128,97 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   });
 });
 
-// Start server
-const server = app.listen(config.port, () => {
-  log.info(`Gateway started on port ${config.port}`);
-  log.info(`Environment: ${config.nodeEnv}`);
-  log.info(`Backend URL: ${config.backendUrl}`);
+// =============================================================================
+// Create Server (HTTP or HTTPS based on configuration)
+// =============================================================================
 
-  // Initialize push notification services
-  initializePushServices();
+/**
+ * Load TLS certificates from disk
+ * Returns null if TLS is disabled or certificates are not available
+ */
+function loadTlsCertificates(): https.ServerOptions | null {
+  if (!config.tls.enabled) {
+    return null;
+  }
 
-  // Connect to backend for events
-  startBackendEvents();
-});
+  try {
+    // Check if certificate files exist
+    if (!fs.existsSync(config.tls.certPath)) {
+      log.error('TLS certificate file not found', { path: config.tls.certPath });
+      process.exit(1);
+    }
+    if (!fs.existsSync(config.tls.keyPath)) {
+      log.error('TLS private key file not found', { path: config.tls.keyPath });
+      process.exit(1);
+    }
+
+    const cert = fs.readFileSync(config.tls.certPath, 'utf8');
+    const key = fs.readFileSync(config.tls.keyPath, 'utf8');
+
+    log.info('TLS certificates loaded successfully', {
+      certPath: config.tls.certPath,
+      keyPath: config.tls.keyPath,
+    });
+
+    return {
+      cert,
+      key,
+      minVersion: config.tls.minVersion,
+      // Modern TLS settings
+      ciphers: [
+        'ECDHE-ECDSA-AES128-GCM-SHA256',
+        'ECDHE-RSA-AES128-GCM-SHA256',
+        'ECDHE-ECDSA-AES256-GCM-SHA384',
+        'ECDHE-RSA-AES256-GCM-SHA384',
+        'ECDHE-ECDSA-CHACHA20-POLY1305',
+        'ECDHE-RSA-CHACHA20-POLY1305',
+      ].join(':'),
+      honorCipherOrder: true,
+    };
+  } catch (error) {
+    log.error('Failed to load TLS certificates', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    process.exit(1);
+  }
+}
+
+// Create server based on TLS configuration
+let server: http.Server | https.Server;
+const tlsOptions = loadTlsCertificates();
+
+if (tlsOptions) {
+  // HTTPS server
+  server = https.createServer(tlsOptions, app);
+  server.listen(config.port, () => {
+    log.info(`Gateway started with HTTPS on port ${config.port}`);
+    log.info(`TLS version: ${config.tls.minVersion}+`);
+    log.info(`Environment: ${config.nodeEnv}`);
+    log.info(`Backend URL: ${config.backendUrl}`);
+
+    // Initialize push notification services
+    initializePushServices();
+
+    // Connect to backend for events
+    startBackendEvents();
+  });
+} else {
+  // HTTP server (development or TLS disabled)
+  server = app.listen(config.port, () => {
+    log.info(`Gateway started with HTTP on port ${config.port}`);
+    if (config.nodeEnv === 'production') {
+      log.warn('WARNING: Running without TLS in production is insecure!');
+    }
+    log.info(`Environment: ${config.nodeEnv}`);
+    log.info(`Backend URL: ${config.backendUrl}`);
+
+    // Initialize push notification services
+    initializePushServices();
+
+    // Connect to backend for events
+    startBackendEvents();
+  });
+}
 
 // Graceful shutdown
 function shutdown(signal: string): void {

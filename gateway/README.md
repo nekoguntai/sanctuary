@@ -10,18 +10,19 @@ The Gateway is a public-facing API proxy for mobile app access to Sanctuary. It 
                                     │  (iOS/Android)  │
                                     └────────┬────────┘
                                              │
-                                    HTTPS (JWT Auth)
+                                   HTTPS/TLS (Direct)
+                                      + JWT Auth
                                              │
                                              ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │                           GATEWAY                                   │
 │                                                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐  │
-│  │ Rate Limiter │  │  JWT Auth    │  │    Route Whitelist      │  │
+│  │  TLS/HTTPS   │  │ Rate Limiter │  │      JWT Auth           │  │
 │  └──────────────┘  └──────────────┘  └─────────────────────────┘  │
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                      HTTP Proxy                               │  │
+│  │                  Route Whitelist + HTTP Proxy                 │  │
 │  │   Only whitelisted routes are forwarded to backend           │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                     │
@@ -248,4 +249,84 @@ Use this to navigate to the relevant transaction when tapped.
 2. **Rate limiting** - Prevents abuse and brute-force attacks
 3. **Route whitelist** - Admin and sensitive routes blocked
 4. **Internal endpoints** - Some backend endpoints only accessible via X-Gateway-Request header
-5. **HTTPS only** - Gateway should be behind TLS termination (nginx/cloudflare)
+5. **TLS/HTTPS** - Gateway handles TLS directly for secure mobile connections
+
+## TLS/HTTPS Configuration
+
+The gateway supports HTTPS directly, eliminating the need for a reverse proxy. This is the recommended setup for production.
+
+### Why Direct TLS?
+
+1. **Security boundary alignment** - The gateway handles auth, rate limiting, and validation. It should also handle TLS.
+2. **No plaintext internal hops** - Credentials and JWTs are encrypted end-to-end from mobile app to gateway.
+3. **Simpler architecture** - No need for nginx/proxy in front of the gateway.
+4. **Certificate pinning** - Mobile apps can pin the gateway's certificate directly.
+
+### Enabling TLS
+
+1. **Set environment variables:**
+   ```bash
+   GATEWAY_TLS_ENABLED=true
+   ```
+
+2. **Provide certificates** (uses same location as nginx by default):
+   ```
+   ./docker/nginx/ssl/fullchain.pem  # Certificate chain
+   ./docker/nginx/ssl/privkey.pem    # Private key
+   ```
+
+3. **Restart the gateway:**
+   ```bash
+   ./start.sh --rebuild
+   ```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GATEWAY_TLS_ENABLED` | `false` | Enable HTTPS (`true` to enable) |
+| `TLS_CERT_PATH` | `/app/config/ssl/fullchain.pem` | Path to certificate file |
+| `TLS_KEY_PATH` | `/app/config/ssl/privkey.pem` | Path to private key file |
+| `GATEWAY_TLS_MIN_VERSION` | `TLSv1.2` | Minimum TLS version (`TLSv1.2` or `TLSv1.3`) |
+
+### Using Let's Encrypt Certificates
+
+For production, use Let's Encrypt certificates:
+
+```bash
+# Install certbot
+sudo apt install certbot
+
+# Get certificates (standalone mode)
+sudo certbot certonly --standalone -d gateway.yourdomain.com
+
+# Copy to gateway ssl directory
+sudo cp /etc/letsencrypt/live/gateway.yourdomain.com/fullchain.pem ./docker/nginx/ssl/
+sudo cp /etc/letsencrypt/live/gateway.yourdomain.com/privkey.pem ./docker/nginx/ssl/
+sudo chown $USER:$USER ./docker/nginx/ssl/*.pem
+```
+
+### TLS Security Settings
+
+The gateway uses modern TLS settings:
+- **Minimum version**: TLSv1.2 (configurable to TLSv1.3)
+- **Cipher suites**: ECDHE with AES-GCM and ChaCha20-Poly1305
+- **No deprecated ciphers**: RC4, 3DES, and export ciphers are disabled
+
+### Mobile App Certificate Pinning
+
+For additional security, mobile apps can pin the gateway's certificate:
+
+```swift
+// iOS (Swift)
+let pinnedCertificates = [
+    SecCertificateCreateWithData(nil, certData as CFData)!
+]
+```
+
+```kotlin
+// Android (Kotlin)
+val certificatePinner = CertificatePinner.Builder()
+    .add("gateway.yourdomain.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    .build()
+```

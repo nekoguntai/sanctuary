@@ -42,7 +42,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import { createProxyMiddleware, fixRequestBody, Options } from 'http-proxy-middleware';
 import { config } from '../config';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import {
@@ -200,6 +200,11 @@ const proxyOptions: Options = {
   changeOrigin: true,
   logLevel: 'silent',
   onProxyReq: (proxyReq, req) => {
+    // Fix for body parsing: when express.json() parses the body,
+    // the raw stream is consumed. This re-attaches the parsed body
+    // to the proxy request so it can be forwarded to the backend.
+    fixRequestBody(proxyReq, req as Request);
+
     const authReq = req as AuthenticatedRequest;
 
     // Forward user info to backend

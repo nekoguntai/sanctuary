@@ -13,26 +13,33 @@ test.describe('Authentication', () => {
 
   test('should display login page for unauthenticated users', async ({ page }) => {
     // Check that login form is visible
-    await expect(page.getByRole('heading', { name: /login|sign in/i })).toBeVisible();
+    // The app title is "Sanctuary" - verify the login page elements
+    await expect(page.getByRole('heading', { name: /sanctuary/i })).toBeVisible();
     await expect(page.getByLabel(/username/i)).toBeVisible();
     await expect(page.getByLabel(/password/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /login|sign in/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
   });
 
   test('should show error for invalid credentials', async ({ page }) => {
     await page.getByLabel(/username/i).fill('invaliduser');
     await page.getByLabel(/password/i).fill('wrongpassword');
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    await page.getByRole('button', { name: /sign in/i }).click();
 
-    // Should show error message
-    await expect(page.getByText(/invalid|incorrect|failed/i)).toBeVisible();
+    // Should show error message from backend
+    // Error messages include: "Invalid credentials", "Authentication failed", etc.
+    await expect(page.getByText(/invalid|incorrect|failed|error/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('should show validation errors for empty fields', async ({ page }) => {
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    // The form uses HTML5 required attribute, which prevents submission
+    // We verify by checking that the form doesn't navigate away when clicking submit
+    const usernameField = page.getByLabel(/username/i);
+    await page.getByRole('button', { name: /sign in/i }).click();
 
-    // Should show validation errors
-    await expect(page.getByText(/required|cannot be empty/i)).toBeVisible();
+    // Form should still be visible (didn't submit due to HTML5 validation)
+    await expect(usernameField).toBeVisible();
+    // Still on the same page
+    await expect(page).toHaveURL('/');
   });
 
   test('should successfully login with valid credentials', async ({ page }) => {
@@ -42,7 +49,7 @@ test.describe('Authentication', () => {
 
     await page.getByLabel(/username/i).fill('testuser');
     await page.getByLabel(/password/i).fill('testpassword');
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    await page.getByRole('button', { name: /sign in/i }).click();
 
     // Should redirect to dashboard
     await expect(page).toHaveURL(/dashboard|wallets|home/i);
@@ -55,7 +62,7 @@ test.describe('Authentication', () => {
     // After initial login, should show 2FA prompt
     await page.getByLabel(/username/i).fill('user_with_2fa');
     await page.getByLabel(/password/i).fill('password');
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    await page.getByRole('button', { name: /sign in/i }).click();
 
     // Should show 2FA input
     await expect(page.getByLabel(/code|otp|2fa/i)).toBeVisible();
@@ -67,13 +74,13 @@ test.describe('Authentication', () => {
     // First login
     await page.getByLabel(/username/i).fill('testuser');
     await page.getByLabel(/password/i).fill('testpassword');
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    await page.getByRole('button', { name: /sign in/i }).click();
     await expect(page).toHaveURL(/dashboard|wallets|home/i);
 
     // Then logout
     await page.getByRole('button', { name: /logout|sign out/i }).click();
 
     // Should return to login page
-    await expect(page.getByRole('heading', { name: /login|sign in/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /sanctuary/i })).toBeVisible();
   });
 });

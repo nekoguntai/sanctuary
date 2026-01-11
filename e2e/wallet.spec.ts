@@ -15,7 +15,7 @@ test.describe('Wallet Management', () => {
     await page.goto('/');
     await page.getByLabel(/username/i).fill('testuser');
     await page.getByLabel(/password/i).fill('testpassword');
-    await page.getByRole('button', { name: /login|sign in/i }).click();
+    await page.getByRole('button', { name: /sign in/i }).click();
     await expect(page).toHaveURL(/dashboard|wallets|home/i);
   });
 

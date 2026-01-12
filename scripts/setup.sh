@@ -540,11 +540,18 @@ start_services() {
     [ "$OPT_ENABLE_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
     [ "$OPT_ENABLE_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
 
+    # Step 1: Build all images first (ensures all build output completes before continuing)
+    echo "Building containers..."
+    docker compose $COMPOSE_FILES build
+
+    # Step 2: Start containers
+    echo ""
+    echo "Starting containers..."
+
     # Check if --wait flag is supported (docker compose v2.1+)
     if docker compose up --help 2>&1 | grep -q -- '--wait'; then
         # Use --wait to wait for health checks before returning
-        # Use || true to prevent set -e from exiting if --wait times out
-        if docker compose $COMPOSE_FILES up -d --build --wait; then
+        if docker compose $COMPOSE_FILES up -d --wait; then
             FRONTEND_RUNNING=true
         else
             echo ""
@@ -557,7 +564,7 @@ start_services() {
         USED_WAIT_FLAG=true
     else
         # Fallback for older docker compose versions
-        docker compose $COMPOSE_FILES up -d --build
+        docker compose $COMPOSE_FILES up -d
         USED_WAIT_FLAG=false
     fi
 }

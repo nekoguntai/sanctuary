@@ -74,6 +74,7 @@ const ALLOWED_ROUTES: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^\/api\/v1\/auth\/refresh$/ },
   { method: 'POST', pattern: /^\/api\/v1\/auth\/logout$/ },
   { method: 'POST', pattern: /^\/api\/v1\/auth\/logout-all$/ },
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/2fa\/verify$/ },
   { method: 'GET', pattern: /^\/api\/v1\/auth\/me$/ },
   { method: 'PATCH', pattern: /^\/api\/v1\/auth\/me\/preferences$/ },
 
@@ -244,6 +245,7 @@ const proxy = createProxyMiddleware(proxyOptions);
 // Public routes (no auth required)
 router.post('/api/v1/auth/login', checkWhitelist, validateRequest, proxy);
 router.post('/api/v1/auth/refresh', checkWhitelist, validateRequest, proxy);
+router.post('/api/v1/auth/2fa/verify', checkWhitelist, validateRequest, proxy);
 
 // =============================================================================
 // Protected routes with mobile permission checks

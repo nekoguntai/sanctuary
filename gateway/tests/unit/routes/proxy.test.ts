@@ -122,6 +122,10 @@ describe('Proxy Routes', () => {
         expect(isAllowedRoute('POST', '/api/v1/auth/logout-all')).toBe(true);
       });
 
+      it('should allow POST /api/v1/auth/2fa/verify', () => {
+        expect(isAllowedRoute('POST', '/api/v1/auth/2fa/verify')).toBe(true);
+      });
+
       it('should allow GET /api/v1/auth/me', () => {
         expect(isAllowedRoute('GET', '/api/v1/auth/me')).toBe(true);
       });

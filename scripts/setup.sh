@@ -2,8 +2,35 @@
 #
 # Sanctuary Setup Script
 #
-# Generates all required secrets and creates .env file
-# Run this once before first `docker compose up`
+# The core setup script that handles all configuration:
+# - Prerequisite checks (Docker, Docker Compose, OpenSSL)
+# - Secret generation and .env file creation
+# - SSL certificate generation
+# - Optional features (monitoring, Tor)
+# - Service startup and health checking
+# - Completion banners and backup reminders
+#
+# Usage:
+#   ./scripts/setup.sh [options]
+#
+# Options:
+#   --force              Overwrite existing .env without prompting
+#   --non-interactive    Don't prompt for any input (use defaults or env vars)
+#   --no-start           Don't start services after setup
+#   --enable-monitoring  Enable monitoring stack (Grafana/Loki/Promtail)
+#   --enable-tor         Enable Tor proxy
+#   --skip-ssl           Skip SSL certificate generation
+#   --skip-prereqs       Skip prerequisite checks
+#   --from-install       Called from install.sh (adjusts messaging)
+#   --help               Show this help message
+#
+# Environment Variables:
+#   Existing secrets (for upgrades - will be preserved):
+#     JWT_SECRET, ENCRYPTION_KEY, ENCRYPTION_SALT, GATEWAY_SECRET, POSTGRES_PASSWORD
+#
+#   Configuration:
+#     HTTPS_PORT, HTTP_PORT, GATEWAY_PORT (default: 8443, 8080, 4000)
+#     ENABLE_MONITORING, ENABLE_TOR (yes/no)
 #
 
 set -e
@@ -11,7 +38,18 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$PROJECT_DIR/.env"
-ENV_EXAMPLE="$PROJECT_DIR/.env.example"
+
+# ============================================
+# Default Options
+# ============================================
+OPT_FORCE=false
+OPT_NON_INTERACTIVE=false
+OPT_NO_START=false
+OPT_SKIP_SSL=false
+OPT_SKIP_PREREQS=false
+OPT_FROM_INSTALL=false
+OPT_ENABLE_MONITORING="${ENABLE_MONITORING:-}"
+OPT_ENABLE_TOR="${ENABLE_TOR:-}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -21,13 +59,64 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # ============================================
+# Argument Parsing
+# ============================================
+show_help() {
+    sed -n '/^# Usage:/,/^#$/p' "$0" | sed 's/^# //' | sed 's/^#//'
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force)
+            OPT_FORCE=true
+            shift
+            ;;
+        --non-interactive)
+            OPT_NON_INTERACTIVE=true
+            shift
+            ;;
+        --no-start)
+            OPT_NO_START=true
+            shift
+            ;;
+        --enable-monitoring)
+            OPT_ENABLE_MONITORING="yes"
+            shift
+            ;;
+        --enable-tor)
+            OPT_ENABLE_TOR="yes"
+            shift
+            ;;
+        --skip-ssl)
+            OPT_SKIP_SSL=true
+            shift
+            ;;
+        --skip-prereqs)
+            OPT_SKIP_PREREQS=true
+            shift
+            ;;
+        --from-install)
+            OPT_FROM_INSTALL=true
+            shift
+            ;;
+        --help|-h)
+            show_help
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Use --help for usage information."
+            exit 1
+            ;;
+    esac
+done
+
+# ============================================
 # Prerequisite Check Functions
 # ============================================
-# Track check results
 PREREQ_ERRORS=""
 PREREQ_WARNINGS=""
 
-# Check if Docker is installed
 check_docker_installed() {
     if command -v docker &> /dev/null; then
         echo -e "${GREEN}✓${NC} Docker is installed"
@@ -44,9 +133,7 @@ check_docker_installed() {
     fi
 }
 
-# Check if user can access Docker (daemon running + permissions)
 check_docker_access() {
-    # Skip if docker isn't installed
     if ! command -v docker &> /dev/null; then
         return 1
     fi
@@ -56,14 +143,9 @@ check_docker_access() {
         return 0
     fi
 
-    # Docker command exists but can't connect - diagnose why
     if [ -e /var/run/docker.sock ]; then
-        # Socket exists but no permission
         echo -e "${RED}✗${NC} Cannot access Docker (permission denied)"
-
-        # Check if user is in docker group
         if groups 2>/dev/null | grep -qw docker; then
-            # User is in docker group but still can't access - group not active
             PREREQ_ERRORS="${PREREQ_ERRORS}
   ${RED}Docker group membership not active${NC}
     You are in the 'docker' group but it hasn't taken effect yet.
@@ -72,7 +154,6 @@ check_docker_access() {
     Then run this script again.
 "
         else
-            # User is not in docker group
             PREREQ_ERRORS="${PREREQ_ERRORS}
   ${RED}User not in docker group${NC}
     Your user '$(whoami)' is not in the 'docker' group.
@@ -84,7 +165,6 @@ check_docker_access() {
         fi
         return 1
     else
-        # Socket doesn't exist - daemon not running
         echo -e "${RED}✗${NC} Docker daemon is not running"
         PREREQ_ERRORS="${PREREQ_ERRORS}
   ${RED}Docker daemon not running${NC}
@@ -98,9 +178,7 @@ check_docker_access() {
     fi
 }
 
-# Check for Docker Compose v2
 check_docker_compose() {
-    # Skip if docker isn't accessible
     if ! docker info &> /dev/null 2>&1; then
         return 1
     fi
@@ -121,7 +199,6 @@ check_docker_compose() {
     fi
 }
 
-# Check if OpenSSL is available
 check_openssl() {
     if command -v openssl &> /dev/null; then
         echo -e "${GREEN}✓${NC} OpenSSL is available"
@@ -140,12 +217,10 @@ check_openssl() {
     fi
 }
 
-# Run all prerequisite checks
 run_prerequisite_checks() {
     echo "Checking prerequisites..."
     echo ""
 
-    # Run all checks (they accumulate errors/warnings)
     check_docker_installed
     check_docker_access
     check_docker_compose
@@ -153,13 +228,11 @@ run_prerequisite_checks() {
 
     echo ""
 
-    # Show any warnings (non-fatal)
     if [ -n "$PREREQ_WARNINGS" ]; then
         echo -e "${YELLOW}Warnings:${NC}"
         echo -e "$PREREQ_WARNINGS"
     fi
 
-    # Show any errors (fatal)
     if [ -n "$PREREQ_ERRORS" ]; then
         echo -e "${RED}═══════════════════════════════════════════════════════════${NC}"
         echo -e "${RED}Prerequisites not met. Please fix these issues:${NC}"
@@ -174,39 +247,14 @@ run_prerequisite_checks() {
 }
 
 # ============================================
-# Main Script
+# Secret Generation Functions
 # ============================================
-
-echo -e "${BLUE}"
-echo "╔═══════════════════════════════════════════════════╗"
-echo "║           Sanctuary Setup Script                  ║"
-echo "╚═══════════════════════════════════════════════════╝"
-echo -e "${NC}"
-
-# Run prerequisite checks first
-run_prerequisite_checks
-
-# Check if .env already exists
-if [ -f "$ENV_FILE" ]; then
-    echo -e "${YELLOW}Warning: .env file already exists.${NC}"
-    read -p "Overwrite with new secrets? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Setup cancelled. Your existing .env is unchanged."
-        exit 0
-    fi
-    echo
-fi
-
-# Generate secure random strings (aligned with install.sh)
-# Uses multiple fallback methods for maximum compatibility
 generate_secret() {
     if command -v openssl &> /dev/null; then
         openssl rand -base64 32 | tr -d '=/+' | head -c 48
     elif [ -f /dev/urandom ]; then
         cat /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9' | head -c 48
     else
-        # Fallback: use date + process ID (less secure but works everywhere)
         echo "$(date +%s%N)$$" | sha256sum | head -c 48
     fi
 }
@@ -221,25 +269,203 @@ generate_password() {
     fi
 }
 
-echo -e "${GREEN}Generating secure secrets...${NC}"
+# ============================================
+# Port Conflict Detection
+# ============================================
+check_port_conflict() {
+    local port="$1"
+    local name="$2"
+    if command -v ss &> /dev/null; then
+        if ss -tuln 2>/dev/null | grep -q ":${port} "; then
+            echo -e "${YELLOW}Warning: $name port ${port} is already in use.${NC}"
+            return 1
+        fi
+    elif command -v netstat &> /dev/null; then
+        if netstat -tuln 2>/dev/null | grep -q ":${port} "; then
+            echo -e "${YELLOW}Warning: $name port ${port} is already in use.${NC}"
+            return 1
+        fi
+    fi
+    return 0
+}
 
-JWT_SECRET=$(generate_secret)
-ENCRYPTION_KEY=$(generate_secret)
-ENCRYPTION_SALT=$(openssl rand -base64 16 2>/dev/null || generate_password)
-GATEWAY_SECRET=$(generate_secret)
-POSTGRES_PASSWORD=$(generate_password)
+check_all_ports() {
+    local conflicts=false
+    local https_port="${HTTPS_PORT:-8443}"
+    local http_port="${HTTP_PORT:-8080}"
+    local gateway_port="${GATEWAY_PORT:-4000}"
 
-echo "  - JWT_SECRET: generated"
-echo "  - ENCRYPTION_KEY: generated"
-echo "  - ENCRYPTION_SALT: generated"
-echo "  - GATEWAY_SECRET: generated"
-echo "  - POSTGRES_PASSWORD: generated"
-echo
+    check_port_conflict "$https_port" "HTTPS" || conflicts=true
+    check_port_conflict "$http_port" "HTTP" || conflicts=true
+    check_port_conflict "$gateway_port" "Gateway" || conflicts=true
 
-# Create .env file
-echo -e "${GREEN}Creating .env file...${NC}"
+    if [ "$OPT_ENABLE_MONITORING" = "yes" ]; then
+        check_port_conflict "${GRAFANA_PORT:-3000}" "Grafana" || conflicts=true
+    fi
 
-cat > "$ENV_FILE" << EOF
+    if [ "$conflicts" = true ]; then
+        echo "  Set alternative ports via environment variables if Sanctuary fails to start."
+        echo "  Example: HTTPS_PORT=9443 HTTP_PORT=9080 ./scripts/setup.sh"
+        echo ""
+    fi
+}
+
+# ============================================
+# Optional Features Prompts
+# ============================================
+prompt_optional_features() {
+    # Skip prompts in non-interactive mode
+    if [ "$OPT_NON_INTERACTIVE" = true ]; then
+        # Use defaults if not set
+        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no"
+        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no"
+        return
+    fi
+
+    # Skip if not a terminal
+    if [ ! -t 0 ]; then
+        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no"
+        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no"
+        return
+    fi
+
+    # Monitoring prompt
+    if [ -z "$OPT_ENABLE_MONITORING" ]; then
+        echo -e "${BLUE}Optional Features${NC}"
+        echo ""
+        echo "Would you like to enable monitoring? (Grafana/Loki/Promtail)"
+        echo "  - View logs and metrics in a web dashboard"
+        echo "  - Uses ~500MB additional disk space and ~512MB RAM"
+        echo ""
+        read -p "Enable monitoring? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            OPT_ENABLE_MONITORING="yes"
+            echo -e "${GREEN}✓${NC} Monitoring will be enabled"
+        else
+            OPT_ENABLE_MONITORING="no"
+            echo -e "${GREEN}✓${NC} Monitoring skipped (run './start.sh --with-monitoring' later to enable)"
+        fi
+        echo ""
+    fi
+
+    # Tor prompt
+    if [ -z "$OPT_ENABLE_TOR" ]; then
+        echo "Would you like to enable the built-in Tor proxy?"
+        echo "  - Route Electrum connections through Tor for privacy"
+        echo "  - Hides your IP address from Electrum servers"
+        echo "  - Uses ~50MB additional disk space and ~128MB RAM"
+        echo ""
+        read -p "Enable Tor? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            OPT_ENABLE_TOR="yes"
+            echo -e "${GREEN}✓${NC} Tor proxy will be enabled"
+        else
+            OPT_ENABLE_TOR="no"
+            echo -e "${GREEN}✓${NC} Tor skipped (run './start.sh --with-tor' later to enable)"
+        fi
+        echo ""
+    fi
+}
+
+# ============================================
+# SSL Certificate Generation
+# ============================================
+generate_ssl_certificates() {
+    SSL_DIR="$PROJECT_DIR/docker/nginx/ssl"
+
+    if [ ! -f "$SSL_DIR/fullchain.pem" ] || [ ! -f "$SSL_DIR/privkey.pem" ]; then
+        echo -e "${GREEN}Generating SSL certificates...${NC}"
+        if command -v openssl &> /dev/null; then
+            mkdir -p "$SSL_DIR"
+            chmod +x "$SSL_DIR/generate-certs.sh" 2>/dev/null || true
+            if (cd "$SSL_DIR" && ./generate-certs.sh localhost); then
+                echo -e "${GREEN}✓${NC} SSL certificates generated"
+            else
+                echo -e "${YELLOW}⚠${NC} Could not generate SSL certificates"
+                echo "  Run manually: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+            fi
+        else
+            echo -e "${YELLOW}⚠${NC} OpenSSL not found - cannot generate SSL certificates"
+            echo "  Install openssl and run: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+        fi
+    else
+        echo -e "${GREEN}✓${NC} SSL certificates already exist"
+        chmod 644 "$SSL_DIR/privkey.pem" "$SSL_DIR/fullchain.pem" 2>/dev/null || true
+    fi
+    echo ""
+}
+
+# ============================================
+# Secret Loading and Generation
+# ============================================
+load_or_generate_secrets() {
+    # Check for .env.local migration (backwards compatibility)
+    if [ -f "$PROJECT_DIR/.env.local" ] && [ ! -f "$ENV_FILE" ]; then
+        echo -e "${YELLOW}!${NC} Migrating secrets from .env.local to .env"
+        set -a
+        source "$PROJECT_DIR/.env.local"
+        set +a
+    fi
+
+    # Load existing .env if present
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        source "$ENV_FILE"
+        set +a
+    fi
+
+    # Use existing secrets from environment, or generate new ones
+    echo -e "${GREEN}Configuring secrets...${NC}"
+
+    if [ -n "$JWT_SECRET" ]; then
+        echo "  - JWT_SECRET: using existing"
+    else
+        JWT_SECRET=$(generate_secret)
+        echo "  - JWT_SECRET: generated"
+    fi
+
+    if [ -n "$ENCRYPTION_KEY" ]; then
+        echo "  - ENCRYPTION_KEY: using existing"
+    else
+        ENCRYPTION_KEY=$(generate_secret)
+        echo "  - ENCRYPTION_KEY: generated"
+    fi
+
+    if [ -n "$ENCRYPTION_SALT" ]; then
+        echo "  - ENCRYPTION_SALT: using existing"
+    else
+        ENCRYPTION_SALT=$(openssl rand -base64 16 2>/dev/null || generate_password)
+        echo "  - ENCRYPTION_SALT: generated"
+    fi
+
+    if [ -n "$GATEWAY_SECRET" ]; then
+        echo "  - GATEWAY_SECRET: using existing"
+    else
+        GATEWAY_SECRET=$(generate_secret)
+        echo "  - GATEWAY_SECRET: generated"
+    fi
+
+    if [ -n "$POSTGRES_PASSWORD" ]; then
+        echo "  - POSTGRES_PASSWORD: using existing"
+    else
+        POSTGRES_PASSWORD=$(generate_password)
+        echo "  - POSTGRES_PASSWORD: generated"
+    fi
+
+    echo ""
+}
+
+# ============================================
+# .env File Creation
+# ============================================
+write_env_file() {
+    local https_port="${HTTPS_PORT:-8443}"
+    local http_port="${HTTP_PORT:-8080}"
+    local gateway_port="${GATEWAY_PORT:-4000}"
+
+    cat > "$ENV_FILE" << EOF
 # Sanctuary Bitcoin Wallet - Environment Configuration
 # Generated by setup.sh on $(date)
 #
@@ -249,208 +475,310 @@ cat > "$ENV_FILE" << EOF
 # REQUIRED SECRETS (auto-generated)
 # ============================================
 
-# JWT secret for authentication tokens
 JWT_SECRET=$JWT_SECRET
-
-# Encryption key for sensitive data (node passwords, etc.)
 ENCRYPTION_KEY=$ENCRYPTION_KEY
-
-# Encryption salt for key derivation (required in production)
 ENCRYPTION_SALT=$ENCRYPTION_SALT
-
-# Gateway secret for internal service communication
 GATEWAY_SECRET=$GATEWAY_SECRET
-
-# PostgreSQL database password
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 
 # ============================================
-# PORTS (defaults are usually fine)
+# PORTS
 # ============================================
 
-# HTTPS port for web interface
-HTTPS_PORT=8443
-
-# HTTP port (redirects to HTTPS)
-HTTP_PORT=8080
-
-# Gateway port for mobile app
-GATEWAY_PORT=4000
+HTTPS_PORT=$https_port
+HTTP_PORT=$http_port
+GATEWAY_PORT=$gateway_port
 
 # Gateway TLS - enabled by default for secure mobile connections
 GATEWAY_TLS_ENABLED=true
 
 # ============================================
-# OPTIONAL - Bitcoin Network
+# OPTIONAL FEATURES
+# ============================================
+
+ENABLE_MONITORING=${OPT_ENABLE_MONITORING:-no}
+ENABLE_TOR=${OPT_ENABLE_TOR:-no}
+
+# ============================================
+# BITCOIN NETWORK
 # ============================================
 
 # Options: mainnet, testnet, signet, regtest
-BITCOIN_NETWORK=mainnet
+BITCOIN_NETWORK=${BITCOIN_NETWORK:-mainnet}
 
 # ============================================
-# OPTIONAL - Logging
+# LOGGING
 # ============================================
 
 # Options: debug, info, warn, error
-LOG_LEVEL=info
+LOG_LEVEL=${LOG_LEVEL:-info}
 EOF
 
-echo -e "${GREEN}Secrets generated!${NC}"
-echo
+    echo -e "${GREEN}✓${NC} Configuration saved to .env"
 
-# ============================================
-# Generate SSL certificates if needed
-# ============================================
-SSL_DIR="$PROJECT_DIR/docker/nginx/ssl"
-if [ ! -f "$SSL_DIR/fullchain.pem" ] || [ ! -f "$SSL_DIR/privkey.pem" ]; then
-    echo -e "${GREEN}Generating SSL certificates...${NC}"
-    if command -v openssl &> /dev/null; then
-        mkdir -p "$SSL_DIR"
-        chmod +x "$SSL_DIR/generate-certs.sh" 2>/dev/null || true
-        if (cd "$SSL_DIR" && ./generate-certs.sh localhost); then
-            echo -e "${GREEN}✓${NC} SSL certificates generated"
-        else
-            echo -e "${YELLOW}⚠${NC} Could not generate SSL certificates"
-            echo "  Run manually: cd docker/nginx/ssl && ./generate-certs.sh localhost"
-        fi
-    else
-        echo -e "${YELLOW}⚠${NC} OpenSSL not found - cannot generate SSL certificates"
-        echo "  Install openssl and run: cd docker/nginx/ssl && ./generate-certs.sh localhost"
+    # Clean up old .env.local if we migrated
+    if [ -f "$PROJECT_DIR/.env.local" ]; then
+        rm -f "$PROJECT_DIR/.env.local"
+        echo -e "${GREEN}✓${NC} Cleaned up old .env.local"
     fi
-else
-    echo -e "${GREEN}✓${NC} SSL certificates already exist"
-    # Ensure permissions allow Docker containers to read the certs
-    chmod 644 "$SSL_DIR/privkey.pem" "$SSL_DIR/fullchain.pem" 2>/dev/null || true
-fi
-echo
 
-# Ask to start services
-STARTED=false
-FRONTEND_RUNNING=false
-if [ -t 0 ]; then
-    read -p "Start Sanctuary now? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        echo ""
-        echo "Starting Sanctuary..."
-        echo -e "${YELLOW}Note: First-time build may take 2-5 minutes.${NC}"
-        echo ""
-        cd "$PROJECT_DIR"
-        docker compose up -d --build
-        STARTED=true
+    echo ""
+}
 
-        # Wait for services to be healthy (with proper timeout)
-        echo ""
-        echo "Waiting for services to start..."
+# ============================================
+# Service Startup
+# ============================================
+start_services() {
+    echo "Starting Sanctuary..."
+    echo -e "${YELLOW}Note: First-time build may take 2-5 minutes.${NC}"
+    echo ""
 
-        MAX_WAIT=120
-        WAITED=0
-        INTERVAL=5
+    cd "$PROJECT_DIR"
 
-        while [ $WAITED -lt $MAX_WAIT ]; do
-            # Check if frontend is healthy (last service to become ready)
-            if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
-                FRONTEND_RUNNING=true
+    # Build compose files list
+    COMPOSE_FILES="-f docker-compose.yml"
+    [ "$OPT_ENABLE_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
+    [ "$OPT_ENABLE_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
+
+    docker compose $COMPOSE_FILES up -d --build
+}
+
+wait_for_healthy() {
+    echo ""
+    echo "Waiting for services to start..."
+
+    MAX_WAIT=120
+    WAITED=0
+    INTERVAL=5
+    FRONTEND_RUNNING=false
+
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
+            FRONTEND_RUNNING=true
+            break
+        fi
+
+        if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE "(Exit|exited)"; then
+            echo -e "${YELLOW}Some containers exited. Checking status...${NC}"
+            FAILED=$(docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E "(Exit|exited)" | grep -v "migrate" || true)
+            if [ -n "$FAILED" ]; then
+                echo -e "${RED}Container failures detected:${NC}"
+                echo "$FAILED"
                 break
             fi
+        fi
 
-            # Check for container failures
-            if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE "(Exit|exited)"; then
-                echo -e "${YELLOW}Some containers exited. Checking status...${NC}"
-                # Migration container exiting with 0 is expected
-                FAILED=$(docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E "(Exit|exited)" | grep -v "migrate" || true)
-                if [ -n "$FAILED" ]; then
-                    echo -e "${RED}Container failures detected:${NC}"
-                    echo "$FAILED"
-                    break
-                fi
+        sleep $INTERVAL
+        WAITED=$((WAITED + INTERVAL))
+        echo "  Still starting... ($WAITED/${MAX_WAIT}s)"
+    done
+
+    if [ $WAITED -ge $MAX_WAIT ] && [ "$FRONTEND_RUNNING" = false ]; then
+        echo -e "${YELLOW}Timeout waiting for services. They may still be starting.${NC}"
+        echo "  Check status with: docker compose ps"
+        echo "  View logs with: docker compose logs -f"
+    fi
+
+    echo ""
+}
+
+# ============================================
+# Completion Banner
+# ============================================
+show_completion_banner() {
+    local https_port="${HTTPS_PORT:-8443}"
+    local ssl_exists=false
+    [ -f "$PROJECT_DIR/docker/nginx/ssl/fullchain.pem" ] && ssl_exists=true
+
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+
+    if [ "$FRONTEND_RUNNING" = true ]; then
+        echo -e "${BLUE}║${NC}            ${GREEN}Setup complete! Sanctuary is running.${NC}       ${BLUE}║${NC}"
+    elif [ "$STARTED" = true ]; then
+        echo -e "${BLUE}║${NC}          ${YELLOW}Setup complete! Services starting...${NC}          ${BLUE}║${NC}"
+    else
+        echo -e "${BLUE}║${NC}                    ${GREEN}Setup complete!${NC}                      ${BLUE}║${NC}"
+    fi
+
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}  Open your browser:                                       ${BLUE}║${NC}"
+
+    if [ "$ssl_exists" = true ]; then
+        printf "${BLUE}║${NC}    ${GREEN}https://localhost:%-5s${NC}                             ${BLUE}║${NC}\n" "$https_port"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}Accept the self-signed certificate warning${NC}              ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}(click Advanced → Proceed)${NC}                               ${BLUE}║${NC}"
+    else
+        printf "${BLUE}║${NC}    ${GREEN}http://localhost:%-5s${NC}                               ${BLUE}║${NC}\n" "${HTTP_PORT:-8080}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${RED}HTTPS unavailable - SSL certs missing${NC}                   ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  ${YELLOW}Install openssl and run: ./start.sh --rebuild${NC}          ${BLUE}║${NC}"
+    fi
+
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}  Default login:                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}    Username: ${GREEN}admin${NC}                                        ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}    Password: ${GREEN}sanctuary${NC}                                    ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}  ${YELLOW}You'll be asked to change the password on first login${NC}   ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+
+    # Monitoring section
+    if [ "$OPT_ENABLE_MONITORING" = "yes" ]; then
+        echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  Monitoring (Grafana):                                    ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    ${GREEN}http://localhost:3000${NC}                                 ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Username: ${GREEN}admin${NC}                                        ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Password: ${GREEN}(your ENCRYPTION_KEY from .env)${NC}             ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    fi
+
+    # Tor section
+    if [ "$OPT_ENABLE_TOR" = "yes" ]; then
+        echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}  Tor Proxy:                                               ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Go to ${GREEN}Admin → Node Configuration${NC}                      ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}    Enable ${GREEN}Proxy / Tor${NC} and select ${GREEN}Tor Container${NC}         ${BLUE}║${NC}"
+        echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    fi
+
+    echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}    View logs:    docker compose logs -f                   ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}    Stop:         docker compose down                      ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}    Restart:      docker compose restart                   ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    echo "Common commands:"
+    echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
+    echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
+    echo "  ${GREEN}./start.sh --logs${NC}    View logs"
+    echo "  ${GREEN}./start.sh --rebuild${NC} Rebuild after code changes"
+    echo ""
+}
+
+show_backup_reminder() {
+    echo -e "${RED}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║${NC}  ${YELLOW}⚠  IMPORTANT: Back up your encryption keys!${NC}              ${RED}║${NC}"
+    echo -e "${RED}╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Your encryption keys are stored in: ${GREEN}$ENV_FILE${NC}"
+    echo ""
+    echo "These keys encrypt sensitive data (2FA secrets, node passwords)."
+    echo -e "${RED}If lost, encrypted data cannot be recovered!${NC}"
+    echo ""
+    echo -e "${YELLOW}Critical secrets to back up:${NC}"
+    echo "┌─────────────────────────────────────────────────────────────┐"
+    echo "│ ENCRYPTION_KEY=$ENCRYPTION_KEY"
+    echo "│ ENCRYPTION_SALT=$ENCRYPTION_SALT"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "Back up options:"
+    echo "  1. Copy the .env file to a secure location"
+    echo "  2. Save the keys above to a password manager"
+    echo "  3. Print and store in a safe place"
+    echo ""
+    echo -e "${YELLOW}Note:${NC} You'll need these keys if you:"
+    echo "  - Restore from a backup on a new system"
+    echo "  - Reinstall Sanctuary"
+    echo "  - Move to a different server"
+    echo ""
+}
+
+# ============================================
+# Main Script
+# ============================================
+main() {
+    # Show banner (unless called from install.sh which has its own)
+    if [ "$OPT_FROM_INSTALL" != true ]; then
+        echo -e "${BLUE}"
+        echo "╔═══════════════════════════════════════════════════════════╗"
+        echo "║                                                           ║"
+        echo "║              Sanctuary Bitcoin Wallet                     ║"
+        echo "║           Your keys, your coins, your server.             ║"
+        echo "║                                                           ║"
+        echo "╚═══════════════════════════════════════════════════════════╝"
+        echo -e "${NC}"
+    fi
+
+    # Run prerequisite checks
+    if [ "$OPT_SKIP_PREREQS" != true ]; then
+        run_prerequisite_checks
+    fi
+
+    # Check for existing .env
+    if [ -f "$ENV_FILE" ] && [ "$OPT_FORCE" != true ]; then
+        if [ "$OPT_NON_INTERACTIVE" = true ]; then
+            echo -e "${YELLOW}Warning: .env file already exists. Use --force to overwrite.${NC}"
+            echo "Continuing with existing configuration..."
+            echo ""
+        elif [ -t 0 ]; then
+            echo -e "${YELLOW}Warning: .env file already exists.${NC}"
+            read -p "Overwrite with new secrets? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "Setup cancelled. Your existing .env is unchanged."
+                exit 0
             fi
-
-            sleep $INTERVAL
-            WAITED=$((WAITED + INTERVAL))
-            echo "  Still starting... ($WAITED/${MAX_WAIT}s)"
-        done
-
-        if [ $WAITED -ge $MAX_WAIT ] && [ "$FRONTEND_RUNNING" = false ]; then
-            echo -e "${YELLOW}Timeout waiting for services. They may still be starting.${NC}"
-            echo "  Check status with: docker compose ps"
-            echo "  View logs with: docker compose logs -f"
+            echo ""
         fi
     fi
-fi
-echo
 
-# ============================================
-# Setup Complete Banner
-# ============================================
-echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-if [ "$FRONTEND_RUNNING" = true ]; then
-    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete! Sanctuary is running.${NC}       ${BLUE}║${NC}"
-elif [ "$STARTED" = true ]; then
-    echo -e "${BLUE}║${NC}            ${YELLOW}Setup complete! Services starting...${NC}        ${BLUE}║${NC}"
-else
-    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete!${NC}                              ${BLUE}║${NC}"
-fi
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  Open your browser:                                       ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    ${GREEN}https://localhost:8443${NC}                                ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  ${YELLOW}Accept the self-signed certificate warning${NC}              ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  ${YELLOW}(click Advanced → Proceed)${NC}                               ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  Default login:                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    Username: ${GREEN}admin${NC}                                        ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    Password: ${GREEN}sanctuary${NC}                                    ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  ${YELLOW}You'll be asked to change the password on first login${NC}   ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    View logs:    docker compose logs -f                   ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    Stop:         docker compose down                      ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}    Restart:      docker compose restart                   ${BLUE}║${NC}"
-echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
-echo ""
+    # Load existing secrets or generate new ones
+    load_or_generate_secrets
 
-echo "Common commands:"
-echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
-echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
-echo "  ${GREEN}./start.sh --logs${NC}    View logs"
-echo "  ${GREEN}./start.sh --rebuild${NC} Rebuild after code changes"
-echo ""
+    # Prompt for optional features
+    prompt_optional_features
 
-# ============================================
-# Critical: Backup Reminder
-# ============================================
-echo -e "${RED}╔═══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${RED}║${NC}  ${YELLOW}⚠  IMPORTANT: Back up your encryption keys!${NC}              ${RED}║${NC}"
-echo -e "${RED}╚═══════════════════════════════════════════════════════════╝${NC}"
-echo ""
-echo "Your encryption keys are stored in: ${GREEN}$ENV_FILE${NC}"
-echo ""
-echo "These keys encrypt sensitive data (2FA secrets, node passwords)."
-echo -e "${RED}If lost, encrypted data cannot be recovered!${NC}"
-echo ""
-echo -e "${YELLOW}Critical secrets to back up:${NC}"
-echo "┌─────────────────────────────────────────────────────────────┐"
-echo "│ ENCRYPTION_KEY=$ENCRYPTION_KEY"
-echo "│ ENCRYPTION_SALT=$ENCRYPTION_SALT"
-echo "└─────────────────────────────────────────────────────────────┘"
-echo ""
-echo "Back up options:"
-echo "  1. Copy the .env file to a secure location"
-echo "  2. Save the keys above to a password manager"
-echo "  3. Print and store in a safe place"
-echo ""
-echo -e "${YELLOW}Note:${NC} You'll need these keys if you:"
-echo "  - Restore from a backup on a new system"
-echo "  - Reinstall Sanctuary"
-echo "  - Move to a different server"
-echo ""
+    # Check for port conflicts
+    check_all_ports
+
+    # Write .env file
+    write_env_file
+
+    # Generate SSL certificates
+    if [ "$OPT_SKIP_SSL" != true ]; then
+        generate_ssl_certificates
+    fi
+
+    # Start services
+    STARTED=false
+    FRONTEND_RUNNING=false
+
+    if [ "$OPT_NO_START" != true ]; then
+        if [ "$OPT_NON_INTERACTIVE" = true ] || [ ! -t 0 ]; then
+            # Non-interactive: start automatically
+            start_services
+            STARTED=true
+            wait_for_healthy
+        else
+            # Interactive: ask user
+            read -p "Start Sanctuary now? [Y/n] " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                start_services
+                STARTED=true
+                wait_for_healthy
+            fi
+        fi
+    fi
+
+    # Show completion banner
+    show_completion_banner
+
+    # Show backup reminder
+    show_backup_reminder
+}
+
+# Run main function
+main

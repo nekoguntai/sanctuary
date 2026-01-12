@@ -94,7 +94,8 @@ app.use(requestLogger);
 // Mobile clients may add trailing slashes which won't match our route patterns
 app.use((req, _res, next) => {
   if (req.path !== '/' && req.path.endsWith('/')) {
-    req.url = req.url.replace(/\/+$/, '') || '/';
+    // Remove trailing slashes before query string (?), hash (#), or end of URL
+    req.url = req.url.replace(/\/+(?=\?|#|$)/, '') || '/';
   }
   next();
 });

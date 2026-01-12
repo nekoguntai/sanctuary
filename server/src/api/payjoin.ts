@@ -38,77 +38,15 @@ const payjoinRateLimiter = rateLimit({
   },
 });
 
-/**
- * POST /api/v1/payjoin/:addressId
- * BIP78 Payjoin endpoint (receiver)
- *
- * This endpoint is called by Payjoin-capable senders.
- * It processes the original PSBT and returns a proposal with the receiver's input added.
- *
- * Query params:
- *   v=1 (required) - Protocol version
- *   minfeerate (optional) - Minimum fee rate in sat/vB
- *   maxadditionalfeecontribution (optional) - Max additional fee receiver will pay
- *
- * Body: Original PSBT (text/plain, base64)
- * Returns: Proposal PSBT (text/plain, base64)
- */
-router.post('/:addressId', payjoinRateLimiter, async (req: Request, res: Response) => {
-  const { addressId } = req.params;
-  const { v, minfeerate } = req.query;
-
-  // BIP78 requires v=1
-  if (v !== '1') {
-    log.warn('Unsupported Payjoin protocol version', { version: v });
-    return res.status(400).type('text/plain').send(PayjoinErrors.VERSION_UNSUPPORTED);
-  }
-
-  // Get the PSBT from body (raw text)
-  const originalPsbt = typeof req.body === 'string'
-    ? req.body
-    : req.body?.toString?.();
-
-  if (!originalPsbt || originalPsbt.length === 0) {
-    log.warn('Empty PSBT in Payjoin request');
-    return res.status(400).type('text/plain').send(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
-  }
-
-  try {
-    const result = await processPayjoinRequest(
-      addressId,
-      originalPsbt,
-      parseFloat(minfeerate as string) || 1
-    );
-
-    if (!result.success) {
-      log.info('Payjoin request rejected', {
-        addressId,
-        error: result.error,
-        message: result.errorMessage,
-      });
-      return res.status(400).type('text/plain').send(result.error || PayjoinErrors.RECEIVER_ERROR);
-    }
-
-    log.info('Payjoin proposal sent', { addressId });
-    res.type('text/plain').send(result.proposalPsbt);
-  } catch (err) {
-    log.error('Payjoin endpoint error', { error: String(err) });
-    res.status(500).type('text/plain').send(PayjoinErrors.RECEIVER_ERROR);
-  }
-});
-
 // ========================================
 // Authenticated endpoints for wallet management
 // ========================================
-
-// Apply authentication to the following routes
-router.use(authenticate);
 
 /**
  * GET /api/v1/payjoin/eligibility/:walletId
  * Check if wallet is eligible for Payjoin receives
  */
-router.get('/eligibility/:walletId', async (req: Request, res: Response) => {
+router.get('/eligibility/:walletId', authenticate, async (req: Request, res: Response) => {
   try {
     const { walletId } = req.params;
     const userId = req.user?.userId;
@@ -198,7 +136,7 @@ router.get('/eligibility/:walletId', async (req: Request, res: Response) => {
  * GET /api/v1/payjoin/address/:addressId/uri
  * Generate a BIP21 URI with Payjoin endpoint for an address
  */
-router.get('/address/:addressId/uri', async (req: Request, res: Response) => {
+router.get('/address/:addressId/uri', authenticate, async (req: Request, res: Response) => {
   try {
     const { addressId } = req.params;
     const { amount, label, message } = req.query;
@@ -248,7 +186,7 @@ router.get('/address/:addressId/uri', async (req: Request, res: Response) => {
  * POST /api/v1/payjoin/parse-uri
  * Parse a BIP21 URI to extract address and Payjoin URL
  */
-router.post('/parse-uri', async (req: Request, res: Response) => {
+router.post('/parse-uri', authenticate, async (req: Request, res: Response) => {
   try {
     const { uri } = req.body;
 
@@ -276,7 +214,7 @@ router.post('/parse-uri', async (req: Request, res: Response) => {
  * POST /api/v1/payjoin/attempt
  * Attempt to perform a Payjoin send
  */
-router.post('/attempt', async (req: Request, res: Response) => {
+router.post('/attempt', authenticate, async (req: Request, res: Response) => {
   try {
     const { psbt, payjoinUrl, network } = req.body;
 
@@ -307,6 +245,72 @@ router.post('/attempt', async (req: Request, res: Response) => {
   } catch (error) {
     log.error('Error attempting Payjoin', { error: String(error) });
     res.status(500).json({ error: 'Payjoin attempt failed' });
+  }
+});
+
+// ========================================
+// BIP78 Payjoin endpoint (unauthenticated)
+// ========================================
+
+/**
+ * POST /api/v1/payjoin/:addressId
+ * BIP78 Payjoin endpoint (receiver)
+ *
+ * This endpoint is called by Payjoin-capable senders.
+ * It processes the original PSBT and returns a proposal with the receiver's input added.
+ *
+ * IMPORTANT: This route MUST be defined after all specific POST routes (/parse-uri, /attempt)
+ * to avoid the parameterized :addressId from capturing those paths.
+ *
+ * Query params:
+ *   v=1 (required) - Protocol version
+ *   minfeerate (optional) - Minimum fee rate in sat/vB
+ *   maxadditionalfeecontribution (optional) - Max additional fee receiver will pay
+ *
+ * Body: Original PSBT (text/plain, base64)
+ * Returns: Proposal PSBT (text/plain, base64)
+ */
+router.post('/:addressId', payjoinRateLimiter, async (req: Request, res: Response) => {
+  const { addressId } = req.params;
+  const { v, minfeerate } = req.query;
+
+  // BIP78 requires v=1
+  if (v !== '1') {
+    log.warn('Unsupported Payjoin protocol version', { version: v });
+    return res.status(400).type('text/plain').send(PayjoinErrors.VERSION_UNSUPPORTED);
+  }
+
+  // Get the PSBT from body (raw text)
+  const originalPsbt = typeof req.body === 'string'
+    ? req.body
+    : req.body?.toString?.();
+
+  if (!originalPsbt || originalPsbt.length === 0) {
+    log.warn('Empty PSBT in Payjoin request');
+    return res.status(400).type('text/plain').send(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
+  }
+
+  try {
+    const result = await processPayjoinRequest(
+      addressId,
+      originalPsbt,
+      parseFloat(minfeerate as string) || 1
+    );
+
+    if (!result.success) {
+      log.info('Payjoin request rejected', {
+        addressId,
+        error: result.error,
+        message: result.errorMessage,
+      });
+      return res.status(400).type('text/plain').send(result.error || PayjoinErrors.RECEIVER_ERROR);
+    }
+
+    log.info('Payjoin proposal sent', { addressId });
+    res.type('text/plain').send(result.proposalPsbt);
+  } catch (err) {
+    log.error('Payjoin endpoint error', { error: String(err) });
+    res.status(500).type('text/plain').send(PayjoinErrors.RECEIVER_ERROR);
   }
 });
 

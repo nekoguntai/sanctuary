@@ -1,25 +1,22 @@
-import { vi } from 'vitest';
+import { vi, Mock } from 'vitest';
 /**
  * AI API Routes Tests
  *
  * Tests for public AI API endpoints including authentication,
  * rate limiting, and error handling.
  *
- * Coverage target: 80%+
+ * Tests the actual src/api/ai.ts router by using supertest.
  */
 
-import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
-import {
-  createMockRequest,
-  createMockResponse,
-  createMockNext,
-} from '../../helpers/testUtils';
-import { Request, Response, NextFunction } from 'express';
+import request from 'supertest';
+import express, { Express, Request, Response, NextFunction } from 'express';
 
 // Mock Prisma
 vi.mock('../../../src/models/prisma', () => ({
   __esModule: true,
-  default: mockPrismaClient,
+  default: {
+    $queryRaw: vi.fn(),
+  },
 }));
 
 // Mock logger
@@ -32,106 +29,131 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
-// Mock AI service
-const mockAiService = {
-  isEnabled: vi.fn(),
-  isContainerAvailable: vi.fn(),
-  checkHealth: vi.fn(),
-  suggestTransactionLabel: vi.fn(),
-  executeNaturalQuery: vi.fn(),
-  detectOllama: vi.fn(),
-  listModels: vi.fn(),
-  pullModel: vi.fn(),
-};
-
-vi.mock('../../../src/services/aiService', () => ({
-  aiService: mockAiService,
+// Mock config
+vi.mock('../../../src/config', () => ({
+  getConfig: () => ({
+    rateLimit: {
+      aiWindowSeconds: 60,
+      aiAnalyzeLimit: 20,
+    },
+  }),
 }));
 
-// Mock rate limiter
-const mockRateLimiter = vi.fn((req: Request, res: Response, next: NextFunction) => next());
-vi.mock('express-rate-limit', () => () => mockRateLimiter);
+// Mock rate limiter to bypass in tests
+vi.mock('express-rate-limit', () => ({
+  default: () => (req: Request, res: Response, next: NextFunction) => next(),
+}));
+
+// Mock AI service with vi.fn() in factory
+vi.mock('../../../src/services/aiService', () => ({
+  aiService: {
+    isEnabled: vi.fn(),
+    isContainerAvailable: vi.fn(),
+    checkHealth: vi.fn(),
+    suggestTransactionLabel: vi.fn(),
+    executeNaturalQuery: vi.fn(),
+    detectOllama: vi.fn(),
+    listModels: vi.fn(),
+    pullModel: vi.fn(),
+    deleteModel: vi.fn(),
+  },
+}));
+
+// Mock docker utilities
+vi.mock('../../../src/utils/docker', () => ({
+  isDockerProxyAvailable: vi.fn(),
+  getOllamaStatus: vi.fn(),
+  startOllama: vi.fn(),
+  stopOllama: vi.fn(),
+}));
+
+// Mock child_process execSync for system resources
+vi.mock('child_process', () => ({
+  execSync: vi.fn().mockReturnValue('Filesystem     1M-blocks      Used Available Use% Mounted on\n/dev/sda1         100000     50000     40000  56% /'),
+}));
+
+// Mock os module for system resources
+vi.mock('os', () => ({
+  totalmem: vi.fn().mockReturnValue(16 * 1024 * 1024 * 1024), // 16GB
+  freemem: vi.fn().mockReturnValue(8 * 1024 * 1024 * 1024),   // 8GB free
+}));
 
 // Mock authenticate middleware
-const mockAuthenticate = vi.fn((req: Request, res: Response, next: NextFunction) => {
-  if (req.headers.authorization) {
-    // Check for admin header to simulate admin users
-    const isAdmin = req.headers['x-test-admin'] === 'true';
-    (req as any).user = { userId: 'user-123', username: 'testuser', isAdmin };
-    next();
-  } else {
-    res.status(401).json({ error: 'Unauthorized' });
-  }
-});
-
-// Mock requireAdmin middleware
-const mockRequireAdmin = vi.fn((req: Request, res: Response, next: NextFunction) => {
-  if ((req as any).user?.isAdmin) {
-    next();
-  } else {
-    res.status(403).json({ error: 'Forbidden', message: 'Admin access required' });
-  }
-});
-
 vi.mock('../../../src/middleware/auth', () => ({
-  authenticate: (req: Request, res: Response, next: NextFunction) => mockAuthenticate(req, res, next),
-  requireAdmin: (req: Request, res: Response, next: NextFunction) => mockRequireAdmin(req, res, next),
+  authenticate: vi.fn((req: Request, res: Response, next: NextFunction) => {
+    if (req.headers.authorization) {
+      const isAdmin = req.headers['x-test-admin'] === 'true';
+      (req as any).user = { userId: 'user-123', username: 'testuser', isAdmin };
+      next();
+    } else {
+      res.status(401).json({ error: 'Unauthorized' });
+    }
+  }),
+  requireAdmin: vi.fn((req: Request, res: Response, next: NextFunction) => {
+    if ((req as any).user?.isAdmin) {
+      next();
+    } else {
+      res.status(403).json({ error: 'Forbidden', message: 'Admin access required' });
+    }
+  }),
 }));
 
+// Import mocked modules AFTER vi.mock definitions
+import { aiService } from '../../../src/services/aiService';
+import * as docker from '../../../src/utils/docker';
+
+// Import the router AFTER all mocks are set up
+import aiRouter from '../../../src/api/ai';
+
 describe('AI API Routes', () => {
+  let app: Express;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1/ai', aiRouter);
+  });
+
   beforeEach(() => {
-    resetPrismaMocks();
     vi.clearAllMocks();
   });
 
   describe('GET /api/v1/ai/status', () => {
     it('should return AI status when enabled and available', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.checkHealth.mockResolvedValue({
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.checkHealth as Mock).mockResolvedValue({
         available: true,
         model: 'llama2',
         endpoint: 'http://localhost:11434',
         containerAvailable: true,
       });
 
-      const enabled = await mockAiService.isEnabled();
-      expect(enabled).toBe(true);
+      const response = await request(app)
+        .get('/api/v1/ai/status')
+        .set('Authorization', 'Bearer test-token');
 
-      const health = await mockAiService.checkHealth();
-
-      const response = {
-        available: health.available,
-        model: health.model,
-        endpoint: health.endpoint,
-        containerAvailable: health.containerAvailable,
-        error: health.error,
-      };
-
-      expect(response.available).toBe(true);
-      expect(response.model).toBe('llama2');
-      expect(response.endpoint).toBe('http://localhost:11434');
-      expect(response.containerAvailable).toBe(true);
+      expect(response.status).toBe(200);
+      expect(response.body.available).toBe(true);
+      expect(response.body.model).toBe('llama2');
+      expect(response.body.endpoint).toBe('http://localhost:11434');
+      expect(response.body.containerAvailable).toBe(true);
     });
 
     it('should return unavailable status when AI is disabled', async () => {
-      mockAiService.isEnabled.mockResolvedValue(false);
+      (aiService.isEnabled as Mock).mockResolvedValue(false);
 
-      const enabled = await mockAiService.isEnabled();
+      const response = await request(app)
+        .get('/api/v1/ai/status')
+        .set('Authorization', 'Bearer test-token');
 
-      if (!enabled) {
-        const response = {
-          available: false,
-          message: 'AI is disabled or not configured',
-        };
-
-        expect(response.available).toBe(false);
-        expect(response.message).toBe('AI is disabled or not configured');
-      }
+      expect(response.status).toBe(200);
+      expect(response.body.available).toBe(false);
+      expect(response.body.message).toBe('AI is disabled or not configured');
     });
 
     it('should return error details when health check fails', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.checkHealth.mockResolvedValue({
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.checkHealth as Mock).mockResolvedValue({
         available: false,
         model: 'llama2',
         endpoint: 'http://localhost:11434',
@@ -139,728 +161,628 @@ describe('AI API Routes', () => {
         error: 'AI container is not available',
       });
 
-      const health = await mockAiService.checkHealth();
+      const response = await request(app)
+        .get('/api/v1/ai/status')
+        .set('Authorization', 'Bearer test-token');
 
-      expect(health.available).toBe(false);
-      expect(health.error).toBe('AI container is not available');
+      expect(response.status).toBe(200);
+      expect(response.body.available).toBe(false);
+      expect(response.body.error).toBe('AI container is not available');
     });
 
     it('should return 500 on unexpected error', async () => {
-      mockAiService.isEnabled.mockRejectedValue(new Error('Unexpected error'));
+      (aiService.isEnabled as Mock).mockRejectedValue(new Error('Unexpected error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .get('/api/v1/ai/status')
+        .set('Authorization', 'Bearer test-token');
 
-      try {
-        await mockAiService.isEnabled();
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to check AI status',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
+      expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to check AI status');
+    });
+
+    it('should require authentication', async () => {
+      const response = await request(app).get('/api/v1/ai/status');
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Unauthorized');
     });
   });
 
   describe('POST /api/v1/ai/suggest-label', () => {
     it('should return label suggestion when AI is available', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.suggestTransactionLabel.mockResolvedValue('Exchange deposit');
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.suggestTransactionLabel as Mock).mockResolvedValue('Exchange deposit');
 
-      const suggestion = await mockAiService.suggestTransactionLabel('tx-123', 'auth-token');
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer test-token')
+        .send({ transactionId: 'tx-123' });
 
-      const response = { suggestion };
-
-      expect(response.suggestion).toBe('Exchange deposit');
-      expect(mockAiService.suggestTransactionLabel).toHaveBeenCalledWith('tx-123', 'auth-token');
+      expect(response.status).toBe(200);
+      expect(response.body.suggestion).toBe('Exchange deposit');
+      expect(aiService.suggestTransactionLabel).toHaveBeenCalledWith('tx-123', 'test-token');
     });
 
     it('should return 400 when transactionId is missing', async () => {
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer test-token')
+        .send({});
 
-      const body = {};
-
-      if (!(body as any).transactionId) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'transactionId is required',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
       expect(response.body.message).toBe('transactionId is required');
     });
 
     it('should return 503 when AI is not enabled', async () => {
-      mockAiService.isEnabled.mockResolvedValue(false);
+      (aiService.isEnabled as Mock).mockResolvedValue(false);
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer test-token')
+        .send({ transactionId: 'tx-123' });
 
-      const enabled = await mockAiService.isEnabled();
-
-      if (!enabled) {
-        res.status!(503).json!({
-          error: 'Service Unavailable',
-          message: 'AI is not enabled or configured',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(503);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('Service Unavailable');
       expect(response.body.message).toBe('AI is not enabled or configured');
     });
 
     it('should return 503 when suggestion is null', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.suggestTransactionLabel.mockResolvedValue(null);
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.suggestTransactionLabel as Mock).mockResolvedValue(null);
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer test-token')
+        .send({ transactionId: 'tx-123' });
 
-      const suggestion = await mockAiService.suggestTransactionLabel('tx-123', 'token');
-
-      if (!suggestion) {
-        res.status!(503).json!({
-          error: 'Service Unavailable',
-          message: 'AI endpoint is not available or returned no suggestion',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(503);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('Service Unavailable');
+      expect(response.body.message).toBe('AI endpoint is not available or returned no suggestion');
     });
 
     it('should return 500 on unexpected error', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.suggestTransactionLabel.mockRejectedValue(new Error('AI error'));
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.suggestTransactionLabel as Mock).mockRejectedValue(new Error('AI error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer test-token')
+        .send({ transactionId: 'tx-123' });
 
-      try {
-        await mockAiService.suggestTransactionLabel('tx-123', 'token');
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to generate label suggestion',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
-    });
-
-    it('should extract auth token from Authorization header', async () => {
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer test-token-123' },
-      });
-
-      const authToken = (req.headers as any).authorization?.replace('Bearer ', '') || '';
-
-      expect(authToken).toBe('test-token-123');
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to generate label suggestion');
     });
   });
 
   describe('POST /api/v1/ai/query', () => {
     it('should return structured query result', async () => {
       const expectedResult = {
-        type: 'transactions' as const,
+        type: 'transactions',
         filter: { type: 'receive' },
-        sort: { field: 'amount', order: 'desc' as const },
+        sort: { field: 'amount', order: 'desc' },
         limit: 10,
       };
 
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.executeNaturalQuery.mockResolvedValue(expectedResult);
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.executeNaturalQuery as Mock).mockResolvedValue(expectedResult);
 
-      const result = await mockAiService.executeNaturalQuery(
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ query: 'Show my largest receives', walletId: 'wallet-123' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(expectedResult);
+      expect(aiService.executeNaturalQuery).toHaveBeenCalledWith(
         'Show my largest receives',
         'wallet-123',
-        'auth-token'
-      );
-
-      expect(result).toEqual(expectedResult);
-      expect(mockAiService.executeNaturalQuery).toHaveBeenCalledWith(
-        'Show my largest receives',
-        'wallet-123',
-        'auth-token'
+        'test-token'
       );
     });
 
     it('should return 400 when query is missing', async () => {
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ walletId: 'wallet-123' });
 
-      const body = { walletId: 'wallet-123' };
-
-      if (!(body as any).query || !body.walletId) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'Query and walletId are required',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.message).toBe('Query and walletId are required');
     });
 
     it('should return 400 when walletId is missing', async () => {
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ query: 'Show transactions' });
 
-      const body = { query: 'Show transactions' };
-
-      if (!body.query || !(body as any).walletId) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'Query and walletId are required',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.message).toBe('Query and walletId are required');
     });
 
     it('should return 503 when AI is not enabled', async () => {
-      mockAiService.isEnabled.mockResolvedValue(false);
+      (aiService.isEnabled as Mock).mockResolvedValue(false);
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ query: 'Show transactions', walletId: 'wallet-123' });
 
-      const enabled = await mockAiService.isEnabled();
-
-      if (!enabled) {
-        res.status!(503).json!({
-          error: 'Service Unavailable',
-          message: 'AI is not enabled or configured',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(503);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('Service Unavailable');
     });
 
     it('should return 503 when query result is null', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.executeNaturalQuery.mockResolvedValue(null);
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.executeNaturalQuery as Mock).mockResolvedValue(null);
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ query: 'Show transactions', walletId: 'wallet-123' });
 
-      const result = await mockAiService.executeNaturalQuery('query', 'wallet', 'token');
-
-      if (!result) {
-        res.status!(503).json!({
-          error: 'Service Unavailable',
-          message: 'AI endpoint is not available or could not process query',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(503);
+      expect(response.status).toBe(503);
+      expect(response.body.error).toBe('Service Unavailable');
     });
 
     it('should return 500 on unexpected error', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.executeNaturalQuery.mockRejectedValue(new Error('Query error'));
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.executeNaturalQuery as Mock).mockRejectedValue(new Error('Query error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer test-token')
+        .send({ query: 'Show transactions', walletId: 'wallet-123' });
 
-      try {
-        await mockAiService.executeNaturalQuery('query', 'wallet', 'token');
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to execute natural language query',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
     });
   });
 
   describe('POST /api/v1/ai/detect-ollama', () => {
     it('should return detection results when Ollama is found', async () => {
-      mockAiService.detectOllama.mockResolvedValue({
+      (aiService.detectOllama as Mock).mockResolvedValue({
         found: true,
         endpoint: 'http://localhost:11434',
         models: ['llama2', 'codellama'],
       });
 
-      const result = await mockAiService.detectOllama();
+      const response = await request(app)
+        .post('/api/v1/ai/detect-ollama')
+        .set('Authorization', 'Bearer test-token');
 
-      expect(result.found).toBe(true);
-      expect(result.endpoint).toBe('http://localhost:11434');
-      expect(result.models).toContain('llama2');
+      expect(response.status).toBe(200);
+      expect(response.body.found).toBe(true);
+      expect(response.body.endpoint).toBe('http://localhost:11434');
+      expect(response.body.models).toContain('llama2');
     });
 
     it('should return not found when Ollama is unavailable', async () => {
-      mockAiService.detectOllama.mockResolvedValue({
+      (aiService.detectOllama as Mock).mockResolvedValue({
         found: false,
         message: 'No Ollama instance found',
       });
 
-      const result = await mockAiService.detectOllama();
+      const response = await request(app)
+        .post('/api/v1/ai/detect-ollama')
+        .set('Authorization', 'Bearer test-token');
 
-      expect(result.found).toBe(false);
-      expect(result.message).toBeDefined();
+      expect(response.status).toBe(200);
+      expect(response.body.found).toBe(false);
+      expect(response.body.message).toBeDefined();
     });
 
     it('should return 500 on error', async () => {
-      mockAiService.detectOllama.mockRejectedValue(new Error('Detection error'));
+      (aiService.detectOllama as Mock).mockRejectedValue(new Error('Detection error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/detect-ollama')
+        .set('Authorization', 'Bearer test-token');
 
-      try {
-        await mockAiService.detectOllama();
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to detect Ollama',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to detect Ollama');
     });
   });
 
   describe('GET /api/v1/ai/models', () => {
     it('should return list of available models', async () => {
-      mockAiService.listModels.mockResolvedValue({
+      (aiService.listModels as Mock).mockResolvedValue({
         models: [
           { name: 'llama2', size: 3826793472, modifiedAt: '2024-01-15T10:00:00Z' },
           { name: 'codellama', size: 3826793472, modifiedAt: '2024-01-14T10:00:00Z' },
         ],
       });
 
-      const result = await mockAiService.listModels();
+      const response = await request(app)
+        .get('/api/v1/ai/models')
+        .set('Authorization', 'Bearer test-token');
 
-      expect(result.models).toHaveLength(2);
-      expect(result.models[0].name).toBe('llama2');
+      expect(response.status).toBe(200);
+      expect(response.body.models).toHaveLength(2);
+      expect(response.body.models[0].name).toBe('llama2');
     });
 
     it('should return 502 when models endpoint returns error', async () => {
-      mockAiService.listModels.mockResolvedValue({
+      (aiService.listModels as Mock).mockResolvedValue({
         models: [],
         error: 'Failed to connect to Ollama',
       });
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .get('/api/v1/ai/models')
+        .set('Authorization', 'Bearer test-token');
 
-      const result = await mockAiService.listModels();
-
-      if (result.error) {
-        res.status!(502).json!({
-          error: 'Bad Gateway',
-          message: result.error,
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(502);
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe('Bad Gateway');
       expect(response.body.message).toBe('Failed to connect to Ollama');
     });
 
     it('should return 500 on unexpected error', async () => {
-      mockAiService.listModels.mockRejectedValue(new Error('List error'));
+      (aiService.listModels as Mock).mockRejectedValue(new Error('List error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .get('/api/v1/ai/models')
+        .set('Authorization', 'Bearer test-token');
 
-      try {
-        await mockAiService.listModels();
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to list models',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to list models');
     });
   });
 
   describe('POST /api/v1/ai/pull-model', () => {
-    it('should successfully pull a model', async () => {
-      mockAiService.pullModel.mockResolvedValue({
+    it('should successfully pull a model (admin only)', async () => {
+      (aiService.pullModel as Mock).mockResolvedValue({
         success: true,
         model: 'llama2',
         status: 'completed',
       });
 
-      const result = await mockAiService.pullModel('llama2');
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
 
-      expect(result.success).toBe(true);
-      expect(result.model).toBe('llama2');
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.model).toBe('llama2');
+    });
+
+    it('should return 403 for non-admin users', async () => {
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Forbidden');
     });
 
     it('should return 400 when model name is missing', async () => {
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({});
 
-      const body = {};
-
-      if (!(body as any).model) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'Model name is required',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
       expect(response.body.message).toBe('Model name is required');
     });
 
     it('should return 502 when pull fails', async () => {
-      mockAiService.pullModel.mockResolvedValue({
+      (aiService.pullModel as Mock).mockResolvedValue({
         success: false,
         error: 'Model not found in registry',
       });
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'nonexistent-model' });
 
-      const result = await mockAiService.pullModel('nonexistent-model');
-
-      if (!result.success) {
-        res.status!(502).json!({
-          error: 'Bad Gateway',
-          message: result.error || 'Pull failed',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(502);
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe('Bad Gateway');
+      expect(response.body.message).toBe('Model not found in registry');
     });
 
     it('should return 500 on unexpected error', async () => {
-      mockAiService.pullModel.mockRejectedValue(new Error('Pull error'));
+      (aiService.pullModel as Mock).mockRejectedValue(new Error('Pull error'));
 
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
 
-      try {
-        await mockAiService.pullModel('llama2');
-      } catch {
-        res.status!(500).json!({
-          error: 'Internal Server Error',
-          message: 'Failed to pull model',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
-    });
-
-    it('should require admin access for pull-model endpoint', async () => {
-      // Non-admin user should receive 403
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer valid-token' },
-        body: { model: 'llama2' },
-      });
-      const { res, getResponse } = createMockResponse();
-      const next = createMockNext();
-
-      // Simulate auth then admin check
-      mockAuthenticate(req as Request, res as Response, () => {
-        mockRequireAdmin(req as Request, res as Response, next);
-      });
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(403);
-      expect(response.body.error).toBe('Forbidden');
-      expect(response.body.message).toBe('Admin access required');
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    it('should allow admin access to pull-model endpoint', async () => {
-      // Admin user should pass through
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer valid-token', 'x-test-admin': 'true' },
-        body: { model: 'llama2' },
-      });
-      const { res } = createMockResponse();
-      const next = createMockNext();
-
-      // Simulate auth then admin check
-      mockAuthenticate(req as Request, res as Response, () => {
-        mockRequireAdmin(req as Request, res as Response, next);
-      });
-
-      expect(next).toHaveBeenCalled();
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to pull model');
     });
   });
 
   describe('DELETE /api/v1/ai/delete-model', () => {
-    it('should require admin access for delete-model endpoint', async () => {
-      // Non-admin user should receive 403
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer valid-token' },
-        body: { model: 'llama2' },
-      });
-      const { res, getResponse } = createMockResponse();
-      const next = createMockNext();
-
-      // Simulate auth then admin check
-      mockAuthenticate(req as Request, res as Response, () => {
-        mockRequireAdmin(req as Request, res as Response, next);
+    it('should successfully delete a model (admin only)', async () => {
+      (aiService.deleteModel as Mock).mockResolvedValue({
+        success: true,
       });
 
-      const response = getResponse();
-      expect(response.statusCode).toBe(403);
-      expect(response.body.error).toBe('Forbidden');
-      expect(response.body.message).toBe('Admin access required');
-      expect(next).not.toHaveBeenCalled();
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
     });
 
-    it('should allow admin access to delete-model endpoint', async () => {
-      // Admin user should pass through
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer valid-token', 'x-test-admin': 'true' },
-        body: { model: 'llama2' },
-      });
-      const { res } = createMockResponse();
-      const next = createMockNext();
+    it('should return 403 for non-admin users', async () => {
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .send({ model: 'llama2' });
 
-      // Simulate auth then admin check
-      mockAuthenticate(req as Request, res as Response, () => {
-        mockRequireAdmin(req as Request, res as Response, next);
-      });
-
-      expect(next).toHaveBeenCalled();
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Forbidden');
     });
 
     it('should return 400 when model name is missing', async () => {
-      const { res, getResponse } = createMockResponse();
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({});
 
-      const body = {};
-
-      if (!(body as any).model) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'Model name is required',
-        });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
       expect(response.body.message).toBe('Model name is required');
+    });
+
+    it('should return 502 when delete fails', async () => {
+      (aiService.deleteModel as Mock).mockResolvedValue({
+        success: false,
+        error: 'Model is in use',
+      });
+
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(502);
+      expect(response.body.error).toBe('Bad Gateway');
+    });
+
+    it('should return 500 on unexpected error', async () => {
+      (aiService.deleteModel as Mock).mockRejectedValue(new Error('Delete error'));
+
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+      expect(response.body.message).toBe('Failed to delete model');
+    });
+  });
+
+  describe('Ollama Container Management', () => {
+    describe('GET /api/v1/ai/ollama-container/status', () => {
+      it('should return container status when docker proxy is available', async () => {
+        (docker.isDockerProxyAvailable as Mock).mockResolvedValue(true);
+        (docker.getOllamaStatus as Mock).mockResolvedValue({
+          exists: true,
+          running: true,
+          status: 'running',
+          containerId: 'abc123',
+        });
+
+        const response = await request(app)
+          .get('/api/v1/ai/ollama-container/status')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(200);
+        expect(response.body.available).toBe(true);
+        expect(response.body.exists).toBe(true);
+        expect(response.body.running).toBe(true);
+      });
+
+      it('should return unavailable when docker proxy is not available', async () => {
+        (docker.isDockerProxyAvailable as Mock).mockResolvedValue(false);
+
+        const response = await request(app)
+          .get('/api/v1/ai/ollama-container/status')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(200);
+        expect(response.body.available).toBe(false);
+        expect(response.body.message).toBe('Docker management not available');
+      });
+
+      it('should return 500 on error', async () => {
+        (docker.isDockerProxyAvailable as Mock).mockRejectedValue(new Error('Docker error'));
+
+        const response = await request(app)
+          .get('/api/v1/ai/ollama-container/status')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(500);
+        expect(response.body.error).toBe('Internal Server Error');
+      });
+    });
+
+    describe('POST /api/v1/ai/ollama-container/start', () => {
+      it('should start the container successfully', async () => {
+        (docker.startOllama as Mock).mockResolvedValue({
+          success: true,
+          message: 'Ollama started successfully',
+        });
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/start')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+      });
+
+      it('should return 400 when start fails', async () => {
+        (docker.startOllama as Mock).mockResolvedValue({
+          success: false,
+          message: 'Container not found',
+        });
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/start')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe('Failed to start');
+      });
+
+      it('should return 500 on error', async () => {
+        (docker.startOllama as Mock).mockRejectedValue(new Error('Start error'));
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/start')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(500);
+        expect(response.body.error).toBe('Internal Server Error');
+      });
+    });
+
+    describe('POST /api/v1/ai/ollama-container/stop', () => {
+      it('should stop the container successfully', async () => {
+        (docker.stopOllama as Mock).mockResolvedValue({
+          success: true,
+          message: 'Ollama stopped successfully',
+        });
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/stop')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+      });
+
+      it('should return 400 when stop fails', async () => {
+        (docker.stopOllama as Mock).mockResolvedValue({
+          success: false,
+          message: 'Container is not running',
+        });
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/stop')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe('Failed to stop');
+      });
+
+      it('should return 500 on error', async () => {
+        (docker.stopOllama as Mock).mockRejectedValue(new Error('Stop error'));
+
+        const response = await request(app)
+          .post('/api/v1/ai/ollama-container/stop')
+          .set('Authorization', 'Bearer test-token');
+
+        expect(response.status).toBe(500);
+        expect(response.body.error).toBe('Internal Server Error');
+      });
+    });
+  });
+
+  describe('GET /api/v1/ai/system-resources', () => {
+    it('should return system resource information', async () => {
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.ram).toBeDefined();
+      expect(response.body.ram.total).toBeDefined();
+      expect(response.body.ram.available).toBeDefined();
+      expect(response.body.ram.required).toBeDefined();
+      expect(response.body.ram.sufficient).toBeDefined();
+      expect(response.body.disk).toBeDefined();
+      expect(response.body.gpu).toBeDefined();
+      expect(response.body.overall).toBeDefined();
+    });
+
+    it('should indicate when resources are sufficient', async () => {
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      // With 8GB free RAM (mocked above), should be sufficient (>4GB required)
+      expect(response.body.ram.sufficient).toBe(true);
     });
   });
 
   describe('Authentication', () => {
-    it('should require authentication for all endpoints', () => {
-      const req = createMockRequest({});
-      const { res, getResponse } = createMockResponse();
-      const next = createMockNext();
+    it('should require authentication for status endpoint', async () => {
+      const response = await request(app).get('/api/v1/ai/status');
 
-      mockAuthenticate(req as Request, res as Response, next);
-
-      expect(getResponse().statusCode).toBe(401);
-      expect(next).not.toHaveBeenCalled();
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Unauthorized');
     });
 
-    it('should pass authentication with valid token', () => {
-      const req = createMockRequest({
-        headers: { authorization: 'Bearer valid-token' },
-      });
-      const { res, getResponse } = createMockResponse();
-      const next = createMockNext();
+    it('should require authentication for suggest-label endpoint', async () => {
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .send({ transactionId: 'tx-123' });
 
-      mockAuthenticate(req as Request, res as Response, next);
+      expect(response.status).toBe(401);
+    });
 
-      expect(next).toHaveBeenCalled();
-      expect((req as any).user).toBeDefined();
-      expect((req as any).user.userId).toBe('user-123');
+    it('should require authentication for query endpoint', async () => {
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .send({ query: 'Show transactions', walletId: 'wallet-123' });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should require authentication for models endpoint', async () => {
+      const response = await request(app).get('/api/v1/ai/models');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should require authentication for container status endpoint', async () => {
+      const response = await request(app).get('/api/v1/ai/ollama-container/status');
+
+      expect(response.status).toBe(401);
     });
   });
 
   describe('Rate Limiting', () => {
-    it('should apply rate limiter to all AI endpoints', () => {
-      const req = createMockRequest({});
-      const { res } = createMockResponse();
-      const next = createMockNext();
+    it('should apply rate limiter to AI endpoints', async () => {
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.checkHealth as Mock).mockResolvedValue({ available: true });
 
-      mockRateLimiter(req as Request, res as Response, next);
+      // Make a request - rate limiter is applied but not blocking in tests
+      const response = await request(app)
+        .get('/api/v1/ai/status')
+        .set('Authorization', 'Bearer test-token');
 
-      expect(mockRateLimiter).toHaveBeenCalled();
-      expect(next).toHaveBeenCalled();
-    });
-
-    it('should have reasonable rate limit configuration', () => {
-      // Rate limit: 10 requests per minute per IP
-      const windowMs = 60 * 1000;
-      const max = 10;
-
-      expect(windowMs).toBe(60000);
-      expect(max).toBe(10);
-    });
-  });
-
-  describe('Error Messages', () => {
-    it('should return consistent error format', () => {
-      const errorResponse = {
-        error: 'Bad Request',
-        message: 'transactionId is required',
-      };
-
-      expect(errorResponse).toHaveProperty('error');
-      expect(errorResponse).toHaveProperty('message');
-      expect(typeof errorResponse.error).toBe('string');
-      expect(typeof errorResponse.message).toBe('string');
-    });
-
-    it('should not expose internal error details', () => {
-      const internalError = new Error('Database connection failed: password incorrect');
-
-      const publicErrorResponse = {
-        error: 'Internal Server Error',
-        message: 'Failed to process request',
-      };
-
-      expect(publicErrorResponse.message).not.toContain('password');
-      expect(publicErrorResponse.message).not.toContain('Database');
-    });
-  });
-
-  describe('Request Body Validation', () => {
-    it('should validate suggest-label request body', () => {
-      const validBody = { transactionId: 'tx-123' };
-      const invalidBody = {};
-
-      expect(validBody.transactionId).toBeDefined();
-      expect((invalidBody as any).transactionId).toBeUndefined();
-    });
-
-    it('should validate query request body', () => {
-      const validBody = { query: 'Show transactions', walletId: 'wallet-123' };
-      const missingQuery = { walletId: 'wallet-123' };
-      const missingWallet = { query: 'Show transactions' };
-
-      expect(validBody.query).toBeDefined();
-      expect(validBody.walletId).toBeDefined();
-      expect((missingQuery as any).query).toBeUndefined();
-      expect((missingWallet as any).walletId).toBeUndefined();
-    });
-
-    it('should validate pull-model request body', () => {
-      const validBody = { model: 'llama2' };
-      const invalidBody = {};
-
-      expect(validBody.model).toBeDefined();
-      expect((invalidBody as any).model).toBeUndefined();
-    });
-  });
-
-  describe('Response Format', () => {
-    it('should return status response format', async () => {
-      mockAiService.isEnabled.mockResolvedValue(true);
-      mockAiService.checkHealth.mockResolvedValue({
-        available: true,
-        model: 'llama2',
-        endpoint: 'http://localhost:11434',
-        containerAvailable: true,
-      });
-
-      const health = await mockAiService.checkHealth();
-
-      expect(health).toHaveProperty('available');
-      expect(health).toHaveProperty('model');
-      expect(health).toHaveProperty('endpoint');
-      expect(health).toHaveProperty('containerAvailable');
-    });
-
-    it('should return suggestion response format', async () => {
-      mockAiService.suggestTransactionLabel.mockResolvedValue('Exchange deposit');
-
-      const suggestion = await mockAiService.suggestTransactionLabel('tx-123', 'token');
-
-      const response = { suggestion };
-
-      expect(response).toHaveProperty('suggestion');
-      expect(typeof response.suggestion).toBe('string');
-    });
-
-    it('should return query response format', async () => {
-      const queryResult = {
-        type: 'transactions' as const,
-        filter: {},
-        sort: { field: 'date', order: 'desc' as const },
-      };
-
-      mockAiService.executeNaturalQuery.mockResolvedValue(queryResult);
-
-      const result = await mockAiService.executeNaturalQuery('query', 'wallet', 'token');
-
-      expect(result).toHaveProperty('type');
-      expect(['transactions', 'addresses', 'utxos', 'summary']).toContain(result?.type);
-    });
-
-    it('should return models response format', async () => {
-      mockAiService.listModels.mockResolvedValue({
-        models: [
-          { name: 'llama2', size: 3826793472, modifiedAt: '2024-01-15T10:00:00Z' },
-        ],
-      });
-
-      const result = await mockAiService.listModels();
-
-      expect(result).toHaveProperty('models');
-      expect(Array.isArray(result.models)).toBe(true);
-      expect(result.models[0]).toHaveProperty('name');
-      expect(result.models[0]).toHaveProperty('size');
-      expect(result.models[0]).toHaveProperty('modifiedAt');
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('should handle empty transactionId', async () => {
-      const { res, getResponse } = createMockResponse();
-
-      const transactionId = '';
-
-      if (!transactionId) {
-        res.status!(400).json!({
-          error: 'Bad Request',
-          message: 'transactionId is required',
-        });
-      }
-
-      expect(getResponse().statusCode).toBe(400);
-    });
-
-    it('should handle whitespace-only query', async () => {
-      const query = '   ';
-
-      if (!query.trim()) {
-        const isValidQuery = false;
-        expect(isValidQuery).toBe(false);
-      }
-    });
-
-    it('should handle very long query', async () => {
-      const longQuery = 'a'.repeat(10000);
-
-      // Should still process (may truncate internally)
-      mockAiService.executeNaturalQuery.mockResolvedValue({
-        type: 'transactions',
-        filter: {},
-      });
-
-      const result = await mockAiService.executeNaturalQuery(longQuery, 'wallet', 'token');
-
-      expect(result).toBeDefined();
-    });
-
-    it('should handle special characters in query', async () => {
-      const queryWithSpecialChars = "Show transactions with label 'Exchange & Trading'";
-
-      mockAiService.executeNaturalQuery.mockResolvedValue({
-        type: 'transactions',
-        filter: { label: "Exchange & Trading" },
-      });
-
-      const result = await mockAiService.executeNaturalQuery(queryWithSpecialChars, 'wallet', 'token');
-
-      expect(result).toBeDefined();
+      expect(response.status).toBe(200);
     });
   });
 });

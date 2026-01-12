@@ -1,75 +1,40 @@
-import { vi, Mock } from 'vitest';
 /**
  * Payjoin API Routes Tests (CRITICAL)
  *
- * Tests for BIP78 Payjoin API endpoints:
- * - POST /:addressId - BIP78 receiver endpoint
- * - GET /address/:addressId/uri - Generate BIP21 URI with Payjoin
- * - POST /parse-uri - Parse BIP21 URI
- * - POST /attempt - Attempt Payjoin send
- *
+ * Tests for BIP78 Payjoin API endpoints using supertest.
  * These tests are SECURITY-CRITICAL for Bitcoin transaction privacy.
  */
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import express, { Express, Request, Response, NextFunction } from 'express';
+import request from 'supertest';
 
-import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
-import {
-  createMockRequest,
-  createMockResponse,
-  generateTestToken,
-} from '../../helpers/testUtils';
+// Mock config
+vi.mock('../../../src/config', () => ({
+  default: {
+    gatewaySecret: 'test-gateway-secret',
+  },
+}));
 
-/**
- * Helper to create a mock request with raw body (for BIP78 PSBT endpoints)
- * BIP78 uses text/plain for PSBT data, not JSON
- */
-function createRawBodyRequest(options: {
-  body?: string | null;
-  params?: Record<string, string>;
-  query?: Record<string, string>;
-  headers?: Record<string, string>;
-  user?: {
-    userId: string;
-    username: string;
-    isAdmin: boolean;
-  };
-  ip?: string;
-}): Partial<Request> {
-  const mockHeaders: Record<string, string> = {
-    'content-type': 'text/plain',
-    ...options.headers,
-  };
+// Mock rate limiter to avoid rate limiting in tests
+vi.mock('express-rate-limit', () => ({
+  default: () => (req: Request, res: Response, next: NextFunction) => next(),
+}));
+
+// Mock Prisma
+vi.mock('../../../src/models/prisma', () => {
+  const mockWallet = { findFirst: vi.fn() };
+  const mockUTXO = { count: vi.fn() };
+  const mockAddress = { findFirst: vi.fn() };
 
   return {
-    body: options.body,
-    params: options.params || {},
-    query: options.query || {},
-    headers: mockHeaders,
-    user: options.user,
-    ip: options.ip || '127.0.0.1',
-    get: vi.fn((header: string): string | undefined => {
-      return mockHeaders[header.toLowerCase()];
-    }),
-    protocol: 'https',
-  } as unknown as Partial<Request>;
-}
-
-type Request = import('express').Request;
-
-// Mock Prisma before importing router
-vi.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
-}));
-
-// Mock the logger
-vi.mock('../../../src/utils/logger', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
-}));
+    __esModule: true,
+    default: {
+      wallet: mockWallet,
+      uTXO: mockUTXO,
+      address: mockAddress,
+    },
+  };
+});
 
 // Mock payjoin service
 vi.mock('../../../src/services/payjoinService', () => ({
@@ -86,870 +51,725 @@ vi.mock('../../../src/services/payjoinService', () => ({
   },
 }));
 
-// Mock authentication middleware
+// Mock authenticate middleware
 vi.mock('../../../src/middleware/auth', () => ({
-  authenticate: vi.fn((req, res, next) => {
-    if (req.headers?.authorization) {
-      req.user = { userId: 'user-123', username: 'testuser', isAdmin: false };
+  authenticate: (req: Request, res: Response, next: NextFunction) => {
+    if (req.headers.authorization) {
+      const userId = (req.headers['x-test-user-id'] as string) || 'user-123';
+      req.user = { userId, username: 'testuser', isAdmin: false };
       next();
     } else {
       res.status(401).json({ error: 'Unauthorized' });
     }
+  },
+}));
+
+// Mock logger
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   }),
 }));
 
+// Import router and mocked modules after mocks
+import payjoinRouter from '../../../src/api/payjoin';
+import prisma from '../../../src/models/prisma';
 import {
   processPayjoinRequest,
   parseBip21Uri,
   generateBip21Uri,
   attemptPayjoinSend,
-  PayjoinErrors,
 } from '../../../src/services/payjoinService';
+
+// Get typed references to mocked functions
+const mockPrisma = prisma as unknown as {
+  wallet: { findFirst: ReturnType<typeof vi.fn> };
+  uTXO: { count: ReturnType<typeof vi.fn> };
+  address: { findFirst: ReturnType<typeof vi.fn> };
+};
+const mockProcessPayjoinRequest = processPayjoinRequest as ReturnType<typeof vi.fn>;
+const mockParseBip21Uri = parseBip21Uri as ReturnType<typeof vi.fn>;
+const mockGenerateBip21Uri = generateBip21Uri as ReturnType<typeof vi.fn>;
+const mockAttemptPayjoinSend = attemptPayjoinSend as ReturnType<typeof vi.fn>;
 
 // Test constants
 const TEST_ADDRESS = 'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx';
 const TEST_ADDRESS_ID = 'addr-123';
-const TEST_PAYJOIN_URL = 'https://example.com/api/v1/payjoin/addr-123';
-const VALID_PSBT_BASE64 = 'cHNidP8BAFICAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8BrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GgAAAAAAAA==';
-const PROPOSAL_PSBT_BASE64 = 'cHNidP8BAHECAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8CrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GhAnAAAAAAAAFgAUdpn98MqGxRdMa7mGg0HhZKSL0BMAAAAAAAAA';
+const TEST_WALLET_ID = 'wallet-123';
+const VALID_PSBT_BASE64 =
+  'cHNidP8BAFICAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8BrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GgAAAAAAAA==';
+const PROPOSAL_PSBT_BASE64 =
+  'cHNidP8BAHECAAAAASaBcTce3/KF6Tig7cez53bDXJKhN6KHaGvkpKt8vp1WAAAAAP3///8CrBIAAAAAAAAWABTYQzl7cYbXYS5N0Wj6eS5qCeM5GhAnAAAAAAAAFgAUdpn98MqGxRdMa7mGg0HhZKSL0BMAAAAAAAAA';
 
 describe('Payjoin API Routes', () => {
+  let app: Express;
+
+  beforeAll(() => {
+    app = express();
+    // Use text parser for BIP78 endpoint (raw PSBT)
+    app.use(express.text({ type: 'text/plain' }));
+    app.use(express.json());
+    app.use('/api/v1/payjoin', payjoinRouter);
+  });
+
   beforeEach(() => {
-    resetPrismaMocks();
     vi.clearAllMocks();
   });
 
   describe('POST /:addressId (BIP78 Receiver Endpoint)', () => {
-    it('should require v=1 query parameter', async () => {
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: {}, // Missing v=1
-        body: VALID_PSBT_BASE64,
+    it('should return proposal PSBT on success', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: true,
+        proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
-      const { res, getResponse } = createMockResponse();
 
-      // Simulate the route handler logic
-      const { v } = req.query as { v?: string };
-      if (v !== '1') {
-        (res.status as Mock)(400);
-        (res as any).type = vi.fn().mockReturnValue(res);
-        (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
-      }
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
-      expect(response.body).toBe(PayjoinErrors.VERSION_UNSUPPORTED);
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(PROPOSAL_PSBT_BASE64);
+      expect(res.type).toBe('text/plain');
+      expect(mockProcessPayjoinRequest).toHaveBeenCalledWith(TEST_ADDRESS_ID, VALID_PSBT_BASE64, 1);
+    });
+
+    it('should require v=1 query parameter', async () => {
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
+
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('version-unsupported');
+    });
+
+    it('should reject v=2 query parameter', async () => {
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=2`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
+
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('version-unsupported');
     });
 
     it('should reject empty PSBT', async () => {
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: '', // Empty body
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send('');
 
-      // Simulate the route handler logic
-      const originalPsbt = typeof req.body === 'string' ? req.body : '';
-      if (!originalPsbt || originalPsbt.length === 0) {
-        (res.status as Mock)(400);
-        (res as any).type = vi.fn().mockReturnValue(res);
-        (res.send as Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
-      expect(response.body).toBe(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
-    });
-
-    it('should return valid proposal PSBT on success', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
-        success: true,
-        proposalPsbt: PROPOSAL_PSBT_BASE64,
-      });
-
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: VALID_PSBT_BASE64,
-      });
-      const { res, getResponse } = createMockResponse();
-
-      // Simulate the route handler logic
-      const { v } = req.query as { v?: string };
-      const originalPsbt = req.body as string;
-
-      if (v === '1' && originalPsbt) {
-        const result = await processPayjoinRequest(
-          TEST_ADDRESS_ID,
-          originalPsbt,
-          1
-        );
-
-        if (result.success) {
-          (res as any).type = vi.fn().mockReturnValue(res);
-          (res.send as Mock)(result.proposalPsbt);
-        }
-      }
-
-      const response = getResponse();
-      expect(response.body).toBe(PROPOSAL_PSBT_BASE64);
-    });
-
-    it('should return text/plain content type on error', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
-        success: false,
-        error: PayjoinErrors.NOT_ENOUGH_MONEY,
-        errorMessage: 'No suitable UTXOs',
-      });
-
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: VALID_PSBT_BASE64,
-      });
-      const { res, getResponse } = createMockResponse();
-
-      const typeSpy = vi.fn().mockReturnValue(res);
-      (res as any).type = typeSpy;
-
-      // Simulate the route handler logic
-      const result = await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        req.body as string,
-        1
-      );
-
-      if (!result.success) {
-        (res.status as Mock)(400);
-        typeSpy('text/plain');
-        (res.send as Mock)(result.error);
-      }
-
-      expect(typeSpy).toHaveBeenCalledWith('text/plain');
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('original-psbt-rejected');
     });
 
     it('should use minfeerate query parameter', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
+      mockProcessPayjoinRequest.mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
 
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1', minfeerate: '5' },
-        body: VALID_PSBT_BASE64,
-      });
+      await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1&minfeerate=5`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      const minFeeRate = parseFloat(req.query?.minfeerate as string) || 1;
-
-      await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        req.body as string,
-        minFeeRate
-      );
-
-      expect(processPayjoinRequest).toHaveBeenCalledWith(
-        TEST_ADDRESS_ID,
-        VALID_PSBT_BASE64,
-        5
-      );
+      expect(mockProcessPayjoinRequest).toHaveBeenCalledWith(TEST_ADDRESS_ID, VALID_PSBT_BASE64, 5);
     });
 
-    it('should default minfeerate to 1 if not provided', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
+    it('should default minfeerate to 1', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
 
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' }, // No minfeerate
-        body: VALID_PSBT_BASE64,
+      await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
+
+      expect(mockProcessPayjoinRequest).toHaveBeenCalledWith(TEST_ADDRESS_ID, VALID_PSBT_BASE64, 1);
+    });
+
+    it('should return error from service', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: false,
+        error: 'not-enough-money',
+        errorMessage: 'No suitable UTXOs',
       });
 
-      const minFeeRate = parseFloat(req.query?.minfeerate as string) || 1;
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        req.body as string,
-        minFeeRate
-      );
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('not-enough-money');
+    });
 
-      expect(processPayjoinRequest).toHaveBeenCalledWith(
-        TEST_ADDRESS_ID,
-        VALID_PSBT_BASE64,
-        1
-      );
+    it('should return receiver-error as default error', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: false,
+        errorMessage: 'Something went wrong',
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
+
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('receiver-error');
     });
 
     it('should return 500 on internal error', async () => {
-      (processPayjoinRequest as Mock).mockRejectedValue(
-        new Error('Internal error')
-      );
+      mockProcessPayjoinRequest.mockRejectedValue(new Error('Internal error'));
 
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: VALID_PSBT_BASE64,
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      try {
-        await processPayjoinRequest(
-          TEST_ADDRESS_ID,
-          req.body as string,
-          1
-        );
-      } catch {
-        (res.status as Mock)(500);
-        (res as any).type = vi.fn().mockReturnValue(res);
-        (res.send as Mock)(PayjoinErrors.RECEIVER_ERROR);
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
-      expect(response.body).toBe(PayjoinErrors.RECEIVER_ERROR);
+      expect(res.status).toBe(500);
+      expect(res.text).toBe('receiver-error');
     });
 
-    it('should handle v parameter with wrong version', async () => {
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '2' }, // Wrong version
-        body: VALID_PSBT_BASE64,
+    it('should NOT require authentication (public BIP78 endpoint)', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: true,
+        proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
-      const { res, getResponse } = createMockResponse();
 
-      const { v } = req.query as { v?: string };
-      if (v !== '1') {
-        (res.status as Mock)(400);
-        (res as any).type = vi.fn().mockReturnValue(res);
-        (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
-      }
+      // No Authorization header - should still work
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
-      expect(response.body).toBe(PayjoinErrors.VERSION_UNSUPPORTED);
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('GET /eligibility/:walletId', () => {
+    it('should return ready status when eligible UTXOs exist', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      // eligible, total, frozen, unconfirmed, locked
+      mockPrisma.uTXO.count.mockResolvedValueOnce(5); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(10); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // frozen
+      mockPrisma.uTXO.count.mockResolvedValueOnce(1); // unconfirmed
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // locked
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(true);
+      expect(res.body.status).toBe('ready');
+      expect(res.body.eligibleUtxoCount).toBe(5);
+      expect(res.body.totalUtxoCount).toBe(10);
+      expect(res.body.reason).toBeNull();
+    });
+
+    it('should return no-utxos status when wallet has no UTXOs', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // frozen
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // unconfirmed
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // locked
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(false);
+      expect(res.body.status).toBe('no-utxos');
+      expect(res.body.reason).toContain('need bitcoin');
+    });
+
+    it('should return all-frozen status when all UTXOs are frozen', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(3); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(3); // frozen = total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // unconfirmed
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // locked
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(false);
+      expect(res.body.status).toBe('all-frozen');
+      expect(res.body.reason).toContain('frozen');
+    });
+
+    it('should return pending-confirmations status', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // frozen
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // unconfirmed = total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // locked
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(false);
+      expect(res.body.status).toBe('pending-confirmations');
+      expect(res.body.reason).toContain('confirmation');
+    });
+
+    it('should return all-locked status', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // frozen
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // unconfirmed
+      mockPrisma.uTXO.count.mockResolvedValueOnce(2); // locked = total
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(false);
+      expect(res.body.status).toBe('all-locked');
+      expect(res.body.reason).toContain('locked');
+    });
+
+    it('should return 404 when wallet not found', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue(null);
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain('not found');
+    });
+
+    it('should return 401 without authentication', async () => {
+      const res = await request(app).get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`);
+
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 500 on service error', async () => {
+      mockPrisma.wallet.findFirst.mockRejectedValue(new Error('Database error'));
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('eligibility');
     });
   });
 
   describe('GET /address/:addressId/uri', () => {
-    const mockAddress = {
-      id: TEST_ADDRESS_ID,
-      address: TEST_ADDRESS,
-      walletId: 'wallet-123',
-    };
-
-    it('should require authentication', async () => {
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        // No authorization header
+    it('should generate BIP21 URI with Payjoin endpoint', async () => {
+      mockPrisma.address.findFirst.mockResolvedValue({
+        id: TEST_ADDRESS_ID,
+        address: TEST_ADDRESS,
+        walletId: TEST_WALLET_ID,
       });
-      const { res, getResponse } = createMockResponse();
+      mockGenerateBip21Uri.mockReturnValue(`bitcoin:${TEST_ADDRESS}?pj=https://example.com/api/v1/payjoin/${TEST_ADDRESS_ID}`);
 
-      // Simulate auth middleware
-      if (!req.headers?.authorization) {
-        (res.status as Mock)(401);
-        (res.json as Mock)({ error: 'Unauthorized' });
-      }
+      const res = await request(app)
+        .get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri`)
+        .set('Authorization', 'Bearer test-token');
 
-      const response = getResponse();
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('should return 404 for unknown address', async () => {
-      mockPrismaClient.address.findFirst.mockResolvedValue(null);
-
-      const req = createMockRequest({
-        params: { addressId: 'unknown-address' },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
-
-      const address = await mockPrismaClient.address.findFirst({
-        where: { id: req.params?.addressId },
-      });
-
-      if (!address) {
-        (res.status as Mock)(404);
-        (res.json as Mock)({ error: 'Address not found or access denied' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(404);
-    });
-
-    it('should generate valid BIP21 URI with Payjoin endpoint', async () => {
-      mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as Mock).mockReturnValue(
-        `bitcoin:${TEST_ADDRESS}?pj=${encodeURIComponent(TEST_PAYJOIN_URL)}`
-      );
-
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: {},
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      (req as any).protocol = 'https';
-      (req as any).get = vi.fn().mockReturnValue('example.com');
-
-      const { res, getResponse } = createMockResponse();
-
-      const address = await mockPrismaClient.address.findFirst({
-        where: { id: TEST_ADDRESS_ID },
-      });
-
-      if (address) {
-        const baseUrl = 'https://example.com';
-        const payjoinUrl = `${baseUrl}/api/v1/payjoin/${TEST_ADDRESS_ID}`;
-
-        const uri = generateBip21Uri(address.address, {
-          payjoinUrl,
-        });
-
-        (res.json as Mock)({
-          uri,
-          address: address.address,
-          payjoinUrl,
-        });
-      }
-
-      const response = getResponse();
-      expect(response.body.uri).toContain('bitcoin:');
-      expect(response.body.uri).toContain('pj=');
-      expect(response.body.address).toBe(TEST_ADDRESS);
-      expect(response.body.payjoinUrl).toContain('/api/v1/payjoin/');
+      expect(res.status).toBe(200);
+      expect(res.body.uri).toContain('bitcoin:');
+      expect(res.body.uri).toContain('pj=');
+      expect(res.body.address).toBe(TEST_ADDRESS);
+      expect(res.body.payjoinUrl).toContain('/api/v1/payjoin/');
     });
 
     it('should include amount when provided', async () => {
-      mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as Mock).mockReturnValue(
-        `bitcoin:${TEST_ADDRESS}?amount=0.001&pj=${encodeURIComponent(TEST_PAYJOIN_URL)}`
-      );
-
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { amount: '100000' }, // 100000 sats
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
+      mockPrisma.address.findFirst.mockResolvedValue({
+        id: TEST_ADDRESS_ID,
+        address: TEST_ADDRESS,
+        walletId: TEST_WALLET_ID,
       });
+      mockGenerateBip21Uri.mockReturnValue(`bitcoin:${TEST_ADDRESS}?amount=0.001&pj=...`);
 
-      const { res, getResponse } = createMockResponse();
+      await request(app)
+        .get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri?amount=100000`)
+        .set('Authorization', 'Bearer test-token');
 
-      const address = await mockPrismaClient.address.findFirst({
-        where: { id: TEST_ADDRESS_ID },
-      });
-
-      if (address) {
-        const amount = parseInt(req.query?.amount as string, 10);
-        const uri = generateBip21Uri(address.address, {
-          amount,
-          payjoinUrl: TEST_PAYJOIN_URL,
-        });
-
-        (res.json as Mock)({ uri });
-      }
-
-      expect(generateBip21Uri).toHaveBeenCalledWith(
+      expect(mockGenerateBip21Uri).toHaveBeenCalledWith(
         TEST_ADDRESS,
         expect.objectContaining({ amount: 100000 })
       );
     });
 
     it('should include label and message when provided', async () => {
-      mockPrismaClient.address.findFirst.mockResolvedValue(mockAddress);
-      (generateBip21Uri as Mock).mockReturnValue('bitcoin:...');
-
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { label: 'Test Payment', message: 'Invoice #123' },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
+      mockPrisma.address.findFirst.mockResolvedValue({
+        id: TEST_ADDRESS_ID,
+        address: TEST_ADDRESS,
+        walletId: TEST_WALLET_ID,
       });
+      mockGenerateBip21Uri.mockReturnValue('bitcoin:...');
 
-      const { res, getResponse } = createMockResponse();
+      await request(app)
+        .get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri?label=Test%20Payment&message=Invoice%20123`)
+        .set('Authorization', 'Bearer test-token');
 
-      const address = await mockPrismaClient.address.findFirst({
-        where: { id: TEST_ADDRESS_ID },
-      });
-
-      if (address) {
-        generateBip21Uri(address.address, {
-          label: req.query?.label as string,
-          message: req.query?.message as string,
-          payjoinUrl: TEST_PAYJOIN_URL,
-        });
-
-        (res.json as Mock)({ uri: 'bitcoin:...' });
-      }
-
-      expect(generateBip21Uri).toHaveBeenCalledWith(
+      expect(mockGenerateBip21Uri).toHaveBeenCalledWith(
         TEST_ADDRESS,
         expect.objectContaining({
           label: 'Test Payment',
-          message: 'Invoice #123',
+          message: 'Invoice 123',
         })
       );
+    });
+
+    it('should return 404 when address not found', async () => {
+      mockPrisma.address.findFirst.mockResolvedValue(null);
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toContain('not found');
+    });
+
+    it('should return 401 without authentication', async () => {
+      const res = await request(app).get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri`);
+
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 500 on service error', async () => {
+      mockPrisma.address.findFirst.mockRejectedValue(new Error('Database error'));
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('generate');
     });
   });
 
   describe('POST /parse-uri', () => {
-    it('should require authentication', async () => {
-      const req = createMockRequest({
-        body: { uri: `bitcoin:${TEST_ADDRESS}` },
-        // No authorization header
-      });
-      const { res, getResponse } = createMockResponse();
-
-      if (!req.headers?.authorization) {
-        (res.status as Mock)(401);
-        (res.json as Mock)({ error: 'Unauthorized' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('should return 400 for missing URI', async () => {
-      const req = createMockRequest({
-        body: {}, // No URI
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
-
-      if (!req.body?.uri || typeof req.body.uri !== 'string') {
-        (res.status as Mock)(400);
-        (res.json as Mock)({ error: 'URI is required' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
-    });
-
-    it('should parse valid BIP21 URI and return components', async () => {
-      (parseBip21Uri as Mock).mockReturnValue({
+    it('should parse valid BIP21 URI', async () => {
+      mockParseBip21Uri.mockReturnValue({
         address: TEST_ADDRESS,
         amount: 100000,
         label: 'Test',
         message: 'Payment',
-        payjoinUrl: TEST_PAYJOIN_URL,
+        payjoinUrl: 'https://example.com/pj',
       });
 
-      const req = createMockRequest({
-        body: { uri: `bitcoin:${TEST_ADDRESS}?amount=0.001&pj=${encodeURIComponent(TEST_PAYJOIN_URL)}` },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post('/api/v1/payjoin/parse-uri')
+        .set('Authorization', 'Bearer test-token')
+        .send({ uri: `bitcoin:${TEST_ADDRESS}?amount=0.001&pj=...` });
 
-      if (req.body?.uri) {
-        const parsed = parseBip21Uri(req.body.uri);
-        (res.json as Mock)({
-          address: parsed.address,
-          amount: parsed.amount,
-          label: parsed.label,
-          message: parsed.message,
-          payjoinUrl: parsed.payjoinUrl,
-          hasPayjoin: !!parsed.payjoinUrl,
-        });
-      }
-
-      const response = getResponse();
-      expect(response.body.address).toBe(TEST_ADDRESS);
-      expect(response.body.hasPayjoin).toBe(true);
-      expect(response.body.payjoinUrl).toBe(TEST_PAYJOIN_URL);
+      expect(res.status).toBe(200);
+      expect(res.body.address).toBe(TEST_ADDRESS);
+      expect(res.body.amount).toBe(100000);
+      expect(res.body.hasPayjoin).toBe(true);
+      expect(res.body.payjoinUrl).toBe('https://example.com/pj');
     });
 
     it('should indicate hasPayjoin: false when no pj parameter', async () => {
-      (parseBip21Uri as Mock).mockReturnValue({
+      mockParseBip21Uri.mockReturnValue({
         address: TEST_ADDRESS,
         amount: 100000,
         payjoinUrl: undefined,
       });
 
-      const req = createMockRequest({
-        body: { uri: `bitcoin:${TEST_ADDRESS}?amount=0.001` },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post('/api/v1/payjoin/parse-uri')
+        .set('Authorization', 'Bearer test-token')
+        .send({ uri: `bitcoin:${TEST_ADDRESS}?amount=0.001` });
 
-      if (req.body?.uri) {
-        const parsed = parseBip21Uri(req.body.uri);
-        (res.json as Mock)({
-          address: parsed.address,
-          hasPayjoin: !!parsed.payjoinUrl,
-        });
-      }
-
-      const response = getResponse();
-      expect(response.body.hasPayjoin).toBe(false);
+      expect(res.status).toBe(200);
+      expect(res.body.hasPayjoin).toBe(false);
     });
 
-    it('should handle invalid URI format', async () => {
-      (parseBip21Uri as Mock).mockImplementation(() => {
+    it('should return 400 for missing URI', async () => {
+      const res = await request(app)
+        .post('/api/v1/payjoin/parse-uri')
+        .set('Authorization', 'Bearer test-token')
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('required');
+    });
+
+    it('should return 400 for invalid URI format', async () => {
+      mockParseBip21Uri.mockImplementation(() => {
         throw new Error('Invalid URI format');
       });
 
-      const req = createMockRequest({
-        body: { uri: 'not-a-valid-uri' },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post('/api/v1/payjoin/parse-uri')
+        .set('Authorization', 'Bearer test-token')
+        .send({ uri: 'not-a-valid-uri' });
 
-      try {
-        parseBip21Uri(req.body?.uri);
-      } catch {
-        (res.status as Mock)(400);
-        (res.json as Mock)({ error: 'Invalid URI format' });
-      }
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid');
+    });
 
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+    it('should return 401 without authentication', async () => {
+      const res = await request(app).post('/api/v1/payjoin/parse-uri').send({ uri: `bitcoin:${TEST_ADDRESS}` });
+
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /attempt', () => {
-    it('should require authentication', async () => {
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64, payjoinUrl: TEST_PAYJOIN_URL },
-        // No authorization header
-      });
-      const { res, getResponse } = createMockResponse();
-
-      if (!req.headers?.authorization) {
-        (res.status as Mock)(401);
-        (res.json as Mock)({ error: 'Unauthorized' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('should require psbt and payjoinUrl', async () => {
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64 }, // Missing payjoinUrl
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
-
-      if (!req.body?.psbt || !req.body?.payjoinUrl) {
-        (res.status as Mock)(400);
-        (res.json as Mock)({ error: 'psbt and payjoinUrl are required' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
-    });
-
     it('should attempt Payjoin and return proposal', async () => {
-      (attemptPayjoinSend as Mock).mockResolvedValue({
+      mockAttemptPayjoinSend.mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
         isPayjoin: true,
       });
 
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64, payjoinUrl: TEST_PAYJOIN_URL },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+          payjoinUrl: 'https://example.com/pj',
+        });
 
-      if (req.body?.psbt && req.body?.payjoinUrl) {
-        const result = await attemptPayjoinSend(
-          req.body.psbt,
-          req.body.payjoinUrl,
-          [0]
-        );
-        (res.json as Mock)(result);
-      }
-
-      const response = getResponse();
-      expect(response.body.success).toBe(true);
-      expect(response.body.proposalPsbt).toBe(PROPOSAL_PSBT_BASE64);
-      expect(response.body.isPayjoin).toBe(true);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.proposalPsbt).toBe(PROPOSAL_PSBT_BASE64);
+      expect(res.body.isPayjoin).toBe(true);
     });
 
     it('should return failure response when Payjoin fails', async () => {
-      (attemptPayjoinSend as Mock).mockResolvedValue({
+      mockAttemptPayjoinSend.mockResolvedValue({
         success: false,
         isPayjoin: false,
         error: 'Endpoint returned error',
       });
 
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64, payjoinUrl: TEST_PAYJOIN_URL },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+          payjoinUrl: 'https://example.com/pj',
+        });
 
-      if (req.body?.psbt && req.body?.payjoinUrl) {
-        const result = await attemptPayjoinSend(
-          req.body.psbt,
-          req.body.payjoinUrl,
-          [0]
-        );
-        (res.json as Mock)(result);
-      }
-
-      const response = getResponse();
-      expect(response.body.success).toBe(false);
-      expect(response.body.isPayjoin).toBe(false);
-      expect(response.body.error).toBeDefined();
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(false);
+      expect(res.body.isPayjoin).toBe(false);
     });
 
-    it('should handle internal errors', async () => {
-      (attemptPayjoinSend as Mock).mockRejectedValue(
-        new Error('Network failure')
-      );
+    it('should return 400 when psbt is missing', async () => {
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          payjoinUrl: 'https://example.com/pj',
+        });
 
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64, payjoinUrl: TEST_PAYJOIN_URL },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
-
-      try {
-        await attemptPayjoinSend(
-          req.body?.psbt,
-          req.body?.payjoinUrl,
-          [0]
-        );
-      } catch {
-        (res.status as Mock)(500);
-        (res.json as Mock)({ error: 'Payjoin attempt failed' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(500);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('required');
     });
 
-    it('should assume first input is sender by default', async () => {
-      (attemptPayjoinSend as Mock).mockResolvedValue({
+    it('should return 400 when payjoinUrl is missing', async () => {
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('required');
+    });
+
+    it('should return 400 for invalid network', async () => {
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+          payjoinUrl: 'https://example.com/pj',
+          network: 'invalid-network',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('network');
+    });
+
+    it('should accept valid network parameter', async () => {
+      mockAttemptPayjoinSend.mockResolvedValue({
         success: true,
         proposalPsbt: PROPOSAL_PSBT_BASE64,
         isPayjoin: true,
       });
 
-      const req = createMockRequest({
-        body: { psbt: VALID_PSBT_BASE64, payjoinUrl: TEST_PAYJOIN_URL },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-123', username: 'testuser', isAdmin: false },
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+          payjoinUrl: 'https://example.com/pj',
+          network: 'testnet',
+        });
+
+      expect(res.status).toBe(200);
+    });
+
+    it('should return 500 on internal error', async () => {
+      mockAttemptPayjoinSend.mockRejectedValue(new Error('Network failure'));
+
+      const res = await request(app)
+        .post('/api/v1/payjoin/attempt')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          psbt: VALID_PSBT_BASE64,
+          payjoinUrl: 'https://example.com/pj',
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('failed');
+    });
+
+    it('should return 401 without authentication', async () => {
+      const res = await request(app).post('/api/v1/payjoin/attempt').send({
+        psbt: VALID_PSBT_BASE64,
+        payjoinUrl: 'https://example.com/pj',
       });
 
-      await attemptPayjoinSend(
-        req.body?.psbt,
-        req.body?.payjoinUrl,
-        [0] // First input is sender's
-      );
-
-      expect(attemptPayjoinSend).toHaveBeenCalledWith(
-        VALID_PSBT_BASE64,
-        TEST_PAYJOIN_URL,
-        [0]
-      );
+      expect(res.status).toBe(401);
     });
   });
 
   describe('BIP78 Error Codes', () => {
     it('should return version-unsupported for wrong version', async () => {
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=0`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      (res.status as Mock)(400);
-      (res as any).type = vi.fn().mockReturnValue(res);
-      (res.send as Mock)(PayjoinErrors.VERSION_UNSUPPORTED);
-
-      const response = getResponse();
-      expect(response.body).toBe('version-unsupported');
+      expect(res.text).toBe('version-unsupported');
     });
 
-    it('should return unavailable when address not found', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
+    it('should return unavailable when service reports it', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
         success: false,
-        error: PayjoinErrors.UNAVAILABLE,
+        error: 'unavailable',
         errorMessage: 'Address not found',
       });
 
-      const result = await processPayjoinRequest(
-        'unknown-address',
-        VALID_PSBT_BASE64,
-        1
-      );
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      expect(result.error).toBe('unavailable');
+      expect(res.text).toBe('unavailable');
     });
 
     it('should return not-enough-money when no UTXOs', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
+      mockProcessPayjoinRequest.mockResolvedValue({
         success: false,
-        error: PayjoinErrors.NOT_ENOUGH_MONEY,
+        error: 'not-enough-money',
         errorMessage: 'No suitable UTXOs',
       });
 
-      const result = await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        VALID_PSBT_BASE64,
-        1
-      );
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
 
-      expect(result.error).toBe('not-enough-money');
+      expect(res.text).toBe('not-enough-money');
     });
 
     it('should return original-psbt-rejected for invalid PSBT', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
+      mockProcessPayjoinRequest.mockResolvedValue({
         success: false,
-        error: PayjoinErrors.ORIGINAL_PSBT_REJECTED,
+        error: 'original-psbt-rejected',
         errorMessage: 'PSBT has no inputs',
       });
 
-      const result = await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        'invalid-psbt',
-        1
-      );
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send('invalid-psbt');
 
-      expect(result.error).toBe('original-psbt-rejected');
-    });
-
-    it('should return receiver-error for internal errors', async () => {
-      (processPayjoinRequest as Mock).mockResolvedValue({
-        success: false,
-        error: PayjoinErrors.RECEIVER_ERROR,
-        errorMessage: 'Unknown error',
-      });
-
-      const result = await processPayjoinRequest(
-        TEST_ADDRESS_ID,
-        VALID_PSBT_BASE64,
-        1
-      );
-
-      expect(result.error).toBe('receiver-error');
+      expect(res.text).toBe('original-psbt-rejected');
     });
   });
 
   describe('Security and Access Control', () => {
-    it('should allow unauthenticated access to receiver endpoint', () => {
-      // POST /:addressId is the public BIP78 endpoint
-      // It should NOT require authentication
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: VALID_PSBT_BASE64,
-        // No authorization header - this should be allowed
+    it('should allow unauthenticated access to BIP78 receiver endpoint', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: true,
+        proposalPsbt: PROPOSAL_PSBT_BASE64,
       });
 
-      // The route should proceed without authentication check
-      expect(req.user).toBeUndefined();
-      // No error should be thrown for missing auth on this endpoint
+      // No Authorization header
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'text/plain')
+        .send(VALID_PSBT_BASE64);
+
+      expect(res.status).toBe(200);
+    });
+
+    it('should require authentication for eligibility check', async () => {
+      const res = await request(app).get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`);
+
+      expect(res.status).toBe(401);
     });
 
     it('should require authentication for URI generation', async () => {
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        // No authorization
-      });
-      const { res, getResponse } = createMockResponse();
+      const res = await request(app).get(`/api/v1/payjoin/address/${TEST_ADDRESS_ID}/uri`);
 
-      // This endpoint requires auth
-      if (!req.headers?.authorization) {
-        (res.status as Mock)(401);
-        (res.json as Mock)({ error: 'Unauthorized' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(401);
+      expect(res.status).toBe(401);
     });
 
-    it('should verify user has access to address for URI generation', async () => {
-      mockPrismaClient.address.findFirst.mockResolvedValue(null); // No access
+    it('should require authentication for URI parsing', async () => {
+      const res = await request(app).post('/api/v1/payjoin/parse-uri').send({ uri: 'bitcoin:...' });
 
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        headers: { authorization: 'Bearer test-token' },
-        user: { userId: 'user-456', username: 'otheruser', isAdmin: false },
-      });
-      const { res, getResponse } = createMockResponse();
-
-      const address = await mockPrismaClient.address.findFirst({
-        where: {
-          id: TEST_ADDRESS_ID,
-          wallet: {
-            OR: [
-              { users: { some: { userId: 'user-456' } } },
-              { group: { members: { some: { userId: 'user-456' } } } },
-            ],
-          },
-        },
-      });
-
-      if (!address) {
-        (res.status as Mock)(404);
-        (res.json as Mock)({ error: 'Address not found or access denied' });
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(404);
-    });
-  });
-
-  describe('Input Validation', () => {
-    it('should handle null body gracefully', async () => {
-      const req = createRawBodyRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: null,
-      });
-      const { res, getResponse } = createMockResponse();
-
-      const originalPsbt = typeof req.body === 'string' ? req.body : (req.body as any)?.toString?.();
-      if (!originalPsbt || originalPsbt.length === 0) {
-        (res.status as Mock)(400);
-        (res as any).type = vi.fn().mockReturnValue(res);
-        (res.send as Mock)(PayjoinErrors.ORIGINAL_PSBT_REJECTED);
-      }
-
-      const response = getResponse();
-      expect(response.statusCode).toBe(400);
+      expect(res.status).toBe(401);
     });
 
-    it('should handle object body (parse as text)', async () => {
-      const req = createMockRequest({
-        params: { addressId: TEST_ADDRESS_ID },
-        query: { v: '1' },
-        body: { data: 'should be text' }, // Object instead of string
-      });
-      const { res, getResponse } = createMockResponse();
-
-      const originalPsbt = typeof req.body === 'string'
-        ? req.body
-        : req.body?.toString?.();
-
-      // Object.toString() returns "[object Object]"
-      expect(originalPsbt).toBe('[object Object]');
-    });
-
-    it('should sanitize addressId parameter', async () => {
-      // SQL injection attempt
-      const maliciousId = "addr-123'; DROP TABLE addresses;--";
-
-      const req = createRawBodyRequest({
-        params: { addressId: maliciousId },
-        query: { v: '1' },
-        body: VALID_PSBT_BASE64,
+    it('should require authentication for Payjoin attempt', async () => {
+      const res = await request(app).post('/api/v1/payjoin/attempt').send({
+        psbt: VALID_PSBT_BASE64,
+        payjoinUrl: 'https://example.com/pj',
       });
 
-      // The service should be called with the raw parameter
-      // Prisma handles parameterized queries safely
-      expect(req.params?.addressId).toBe(maliciousId);
+      expect(res.status).toBe(401);
     });
   });
 });

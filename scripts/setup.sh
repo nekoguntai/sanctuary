@@ -649,21 +649,46 @@ show_completion_banner() {
         echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     fi
 
-    echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}    View logs:    docker compose logs -f                   ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}    Stop:         docker compose down                      ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}    Restart:      docker compose restart                   ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    echo "Common commands:"
-    echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
-    echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
-    echo "  ${GREEN}./start.sh --logs${NC}    View logs"
-    echo "  ${GREEN}./start.sh --rebuild${NC} Rebuild after code changes"
+    # Show "Next Steps" checklist
+    echo -e "${GREEN}┌─────────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${GREEN}│${NC}                       ${GREEN}Next Steps${NC}                           ${GREEN}│${NC}"
+    echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${NC}"
+
+    local step=1
+    if [ "$STARTED" != true ]; then
+        echo -e "${GREEN}│${NC}  ${step}. Run ${GREEN}./start.sh${NC} to start Sanctuary                    ${GREEN}│${NC}"
+        step=$((step + 1))
+    fi
+
+    if [ "$ssl_exists" = true ]; then
+        echo -e "${GREEN}│${NC}  ${step}. Open ${GREEN}https://localhost:${https_port}${NC} in your browser           ${GREEN}│${NC}"
+    else
+        echo -e "${GREEN}│${NC}  ${step}. Open ${GREEN}http://localhost:${HTTP_PORT:-8080}${NC} in your browser            ${GREEN}│${NC}"
+    fi
+    step=$((step + 1))
+
+    echo -e "${GREEN}│${NC}  ${step}. Log in with ${GREEN}admin${NC} / ${GREEN}sanctuary${NC}                        ${GREEN}│${NC}"
+    step=$((step + 1))
+
+    echo -e "${GREEN}│${NC}  ${step}. Change your password when prompted                      ${GREEN}│${NC}"
+    step=$((step + 1))
+
+    echo -e "${GREEN}│${NC}  ${step}. Connect to a Bitcoin node (Settings → Electrum)         ${GREEN}│${NC}"
+    step=$((step + 1))
+
+    echo -e "${GREEN}│${NC}  ${step}. ${YELLOW}Back up your encryption keys${NC} (see below)                ${GREEN}│${NC}"
+
+    echo -e "${GREEN}└─────────────────────────────────────────────────────────────┘${NC}"
+    echo ""
+
+    echo "Useful commands:"
+    echo -e "  ${GREEN}./start.sh${NC}           Start Sanctuary"
+    echo -e "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
+    echo -e "  ${GREEN}./start.sh --logs${NC}    View logs"
+    echo -e "  ${GREEN}docker compose logs -f${NC}  Follow all container logs"
     echo ""
 }
 
@@ -672,7 +697,7 @@ show_backup_reminder() {
     echo -e "${RED}║${NC}  ${YELLOW}⚠  IMPORTANT: Back up your encryption keys!${NC}              ${RED}║${NC}"
     echo -e "${RED}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "Your encryption keys are stored in: ${GREEN}$ENV_FILE${NC}"
+    echo -e "Your encryption keys are stored in: ${GREEN}$ENV_FILE${NC}"
     echo ""
     echo "These keys encrypt sensitive data (2FA secrets, node passwords)."
     echo -e "${RED}If lost, encrypted data cannot be recovered!${NC}"

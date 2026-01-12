@@ -363,10 +363,9 @@ main() {
     echo "Running setup..."
     echo ""
 
-    # Export secrets so setup.sh can use them
+    # Export secrets so setup.sh can use them (but NOT feature flags - let setup.sh prompt)
     export JWT_SECRET ENCRYPTION_KEY ENCRYPTION_SALT GATEWAY_SECRET POSTGRES_PASSWORD
     export HTTPS_PORT HTTP_PORT GATEWAY_PORT
-    export ENABLE_MONITORING ENABLE_TOR
 
     # Run setup.sh
     "$INSTALL_DIR/scripts/setup.sh" $SETUP_FLAGS

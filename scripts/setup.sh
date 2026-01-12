@@ -326,6 +326,7 @@ echo
 
 # Ask to start services
 STARTED=false
+FRONTEND_RUNNING=false
 if [ -t 0 ]; then
     read -p "Start Sanctuary now? [Y/n] " -n 1 -r
     echo
@@ -337,6 +338,44 @@ if [ -t 0 ]; then
         cd "$PROJECT_DIR"
         docker compose up -d --build
         STARTED=true
+
+        # Wait for services to be healthy (with proper timeout)
+        echo ""
+        echo "Waiting for services to start..."
+
+        MAX_WAIT=120
+        WAITED=0
+        INTERVAL=5
+
+        while [ $WAITED -lt $MAX_WAIT ]; do
+            # Check if frontend is healthy (last service to become ready)
+            if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
+                FRONTEND_RUNNING=true
+                break
+            fi
+
+            # Check for container failures
+            if docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE "(Exit|exited)"; then
+                echo -e "${YELLOW}Some containers exited. Checking status...${NC}"
+                # Migration container exiting with 0 is expected
+                FAILED=$(docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E "(Exit|exited)" | grep -v "migrate" || true)
+                if [ -n "$FAILED" ]; then
+                    echo -e "${RED}Container failures detected:${NC}"
+                    echo "$FAILED"
+                    break
+                fi
+            fi
+
+            sleep $INTERVAL
+            WAITED=$((WAITED + INTERVAL))
+            echo "  Still starting... ($WAITED/${MAX_WAIT}s)"
+        done
+
+        if [ $WAITED -ge $MAX_WAIT ] && [ "$FRONTEND_RUNNING" = false ]; then
+            echo -e "${YELLOW}Timeout waiting for services. They may still be starting.${NC}"
+            echo "  Check status with: docker compose ps"
+            echo "  View logs with: docker compose logs -f"
+        fi
     fi
 fi
 echo
@@ -346,8 +385,10 @@ echo
 # ============================================
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
-if [ "$STARTED" = true ]; then
-    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete! Sanctuary is starting.${NC}      ${BLUE}║${NC}"
+if [ "$FRONTEND_RUNNING" = true ]; then
+    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete! Sanctuary is running.${NC}       ${BLUE}║${NC}"
+elif [ "$STARTED" = true ]; then
+    echo -e "${BLUE}║${NC}            ${YELLOW}Setup complete! Services starting...${NC}        ${BLUE}║${NC}"
 else
     echo -e "${BLUE}║${NC}              ${GREEN}Setup complete!${NC}                              ${BLUE}║${NC}"
 fi

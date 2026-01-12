@@ -28,6 +28,53 @@ docker compose logs -f backend
 # POSTGRES_PASSWORD="..." JWT_SECRET="..." docker compose up
 ```
 
+## Installation Scripts Architecture
+
+The installation scripts are organized with `setup.sh` as the core and `install.sh` as a thin wrapper:
+
+```
+install.sh (thin wrapper - repo management only)
+├── Git prerequisite check
+├── Platform detection (GitHub/GitLab)
+├── Version fetching and checkout
+├── Repository clone/update
+├── Upgrade detection with database backup prompt
+├── Resource checks (disk, memory, WSL, architecture)
+└── Calls: ./scripts/setup.sh --from-install [flags]
+
+scripts/setup.sh (the polished core - all setup logic)
+├── Prerequisite checks (Docker, Docker Compose, OpenSSL)
+├── Secret generation with existing secret preservation
+├── SSL certificate generation
+├── Optional features prompts (monitoring, Tor)
+├── Port conflict detection
+├── .env file creation
+├── Service startup with health checking
+└── Completion banner and backup reminder
+```
+
+### setup.sh Flags
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Overwrite existing .env without prompting |
+| `--non-interactive` | Skip all prompts (use defaults or env vars) |
+| `--no-start` | Don't start services after setup |
+| `--enable-monitoring` | Enable Grafana/Loki/Promtail |
+| `--enable-tor` | Enable Tor proxy |
+| `--skip-ssl` | Skip SSL certificate generation |
+| `--skip-prereqs` | Skip prerequisite checks |
+| `--from-install` | Called from install.sh (adjusts messaging) |
+
+### User Entry Points
+
+| How user runs it | What happens |
+|------------------|--------------|
+| `curl ... \| bash` | install.sh clones repo → calls setup.sh |
+| `./install.sh` (upgrade) | install.sh updates repo → calls setup.sh --force |
+| `git clone && ./scripts/setup.sh` | Full standalone setup experience |
+| CI: `./scripts/setup.sh --non-interactive` | Automated setup, no prompts |
+
 ## Project Structure
 
 - `server/` - Backend API (Express + Prisma)

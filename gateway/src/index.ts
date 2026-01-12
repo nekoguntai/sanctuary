@@ -90,6 +90,15 @@ app.use(express.json({ limit: '1mb' }));
 // Request logging - captures all requests for auditing
 app.use(requestLogger);
 
+// Strip trailing slashes for consistent routing
+// Mobile clients may add trailing slashes which won't match our route patterns
+app.use((req, _res, next) => {
+  if (req.path !== '/' && req.path.endsWith('/')) {
+    req.url = req.url.replace(/\/+$/, '') || '/';
+  }
+  next();
+});
+
 // Health check (no auth required)
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

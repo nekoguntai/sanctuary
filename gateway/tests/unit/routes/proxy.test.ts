@@ -446,6 +446,18 @@ describe('Proxy Routes', () => {
       });
     });
 
+    it('should return 403 for blocked routes when mounted under /api/v1', () => {
+      // When mounted at /api/v1, path is stripped but baseUrl preserves it
+      mockReq.method = 'GET';
+      mockReq.path = '/admin/users';
+      mockReq.baseUrl = '/api/v1';
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+    });
+
     it('should log security event for blocked routes', () => {
       mockReq.method = 'POST';
       mockReq.path = '/api/v1/admin/settings';

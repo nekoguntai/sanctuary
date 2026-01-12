@@ -543,8 +543,17 @@ start_services() {
     # Check if --wait flag is supported (docker compose v2.1+)
     if docker compose up --help 2>&1 | grep -q -- '--wait'; then
         # Use --wait to wait for health checks before returning
-        docker compose $COMPOSE_FILES up -d --build --wait
-        FRONTEND_RUNNING=true
+        # Use || true to prevent set -e from exiting if --wait times out
+        if docker compose $COMPOSE_FILES up -d --build --wait; then
+            FRONTEND_RUNNING=true
+        else
+            echo ""
+            echo -e "${YELLOW}Note: Some services may still be starting.${NC}"
+            # Check if frontend is actually running despite the timeout
+            if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
+                FRONTEND_RUNNING=true
+            fi
+        fi
         USED_WAIT_FLAG=true
     else
         # Fallback for older docker compose versions

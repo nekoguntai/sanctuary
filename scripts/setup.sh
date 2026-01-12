@@ -540,17 +540,32 @@ start_services() {
     [ "$OPT_ENABLE_MONITORING" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.monitoring.yml"
     [ "$OPT_ENABLE_TOR" = "yes" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.tor.yml"
 
-    docker compose $COMPOSE_FILES up -d --build
+    # Check if --wait flag is supported (docker compose v2.1+)
+    if docker compose up --help 2>&1 | grep -q -- '--wait'; then
+        # Use --wait to wait for health checks before returning
+        docker compose $COMPOSE_FILES up -d --build --wait
+        FRONTEND_RUNNING=true
+        USED_WAIT_FLAG=true
+    else
+        # Fallback for older docker compose versions
+        docker compose $COMPOSE_FILES up -d --build
+        USED_WAIT_FLAG=false
+    fi
 }
 
 wait_for_healthy() {
+    # Skip if --wait flag was used (already waited)
+    if [ "$USED_WAIT_FLAG" = true ]; then
+        echo ""
+        return
+    fi
+
     echo ""
     echo "Waiting for services to start..."
 
     MAX_WAIT=120
     WAITED=0
     INTERVAL=5
-    FRONTEND_RUNNING=false
 
     while [ $WAITED -lt $MAX_WAIT ]; do
         if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then

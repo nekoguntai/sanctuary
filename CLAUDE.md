@@ -65,6 +65,32 @@ The server uses established patterns documented in `server/ARCHITECTURE.md`. Key
 
 Before recommending architectural improvements, check if the pattern already exists.
 
+## Code Modularization
+
+When files grow large (typically >300-400 lines), consider breaking them into focused domain modules:
+
+- **API Routes**: Split large route files into subdirectories with focused domain routers
+  - Example: `auth.ts` (800+ lines) → `auth/login.ts`, `auth/password.ts`, `auth/twoFactor.ts`, etc.
+  - Keep the parent file as a thin router aggregator that mounts sub-routers
+  - Pass dependencies (rate limiters, middleware) via factory functions: `createLoginRouter(loginLimiter)`
+
+- **Services**: Extract related functionality into separate files within a service directory
+  - Keep interfaces and types in `types.ts` within the directory
+  - Export public API from an `index.ts` barrel file
+
+- **Benefits**: Better testability, easier navigation, clearer ownership, smaller diffs in PRs
+
+### When to modularize
+
+| Indicator | Action |
+|-----------|--------|
+| File exceeds 400 lines | Consider splitting by domain |
+| Multiple distinct route groups | Extract to subdirectory |
+| Helpers used by multiple routes | Extract to shared utility |
+| Complex business logic | Move to dedicated service |
+
+See `src/api/auth/`, `src/api/wallets/`, and `src/api/devices/` for reference implementations of modularized route structures.
+
 ## Theme System & Dark Mode Colors
 
 **IMPORTANT**: The theme system uses **inverted color scales** for dark mode in `primary`, `warning`, and `success` palettes.

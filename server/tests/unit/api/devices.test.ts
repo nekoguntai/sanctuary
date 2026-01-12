@@ -7,6 +7,13 @@ import { vi } from 'vitest';
  * - GET /devices/:id/accounts
  * - POST /devices/:id/accounts
  * - DELETE /devices/:id/accounts/:accountId
+ * - GET /devices/models (device catalog)
+ * - GET /devices/models/:slug (specific model)
+ * - GET /devices/manufacturers (manufacturer list)
+ * - GET /devices/:id/share (sharing info)
+ * - POST /devices/:id/share/user (share with user)
+ * - DELETE /devices/:id/share/user/:targetUserId (remove user)
+ * - POST /devices/:id/share/group (share with group)
  */
 
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
@@ -660,6 +667,690 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1/accounts/non-existent');
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  // ========================================
+  // Device CRUD Routes
+  // ========================================
+
+  describe('GET /devices - List All Devices', () => {
+    it('should return all accessible devices', async () => {
+      const { getUserAccessibleDevices } = await import('../../../src/services/deviceAccess');
+      const mockGetUserAccessibleDevices = vi.mocked(getUserAccessibleDevices);
+
+      mockGetUserAccessibleDevices.mockResolvedValue([
+        {
+          id: 'device-1',
+          type: 'trezor',
+          label: 'My Trezor',
+          fingerprint: 'abc12345',
+          role: 'owner',
+        },
+        {
+          id: 'device-2',
+          type: 'coldcard',
+          label: 'Shared Coldcard',
+          fingerprint: 'def67890',
+          role: 'viewer',
+        },
+      ] as any);
+
+      const response = await request(app)
+        .get('/api/v1/devices');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(2);
+      expect(mockGetUserAccessibleDevices).toHaveBeenCalledWith('test-user-id');
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const { getUserAccessibleDevices } = await import('../../../src/services/deviceAccess');
+      const mockGetUserAccessibleDevices = vi.mocked(getUserAccessibleDevices);
+
+      mockGetUserAccessibleDevices.mockRejectedValue(new Error('Service error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('GET /devices/:id - Get Specific Device', () => {
+    it('should return device with access info', async () => {
+      const mockDevice = {
+        id: 'device-1',
+        type: 'trezor',
+        label: 'My Trezor',
+        fingerprint: 'abc12345',
+        model: { name: 'Model T' },
+        accounts: [
+          { id: 'account-1', purpose: 'single_sig', scriptType: 'native_segwit' },
+        ],
+        wallets: [],
+        user: { username: 'testuser' },
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(mockDevice);
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBe('device-1');
+      expect(response.body.isOwner).toBe(true);
+      expect(response.body.userRole).toBe('owner');
+    });
+
+    it('should return 404 when device not found', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/api/v1/devices/non-existent');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Not Found');
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.device.findUnique.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('PATCH /devices/:id - Update Device', () => {
+    it('should update device label', async () => {
+      mockPrismaClient.device.update.mockResolvedValue({
+        id: 'device-1',
+        type: 'trezor',
+        label: 'Updated Label',
+        fingerprint: 'abc12345',
+      });
+
+      const response = await request(app)
+        .patch('/api/v1/devices/device-1')
+        .send({ label: 'Updated Label' });
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.device.update).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+        data: { label: 'Updated Label' },
+        include: { model: true },
+      });
+    });
+
+    it('should update device with model slug', async () => {
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue({
+        id: 'model-1',
+        slug: 'trezor-model-t',
+        name: 'Model T',
+      });
+      mockPrismaClient.device.update.mockResolvedValue({
+        id: 'device-1',
+        type: 'trezor-model-t',
+        label: 'My Trezor',
+        modelId: 'model-1',
+      });
+
+      const response = await request(app)
+        .patch('/api/v1/devices/device-1')
+        .send({ modelSlug: 'trezor-model-t' });
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.device.update).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+        data: expect.objectContaining({
+          modelId: 'model-1',
+          type: 'trezor-model-t',
+        }),
+        include: { model: true },
+      });
+    });
+
+    it('should return 400 for invalid model slug', async () => {
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .patch('/api/v1/devices/device-1')
+        .send({ modelSlug: 'non-existent-model' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('Invalid device model');
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.device.update.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .patch('/api/v1/devices/device-1')
+        .send({ label: 'Updated' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('DELETE /devices/:id - Delete Device', () => {
+    it('should delete device not in use', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue({
+        id: 'device-1',
+        wallets: [],
+      });
+      mockPrismaClient.device.delete.mockResolvedValue({});
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1');
+
+      expect(response.status).toBe(204);
+      expect(mockPrismaClient.device.delete).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+      });
+    });
+
+    it('should return 404 when device not found', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .delete('/api/v1/devices/non-existent');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Not Found');
+    });
+
+    it('should return 409 when device is in use by wallet', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue({
+        id: 'device-1',
+        wallets: [
+          { wallet: { id: 'wallet-1', name: 'My Wallet' } },
+        ],
+      });
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1');
+
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe('Conflict');
+      expect(response.body.message).toContain('in use by wallet');
+      expect(response.body.wallets).toHaveLength(1);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue({
+        id: 'device-1',
+        wallets: [],
+      });
+      mockPrismaClient.device.delete.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  // ========================================
+  // Device Models Routes (Public Endpoints)
+  // ========================================
+
+  describe('GET /devices/models - Device Catalog', () => {
+    const mockModels = [
+      {
+        id: 'model-1',
+        slug: 'trezor-model-t',
+        name: 'Model T',
+        manufacturer: 'Trezor',
+        airGapped: false,
+        connectivity: ['USB'],
+        discontinued: false,
+      },
+      {
+        id: 'model-2',
+        slug: 'coldcard-mk4',
+        name: 'Coldcard MK4',
+        manufacturer: 'Coinkite',
+        airGapped: true,
+        connectivity: ['MicroSD', 'NFC'],
+        discontinued: false,
+      },
+      {
+        id: 'model-3',
+        slug: 'ledger-nano-x',
+        name: 'Nano X',
+        manufacturer: 'Ledger',
+        airGapped: false,
+        connectivity: ['USB', 'Bluetooth'],
+        discontinued: false,
+      },
+    ];
+
+    it('should return all non-discontinued models', async () => {
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue(mockModels);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(3);
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          discontinued: false,
+        }),
+        orderBy: [
+          { manufacturer: 'asc' },
+          { name: 'asc' },
+        ],
+      });
+    });
+
+    it('should filter by manufacturer', async () => {
+      const trezorModels = [mockModels[0]];
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue(trezorModels);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models?manufacturer=Trezor');
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          manufacturer: 'Trezor',
+        }),
+        orderBy: expect.any(Array),
+      });
+    });
+
+    it('should filter by airGapped capability', async () => {
+      const airGappedModels = [mockModels[1]];
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue(airGappedModels);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models?airGapped=true');
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          airGapped: true,
+        }),
+        orderBy: expect.any(Array),
+      });
+    });
+
+    it('should filter by connectivity type', async () => {
+      const bluetoothModels = [mockModels[2]];
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue(bluetoothModels);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models?connectivity=Bluetooth');
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          connectivity: { has: 'Bluetooth' },
+        }),
+        orderBy: expect.any(Array),
+      });
+    });
+
+    it('should include discontinued models when showDiscontinued=true', async () => {
+      const allModels = [...mockModels, { ...mockModels[0], id: 'model-4', discontinued: true }];
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue(allModels);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models?showDiscontinued=true');
+
+      expect(response.status).toBe(200);
+      // When showDiscontinued is provided, the discontinued filter should not be applied
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: expect.not.objectContaining({
+          discontinued: false,
+        }),
+        orderBy: expect.any(Array),
+      });
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.hardwareDeviceModel.findMany.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/models');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('GET /devices/models/:slug - Specific Model', () => {
+    const mockModel = {
+      id: 'model-1',
+      slug: 'trezor-model-t',
+      name: 'Model T',
+      manufacturer: 'Trezor',
+      airGapped: false,
+      connectivity: ['USB'],
+      discontinued: false,
+      features: ['Touchscreen', 'Shamir Backup'],
+    };
+
+    it('should return model by slug', async () => {
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue(mockModel);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models/trezor-model-t');
+
+      expect(response.status).toBe(200);
+      expect(response.body.slug).toBe('trezor-model-t');
+      expect(response.body.manufacturer).toBe('Trezor');
+      expect(mockPrismaClient.hardwareDeviceModel.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'trezor-model-t' },
+      });
+    });
+
+    it('should return 404 for non-existent model', async () => {
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/api/v1/devices/models/non-existent-model');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Not Found');
+      expect(response.body.message).toContain('not found');
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/models/trezor-model-t');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('GET /devices/manufacturers - Manufacturer List', () => {
+    it('should return list of manufacturers', async () => {
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue([
+        { manufacturer: 'Coinkite' },
+        { manufacturer: 'Ledger' },
+        { manufacturer: 'Trezor' },
+      ]);
+
+      const response = await request(app)
+        .get('/api/v1/devices/manufacturers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(['Coinkite', 'Ledger', 'Trezor']);
+      expect(mockPrismaClient.hardwareDeviceModel.findMany).toHaveBeenCalledWith({
+        where: { discontinued: false },
+        select: { manufacturer: true },
+        distinct: ['manufacturer'],
+        orderBy: { manufacturer: 'asc' },
+      });
+    });
+
+    it('should return empty array when no manufacturers exist', async () => {
+      mockPrismaClient.hardwareDeviceModel.findMany.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/v1/devices/manufacturers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([]);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockPrismaClient.hardwareDeviceModel.findMany.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/manufacturers');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  // ========================================
+  // Device Sharing Routes
+  // ========================================
+
+  describe('GET /devices/:id/share - Sharing Info', () => {
+    it('should return device sharing info', async () => {
+      const { getDeviceShareInfo } = await import('../../../src/services/deviceAccess');
+      const mockGetDeviceShareInfo = vi.mocked(getDeviceShareInfo);
+
+      mockGetDeviceShareInfo.mockResolvedValue({
+        deviceId: 'device-1',
+        owner: { id: 'test-user-id', username: 'testuser' },
+        sharedUsers: [
+          { id: 'user-2', username: 'otheruser', role: 'viewer' },
+        ],
+        group: null,
+      });
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1/share');
+
+      expect(response.status).toBe(200);
+      expect(response.body.deviceId).toBe('device-1');
+      expect(response.body.owner.username).toBe('testuser');
+      expect(response.body.sharedUsers).toHaveLength(1);
+      expect(mockGetDeviceShareInfo).toHaveBeenCalledWith('device-1');
+    });
+
+    it('should include group info when device is shared with group', async () => {
+      const { getDeviceShareInfo } = await import('../../../src/services/deviceAccess');
+      const mockGetDeviceShareInfo = vi.mocked(getDeviceShareInfo);
+
+      mockGetDeviceShareInfo.mockResolvedValue({
+        deviceId: 'device-1',
+        owner: { id: 'test-user-id', username: 'testuser' },
+        sharedUsers: [],
+        group: { id: 'group-1', name: 'Family Group' },
+      });
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1/share');
+
+      expect(response.status).toBe(200);
+      expect(response.body.group).toBeDefined();
+      expect(response.body.group.name).toBe('Family Group');
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const { getDeviceShareInfo } = await import('../../../src/services/deviceAccess');
+      const mockGetDeviceShareInfo = vi.mocked(getDeviceShareInfo);
+
+      mockGetDeviceShareInfo.mockRejectedValue(new Error('Service error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1/share');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('POST /devices/:id/share/user - Share with User', () => {
+    it('should share device with another user', async () => {
+      const { shareDeviceWithUser } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithUser = vi.mocked(shareDeviceWithUser);
+
+      mockShareDeviceWithUser.mockResolvedValue({
+        success: true,
+        message: 'Device shared successfully',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/user')
+        .send({ targetUserId: 'user-2' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockShareDeviceWithUser).toHaveBeenCalledWith('device-1', 'user-2', 'test-user-id');
+    });
+
+    it('should reject when targetUserId is missing', async () => {
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/user')
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Bad Request');
+      expect(response.body.message).toContain('targetUserId');
+    });
+
+    it('should return 400 when service returns failure', async () => {
+      const { shareDeviceWithUser } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithUser = vi.mocked(shareDeviceWithUser);
+
+      mockShareDeviceWithUser.mockResolvedValue({
+        success: false,
+        message: 'User not found',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/user')
+        .send({ targetUserId: 'non-existent-user' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('User not found');
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const { shareDeviceWithUser } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithUser = vi.mocked(shareDeviceWithUser);
+
+      mockShareDeviceWithUser.mockRejectedValue(new Error('Service error'));
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/user')
+        .send({ targetUserId: 'user-2' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('DELETE /devices/:id/share/user/:targetUserId - Remove User Access', () => {
+    it('should remove user access to device', async () => {
+      const { removeUserFromDevice } = await import('../../../src/services/deviceAccess');
+      const mockRemoveUserFromDevice = vi.mocked(removeUserFromDevice);
+
+      mockRemoveUserFromDevice.mockResolvedValue({
+        success: true,
+        message: 'User access removed',
+      });
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1/share/user/user-2');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockRemoveUserFromDevice).toHaveBeenCalledWith('device-1', 'user-2', 'test-user-id');
+    });
+
+    it('should return 400 when service returns failure', async () => {
+      const { removeUserFromDevice } = await import('../../../src/services/deviceAccess');
+      const mockRemoveUserFromDevice = vi.mocked(removeUserFromDevice);
+
+      mockRemoveUserFromDevice.mockResolvedValue({
+        success: false,
+        message: 'Cannot remove owner',
+      });
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1/share/user/owner-user');
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Cannot remove owner');
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const { removeUserFromDevice } = await import('../../../src/services/deviceAccess');
+      const mockRemoveUserFromDevice = vi.mocked(removeUserFromDevice);
+
+      mockRemoveUserFromDevice.mockRejectedValue(new Error('Service error'));
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1/share/user/user-2');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+  });
+
+  describe('POST /devices/:id/share/group - Share with Group', () => {
+    it('should share device with a group', async () => {
+      const { shareDeviceWithGroup } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithGroup = vi.mocked(shareDeviceWithGroup);
+
+      mockShareDeviceWithGroup.mockResolvedValue({
+        success: true,
+        message: 'Device shared with group',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/group')
+        .send({ groupId: 'group-1' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockShareDeviceWithGroup).toHaveBeenCalledWith('device-1', 'group-1', 'test-user-id');
+    });
+
+    it('should remove group access when groupId is null', async () => {
+      const { shareDeviceWithGroup } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithGroup = vi.mocked(shareDeviceWithGroup);
+
+      mockShareDeviceWithGroup.mockResolvedValue({
+        success: true,
+        message: 'Group access removed',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/group')
+        .send({ groupId: null });
+
+      expect(response.status).toBe(200);
+      expect(mockShareDeviceWithGroup).toHaveBeenCalledWith('device-1', null, 'test-user-id');
+    });
+
+    it('should return 400 when service returns failure', async () => {
+      const { shareDeviceWithGroup } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithGroup = vi.mocked(shareDeviceWithGroup);
+
+      mockShareDeviceWithGroup.mockResolvedValue({
+        success: false,
+        message: 'Group not found',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/group')
+        .send({ groupId: 'non-existent-group' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Group not found');
+    });
+
+    it('should handle service errors gracefully', async () => {
+      const { shareDeviceWithGroup } = await import('../../../src/services/deviceAccess');
+      const mockShareDeviceWithGroup = vi.mocked(shareDeviceWithGroup);
+
+      mockShareDeviceWithGroup.mockRejectedValue(new Error('Service error'));
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/share/group')
+        .send({ groupId: 'group-1' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
     });
   });
 });

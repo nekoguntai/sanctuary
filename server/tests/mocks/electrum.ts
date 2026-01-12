@@ -1,4 +1,4 @@
-import { vi, Mock, Mock } from 'vitest';
+import { vi, Mock } from 'vitest';
 /**
  * Electrum Client Mock
  *
@@ -53,6 +53,9 @@ export const mockElectrumClient = {
   disconnect: vi.fn().mockResolvedValue(undefined),
   isConnected: vi.fn().mockReturnValue(true),
 
+  // Server info
+  getServerVersion: vi.fn().mockResolvedValue({ server: 'ElectrumX', protocol: '1.4' }),
+
   // Transaction methods
   getTransaction: vi.fn().mockResolvedValue(null),
   getTransactionsBatch: vi.fn().mockResolvedValue(new Map()),
@@ -68,7 +71,7 @@ export const mockElectrumClient = {
 
   // Block methods
   getBlockHeight: vi.fn().mockResolvedValue(800000),
-  getBlockHeader: vi.fn().mockResolvedValue('0'.repeat(160)),
+  getBlockHeader: vi.fn().mockResolvedValue({ hash: 'abc123', height: 800000, timestamp: 1700000000 }),
 
   // Fee estimation
   estimateFee: vi.fn().mockResolvedValue(10),

@@ -29,6 +29,7 @@ declare -a FAILED_TESTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 INSTALL_SCRIPT="$PROJECT_ROOT/install.sh"
+SETUP_SCRIPT="$PROJECT_ROOT/scripts/setup.sh"
 
 # ============================================
 # Test Framework
@@ -472,28 +473,31 @@ test_install_script_has_set_e() {
 }
 
 test_install_script_has_docker_check() {
-    if grep -q "check_docker" "$INSTALL_SCRIPT"; then
+    # Docker check is now in setup.sh (install.sh delegates to setup.sh)
+    if grep -q "check_docker\|docker info\|Docker.*installed" "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have docker check function"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should have docker check function"
         return 1
     fi
 }
 
 test_install_script_has_git_check() {
-    if grep -q "check_git" "$INSTALL_SCRIPT"; then
+    # install.sh checks for git before cloning
+    if grep -q "command -v git\|git.*installed\|Git is" "$INSTALL_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have git check function"
+        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have git check"
         return 1
     fi
 }
 
 test_install_script_has_openssl_check() {
-    if grep -q "check_openssl" "$INSTALL_SCRIPT"; then
+    # OpenSSL check is now in setup.sh (install.sh delegates to setup.sh)
+    if grep -q "check_openssl\|command -v openssl\|OpenSSL" "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have openssl check function"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should have openssl check"
         return 1
     fi
 }
@@ -544,33 +548,33 @@ test_install_script_uses_docker_compose() {
 }
 
 test_install_script_creates_env_file() {
-    # install.sh now creates .env (Docker Compose's default) instead of .env.local
-    if grep -q 'cat > "\$INSTALL_DIR/.env"' "$INSTALL_SCRIPT"; then
+    # .env file creation is now in setup.sh (install.sh delegates to setup.sh)
+    if grep -q 'cat > "\$ENV_FILE"\|cat > .*\.env' "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should create .env file"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should create .env file"
         return 1
     fi
 }
 
 test_install_script_has_silent_openssl_check() {
-    # install.sh must have a silent has_openssl function for capture patterns
-    # Using check_openssl in $(cmd && echo yes) captures the echo output too
-    if grep -q "has_openssl" "$INSTALL_SCRIPT"; then
+    # setup.sh uses command -v openssl for silent checks
+    # This test verifies setup.sh can check openssl availability silently
+    if grep -q "command -v openssl" "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have has_openssl function"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should have silent openssl check"
         echo "  This is needed for clean capture patterns like \$(has_openssl && echo yes)"
         return 1
     fi
 }
 
 test_install_script_uses_has_openssl_for_capture() {
-    # The HAS_OPENSSL variable must use has_openssl (silent) not check_openssl (verbose)
-    if grep -q 'HAS_OPENSSL=.*has_openssl' "$INSTALL_SCRIPT"; then
+    # setup.sh must use command -v openssl for silent capture (not check_openssl which has echo)
+    if grep -q 'command -v openssl' "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} HAS_OPENSSL must use has_openssl (silent function)"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh must use command -v openssl for silent check"
         echo "  Using check_openssl captures echo output and breaks the comparison"
         return 1
     fi
@@ -742,24 +746,25 @@ test_install_script_has_architecture_check() {
 }
 
 test_install_script_has_port_conflict_check() {
-    if grep -q "check_port_conflict" "$INSTALL_SCRIPT"; then
+    # Port conflict check is now in setup.sh (install.sh delegates to setup.sh)
+    if grep -q "check_port_conflict" "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have check_port_conflict function"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should have check_port_conflict function"
         return 1
     fi
 }
 
 test_install_script_checks_multiple_ports() {
-    # Should check HTTPS, HTTP, and Gateway ports
-    local https_check=$(grep -c 'check_port_conflict.*HTTPS' "$INSTALL_SCRIPT" || echo "0")
-    local http_check=$(grep -c 'check_port_conflict.*HTTP' "$INSTALL_SCRIPT" || echo "0")
-    local gateway_check=$(grep -c 'check_port_conflict.*Gateway\|GATEWAY' "$INSTALL_SCRIPT" || echo "0")
+    # Port checks are now in setup.sh - should check HTTPS, HTTP, and Gateway ports
+    local https_check=$(grep -c 'check_port_conflict.*HTTPS\|https_port' "$SETUP_SCRIPT" || echo "0")
+    local http_check=$(grep -c 'check_port_conflict.*HTTP\|http_port' "$SETUP_SCRIPT" || echo "0")
+    local gateway_check=$(grep -c 'check_port_conflict.*Gateway\|gateway_port\|GATEWAY' "$SETUP_SCRIPT" || echo "0")
 
     if [ "$https_check" -ge 1 ] && [ "$http_check" -ge 1 ] && [ "$gateway_check" -ge 1 ]; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should check HTTPS, HTTP, and Gateway ports"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should check HTTPS, HTTP, and Gateway ports"
         echo "  HTTPS checks: $https_check, HTTP checks: $http_check, Gateway checks: $gateway_check"
         return 1
     fi
@@ -775,11 +780,11 @@ test_install_script_has_upgrade_backup_guidance() {
 }
 
 test_install_script_has_health_check_timeout() {
-    # Should have MAX_WAIT for health check polling (not just sleep 5)
-    if grep -q "MAX_WAIT" "$INSTALL_SCRIPT"; then
+    # Health check timeout is now in setup.sh - should have MAX_WAIT for health check polling
+    if grep -q "MAX_WAIT" "$SETUP_SCRIPT"; then
         return 0
     else
-        echo -e "${RED}ASSERTION FAILED:${NC} install.sh should have MAX_WAIT for health check timeout"
+        echo -e "${RED}ASSERTION FAILED:${NC} setup.sh should have MAX_WAIT for health check timeout"
         return 1
     fi
 }

@@ -556,7 +556,8 @@ start_services() {
     # Check if --wait flag is supported (docker compose v2.1+)
     if docker compose up --help 2>&1 | grep -q -- '--wait'; then
         # Use --wait to wait for health checks before returning
-        if docker compose $COMPOSE_FILES up -d --wait; then
+        # Use --no-build since we already built in the previous step
+        if docker compose $COMPOSE_FILES up -d --no-build --wait; then
             FRONTEND_RUNNING=true
         else
             echo ""
@@ -569,7 +570,8 @@ start_services() {
         USED_WAIT_FLAG=true
     else
         # Fallback for older docker compose versions
-        docker compose $COMPOSE_FILES up -d
+        # Use --no-build since we already built in the previous step
+        docker compose $COMPOSE_FILES up -d --no-build
         USED_WAIT_FLAG=false
     fi
 }

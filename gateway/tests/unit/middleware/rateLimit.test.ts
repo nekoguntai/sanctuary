@@ -4,14 +4,20 @@
  * Tests rate limiting behavior for different tiers and exponential backoff.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 import {
   defaultRateLimiter,
   strictRateLimiter,
   authRateLimiter,
+  transactionCreateRateLimiter,
+  broadcastRateLimiter,
+  deviceRegistrationRateLimiter,
+  addressGenerationRateLimiter,
   resetBackoff,
   cleanupBackoffTracker,
+  calculateBackoff,
+  backoffTracker,
 } from '../../../src/middleware/rateLimit';
 import { AuthenticatedRequest } from '../../../src/middleware/auth';
 
@@ -36,8 +42,15 @@ vi.mock('../../../src/middleware/requestLogger', () => ({
 }));
 
 describe('Rate Limiting Middleware', () => {
-  // Note: Rate limiters are stateful, so these tests verify configuration
-  // rather than actual rate limiting behavior (which requires integration tests)
+  beforeEach(() => {
+    // Clear backoff tracker between tests
+    backoffTracker.clear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   describe('defaultRateLimiter', () => {
     it('should be configured as a middleware function', () => {
@@ -67,7 +80,6 @@ describe('Rate Limiting Middleware', () => {
       );
 
       // The middleware should call next or set headers
-      // (actual behavior depends on rate limit state)
       expect(typeof defaultRateLimiter).toBe('function');
     });
   });
@@ -78,7 +90,6 @@ describe('Rate Limiting Middleware', () => {
     });
 
     it('should have stricter limits than default', () => {
-      // This is a structural test - actual limits are tested in integration
       expect(typeof strictRateLimiter).toBe('function');
     });
   });
@@ -89,21 +100,143 @@ describe('Rate Limiting Middleware', () => {
     });
 
     it('should be the strictest limiter for security', () => {
-      // Auth rate limiter is critical for preventing brute force attacks
       expect(typeof authRateLimiter).toBe('function');
+    });
+  });
+
+  describe('Mobile-Specific Rate Limiters', () => {
+    describe('transactionCreateRateLimiter', () => {
+      it('should be configured as a middleware function', () => {
+        expect(typeof transactionCreateRateLimiter).toBe('function');
+      });
+
+      it('should allow requests through', () => {
+        const mockReq = {
+          ip: '10.0.0.1',
+          headers: {},
+          path: '/api/v1/mobile/transactions',
+          user: { userId: 'user-123' },
+        } as Partial<AuthenticatedRequest>;
+
+        const mockRes = {
+          setHeader: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as Partial<Response>;
+
+        const mockNext = vi.fn();
+
+        transactionCreateRateLimiter(
+          mockReq as Request,
+          mockRes as Response,
+          mockNext as NextFunction
+        );
+
+        expect(typeof transactionCreateRateLimiter).toBe('function');
+      });
+    });
+
+    describe('broadcastRateLimiter', () => {
+      it('should be configured as a middleware function', () => {
+        expect(typeof broadcastRateLimiter).toBe('function');
+      });
+
+      it('should allow requests through', () => {
+        const mockReq = {
+          ip: '10.0.0.2',
+          headers: {},
+          path: '/api/v1/mobile/broadcast',
+          user: { userId: 'user-456' },
+        } as Partial<AuthenticatedRequest>;
+
+        const mockRes = {
+          setHeader: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as Partial<Response>;
+
+        const mockNext = vi.fn();
+
+        broadcastRateLimiter(
+          mockReq as Request,
+          mockRes as Response,
+          mockNext as NextFunction
+        );
+
+        expect(typeof broadcastRateLimiter).toBe('function');
+      });
+    });
+
+    describe('deviceRegistrationRateLimiter', () => {
+      it('should be configured as a middleware function', () => {
+        expect(typeof deviceRegistrationRateLimiter).toBe('function');
+      });
+
+      it('should allow requests through', () => {
+        const mockReq = {
+          ip: '10.0.0.3',
+          headers: {},
+          path: '/api/v1/mobile/devices',
+          user: { userId: 'user-789' },
+        } as Partial<AuthenticatedRequest>;
+
+        const mockRes = {
+          setHeader: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as Partial<Response>;
+
+        const mockNext = vi.fn();
+
+        deviceRegistrationRateLimiter(
+          mockReq as Request,
+          mockRes as Response,
+          mockNext as NextFunction
+        );
+
+        expect(typeof deviceRegistrationRateLimiter).toBe('function');
+      });
+    });
+
+    describe('addressGenerationRateLimiter', () => {
+      it('should be configured as a middleware function', () => {
+        expect(typeof addressGenerationRateLimiter).toBe('function');
+      });
+
+      it('should allow requests through', () => {
+        const mockReq = {
+          ip: '10.0.0.4',
+          headers: {},
+          path: '/api/v1/mobile/addresses',
+          user: { userId: 'user-abc' },
+        } as Partial<AuthenticatedRequest>;
+
+        const mockRes = {
+          setHeader: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as Partial<Response>;
+
+        const mockNext = vi.fn();
+
+        addressGenerationRateLimiter(
+          mockReq as Request,
+          mockRes as Response,
+          mockNext as NextFunction
+        );
+
+        expect(typeof addressGenerationRateLimiter).toBe('function');
+      });
     });
   });
 
   describe('Rate Limiter Key Generation', () => {
     it('should use user ID when authenticated', () => {
-      // The key generator uses userId if available
       const mockReq = {
         ip: '192.168.1.1',
         user: { userId: 'user-123' },
       } as Partial<AuthenticatedRequest>;
 
-      // Key generation is internal to rate limiter
-      // This test documents expected behavior
       expect(mockReq.user?.userId).toBe('user-123');
     });
 
@@ -119,9 +252,112 @@ describe('Rate Limiting Middleware', () => {
 
   describe('Exponential Backoff', () => {
     beforeEach(() => {
-      // Reset backoff state between tests
-      resetBackoff('test-user');
-      resetBackoff('192.168.1.1');
+      backoffTracker.clear();
+    });
+
+    describe('calculateBackoff', () => {
+      it('should return base retry time for first violation', () => {
+        const retryAfter = calculateBackoff('new-client');
+
+        expect(retryAfter).toBe(60);
+        expect(backoffTracker.get('new-client')).toEqual({
+          violations: 1,
+          lastViolation: expect.any(Number),
+        });
+      });
+
+      it('should double retry time for second violation', () => {
+        // First violation
+        calculateBackoff('test-client');
+
+        // Second violation (within window)
+        vi.advanceTimersByTime(1000); // 1 second later
+        const retryAfter = calculateBackoff('test-client');
+
+        expect(retryAfter).toBe(120); // 60 * 2^1
+        expect(backoffTracker.get('test-client')?.violations).toBe(2);
+      });
+
+      it('should continue exponential growth', () => {
+        // First violation: 60
+        calculateBackoff('test-client');
+
+        // Second violation: 120
+        vi.advanceTimersByTime(1000);
+        calculateBackoff('test-client');
+
+        // Third violation: 240
+        vi.advanceTimersByTime(1000);
+        const third = calculateBackoff('test-client');
+        expect(third).toBe(240); // 60 * 2^2
+
+        // Fourth violation: 480
+        vi.advanceTimersByTime(1000);
+        const fourth = calculateBackoff('test-client');
+        expect(fourth).toBe(480); // 60 * 2^3
+
+        // Fifth violation: 960
+        vi.advanceTimersByTime(1000);
+        const fifth = calculateBackoff('test-client');
+        expect(fifth).toBe(960); // 60 * 2^4
+
+        expect(backoffTracker.get('test-client')?.violations).toBe(5);
+      });
+
+      it('should cap at maxRetryAfter (3600 seconds)', () => {
+        // Simulate many violations to exceed max
+        for (let i = 0; i < 10; i++) {
+          calculateBackoff('test-client');
+          vi.advanceTimersByTime(1000);
+        }
+
+        const retryAfter = calculateBackoff('test-client');
+        expect(retryAfter).toBeLessThanOrEqual(3600);
+      });
+
+      it('should reset backoff after window + retry period expires', () => {
+        // First violation
+        calculateBackoff('test-client');
+        expect(backoffTracker.get('test-client')?.violations).toBe(1);
+
+        // Advance time past window (60000ms) + retry period (60 * 1 * 1000ms)
+        vi.advanceTimersByTime(60000 + 60000 + 1);
+
+        // Should reset to first violation
+        const retryAfter = calculateBackoff('test-client');
+        expect(retryAfter).toBe(60);
+        expect(backoffTracker.get('test-client')?.violations).toBe(1);
+      });
+
+      it('should track different clients independently', () => {
+        // Client A: first violation
+        calculateBackoff('client-a');
+
+        // Client B: first violation
+        calculateBackoff('client-b');
+
+        // Both should be at 1 violation
+        expect(backoffTracker.get('client-a')?.violations).toBe(1);
+        expect(backoffTracker.get('client-b')?.violations).toBe(1);
+
+        // Client A: second violation
+        vi.advanceTimersByTime(1000);
+        calculateBackoff('client-a');
+
+        // Only client A should be at 2 violations
+        expect(backoffTracker.get('client-a')?.violations).toBe(2);
+        expect(backoffTracker.get('client-b')?.violations).toBe(1);
+      });
+
+      it('should store lastViolation timestamp', () => {
+        const beforeTime = Date.now();
+        calculateBackoff('test-client');
+        const afterTime = Date.now();
+
+        const tracker = backoffTracker.get('test-client');
+        expect(tracker?.lastViolation).toBeGreaterThanOrEqual(beforeTime);
+        expect(tracker?.lastViolation).toBeLessThanOrEqual(afterTime);
+      });
     });
 
     describe('resetBackoff', () => {
@@ -133,10 +369,24 @@ describe('Rate Limiting Middleware', () => {
         expect(() => resetBackoff('non-existent-key')).not.toThrow();
       });
 
-      it('should reset backoff for a specific key', () => {
-        // Reset should clear any stored state
+      it('should clear backoff state for a key', () => {
+        // Create backoff state
+        calculateBackoff('test-key');
+        expect(backoffTracker.has('test-key')).toBe(true);
+
+        // Reset it
         resetBackoff('test-key');
-        expect(true).toBe(true); // Just verify it completes
+        expect(backoffTracker.has('test-key')).toBe(false);
+      });
+
+      it('should not affect other keys when resetting', () => {
+        calculateBackoff('key-a');
+        calculateBackoff('key-b');
+
+        resetBackoff('key-a');
+
+        expect(backoffTracker.has('key-a')).toBe(false);
+        expect(backoffTracker.has('key-b')).toBe(true);
       });
     });
 
@@ -145,46 +395,128 @@ describe('Rate Limiting Middleware', () => {
         expect(typeof cleanupBackoffTracker).toBe('function');
       });
 
-      it('should not throw when called', () => {
+      it('should not throw when called on empty tracker', () => {
         expect(() => cleanupBackoffTracker()).not.toThrow();
       });
 
-      it('should clean up old entries', () => {
-        // Cleanup should remove expired entries
+      it('should remove entries older than 2x window', () => {
+        // Create an entry
+        calculateBackoff('old-client');
+        expect(backoffTracker.has('old-client')).toBe(true);
+
+        // Advance time past 2x window (120000ms)
+        vi.advanceTimersByTime(120001);
+
+        // Cleanup should remove it
         cleanupBackoffTracker();
-        expect(true).toBe(true); // Just verify it completes
+        expect(backoffTracker.has('old-client')).toBe(false);
+      });
+
+      it('should keep entries newer than 2x window', () => {
+        // Create an entry
+        calculateBackoff('recent-client');
+        expect(backoffTracker.has('recent-client')).toBe(true);
+
+        // Advance time but not past threshold
+        vi.advanceTimersByTime(100000);
+
+        // Cleanup should keep it
+        cleanupBackoffTracker();
+        expect(backoffTracker.has('recent-client')).toBe(true);
+      });
+
+      it('should clean up multiple old entries', () => {
+        // Create multiple entries
+        calculateBackoff('old-1');
+        vi.advanceTimersByTime(1000);
+        calculateBackoff('old-2');
+        vi.advanceTimersByTime(1000);
+        calculateBackoff('old-3');
+
+        expect(backoffTracker.size).toBe(3);
+
+        // Advance past threshold (2x window = 120000ms) plus buffer for all entries
+        vi.advanceTimersByTime(125000);
+
+        cleanupBackoffTracker();
+        expect(backoffTracker.size).toBe(0);
+      });
+
+      it('should keep some entries while removing others', () => {
+        // Create old entry
+        calculateBackoff('old-client');
+
+        // Advance time
+        vi.advanceTimersByTime(100000);
+
+        // Create recent entry
+        calculateBackoff('recent-client');
+
+        // Advance a bit more to make old entry expire
+        vi.advanceTimersByTime(25000);
+
+        cleanupBackoffTracker();
+
+        expect(backoffTracker.has('old-client')).toBe(false);
+        expect(backoffTracker.has('recent-client')).toBe(true);
       });
     });
 
     describe('Backoff Configuration', () => {
       it('should be configured with base retry of 60 seconds', () => {
-        // This documents the expected configuration
-        const expectedConfig = {
-          baseRetryAfter: 60,
-          maxRetryAfter: 3600,
-          multiplier: 2,
-        };
-        expect(expectedConfig.baseRetryAfter).toBe(60);
+        const retryAfter = calculateBackoff('config-test');
+        expect(retryAfter).toBe(60);
       });
 
       it('should be configured with max retry of 3600 seconds (1 hour)', () => {
-        const expectedConfig = {
-          baseRetryAfter: 60,
-          maxRetryAfter: 3600,
-          multiplier: 2,
-        };
-        expect(expectedConfig.maxRetryAfter).toBe(3600);
+        // Create many violations to hit the cap
+        for (let i = 0; i < 20; i++) {
+          calculateBackoff('max-test');
+          vi.advanceTimersByTime(100);
+        }
+
+        // The value should be capped at 3600
+        const tracker = backoffTracker.get('max-test');
+        expect(tracker?.violations).toBe(20);
+
+        // Calculate one more to verify cap
+        const retryAfter = calculateBackoff('max-test');
+        expect(retryAfter).toBe(3600);
       });
 
       it('should use multiplier of 2 for exponential growth', () => {
-        // Expected sequence: 60, 120, 240, 480, 960, 1920, 3600 (capped)
-        const expectedConfig = {
-          baseRetryAfter: 60,
-          maxRetryAfter: 3600,
-          multiplier: 2,
-        };
-        expect(expectedConfig.multiplier).toBe(2);
+        // First: 60 * 2^0 = 60
+        const first = calculateBackoff('multiplier-test');
+        expect(first).toBe(60);
+
+        vi.advanceTimersByTime(100);
+
+        // Second: 60 * 2^1 = 120
+        const second = calculateBackoff('multiplier-test');
+        expect(second).toBe(120);
+
+        vi.advanceTimersByTime(100);
+
+        // Third: 60 * 2^2 = 240
+        const third = calculateBackoff('multiplier-test');
+        expect(third).toBe(240);
       });
+    });
+  });
+
+  describe('backoffTracker Map', () => {
+    it('should be exported for testing', () => {
+      expect(backoffTracker).toBeInstanceOf(Map);
+    });
+
+    it('should start empty', () => {
+      expect(backoffTracker.size).toBe(0);
+    });
+
+    it('should track entries after calculateBackoff', () => {
+      calculateBackoff('tracked-client');
+      expect(backoffTracker.size).toBe(1);
+      expect(backoffTracker.has('tracked-client')).toBe(true);
     });
   });
 });

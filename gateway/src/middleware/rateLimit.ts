@@ -43,12 +43,13 @@ import { AuthenticatedRequest } from './auth';
  * Exponential backoff tracker for rate-limited clients
  * Maps client key to { violations: number, lastViolation: timestamp }
  */
-const backoffTracker = new Map<string, { violations: number; lastViolation: number }>();
+export const backoffTracker = new Map<string, { violations: number; lastViolation: number }>();
 
 /**
  * Calculate exponential backoff retry-after time
+ * Exported for testing purposes
  */
-function calculateBackoff(key: string): number {
+export function calculateBackoff(key: string): number {
   const { baseRetryAfter, maxRetryAfter, multiplier } = config.rateLimit.backoff;
   const tracker = backoffTracker.get(key);
 

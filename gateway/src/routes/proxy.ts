@@ -170,13 +170,16 @@ export { ALLOWED_ROUTES };
  * Exported for testing
  */
 export function checkWhitelist(req: Request, res: Response, next: () => void): void {
-  const { method, path } = req;
+  const { method } = req;
+  // Use baseUrl + path to get full path regardless of router mounting
+  // When mounted at /api/v1, req.path is stripped but baseUrl preserves it
+  const fullPath = req.baseUrl + req.path;
   const authReq = req as AuthenticatedRequest;
 
-  if (!isAllowedRoute(method, path)) {
+  if (!isAllowedRoute(method, fullPath)) {
     logSecurityEvent('ROUTE_BLOCKED', {
       method,
-      path,
+      path: fullPath,
       ip: req.ip,
       userId: authReq.user?.userId,
       userAgent: req.headers['user-agent'],

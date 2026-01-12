@@ -395,6 +395,7 @@ describe('Proxy Routes', () => {
       mockReq = {
         method: 'GET',
         path: '/api/v1/wallets',
+        baseUrl: '', // Top-level routes have empty baseUrl
         ip: '127.0.0.1',
         headers: {
           'user-agent': 'test-agent',
@@ -410,6 +411,19 @@ describe('Proxy Routes', () => {
     it('should call next() for allowed routes', () => {
       mockReq.method = 'GET';
       mockReq.path = '/api/v1/wallets';
+      mockReq.baseUrl = '';
+
+      checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should call next() for routes mounted under /api/v1', () => {
+      // When mounted at /api/v1, path is stripped but baseUrl preserves it
+      mockReq.method = 'GET';
+      mockReq.path = '/wallets';
+      mockReq.baseUrl = '/api/v1';
 
       checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
 
@@ -420,6 +434,7 @@ describe('Proxy Routes', () => {
     it('should return 403 for blocked routes', () => {
       mockReq.method = 'GET';
       mockReq.path = '/api/v1/admin/users';
+      mockReq.baseUrl = '';
 
       checkWhitelist(mockReq as Request, mockRes as Response, mockNext);
 

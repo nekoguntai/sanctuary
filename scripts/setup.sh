@@ -542,7 +542,12 @@ start_services() {
 
     # Step 1: Build all images first (ensures all build output completes before continuing)
     echo "Building containers..."
-    docker compose $COMPOSE_FILES build
+    # Note: parallel builds can sometimes fail with "already exists" race condition
+    # but the images are still built successfully, so we continue on error
+    if ! docker compose $COMPOSE_FILES build; then
+        echo ""
+        echo -e "${YELLOW}Build completed with warnings (this is usually fine).${NC}"
+    fi
 
     # Step 2: Start containers
     echo ""

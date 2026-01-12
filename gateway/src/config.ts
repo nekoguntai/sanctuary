@@ -27,8 +27,9 @@
  * - `BACKEND_WS_URL` - Backend WebSocket URL (default: ws://backend:3000)
  *
  * ### Rate Limiting
- * - `RATE_LIMIT_WINDOW_MS` - Time window in ms (default: 60000)
+ * - `RATE_LIMIT_WINDOW_MS` - Time window in ms (default: 60000 = 1 minute)
  * - `RATE_LIMIT_MAX` - Max requests per window (default: 60)
+ * - Exponential backoff: retry-after doubles with each violation (60s → 120s → 240s → max 3600s)
  *
  * ### CORS
  * - `CORS_ALLOWED_ORIGINS` - Comma-separated list of allowed origins (default: all)
@@ -79,6 +80,12 @@ export const config = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10), // 1 minute
     maxRequests: parseInt(process.env.RATE_LIMIT_MAX || '60', 10), // 60 requests per minute
+    // Exponential backoff settings
+    backoff: {
+      baseRetryAfter: 60, // Start with 1 minute
+      maxRetryAfter: 3600, // Max 1 hour
+      multiplier: 2, // Double each time
+    },
   },
 
   // Firebase Cloud Messaging (Android)

@@ -1,0 +1,612 @@
+/**
+ * Notification Service Tests
+ *
+ * Tests for the WebSocket notification service that broadcasts
+ * blockchain events to connected clients.
+ */
+
+import { vi, Mock } from 'vitest';
+
+// Mock dependencies before imports
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+const mockBroadcast = vi.fn();
+const mockGetStats = vi.fn().mockReturnValue({ clients: 5, channelList: [] });
+
+vi.mock('../../../src/websocket/server', () => ({
+  getWebSocketServer: vi.fn(() => ({
+    broadcast: mockBroadcast,
+    getStats: mockGetStats,
+  })),
+}));
+
+const mockSubscribeAddress = vi.fn().mockResolvedValue('subscription-id');
+const mockGetAddressHistory = vi.fn().mockResolvedValue([]);
+const mockGetAddressBalance = vi.fn().mockResolvedValue({ confirmed: 100000, unconfirmed: 0 });
+
+vi.mock('../../../src/services/bitcoin/electrum', () => ({
+  getElectrumClient: vi.fn(() => ({
+    subscribeAddress: mockSubscribeAddress,
+    getAddressHistory: mockGetAddressHistory,
+    getAddressBalance: mockGetAddressBalance,
+  })),
+}));
+
+vi.mock('../../../src/models/prisma', () => ({
+  __esModule: true,
+  default: {
+    address: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    transaction: {
+      findFirst: vi.fn(),
+    },
+    wallet: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('../../../src/services/walletLogBuffer', () => ({
+  walletLogBuffer: {
+    add: vi.fn(),
+  },
+}));
+
+import prisma from '../../../src/models/prisma';
+import {
+  NotificationService,
+  notificationService,
+  getNotificationService,
+  walletLog,
+  type TransactionNotification,
+  type BalanceUpdate,
+  type BlockNotification,
+  type MempoolNotification,
+  type ModelDownloadProgress,
+} from '../../../src/websocket/notifications';
+import { walletLogBuffer } from '../../../src/services/walletLogBuffer';
+
+describe('NotificationService', () => {
+  let service: NotificationService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new NotificationService();
+  });
+
+  describe('start/stop', () => {
+    it('should start the notification service', async () => {
+      await service.start();
+      // Should complete without error
+    });
+
+    it('should not restart if already running', async () => {
+      await service.start();
+      await service.start(); // Second call should be no-op
+    });
+
+    it('should stop the notification service', async () => {
+      await service.start();
+      service.stop();
+      // Should complete without error
+    });
+  });
+
+  describe('unsubscribeWalletAddresses', () => {
+    it('should unsubscribe all addresses for a wallet', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([
+        { address: 'bc1q123' },
+        { address: 'bc1q456' },
+      ]);
+
+      await service.unsubscribeWalletAddresses('wallet-123');
+
+      expect(prisma.address.findMany).toHaveBeenCalledWith({
+        where: { walletId: 'wallet-123' },
+        select: { address: true },
+      });
+    });
+
+    it('should handle empty address list', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([]);
+
+      await service.unsubscribeWalletAddresses('wallet-123');
+      // Should complete without error
+    });
+
+    it('should handle database error', async () => {
+      (prisma.address.findMany as Mock).mockRejectedValue(new Error('DB error'));
+
+      await service.unsubscribeWalletAddresses('wallet-123');
+      // Should not throw, just log warning
+    });
+  });
+
+  describe('subscribeToAddress', () => {
+    it('should subscribe to address updates', async () => {
+      await service.subscribeToAddress('bc1q123', 'wallet-456');
+
+      expect(mockSubscribeAddress).toHaveBeenCalledWith('bc1q123');
+    });
+
+    it('should not subscribe again if already subscribed', async () => {
+      await service.subscribeToAddress('bc1q123', 'wallet-456');
+      await service.subscribeToAddress('bc1q123', 'wallet-456');
+
+      // Should only be called once
+      expect(mockSubscribeAddress).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle subscription error', async () => {
+      mockSubscribeAddress.mockRejectedValueOnce(new Error('Connection error'));
+
+      await service.subscribeToAddress('bc1q123', 'wallet-456');
+      // Should not throw, just log error
+    });
+  });
+
+  describe('subscribeWallet', () => {
+    it('should subscribe to all wallet addresses', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([
+        { address: 'bc1q123' },
+        { address: 'bc1q456' },
+        { address: 'bc1q789' },
+      ]);
+
+      await service.subscribeWallet('wallet-123');
+
+      expect(prisma.address.findMany).toHaveBeenCalledWith({
+        where: { walletId: 'wallet-123' },
+      });
+    });
+
+    it('should handle wallet with no addresses', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([]);
+
+      await service.subscribeWallet('empty-wallet');
+      // Should complete without error
+    });
+
+    it('should handle database error', async () => {
+      (prisma.address.findMany as Mock).mockRejectedValue(new Error('DB error'));
+
+      await service.subscribeWallet('wallet-123');
+      // Should not throw, just log error
+    });
+  });
+
+  describe('broadcastTransactionNotification', () => {
+    it('should broadcast transaction notification', () => {
+      const notification: TransactionNotification = {
+        txid: 'tx-abc',
+        walletId: 'wallet-123',
+        type: 'received',
+        amount: 100000,
+        confirmations: 0,
+        timestamp: new Date(),
+      };
+
+      service.broadcastTransactionNotification(notification);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'transaction',
+          walletId: 'wallet-123',
+          data: expect.objectContaining({
+            txid: 'tx-abc',
+            type: 'received',
+            amount: 100000,
+          }),
+        })
+      );
+    });
+
+    it('should include block height when provided', () => {
+      const notification: TransactionNotification = {
+        txid: 'tx-abc',
+        walletId: 'wallet-123',
+        type: 'received',
+        amount: 100000,
+        confirmations: 6,
+        blockHeight: 800000,
+        timestamp: new Date(),
+      };
+
+      service.broadcastTransactionNotification(notification);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            blockHeight: 800000,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastBalanceUpdate', () => {
+    it('should broadcast balance update', () => {
+      const update: BalanceUpdate = {
+        walletId: 'wallet-123',
+        balance: 500000,
+        unconfirmed: 25000,
+        previousBalance: 475000,
+        change: 25000,
+      };
+
+      service.broadcastBalanceUpdate(update);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'balance',
+          walletId: 'wallet-123',
+          data: expect.objectContaining({
+            balance: 500000,
+            unconfirmed: 25000,
+            change: 25000,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastBlockNotification', () => {
+    it('should broadcast block notification', () => {
+      const notification: BlockNotification = {
+        height: 800000,
+        hash: 'blockhash123',
+        timestamp: new Date(),
+        transactionCount: 2500,
+      };
+
+      service.broadcastBlockNotification(notification);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'block',
+          data: expect.objectContaining({
+            height: 800000,
+            hash: 'blockhash123',
+            transactionCount: 2500,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastNewBlock', () => {
+    it('should broadcast new block with minimal data', () => {
+      service.broadcastNewBlock({ height: 800001 });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'newBlock',
+          data: expect.objectContaining({
+            height: 800001,
+            timestamp: expect.any(Date),
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastMempoolNotification', () => {
+    it('should broadcast mempool notification', () => {
+      const notification: MempoolNotification = {
+        txid: 'mempool-tx-123',
+        fee: 5000,
+        size: 250,
+        feeRate: 20,
+      };
+
+      service.broadcastMempoolNotification(notification);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'mempool',
+          data: expect.objectContaining({
+            txid: 'mempool-tx-123',
+            fee: 5000,
+            size: 250,
+            feeRate: 20,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastModelDownloadProgress', () => {
+    it('should broadcast model download progress', () => {
+      const progress: ModelDownloadProgress = {
+        model: 'llama2',
+        status: 'downloading',
+        completed: 450000000,
+        total: 1000000000,
+        percent: 45,
+      };
+
+      service.broadcastModelDownloadProgress(progress);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'modelDownload',
+          data: expect.objectContaining({
+            model: 'llama2',
+            status: 'downloading',
+            percent: 45,
+          }),
+        })
+      );
+    });
+
+    it('should handle error status', () => {
+      const progress: ModelDownloadProgress = {
+        model: 'llama2',
+        status: 'error',
+        completed: 0,
+        total: 0,
+        percent: 0,
+        error: 'Download failed',
+      };
+
+      service.broadcastModelDownloadProgress(progress);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'error',
+            error: 'Download failed',
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastConfirmationUpdate', () => {
+    it('should broadcast confirmation update', () => {
+      service.broadcastConfirmationUpdate('wallet-123', {
+        txid: 'tx-abc',
+        confirmations: 6,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'confirmation',
+          walletId: 'wallet-123',
+          data: expect.objectContaining({
+            txid: 'tx-abc',
+            confirmations: 6,
+          }),
+        })
+      );
+    });
+
+    it('should include previous confirmations when provided', () => {
+      service.broadcastConfirmationUpdate('wallet-123', {
+        txid: 'tx-abc',
+        confirmations: 1,
+        previousConfirmations: 0,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            previousConfirmations: 0,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastSyncStatus', () => {
+    it('should broadcast sync started status', () => {
+      service.broadcastSyncStatus('wallet-123', {
+        inProgress: true,
+        status: 'started',
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sync',
+          walletId: 'wallet-123',
+          data: expect.objectContaining({
+            inProgress: true,
+            status: 'started',
+            walletId: 'wallet-123',
+          }),
+        })
+      );
+    });
+
+    it('should broadcast sync completed status', () => {
+      service.broadcastSyncStatus('wallet-123', {
+        inProgress: false,
+        status: 'completed',
+        lastSyncedAt: new Date(),
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            inProgress: false,
+            status: 'completed',
+          }),
+        })
+      );
+    });
+
+    it('should broadcast retry status with all retry info', () => {
+      service.broadcastSyncStatus('wallet-123', {
+        inProgress: true,
+        status: 'retrying',
+        retryCount: 2,
+        maxRetries: 5,
+        retryingIn: 30000,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            retryCount: 2,
+            maxRetries: 5,
+            retryingIn: 30000,
+          }),
+        })
+      );
+    });
+
+    it('should broadcast error status', () => {
+      service.broadcastSyncStatus('wallet-123', {
+        inProgress: false,
+        error: 'Connection failed',
+        retriesExhausted: true,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            error: 'Connection failed',
+            retriesExhausted: true,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('broadcastWalletLog', () => {
+    it('should broadcast wallet log entry', () => {
+      service.broadcastWalletLog('wallet-123', {
+        level: 'info',
+        module: 'sync',
+        message: 'Syncing started',
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'log',
+          walletId: 'wallet-123',
+          data: expect.objectContaining({
+            id: expect.any(String),
+            timestamp: expect.any(String),
+            level: 'info',
+            module: 'sync',
+            message: 'Syncing started',
+          }),
+        })
+      );
+    });
+
+    it('should store log in buffer', () => {
+      service.broadcastWalletLog('wallet-123', {
+        level: 'info',
+        module: 'sync',
+        message: 'Test message',
+      });
+
+      expect(walletLogBuffer.add).toHaveBeenCalledWith(
+        'wallet-123',
+        expect.objectContaining({
+          level: 'info',
+          module: 'sync',
+          message: 'Test message',
+        })
+      );
+    });
+
+    it('should include details when provided', () => {
+      service.broadcastWalletLog('wallet-123', {
+        level: 'error',
+        module: 'electrum',
+        message: 'Connection failed',
+        details: { host: 'electrum.example.com', error: 'ECONNREFUSED' },
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            details: {
+              host: 'electrum.example.com',
+              error: 'ECONNREFUSED',
+            },
+          }),
+        })
+      );
+    });
+  });
+});
+
+describe('Singleton exports', () => {
+  it('should export singleton notificationService', () => {
+    expect(notificationService).toBeInstanceOf(NotificationService);
+  });
+
+  it('should return same instance from getNotificationService', () => {
+    expect(getNotificationService()).toBe(notificationService);
+  });
+});
+
+describe('walletLog helper', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should send log entry via notification service', () => {
+    walletLog('wallet-123', 'info', 'sync', 'Test log message');
+
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'log',
+        walletId: 'wallet-123',
+        data: expect.objectContaining({
+          level: 'info',
+          module: 'sync',
+          message: 'Test log message',
+        }),
+      })
+    );
+  });
+
+  it('should include details when provided', () => {
+    walletLog('wallet-123', 'error', 'bitcoin', 'Failed to broadcast', {
+      txid: 'tx-abc',
+      error: 'Insufficient fee',
+    });
+
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          details: {
+            txid: 'tx-abc',
+            error: 'Insufficient fee',
+          },
+        }),
+      })
+    );
+  });
+
+  it('should handle all log levels', () => {
+    const levels = ['debug', 'info', 'warn', 'error'] as const;
+
+    for (const level of levels) {
+      vi.clearAllMocks();
+      walletLog('wallet-123', level, 'test', `${level} message`);
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            level,
+          }),
+        })
+      );
+    }
+  });
+});

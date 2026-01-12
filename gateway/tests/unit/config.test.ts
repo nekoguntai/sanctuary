@@ -199,7 +199,7 @@ describe('Gateway Config', () => {
     });
 
     describe('rate limit config', () => {
-      it('should use default window of 60000ms', async () => {
+      it('should use default window of 60000ms (1 minute)', async () => {
         delete process.env.RATE_LIMIT_WINDOW_MS;
         const { config } = await import('../../src/config');
         expect(config.rateLimit.windowMs).toBe(60000);
@@ -221,6 +221,14 @@ describe('Gateway Config', () => {
         process.env.RATE_LIMIT_MAX = '100';
         const { config } = await import('../../src/config');
         expect(config.rateLimit.maxRequests).toBe(100);
+      });
+
+      it('should have exponential backoff config', async () => {
+        const { config } = await import('../../src/config');
+        expect(config.rateLimit.backoff).toBeDefined();
+        expect(config.rateLimit.backoff.baseRetryAfter).toBe(60);
+        expect(config.rateLimit.backoff.maxRetryAfter).toBe(3600);
+        expect(config.rateLimit.backoff.multiplier).toBe(2);
       });
     });
 

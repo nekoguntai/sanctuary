@@ -10,7 +10,7 @@ vi.unmock('../../../src/utils/logger');
 vi.unmock('../../../src/utils/requestContext');
 vi.unmock('../../../src/utils/redact');
 
-import { createLogger, setLogLevel, getConfiguredLogLevel, LogLevel } from '../../../src/utils/logger';
+import { createLogger, setLogLevel, getConfiguredLogLevel, LogLevel, extractError, createTimer } from '../../../src/utils/logger';
 
 // Capture console.log output for testing
 const originalConsoleLog = console.log;
@@ -301,5 +301,162 @@ describe('Logger', () => {
 
       expect(capturedLogs[0]).toContain('[Circular]');
     });
+  });
+});
+
+describe('extractError', () => {
+  it('should extract error message from Error object', () => {
+    const error = new Error('Something went wrong');
+    const result = extractError(error);
+
+    expect(result.error).toBe('Something went wrong');
+  });
+
+  it('should extract error name for non-standard errors', () => {
+    const error = new TypeError('Invalid type');
+    const result = extractError(error);
+
+    expect(result.error).toBe('Invalid type');
+    expect(result.errorName).toBe('TypeError');
+  });
+
+  it('should not include errorName for generic Error', () => {
+    const error = new Error('Generic error');
+    const result = extractError(error);
+
+    expect(result.error).toBe('Generic error');
+    expect(result.errorName).toBeUndefined();
+  });
+
+  it('should handle string errors', () => {
+    const result = extractError('string error');
+
+    expect(result.error).toBe('string error');
+  });
+
+  it('should handle null errors', () => {
+    const result = extractError(null);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle undefined errors', () => {
+    const result = extractError(undefined);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle object errors', () => {
+    const result = extractError({ message: 'object error' });
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle RangeError', () => {
+    const error = new RangeError('Out of range');
+    const result = extractError(error);
+
+    expect(result.error).toBe('Out of range');
+    expect(result.errorName).toBe('RangeError');
+  });
+});
+
+describe('createTimer', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should measure elapsed time in milliseconds', () => {
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(100);
+
+    expect(timer.elapsed()).toBe(100);
+  });
+
+  it('should format elapsed time in milliseconds', () => {
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(500);
+
+    expect(timer.elapsedFormatted()).toBe('500ms');
+  });
+
+  it('should format elapsed time in seconds when >= 1000ms', () => {
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(1500);
+
+    expect(timer.elapsedFormatted()).toBe('1.50s');
+  });
+
+  it('should return elapsed time on end()', () => {
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(200);
+
+    const duration = timer.end();
+    expect(duration).toBe(200);
+  });
+
+  it('should log completion when operation name and logger provided', () => {
+    const log = createLogger('TEST');
+    const timer = createTimer('test-operation', log);
+
+    vi.advanceTimersByTime(300);
+    timer.end({ extra: 'context' });
+
+    expect(capturedLogs[capturedLogs.length - 1]).toContain('test-operation completed');
+    expect(capturedLogs[capturedLogs.length - 1]).toContain('duration');
+    expect(capturedLogs[capturedLogs.length - 1]).toContain('extra=context');
+  });
+
+  it('should not log when no operation name provided', () => {
+    const initialLogCount = capturedLogs.length;
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(100);
+    timer.end();
+
+    // No additional logs should be added
+    expect(capturedLogs.length).toBe(initialLogCount);
+  });
+
+  it('should not log when no logger provided', () => {
+    const initialLogCount = capturedLogs.length;
+    const timer = createTimer('operation-name');
+
+    vi.advanceTimersByTime(100);
+    timer.end();
+
+    // No additional logs should be added
+    expect(capturedLogs.length).toBe(initialLogCount);
+  });
+
+  it('should include durationMs in logged context', () => {
+    const log = createLogger('TEST');
+    const timer = createTimer('timed-op', log);
+
+    vi.advanceTimersByTime(250);
+    timer.end();
+
+    expect(capturedLogs[capturedLogs.length - 1]).toContain('durationMs=250');
+  });
+
+  it('should handle end() being called multiple times', () => {
+    const timer = createTimer();
+
+    vi.advanceTimersByTime(100);
+    const first = timer.end();
+
+    vi.advanceTimersByTime(100);
+    const second = timer.end();
+
+    expect(first).toBe(100);
+    expect(second).toBe(200);
   });
 });

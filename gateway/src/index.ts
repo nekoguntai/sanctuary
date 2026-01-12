@@ -20,7 +20,7 @@ import fs from 'fs';
 import { config, validateConfig } from './config';
 import { createLogger } from './utils/logger';
 import { requestLogger } from './middleware/requestLogger';
-import { authRateLimiter } from './middleware/rateLimit';
+import { authRateLimiter, cleanupBackoffTracker } from './middleware/rateLimit';
 import proxyRoutes from './routes/proxy';
 import { initializePushServices, shutdownPushServices } from './services/push';
 import { startBackendEvents, stopBackendEvents } from './services/backendEvents';
@@ -192,6 +192,9 @@ function loadTlsCertificates(): https.ServerOptions | null {
 let server: http.Server | https.Server;
 const tlsOptions = loadTlsCertificates();
 
+// Periodic cleanup interval for rate limit backoff tracker
+let backoffCleanupInterval: NodeJS.Timeout | null = null;
+
 if (tlsOptions) {
   // HTTPS server
   server = https.createServer(tlsOptions, app);
@@ -206,6 +209,9 @@ if (tlsOptions) {
 
     // Connect to backend for events
     startBackendEvents();
+
+    // Start periodic cleanup of rate limit backoff tracker (every 5 minutes)
+    backoffCleanupInterval = setInterval(cleanupBackoffTracker, 5 * 60 * 1000);
   });
 } else {
   // HTTP server (development or TLS disabled)
@@ -222,6 +228,9 @@ if (tlsOptions) {
 
     // Connect to backend for events
     startBackendEvents();
+
+    // Start periodic cleanup of rate limit backoff tracker (every 5 minutes)
+    backoffCleanupInterval = setInterval(cleanupBackoffTracker, 5 * 60 * 1000);
   });
 }
 
@@ -235,6 +244,11 @@ function shutdown(signal: string): void {
     // Cleanup services
     stopBackendEvents();
     shutdownPushServices();
+
+    // Clear backoff cleanup interval
+    if (backoffCleanupInterval) {
+      clearInterval(backoffCleanupInterval);
+    }
 
     log.info('Gateway shutdown complete');
     process.exit(0);

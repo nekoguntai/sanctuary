@@ -324,12 +324,8 @@ else
 fi
 echo
 
-echo -e "${GREEN}Setup complete!${NC}"
-echo
-echo -e "${BLUE}Your .env file has been created with secure random secrets.${NC}"
-echo
-
 # Ask to start services
+STARTED=false
 if [ -t 0 ]; then
     read -p "Start Sanctuary now? [Y/n] " -n 1 -r
     echo
@@ -340,26 +336,54 @@ if [ -t 0 ]; then
         echo ""
         cd "$PROJECT_DIR"
         docker compose up -d --build
-        echo ""
-        echo -e "${GREEN}Sanctuary is starting!${NC}"
-        echo ""
-        echo "  Open: https://localhost:8443"
-        echo "  Default login: admin / sanctuary"
-        echo ""
-        echo -e "${YELLOW}Accept the self-signed certificate warning in your browser.${NC}"
-    else
-        echo "To start later, run:"
-        echo "  docker compose up -d"
-        echo ""
-        echo "Then open https://localhost:8443"
+        STARTED=true
     fi
-else
-    echo "To start Sanctuary, run:"
-    echo "  docker compose up -d"
-    echo ""
-    echo "Then open https://localhost:8443"
 fi
 echo
+
+# ============================================
+# Setup Complete Banner
+# ============================================
+echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+if [ "$STARTED" = true ]; then
+    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete! Sanctuary is starting.${NC}      ${BLUE}║${NC}"
+else
+    echo -e "${BLUE}║${NC}              ${GREEN}Setup complete!${NC}                              ${BLUE}║${NC}"
+fi
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  Open your browser:                                       ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    ${GREEN}https://localhost:8443${NC}                                ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  ${YELLOW}Accept the self-signed certificate warning${NC}              ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  ${YELLOW}(click Advanced → Proceed)${NC}                               ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  Default login:                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    Username: ${GREEN}admin${NC}                                        ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    Password: ${GREEN}sanctuary${NC}                                    ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  ${YELLOW}You'll be asked to change the password on first login${NC}   ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}╠═══════════════════════════════════════════════════════════╣${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  Useful commands:                                         ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    View logs:    docker compose logs -f                   ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    Stop:         docker compose down                      ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}    Restart:      docker compose restart                   ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
+echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+echo "Common commands:"
+echo "  ${GREEN}./start.sh${NC}           Start Sanctuary"
+echo "  ${GREEN}./start.sh --stop${NC}    Stop Sanctuary"
+echo "  ${GREEN}./start.sh --logs${NC}    View logs"
+echo "  ${GREEN}./start.sh --rebuild${NC} Rebuild after code changes"
+echo ""
 
 # ============================================
 # Critical: Backup Reminder

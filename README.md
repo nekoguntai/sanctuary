@@ -404,19 +404,16 @@ If you prefer to run the commands yourself:
 git clone https://github.com/nekoguntai/sanctuary.git
 cd sanctuary
 
-# 2. Run setup script (generates all required secrets)
+# 2. Run setup script (generates secrets, SSL certs, builds and starts services)
 ./scripts/setup.sh
 
-# 3. Generate SSL certificates
-cd docker/nginx/ssl && chmod +x generate-certs.sh && ./generate-certs.sh localhost && cd ../../..
-
-# 4. Start Sanctuary
-docker compose up -d
-
-# 5. Open https://localhost:8443
+# 3. Open https://localhost:8443
 ```
 
-The setup script automatically generates secure random values for:
+The setup script automatically:
+- Generates SSL certificates for HTTPS
+- Builds and starts all Docker containers
+- Creates secure random values for:
 - `JWT_SECRET` - Authentication tokens
 - `ENCRYPTION_KEY` - Encrypts sensitive data (node passwords, 2FA secrets)
 - `ENCRYPTION_SALT` - Salt for key derivation (required in production)
@@ -442,8 +439,7 @@ The setup script automatically generates secure random values for:
    ```powershell
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   wsl ./scripts/setup.sh  # Generates secure secrets
-   docker compose up -d
+   wsl ./scripts/setup.sh  # Generates secrets, SSL certs, builds and starts
    ```
 
 #### Option 2: WSL 2 + Docker (No Docker Desktop)
@@ -467,8 +463,7 @@ For users who prefer not to use Docker Desktop:
    ```bash
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   ./scripts/setup.sh  # Generates secure secrets
-   docker compose up -d
+   ./scripts/setup.sh  # Generates secrets, SSL certs, builds and starts
    ```
 
 > **Note:** All commands after step 1 must be run in the Ubuntu/Linux terminal (WSL), not in PowerShell or Command Prompt.
@@ -488,8 +483,7 @@ For users who prefer not to use Docker Desktop:
    ```bash
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   ./scripts/setup.sh  # Generates secure secrets
-   docker compose up -d
+   ./scripts/setup.sh  # Generates secrets, SSL certs, builds and starts
    ```
 
 #### Option 2: Colima (Lightweight Alternative)
@@ -510,8 +504,7 @@ For users who prefer a lighter-weight solution:
    ```bash
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   ./scripts/setup.sh  # Generates secure secrets
-   docker compose up -d
+   ./scripts/setup.sh  # Generates secrets, SSL certs, builds and starts
    ```
 
 ---
@@ -546,8 +539,7 @@ For users who prefer a lighter-weight solution:
    ```bash
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   ./scripts/setup.sh  # Generates secure secrets
-   docker compose up -d
+   ./scripts/setup.sh  # Generates secrets, SSL certs, builds and starts
    ```
 
 #### Option 2: Podman (Rootless Alternative)
@@ -567,8 +559,8 @@ For systems where you can't or don't want to run Docker:
    ```bash
    git clone https://github.com/nekoguntai/sanctuary.git
    cd sanctuary
-   ./scripts/setup.sh  # Generates secure secrets
-   podman-compose up -d
+   ./scripts/setup.sh --no-start  # Generates secrets and SSL certs (but don't start with docker)
+   podman-compose up -d           # Use podman-compose instead
    ```
 
 ---

@@ -657,29 +657,16 @@ show_completion_banner() {
     echo -e "${GREEN}│${NC}                       ${GREEN}Next Steps${NC}                           ${GREEN}│${NC}"
     echo -e "${GREEN}├─────────────────────────────────────────────────────────────┤${NC}"
 
-    local step=1
-    if [ "$STARTED" != true ]; then
-        echo -e "${GREEN}│${NC}  ${step}. Run ${GREEN}./start.sh${NC} to start Sanctuary                    ${GREEN}│${NC}"
-        step=$((step + 1))
-    fi
-
     if [ "$ssl_exists" = true ]; then
-        echo -e "${GREEN}│${NC}  ${step}. Open ${GREEN}https://localhost:${https_port}${NC} in your browser           ${GREEN}│${NC}"
+        echo -e "${GREEN}│${NC}  1. Open ${GREEN}https://localhost:${https_port}${NC} in your browser           ${GREEN}│${NC}"
     else
-        echo -e "${GREEN}│${NC}  ${step}. Open ${GREEN}http://localhost:${HTTP_PORT:-8080}${NC} in your browser            ${GREEN}│${NC}"
+        echo -e "${GREEN}│${NC}  1. Open ${GREEN}http://localhost:${HTTP_PORT:-8080}${NC} in your browser            ${GREEN}│${NC}"
     fi
-    step=$((step + 1))
 
-    echo -e "${GREEN}│${NC}  ${step}. Log in with ${GREEN}admin${NC} / ${GREEN}sanctuary${NC}                        ${GREEN}│${NC}"
-    step=$((step + 1))
-
-    echo -e "${GREEN}│${NC}  ${step}. Change your password when prompted                      ${GREEN}│${NC}"
-    step=$((step + 1))
-
-    echo -e "${GREEN}│${NC}  ${step}. Connect to a Bitcoin node (Settings → Electrum)         ${GREEN}│${NC}"
-    step=$((step + 1))
-
-    echo -e "${GREEN}│${NC}  ${step}. ${YELLOW}Back up your encryption keys${NC} (see below)                ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  2. Log in with ${GREEN}admin${NC} / ${GREEN}sanctuary${NC}                        ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  3. Change your password when prompted                      ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  4. Connect to a Bitcoin node (Settings → Electrum)         ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC}  5. ${YELLOW}Back up your encryption keys${NC} (see below)                ${GREEN}│${NC}"
 
     echo -e "${GREEN}└─────────────────────────────────────────────────────────────┘${NC}"
     echo ""

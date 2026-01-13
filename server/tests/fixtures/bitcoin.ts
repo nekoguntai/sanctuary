@@ -63,7 +63,8 @@ export const mainnetAddresses = {
 
 export const testXpubs = {
   // Testnet xpubs (tpub format)
-  // Derived from mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  // Derived from BIP-39 test mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  // These are official BIP test vectors - see https://github.com/bitcoin/bips
   testnet: {
     // BIP84 (Native SegWit) - m/84'/1'/0'
     bip84: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
@@ -74,13 +75,14 @@ export const testXpubs = {
   },
 
   // Mainnet xpubs
-  // Derived from standard test mnemonic
+  // Derived from BIP-39 test mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  // These are official BIP test vectors - see https://github.com/bitcoin/bips
   mainnet: {
-    // BIP84 (zpub) - m/84'/0'/0' - converted from xpub below
-    bip84: 'zpub6qUQGY8YyN3ZxYEgf8J6KCQBqQAbdSWaT9RK54L5FWTTh8na8NkCkZpYHnWt7zEwNhqd6p9Utq562cSZsqGqFE87NNsUKnyZeJ5KvbhfC8E',
-    // BIP49 (ypub) - m/49'/0'/0'
-    bip49: 'ypub6Ww3ibxVfGzLtJR4F9SRBicspAfvmvw54yern9Q6qZWFC9T6FYA34K57La5Sgs8pXuyvpDfEHX5KNZRiZRukUWaVPyL4NxA69sEAqdoV8ve',
-    // BIP44 (xpub) - m/44'/0'/0'
+    // BIP84 (zpub) - m/84'/0'/0' - First address: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+    bip84: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs',
+    // BIP49 (ypub) - m/49'/0'/0' - First address: 37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf
+    bip49: 'ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP',
+    // BIP44 (xpub) - m/44'/0'/0' - First address: 1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA
     bip44: 'xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj',
   },
 };

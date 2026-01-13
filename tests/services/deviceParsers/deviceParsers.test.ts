@@ -3,6 +3,16 @@
  *
  * Comprehensive tests for all device import format parsers.
  * Tests cover format detection, parsing accuracy, and priority handling.
+ *
+ * Test xpub values are from the BIP-39 test mnemonic:
+ * "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+ *
+ * Single-sig test vectors (official BIP test vectors):
+ * - BIP-84 (zpub): zpub6rFR7y4Q2AijB...AGutZYs - first address: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+ * - BIP-49 (ypub): ypub6Ww3ibxVfGzLr...663zsP - first address: 37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf
+ * - BIP-44 (xpub): xpub6BosfCnifzxcF...T9nMdj - first address: 1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA
+ *
+ * Multisig test values (Zpub/Ypub) are test-only placeholder values for format parsing tests.
  */
 
 import { parseDeviceJson, parseDeviceData, deviceParserRegistry } from '../../../services/deviceParsers';
@@ -21,7 +31,7 @@ describe('Device Parser Registry', () => {
       xpub: 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8',
       bip84: {
         xpub: 'xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XYuvXUGvJsQAq1GCqUFQeMLeJfFpWv3GnY2GnBGn4BwxJDy6EqgCdmR2',
-        _pub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y',
+        _pub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs',
         deriv: "m/84'/0'/0'",
         first: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu',
         name: 'p2wpkh',
@@ -43,7 +53,7 @@ describe('Device Parser Registry', () => {
 
     it('parses Coldcard nested format with BIP84', () => {
       const result = coldcardNestedParser.parse(coldcardNestedJson);
-      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y');
+      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs');
       expect(result.fingerprint).toBe('FA79B6AA');
       expect(result.derivationPath).toBe("m/84'/0'/0'");
     });
@@ -82,7 +92,7 @@ describe('Device Parser Registry', () => {
         expect(bip84Account).toBeDefined();
         expect(bip84Account?.purpose).toBe('single_sig');
         expect(bip84Account?.scriptType).toBe('native_segwit');
-        expect(bip84Account?.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y');
+        expect(bip84Account?.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs');
 
         const bip49Account = result.accounts?.find(a => a.derivationPath === "m/49'/0'/0'");
         expect(bip49Account).toBeDefined();
@@ -382,7 +392,7 @@ describe('Device Parser Registry', () => {
   describe('BitBox Format Parser', () => {
     const bitboxJson = {
       keypath: "m/84'/0'/0'",
-      xpub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y',
+      xpub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs',
     };
 
     it('detects BitBox format', () => {
@@ -393,7 +403,7 @@ describe('Device Parser Registry', () => {
 
     it('parses BitBox format', () => {
       const result = bitboxParser.parse(bitboxJson);
-      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y');
+      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs');
       expect(result.derivationPath).toBe("m/84'/0'/0'");
     });
   });
@@ -423,9 +433,9 @@ describe('Device Parser Registry', () => {
 
   describe('Generic JSON Parser', () => {
     it('parses JSON with various xpub field names', () => {
-      const zpubJson = { zpub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y' };
+      const zpubJson = { zpub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs' };
       const result = genericJsonParser.parse(zpubJson);
-      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y');
+      expect(result.xpub).toBe('zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs');
     });
 
     it('parses JSON with various fingerprint field names', () => {
@@ -455,7 +465,7 @@ describe('Device Parser Registry', () => {
     });
 
     it('parses zpub, ypub, and other prefixes', () => {
-      const zpub = 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y';
+      const zpub = 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs';
       const result = plainXpubParser.parse(zpub);
       expect(result.xpub).toBe(zpub);
     });
@@ -534,7 +544,7 @@ describe('Device Parser Registry', () => {
       const mixedFormat = {
         xfp: 'FA79B6AA',
         bip84: {
-          _pub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz7C2pUvCBz5y',
+          _pub: 'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs',
           deriv: "m/84'/0'/0'",
         },
         p2wsh: 'Zpub74mMqDrTGjmahLnCEpF18LoRMJCp8Wu1x6dJXw8rfT2vfCHKn8f8uxXJQgAKmLB4vZKT7EfXwMrnk9z1wJZBgUPbK1rhMjYFRvG8cBb2HA1',

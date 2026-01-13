@@ -5,10 +5,12 @@
 import { config } from '../config';
 
 // Import shared types from consolidated module
-import { LogLevel, LOG_LEVEL_MAP, Logger } from '../../../shared/types/logger';
+import { LogLevel, LOG_LEVEL_MAP } from '../../../shared/types/logger';
+import type { Logger } from '../../../shared/types/logger';
 
 // Re-export for backward compatibility
-export { LogLevel, Logger };
+export { LogLevel };
+export type { Logger };
 
 // Get current log level from config
 const currentLevel = LOG_LEVEL_MAP[config.logLevel] ?? LogLevel.INFO;

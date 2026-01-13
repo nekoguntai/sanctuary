@@ -76,10 +76,12 @@ import { requestContext } from './requestContext';
 import { safeError, redactObject } from './redact';
 
 // Import shared types from consolidated module
-import { LogLevel, LOG_LEVEL_MAP, Logger } from '../../../shared/types/logger';
+import { LogLevel, LOG_LEVEL_MAP } from '../../../shared/types/logger';
+import type { Logger } from '../../../shared/types/logger';
 
 // Re-export shared types for backward compatibility
-export { LogLevel, Logger };
+export { LogLevel };
+export type { Logger };
 
 // Get log level from environment, default to INFO
 const getLogLevel = (): LogLevel => {

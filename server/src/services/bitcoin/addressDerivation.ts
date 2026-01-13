@@ -10,6 +10,9 @@ import * as ecc from 'tiny-secp256k1';
 import bs58check from 'bs58check';
 import { getErrorMessage } from '../../utils/errors';
 
+// Initialize ECC library for Taproot/Schnorr support
+bitcoin.initEccLib(ecc);
+
 const bip32 = BIP32Factory(ecc);
 
 /**
@@ -214,19 +217,35 @@ function parseMultisigDescriptor(
   }
   const quorum = parseInt(quorumMatch[1], 10);
 
-  // Extract all key expressions: [fingerprint/path]xpub/derivation
-  // Note: fingerprint can be uppercase or lowercase hex
-  const keyRegex = /\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*]+))?/g;
   const keys: MultisigKeyInfo[] = [];
 
+  // First try to match full format with fingerprint: [fingerprint/path]xpub/derivation
+  // Note: fingerprint can be uppercase or lowercase hex
+  const fullKeyRegex = /\[([a-fA-F0-9]{8})\/([^\]]+)\]([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*<>;]+))?/g;
+
   let match;
-  while ((match = keyRegex.exec(descriptor)) !== null) {
+  while ((match = fullKeyRegex.exec(descriptor)) !== null) {
     keys.push({
       fingerprint: match[1],
       accountPath: match[2],
       xpub: match[3],
       derivationPath: match[4] || '0/*',
     });
+  }
+
+  // If no keys found with full format, try bare xpub format: xpub/derivation
+  // This is simpler format without fingerprint wrapper
+  if (keys.length === 0) {
+    const bareKeyRegex = /([xyztuvYZTUV]pub[a-zA-Z0-9]+)(?:\/([0-9/*<>;]+))?/g;
+
+    while ((match = bareKeyRegex.exec(descriptor)) !== null) {
+      keys.push({
+        fingerprint: '00000000', // Unknown fingerprint
+        accountPath: "m/unknown'",
+        xpub: match[1],
+        derivationPath: match[2] || '0/*',
+      });
+    }
   }
 
   if (keys.length === 0) {

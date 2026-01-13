@@ -33,6 +33,20 @@ export {
 } from './bitcoin';
 
 // ========================================
+// VERIFIED ADDRESS VECTORS
+// ========================================
+export {
+  VERIFIED_SINGLESIG_VECTORS,
+  VERIFIED_MULTISIG_VECTORS,
+  TEST_MNEMONIC,
+  type VerifiedSingleSigVector,
+  type VerifiedMultisigVector,
+  type ScriptType,
+  type MultisigScriptType,
+  type Network,
+} from './verified-address-vectors';
+
+// ========================================
 // DATA GENERATORS
 // ========================================
 // Re-export from repository setup for consistency

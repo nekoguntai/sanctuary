@@ -1,0 +1,18 @@
+{
+  "name": "sanctuary-psbt-verification",
+  "version": "1.0.0",
+  "description": "PSBT cross-implementation verification for Sanctuary",
+  "type": "module",
+  "scripts": {
+    "generate": "tsx generate-vectors.ts",
+    "verify": "tsx verify.ts"
+  },
+  "dependencies": {
+    "bitcoinjs-lib": "^6.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

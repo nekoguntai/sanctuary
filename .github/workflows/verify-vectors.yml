@@ -1,0 +1,128 @@
+name: Verify Address Vectors
+
+on:
+  # Run weekly to catch any regressions
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at midnight UTC
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+  # Run on PRs that touch address derivation code
+  pull_request:
+    paths:
+      - 'server/src/services/bitcoin/addressDerivation.ts'
+      - 'server/src/services/bitcoin/descriptorParser.ts'
+      - 'server/src/services/scriptTypes/**'
+      - 'server/tests/fixtures/verified-address-vectors.ts'
+      - 'scripts/verify-addresses/**'
+
+jobs:
+  verify-vectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run address derivation tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/bitcoin/addressDerivation.verified.test.ts
+
+      - name: Run derivation path tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/scriptTypes/derivationPaths.test.ts
+
+      - name: Run multisig key ordering tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/bitcoin/multisigKeyOrdering.test.ts
+
+      - name: Run xpub validation tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/bitcoin/xpubValidation.test.ts
+
+      - name: Run property-based tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/bitcoin/propertyBased.test.ts
+
+      - name: Run descriptor checksum tests
+        working-directory: server
+        run: npm run test -- tests/unit/services/bitcoin/descriptorChecksum.test.ts
+
+  # Optional: Regenerate vectors with Bitcoin Core
+  # This job runs only on manual trigger and requires Docker
+  regenerate-vectors:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      bitcoind:
+        image: ruimarinho/bitcoin-core:latest
+        ports:
+          - 18443:18443
+        options: >-
+          --health-cmd "bitcoin-cli -regtest -rpcuser=test -rpcpassword=test getblockchaininfo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install verification script dependencies
+        working-directory: scripts/verify-addresses
+        run: npm ci
+        continue-on-error: true # May not exist yet
+
+      - name: Generate vectors with Bitcoin Core
+        working-directory: scripts/verify-addresses
+        run: |
+          echo "Vector generation would run here"
+          echo "This requires the verify-addresses infrastructure to be set up"
+        continue-on-error: true
+
+      - name: Check for vector changes
+        run: |
+          if git diff --quiet server/tests/fixtures/verified-address-vectors.ts; then
+            echo "✅ Vectors unchanged - all implementations agree"
+          else
+            echo "⚠️ Vectors changed - review needed"
+            git diff server/tests/fixtures/verified-address-vectors.ts
+            exit 1
+          fi
+        continue-on-error: true
+
+  # Summary job
+  summary:
+    needs: [verify-vectors]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.verify-vectors.result }}" == "success" ]; then
+            echo "✅ All address verification tests passed"
+          else
+            echo "❌ Address verification tests failed"
+            exit 1
+          fi

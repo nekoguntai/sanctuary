@@ -7,7 +7,14 @@
  *
  * Focus: Bitcoin address derivation - the most critical code path where bugs = lost funds
  *
- * Usage:
+ * KNOWN ISSUE: Stryker vitest-runner 8.x has compatibility issues with Vitest 4.x.
+ * When this is fixed upstream, mutation testing will work automatically.
+ * Track: https://github.com/stryker-mutator/stryker-js/issues
+ *
+ * Alternative: Use @stryker-mutator/vitest-runner@latest when available, or
+ * wait for Stryker 9.x release which supports Vitest 4.x.
+ *
+ * Usage (when working):
  *   npm run test:mutation           # Run full mutation testing
  *   npm run test:mutation -- --incremental  # Run incrementally (faster for CI)
  */

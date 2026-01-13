@@ -36,3 +36,7 @@ Thumbs.db
 coverage/
 junit.xml
 *.lcov
+
+# Stryker mutation testing cache
+.stryker-cache/
+reports/mutation/

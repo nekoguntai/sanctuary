@@ -28,6 +28,7 @@
     "test:security": "vitest run --testNamePattern='Authentication|Encryption|Two-Factor|Password'",
     "test:fast": "vitest run --changed",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
+    "test:mutation": "stryker run",
     "check:prisma-imports": "tsx scripts/check-prisma-imports.ts",
     "prepare": "cd .. && husky server/.husky",
     "prisma:generate": "prisma generate",
@@ -80,6 +81,7 @@
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
     "@stryker-mutator/core": "^8.7.1",
+    "@stryker-mutator/typescript-checker": "^8.7.1",
     "@stryker-mutator/vitest-runner": "^8.7.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",

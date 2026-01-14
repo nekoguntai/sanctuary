@@ -26,6 +26,7 @@ router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) 
         id: true,
         username: true,
         email: true,
+        emailVerified: true,
         isAdmin: true,
         createdAt: true,
         updatedAt: true,
@@ -51,11 +52,11 @@ router.post('/', authenticate, requireAdmin, async (req: Request, res: Response)
   try {
     const { username, password, email, isAdmin } = req.body;
 
-    // Validation
-    if (!username || !password) {
+    // Validation - email is now required for all users
+    if (!username || !password || !email) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Username and password are required',
+        message: 'Username, password, and email are required',
       });
     }
 
@@ -63,6 +64,15 @@ router.post('/', authenticate, requireAdmin, async (req: Request, res: Response)
       return res.status(400).json({
         error: 'Bad Request',
         message: 'Username must be at least 3 characters',
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Invalid email address format',
       });
     }
 
@@ -88,35 +98,36 @@ router.post('/', authenticate, requireAdmin, async (req: Request, res: Response)
       });
     }
 
-    // Check if email already exists (if provided)
-    if (email) {
-      const existingEmail = await prisma.user.findUnique({
-        where: { email },
-      });
+    // Check if email already exists
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
 
-      if (existingEmail) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Email already exists',
-        });
-      }
+    if (existingEmail) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Email already exists',
+      });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user - admin-created users are trusted (auto-verified)
     const user = await prisma.user.create({
       data: {
         username,
         password: hashedPassword,
-        email: email || null,
+        email: email.toLowerCase(),
+        emailVerified: true, // Admin-created users are trusted
+        emailVerifiedAt: new Date(),
         isAdmin: isAdmin === true,
       },
       select: {
         id: true,
         username: true,
         email: true,
+        emailVerified: true,
         isAdmin: true,
         createdAt: true,
       },
@@ -178,10 +189,11 @@ router.put('/:userId', authenticate, requireAdmin, async (req: Request, res: Res
     }
 
     if (email !== undefined) {
-      if (email && email !== existingUser.email) {
+      const normalizedEmail = email ? email.toLowerCase() : null;
+      if (normalizedEmail && normalizedEmail !== existingUser.email) {
         // Check if new email is taken
         const emailTaken = await prisma.user.findUnique({
-          where: { email },
+          where: { email: normalizedEmail },
         });
         if (emailTaken) {
           return res.status(409).json({
@@ -189,8 +201,16 @@ router.put('/:userId', authenticate, requireAdmin, async (req: Request, res: Res
             message: 'Email already exists',
           });
         }
+        // Admin updating email - keep it verified (trusted)
+        updateData.email = normalizedEmail;
+        updateData.emailVerified = true;
+        updateData.emailVerifiedAt = new Date();
+      } else if (!normalizedEmail && existingUser.email) {
+        // Removing email
+        updateData.email = null;
+        updateData.emailVerified = false;
+        updateData.emailVerifiedAt = null;
       }
-      updateData.email = email || null;
     }
 
     if (password) {
@@ -218,6 +238,7 @@ router.put('/:userId', authenticate, requireAdmin, async (req: Request, res: Res
         id: true,
         username: true,
         email: true,
+        emailVerified: true,
         isAdmin: true,
         createdAt: true,
         updatedAt: true,

@@ -35,11 +35,57 @@ export async function exists(id: string): Promise<boolean> {
   return count > 0;
 }
 
+/**
+ * Update email verification status
+ */
+export async function updateEmailVerification(
+  id: string,
+  verified: boolean
+): Promise<User> {
+  return prisma.user.update({
+    where: { id },
+    data: {
+      emailVerified: verified,
+      emailVerifiedAt: verified ? new Date() : null,
+    },
+  });
+}
+
+/**
+ * Update user email (triggers need for re-verification)
+ */
+export async function updateEmail(
+  id: string,
+  email: string
+): Promise<User> {
+  return prisma.user.update({
+    where: { id },
+    data: {
+      email,
+      emailVerified: false,
+      emailVerifiedAt: null,
+    },
+  });
+}
+
+/**
+ * Check if email is already in use
+ */
+export async function emailExists(email: string): Promise<boolean> {
+  const count = await prisma.user.count({
+    where: { email },
+  });
+  return count > 0;
+}
+
 // Export as namespace
 export const userRepository = {
   findById,
   findByEmail,
   exists,
+  updateEmailVerification,
+  updateEmail,
+  emailExists,
 };
 
 export default userRepository;

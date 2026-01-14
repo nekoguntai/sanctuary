@@ -1,0 +1,354 @@
+/**
+ * Email Verification Service
+ *
+ * Handles email verification token generation, validation, and email sending.
+ */
+
+import * as crypto from 'crypto';
+import {
+  emailVerificationRepository,
+  userRepository,
+  systemSettingRepository,
+  SystemSettingKeys,
+} from '../../repositories';
+import { sendEmail, isSmtpConfigured } from './emailService';
+import { generateVerificationEmail } from './templates/verification';
+import { createLogger } from '../../utils/logger';
+import config from '../../config';
+
+const log = createLogger('email-verification');
+
+// Token configuration
+const TOKEN_BYTES = 32;
+const DEFAULT_EXPIRY_HOURS = 24;
+
+/**
+ * Generate a cryptographically secure verification token
+ */
+function generateToken(): string {
+  return crypto.randomBytes(TOKEN_BYTES).toString('base64url');
+}
+
+/**
+ * Hash a token for secure storage
+ */
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Get the token expiry hours from settings
+ */
+async function getTokenExpiryHours(): Promise<number> {
+  return systemSettingRepository.getNumber(
+    SystemSettingKeys.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS,
+    DEFAULT_EXPIRY_HOURS
+  );
+}
+
+/**
+ * Check if email verification is required for login
+ */
+export async function isVerificationRequired(): Promise<boolean> {
+  return systemSettingRepository.getBoolean(
+    SystemSettingKeys.EMAIL_VERIFICATION_REQUIRED,
+    true
+  );
+}
+
+/**
+ * Get the server name for emails
+ */
+async function getServerName(): Promise<string> {
+  const name = await systemSettingRepository.getValue(SystemSettingKeys.SERVER_NAME);
+  return name || 'Sanctuary';
+}
+
+/**
+ * Generate the verification URL
+ */
+function getVerificationUrl(token: string): string {
+  // Use the client URL since verification happens in the frontend
+  const baseUrl = config.server.clientUrl || `http://localhost:3000`;
+  return `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Create a new email verification token and send verification email
+ */
+export async function createVerificationToken(
+  userId: string,
+  email: string,
+  username: string
+): Promise<{
+  success: boolean;
+  tokenId?: string;
+  expiresAt?: Date;
+  error?: string;
+}> {
+  try {
+    // Check if SMTP is configured
+    const smtpConfigured = await isSmtpConfigured();
+    if (!smtpConfigured) {
+      log.warn('SMTP not configured, skipping verification email', { userId, email });
+      return {
+        success: false,
+        error: 'SMTP not configured',
+      };
+    }
+
+    // Delete any existing unused tokens for this user
+    await emailVerificationRepository.deleteUnusedByUserId(userId);
+
+    // Generate new token
+    const token = generateToken();
+    const tokenHash = hashToken(token);
+    const expiryHours = await getTokenExpiryHours();
+    const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+
+    // Store token in database
+    const verificationToken = await emailVerificationRepository.create({
+      userId,
+      email,
+      tokenHash,
+      expiresAt,
+    });
+
+    // Generate and send verification email
+    const serverName = await getServerName();
+    const verificationUrl = getVerificationUrl(token);
+
+    const emailContent = generateVerificationEmail({
+      username,
+      email,
+      verificationUrl,
+      expiresInHours: expiryHours,
+      serverName,
+    });
+
+    const sendResult = await sendEmail({
+      to: email,
+      subject: emailContent.subject,
+      text: emailContent.text,
+      html: emailContent.html,
+    });
+
+    if (!sendResult.success) {
+      log.error('Failed to send verification email', {
+        userId,
+        email,
+        error: sendResult.error,
+      });
+      // Don't delete the token - user can try to resend
+      return {
+        success: false,
+        tokenId: verificationToken.id,
+        expiresAt,
+        error: sendResult.error,
+      };
+    }
+
+    log.info('Verification email sent', { userId, email, tokenId: verificationToken.id });
+
+    return {
+      success: true,
+      tokenId: verificationToken.id,
+      expiresAt,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Failed to create verification token', { userId, email, error: errorMessage });
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Verify an email using a token
+ */
+export async function verifyEmail(token: string): Promise<{
+  success: boolean;
+  userId?: string;
+  email?: string;
+  error?: 'INVALID_TOKEN' | 'EXPIRED_TOKEN' | 'ALREADY_USED' | 'USER_NOT_FOUND' | 'UNKNOWN_ERROR';
+}> {
+  try {
+    const tokenHash = hashToken(token);
+
+    // Find the token
+    const verificationToken = await emailVerificationRepository.findByTokenHash(tokenHash);
+
+    if (!verificationToken) {
+      log.warn('Invalid verification token attempted');
+      return {
+        success: false,
+        error: 'INVALID_TOKEN',
+      };
+    }
+
+    // Check if already used
+    if (verificationToken.usedAt) {
+      log.warn('Already used verification token attempted', {
+        tokenId: verificationToken.id,
+        userId: verificationToken.userId,
+      });
+      return {
+        success: false,
+        error: 'ALREADY_USED',
+      };
+    }
+
+    // Check if expired
+    if (new Date() > verificationToken.expiresAt) {
+      log.warn('Expired verification token attempted', {
+        tokenId: verificationToken.id,
+        userId: verificationToken.userId,
+      });
+      return {
+        success: false,
+        error: 'EXPIRED_TOKEN',
+      };
+    }
+
+    // Get the user
+    const user = await userRepository.findById(verificationToken.userId);
+    if (!user) {
+      log.error('User not found for verification token', {
+        tokenId: verificationToken.id,
+        userId: verificationToken.userId,
+      });
+      return {
+        success: false,
+        error: 'USER_NOT_FOUND',
+      };
+    }
+
+    // Mark token as used
+    await emailVerificationRepository.markUsed(verificationToken.id);
+
+    // Update user email verification status
+    // Only verify if the email matches (in case user changed email)
+    if (user.email === verificationToken.email) {
+      await userRepository.updateEmailVerification(user.id, true);
+      log.info('Email verified successfully', {
+        userId: user.id,
+        email: verificationToken.email,
+      });
+    } else {
+      // Email was changed after token was created - update to the verified email
+      await userRepository.updateEmail(user.id, verificationToken.email);
+      await userRepository.updateEmailVerification(user.id, true);
+      log.info('Email verified and updated', {
+        userId: user.id,
+        oldEmail: user.email,
+        newEmail: verificationToken.email,
+      });
+    }
+
+    return {
+      success: true,
+      userId: user.id,
+      email: verificationToken.email,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Failed to verify email', { error: errorMessage });
+    return {
+      success: false,
+      error: 'UNKNOWN_ERROR',
+    };
+  }
+}
+
+/**
+ * Resend verification email
+ */
+export async function resendVerification(
+  userId: string
+): Promise<{
+  success: boolean;
+  expiresAt?: Date;
+  error?: string;
+}> {
+  try {
+    // Get user
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      return {
+        success: false,
+        error: 'User not found',
+      };
+    }
+
+    if (!user.email) {
+      return {
+        success: false,
+        error: 'No email address set',
+      };
+    }
+
+    if (user.emailVerified) {
+      return {
+        success: false,
+        error: 'Email already verified',
+      };
+    }
+
+    // Check rate limiting - max 5 tokens in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentCount = await emailVerificationRepository.countCreatedSince(userId, oneHourAgo);
+
+    if (recentCount >= 5) {
+      return {
+        success: false,
+        error: 'Too many verification requests. Please try again later.',
+      };
+    }
+
+    // Create new verification token
+    const result = await createVerificationToken(userId, user.email, user.username);
+
+    return {
+      success: result.success,
+      expiresAt: result.expiresAt,
+      error: result.error,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    log.error('Failed to resend verification', { userId, error: errorMessage });
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Check if a user's email is verified
+ */
+export async function isEmailVerified(userId: string): Promise<boolean> {
+  const user = await userRepository.findById(userId);
+  return user?.emailVerified ?? false;
+}
+
+/**
+ * Clean up expired verification tokens (maintenance job)
+ */
+export async function cleanupExpiredTokens(): Promise<number> {
+  const count = await emailVerificationRepository.deleteExpired();
+  if (count > 0) {
+    log.info('Cleaned up expired verification tokens', { count });
+  }
+  return count;
+}
+
+export default {
+  isVerificationRequired,
+  createVerificationToken,
+  verifyEmail,
+  resendVerification,
+  isEmailVerified,
+  cleanupExpiredTokens,
+};

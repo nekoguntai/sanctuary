@@ -20,6 +20,19 @@ export const SystemSettingKeys = {
   REGISTRATION_ENABLED: 'registration.enabled',
   REGISTRATION_REQUIRE_APPROVAL: 'registration.requireApproval',
 
+  // Email verification settings
+  EMAIL_VERIFICATION_REQUIRED: 'email.verificationRequired',
+  EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS: 'email.tokenExpiryHours',
+
+  // SMTP settings
+  SMTP_HOST: 'smtp.host',
+  SMTP_PORT: 'smtp.port',
+  SMTP_SECURE: 'smtp.secure',
+  SMTP_USER: 'smtp.user',
+  SMTP_PASSWORD: 'smtp.password',
+  SMTP_FROM_ADDRESS: 'smtp.fromAddress',
+  SMTP_FROM_NAME: 'smtp.fromName',
+
   // Sync settings
   SYNC_INTERVAL_MS: 'sync.intervalMs',
   SYNC_BATCH_SIZE: 'sync.batchSize',

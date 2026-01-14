@@ -144,6 +144,31 @@ export const DEFAULT_AI_MODEL = '';
 // and can be overridden via RATE_LIMIT_AI_* environment variables
 
 // ============================================================================
+// EMAIL VERIFICATION CONSTANTS
+// ============================================================================
+
+/**
+ * Default email verification required status
+ * When true, users must verify their email before logging in (for open registration)
+ */
+export const DEFAULT_EMAIL_VERIFICATION_REQUIRED = true;
+
+/**
+ * Default email verification token expiry in hours
+ */
+export const DEFAULT_EMAIL_TOKEN_EXPIRY_HOURS = 24;
+
+/**
+ * Default SMTP port
+ */
+export const DEFAULT_SMTP_PORT = 587;
+
+/**
+ * Default SMTP from name
+ */
+export const DEFAULT_SMTP_FROM_NAME = 'Sanctuary';
+
+// ============================================================================
 // WALLET LOG BUFFER CONSTANTS
 // ============================================================================
 

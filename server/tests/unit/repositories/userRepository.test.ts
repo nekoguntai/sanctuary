@@ -13,6 +13,7 @@ vi.mock('../../../src/models/prisma', () => ({
     user: {
       findUnique: vi.fn(),
       count: vi.fn(),
+      update: vi.fn(),
     },
   },
 }));
@@ -128,6 +129,128 @@ describe('User Repository', () => {
       (prisma.user.count as Mock).mockRejectedValue(new Error('Database error'));
 
       await expect(userRepository.exists('user-123')).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('updateEmailVerification', () => {
+    it('should set emailVerified to true with timestamp', async () => {
+      const mockUpdatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        username: 'testuser',
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (prisma.user.update as Mock).mockResolvedValue(mockUpdatedUser);
+
+      const result = await userRepository.updateEmailVerification('user-123', true);
+
+      expect(result).toEqual(mockUpdatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: {
+          emailVerified: true,
+          emailVerifiedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should set emailVerified to false with null timestamp', async () => {
+      const mockUpdatedUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        username: 'testuser',
+        emailVerified: false,
+        emailVerifiedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (prisma.user.update as Mock).mockResolvedValue(mockUpdatedUser);
+
+      const result = await userRepository.updateEmailVerification('user-123', false);
+
+      expect(result).toEqual(mockUpdatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: {
+          emailVerified: false,
+          emailVerifiedAt: null,
+        },
+      });
+    });
+
+    it('should propagate database errors', async () => {
+      (prisma.user.update as Mock).mockRejectedValue(new Error('Update failed'));
+
+      await expect(userRepository.updateEmailVerification('user-123', true))
+        .rejects.toThrow('Update failed');
+    });
+  });
+
+  describe('updateEmail', () => {
+    it('should update email and reset verification status', async () => {
+      const mockUpdatedUser = {
+        id: 'user-123',
+        email: 'new@example.com',
+        username: 'testuser',
+        emailVerified: false,
+        emailVerifiedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (prisma.user.update as Mock).mockResolvedValue(mockUpdatedUser);
+
+      const result = await userRepository.updateEmail('user-123', 'new@example.com');
+
+      expect(result).toEqual(mockUpdatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: {
+          email: 'new@example.com',
+          emailVerified: false,
+          emailVerifiedAt: null,
+        },
+      });
+    });
+
+    it('should propagate database errors', async () => {
+      (prisma.user.update as Mock).mockRejectedValue(new Error('Email update failed'));
+
+      await expect(userRepository.updateEmail('user-123', 'new@example.com'))
+        .rejects.toThrow('Email update failed');
+    });
+  });
+
+  describe('emailExists', () => {
+    it('should return true when email exists', async () => {
+      (prisma.user.count as Mock).mockResolvedValue(1);
+
+      const result = await userRepository.emailExists('existing@example.com');
+
+      expect(result).toBe(true);
+      expect(prisma.user.count).toHaveBeenCalledWith({
+        where: { email: 'existing@example.com' },
+      });
+    });
+
+    it('should return false when email does not exist', async () => {
+      (prisma.user.count as Mock).mockResolvedValue(0);
+
+      const result = await userRepository.emailExists('new@example.com');
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle database errors', async () => {
+      (prisma.user.count as Mock).mockRejectedValue(new Error('Database error'));
+
+      await expect(userRepository.emailExists('test@example.com'))
+        .rejects.toThrow('Database error');
     });
   });
 });

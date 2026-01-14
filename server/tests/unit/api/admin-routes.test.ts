@@ -164,7 +164,12 @@ describe('Admin Routes', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    // Reset to default resolved values after clearing
+    mockAuditService.log.mockResolvedValue(undefined);
+    mockAuditService.logFromRequest.mockResolvedValue(undefined);
+    mockAuditService.query.mockResolvedValue({ logs: [], total: 0 });
+    mockAuditService.getStats.mockResolvedValue({ total: 0, byAction: {}, byCategory: {} });
   });
 
   // ========================================
@@ -184,6 +189,40 @@ describe('Admin Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
       expect(response.body[0].username).toBe('admin');
+    });
+
+    it('should include email and verification status in user list', async () => {
+      const mockUsers = [
+        {
+          id: 'user-1',
+          username: 'verified',
+          email: 'verified@test.com',
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          isAdmin: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'user-2',
+          username: 'unverified',
+          email: 'unverified@test.com',
+          emailVerified: false,
+          emailVerifiedAt: null,
+          isAdmin: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      mockPrisma.user.findMany.mockResolvedValue(mockUsers);
+
+      const response = await request(app).get('/api/v1/admin/users');
+
+      expect(response.status).toBe(200);
+      expect(response.body[0].email).toBe('verified@test.com');
+      expect(response.body[0].emailVerified).toBe(true);
+      expect(response.body[1].email).toBe('unverified@test.com');
+      expect(response.body[1].emailVerified).toBe(false);
     });
 
     it('should handle database error', async () => {
@@ -232,7 +271,7 @@ describe('Admin Routes', () => {
     it('should reject weak password', async () => {
       const response = await request(app)
         .post('/api/v1/admin/users')
-        .send({ username: 'newuser', password: '123' });
+        .send({ username: 'newuser', password: '123', email: 'new@test.com' });
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('security requirements');
@@ -243,7 +282,7 @@ describe('Admin Routes', () => {
 
       const response = await request(app)
         .post('/api/v1/admin/users')
-        .send({ username: 'existinguser', password: 'StrongPass123!' });
+        .send({ username: 'existinguser', password: 'StrongPass123!', email: 'existing@test.com' });
 
       expect(response.status).toBe(409);
       expect(response.body.message).toContain('already exists');
@@ -252,10 +291,101 @@ describe('Admin Routes', () => {
     it('should reject short username', async () => {
       const response = await request(app)
         .post('/api/v1/admin/users')
-        .send({ username: 'ab', password: 'StrongPass123!' });
+        .send({ username: 'ab', password: 'StrongPass123!', email: 'short@test.com' });
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('at least 3');
+    });
+
+    it('should reject missing email', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({ username: 'newuser', password: 'StrongPass123!' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('required');
+    });
+
+    it('should reject invalid email format', async () => {
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({ username: 'newuser', password: 'StrongPass123!', email: 'invalid-email' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('email');
+    });
+
+    it('should reject duplicate email', async () => {
+      // First call: check username not taken (null)
+      // Second call: check email already exists
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(null)  // username check
+        .mockResolvedValueOnce({ id: 'existing-user', email: 'existing@test.com' });  // email check
+
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({ username: 'newuser', password: 'StrongPass123!', email: 'existing@test.com' });
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toContain('already');
+    });
+
+    it('should auto-verify email for admin-created users', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'new-user',
+        username: 'newuser',
+        email: 'new@test.com',
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({
+          username: 'newuser',
+          password: 'StrongPass123!',
+          email: 'new@test.com',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.emailVerified).toBe(true);
+      // Verify the create call included emailVerified: true
+      expect(mockPrisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            emailVerified: true,
+            emailVerifiedAt: expect.any(Date),
+          }),
+        })
+      );
+    });
+
+    it('should include email in created user response', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'new-user',
+        username: 'newuser',
+        email: 'new@test.com',
+        emailVerified: true,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({
+          username: 'newuser',
+          password: 'StrongPass123!',
+          email: 'new@test.com',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.email).toBe('new@test.com');
     });
   });
 
@@ -310,6 +440,52 @@ describe('Admin Routes', () => {
 
       expect(response.status).toBe(409);
     });
+
+    it('should reject duplicate email on update', async () => {
+      // When only sending email (no username), the username check is skipped
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({ id: 'user-1', username: 'oldname', email: 'old@test.com' })  // existing user
+        .mockResolvedValueOnce({ id: 'user-2', email: 'taken@test.com' });  // email check (username check skipped)
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ email: 'taken@test.com' });
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toContain('already');
+    });
+
+    it('should update email successfully', async () => {
+      // When only sending email (no username), the username check is skipped
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({
+          id: 'user-1',
+          username: 'testuser',
+          email: 'old@test.com',
+          emailVerified: true,
+          isAdmin: false,
+        })
+        .mockResolvedValueOnce(null);  // email check (username check skipped)
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'new@test.com',
+        emailVerified: true,  // Admin-updated emails stay verified
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ email: 'new@test.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe('new@test.com');
+    });
+
+    // Note: Email format is NOT validated on update in the admin endpoint
+    // The endpoint only checks for duplicate emails, not format validation
   });
 
   // ========================================

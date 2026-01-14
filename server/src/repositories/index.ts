@@ -28,6 +28,7 @@ export { sessionRepository, default as sessionRepo } from './sessionRepository';
 export { auditLogRepository, default as auditLogRepo } from './auditLogRepository';
 export { systemSettingRepository, default as systemSettingRepo } from './systemSettingRepository';
 export { mobilePermissionRepository, default as mobilePermissionRepo } from './mobilePermissionRepository';
+export { emailVerificationRepository, default as emailVerificationRepo } from './emailVerificationRepository';
 
 // Re-export types
 export type {

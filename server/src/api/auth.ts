@@ -22,6 +22,7 @@ import { createLoginRouter } from './auth/login';
 import profileRouter from './auth/profile';
 import { createPasswordRouter } from './auth/password';
 import { createTwoFactorRouter } from './auth/twoFactor';
+import { createEmailRouter } from './auth/email';
 import telegramRouter from './auth/telegram';
 import tokensRouter from './auth/tokens';
 import sessionsRouter from './auth/sessions';
@@ -103,6 +104,45 @@ const passwordChangeLimiter = rateLimit({
   validate: rateLimitValidations,
 });
 
+// Limiter for email verification token attempts (10 per 15 minutes)
+const emailVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many verification attempts. Please try again in 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: rateLimitValidations,
+});
+
+// Limiter for resending verification emails (5 per hour)
+const emailResendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many verification email requests. Please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: rateLimitValidations,
+});
+
+// Limiter for email updates (3 per hour)
+const emailUpdateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3,
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many email update attempts. Please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: rateLimitValidations,
+});
+
 // ========================================
 // ROUTE CONFIGURATION
 // ========================================
@@ -124,5 +164,11 @@ router.use('/', authenticate, profileRouter);
 router.use('/', authenticate, createPasswordRouter(passwordChangeLimiter));
 router.use('/', authenticate, telegramRouter);
 router.use('/', authenticate, sessionsRouter);
+
+// Email verification routes - mixed auth requirements:
+// - /email/verify is public (uses token from email)
+// - /email/resend requires authentication
+// - /me/email requires authentication
+router.use('/', createEmailRouter(emailVerifyLimiter, emailResendLimiter, emailUpdateLimiter));
 
 export default router;

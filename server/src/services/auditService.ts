@@ -91,6 +91,12 @@ export enum AuditAction {
   TWO_FACTOR_BACKUP_CODE_USED = 'auth.2fa_backup_code_used',
   TWO_FACTOR_BACKUP_CODES_REGENERATED = 'auth.2fa_backup_codes_regenerated',
 
+  // Email verification
+  AUTH_EMAIL_VERIFICATION_SENT = 'auth.email_verification_sent',
+  AUTH_EMAIL_VERIFIED = 'auth.email_verified',
+  AUTH_EMAIL_VERIFICATION_FAILED = 'auth.email_verification_failed',
+  USER_EMAIL_UPDATED = 'user.email_updated',
+
   // Transaction operations
   TRANSACTION_CREATE = 'wallet.transaction_create',
   TRANSACTION_SIGN = 'wallet.transaction_sign',

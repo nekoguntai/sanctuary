@@ -24,6 +24,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Email verification
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+
   // User preferences (stored as JSON)
   preferences Json?
 
@@ -49,6 +53,9 @@ model User {
 
   // Mobile permissions
   mobilePermissions  MobilePermission[]
+
+  // Email verification tokens
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([isAdmin]) // For admin user lookups
   @@map("users")
@@ -944,4 +951,26 @@ model FeatureFlagAudit {
   @@index([changedBy])
   @@index([createdAt])
   @@map("feature_flag_audit")
+}
+
+// ========================================
+// EMAIL VERIFICATION
+// ========================================
+
+// Tokens for email verification workflow
+// Supports verification on registration, email updates, and admin-created users
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  email     String // The email address being verified (allows tracking email changes)
+  tokenHash String    @unique // SHA256 hash of the verification token
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime? // Null until verified, tracks when token was used
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt]) // For cleanup of expired tokens
+  @@map("email_verification_tokens")
 }

@@ -14,6 +14,11 @@ import { auditService, AuditAction, AuditCategory, getClientInfo } from '../../s
 import * as refreshTokenService from '../../services/refreshTokenService';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 import { isUsingInitialPassword } from './password';
+import {
+  isVerificationRequired,
+  createVerificationToken,
+  isSmtpConfigured,
+} from '../../services/email';
 
 const router = Router();
 const log = createLogger('AUTH:LOGIN');
@@ -73,11 +78,20 @@ export function createLoginRouter(
 
       const { username, password, email } = req.body;
 
-      // Validation
-      if (!username || !password) {
+      // Validation - email is required for open registration
+      if (!username || !password || !email) {
         return res.status(400).json({
           error: 'Bad Request',
-          message: 'Username and password are required',
+          message: 'Username, password, and email are required',
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Invalid email address format',
         });
       }
 
@@ -103,6 +117,18 @@ export function createLoginRouter(
         });
       }
 
+      // Check if email is already in use
+      const existingEmail = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: 'Email address is already in use',
+        });
+      }
+
       // Hash password
       const hashedPassword = await hashPassword(password);
 
@@ -111,7 +137,8 @@ export function createLoginRouter(
         data: {
           username,
           password: hashedPassword,
-          email,
+          email: email.toLowerCase(),
+          emailVerified: false,
           preferences: {
             darkMode: true,
             theme: 'sanctuary',
@@ -130,6 +157,32 @@ export function createLoginRouter(
           },
         },
       });
+
+      // Send verification email if SMTP is configured
+      let emailVerificationRequired = false;
+      let verificationEmailSent = false;
+
+      const verificationRequired = await isVerificationRequired();
+      const smtpConfigured = await isSmtpConfigured();
+
+      if (smtpConfigured) {
+        const verificationResult = await createVerificationToken(
+          user.id,
+          email.toLowerCase(),
+          username
+        );
+        verificationEmailSent = verificationResult.success;
+        if (verificationResult.success) {
+          log.info('Verification email sent for new registration', { userId: user.id, email: email.toLowerCase() });
+        } else {
+          log.warn('Failed to send verification email', { userId: user.id, error: verificationResult.error });
+        }
+      } else {
+        log.warn('SMTP not configured, skipping verification email', { userId: user.id });
+      }
+
+      // Email verification is required if the setting is enabled
+      emailVerificationRequired = verificationRequired;
 
       // Get device info from request
       const { ipAddress, userAgent } = getClientInfo(req);
@@ -154,9 +207,15 @@ export function createLoginRouter(
           id: user.id,
           username: user.username,
           email: user.email,
+          emailVerified: user.emailVerified,
           isAdmin: user.isAdmin,
           preferences: user.preferences,
         },
+        emailVerificationRequired,
+        verificationEmailSent,
+        message: emailVerificationRequired
+          ? 'Registration successful. Please check your email to verify your account.'
+          : 'Registration successful.',
       });
     } catch (error) {
       log.error('Register error', { error });
@@ -230,6 +289,21 @@ export function createLoginRouter(
         });
       }
 
+      // Check email verification status if required
+      const verificationRequired = await isVerificationRequired();
+      if (verificationRequired && user.email && !user.emailVerified) {
+        // User has email but hasn't verified - block login
+        log.info('Login blocked - email not verified', { userId: user.id, email: user.email });
+
+        return res.status(403).json({
+          error: 'Email Not Verified',
+          message: 'Please verify your email address before logging in.',
+          emailVerificationRequired: true,
+          email: user.email,
+          canResend: true,
+        });
+      }
+
       // Check if 2FA is enabled
       if (user.twoFactorEnabled && user.twoFactorSecret) {
         // Check if using initial password before creating temp token
@@ -286,6 +360,7 @@ export function createLoginRouter(
           id: user.id,
           username: user.username,
           email: user.email,
+          emailVerified: user.emailVerified,
           isAdmin: user.isAdmin,
           preferences: user.preferences,
           twoFactorEnabled: user.twoFactorEnabled,

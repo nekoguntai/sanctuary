@@ -61,7 +61,8 @@ export async function createTestUser(
     data: {
       username: user.username,
       password: hashedPassword,
-      email: user.email,
+      email: user.email ?? `${user.username}@example.com`,
+      emailVerified: true, // Auto-verify for tests so login works
       isAdmin: user.isAdmin ?? false,
       preferences: {},
     },

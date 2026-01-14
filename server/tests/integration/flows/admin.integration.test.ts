@@ -39,6 +39,8 @@ describeIfDb('Admin API Integration', () => {
       data: {
         username,
         password: hashedPassword,
+        email: `${username}@example.com`,
+        emailVerified: true,
         isAdmin: true,
       },
     });
@@ -61,6 +63,8 @@ describeIfDb('Admin API Integration', () => {
       data: {
         username,
         password: hashedPassword,
+        email: `${username}@example.com`,
+        emailVerified: true,
         isAdmin: false,
       },
     });
@@ -173,6 +177,7 @@ describeIfDb('Admin API Integration', () => {
           .send({
             username: newUsername,
             password: 'AdminPass123!',
+            email: `${newUsername}@example.com`,
             isAdmin: true,
           })
           .expect(201);
@@ -192,7 +197,11 @@ describeIfDb('Admin API Integration', () => {
 
         // Create existing user
         await prisma.user.create({
-          data: { username: existingUsername, password: 'hash' },
+          data: {
+            username: existingUsername,
+            password: 'hash',
+            email: `${existingUsername}@example.com`,
+          },
         });
 
         await request(app)
@@ -201,19 +210,22 @@ describeIfDb('Admin API Integration', () => {
           .send({
             username: existingUsername,
             password: 'Password123!',
+            email: `${existingUsername}2@example.com`,
           })
           .expect(409);
       });
 
       it('should reject weak password', async () => {
         const { token } = await createAdminAndLogin();
+        const newUsername = uniqueUsername('weakpass');
 
         await request(app)
           .post('/api/v1/admin/users')
           .set(authHeader(token))
           .send({
-            username: uniqueUsername('weakpass'),
+            username: newUsername,
             password: 'weak', // Too short, no uppercase, no number
+            email: `${newUsername}@example.com`,
           })
           .expect(400);
       });
@@ -227,6 +239,7 @@ describeIfDb('Admin API Integration', () => {
           .send({
             username: 'ab',
             password: 'ValidPass123!',
+            email: 'shortuser@example.com',
           })
           .expect(400);
       });
@@ -257,13 +270,15 @@ describeIfDb('Admin API Integration', () => {
 
       it('should deny non-admin from creating users', async () => {
         const { token } = await createUserAndLogin();
+        const newUsername = uniqueUsername('test');
 
         await request(app)
           .post('/api/v1/admin/users')
           .set(authHeader(token))
           .send({
-            username: uniqueUsername('test'),
+            username: newUsername,
             password: 'Password123!',
+            email: `${newUsername}@example.com`,
           })
           .expect(403);
       });

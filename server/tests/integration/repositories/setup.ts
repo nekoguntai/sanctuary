@@ -187,6 +187,7 @@ export async function createTestUser(
       username: options.username || `testuser-${Date.now()}`,
       password: hashedPassword,
       email: options.email || `test-${Date.now()}@example.com`,
+      emailVerified: true, // Auto-verify for tests so login works
       isAdmin: options.isAdmin ?? false,
       twoFactorEnabled: options.twoFactorEnabled ?? false,
       twoFactorSecret: options.twoFactorSecret,

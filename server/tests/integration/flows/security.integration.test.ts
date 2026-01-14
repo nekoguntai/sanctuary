@@ -70,6 +70,8 @@ describeWithDb('Security Integration Tests', () => {
         data: {
           username,
           password: hashedDefaultPassword,
+          email: `${username}@example.com`,
+          emailVerified: true,
           isAdmin: false,
           preferences: {},
         },
@@ -122,6 +124,8 @@ describeWithDb('Security Integration Tests', () => {
         data: {
           username,
           password: hashedDefaultPassword,
+          email: `${username}@example.com`,
+          emailVerified: true,
           isAdmin: false,
           preferences: {},
         },

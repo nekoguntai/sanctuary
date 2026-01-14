@@ -885,6 +885,7 @@ describeIfDb('Admin API Integration', () => {
         .send({
           username: newUsername,
           password: 'Password123!',
+          email: `${newUsername}@example.com`,
         })
         .expect(201);
 

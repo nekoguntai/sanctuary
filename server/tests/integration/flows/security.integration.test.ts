@@ -167,12 +167,14 @@ describeWithDb('Security Integration Tests', () => {
         await createTestUser(prisma, { ...testAdmin, isAdmin: true });
         const adminToken = await loginTestUser(app, testAdmin);
 
+        const username = `shortpwd_${Date.now()}`;
         const response = await request(app)
           .post('/api/v1/admin/users')
           .set('Authorization', `Bearer ${adminToken}`)
           .send({
-            username: `shortpwd_${Date.now()}`,
+            username,
             password: 'Abc123!', // 7 characters - should fail
+            email: `${username}@example.com`,
           })
           .expect(400);
 
@@ -186,12 +188,14 @@ describeWithDb('Security Integration Tests', () => {
         const adminToken = await loginTestUser(app, testAdmin);
 
         // Strong password: 8+ chars with uppercase, lowercase, and number
+        const username = `strongpwd_${Date.now()}`;
         const response = await request(app)
           .post('/api/v1/admin/users')
           .set('Authorization', `Bearer ${adminToken}`)
           .send({
-            username: `strongpwd_${Date.now()}`,
+            username,
             password: 'Abcd1234', // 8 characters with complexity - accepted
+            email: `${username}@example.com`,
           })
           .expect(201);
 
@@ -416,6 +420,7 @@ describeWithDb('Security Integration Tests', () => {
           .send({
             username: 'ab', // 2 characters
             password: 'Password123!',
+            email: `ab_${Date.now()}@example.com`,
           })
           .expect(400);
 
@@ -470,6 +475,7 @@ describeWithDb('Security Integration Tests', () => {
         const adminToken = await loginTestUser(app, testAdmin);
 
         const username = `duplicate_${Date.now()}`;
+        const email = `${username}@example.com`;
 
         // Create first user
         await request(app)
@@ -478,6 +484,7 @@ describeWithDb('Security Integration Tests', () => {
           .send({
             username,
             password: 'Password123!',
+            email,
           })
           .expect(201);
 
@@ -488,6 +495,7 @@ describeWithDb('Security Integration Tests', () => {
           .send({
             username,
             password: 'Password123!',
+            email: `${username}_2@example.com`, // Different email but same username
           })
           .expect(409);
 

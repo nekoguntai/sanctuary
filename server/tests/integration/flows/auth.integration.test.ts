@@ -192,6 +192,7 @@ describeWithDb('Authentication Integration', () => {
         .send({
           username: newUsername,
           password: 'NewUserPassword123!',
+          email: `${newUsername}@example.com`,
         })
         .expect(201);
 

@@ -396,7 +396,7 @@ describe('DeviceSharing', () => {
       render(<DeviceSharing {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText('Failed to load sharing information')).toBeInTheDocument();
+        expect(screen.getByText('API Error')).toBeInTheDocument();
       });
     });
 

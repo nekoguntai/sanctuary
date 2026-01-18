@@ -13,6 +13,7 @@ import * as authApi from '../src/api/auth';
 import * as adminApi from '../src/api/admin';
 import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
+import { useLoadingState } from '../hooks/useLoadingState';
 
 const log = createLogger('DeviceSharing');
 
@@ -38,9 +39,13 @@ export const DeviceSharing: React.FC<DeviceSharingProps> = ({
   const { user } = useUser();
   const [shareInfo, setShareInfo] = useState<DeviceShareInfo | null>(null);
   const [groups, setGroups] = useState<GroupDisplay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sharingLoading, setSharingLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // Loading states using hook
+  const { loading, error: loadError, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: sharingLoading, error: sharingError, execute: runSharing } = useLoadingState();
+
+  // Combined error display
+  const error = loadError || sharingError;
 
   // Group selection
   const [selectedGroupToAdd, setSelectedGroupToAdd] = useState('');
@@ -51,36 +56,24 @@ export const DeviceSharing: React.FC<DeviceSharingProps> = ({
   const [searchingUsers, setSearchingUsers] = useState(false);
 
   const fetchShareInfo = useCallback(async () => {
-    try {
-      const info = await devicesApi.getDeviceShareInfo(deviceId);
-      setShareInfo(info);
-      onShareInfoChange?.(info);
-    } catch (err) {
-      log.error('Failed to fetch share info', { err });
-      setError('Failed to load sharing information');
-    }
+    const info = await devicesApi.getDeviceShareInfo(deviceId);
+    setShareInfo(info);
+    onShareInfoChange?.(info);
   }, [deviceId, onShareInfoChange]);
 
   const fetchGroups = useCallback(async () => {
-    try {
-      // Admins can see all groups; regular users only see their groups
-      const userGroups = user?.isAdmin
-        ? await adminApi.getGroups()
-        : await authApi.getUserGroups();
-      setGroups(userGroups);
-    } catch (err) {
-      log.error('Failed to fetch groups', { err });
-    }
+    // Admins can see all groups; regular users only see their groups
+    const userGroups = user?.isAdmin
+      ? await adminApi.getGroups()
+      : await authApi.getUserGroups();
+    setGroups(userGroups);
   }, [user?.isAdmin]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    runLoad(async () => {
       await Promise.all([fetchShareInfo(), fetchGroups()]);
-      setLoading(false);
-    };
-    fetchData();
-  }, [fetchShareInfo, fetchGroups]);
+    });
+  }, [deviceId, user?.isAdmin]);
 
   // User search handler
   const handleSearchUsers = useCallback(async (query: string) => {
@@ -105,66 +98,45 @@ export const DeviceSharing: React.FC<DeviceSharingProps> = ({
 
   // Share with user
   const handleShareWithUser = async (targetUserId: string) => {
-    setSharingLoading(true);
-    setError(null);
-    try {
+    const result = await runSharing(async () => {
       await devicesApi.shareDeviceWithUser(deviceId, { targetUserId });
       await fetchShareInfo();
+    });
+
+    if (result !== null) {
       setUserSearchQuery('');
       setUserSearchResults([]);
-    } catch (err: any) {
-      log.error('Failed to share with user', { err });
-      setError(err.message || 'Failed to share device');
-    } finally {
-      setSharingLoading(false);
     }
   };
 
   // Remove user access
   const handleRemoveUserAccess = async (targetUserId: string) => {
-    setSharingLoading(true);
-    setError(null);
-    try {
+    await runSharing(async () => {
       await devicesApi.removeUserFromDevice(deviceId, targetUserId);
       await fetchShareInfo();
-    } catch (err: any) {
-      log.error('Failed to remove user access', { err });
-      setError(err.message || 'Failed to remove access');
-    } finally {
-      setSharingLoading(false);
-    }
+    });
   };
 
   // Share with group
   const handleAddGroup = async () => {
     if (!selectedGroupToAdd) return;
-    setSharingLoading(true);
-    setError(null);
-    try {
+
+    const result = await runSharing(async () => {
       await devicesApi.shareDeviceWithGroup(deviceId, { groupId: selectedGroupToAdd });
       await fetchShareInfo();
+    });
+
+    if (result !== null) {
       setSelectedGroupToAdd('');
-    } catch (err: any) {
-      log.error('Failed to share with group', { err });
-      setError(err.message || 'Failed to share with group');
-    } finally {
-      setSharingLoading(false);
     }
   };
 
   // Remove group access
   const handleRemoveGroup = async () => {
-    setSharingLoading(true);
-    setError(null);
-    try {
+    await runSharing(async () => {
       await devicesApi.shareDeviceWithGroup(deviceId, { groupId: null });
       await fetchShareInfo();
-    } catch (err: any) {
-      log.error('Failed to remove group access', { err });
-      setError(err.message || 'Failed to remove group access');
-    } finally {
-      setSharingLoading(false);
-    }
+    });
   };
 
   if (loading) {

@@ -5,7 +5,7 @@
  * Replaces the monolithic SendTransaction.tsx with a cleaner separation of concerns.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -20,6 +20,7 @@ import type { DraftTransaction } from '../../src/api/drafts';
 import { ApiError } from '../../src/api/client';
 import { useUser } from '../../contexts/UserContext';
 import { useErrorHandler } from '../../hooks/useErrorHandler';
+import { useLoadingState } from '../../hooks/useLoadingState';
 import { createLogger } from '../../utils/logger';
 import type { BlockData, QueuedBlocksSummary } from '../../src/api/bitcoin';
 import type { SerializableTransactionState, WalletAddress } from '../../contexts/send/types';
@@ -33,9 +34,9 @@ export const SendTransactionPage: React.FC = () => {
   const { user } = useUser();
   const { showInfo } = useErrorHandler();
 
-  // Loading and error states
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Loading state using hook
+  const { loading, error, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const mountedRef = useRef(true);
 
   // Data from APIs
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -65,279 +66,261 @@ export const SendTransactionPage: React.FC = () => {
 
   // Fetch all required data
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
 
-    const fetchData = async () => {
-      if (!id || !user) return;
+    if (!id || !user) return;
 
-      setLoading(true);
-      setError(null);
+    runLoad(async () => {
+      // Fetch wallet data first (critical)
+      const apiWallet = await walletsApi.getWallet(id);
+      if (!mountedRef.current) return;
 
-      try {
-        // Fetch wallet data first (critical)
-        const apiWallet = await walletsApi.getWallet(id);
-        if (!mounted) return;
-
-        // Check if user has permission to send (viewers cannot send)
-        if (apiWallet.userRole === 'viewer') {
-          log.warn('Viewer attempted to access send page', { walletId: id });
-          navigate(`/wallets/${id}`, { replace: true });
-          return;
-        }
-
-        // Convert API wallet to Wallet type (enum values now match API values)
-        const walletType = isMultisigType(apiWallet.type) ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
-        const formattedWallet: Wallet = {
-          id: apiWallet.id,
-          name: apiWallet.name,
-          type: walletType,
-          balance: apiWallet.balance,
-          scriptType: apiWallet.scriptType,
-          derivationPath: apiWallet.descriptor || '',
-          fingerprint: apiWallet.fingerprint || '',
-          label: apiWallet.name,
-          xpub: '',
-          unit: 'sats',
-          ownerId: user.id,
-          groupIds: [],
-          quorum: {
-            m: getQuorumM(apiWallet.quorum, 1),
-            n: getQuorumN(apiWallet.quorum, apiWallet.totalSigners, 1),
-          },
-          descriptor: apiWallet.descriptor,
-          deviceIds: [],
-        };
-        setWallet(formattedWallet);
-
-        // Fetch all other data in parallel
-        const [utxoData, feeEstimates, mempoolData, addressData, allDevices] = await Promise.all([
-          transactionsApi.getUTXOs(id),
-          bitcoinApi.getFeeEstimates(),
-          bitcoinApi.getMempoolData().catch(() => null),
-          transactionsApi.getAddresses(id).catch(() => []),
-          devicesApi.getDevices().catch(() => []),
-        ]);
-        if (!mounted) return;
-
-        // Format UTXOs
-        const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
-          id: utxo.id,
-          txid: utxo.txid,
-          vout: utxo.vout,
-          amount: Number(utxo.amount),
-          address: utxo.address,
-          confirmations: utxo.confirmations,
-          spendable: utxo.spendable,
-          scriptType: formattedWallet.scriptType,
-          frozen: utxo.frozen ?? false,
-          lockedByDraftId: utxo.lockedByDraftId,
-          lockedByDraftLabel: utxo.lockedByDraftLabel,
-        }));
-        setUTXOs(formattedUTXOs);
-
-        // Format fees
-        const formattedFees: FeeEstimate = {
-          fastestFee: feeEstimates.fastest,
-          halfHourFee: feeEstimates.hour,
-          hourFee: feeEstimates.economy,
-          economyFee: feeEstimates.minimum || 1,
-          minimumFee: feeEstimates.minimum || 1,
-        };
-        setFees(formattedFees);
-
-        // Set mempool data
-        if (mempoolData) {
-          const allBlocks = [...mempoolData.mempool, ...mempoolData.blocks];
-          setMempoolBlocks(allBlocks);
-          setQueuedBlocksSummary(mempoolData.queuedBlocksSummary || null);
-        }
-
-        // Set wallet addresses - include ALL addresses (receive and change) for label lookup
-        if (addressData && addressData.length > 0) {
-          const allAddresses: WalletAddress[] = addressData
-            .map(addr => ({
-              address: addr.address,
-              used: addr.used,
-              index: addr.index,
-              isChange: addr.isChange,
-            }));
-          log.info('Wallet addresses loaded:', {
-            count: allAddresses.length,
-            sample: allAddresses.slice(0, 3).map(a => a.address.substring(0, 20) + '...'),
-          });
-          setWalletAddresses(allAddresses);
-        } else {
-          log.warn('No wallet addresses loaded for label lookup');
-        }
-
-        // Filter devices for this wallet
-        log.info('Device filtering debug:', {
-          walletId: id,
-          totalDevices: allDevices.length,
-          deviceDetails: allDevices.map(d => ({
-            id: d.id,
-            type: d.type,
-            label: d.label,
-            fingerprint: d.fingerprint,
-            wallets: d.wallets?.map(w => ({ walletId: w.wallet?.id, walletName: w.wallet?.name })),
-          })),
-        });
-
-        // First try to match via wallet-device association
-        let walletDeviceList = allDevices.filter(d =>
-          d.wallets?.some(w => w.wallet.id === id)
-        );
-
-        // If no matches and this is a multisig, try to match by fingerprint from descriptor
-        if (walletDeviceList.length === 0 && isMultisigType(apiWallet.type) && apiWallet.descriptor) {
-          // Extract fingerprints from descriptor (format: [fingerprint/path])
-          const fingerprintMatches = apiWallet.descriptor.match(/\[([a-f0-9]{8})\//gi);
-          if (fingerprintMatches) {
-            const descriptorFingerprints = new Set(
-              fingerprintMatches.map(m => m.slice(1, 9).toLowerCase())
-            );
-            walletDeviceList = allDevices.filter(d =>
-              d.fingerprint && descriptorFingerprints.has(d.fingerprint.toLowerCase())
-            );
-            log.info('Fallback fingerprint matching for multisig:', {
-              descriptorFingerprints: [...descriptorFingerprints],
-              matchedDevices: walletDeviceList.length,
-            });
-          }
-        }
-
-        log.info('Filtered devices for wallet:', {
-          walletId: id,
-          matchedDevices: walletDeviceList.map(d => ({ id: d.id, type: d.type, label: d.label })),
-        });
-        setDevices(walletDeviceList);
-
-        // Build initial state from draft or pre-selection
-        const frozenUtxoIds = new Set(
-          formattedUTXOs.filter(u => u.frozen).map(u => `${u.txid}:${u.vout}`)
-        );
-
-        if (draftData) {
-          const unsignedPsbtToUse = draftData.signedPsbtBase64 || draftData.psbtBase64;
-          log.info('Loading draft data:', {
-            draftId: draftData.id,
-            hasPsbtBase64: !!draftData.psbtBase64,
-            hasSignedPsbtBase64: !!draftData.signedPsbtBase64,
-            psbtLength: unsignedPsbtToUse?.length,
-            psbtPreview: unsignedPsbtToUse?.substring(0, 30) + '...',
-            outputCount: draftData.outputs?.length ?? 1,
-            recipient: draftData.recipient?.substring(0, 20) + '...',
-          });
-          // Resume from draft - go directly to review (PSBT is already created)
-          // All parameters are locked since the PSBT can't be modified
-          const draftInitial: Partial<SerializableTransactionState> = {
-            currentStep: 'review',
-            completedSteps: ['type', 'outputs'],
-            isDraftMode: true,
-            feeRate: draftData.feeRate,
-            rbfEnabled: draftData.enableRBF,
-            subtractFees: draftData.subtractFees,
-            draftId: draftData.id,
-            // Pass the PSBT for signing
-            unsignedPsbt: draftData.signedPsbtBase64 || draftData.psbtBase64,
-            // Pass signed devices if any
-            signedDevices: draftData.signedDeviceIds || [],
-            // Restore payjoin URL to allow re-attempt if previously failed
-            payjoinUrl: draftData.payjoinUrl || null,
-            payjoinStatus: 'idle', // Reset status to allow re-attempt
-            outputs: draftData.outputs && draftData.outputs.length > 0
-              ? draftData.outputs.map(o => ({
-                  address: o.address,
-                  amount: o.amount.toString(),
-                  sendMax: false,
-                }))
-              : [{
-                  address: draftData.recipient,
-                  amount: draftData.amount.toString(),
-                  sendMax: false,
-                }],
-          };
-
-          // Handle selected UTXOs from draft
-          if (draftData.selectedUtxoIds && draftData.selectedUtxoIds.length > 0) {
-            // Include UTXOs that are spendable OR locked by this specific draft
-            const availableUtxoIds = new Set(
-              formattedUTXOs
-                .filter(u => (u.spendable && !u.frozen) || u.lockedByDraftId === draftData.id)
-                .map(u => `${u.txid}:${u.vout}`)
-            );
-            const validUtxoIds = draftData.isRBF
-              ? draftData.selectedUtxoIds
-              : draftData.selectedUtxoIds.filter(utxoId => availableUtxoIds.has(utxoId));
-
-            if (validUtxoIds.length > 0) {
-              draftInitial.selectedUTXOs = validUtxoIds;
-              draftInitial.showCoinControl = true;
-            }
-
-            if (validUtxoIds.length !== draftData.selectedUtxoIds.length && !draftData.isRBF) {
-              showInfo(`${draftData.selectedUtxoIds.length - validUtxoIds.length} UTXOs are no longer available`);
-            }
-          }
-
-          // Check if this is a consolidation or standard transaction
-          const allAddresses = addressData?.map(a => a.address) || [];
-          if (allAddresses.includes(draftData.recipient)) {
-            draftInitial.transactionType = 'consolidation';
-          } else {
-            draftInitial.transactionType = 'standard';
-          }
-
-          // Set outputsValid to true for all outputs (PSBT was already validated)
-          const draftOutputs = draftInitial.outputs || [];
-          draftInitial.outputsValid = draftOutputs.map(() => true);
-
-          setInitialState(draftInitial);
-
-          // Set transaction data from draft for review step
-          setDraftTxData({
-            fee: draftData.fee,
-            totalInput: draftData.totalInput,
-            totalOutput: draftData.totalOutput,
-            changeAmount: draftData.changeAmount,
-            changeAddress: draftData.changeAddress,
-            effectiveAmount: draftData.effectiveAmount,
-            selectedUtxoIds: draftData.selectedUtxoIds,
-            inputPaths: draftData.inputPaths,
-          });
-        } else if (preSelectedUTXOs && preSelectedUTXOs.length > 0) {
-          // Handle pre-selected UTXOs from wallet view
-          const validPre = preSelectedUTXOs.filter(utxoId => !frozenUtxoIds.has(utxoId));
-          if (validPre.length !== preSelectedUTXOs.length) {
-            showInfo(`${preSelectedUTXOs.length - validPre.length} frozen UTXO${preSelectedUTXOs.length - validPre.length > 1 ? 's' : ''} removed from selection`);
-          }
-          if (validPre.length > 0) {
-            setInitialState({
-              selectedUTXOs: validPre,
-              showCoinControl: true,
-            });
-          }
-        }
-
-        setLoading(false);
-      } catch (err) {
-        if (!mounted) return;
-        log.error('Failed to fetch data', { error: err });
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else {
-          setError('Failed to load transaction data');
-        }
-        setLoading(false);
+      // Check if user has permission to send (viewers cannot send)
+      if (apiWallet.userRole === 'viewer') {
+        log.warn('Viewer attempted to access send page', { walletId: id });
+        navigate(`/wallets/${id}`, { replace: true });
+        return;
       }
-    };
 
-    fetchData();
+      // Convert API wallet to Wallet type (enum values now match API values)
+      const walletType = isMultisigType(apiWallet.type) ? WalletType.MULTI_SIG : WalletType.SINGLE_SIG;
+      const formattedWallet: Wallet = {
+        id: apiWallet.id,
+        name: apiWallet.name,
+        type: walletType,
+        balance: apiWallet.balance,
+        scriptType: apiWallet.scriptType,
+        derivationPath: apiWallet.descriptor || '',
+        fingerprint: apiWallet.fingerprint || '',
+        label: apiWallet.name,
+        xpub: '',
+        unit: 'sats',
+        ownerId: user.id,
+        groupIds: [],
+        quorum: {
+          m: getQuorumM(apiWallet.quorum, 1),
+          n: getQuorumN(apiWallet.quorum, apiWallet.totalSigners, 1),
+        },
+        descriptor: apiWallet.descriptor,
+        deviceIds: [],
+      };
+      setWallet(formattedWallet);
+
+      // Fetch all other data in parallel
+      const [utxoData, feeEstimates, mempoolData, addressData, allDevices] = await Promise.all([
+        transactionsApi.getUTXOs(id),
+        bitcoinApi.getFeeEstimates(),
+        bitcoinApi.getMempoolData().catch(() => null),
+        transactionsApi.getAddresses(id).catch(() => []),
+        devicesApi.getDevices().catch(() => []),
+      ]);
+      if (!mountedRef.current) return;
+
+      // Format UTXOs
+      const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
+        id: utxo.id,
+        txid: utxo.txid,
+        vout: utxo.vout,
+        amount: Number(utxo.amount),
+        address: utxo.address,
+        confirmations: utxo.confirmations,
+        spendable: utxo.spendable,
+        scriptType: formattedWallet.scriptType,
+        frozen: utxo.frozen ?? false,
+        lockedByDraftId: utxo.lockedByDraftId,
+        lockedByDraftLabel: utxo.lockedByDraftLabel,
+      }));
+      setUTXOs(formattedUTXOs);
+
+      // Format fees
+      const formattedFees: FeeEstimate = {
+        fastestFee: feeEstimates.fastest,
+        halfHourFee: feeEstimates.hour,
+        hourFee: feeEstimates.economy,
+        economyFee: feeEstimates.minimum || 1,
+        minimumFee: feeEstimates.minimum || 1,
+      };
+      setFees(formattedFees);
+
+      // Set mempool data
+      if (mempoolData) {
+        const allBlocks = [...mempoolData.mempool, ...mempoolData.blocks];
+        setMempoolBlocks(allBlocks);
+        setQueuedBlocksSummary(mempoolData.queuedBlocksSummary || null);
+      }
+
+      // Set wallet addresses - include ALL addresses (receive and change) for label lookup
+      if (addressData && addressData.length > 0) {
+        const allAddresses: WalletAddress[] = addressData
+          .map(addr => ({
+            address: addr.address,
+            used: addr.used,
+            index: addr.index,
+            isChange: addr.isChange,
+          }));
+        log.info('Wallet addresses loaded:', {
+          count: allAddresses.length,
+          sample: allAddresses.slice(0, 3).map(a => a.address.substring(0, 20) + '...'),
+        });
+        setWalletAddresses(allAddresses);
+      } else {
+        log.warn('No wallet addresses loaded for label lookup');
+      }
+
+      // Filter devices for this wallet
+      log.info('Device filtering debug:', {
+        walletId: id,
+        totalDevices: allDevices.length,
+        deviceDetails: allDevices.map(d => ({
+          id: d.id,
+          type: d.type,
+          label: d.label,
+          fingerprint: d.fingerprint,
+          wallets: d.wallets?.map(w => ({ walletId: w.wallet?.id, walletName: w.wallet?.name })),
+        })),
+      });
+
+      // First try to match via wallet-device association
+      let walletDeviceList = allDevices.filter(d =>
+        d.wallets?.some(w => w.wallet.id === id)
+      );
+
+      // If no matches and this is a multisig, try to match by fingerprint from descriptor
+      if (walletDeviceList.length === 0 && isMultisigType(apiWallet.type) && apiWallet.descriptor) {
+        // Extract fingerprints from descriptor (format: [fingerprint/path])
+        const fingerprintMatches = apiWallet.descriptor.match(/\[([a-f0-9]{8})\//gi);
+        if (fingerprintMatches) {
+          const descriptorFingerprints = new Set(
+            fingerprintMatches.map(m => m.slice(1, 9).toLowerCase())
+          );
+          walletDeviceList = allDevices.filter(d =>
+            d.fingerprint && descriptorFingerprints.has(d.fingerprint.toLowerCase())
+          );
+          log.info('Fallback fingerprint matching for multisig:', {
+            descriptorFingerprints: [...descriptorFingerprints],
+            matchedDevices: walletDeviceList.length,
+          });
+        }
+      }
+
+      log.info('Filtered devices for wallet:', {
+        walletId: id,
+        matchedDevices: walletDeviceList.map(d => ({ id: d.id, type: d.type, label: d.label })),
+      });
+      setDevices(walletDeviceList);
+
+      // Build initial state from draft or pre-selection
+      const frozenUtxoIds = new Set(
+        formattedUTXOs.filter(u => u.frozen).map(u => `${u.txid}:${u.vout}`)
+      );
+
+      if (draftData) {
+        const unsignedPsbtToUse = draftData.signedPsbtBase64 || draftData.psbtBase64;
+        log.info('Loading draft data:', {
+          draftId: draftData.id,
+          hasPsbtBase64: !!draftData.psbtBase64,
+          hasSignedPsbtBase64: !!draftData.signedPsbtBase64,
+          psbtLength: unsignedPsbtToUse?.length,
+          psbtPreview: unsignedPsbtToUse?.substring(0, 30) + '...',
+          outputCount: draftData.outputs?.length ?? 1,
+          recipient: draftData.recipient?.substring(0, 20) + '...',
+        });
+        // Resume from draft - go directly to review (PSBT is already created)
+        // All parameters are locked since the PSBT can't be modified
+        const draftInitial: Partial<SerializableTransactionState> = {
+          currentStep: 'review',
+          completedSteps: ['type', 'outputs'],
+          isDraftMode: true,
+          feeRate: draftData.feeRate,
+          rbfEnabled: draftData.enableRBF,
+          subtractFees: draftData.subtractFees,
+          draftId: draftData.id,
+          // Pass the PSBT for signing
+          unsignedPsbt: draftData.signedPsbtBase64 || draftData.psbtBase64,
+          // Pass signed devices if any
+          signedDevices: draftData.signedDeviceIds || [],
+          // Restore payjoin URL to allow re-attempt if previously failed
+          payjoinUrl: draftData.payjoinUrl || null,
+          payjoinStatus: 'idle', // Reset status to allow re-attempt
+          outputs: draftData.outputs && draftData.outputs.length > 0
+            ? draftData.outputs.map(o => ({
+                address: o.address,
+                amount: o.amount.toString(),
+                sendMax: false,
+              }))
+            : [{
+                address: draftData.recipient,
+                amount: draftData.amount.toString(),
+                sendMax: false,
+              }],
+        };
+
+        // Handle selected UTXOs from draft
+        if (draftData.selectedUtxoIds && draftData.selectedUtxoIds.length > 0) {
+          // Include UTXOs that are spendable OR locked by this specific draft
+          const availableUtxoIds = new Set(
+            formattedUTXOs
+              .filter(u => (u.spendable && !u.frozen) || u.lockedByDraftId === draftData.id)
+              .map(u => `${u.txid}:${u.vout}`)
+          );
+          const validUtxoIds = draftData.isRBF
+            ? draftData.selectedUtxoIds
+            : draftData.selectedUtxoIds.filter(utxoId => availableUtxoIds.has(utxoId));
+
+          if (validUtxoIds.length > 0) {
+            draftInitial.selectedUTXOs = validUtxoIds;
+            draftInitial.showCoinControl = true;
+          }
+
+          if (validUtxoIds.length !== draftData.selectedUtxoIds.length && !draftData.isRBF) {
+            showInfo(`${draftData.selectedUtxoIds.length - validUtxoIds.length} UTXOs are no longer available`);
+          }
+        }
+
+        // Check if this is a consolidation or standard transaction
+        const allAddresses = addressData?.map(a => a.address) || [];
+        if (allAddresses.includes(draftData.recipient)) {
+          draftInitial.transactionType = 'consolidation';
+        } else {
+          draftInitial.transactionType = 'standard';
+        }
+
+        // Set outputsValid to true for all outputs (PSBT was already validated)
+        const draftOutputs = draftInitial.outputs || [];
+        draftInitial.outputsValid = draftOutputs.map(() => true);
+
+        setInitialState(draftInitial);
+
+        // Set transaction data from draft for review step
+        setDraftTxData({
+          fee: draftData.fee,
+          totalInput: draftData.totalInput,
+          totalOutput: draftData.totalOutput,
+          changeAmount: draftData.changeAmount,
+          changeAddress: draftData.changeAddress,
+          effectiveAmount: draftData.effectiveAmount,
+          selectedUtxoIds: draftData.selectedUtxoIds,
+          inputPaths: draftData.inputPaths,
+        });
+      } else if (preSelectedUTXOs && preSelectedUTXOs.length > 0) {
+        // Handle pre-selected UTXOs from wallet view
+        const validPre = preSelectedUTXOs.filter(utxoId => !frozenUtxoIds.has(utxoId));
+        if (validPre.length !== preSelectedUTXOs.length) {
+          showInfo(`${preSelectedUTXOs.length - validPre.length} frozen UTXO${preSelectedUTXOs.length - validPre.length > 1 ? 's' : ''} removed from selection`);
+        }
+        if (validPre.length > 0) {
+          setInitialState({
+            selectedUTXOs: validPre,
+            showCoinControl: true,
+          });
+        }
+      }
+    });
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
     };
-  }, [id, user, draftData, preSelectedUTXOs, showInfo]);
+  }, [id, user, draftData, preSelectedUTXOs, showInfo, runLoad]);
 
   // Cancel handler
   const handleCancel = useCallback(() => {

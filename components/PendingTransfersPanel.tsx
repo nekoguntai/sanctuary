@@ -12,6 +12,7 @@ import { useUser } from '../contexts/UserContext';
 import * as transfersApi from '../src/api/transfers';
 import { Transfer } from '../types';
 import { ApiError } from '../src/api/client';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PendingTransfersPanel');
@@ -29,9 +30,14 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
 }) => {
   const { user } = useUser();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Loading state using hook
+  const { loading, error: loadError, execute: runLoad } = useLoadingState({ initialLoading: true });
+
+  // Combined error display
+  const error = loadError || actionError;
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -41,22 +47,15 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   const [declineReason, setDeclineReason] = useState('');
 
   // Fetch active transfers for this resource
-  const fetchTransfers = useCallback(async () => {
-    try {
-      const result = await transfersApi.getTransfers({
-        status: 'active',
-        resourceType,
-      });
-      // Filter to only this resource
-      const resourceTransfers = result.transfers.filter(t => t.resourceId === resourceId);
-      setTransfers(resourceTransfers);
-    } catch (err) {
-      log.error('Failed to fetch transfers', { err });
-      setError('Failed to load transfers');
-    } finally {
-      setLoading(false);
-    }
-  }, [resourceType, resourceId]);
+  const fetchTransfers = useCallback(() => runLoad(async () => {
+    const result = await transfersApi.getTransfers({
+      status: 'active',
+      resourceType,
+    });
+    // Filter to only this resource
+    const resourceTransfers = result.transfers.filter(t => t.resourceId === resourceId);
+    setTransfers(resourceTransfers);
+  }), [resourceType, resourceId, runLoad]);
 
   useEffect(() => {
     fetchTransfers();
@@ -65,14 +64,14 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   // Handle accept transfer
   const handleAccept = async (transferId: string) => {
     setActionLoading(transferId);
-    setError(null);
+    setActionError(null);
     try {
       await transfersApi.acceptTransfer(transferId);
       await fetchTransfers();
       setConfirmModal(null);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to accept transfer';
-      setError(message);
+      setActionError(message);
     } finally {
       setActionLoading(null);
     }
@@ -81,7 +80,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   // Handle decline transfer
   const handleDecline = async (transferId: string) => {
     setActionLoading(transferId);
-    setError(null);
+    setActionError(null);
     try {
       await transfersApi.declineTransfer(transferId, { reason: declineReason.trim() || undefined });
       await fetchTransfers();
@@ -89,7 +88,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       setDeclineReason('');
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to decline transfer';
-      setError(message);
+      setActionError(message);
     } finally {
       setActionLoading(null);
     }
@@ -98,14 +97,14 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   // Handle cancel transfer
   const handleCancel = async (transferId: string) => {
     setActionLoading(transferId);
-    setError(null);
+    setActionError(null);
     try {
       await transfersApi.cancelTransfer(transferId);
       await fetchTransfers();
       setConfirmModal(null);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to cancel transfer';
-      setError(message);
+      setActionError(message);
     } finally {
       setActionLoading(null);
     }
@@ -114,7 +113,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
   // Handle confirm transfer
   const handleConfirm = async (transferId: string) => {
     setActionLoading(transferId);
-    setError(null);
+    setActionError(null);
     try {
       await transfersApi.confirmTransfer(transferId);
       await fetchTransfers();
@@ -122,7 +121,7 @@ export const PendingTransfersPanel: React.FC<PendingTransfersPanelProps> = ({
       onTransferComplete?.();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Failed to confirm transfer';
-      setError(message);
+      setActionError(message);
     } finally {
       setActionLoading(null);
     }

@@ -22,6 +22,7 @@ import type {
   ExportResult,
 } from '../types';
 import { convertXpubToFormat } from '../../bitcoin/addressDerivation';
+import { normalizeDerivationPath } from '../../../../../shared/utils/bitcoin';
 
 /**
  * Map internal script type to Coldcard format string
@@ -35,14 +36,6 @@ function mapScriptTypeToFormat(scriptType: string): string {
   return scriptTypeMap[scriptType] || 'P2WSH';
 }
 
-/**
- * Convert derivation path to Coldcard format using ' notation for hardened paths
- * Coldcard expects m/48'/0'/0'/2' format, not m/48h/0h/0h/2h
- */
-function normalizeDerivationPath(path: string): string {
-  // Replace 'h' with apostrophe for hardened notation
-  return path.replace(/h/g, "'");
-}
 
 /**
  * Extract derivation path from devices

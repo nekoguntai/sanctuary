@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Check, AlertCircle, AlertTriangle, Variable, Info } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Variables');
 
 export const Variables: React.FC = () => {
-  const [loading, setLoading] = useState(true);
   const [confirmationThreshold, setConfirmationThreshold] = useState(1);
   const [deepConfirmationThreshold, setDeepConfirmationThreshold] = useState(3);
   const [dustThreshold, setDustThreshold] = useState(546);
-  const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Loading states using hook
+  const { loading, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: isSaving, error: saveError, execute: runSave } = useLoadingState();
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -25,51 +28,42 @@ export const Variables: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const settings = await adminApi.getSystemSettings();
-        setConfirmationThreshold(settings.confirmationThreshold ?? 1);
-        setDeepConfirmationThreshold(settings.deepConfirmationThreshold ?? 3);
-        setDustThreshold(settings.dustThreshold ?? 546);
-      } catch (error) {
-        log.error('Failed to load settings', { error });
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadSettings();
+    runLoad(async () => {
+      const settings = await adminApi.getSystemSettings();
+      setConfirmationThreshold(settings.confirmationThreshold ?? 1);
+      setDeepConfirmationThreshold(settings.deepConfirmationThreshold ?? 3);
+      setDustThreshold(settings.dustThreshold ?? 546);
+    });
   }, []);
 
   const handleSave = async () => {
     // Validate: deep confirmation must be >= confirmation threshold
     if (deepConfirmationThreshold < confirmationThreshold) {
-      setSaveError('Deep confirmation threshold must be greater than or equal to confirmation threshold');
+      setValidationError('Deep confirmation threshold must be greater than or equal to confirmation threshold');
       return;
     }
+    setValidationError(null);
 
-    setIsSaving(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-
-    try {
+    const result = await runSave(async () => {
       await adminApi.updateSystemSettings({
         confirmationThreshold,
         deepConfirmationThreshold,
         dustThreshold,
       });
+    });
+
+    if (result !== null) {
       setSaveSuccess(true);
       // Clear any existing timeout and set new one
       if (successTimeoutRef.current) {
         clearTimeout(successTimeoutRef.current);
       }
       successTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error) {
-      log.error('Failed to update settings', { error });
-      setSaveError('Failed to update settings');
-    } finally {
-      setIsSaving(false);
     }
   };
+
+  // Combined error display
+  const displayError = validationError || saveError;
 
   if (loading) {
     return <div className="p-8 text-center text-sanctuary-400">Loading variables...</div>;
@@ -191,10 +185,10 @@ export const Variables: React.FC = () => {
             </div>
           )}
 
-          {saveError && (
+          {displayError && (
             <div className="flex items-center space-x-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
               <AlertCircle className="w-4 h-4" />
-              <span className="text-sm">{saveError}</span>
+              <span className="text-sm">{displayError}</span>
             </div>
           )}
         </div>

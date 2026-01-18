@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Tag, Plus, X, Check, ChevronDown } from 'lucide-react';
 import * as labelsApi from '../src/api/labels';
 import type { Label } from '../src/api/labels';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('LabelSelector');
@@ -26,12 +27,14 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
   className = '',
 }) => {
   const [labels, setLabels] = useState<Label[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
-  const [creating, setCreating] = useState(false);
+
+  // Loading states using hook
+  const { loading, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: creating, execute: runCreate } = useLoadingState<Label>();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,17 +57,10 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const loadLabels = async () => {
-    try {
-      setLoading(true);
-      const data = await labelsApi.getLabels(walletId);
-      setLabels(data);
-    } catch (err) {
-      log.error('Failed to load labels', { error: err });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadLabels = () => runLoad(async () => {
+    const data = await labelsApi.getLabels(walletId);
+    setLabels(data);
+  });
 
   const handleToggleLabel = (label: Label) => {
     const isSelected = selectedLabels.some((l) => l.id === label.id);
@@ -83,19 +79,17 @@ export const LabelSelector: React.FC<LabelSelectorProps> = ({
   const handleCreateLabel = async () => {
     if (!newLabelName.trim()) return;
 
-    try {
-      setCreating(true);
-      const newLabel = await labelsApi.createLabel(walletId, {
+    const result = await runCreate(async () => {
+      return await labelsApi.createLabel(walletId, {
         name: newLabelName.trim(),
       });
-      setLabels([...labels, newLabel]);
-      onChange([...selectedLabels, newLabel]);
+    });
+
+    if (result) {
+      setLabels([...labels, result]);
+      onChange([...selectedLabels, result]);
       setNewLabelName('');
       setIsCreating(false);
-    } catch (err) {
-      log.error('Failed to create label', { error: err });
-    } finally {
-      setCreating(false);
     }
   };
 

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { URRegistryDecoder, CryptoOutput, CryptoHDKey, CryptoAccount } from '@keystonehq/bc-ur-registry';
 import { URDecoder as BytesURDecoder } from '@ngraveio/bc-ur';
-import { WalletType, ApiWalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount, isMultisigType } from '../types';
+import { WalletType, HardwareDevice, HardwareDeviceModel, DeviceRole, Device, DeviceShareInfo, DeviceAccount, isMultisigType } from '../types';
 import { getDevice, updateDevice, getDeviceModels, getDeviceShareInfo, shareDeviceWithUser, removeUserFromDevice, shareDeviceWithGroup, addDeviceAccount, DeviceAccountInput } from '../src/api/devices';
 import { parseDeviceJson, DeviceAccount as ParsedDeviceAccount } from '../services/deviceParsers';
 import { hardwareWalletService, isSecureContext, DeviceType } from '../services/hardwareWallet';
@@ -87,7 +87,7 @@ function getAccountTypeInfo(account: DeviceAccount): AccountTypeInfo {
 interface WalletInfo {
   id: string;
   name: string;
-  type: WalletType | ApiWalletType;
+  type: WalletType | string;
 }
 
 // Group display type

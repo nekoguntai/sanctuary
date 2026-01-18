@@ -19,6 +19,7 @@ import { WalletType } from '../types';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
 import { FiatDisplaySubtle } from './FiatDisplay';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 import { truncateAddress } from '../utils/formatters';
 import { downloadBlob } from '../utils/download';
@@ -108,11 +109,16 @@ export const DraftList: React.FC<DraftListProps> = ({
     return undefined;
   }, [knownAddresses, walletName]);
   const [drafts, setDrafts] = useState<DraftTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
+
+  // Loading states using hook
+  const { loading, error, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { error: operationError, execute: runOperation } = useLoadingState();
+
+  // Combined error display
+  const displayError = error || operationError;
 
   // Calculate fee warning for a draft
   const getFeeWarning = (draft: DraftTransaction) => {
@@ -211,22 +217,13 @@ export const DraftList: React.FC<DraftListProps> = ({
     loadDrafts();
   }, [walletId]);
 
-  const loadDrafts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      log.debug('Loading drafts for wallet', { walletId });
-      const data = await getDrafts(walletId);
-      log.debug('Loaded drafts', { count: data.length });
-      setDrafts(data);
-      onDraftsChange?.(data.length);
-    } catch (err: any) {
-      log.error('Failed to load drafts', { error: err });
-      setError(err.message || 'Failed to load drafts');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadDrafts = () => runLoad(async () => {
+    log.debug('Loading drafts for wallet', { walletId });
+    const data = await getDrafts(walletId);
+    log.debug('Loaded drafts', { count: data.length });
+    setDrafts(data);
+    onDraftsChange?.(data.length);
+  });
 
   // Sort drafts: expired first (for visibility), then by expiration (soonest first), then by creation date
   const sortedDrafts = React.useMemo(() => {
@@ -272,15 +269,15 @@ export const DraftList: React.FC<DraftListProps> = ({
   };
 
   const handleDelete = async (draftId: string) => {
-    try {
+    const result = await runOperation(async () => {
       await deleteDraft(walletId, draftId);
+    });
+
+    if (result !== null) {
       const newDrafts = drafts.filter(d => d.id !== draftId);
       setDrafts(newDrafts);
       setDeleteConfirm(null);
       onDraftsChange?.(newDrafts.length);
-    } catch (err: any) {
-      log.error('Failed to delete draft', { error: err });
-      setError(err.message || 'Failed to delete draft');
     }
   };
 
@@ -297,7 +294,7 @@ export const DraftList: React.FC<DraftListProps> = ({
   };
 
   const handleUploadPsbt = async (draftId: string, file: File) => {
-    try {
+    const result = await runOperation(async () => {
       // Read file as binary first to detect format
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -365,13 +362,12 @@ export const DraftList: React.FC<DraftListProps> = ({
         signedPsbtBase64: signedPsbt,
         status: newStatus,
       });
+    });
 
+    if (result !== null) {
       // Reload drafts to get updated data
       await loadDrafts();
       setUploadingFor(null);
-    } catch (err: any) {
-      log.error('Failed to upload PSBT', { error: err });
-      setError(err.message || 'Failed to upload signed PSBT');
     }
   };
 
@@ -472,12 +468,12 @@ export const DraftList: React.FC<DraftListProps> = ({
     );
   }
 
-  if (error) {
+  if (displayError) {
     return (
       <div className="text-center py-10">
         <div className="inline-flex items-center gap-2 text-red-500">
           <AlertCircle className="w-5 h-5" />
-          {error}
+          {displayError}
         </div>
         <button
           onClick={loadDrafts}

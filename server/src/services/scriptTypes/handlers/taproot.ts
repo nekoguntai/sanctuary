@@ -11,13 +11,7 @@ import type {
   DescriptorBuildOptions,
   Network,
 } from '../types';
-
-/**
- * Format a derivation path for use in descriptors (replace ' with h)
- */
-function formatPathForDescriptor(path: string): string {
-  return path.replace(/^m\//, '').replace(/'/g, 'h');
-}
+import { formatPathForDescriptor } from '../../../../../shared/utils/bitcoin';
 
 export const taprootHandler: ScriptTypeHandler = {
   id: 'taproot',

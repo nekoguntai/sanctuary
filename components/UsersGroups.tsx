@@ -4,6 +4,7 @@ import { Users, UserPlus, Shield, User as UserIcon, Plus, Trash2, Edit2, X, Eye,
 import * as adminApi from '../src/api/admin';
 import { AdminUser, AdminGroup } from '../src/api/admin';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('UsersGroups');
@@ -12,7 +13,13 @@ export const UsersGroups: React.FC = () => {
   const { handleError } = useErrorHandler();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [groups, setGroups] = useState<AdminGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Loading states using hook
+  const { loading, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: isCreatingUser, error: createUserError, execute: runCreateUser, clearError: clearCreateUserError } = useLoadingState();
+  const { loading: isUpdatingUser, error: editUserError, execute: runUpdateUser, clearError: clearEditUserError } = useLoadingState();
+  const { loading: isCreatingGroup, execute: runCreateGroup } = useLoadingState();
+  const { loading: isUpdatingGroup, error: editGroupError, execute: runUpdateGroup, clearError: clearEditGroupError } = useLoadingState();
 
   // Create User Modal State
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -21,8 +28,6 @@ export const UsersGroups: React.FC = () => {
   const [newEmail, setNewEmail] = useState('');
   const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [createUserError, setCreateUserError] = useState<string | null>(null);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Edit User Modal State
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
@@ -30,34 +35,23 @@ export const UsersGroups: React.FC = () => {
   const [editPassword, setEditPassword] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editIsAdmin, setEditIsAdmin] = useState(false);
-  const [editUserError, setEditUserError] = useState<string | null>(null);
-  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
   // Create Group State
   const [newGroup, setNewGroup] = useState('');
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   // Edit Group Modal State
   const [editingGroup, setEditingGroup] = useState<AdminGroup | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
   const [editGroupMembers, setEditGroupMembers] = useState<string[]>([]);
-  const [editGroupError, setEditGroupError] = useState<string | null>(null);
-  const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
 
-  const loadData = async () => {
-    try {
-      const [usersData, groupsData] = await Promise.all([
-        adminApi.getUsers(),
-        adminApi.getGroups()
-      ]);
-      setUsers(usersData);
-      setGroups(groupsData);
-    } catch (error) {
-      log.error('Failed to load data', { error });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadData = () => runLoad(async () => {
+    const [usersData, groupsData] = await Promise.all([
+      adminApi.getUsers(),
+      adminApi.getGroups()
+    ]);
+    setUsers(usersData);
+    setGroups(groupsData);
+  });
 
   useEffect(() => {
     loadData();
@@ -65,35 +59,26 @@ export const UsersGroups: React.FC = () => {
 
   const handleCreateUser = async () => {
     if (!newUsername.trim() || !newPassword.trim()) {
-      setCreateUserError('Username and password are required');
       return;
     }
 
-    setIsCreatingUser(true);
-    setCreateUserError(null);
-
-    try {
+    const result = await runCreateUser(async () => {
       await adminApi.createUser({
         username: newUsername.trim(),
         password: newPassword,
         email: newEmail.trim() || undefined,
         isAdmin: newIsAdmin
       });
+    });
 
-      // Reset form and close modal
+    if (result !== null) {
+      // Success - reset form and close modal
       setNewUsername('');
       setNewPassword('');
       setNewEmail('');
       setNewIsAdmin(false);
       setShowCreateUser(false);
-
-      // Reload users
       loadData();
-    } catch (error: any) {
-      log.error('Create user error', { error });
-      setCreateUserError(error.message || 'Failed to create user');
-    } finally {
-      setIsCreatingUser(false);
     }
   };
 
@@ -103,40 +88,34 @@ export const UsersGroups: React.FC = () => {
     setEditEmail(user.email || '');
     setEditIsAdmin(user.isAdmin);
     setEditPassword('');
-    setEditUserError(null);
+    clearEditUserError();
   };
 
   const handleUpdateUser = async () => {
     if (!editingUser) return;
 
-    setIsUpdatingUser(true);
-    setEditUserError(null);
+    const updateData: adminApi.UpdateUserRequest = {};
 
-    try {
-      const updateData: adminApi.UpdateUserRequest = {};
+    if (editUsername !== editingUser.username) {
+      updateData.username = editUsername;
+    }
+    if (editEmail !== (editingUser.email || '')) {
+      updateData.email = editEmail || undefined;
+    }
+    if (editIsAdmin !== editingUser.isAdmin) {
+      updateData.isAdmin = editIsAdmin;
+    }
+    if (editPassword) {
+      updateData.password = editPassword;
+    }
 
-      if (editUsername !== editingUser.username) {
-        updateData.username = editUsername;
-      }
-      if (editEmail !== (editingUser.email || '')) {
-        updateData.email = editEmail || undefined;
-      }
-      if (editIsAdmin !== editingUser.isAdmin) {
-        updateData.isAdmin = editIsAdmin;
-      }
-      if (editPassword) {
-        updateData.password = editPassword;
-      }
-
+    const result = await runUpdateUser(async () => {
       await adminApi.updateUser(editingUser.id, updateData);
+    });
 
+    if (result !== null) {
       setEditingUser(null);
       loadData();
-    } catch (error: any) {
-      log.error('Update user error', { error });
-      setEditUserError(error.message || 'Failed to update user');
-    } finally {
-      setIsUpdatingUser(false);
     }
   };
 
@@ -157,17 +136,13 @@ export const UsersGroups: React.FC = () => {
   const handleCreateGroup = async () => {
     if (!newGroup.trim()) return;
 
-    setIsCreatingGroup(true);
-
-    try {
+    const result = await runCreateGroup(async () => {
       await adminApi.createGroup({ name: newGroup.trim() });
+    });
+
+    if (result !== null) {
       setNewGroup('');
       loadData();
-    } catch (error) {
-      log.error('Create group error', { error });
-      handleError(error, 'Create Group Failed');
-    } finally {
-      setIsCreatingGroup(false);
     }
   };
 
@@ -189,28 +164,22 @@ export const UsersGroups: React.FC = () => {
     setEditingGroup(group);
     setEditGroupName(group.name);
     setEditGroupMembers(group.members.map(m => m.userId));
-    setEditGroupError(null);
+    clearEditGroupError();
   };
 
   const handleUpdateGroup = async () => {
     if (!editingGroup) return;
 
-    setIsUpdatingGroup(true);
-    setEditGroupError(null);
-
-    try {
+    const result = await runUpdateGroup(async () => {
       await adminApi.updateGroup(editingGroup.id, {
         name: editGroupName,
         memberIds: editGroupMembers,
       });
+    });
 
+    if (result !== null) {
       setEditingGroup(null);
       loadData();
-    } catch (error: any) {
-      log.error('Update group error', { error });
-      setEditGroupError(error.message || 'Failed to update group');
-    } finally {
-      setIsUpdatingGroup(false);
     }
   };
 

@@ -143,7 +143,7 @@ describe('LabelManager', () => {
       render(<LabelManager walletId={walletId} />);
 
       await waitFor(() => {
-        expect(screen.getByText('Failed to load labels')).toBeInTheDocument();
+        expect(screen.getByText('An unexpected error occurred')).toBeInTheDocument();
       });
     });
   });

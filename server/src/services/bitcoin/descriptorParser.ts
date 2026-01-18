@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { normalizeDerivationPath } from '../../../../shared/utils/bitcoin';
 
 const log = createLogger('DESCRIPTOR');
 
@@ -52,16 +53,6 @@ function detectNetwork(xpub: string, derivationPath: string): Network {
   return 'mainnet';
 }
 
-/**
- * Convert derivation path notation (h or H to ')
- */
-function normalizeDerivationPath(path: string): string {
-  // Add m/ prefix if missing
-  let normalized = path.startsWith('m/') ? path : `m/${path}`;
-  // Convert h or H to ' (both uppercase and lowercase hardening notation)
-  normalized = normalized.replace(/[hH]/g, "'");
-  return normalized;
-}
 
 /**
  * Parse a key expression like [fingerprint/path]xpub/chain/*

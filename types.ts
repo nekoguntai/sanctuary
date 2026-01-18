@@ -43,11 +43,6 @@ export function isMultisigType(type: WalletType | string | undefined): boolean {
 }
 
 /**
- * @deprecated Use WalletType directly - values now match API format
- */
-export type ApiWalletType = 'single_sig' | 'multi_sig';
-
-/**
  * Script type for wallet address derivation
  */
 export type WalletScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
@@ -715,7 +710,7 @@ export type WalletRole = 'owner' | 'signer' | 'viewer' | null;
 export interface Wallet {
   id: string;
   name: string;
-  type: WalletType | ApiWalletType; // Supports both enum values and API strings
+  type: WalletType | string; // Supports both enum values and API strings
   scriptType?: WalletScriptType;
   network?: WalletNetwork;
   quorum?: Quorum | number; // Quorum object or just m value

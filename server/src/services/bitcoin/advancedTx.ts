@@ -19,18 +19,11 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
+import { normalizeDerivationPath } from '../../../../shared/utils/bitcoin';
 
 const bip32 = BIP32Factory(ecc);
 
 const log = createLogger('ADVANCED_TX');
-
-/**
- * Normalize derivation path to use apostrophe notation for hardened paths.
- * bitcoinjs-lib only recognizes ' notation, not 'h' notation, when encoding PSBT bip32Derivation.
- */
-function normalizeHardenedPath(path: string): string {
-  return path.replace(/h/g, "'");
-}
 
 /**
  * Get dust threshold from system settings
@@ -315,7 +308,7 @@ export async function createRBFTransaction(
 
         if (pubkeyNode.publicKey) {
           // Normalize path to apostrophe notation for PSBT compatibility
-          const normalizedPath = normalizeHardenedPath(derivationPath);
+          const normalizedPath = normalizeDerivationPath(derivationPath);
           psbt.updateInput(i, {
             bip32Derivation: [{
               masterFingerprint,

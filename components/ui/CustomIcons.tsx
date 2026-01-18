@@ -1,5 +1,5 @@
 import React from 'react';
-import { HardwareDevice, WalletType, ApiWalletType, isMultisigType } from '../../types';
+import { HardwareDevice, WalletType, isMultisigType } from '../../types';
 import { Key } from 'lucide-react';
 
 interface IconProps {
@@ -73,7 +73,7 @@ export const MultiSigIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 );
 
-export const getWalletIcon = (type: WalletType | ApiWalletType, className?: string) => {
+export const getWalletIcon = (type: WalletType | string, className?: string) => {
   return isMultisigType(type)
     ? <MultiSigIcon className={className} />
     : <SingleSigIcon className={className} />;

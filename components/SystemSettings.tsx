@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Shield, UserPlus, Check, AlertCircle, Radio, Users, Layers, Gauge, RefreshCw, Zap, Clock } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import type { WebSocketStats, RateLimitEvent } from '../src/api/admin';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 import { Button } from './ui/Button';
 
@@ -19,23 +20,18 @@ const SYSTEM_SETTINGS_TABS: { id: SystemSettingsTab; name: string; icon: React.F
 // WebSocket Stats Component
 const WebSocketStatsCard: React.FC = () => {
   const [stats, setStats] = useState<WebSocketStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Loading state using hook
+  const { loading, error, execute: runLoad } = useLoadingState({ initialLoading: true });
 
   const loadStats = async (showRefreshing = false) => {
     if (showRefreshing) setIsRefreshing(true);
-    setError(null);
-    try {
+    await runLoad(async () => {
       const data = await adminApi.getWebSocketStats();
       setStats(data);
-    } catch (err) {
-      log.error('Failed to load WebSocket stats', { error: err });
-      setError('Failed to load WebSocket statistics');
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
+    });
+    setIsRefreshing(false);
   };
 
   useEffect(() => {
@@ -290,12 +286,13 @@ const WebSocketStatsCard: React.FC = () => {
 
 // Access Control Tab Component
 const AccessControlTab: React.FC = () => {
-  const [loading, setLoading] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Loading states using hook
+  const { loading, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: isSaving, error: saveError, execute: runSave } = useLoadingState();
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -307,30 +304,20 @@ const AccessControlTab: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const settings = await adminApi.getSystemSettings();
-        setRegistrationEnabled(settings.registrationEnabled);
-      } catch (error) {
-        log.error('Failed to load settings', { error });
-        // Default to disabled on error (admin-only)
-        setRegistrationEnabled(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadSettings();
+    runLoad(async () => {
+      const settings = await adminApi.getSystemSettings();
+      setRegistrationEnabled(settings.registrationEnabled);
+    });
   }, []);
 
   const handleToggleRegistration = async () => {
-    setIsSaving(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-
     const newValue = !registrationEnabled;
 
-    try {
+    const result = await runSave(async () => {
       await adminApi.updateSystemSettings({ registrationEnabled: newValue });
+    });
+
+    if (result !== null) {
       setRegistrationEnabled(newValue);
       setSaveSuccess(true);
       // Clear any existing timeout and set new one
@@ -338,11 +325,6 @@ const AccessControlTab: React.FC = () => {
         clearTimeout(successTimeoutRef.current);
       }
       successTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error) {
-      log.error('Failed to update settings', { error });
-      setSaveError('Failed to update settings');
-    } finally {
-      setIsSaving(false);
     }
   };
 

@@ -16,19 +16,7 @@ import type {
   CursorPaginationOptions,
   CursorPaginatedResult,
 } from './types';
-
-/**
- * Build the access control WHERE clause for wallet queries
- * Checks if user has direct access or via group membership
- */
-function buildAccessWhere(userId: string): Prisma.WalletWhereInput {
-  return {
-    OR: [
-      { users: { some: { userId } } },
-      { group: { members: { some: { userId } } } },
-    ],
-  };
-}
+import { buildWalletAccessWhere } from './accessControl';
 
 /**
  * Find a wallet by ID if user has access
@@ -41,7 +29,7 @@ export async function findByIdWithAccess(
   return prisma.wallet.findFirst({
     where: {
       id: walletId,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
   });
 }
@@ -56,7 +44,7 @@ export async function findByIdWithAddresses(
   return prisma.wallet.findFirst({
     where: {
       id: walletId,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
     include: {
       addresses: true,
@@ -69,7 +57,7 @@ export async function findByIdWithAddresses(
  */
 export async function findByUserId(userId: string): Promise<Wallet[]> {
   return prisma.wallet.findMany({
-    where: buildAccessWhere(userId),
+    where: buildWalletAccessWhere(userId),
   });
 }
 
@@ -86,7 +74,7 @@ export async function findByUserIdPaginated(
 
   const wallets = await prisma.wallet.findMany({
     where: {
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
       ...(cursor ? { id: direction === 'forward' ? { gt: cursor } : { lt: cursor } } : {}),
     },
     take,
@@ -118,7 +106,7 @@ export async function findByNetwork(
   return prisma.wallet.findMany({
     where: {
       network,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
   });
 }
@@ -133,7 +121,7 @@ export async function findByNetworkWithSyncStatus(
   return prisma.wallet.findMany({
     where: {
       network,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
     select: {
       id: true,
@@ -154,7 +142,7 @@ export async function getIdsByNetwork(
   const wallets = await prisma.wallet.findMany({
     where: {
       network,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
     select: { id: true },
   });
@@ -208,7 +196,7 @@ export async function hasAccess(walletId: string, userId: string): Promise<boole
   const wallet = await prisma.wallet.findFirst({
     where: {
       id: walletId,
-      ...buildAccessWhere(userId),
+      ...buildWalletAccessWhere(userId),
     },
     select: { id: true },
   });

@@ -25,6 +25,7 @@ import {
   AuditLogQuery,
   AuditLogStats,
 } from '../src/api/admin';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('AuditLogs');
@@ -84,8 +85,6 @@ function formatRelativeTime(dateStr: string): string {
 export const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [stats, setStats] = useState<AuditLogStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
@@ -99,24 +98,19 @@ export const AuditLogs: React.FC = () => {
   const [filterAction, setFilterAction] = useState('');
   const [filterSuccess, setFilterSuccess] = useState<string>('');
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query: AuditLogQuery = {
-        ...filters,
-        limit: pageSize,
-        offset: (currentPage - 1) * pageSize,
-      };
-      const result = await getAuditLogs(query);
-      setLogs(result.logs);
-      setTotal(result.total);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load audit logs');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Loading state using hook
+  const { loading, error, execute: runLoad } = useLoadingState({ initialLoading: true });
+
+  const fetchLogs = () => runLoad(async () => {
+    const query: AuditLogQuery = {
+      ...filters,
+      limit: pageSize,
+      offset: (currentPage - 1) * pageSize,
+    };
+    const result = await getAuditLogs(query);
+    setLogs(result.logs);
+    setTotal(result.total);
+  });
 
   const fetchStats = async () => {
     try {

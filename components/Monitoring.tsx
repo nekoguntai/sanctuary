@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import * as adminApi from '../src/api/admin';
 import type { MonitoringService, MonitoringServicesResponse, GrafanaConfig } from '../src/api/admin';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 import { Button } from './ui/Button';
 
@@ -257,29 +258,28 @@ const ServiceCard: React.FC<{
  * Main Monitoring component
  */
 export const Monitoring: React.FC = () => {
-  const [loading, setLoading] = useState(true);
   const [data, setData] = useState<MonitoringServicesResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Grafana config state
   const [grafanaConfig, setGrafanaConfig] = useState<GrafanaConfig | null>(null);
-  const [isTogglingAnonymous, setIsTogglingAnonymous] = useState(false);
 
   // Edit URL modal state
   const [editingService, setEditingService] = useState<MonitoringService | null>(null);
   const [editUrl, setEditUrl] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Loading states using hook
+  const { loading, error, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: isTogglingAnonymous, execute: runToggle } = useLoadingState();
+  const { loading: isSaving, error: saveError, execute: runSave, clearError: clearSaveError } = useLoadingState();
 
   // Get hostname for URL generation
   const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
   const loadServices = useCallback(async (checkHealth = false) => {
     if (checkHealth) setIsRefreshing(true);
-    setError(null);
 
-    try {
+    await runLoad(async () => {
       const [servicesResult, grafanaResult] = await Promise.all([
         adminApi.getMonitoringServices(checkHealth),
         adminApi.getGrafanaConfig().catch(() => null), // Non-fatal if fails
@@ -288,14 +288,10 @@ export const Monitoring: React.FC = () => {
       if (grafanaResult) {
         setGrafanaConfig(grafanaResult);
       }
-    } catch (err) {
-      log.error('Failed to load monitoring services', { error: err });
-      setError('Failed to load monitoring services');
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
-    }
-  }, []);
+    });
+
+    setIsRefreshing(false);
+  }, [runLoad]);
 
   useEffect(() => {
     loadServices(true); // Check health on initial load
@@ -305,17 +301,15 @@ export const Monitoring: React.FC = () => {
   const handleToggleAnonymous = useCallback(async () => {
     if (!grafanaConfig) return;
 
-    setIsTogglingAnonymous(true);
-    try {
-      const newValue = !grafanaConfig.anonymousAccess;
+    const newValue = !grafanaConfig.anonymousAccess;
+    const result = await runToggle(async () => {
       await adminApi.updateGrafanaConfig({ anonymousAccess: newValue });
+    });
+
+    if (result !== null) {
       setGrafanaConfig({ ...grafanaConfig, anonymousAccess: newValue });
-    } catch (err) {
-      log.error('Failed to toggle anonymous access', { error: err });
-    } finally {
-      setIsTogglingAnonymous(false);
     }
-  }, [grafanaConfig]);
+  }, [grafanaConfig, runToggle]);
 
   // Build credentials map for each service
   const getCredentialsForService = useCallback((serviceId: string): ServiceCredentials | undefined => {
@@ -342,32 +336,28 @@ export const Monitoring: React.FC = () => {
   const handleEditUrl = (service: MonitoringService) => {
     setEditingService(service);
     setEditUrl(service.isCustomUrl ? service.url : '');
-    setSaveError(null);
+    clearSaveError();
   };
 
   const handleCloseModal = () => {
     setEditingService(null);
     setEditUrl('');
-    setSaveError(null);
+    clearSaveError();
   };
 
   const handleSaveUrl = async () => {
     if (!editingService) return;
 
-    setIsSaving(true);
-    setSaveError(null);
-    try {
+    const result = await runSave(async () => {
       await adminApi.updateMonitoringServiceUrl(
         editingService.id,
         editUrl.trim() || null
       );
+    });
+
+    if (result !== null) {
       await loadServices(false);
       handleCloseModal();
-    } catch (err) {
-      log.error('Failed to save custom URL', { error: err });
-      setSaveError('Failed to save custom URL');
-    } finally {
-      setIsSaving(false);
     }
   };
 

@@ -447,7 +447,7 @@ describe('Monitoring', () => {
       await user.click(screen.getByText('Save'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to save custom URL/)).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
       });
     });
 
@@ -509,7 +509,7 @@ describe('Monitoring', () => {
       render(<Monitoring />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load monitoring services/)).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
       });
     });
 

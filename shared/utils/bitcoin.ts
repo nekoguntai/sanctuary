@@ -101,3 +101,67 @@ export function isTestnetAddress(address: string): boolean {
   const type = detectAddressType(address);
   return type !== null && type.startsWith('testnet');
 }
+
+// ============================================================================
+// DERIVATION PATH UTILITIES
+// ============================================================================
+
+/**
+ * Normalize derivation path to use apostrophe notation (')
+ * This is the standard notation used by most Bitcoin tools and required by
+ * bitcoinjs-lib for proper PSBT bip32Derivation encoding.
+ *
+ * @example
+ * normalizeDerivationPath("m/48h/0h/0h/2h") // => "m/48'/0'/0'/2'"
+ * normalizeDerivationPath("48H/0H/0H") // => "m/48'/0'/0'"
+ * normalizeDerivationPath("m/84'/0'/0'") // => "m/84'/0'/0'" (unchanged)
+ */
+export function normalizeDerivationPath(path: string): string {
+  // Add m/ prefix if missing
+  let normalized = path.startsWith('m/') ? path : `m/${path}`;
+  // Convert h or H to ' (both uppercase and lowercase hardening notation)
+  normalized = normalized.replace(/[hH]/g, "'");
+  return normalized;
+}
+
+/**
+ * Format derivation path for use in Bitcoin output descriptors.
+ * Descriptors use 'h' notation without the 'm/' prefix.
+ *
+ * @example
+ * formatPathForDescriptor("m/48'/0'/0'/2'") // => "48h/0h/0h/2h"
+ * formatPathForDescriptor("84'/0'/0'") // => "84h/0h/0h"
+ */
+export function formatPathForDescriptor(path: string): string {
+  // Remove m/ prefix and replace ' with h
+  return path.replace(/^m\//, '').replace(/'/g, 'h');
+}
+
+/**
+ * Extract the change index and address index from a derivation path.
+ * For BIP-48 multisig: purpose'/coin'/account'/script'/change/index
+ * The last two non-hardened parts are change and index.
+ *
+ * @example
+ * extractChangeAndAddressIndex("m/48'/0'/0'/2'/0/5") // => { changeIdx: 0, addressIdx: 5 }
+ * extractChangeAndAddressIndex("m/84'/0'/0'/1/10") // => { changeIdx: 1, addressIdx: 10 }
+ */
+export function extractChangeAndAddressIndex(derivationPath: string): {
+  changeIdx: number;
+  addressIdx: number;
+} {
+  const pathParts = derivationPath
+    .replace(/^m\/?/, '')
+    .split('/')
+    .filter((p) => p);
+  // The last two parts are change and index (non-hardened)
+  const changeIdx =
+    pathParts.length >= 2
+      ? parseInt(pathParts[pathParts.length - 2].replace(/['h]/g, ''), 10)
+      : 0;
+  const addressIdx =
+    pathParts.length >= 1
+      ? parseInt(pathParts[pathParts.length - 1].replace(/['h]/g, ''), 10)
+      : 0;
+  return { changeIdx, addressIdx };
+}

@@ -8,6 +8,7 @@
  */
 
 import type { DeviceParser, DeviceParseResult, FormatDetectionResult } from '../types';
+import { normalizeDerivationPath } from '../../../shared/utils/bitcoin';
 
 interface DescriptorJsonFormat {
   descriptor?: string;
@@ -30,7 +31,7 @@ function parseDescriptorString(descriptor: string): DeviceParseResult | null {
   if (!match) return null;
 
   const [, fingerprint, pathPart, xpub] = match;
-  const derivationPath = pathPart ? `m/${pathPart.replace(/h/g, "'")}` : '';
+  const derivationPath = pathPart ? normalizeDerivationPath(pathPart) : '';
 
   return {
     xpub,

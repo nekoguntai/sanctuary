@@ -30,6 +30,9 @@ export { systemSettingRepository, default as systemSettingRepo } from './systemS
 export { mobilePermissionRepository, default as mobilePermissionRepo } from './mobilePermissionRepository';
 export { emailVerificationRepository, default as emailVerificationRepo } from './emailVerificationRepository';
 
+// Access control helpers
+export { buildWalletAccessWhere, buildDeviceAccessWhere } from './accessControl';
+
 // Re-export types
 export type {
   NetworkType,

@@ -10,6 +10,7 @@ import AppBtc from '@ledgerhq/hw-app-btc';
 import { AppClient, DefaultWalletPolicy } from 'ledger-bitcoin';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../../utils/logger';
+import { normalizeDerivationPath } from '../../../shared/utils/bitcoin';
 import type {
   DeviceAdapter,
   DeviceType,
@@ -95,14 +96,15 @@ const inferScriptTypeFromPath = (path: string): 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pk
 };
 
 /**
- * Extract account path from a full derivation path
+ * Extract account path from a full derivation path (first 4 components)
  */
 const extractAccountPath = (fullPath: string): string => {
-  const parts = fullPath.replace(/h/g, "'").split('/');
+  const normalized = normalizeDerivationPath(fullPath);
+  const parts = normalized.split('/');
   if (parts.length >= 4) {
     return parts.slice(0, 4).join('/');
   }
-  return fullPath;
+  return normalized;
 };
 
 /**

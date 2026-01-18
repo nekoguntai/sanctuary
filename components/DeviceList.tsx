@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { HardwareDevice, HardwareDeviceModel, Device, ApiWalletType } from '../types';
+import { HardwareDevice, HardwareDeviceModel, Device } from '../types';
 import { getDevices, updateDevice, deleteDevice, getDeviceModels } from '../src/api/devices';
 import { HardDrive, Plus, LayoutGrid, List as ListIcon, Users, User, Edit2, Save, X, Trash2 } from 'lucide-react';
 import { getDeviceIcon, getWalletIcon } from './ui/CustomIcons';
 import { Button } from './ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
+import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
 import { ConfigurableTable } from './ui/ConfigurableTable';
 import { ColumnConfigButton } from './ui/ColumnConfigButton';
@@ -27,8 +28,10 @@ type OwnershipFilter = 'all' | 'owned' | 'shared';
 export const DeviceList: React.FC = () => {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
   const { user, updatePreferences } = useUser();
+
+  // Loading state using hook
+  const { loading, execute: runLoad } = useLoadingState({ initialLoading: true });
 
   // Get view mode from user preferences, fallback to 'list'
   const viewMode = (user?.preferences?.viewSettings?.devices?.layout as ViewMode) || 'list';
@@ -119,29 +122,16 @@ export const DeviceList: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    if (!user) return;
 
-    const fetchData = async () => {
-      if (!user) return;
-      try {
-        const [deviceData, models] = await Promise.all([
-          getDevices(),
-          getDeviceModels()
-        ]);
-        if (!mounted) return;
-        setDevices(deviceData);
-        setDeviceModels(models);
-      } catch (error) {
-        log.error('Failed to fetch devices', { error });
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    fetchData();
-
-    return () => {
-      mounted = false;
-    };
+    runLoad(async () => {
+      const [deviceData, models] = await Promise.all([
+        getDevices(),
+        getDeviceModels()
+      ]);
+      setDevices(deviceData);
+      setDeviceModels(models);
+    });
   }, [user]);
 
   const handleEdit = (device: Device) => {
@@ -492,7 +482,7 @@ export const DeviceList: React.FC = () => {
                                      <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-sanctuary-50 dark:border-sanctuary-800">
                                          {device.wallets && device.wallets.length > 0 ? (
                                              device.wallets.map((wd) => {
-                                               const walletType = (wd.wallet.type || 'single_sig') as ApiWalletType;
+                                               const walletType = wd.wallet.type || 'single_sig';
                                                const isMultisig = walletType === 'multi_sig';
                                                const badgeClass = isMultisig
                                                  ? 'bg-warning-100 text-warning-800 border border-warning-200 dark:bg-warning-500/10 dark:text-warning-300 dark:border-warning-500/20'

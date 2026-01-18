@@ -320,7 +320,7 @@ describe('SystemSettings', () => {
       await user.click(screen.getByText('WebSocket'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load WebSocket/)).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
       });
     });
 

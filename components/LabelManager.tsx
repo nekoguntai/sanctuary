@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Tag, Plus, Edit2, Trash2, X, Check, Palette, Hash } from 'lucide-react';
 import * as labelsApi from '../src/api/labels';
 import type { Label } from '../src/api/labels';
+import { useLoadingState } from '../hooks/useLoadingState';
 
 interface LabelManagerProps {
   walletId: string;
@@ -26,8 +27,13 @@ const PRESET_COLORS = [
 
 export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsChange }) => {
   const [labels, setLabels] = useState<Label[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  // Loading states using hook
+  const { loading, error: loadError, execute: runLoad } = useLoadingState({ initialLoading: true });
+  const { loading: saving, error: saveError, execute: runSave, clearError } = useLoadingState();
+
+  // Combined error display
+  const error = loadError || saveError;
 
   // Create/Edit state
   const [isCreating, setIsCreating] = useState(false);
@@ -35,7 +41,6 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
   const [formName, setFormName] = useState('');
   const [formColor, setFormColor] = useState(PRESET_COLORS[0]);
   const [formDescription, setFormDescription] = useState('');
-  const [saving, setSaving] = useState(false);
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -44,18 +49,10 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
     loadLabels();
   }, [walletId]);
 
-  const loadLabels = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await labelsApi.getLabels(walletId);
-      setLabels(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load labels');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadLabels = () => runLoad(async () => {
+    const data = await labelsApi.getLabels(walletId);
+    setLabels(data);
+  });
 
   const handleCreate = () => {
     setIsCreating(true);
@@ -63,6 +60,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
     setFormName('');
     setFormColor(PRESET_COLORS[0]);
     setFormDescription('');
+    clearError();
   };
 
   const handleEdit = (label: Label) => {
@@ -71,6 +69,7 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
     setFormName(label.name);
     setFormColor(label.color);
     setFormDescription(label.description || '');
+    clearError();
   };
 
   const handleCancel = () => {
@@ -79,15 +78,13 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
     setFormName('');
     setFormColor(PRESET_COLORS[0]);
     setFormDescription('');
+    clearError();
   };
 
   const handleSave = async () => {
     if (!formName.trim()) return;
 
-    try {
-      setSaving(true);
-      setError(null);
-
+    const result = await runSave(async () => {
       if (editingLabel) {
         await labelsApi.updateLabel(walletId, editingLabel.id, {
           name: formName.trim(),
@@ -101,29 +98,24 @@ export const LabelManager: React.FC<LabelManagerProps> = ({ walletId, onLabelsCh
           description: formDescription.trim() || undefined,
         });
       }
+    });
 
+    if (result !== null) {
       handleCancel();
       await loadLabels();
       onLabelsChange?.();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save label');
-    } finally {
-      setSaving(false);
     }
   };
 
   const handleDelete = async (labelId: string) => {
-    try {
-      setSaving(true);
-      setError(null);
+    const result = await runSave(async () => {
       await labelsApi.deleteLabel(walletId, labelId);
+    });
+
+    if (result !== null) {
       setDeleteConfirm(null);
       await loadLabels();
       onLabelsChange?.();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete label');
-    } finally {
-      setSaving(false);
     }
   };
 

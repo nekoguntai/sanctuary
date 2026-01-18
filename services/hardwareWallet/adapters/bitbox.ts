@@ -15,6 +15,7 @@ import {
 } from 'bitbox02-api';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../../utils/logger';
+import { normalizeDerivationPath } from '../../../shared/utils/bitcoin';
 import type {
   DeviceAdapter,
   DeviceType,
@@ -150,14 +151,15 @@ const getOutputType = (address: string, network: bitcoin.Network): number => {
 };
 
 /**
- * Extract account path from full derivation path
+ * Extract account path from full derivation path (first 4 components)
  */
 const extractAccountPath = (fullPath: string): string => {
-  const parts = fullPath.replace(/h/g, "'").split('/');
+  const normalized = normalizeDerivationPath(fullPath);
+  const parts = normalized.split('/');
   if (parts.length >= 4) {
     return parts.slice(0, 4).join('/');
   }
-  return fullPath;
+  return normalized;
 };
 
 /**

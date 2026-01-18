@@ -312,7 +312,7 @@ describe('Variables', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
       await waitFor(() => {
-        expect(screen.getByText('Failed to update settings')).toBeInTheDocument();
+        expect(screen.getByText('Save failed')).toBeInTheDocument();
       });
     });
 

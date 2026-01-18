@@ -44,6 +44,7 @@ import { getDeviceIcon } from './ui/CustomIcons';
 import { createLogger } from '../utils/logger';
 import { isSecureContext, hardwareWalletService, DeviceType } from '../services/hardwareWallet';
 import { useSidebar } from '../contexts/SidebarContext';
+import { normalizeDerivationPath as sharedNormalizePath } from '../shared/utils/bitcoin';
 
 const log = createLogger('ConnectDevice');
 
@@ -78,31 +79,27 @@ const getDeviceTypeFromModel = (model: HardwareDeviceModel): DeviceType => {
 type ConnectionMethod = 'usb' | 'sd_card' | 'qr_code' | 'manual';
 
 /**
- * Normalize a derivation path to standard format
- * - Ensures 'm/' prefix
+ * Normalize a derivation path to standard format with auto-hardening for BIP paths
+ * - Ensures 'm/' prefix (case-insensitive)
  * - Converts 'h' notation to apostrophes (84h -> 84')
- * - For standard BIP paths (44/49/84/86), ensures first 3 levels are hardened
+ * - For standard BIP paths (44/49/84/86/48), ensures first 3 levels are hardened
  */
 const normalizeDerivationPath = (path: string): string => {
   if (!path) return '';
 
-  let normalized = path.trim();
+  // Use shared utility for basic normalization
+  let normalized = sharedNormalizePath(path.trim());
 
-  // Ensure starts with 'm/'
-  if (normalized.startsWith('M/')) {
-    normalized = 'm/' + normalized.slice(2);
-  } else if (!normalized.startsWith('m/')) {
-    normalized = 'm/' + normalized;
+  // Handle uppercase 'M/' prefix (shared util only handles lowercase)
+  if (path.trim().startsWith('M/')) {
+    normalized = sharedNormalizePath('m/' + path.trim().slice(2));
   }
 
-  // Convert 'h' notation to apostrophes (e.g., 84h -> 84')
-  normalized = normalized.replace(/(\d+)h/g, "$1'");
-
-  // Split into components
+  // Split into components for auto-hardening
   const parts = normalized.split('/');
   if (parts.length < 2) return normalized;
 
-  // Check if this looks like a standard BIP path (44, 49, 84, 86)
+  // Check if this looks like a standard BIP path (44, 49, 84, 86, 48)
   const purposePart = parts[1]?.replace("'", '');
   const standardPurposes = ['44', '49', '84', '86', '48'];
 

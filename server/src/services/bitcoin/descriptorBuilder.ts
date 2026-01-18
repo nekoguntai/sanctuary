@@ -11,6 +11,8 @@ interface DeviceInfo {
   derivationPath?: string;
 }
 
+import { formatPathForDescriptor } from '../../../../shared/utils/bitcoin';
+
 type ScriptType = 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
 type Network = 'mainnet' | 'testnet' | 'regtest';
 
@@ -62,13 +64,6 @@ export function getMultisigDerivationPath(
   }
 }
 
-/**
- * Format a derivation path for use in descriptors (replace ' with h)
- */
-function formatPathForDescriptor(path: string): string {
-  // Remove 'm/' prefix and replace ' with h
-  return path.replace(/^m\//, '').replace(/'/g, 'h');
-}
 
 /**
  * Build a single-sig descriptor from device info

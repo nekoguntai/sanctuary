@@ -16,6 +16,7 @@
 
 import type { PrismaClient, Wallet, Transaction, Address, UTXO, User, Label } from '@prisma/client';
 import prisma from '../models/prisma';
+import { buildWalletAccessWhere } from './accessControl';
 
 // Type for the minimal Prisma client interface needed by repositories
 export type PrismaClientLike = Pick<
@@ -142,17 +143,6 @@ export interface RepositoryFactory {
   label: LabelRepositoryInterface;
 }
 
-/**
- * Build access control WHERE clause
- */
-function buildAccessWhere(userId: string) {
-  return {
-    OR: [
-      { users: { some: { userId } } },
-      { group: { members: { some: { userId } } } },
-    ],
-  };
-}
 
 /**
  * Create wallet repository with injectable client
@@ -165,19 +155,19 @@ function createWalletRepository(client: PrismaClientLike): WalletRepositoryInter
 
     async findByIdWithAccess(walletId: string, userId: string) {
       return client.wallet.findFirst({
-        where: { id: walletId, ...buildAccessWhere(userId) },
+        where: { id: walletId, ...buildWalletAccessWhere(userId) },
       });
     },
 
     async findByUserId(userId: string) {
       return client.wallet.findMany({
-        where: buildAccessWhere(userId),
+        where: buildWalletAccessWhere(userId),
       });
     },
 
     async hasAccess(walletId: string, userId: string) {
       const wallet = await client.wallet.findFirst({
-        where: { id: walletId, ...buildAccessWhere(userId) },
+        where: { id: walletId, ...buildWalletAccessWhere(userId) },
         select: { id: true },
       });
       return wallet !== null;

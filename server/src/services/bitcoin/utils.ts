@@ -251,21 +251,3 @@ export function createTransaction(
   };
 }
 
-/**
- * Verify transaction signature (for multi-sig)
- */
-export function verifySignature(
-  txHex: string,
-  inputIndex: number,
-  pubkey: Buffer,
-  signature: Buffer
-): boolean {
-  try {
-    const tx = bitcoin.Transaction.fromHex(txHex);
-    // Verification logic would go here
-    // This is complex and depends on script type
-    return true; // Placeholder
-  } catch (error) {
-    return false;
-  }
-}

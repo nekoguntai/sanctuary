@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { HardwareDevice, HardwareDeviceModel, Device, WalletType, ApiWalletType } from '../../types';
+import { HardwareDevice, HardwareDeviceModel, Device, WalletType } from '../../types';
 import { Edit2, Save, X, Trash2, Users, HardDrive } from 'lucide-react';
 import { getDeviceIcon, getWalletIcon } from '../ui/CustomIcons';
 import type { CellRendererProps } from '../ui/ConfigurableTable';
@@ -227,7 +227,7 @@ export function createDeviceCellRenderers(
     return (
       <div className="flex flex-wrap gap-1">
         {wallets.map((wd) => {
-          const walletType = (wd.wallet.type || 'single_sig') as ApiWalletType;
+          const walletType = wd.wallet.type || 'single_sig';
           return (
             <span
               key={wd.wallet.id}

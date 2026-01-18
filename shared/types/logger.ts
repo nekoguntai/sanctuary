@@ -35,13 +35,3 @@ export interface Logger {
   warn: (message: string, context?: Record<string, unknown>) => void;
   error: (message: string, context?: Record<string, unknown>) => void;
 }
-
-/**
- * Extended logger factory interface
- */
-export interface LoggerFactory {
-  createLogger: (prefix: string) => Logger;
-  setLogLevel: (level: LogLevel | string) => void;
-  getLogLevel: () => string;
-  isLevelEnabled: (level: LogLevel) => boolean;
-}

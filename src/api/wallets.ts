@@ -6,6 +6,7 @@
 
 import apiClient, { API_BASE_URL } from './client';
 import type { Wallet, WalletRole } from '../types';
+import { downloadBlob } from '../../utils/download';
 
 // Re-export types for backward compatibility
 export type { Wallet, WalletRole } from '../types';
@@ -334,14 +335,7 @@ export async function exportWalletFormat(
 
   // Download the file
   const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  downloadBlob(blob, filename);
 }
 
 /**
@@ -362,14 +356,8 @@ export async function exportLabelsBip329(walletId: string, walletName: string): 
   }
 
   const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  const filename = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
+  downloadBlob(blob, filename);
 }
 
 // ============================================================================

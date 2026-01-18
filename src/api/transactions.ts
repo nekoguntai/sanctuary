@@ -6,6 +6,7 @@
 
 import apiClient, { API_BASE_URL } from './client';
 import type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
+import { downloadBlob } from '../../utils/download';
 
 // Re-export types for backward compatibility
 export type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
@@ -164,19 +165,11 @@ export async function exportTransactions(
 
   // Get the blob and trigger download
   const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
   const timestamp = new Date().toISOString().slice(0, 10);
   const safeName = walletName.replace(/[^a-zA-Z0-9]/g, '_');
   const extension = options.format === 'json' ? 'json' : 'csv';
   const filename = `${safeName}_transactions_${timestamp}.${extension}`;
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 /**

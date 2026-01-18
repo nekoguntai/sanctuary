@@ -21,6 +21,7 @@ import { Amount } from './Amount';
 import { FiatDisplaySubtle } from './FiatDisplay';
 import { createLogger } from '../utils/logger';
 import { truncateAddress } from '../utils/formatters';
+import { downloadBlob } from '../utils/download';
 
 const log = createLogger('DraftList');
 
@@ -292,14 +293,7 @@ export const DraftList: React.FC<DraftListProps> = ({
       bytes[i] = binaryString.charCodeAt(i);
     }
     const blob = new Blob([bytes], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sanctuary-draft-${draft.id.slice(0, 8)}.psbt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `sanctuary-draft-${draft.id.slice(0, 8)}.psbt`);
   };
 
   const handleUploadPsbt = async (draftId: string, file: File) => {

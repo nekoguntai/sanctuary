@@ -30,6 +30,7 @@ import * as adminApi from '../src/api/admin';
 import type { SanctuaryBackup, ValidationResult, EncryptionKeysResponse } from '../src/api/admin';
 import { createLogger } from '../utils/logger';
 import { useAppNotifications } from '../contexts/AppNotificationContext';
+import { downloadText, downloadBlob } from '../utils/download';
 
 const log = createLogger('BackupRestore');
 
@@ -123,15 +124,8 @@ ENCRYPTION_KEY=${encryptionKeys.encryptionKey}
 ENCRYPTION_SALT=${encryptionKeys.encryptionSalt}
 `;
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sanctuary-encryption-keys-${new Date().toISOString().slice(0, 10)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `sanctuary-encryption-keys-${new Date().toISOString().slice(0, 10)}.txt`;
+    downloadText(content, filename);
   };
 
   /**
@@ -149,19 +143,11 @@ ENCRYPTION_SALT=${encryptionKeys.encryptionSalt}
       });
 
       // Create download link
-      const url = URL.createObjectURL(blob);
       const timestamp = new Date().toISOString()
         .slice(0, 19)
         .replace(/[T:]/g, '-');
       const filename = `sanctuary-backup-${timestamp}.json`;
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
 
       setBackupSuccess(true);
       setDescription('');

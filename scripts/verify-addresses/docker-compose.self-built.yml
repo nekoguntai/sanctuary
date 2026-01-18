@@ -23,7 +23,7 @@ services:
       - -rpcbind=0.0.0.0
       - -fallbackfee=0.0001
     ports:
-      - "18553:18443"  # Regtest RPC port (mapped to avoid conflict with beacon-bitcoind)
+      - "18553:18443"  # Regtest RPC port (mapped to non-standard port)
     volumes:
       - bitcoind-verify-data:/home/bitcoin/.bitcoin
     healthcheck:

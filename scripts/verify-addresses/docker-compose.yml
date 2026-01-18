@@ -9,7 +9,7 @@
 #   cd ../bitcoin-core-docker && ./build.sh 27.0
 #   docker compose -f docker-compose.self-built.yml up -d
 #
-# Or use the existing beacon-bitcoind container if running (see bitcoincore.ts)
+# See bitcoincore.ts for RPC configuration
 
 services:
   bitcoind:

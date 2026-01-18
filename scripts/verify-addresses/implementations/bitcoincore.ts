@@ -9,11 +9,11 @@
 
 import type { AddressDeriver, ScriptType, MultisigScriptType, Network } from '../types.js';
 
-// Default to existing lncm/bitcoind container (beacon-bitcoind) if running
+// Default Bitcoin Core RPC settings for regtest (see docker-compose.yml)
 // Can override with environment variables
 const RPC_URL = process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:18443';
-const RPC_USER = process.env.BITCOIN_RPC_USER || 'beacon';
-const RPC_PASS = process.env.BITCOIN_RPC_PASS || 'beacon';
+const RPC_USER = process.env.BITCOIN_RPC_USER || 'verify';
+const RPC_PASS = process.env.BITCOIN_RPC_PASS || 'verify';
 
 interface RPCResponse<T> {
   result: T;

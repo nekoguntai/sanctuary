@@ -232,6 +232,19 @@ Use the version bump script to update all files at once:
 - **Before release**: Bump version, commit, tag, and push
 - **After fixing version mismatch**: Run `./scripts/bump-version.sh <current-root-version>` to sync all files
 
+### Release workflow
+
+**IMPORTANT**: Never bump version numbers just because CI fails. Fix issues on the same version.
+
+1. Bump version and create RC tag (e.g., `v0.8.5-rc.1`)
+2. Push and **ALWAYS verify CI passed** with `gh run list` before proceeding
+3. Only create release tag after confirming ALL RC workflows succeeded
+4. If CI fails:
+   - Fix the issue locally
+   - Delete the failed tag: `git tag -d v0.8.5-rc.1 && git push origin :refs/tags/v0.8.5-rc.1`
+   - Re-tag the fixed commit with the same version
+   - Do NOT bump to a new version number for CI fixes
+
 ## Extensibility & Perpetual Operation Principles
 
 When implementing features, always consider extensibility and long-running operation patterns. This project is designed to run continuously for extended periods.

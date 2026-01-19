@@ -1,6 +1,6 @@
 {
   "name": "sanctuary-server",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Backend API server for Sanctuary Bitcoin Wallet",
   "main": "dist/server/src/index.js",
   "prisma": {
@@ -69,6 +69,7 @@
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.2.4",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^7.0.12",
     "otplib": "^12.0.1",
     "prom-client": "^15.1.3",
     "qrcode": "^1.5.4",
@@ -96,7 +97,6 @@
     "@vitest/coverage-v8": "^4.0.16",
     "fast-check": "^4.5.3",
     "husky": "^9.1.7",
-    "nodemailer": "^7.0.12",
     "prisma": "^5.7.0",
     "supertest": "^7.1.4",
     "ts-node": "^10.9.2",

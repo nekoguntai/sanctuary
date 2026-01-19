@@ -550,6 +550,11 @@ describe('UserContext', () => {
       vi.mocked(themeRegistry.applyTheme).mockClear();
       vi.mocked(themeRegistry.applyPattern).mockClear();
       vi.mocked(themeRegistry.applyPatternOpacity).mockClear();
+      // Also ensure document is in clean state (redundant but ensures isolation)
+      document.documentElement.classList.remove('dark');
+      // Reset auth mocks to prevent pollution from previous tests
+      vi.mocked(authApi.isAuthenticated).mockReset();
+      vi.mocked(authApi.getCurrentUser).mockReset();
     });
 
     it('applies user theme preferences', async () => {

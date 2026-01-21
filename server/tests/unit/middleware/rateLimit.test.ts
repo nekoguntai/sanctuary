@@ -5,6 +5,10 @@ import { vi, Mock } from 'vitest';
  * Tests for rate limiting middleware behavior, especially fail-closed on errors.
  */
 
+// Unmock the rate limit middleware to test the real implementation
+// (global setup.ts mocks it to bypass Redis in other tests)
+vi.unmock('../../../src/middleware/rateLimit');
+
 import { Request, Response, NextFunction } from 'express';
 import { rateLimit, rateLimitByUser, rateLimitByIpAndKey, rateLimitByKey } from '../../../src/middleware/rateLimit';
 import { rateLimitService } from '../../../src/services/rateLimiting';

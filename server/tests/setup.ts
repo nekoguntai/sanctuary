@@ -33,6 +33,13 @@ vi.mock('../src/utils/requestContext', () => ({
   },
 }));
 
+// Mock rate limiting middleware to bypass Redis dependency in tests
+vi.mock('../src/middleware/rateLimit', () => ({
+  rateLimit: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  rateLimitByIpAndKey: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  rateLimitByUser: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 // Global test utilities
 beforeEach(() => {
   // Clear all mocks before each test

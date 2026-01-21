@@ -26,17 +26,25 @@ vi.mock('../../../src/models/prisma', async () => {
   };
 });
 
-// Mock config
+// Mock config - use vi.hoisted to make mockConfig available at hoist time
+const mockConfig = vi.hoisted(() => ({
+  jwtSecret: 'test-jwt-secret-key-for-testing-only',
+  jwtExpiresIn: '1h',
+  jwtRefreshExpiresIn: '7d',
+  gatewaySecret: '',
+  corsAllowedOrigins: [],
+  nodeEnv: 'test',
+  rateLimit: {
+    enabled: false,
+    windowMs: 60000,
+    maxRequests: 100,
+  },
+}));
+
 vi.mock('../../../src/config', () => ({
   __esModule: true,
-  default: {
-    jwtSecret: 'test-jwt-secret-key-for-testing-only',
-    jwtExpiresIn: '1h',
-    jwtRefreshExpiresIn: '7d',
-    gatewaySecret: '',
-    corsAllowedOrigins: [],
-    nodeEnv: 'test',
-  },
+  default: mockConfig,
+  getConfig: () => mockConfig,
 }));
 
 // Mock token revocation service to prevent database initialization
@@ -80,6 +88,13 @@ vi.mock('../../../src/services/email', () => ({
   isVerificationRequired: () => mockIsVerificationRequired(),
   isSmtpConfigured: () => mockIsSmtpConfigured(),
   createVerificationToken: (...args: unknown[]) => mockCreateVerificationToken(...args),
+}));
+
+// Mock rate limiting middleware to allow requests through in tests
+vi.mock('../../../src/middleware/rateLimit', () => ({
+  rateLimit: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  rateLimitByIpAndKey: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  rateLimitByUser: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
 // Import JWT utilities and password utilities after mocks

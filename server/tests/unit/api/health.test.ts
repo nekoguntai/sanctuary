@@ -32,6 +32,24 @@ vi.mock('../../../src/websocket/server', () => ({
   getWebSocketServer: vi.fn(),
 }));
 
+vi.mock('../../../src/infrastructure/redis', () => ({
+  checkRedisHealth: vi.fn(),
+}));
+
+vi.mock('../../../src/jobs', () => ({
+  jobQueue: {
+    getHealth: vi.fn(),
+  },
+}));
+
+vi.mock('../../../src/services/cacheInvalidation', () => ({
+  getCacheInvalidationStatus: vi.fn(),
+}));
+
+vi.mock('../../../src/services/startupManager', () => ({
+  getStartupStatus: vi.fn(),
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -46,6 +64,10 @@ import prisma from '../../../src/models/prisma';
 import { circuitBreakerRegistry } from '../../../src/services/circuitBreaker';
 import { getSyncService } from '../../../src/services/syncService';
 import { getWebSocketServer } from '../../../src/websocket/server';
+import { checkRedisHealth } from '../../../src/infrastructure/redis';
+import { jobQueue } from '../../../src/jobs';
+import { getCacheInvalidationStatus } from '../../../src/services/cacheInvalidation';
+import { getStartupStatus } from '../../../src/services/startupManager';
 
 // Import the router after mocks
 import healthRouter from '../../../src/api/health';
@@ -90,6 +112,29 @@ describe('Health API', () => {
         subscriptions: 20,
         uniqueUsers: 3,
       }),
+    });
+    (checkRedisHealth as Mock).mockResolvedValue({
+      status: 'healthy',
+      latencyMs: 1,
+    });
+    (jobQueue.getHealth as Mock).mockResolvedValue({
+      healthy: true,
+      queueName: 'test-queue',
+      waiting: 0,
+      active: 0,
+      completed: 100,
+      failed: 0,
+      delayed: 0,
+      paused: false,
+    });
+    (getCacheInvalidationStatus as Mock).mockReturnValue({
+      initialized: true,
+      listenerCount: 3,
+    });
+    (getStartupStatus as Mock).mockReturnValue({
+      started: true,
+      overallSuccess: true,
+      services: [],
     });
   });
 
@@ -452,7 +497,7 @@ describe('Health API', () => {
       const response = await request(app).get('/api/v1/health');
 
       expect(response.status).toBe(200);
-      expect(response.body.components.sync.status).toBe('healthy');
+      expect(response.body.components.sync.status).toBe('degraded');
       expect(response.body.components.sync.message).toBe('Sync stats unavailable');
     });
 

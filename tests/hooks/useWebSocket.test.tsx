@@ -54,6 +54,13 @@ vi.mock('../../src/api/client', () => ({
   },
 }));
 
+// Mock the sync API to avoid actual API calls in useWalletLogs
+const mockGetWalletLogs = vi.fn();
+
+vi.mock('../../src/api/sync', () => ({
+  getWalletLogs: (...args: any[]) => mockGetWalletLogs(...args),
+}));
+
 // Mock queryClient for useWebSocketQueryInvalidation tests
 // Use vi.hoisted to ensure these are available when vi.mock factories run
 const { mockInvalidateQueries, mockSetQueryData, mockQueryClient } = vi.hoisted(() => {
@@ -710,6 +717,9 @@ describe('useWalletLogs', () => {
     connectionChangeCallbacks.clear();
     eventCallbacks.clear();
 
+    // Mock getWalletLogs to return empty array by default
+    mockGetWalletLogs.mockResolvedValue([]);
+
     mockOn.mockImplementation((eventType: string, callback: (event: any) => void) => {
       if (!eventCallbacks.has(eventType)) {
         eventCallbacks.set(eventType, new Set());
@@ -753,6 +763,11 @@ describe('useWalletLogs', () => {
 
   it('should accumulate log entries', async () => {
     const { result } = renderHook(() => useWalletLogs('wallet-789'));
+
+    // Wait for initial loading to complete before sending events
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
 
     const logEvent1 = {
       event: 'log',

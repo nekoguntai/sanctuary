@@ -42,12 +42,27 @@ function setRateLimitHeaders(res: Response, result: RateLimitResult): void {
 /**
  * Send rate limit exceeded response
  */
+interface RateLimitOptions {
+  message?: string;
+  responseType?: 'json' | 'text';
+  contentType?: string;
+}
+
 function sendRateLimitResponse(
   res: Response,
   result: RateLimitResult,
-  message?: string
+  message?: string,
+  options?: RateLimitOptions
 ): void {
   setRateLimitHeaders(res, result);
+
+  if (options?.responseType === 'text') {
+    res
+      .status(429)
+      .type(options.contentType || 'text/plain')
+      .send(message || 'Too many requests. Please try again later.');
+    return;
+  }
 
   res.status(429).json({
     success: false,
@@ -83,7 +98,7 @@ function getClientIp(req: Request): string {
  *
  * Use for public endpoints (unauthenticated)
  */
-export function rateLimit(policyName: string, options?: { message?: string }): RequestHandler {
+export function rateLimit(policyName: string, options?: RateLimitOptions): RequestHandler {
   const policy = rateLimitService.getPolicy(policyName);
   const message = options?.message || policy?.message;
 
@@ -97,7 +112,7 @@ export function rateLimit(policyName: string, options?: { message?: string }): R
       setRateLimitHeaders(res, result);
 
       if (!result.allowed) {
-        return sendRateLimitResponse(res, result, message);
+        return sendRateLimitResponse(res, result, message, options);
       }
 
       next();
@@ -118,7 +133,7 @@ export function rateLimit(policyName: string, options?: { message?: string }): R
  * Use for authenticated endpoints
  * Requires authenticate middleware to run first
  */
-export function rateLimitByUser(policyName: string, options?: { message?: string }): RequestHandler {
+export function rateLimitByUser(policyName: string, options?: RateLimitOptions): RequestHandler {
   const policy = rateLimitService.getPolicy(policyName);
   const message = options?.message || policy?.message;
 
@@ -135,7 +150,7 @@ export function rateLimitByUser(policyName: string, options?: { message?: string
         setRateLimitHeaders(res, result);
 
         if (!result.allowed) {
-          return sendRateLimitResponse(res, result, message);
+          return sendRateLimitResponse(res, result, message, options);
         }
         return next();
       } catch (error) {
@@ -155,7 +170,7 @@ export function rateLimitByUser(policyName: string, options?: { message?: string
       setRateLimitHeaders(res, result);
 
       if (!result.allowed) {
-        return sendRateLimitResponse(res, result, message);
+        return sendRateLimitResponse(res, result, message, options);
       }
 
       next();
@@ -178,7 +193,7 @@ export function rateLimitByUser(policyName: string, options?: { message?: string
 export function rateLimitByIpAndKey(
   policyName: string,
   keyExtractor: (req: Request) => string | undefined,
-  options?: { message?: string }
+  options?: RateLimitOptions
 ): RequestHandler {
   const policy = rateLimitService.getPolicy(policyName);
   const message = options?.message || policy?.message;
@@ -193,7 +208,7 @@ export function rateLimitByIpAndKey(
       setRateLimitHeaders(res, result);
 
       if (!result.allowed) {
-        return sendRateLimitResponse(res, result, message);
+        return sendRateLimitResponse(res, result, message, options);
       }
 
       next();
@@ -216,7 +231,7 @@ export function rateLimitByIpAndKey(
 export function rateLimitByKey(
   policyName: string,
   keyGenerator: (req: Request) => string,
-  options?: { message?: string }
+  options?: RateLimitOptions
 ): RequestHandler {
   const policy = rateLimitService.getPolicy(policyName);
   const message = options?.message || policy?.message;
@@ -229,7 +244,7 @@ export function rateLimitByKey(
       setRateLimitHeaders(res, result);
 
       if (!result.allowed) {
-        return sendRateLimitResponse(res, result, message);
+        return sendRateLimitResponse(res, result, message, options);
       }
 
       next();

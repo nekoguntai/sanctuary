@@ -56,12 +56,12 @@ class RateLimitService implements IRateLimitService {
     if (this.initialized) return;
 
     const redisClient = getRedisClient();
-    if (redisClient) {
-      this.redisLimiter = new RedisRateLimiter(redisClient);
-      log.info('Rate limit service initialized with Redis backend');
-    } else {
-      log.info('Rate limit service initialized with in-memory backend');
+    if (!redisClient || !isRedisConnected()) {
+      throw new Error('Redis is required for rate limiting');
     }
+
+    this.redisLimiter = new RedisRateLimiter(redisClient);
+    log.info('Rate limit service initialized with Redis backend');
 
     this.initialized = true;
   }
@@ -70,13 +70,11 @@ class RateLimitService implements IRateLimitService {
    * Get the active limiter (Redis or memory fallback)
    */
   private getLimiter(): IRateLimiter {
-    // Try Redis first if available
     if (this.redisLimiter && isRedisConnected()) {
       return this.redisLimiter;
     }
 
-    // Fall back to memory
-    return this.memoryLimiter;
+    throw new Error('Redis rate limiter unavailable');
   }
 
   registerPolicy(policy: RateLimitPolicy): void {
@@ -187,10 +185,9 @@ class RateLimitService implements IRateLimitService {
     backend: string;
     latencyMs?: number;
   }> {
-    const limiter = this.getLimiter();
-    const start = Date.now();
-
     try {
+      const limiter = this.getLimiter();
+      const start = Date.now();
       const healthy = await limiter.isHealthy();
       const latencyMs = Date.now() - start;
 
@@ -202,7 +199,7 @@ class RateLimitService implements IRateLimitService {
     } catch {
       return {
         healthy: false,
-        backend: limiter.getType(),
+        backend: 'redis',
       };
     }
   }

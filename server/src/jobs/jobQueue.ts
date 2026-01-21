@@ -80,9 +80,7 @@ class JobQueueService {
 
     const redisClient = getRedisClient();
     if (!redisClient || !isRedisConnected()) {
-      log.warn('Redis not available, job queue disabled');
-      this.initialized = true;
-      return;
+      throw new Error('Redis not available, job queue requires Redis');
     }
 
     try {
@@ -146,7 +144,7 @@ class JobQueueService {
       });
     } catch (error) {
       log.error('Failed to initialize job queue', { error });
-      this.initialized = true; // Mark as initialized to prevent retries
+      throw error;
     }
   }
 

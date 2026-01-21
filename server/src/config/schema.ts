@@ -52,7 +52,33 @@ export const SecurityConfigSchema = z.object({
 
 export const RateLimitConfigSchema = z.object({
   loginAttempts: z.number().int().min(1).max(100),
+  loginWindowSeconds: z.number().int().min(1),
+  registerAttempts: z.number().int().min(1).max(100),
+  registerWindowSeconds: z.number().int().min(1),
+  twoFaAttempts: z.number().int().min(1).max(100),
+  twoFaWindowSeconds: z.number().int().min(1),
   passwordChangeAttempts: z.number().int().min(1).max(100),
+  passwordChangeWindowSeconds: z.number().int().min(1),
+  emailVerifyAttempts: z.number().int().min(1).max(100),
+  emailVerifyWindowSeconds: z.number().int().min(1),
+  emailResendAttempts: z.number().int().min(1).max(100),
+  emailResendWindowSeconds: z.number().int().min(1),
+  emailUpdateAttempts: z.number().int().min(1).max(100),
+  emailUpdateWindowSeconds: z.number().int().min(1),
+  apiDefaultLimit: z.number().int().min(1),
+  apiHeavyLimit: z.number().int().min(1),
+  apiPublicLimit: z.number().int().min(1),
+  syncTriggerLimit: z.number().int().min(1),
+  syncBatchLimit: z.number().int().min(1),
+  txCreateLimit: z.number().int().min(1),
+  txBroadcastLimit: z.number().int().min(1),
+  aiAnalyzeLimit: z.number().int().min(1),
+  aiSummarizeLimit: z.number().int().min(1),
+  aiWindowSeconds: z.number().int().min(1),
+  adminDefaultLimit: z.number().int().min(1),
+  payjoinCreateLimit: z.number().int().min(1),
+  wsConnectLimit: z.number().int().min(1),
+  wsMessageLimit: z.number().int().min(1),
 });
 
 export const BitcoinRpcConfigSchema = z.object({

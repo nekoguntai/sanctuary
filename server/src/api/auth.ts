@@ -14,8 +14,8 @@
  */
 
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth';
+import { rateLimit, rateLimitByIpAndKey, rateLimitByUser } from '../middleware/rateLimit';
 
 // Domain routers
 import { createLoginRouter } from './auth/login';
@@ -30,118 +30,19 @@ import sessionsRouter from './auth/sessions';
 const router = Router();
 
 // ========================================
-// RATE LIMITERS (centralized configuration)
+// RATE LIMITERS (centralized policies)
 // ========================================
 
-// Express app has trust proxy enabled; disable all validations (we know our proxy setup is correct)
-// This suppresses the IPv6 warnings when running behind nginx
-const rateLimitValidations = false;
-
-// Rate limit can be configured via environment variable for testing
-// Default: 5 attempts per 15 minutes (production)
-// Set LOGIN_RATE_LIMIT=100 for testing environments
-const loginRateLimit = parseInt(process.env.LOGIN_RATE_LIMIT || '5', 10);
-
-// Strict limiter for login attempts
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: loginRateLimit,
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many login attempts. Please try again in 15 minutes.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-  keyGenerator: (req) => {
-    // Use IP + username combination to prevent targeted attacks
-    const username = req.body?.username?.toLowerCase() || 'unknown';
-    return `${req.ip}-${username}`;
-  },
-});
-
-// Limiter for registration (10 attempts per hour per IP)
-const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // 10 attempts per hour
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many registration attempts. Please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
-
-// Limiter for 2FA verification (10 attempts per 15 minutes)
-const twoFactorLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many 2FA attempts. Please try again in 15 minutes.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
-
-// Password change rate limit can be configured via environment variable for testing
-// Default: 5 attempts per 15 minutes (production)
-// Set PASSWORD_CHANGE_RATE_LIMIT=100 for testing environments
-const passwordChangeRateLimit = parseInt(process.env.PASSWORD_CHANGE_RATE_LIMIT || '5', 10);
-
-// Limiter for password change
-const passwordChangeLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: passwordChangeRateLimit,
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many password change attempts. Please try again in 15 minutes.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
-
-// Limiter for email verification token attempts (10 per 15 minutes)
-const emailVerifyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many verification attempts. Please try again in 15 minutes.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
-
-// Limiter for resending verification emails (5 per hour)
-const emailResendLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many verification email requests. Please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
-
-// Limiter for email updates (3 per hour)
-const emailUpdateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3,
-  message: {
-    error: 'Too Many Requests',
-    message: 'Too many email update attempts. Please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: rateLimitValidations,
-});
+const loginLimiter = rateLimitByIpAndKey(
+  'auth:login',
+  (req) => req.body?.username?.toLowerCase()
+);
+const registerLimiter = rateLimit('auth:register');
+const twoFactorLimiter = rateLimit('auth:2fa');
+const passwordChangeLimiter = rateLimitByUser('auth:password-change');
+const emailVerifyLimiter = rateLimit('auth:email-verify');
+const emailResendLimiter = rateLimitByUser('auth:email-resend');
+const emailUpdateLimiter = rateLimitByUser('auth:email-update');
 
 // ========================================
 // ROUTE CONFIGURATION

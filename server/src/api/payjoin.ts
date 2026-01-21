@@ -10,7 +10,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
-import rateLimit from 'express-rate-limit';
+import { rateLimitByIpAndKey } from '../middleware/rateLimit';
 import {
   processPayjoinRequest,
   PayjoinErrors,
@@ -24,19 +24,11 @@ const router = Router();
 
 // Rate limiter for unauthenticated BIP78 endpoint
 // Prevents DoS attacks by limiting requests per addressId
-const payjoinRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute window
-  max: 10, // 10 requests per minute per IP
-  message: PayjoinErrors.RECEIVER_ERROR,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Rate limit by IP + addressId combination
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const addressId = req.params.addressId || 'unknown';
-    return `${ip}:${addressId}`;
-  },
-});
+const payjoinRateLimiter = rateLimitByIpAndKey(
+  'payjoin:create',
+  (req) => req.params.addressId,
+  { message: PayjoinErrors.RECEIVER_ERROR, responseType: 'text', contentType: 'text/plain' }
+);
 
 // ========================================
 // Authenticated endpoints for wallet management

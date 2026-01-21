@@ -19,25 +19,7 @@ import cors from 'cors';
 import compression from 'compression';
 import { createServer } from 'http';
 import config from './config';
-import authRoutes from './api/auth';
-import walletRoutes from './api/wallets';
-import deviceRoutes from './api/devices';
-import transactionRoutes from './api/transactions';
-import labelRoutes from './api/labels';
-import bitcoinRoutes from './api/bitcoin';
-import priceRoutes from './api/price';
-import nodeRoutes from './api/node';
-import adminRoutes from './api/admin';
-import syncRoutes from './api/sync';
-import pushRoutes from './api/push';
-import draftRoutes from './api/drafts';
-import payjoinRoutes from './api/payjoin';
-import aiRoutes from './api/ai';
-import aiInternalRoutes from './api/ai-internal';
-import healthRoutes from './api/health';
-import transferRoutes from './api/transfers';
-import openApiRoutes from './api/openapi';
-import mobilePermissionsRoutes from './api/mobilePermissions';
+import { registerRoutes } from './routes';
 import { initializeWebSocketServer, initializeGatewayWebSocketServer } from './websocket/server';
 import { initializeRedisBridge, shutdownRedisBridge } from './websocket/redisBridge';
 import { notificationService } from './websocket/notifications';
@@ -49,13 +31,14 @@ import { requestTimeout } from './middleware/requestTimeout';
 import { apiVersionMiddleware } from './middleware/apiVersion';
 import { migrationService } from './services/migrationService';
 import { maintenanceService } from './services/maintenanceService';
-import { startAllServices, getStartupStatus, isSystemDegraded, type ServiceDefinition } from './services/startupManager';
+import { getStartupStatus, isSystemDegraded } from './services/startupManager';
+import { registerService, startRegisteredServices, stopRegisteredServices } from './services/serviceRegistry';
 import { initializeRevocationService, shutdownRevocationService } from './services/tokenRevocation';
 import { featureFlagService } from './services/featureFlagService';
 import { rateLimitService } from './services/rateLimiting';
 import { jobQueue, maintenanceJobs } from './jobs';
 import { metricsService } from './observability';
-import { metricsMiddleware, metricsHandler } from './middleware/metrics';
+import { metricsMiddleware } from './middleware/metrics';
 import { i18nMiddleware } from './middleware/i18n';
 import { i18nService } from './i18n/i18nService';
 import { connectWithRetry, disconnect, startDatabaseHealthCheck, stopDatabaseHealthCheck } from './models/prisma';
@@ -177,45 +160,7 @@ app.use('/api', apiVersionMiddleware({
 // ROUTES
 // ========================================
 
-// Health check routes (comprehensive health monitoring)
-// Simple /health for basic liveness, /api/v1/health for detailed status
-app.get('/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: config.nodeEnv,
-  });
-});
-
-// Prometheus metrics endpoint
-app.get('/metrics', metricsHandler);
-
-// Comprehensive health check with component status
-app.use('/api/v1/health', healthRoutes);
-
-// API v1 routes
-// Note: Routes with specific paths must come BEFORE catch-all routes mounted at /api/v1
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/wallets', walletRoutes);
-app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/bitcoin', bitcoinRoutes);
-app.use('/api/v1/price', priceRoutes);  // Public route - no auth required
-app.use('/api/v1/node', nodeRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/sync', syncRoutes);
-app.use('/api/v1/push', pushRoutes);
-app.use('/api/v1/transfers', transferRoutes);  // Ownership transfer routes
-app.use('/api/v1/ai', aiRoutes);  // AI-powered features (optional)
-app.use('/internal/ai', aiInternalRoutes);  // Internal AI endpoints (AI container only)
-app.use('/api/v1/mobile-permissions', mobilePermissionsRoutes);  // Mobile permissions
-app.use('/api/v1', mobilePermissionsRoutes);  // Wallet-scoped mobile permissions
-app.use('/', mobilePermissionsRoutes);  // Internal mobile permission endpoints
-// These routes are mounted at /api/v1 without a specific path - must come LAST
-app.use('/api/v1', transactionRoutes);  // Transaction routes include wallet prefix
-app.use('/api/v1', labelRoutes);  // Label routes include various prefixes
-app.use('/api/v1', draftRoutes);  // Draft routes include wallet prefix
-app.use('/api/v1/payjoin', payjoinRoutes);  // Payjoin (BIP78) routes
-app.use('/api/v1/docs', openApiRoutes);  // OpenAPI/Swagger documentation
+registerRoutes(app);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -261,29 +206,30 @@ httpServer.on('upgrade', (request, socket, head) => {
 // Define background services with startup manager
 const syncService = getSyncService();
 
-const backgroundServices: ServiceDefinition[] = [
-  {
-    name: 'notifications',
-    start: () => notificationService.start(),
-    critical: false,
-    maxRetries: 2,
-    backoffMs: [1000, 3000],
-  },
-  {
-    name: 'sync',
-    start: () => syncService.start(),
-    critical: false,
-    maxRetries: 3,
-    backoffMs: [2000, 5000, 10000],
-  },
-  {
-    name: 'maintenance',
-    start: async () => { maintenanceService.start(); },
-    critical: false,
-    maxRetries: 2,
-    backoffMs: [1000, 2000],
-  },
-];
+registerService({
+  name: 'notifications',
+  start: () => notificationService.start(),
+  stop: () => notificationService.stop(),
+  critical: false,
+  maxRetries: 2,
+  backoffMs: [1000, 3000],
+});
+registerService({
+  name: 'sync',
+  start: () => syncService.start(),
+  stop: () => syncService.stop(),
+  critical: false,
+  maxRetries: 3,
+  backoffMs: [2000, 5000, 10000],
+});
+registerService({
+  name: 'maintenance',
+  start: async () => { maintenanceService.start(); },
+  stop: () => maintenanceService.stop(),
+  critical: false,
+  maxRetries: 2,
+  backoffMs: [1000, 2000],
+});
 
 // Run database connection and migrations before starting server
 (async () => {
@@ -379,7 +325,7 @@ const backgroundServices: ServiceDefinition[] = [
 
       // Start background services with resilient startup manager
       try {
-        const startupResults = await startAllServices(backgroundServices);
+        const startupResults = await startRegisteredServices();
         const startupStatus = getStartupStatus();
 
         for (const result of startupResults) {
@@ -444,9 +390,7 @@ const handleShutdown = async (signal: string) => {
   gatewayWsServer.close();
 
   // Stop background services
-  notificationService.stop();
-  syncService.stop();
-  maintenanceService.stop();
+  await stopRegisteredServices();
   stopDatabaseHealthCheck();
   shutdownRevocationService();
   rateLimitService.shutdown();

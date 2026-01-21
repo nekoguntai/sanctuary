@@ -29,19 +29,9 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
-// Mock config
-vi.mock('../../../src/config', () => ({
-  getConfig: () => ({
-    rateLimit: {
-      aiWindowSeconds: 60,
-      aiAnalyzeLimit: 20,
-    },
-  }),
-}));
-
 // Mock rate limiter to bypass in tests
-vi.mock('express-rate-limit', () => ({
-  default: () => (req: Request, res: Response, next: NextFunction) => next(),
+vi.mock('../../../src/middleware/rateLimit', () => ({
+  rateLimitByUser: () => (req: Request, res: Response, next: NextFunction) => next(),
 }));
 
 // Mock AI service with vi.fn() in factory

@@ -50,6 +50,30 @@ function buildPolicies(): Record<string, RateLimitPolicy> {
       message: 'Too many password change attempts. Please try again later.',
     },
 
+    'auth:email-verify': {
+      name: 'auth:email-verify',
+      limit: rl.emailVerifyAttempts,
+      windowSeconds: rl.emailVerifyWindowSeconds,
+      keyStrategy: 'ip',
+      message: 'Too many verification attempts. Please try again later.',
+    },
+
+    'auth:email-resend': {
+      name: 'auth:email-resend',
+      limit: rl.emailResendAttempts,
+      windowSeconds: rl.emailResendWindowSeconds,
+      keyStrategy: 'user',
+      message: 'Too many verification email requests. Please try again later.',
+    },
+
+    'auth:email-update': {
+      name: 'auth:email-update',
+      limit: rl.emailUpdateAttempts,
+      windowSeconds: rl.emailUpdateWindowSeconds,
+      keyStrategy: 'user',
+      message: 'Too many email update attempts. Please try again later.',
+    },
+
     // API policies (general)
     'api:default': {
       name: 'api:default',

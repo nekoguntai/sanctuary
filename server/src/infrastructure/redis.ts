@@ -64,11 +64,8 @@ export async function initializeRedis(): Promise<void> {
   const config = getConfig();
 
   if (!config.redis.enabled) {
-    log.info('Redis not configured, using in-memory implementations');
-    distributedCache = memoryCache;
-    distributedEventBus = localEventBus;
-    isInitialized = true;
-    return;
+    log.error('Redis is required but REDIS_URL is not configured');
+    throw new Error('Redis is required but REDIS_URL is not set');
   }
 
   try {
@@ -143,19 +140,16 @@ export async function initializeRedis(): Promise<void> {
       eventBus: 'redis',
     });
   } catch (error) {
-    log.error('Failed to initialize Redis, falling back to in-memory', { error });
+    log.error('Failed to initialize Redis', { error });
 
     // Clean up partial connections
     if (redisClient) {
       await redisClient.quit().catch(() => {});
       redisClient = null;
     }
-
-    // Use in-memory fallback
-    distributedCache = memoryCache;
-    distributedEventBus = localEventBus;
     isRedisEnabled = false;
-    isInitialized = true;
+    isInitialized = false;
+    throw error;
   }
 }
 
@@ -258,7 +252,7 @@ export async function checkRedisHealth(): Promise<{
   error?: string;
 }> {
   if (!isRedisEnabled || !redisClient) {
-    return { status: 'degraded', error: 'Using in-memory fallback' };
+    return { status: 'unhealthy', error: 'Redis not initialized' };
   }
 
   try {

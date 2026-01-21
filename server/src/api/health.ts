@@ -11,6 +11,10 @@ import { circuitBreakerRegistry } from '../services/circuitBreaker';
 import { getSyncService } from '../services/syncService';
 import { getWebSocketServer } from '../websocket/server';
 import { createLogger } from '../utils/logger';
+import { checkRedisHealth } from '../infrastructure/redis';
+import { jobQueue } from '../jobs';
+import { getCacheInvalidationStatus } from '../services/cacheInvalidation';
+import { getStartupStatus } from '../services/startupManager';
 
 const router = Router();
 const log = createLogger('HEALTH');
@@ -31,9 +35,13 @@ export interface HealthResponse {
   version: string;
   components: {
     database: ComponentHealth;
+    redis: ComponentHealth;
     electrum: ComponentHealth;
     websocket: ComponentHealth;
     sync: ComponentHealth;
+    jobQueue: ComponentHealth;
+    cacheInvalidation: ComponentHealth;
+    startup: ComponentHealth;
     circuitBreakers: ComponentHealth;
     memory: ComponentHealth;
   };
@@ -131,7 +139,7 @@ function checkWebSocket(): ComponentHealth {
     };
   } catch {
     return {
-      status: 'healthy',
+      status: 'degraded',
       message: 'WebSocket stats unavailable',
     };
   }
@@ -172,10 +180,108 @@ function checkSync(): ComponentHealth {
     };
   } catch {
     return {
-      status: 'healthy',
+      status: 'degraded',
       message: 'Sync stats unavailable',
     };
   }
+}
+
+/**
+ * Check Redis status
+ */
+async function checkRedis(): Promise<ComponentHealth> {
+  const redisHealth = await checkRedisHealth();
+
+  if (redisHealth.status === 'healthy') {
+    return {
+      status: 'healthy',
+      latency: redisHealth.latencyMs,
+    };
+  }
+
+  return {
+    status: redisHealth.status === 'degraded' ? 'degraded' : 'unhealthy',
+    message: redisHealth.error,
+    latency: redisHealth.latencyMs,
+  };
+}
+
+/**
+ * Check job queue status
+ */
+async function checkJobQueue(): Promise<ComponentHealth> {
+  const health = await jobQueue.getHealth();
+  const status = health.healthy ? 'healthy' : 'unhealthy';
+
+  return {
+    status,
+    details: {
+      queueName: health.queueName,
+      waiting: health.waiting,
+      active: health.active,
+      completed: health.completed,
+      failed: health.failed,
+      delayed: health.delayed,
+      paused: health.paused,
+    },
+  };
+}
+
+/**
+ * Check cache invalidation status
+ */
+function checkCacheInvalidation(): ComponentHealth {
+  const status = getCacheInvalidationStatus();
+
+  if (!status.initialized) {
+    return {
+      status: 'degraded',
+      message: 'Cache invalidation not initialized',
+      details: status,
+    };
+  }
+
+  return {
+    status: 'healthy',
+    details: status,
+  };
+}
+
+/**
+ * Check startup manager status
+ */
+function checkStartup(): ComponentHealth {
+  const status = getStartupStatus();
+
+  if (!status.started) {
+    return {
+      status: 'degraded',
+      message: 'Startup not initiated',
+      details: status,
+    };
+  }
+
+  if (!status.overallSuccess) {
+    return {
+      status: 'unhealthy',
+      message: 'Startup failed for one or more services',
+      details: status,
+    };
+  }
+
+  const hasDegraded = status.services.some(service => service.degraded);
+  if (hasDegraded) {
+    return {
+      status: 'degraded',
+      message: 'One or more services running in degraded mode',
+      details: status,
+    };
+  }
+
+  return {
+    status: 'healthy',
+    details: status,
+  };
 }
 
 /**
@@ -277,6 +383,10 @@ function determineOverallStatus(components: Record<string, ComponentHealth>): He
     return 'unhealthy';
   }
 
+  if (components.redis?.status === 'unhealthy') {
+    return 'unhealthy';
+  }
+
   // Any unhealthy = overall degraded (unless database)
   if (statuses.includes('unhealthy')) {
     return 'degraded';
@@ -297,9 +407,13 @@ function determineOverallStatus(components: Record<string, ComponentHealth>): He
 router.get('/', async (req: Request, res: Response) => {
   const components = {
     database: await checkDatabase(),
+    redis: await checkRedis(),
     electrum: checkElectrum(),
     websocket: checkWebSocket(),
     sync: checkSync(),
+    jobQueue: await checkJobQueue(),
+    cacheInvalidation: checkCacheInvalidation(),
+    startup: checkStartup(),
     circuitBreakers: checkCircuitBreakers(),
     memory: checkMemory(),
   };

@@ -114,6 +114,12 @@ function loadConfig(): CombinedConfig {
       twoFaWindowSeconds: parseInt(process.env.RATE_LIMIT_2FA_WINDOW || '900', 10), // 15 minutes
       passwordChangeAttempts: parseInt(process.env.RATE_LIMIT_PASSWORD_CHANGE || '5', 10),
       passwordChangeWindowSeconds: parseInt(process.env.RATE_LIMIT_PASSWORD_CHANGE_WINDOW || '900', 10), // 15 minutes
+      emailVerifyAttempts: parseInt(process.env.RATE_LIMIT_EMAIL_VERIFY || '10', 10),
+      emailVerifyWindowSeconds: parseInt(process.env.RATE_LIMIT_EMAIL_VERIFY_WINDOW || '900', 10), // 15 minutes
+      emailResendAttempts: parseInt(process.env.RATE_LIMIT_EMAIL_RESEND || '5', 10),
+      emailResendWindowSeconds: parseInt(process.env.RATE_LIMIT_EMAIL_RESEND_WINDOW || '3600', 10), // 1 hour
+      emailUpdateAttempts: parseInt(process.env.RATE_LIMIT_EMAIL_UPDATE || '3', 10),
+      emailUpdateWindowSeconds: parseInt(process.env.RATE_LIMIT_EMAIL_UPDATE_WINDOW || '3600', 10), // 1 hour
 
       // API policies (per minute unless specified)
       apiDefaultLimit: parseInt(process.env.RATE_LIMIT_API_DEFAULT || '1000', 10),

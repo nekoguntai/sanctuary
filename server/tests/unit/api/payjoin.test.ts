@@ -16,8 +16,8 @@ vi.mock('../../../src/config', () => ({
 }));
 
 // Mock rate limiter to avoid rate limiting in tests
-vi.mock('express-rate-limit', () => ({
-  default: () => (req: Request, res: Response, next: NextFunction) => next(),
+vi.mock('../../../src/middleware/rateLimit', () => ({
+  rateLimitByIpAndKey: () => (req: Request, res: Response, next: NextFunction) => next(),
 }));
 
 // Mock Prisma

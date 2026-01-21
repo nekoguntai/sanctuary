@@ -145,6 +145,8 @@ export async function startAllServices(
   state.startedAt = new Date();
   state.services.clear();
 
+  validateDependencies(services);
+
   const results: ServiceStartupResult[] = [];
   const started = new Set<string>();
 
@@ -245,6 +247,21 @@ function topologicalSort(services: ServiceDefinition[]): ServiceDefinition[] {
   }
 
   return result;
+}
+
+/**
+ * Ensure all declared dependencies exist
+ */
+function validateDependencies(services: ServiceDefinition[]): void {
+  const names = new Set(services.map(service => service.name));
+
+  for (const service of services) {
+    for (const dep of service.dependsOn ?? []) {
+      if (!names.has(dep)) {
+        throw new Error(`Service ${service.name} depends on missing service ${dep}`);
+      }
+    }
+  }
 }
 
 /**

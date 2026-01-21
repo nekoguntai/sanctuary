@@ -122,3 +122,13 @@ export function shutdownCacheInvalidation(): void {
   isInitialized = false;
   log.info('Cache invalidation shutdown complete');
 }
+
+/**
+ * Get cache invalidation status
+ */
+export function getCacheInvalidationStatus(): { initialized: boolean; listeners: number } {
+  return {
+    initialized: isInitialized,
+    listeners: unsubscribers.length,
+  };
+}

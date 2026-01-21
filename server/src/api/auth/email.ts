@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import type { RateLimitRequestHandler } from 'express-rate-limit';
+import type { RequestHandler } from 'express';
 import { verifyEmail, resendVerification } from '../../services/email';
 import { userRepository } from '../../repositories';
 import { verifyPassword } from '../../utils/password';
@@ -21,9 +21,9 @@ const log = createLogger('auth:email');
  * Create email verification router with rate limiters
  */
 export function createEmailRouter(
-  verifyLimiter: RateLimitRequestHandler,
-  resendLimiter: RateLimitRequestHandler,
-  updateLimiter: RateLimitRequestHandler
+  verifyLimiter: RequestHandler,
+  resendLimiter: RequestHandler,
+  updateLimiter: RequestHandler
 ): Router {
   const router = Router();
 
@@ -118,8 +118,8 @@ export function createEmailRouter(
    */
   router.post(
     '/email/resend',
-    resendLimiter,
     authenticate,
+    resendLimiter,
     async (req: Request, res: Response) => {
       try {
         const userId = req.user!.userId;
@@ -181,8 +181,8 @@ export function createEmailRouter(
    */
   router.put(
     '/me/email',
-    updateLimiter,
     authenticate,
+    updateLimiter,
     async (req: Request, res: Response) => {
       try {
         const parseResult = UpdateEmailSchema.safeParse(req.body);

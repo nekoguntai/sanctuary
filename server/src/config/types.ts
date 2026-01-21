@@ -48,6 +48,12 @@ export interface RateLimitConfig {
   twoFaWindowSeconds: number;
   passwordChangeAttempts: number;
   passwordChangeWindowSeconds: number;
+  emailVerifyAttempts: number;
+  emailVerifyWindowSeconds: number;
+  emailResendAttempts: number;
+  emailResendWindowSeconds: number;
+  emailUpdateAttempts: number;
+  emailUpdateWindowSeconds: number;
 
   // API policies
   apiDefaultLimit: number;

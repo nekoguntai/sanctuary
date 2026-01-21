@@ -189,7 +189,7 @@ describe('Health API', () => {
       const response = await request(app).get('/api/v1/health');
 
       expect(response.status).toBe(200);
-      expect(response.body.components.websocket.status).toBe('healthy');
+      expect(response.body.components.websocket.status).toBe('degraded');
       expect(response.body.components.websocket.message).toBe('WebSocket stats unavailable');
     });
 

@@ -88,11 +88,9 @@ const createTestApp = async () => {
   // Import router dynamically after mocks
   const mobilePermissionsModule = await import('../../../src/api/mobilePermissions');
 
-  // Mount at both paths to match how the actual app routes
-  app.use('/api/v1/mobile-permissions', mobilePermissionsModule.default);
+  // Mount to match how the actual app routes
   app.use('/api/v1', mobilePermissionsModule.default);
-  // Internal routes are defined with full path in the router
-  app.use('/', mobilePermissionsModule.default);
+  app.use('/internal', mobilePermissionsModule.mobilePermissionsInternalRoutes);
 
   return app;
 };
@@ -155,6 +153,18 @@ describe('Mobile Permissions API', () => {
   beforeEach(() => {
     resetPrismaMocks();
     vi.clearAllMocks();
+  });
+
+  describe('route mounting', () => {
+    it('does not expose unversioned mobile permissions routes', async () => {
+      const response = await request(app).get('/mobile-permissions');
+      expect(response.status).toBe(404);
+    });
+
+    it('does not expose wallet-scoped routes without versioning', async () => {
+      const response = await request(app).get('/wallets/wallet-123/mobile-permissions');
+      expect(response.status).toBe(404);
+    });
   });
 
   describe('GET /api/v1/mobile-permissions', () => {

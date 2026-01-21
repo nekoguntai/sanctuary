@@ -45,3 +45,9 @@ junit.xml
 .claude/settings.json
 .claude/settings.local.json
 .claude/*.old
+
+# Claude Code scratch artifacts
+.claude/plans/
+**/CLAUDE.md
+**/.stryker-tmp/
+\*\*

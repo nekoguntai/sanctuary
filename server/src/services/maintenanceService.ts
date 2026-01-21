@@ -403,9 +403,10 @@ class MaintenanceService {
   async cleanupOrphanedDrafts(): Promise<number> {
     try {
       // Delete drafts where wallet no longer exists using raw SQL for efficiency
+      // Note: Use actual PostgreSQL table names from @@map(), not Prisma model names
       const result = await prisma.$executeRaw`
-        DELETE FROM "DraftTransaction"
-        WHERE "walletId" NOT IN (SELECT id FROM "Wallet")
+        DELETE FROM draft_transactions
+        WHERE "walletId" NOT IN (SELECT id FROM wallets)
       `;
 
       if (result > 0) {
@@ -538,16 +539,17 @@ class MaintenanceService {
 
       // Run REINDEX on heavily-updated tables
       // SECURITY: Use individual static queries - no string interpolation
+      // Note: Use actual PostgreSQL table names from @@map(), not Prisma model names
       log.info('Running REINDEX on table: audit_logs');
-      await prisma.$executeRaw`REINDEX TABLE "audit_logs"`;
+      await prisma.$executeRaw`REINDEX TABLE audit_logs`;
 
       log.info('Running REINDEX on table: transactions');
-      await prisma.$executeRaw`REINDEX TABLE "Transaction"`;
+      await prisma.$executeRaw`REINDEX TABLE transactions`;
 
       log.info('Running REINDEX on table: utxos');
-      await prisma.$executeRaw`REINDEX TABLE "UTXO"`;
+      await prisma.$executeRaw`REINDEX TABLE utxos`;
 
-      const heavyTables = ['audit_logs', 'Transaction', 'UTXO'];
+      const heavyTables = ['audit_logs', 'transactions', 'utxos'];
 
       const duration = Date.now() - startTime;
       log.info('Weekly database maintenance completed', {

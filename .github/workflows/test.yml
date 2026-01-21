@@ -201,6 +201,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -240,6 +250,7 @@ jobs:
         run: npm run start &
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
+          REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
@@ -263,6 +274,7 @@ jobs:
         run: npm run test:e2e -- --project=chromium
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
+          REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test

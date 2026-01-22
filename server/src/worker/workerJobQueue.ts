@@ -300,6 +300,8 @@ export class WorkerJobQueue {
     }
 
     try {
+      const jobId = options?.jobId ?? `repeat:${queueName}:${jobName}:${cron}`;
+
       // Remove existing repeatable job with same key first
       const repeatableJobs = await queueInstance.queue.getRepeatableJobs();
       const existingJob = repeatableJobs.find(j => j.name === jobName);
@@ -310,6 +312,7 @@ export class WorkerJobQueue {
 
       const job = await queueInstance.queue.add(jobName, data, {
         ...options,
+        jobId,
         repeat: { pattern: cron },
         removeOnComplete: options?.removeOnComplete ?? 10,
       });

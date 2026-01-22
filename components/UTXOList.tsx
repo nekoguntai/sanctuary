@@ -55,6 +55,7 @@ function getSpendCost(utxo: UTXO, feeRate: number): number {
 
 interface UTXOListProps {
   utxos: UTXO[];
+  totalCount?: number;
   onToggleFreeze: (txid: string, vout: number) => void;
   selectable?: boolean;
   selectedUtxos?: Set<string>;
@@ -69,6 +70,7 @@ interface UTXOListProps {
 
 export const UTXOList: React.FC<UTXOListProps> = ({
   utxos,
+  totalCount,
   onToggleFreeze,
   selectable = false,
   selectedUtxos = new Set(),
@@ -150,7 +152,9 @@ export const UTXOList: React.FC<UTXOListProps> = ({
       <div className="flex justify-between items-center mb-4 sticky top-0 surface-muted z-10 py-2">
          <div className="flex items-center space-x-4">
             <h4 className="text-sm font-medium text-sanctuary-500 dark:text-sanctuary-400 uppercase tracking-wide">Available Outputs</h4>
-            <span className="text-xs text-sanctuary-400 surface-secondary px-2 py-1 rounded-full">{utxos.length} UTXOs</span>
+            <span className="text-xs text-sanctuary-400 surface-secondary px-2 py-1 rounded-full">
+              {totalCount !== undefined ? `${utxos.length} of ${totalCount}` : utxos.length} UTXOs
+            </span>
          </div>
          <div className="flex items-center space-x-2">
             {selectable && selectedCount > 0 && onSendSelected && (

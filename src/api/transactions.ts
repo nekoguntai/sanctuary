@@ -29,6 +29,10 @@ export interface GetUTXOsResponse {
   totalBalance: number;
 }
 
+export interface GetUTXOsParams {
+  limit?: number;
+  offset?: number;
+}
 export interface CreateTransactionRequest {
   recipient: string;
   amount: number;
@@ -190,8 +194,11 @@ export async function exportTransactions(
 /**
  * Get UTXOs for a wallet
  */
-export async function getUTXOs(walletId: string): Promise<GetUTXOsResponse> {
-  return apiClient.get<GetUTXOsResponse>(`/wallets/${walletId}/utxos`);
+export async function getUTXOs(
+  walletId: string,
+  params?: GetUTXOsParams
+): Promise<GetUTXOsResponse> {
+  return apiClient.get<GetUTXOsResponse>(`/wallets/${walletId}/utxos`, params);
 }
 
 /**
@@ -376,12 +383,17 @@ export type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
  */
 export async function getBalanceHistory(
   timeframe: Timeframe,
-  totalBalance: number
+  totalBalance: number,
+  walletIds?: string[]
 ): Promise<BalanceHistoryPoint[]> {
-  return apiClient.get<BalanceHistoryPoint[]>('/transactions/balance-history', {
+  const params: Record<string, string | number> = {
     timeframe,
     totalBalance,
-  });
+  };
+  if (walletIds && walletIds.length > 0) {
+    params.walletIds = walletIds.join(',');
+  }
+  return apiClient.get<BalanceHistoryPoint[]>('/transactions/balance-history', params);
 }
 
 // ========================================

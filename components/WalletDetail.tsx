@@ -159,6 +159,12 @@ export const WalletDetail: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [utxos, setUTXOs] = useState<UTXO[]>([]);
+  const [utxoSummary, setUtxoSummary] = useState<{ count: number; totalBalance: number } | null>(null);
+  const [utxoOffset, setUtxoOffset] = useState(0);
+  const [hasMoreUtxos, setHasMoreUtxos] = useState(true);
+  const [loadingMoreUtxos, setLoadingMoreUtxos] = useState(false);
+  const [utxoStats, setUtxoStats] = useState<UTXO[]>([]);
+  const [loadingUtxoStats, setLoadingUtxoStats] = useState(false);
 
   // AI Query filter state
   const [aiQueryFilter, setAiQueryFilter] = useState<NaturalQueryResult | null>(null);
@@ -174,6 +180,9 @@ export const WalletDetail: React.FC = () => {
   const [hasMoreTx, setHasMoreTx] = useState(true);
   const [loadingMoreTx, setLoadingMoreTx] = useState(false);
   const [transactionStats, setTransactionStats] = useState<transactionsApi.TransactionStats | null>(null);
+
+  // UTXO Pagination State
+  const UTXO_PAGE_SIZE = 100;
 
   // Addresses State
   const ADDRESS_PAGE_SIZE = 25;
@@ -191,6 +200,12 @@ export const WalletDetail: React.FC = () => {
       setHasMoreAddresses(addressOffset < addressSummary.totalAddresses);
     }
   }, [addressSummary, addressOffset]);
+
+  useEffect(() => {
+    if (utxoSummary) {
+      setHasMoreUtxos(utxoOffset < utxoSummary.count);
+    }
+  }, [utxoSummary, utxoOffset]);
 
   // Apply AI query filter to transactions
   const filteredTransactions = useMemo(() => {
@@ -585,6 +600,17 @@ export const WalletDetail: React.FC = () => {
     fetchData();
   }, [id, user]);
 
+  useEffect(() => {
+    setUTXOs([]);
+    setUtxoSummary(null);
+    setUtxoOffset(0);
+    setHasMoreUtxos(true);
+    setUtxoStats([]);
+    setSelectedUtxos(new Set());
+    setLoadingMoreUtxos(false);
+    setLoadingUtxoStats(false);
+  }, [id]);
+
   // Refetch wallet data when window becomes visible (handles missed WS events)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -599,6 +625,12 @@ export const WalletDetail: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [id, user]);
+
+  useEffect(() => {
+    if (!id || activeTab !== 'stats') return;
+    if (utxoStats.length > 0 || loadingUtxoStats) return;
+    loadUtxosForStats(id);
+  }, [activeTab, id, utxoStats.length, loadingUtxoStats]);
 
   const fetchData = async (isRefresh = false) => {
     if (!id || !user) return;
@@ -757,25 +789,9 @@ export const WalletDetail: React.FC = () => {
         .catch(err => log.error('Failed to fetch transaction stats', { error: err }))
     );
 
-    // Fetch UTXOs
+    // Fetch UTXOs (paged)
     fetchPromises.push(
-      transactionsApi.getUTXOs(id)
-        .then(utxoData => {
-          const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
-            id: utxo.id,
-            txid: utxo.txid,
-            vout: utxo.vout,
-            amount: Number(utxo.amount),
-            address: utxo.address,
-            confirmations: utxo.confirmations,
-            frozen: utxo.frozen ?? false,
-            spendable: utxo.spendable,
-            date: new Date(utxo.createdAt).getTime(),
-            lockedByDraftId: utxo.lockedByDraftId,
-            lockedByDraftLabel: utxo.lockedByDraftLabel,
-          }));
-          setUTXOs(formattedUTXOs);
-        })
+      loadUtxos(id, UTXO_PAGE_SIZE, 0, true)
         .catch(err => log.error('Failed to fetch UTXOs', { error: err }))
     );
 
@@ -904,6 +920,11 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
+  const loadMoreUtxos = async () => {
+    if (!id || loadingMoreUtxos || !hasMoreUtxos) return;
+    await loadUtxos(id, UTXO_PAGE_SIZE, utxoOffset, false);
+  };
+
   const loadAddressSummary = async (walletId: string) => {
     try {
       const summary = await transactionsApi.getAddressSummary(walletId);
@@ -948,6 +969,71 @@ export const WalletDetail: React.FC = () => {
       // Non-critical - addresses tab may be empty but wallet is still usable
     } finally {
       setLoadingAddresses(false);
+    }
+  };
+
+  const loadUtxos = async (walletId: string, limit: number, offset: number, reset = false) => {
+    if (!reset) {
+      setLoadingMoreUtxos(true);
+    }
+
+    try {
+      if (reset) {
+        setUtxoOffset(0);
+      }
+
+      const utxoData = await transactionsApi.getUTXOs(walletId, { limit, offset });
+      setUtxoSummary({ count: utxoData.count, totalBalance: utxoData.totalBalance });
+
+      const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
+        id: utxo.id,
+        txid: utxo.txid,
+        vout: utxo.vout,
+        amount: Number(utxo.amount),
+        address: utxo.address,
+        confirmations: utxo.confirmations,
+        frozen: utxo.frozen ?? false,
+        spendable: utxo.spendable,
+        date: new Date(utxo.createdAt).getTime(),
+        lockedByDraftId: utxo.lockedByDraftId,
+        lockedByDraftLabel: utxo.lockedByDraftLabel,
+      }));
+
+      setUTXOs(prev => reset ? formattedUTXOs : [...prev, ...formattedUTXOs]);
+      const nextOffset = offset + formattedUTXOs.length;
+      setUtxoOffset(nextOffset);
+      setHasMoreUtxos(nextOffset < utxoData.count);
+    } catch (err) {
+      logError(log, err, 'Failed to load UTXOs');
+    } finally {
+      if (!reset) {
+        setLoadingMoreUtxos(false);
+      }
+    }
+  };
+
+  const loadUtxosForStats = async (walletId: string) => {
+    setLoadingUtxoStats(true);
+    try {
+      const utxoData = await transactionsApi.getUTXOs(walletId);
+      const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
+        id: utxo.id,
+        txid: utxo.txid,
+        vout: utxo.vout,
+        amount: Number(utxo.amount),
+        address: utxo.address,
+        confirmations: utxo.confirmations,
+        frozen: utxo.frozen ?? false,
+        spendable: utxo.spendable,
+        date: new Date(utxo.createdAt).getTime(),
+        lockedByDraftId: utxo.lockedByDraftId,
+        lockedByDraftLabel: utxo.lockedByDraftLabel,
+      }));
+      setUtxoStats(formattedUTXOs);
+    } catch (err) {
+      logError(log, err, 'Failed to load UTXOs for stats');
+    } finally {
+      setLoadingUtxoStats(false);
     }
   };
 
@@ -1106,6 +1192,11 @@ export const WalletDetail: React.FC = () => {
         (u.txid === txid && u.vout === vout) ? { ...u, frozen: newFrozenState } : u
       )
     );
+    setUtxoStats(current =>
+      current.map(u =>
+        (u.txid === txid && u.vout === vout) ? { ...u, frozen: newFrozenState } : u
+      )
+    );
 
     try {
       await transactionsApi.freezeUTXO(utxo.id, newFrozenState);
@@ -1114,6 +1205,11 @@ export const WalletDetail: React.FC = () => {
       handleError(err, 'Failed to Freeze UTXO');
       // Revert optimistic update on error
       setUTXOs(current =>
+        current.map(u =>
+          (u.txid === txid && u.vout === vout) ? { ...u, frozen: !newFrozenState } : u
+        )
+      );
+      setUtxoStats(current =>
         current.map(u =>
           (u.txid === txid && u.vout === vout) ? { ...u, frozen: !newFrozenState } : u
         )
@@ -1640,18 +1736,39 @@ export const WalletDetail: React.FC = () => {
         )}
         
         {activeTab === 'utxo' && (
-          <UTXOList
-            utxos={utxos}
-            onToggleFreeze={handleToggleFreeze}
-            selectable={wallet.userRole !== 'viewer'}
-            selectedUtxos={selectedUtxos}
-            onToggleSelect={handleToggleSelect}
-            onSendSelected={wallet.userRole !== 'viewer' ? handleSendSelected : undefined}
-            privacyData={privacyData}
-            privacySummary={privacySummary}
-            showPrivacy={showPrivacy}
-            network={wallet?.network}
-          />
+          <div>
+            <UTXOList
+              utxos={utxos}
+              totalCount={utxoSummary?.count}
+              onToggleFreeze={handleToggleFreeze}
+              selectable={wallet.userRole !== 'viewer'}
+              selectedUtxos={selectedUtxos}
+              onToggleSelect={handleToggleSelect}
+              onSendSelected={wallet.userRole !== 'viewer' ? handleSendSelected : undefined}
+              privacyData={privacyData}
+              privacySummary={privacySummary}
+              showPrivacy={showPrivacy}
+              network={wallet?.network}
+            />
+            {hasMoreUtxos && utxos.length > 0 && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={loadMoreUtxos}
+                  disabled={loadingMoreUtxos}
+                  className="px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreUtxos ? (
+                    <span className="flex items-center justify-center">
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-500 border-t-transparent mr-2" />
+                      Loading...
+                    </span>
+                  ) : (
+                    `Load More (${utxos.length} shown)`
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'addresses' && (() => {
@@ -1987,7 +2104,7 @@ export const WalletDetail: React.FC = () => {
         )}
 
         {activeTab === 'stats' && (
-          <WalletStats utxos={utxos} balance={wallet.balance} transactions={transactions} />
+          <WalletStats utxos={utxoStats.length > 0 ? utxoStats : utxos} balance={wallet.balance} transactions={transactions} />
         )}
 
         {activeTab === 'log' && (

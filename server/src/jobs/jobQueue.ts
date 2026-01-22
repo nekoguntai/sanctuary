@@ -59,6 +59,13 @@ const DEFAULT_CONFIG: Required<JobQueueConfig> = {
   removeOnFail: 50,
 };
 
+function buildRepeatableJobId(name: string, scheduleOptions: ScheduleOptions): string {
+  const parts = [name, scheduleOptions.cron || ''];
+  if (scheduleOptions.timezone) parts.push(scheduleOptions.timezone);
+  if (scheduleOptions.limit !== undefined) parts.push(`limit=${scheduleOptions.limit}`);
+  return `repeat:${parts.join(':')}`;
+}
+
 class JobQueueService {
   private queue: Queue | null = null;
   private worker: Worker | null = null;
@@ -259,10 +266,15 @@ class JobQueueService {
         tz: scheduleOptions.timezone,
         limit: scheduleOptions.limit,
       };
+      jobOptions.jobId = scheduleOptions.jobId || buildRepeatableJobId(name, scheduleOptions);
     }
 
     if (scheduleOptions.delay) {
       jobOptions.delay = scheduleOptions.delay;
+    }
+
+    if (!jobOptions.jobId && scheduleOptions.jobId) {
+      jobOptions.jobId = scheduleOptions.jobId;
     }
 
     try {

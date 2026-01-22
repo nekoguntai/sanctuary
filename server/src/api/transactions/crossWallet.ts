@@ -43,6 +43,59 @@ function getTimeframeStartDate(timeframe: string): Date {
   }
 }
 
+type BucketUnit = 'hour' | 'day' | 'week' | 'month';
+
+function getBucketConfig(timeframe: string): { unit: BucketUnit; label: (date: Date) => string } {
+  switch (timeframe) {
+    case '1D':
+      return {
+        unit: 'hour',
+        label: (date) => date.toLocaleTimeString(undefined, { hour: 'numeric' }),
+      };
+    case '1Y':
+      return {
+        unit: 'week',
+        label: (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      };
+    case 'ALL':
+      return {
+        unit: 'month',
+        label: (date) => date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }),
+      };
+    case '1W':
+    case '1M':
+    default:
+      return {
+        unit: 'day',
+        label: (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      };
+  }
+}
+
+async function getBucketedBalanceDeltas(
+  walletIds: string[],
+  startDate: Date,
+  bucketUnit: BucketUnit
+): Promise<Array<{ bucket: Date; amount: bigint }>> {
+  // Bucket unit is controlled by a trusted switch above.
+  const query = `
+    SELECT date_trunc('${bucketUnit}', "blockTime") AS bucket,
+           COALESCE(SUM("amount"), 0) AS amount
+    FROM "transactions"
+    WHERE "walletId" = ANY($1)
+      AND "blockTime" IS NOT NULL
+      AND "blockTime" >= $2
+    GROUP BY bucket
+    ORDER BY bucket ASC
+  `;
+
+  return prisma.$queryRawUnsafe<Array<{ bucket: Date; amount: bigint }>>(
+    query,
+    walletIds,
+    startDate
+  );
+}
+
 /**
  * GET /api/v1/transactions/recent
  * Get recent transactions across all wallets the user has access to
@@ -226,12 +279,16 @@ router.get('/transactions/pending', async (req: Request, res: Response) => {
  * Query params:
  * - timeframe: '1D' | '1W' | '1M' | '1Y' | 'ALL' (default: '1W')
  * - totalBalance: current total balance in satoshis (required for chart calculation)
+ * - walletIds: comma-separated list of wallet IDs to filter (optional)
  */
 router.get('/transactions/balance-history', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const timeframe = (req.query.timeframe as string) || '1W';
     const totalBalance = parseInt(req.query.totalBalance as string, 10) || 0;
+    const requestedWalletIds = req.query.walletIds
+      ? (req.query.walletIds as string).split(',').filter(Boolean)
+      : null;
 
     // Get all wallet IDs the user has access to
     const accessibleWallets = await prisma.wallet.findMany({
@@ -240,6 +297,7 @@ router.get('/transactions/balance-history', async (req: Request, res: Response) 
           { users: { some: { userId } } },
           { group: { members: { some: { userId } } } },
         ],
+        ...(requestedWalletIds && { id: { in: requestedWalletIds } }),
       },
       select: { id: true },
     });
@@ -254,20 +312,10 @@ router.get('/transactions/balance-history', async (req: Request, res: Response) 
     const walletIds = accessibleWallets.map(w => w.id);
     const startDate = getTimeframeStartDate(timeframe);
 
-    // Fetch transactions within timeframe from all accessible wallets
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        walletId: { in: walletIds },
-        blockTime: { gte: startDate },
-      },
-      select: {
-        amount: true,
-        blockTime: true,
-      },
-      orderBy: { blockTime: 'asc' }, // Oldest first for building history
-    });
+    const bucketConfig = getBucketConfig(timeframe);
+    const bucketed = await getBucketedBalanceDeltas(walletIds, startDate, bucketConfig.unit);
 
-    if (transactions.length === 0) {
+    if (bucketed.length === 0) {
       // No transactions in range - return flat line
       return res.json([
         { name: 'Start', value: totalBalance },
@@ -282,16 +330,15 @@ router.get('/transactions/balance-history', async (req: Request, res: Response) 
     // Start with current balance
     chartData.push({ name: 'Now', value: totalBalance });
 
-    // Work backwards through transactions to reconstruct history
-    // Transactions are sorted oldest first, so reverse iterate
-    for (let i = transactions.length - 1; i >= 0; i--) {
-      const tx = transactions[i];
-      const amount = bigIntToNumberOrZero(tx.amount);
-      // Subtract the transaction amount to get balance before
+    // Work backwards through bucketed deltas to reconstruct history
+    // Buckets are sorted oldest first, so reverse iterate
+    for (let i = bucketed.length - 1; i >= 0; i--) {
+      const bucket = bucketed[i];
+      const amount = bigIntToNumberOrZero(bucket.amount);
+      // Subtract the bucket net amount to get balance before
       runningBalance -= amount;
-      const txDate = tx.blockTime ? new Date(tx.blockTime) : new Date();
       chartData.unshift({
-        name: txDate.toLocaleDateString(),
+        name: bucketConfig.label(new Date(bucket.bucket)),
         value: runningBalance,
       });
     }

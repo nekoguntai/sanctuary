@@ -10,6 +10,7 @@ import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
 import { checkWalletEditAccess } from '../../services/wallet';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
+import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';
 
 const router = Router();
 const log = createLogger('TX:UTXOS');
@@ -21,6 +22,12 @@ const log = createLogger('TX:UTXOS');
 router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: Request, res: Response) => {
   try {
     const walletId = req.walletId!;
+    const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+    const { limit, offset } = validatePagination(
+      req.query.limit as string,
+      req.query.offset as string,
+      1000
+    );
 
     // Get confirmation threshold setting
     const thresholdSetting = await prisma.systemSetting.findUnique({
@@ -33,22 +40,30 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
       'confirmationThreshold'
     );
 
-    const utxos = await prisma.uTXO.findMany({
-      where: {
-        walletId,
-        spent: false,
-      },
-      orderBy: { amount: 'desc' },
-      include: {
-        draftLock: {
-          include: {
-            draft: {
-              select: { id: true, label: true },
+    const [summary, utxos] = await Promise.all([
+      prisma.uTXO.aggregate({
+        where: { walletId, spent: false },
+        _count: { _all: true },
+        _sum: { amount: true },
+      }),
+      prisma.uTXO.findMany({
+        where: {
+          walletId,
+          spent: false,
+        },
+        orderBy: { amount: 'desc' },
+        include: {
+          draftLock: {
+            include: {
+              draft: {
+                select: { id: true, label: true },
+              },
             },
           },
         },
-      },
-    });
+        ...(hasPagination ? { take: limit, skip: offset } : {}),
+      }),
+    ]);
 
     // Get associated transactions to find blockTime for each UTXO
     const txids = [...new Set(utxos.map(u => u.txid))];
@@ -84,12 +99,13 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
       };
     });
 
-    // Calculate total balance
-    const totalBalance = serializedUtxos.reduce((sum, utxo) => sum + utxo.amount, 0);
+    // Total balance/count across all unspent UTXOs (independent of pagination)
+    const totalBalance = bigIntToNumberOrZero(summary._sum.amount);
+    const totalCount = summary._count._all;
 
     res.json({
       utxos: serializedUtxos,
-      count: serializedUtxos.length,
+      count: totalCount,
       totalBalance,
     });
   } catch (error) {

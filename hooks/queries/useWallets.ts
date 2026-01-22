@@ -334,24 +334,6 @@ export function useWalletShareInfo(walletId: string | undefined) {
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';
 
-// Helper to get timeframe start date
-function getTimeframeStartDate(timeframe: Timeframe): Date {
-  const now = new Date();
-  switch (timeframe) {
-    case '1D':
-      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    case '1W':
-      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    case '1M':
-      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    case '1Y':
-      return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    case 'ALL':
-    default:
-      return new Date(0); // Beginning of time
-  }
-}
-
 /**
  * Hook to fetch all transactions from all wallets for balance history chart
  * Matches the Dashboard chart behavior with timeframe filtering
@@ -367,63 +349,10 @@ export function useBalanceHistory(
   const walletIdsKey = walletIds.join(',');
 
   const query = useQuery({
-    queryKey: ['balanceHistory', walletIdsKey, timeframe],
+    queryKey: ['balanceHistory', walletIdsKey, timeframe, totalBalance],
     queryFn: async () => {
       if (walletIds.length === 0) return [];
-
-      // Fetch all transactions from all wallets
-      const results = await Promise.all(
-        walletIds.map((walletId) => transactionsApi.getTransactions(walletId, { limit: 1000 }))
-      );
-
-      // Aggregate all transactions
-      const allTransactions = results.flat();
-
-      // Get timeframe start date
-      const startDate = getTimeframeStartDate(timeframe);
-
-      // Filter transactions within timeframe (exclude consolidations for chart)
-      const filteredTransactions = allTransactions
-        .filter((tx) => {
-          if (!tx.blockTime) return false;
-          const txDate = new Date(tx.blockTime);
-          return txDate >= startDate;
-        })
-        .sort((a, b) => {
-          const timeA = a.blockTime ? new Date(a.blockTime).getTime() : 0;
-          const timeB = b.blockTime ? new Date(b.blockTime).getTime() : 0;
-          return timeA - timeB; // Oldest first for building history
-        });
-
-      // Build chart data points
-      if (filteredTransactions.length === 0) {
-        // No transactions in range - return flat line
-        return [
-          { name: 'Start', value: totalBalance },
-          { name: 'Now', value: totalBalance },
-        ];
-      }
-
-      // Calculate running balance backwards from current total
-      let runningBalance = totalBalance;
-      const chartData: { name: string; value: number }[] = [];
-
-      // Start with current balance
-      chartData.push({ name: 'Now', value: totalBalance });
-
-      // Work backwards through transactions to reconstruct history
-      for (let i = filteredTransactions.length - 1; i >= 0; i--) {
-        const tx = filteredTransactions[i];
-        // Subtract the transaction amount to get balance before
-        runningBalance -= tx.amount;
-        const txDate = new Date(tx.blockTime!);
-        chartData.unshift({
-          name: txDate.toLocaleDateString(),
-          value: runningBalance,
-        });
-      }
-
-      return chartData;
+      return transactionsApi.getBalanceHistory(timeframe, totalBalance, walletIds);
     },
     enabled: walletIds.length > 0,
     staleTime: 60000, // Consider stale after 1 minute

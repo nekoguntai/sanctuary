@@ -60,6 +60,8 @@ export interface ScheduleOptions {
   timezone?: string;
   /** Maximum number of runs */
   limit?: number;
+  /** Optional job ID for idempotent scheduling */
+  jobId?: string;
 }
 
 /**

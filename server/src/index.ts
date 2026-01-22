@@ -224,7 +224,13 @@ registerService({
 });
 registerService({
   name: 'maintenance',
-  start: async () => { maintenanceService.start(); },
+  start: async () => {
+    if (jobQueue.isAvailable()) {
+      log.info('Skipping in-process maintenance service (job queue enabled)');
+      return;
+    }
+    maintenanceService.start();
+  },
   stop: () => maintenanceService.stop(),
   critical: false,
   maxRetries: 2,

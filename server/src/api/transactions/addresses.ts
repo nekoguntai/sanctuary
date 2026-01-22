@@ -25,11 +25,14 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
     const walletId = req.walletId!;
     const { used } = req.query;
     const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+    const DEFAULT_UNPAGED_LIMIT = 1000;
     const { limit, offset } = validatePagination(
       req.query.limit as string,
       req.query.offset as string,
-      1000
+      DEFAULT_UNPAGED_LIMIT
     );
+    const effectiveLimit = hasPagination ? limit : DEFAULT_UNPAGED_LIMIT;
+    const effectiveOffset = hasPagination ? offset : 0;
 
     // Get wallet for descriptor
     const wallet = await prisma.wallet.findUnique({
@@ -58,7 +61,8 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
         },
       },
       orderBy: { index: 'asc' },
-      ...(hasPagination ? { take: limit, skip: offset } : {}),
+      take: effectiveLimit,
+      skip: effectiveOffset,
     });
 
     // Auto-generate addresses if none exist and wallet has a descriptor
@@ -123,7 +127,8 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
             },
           },
           orderBy: { index: 'asc' },
-          ...(hasPagination ? { take: limit, skip: offset } : {}),
+          take: effectiveLimit,
+          skip: effectiveOffset,
         });
       } catch (err) {
         log.error('Failed to auto-generate addresses', { error: err });
@@ -167,6 +172,11 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
         isChange,
       };
     });
+
+    if (!hasPagination) {
+      res.setHeader('X-Result-Limit', String(DEFAULT_UNPAGED_LIMIT));
+      res.setHeader('X-Result-Truncated', addresses.length >= DEFAULT_UNPAGED_LIMIT ? 'true' : 'false');
+    }
 
     res.json(addressesWithBalance);
   } catch (error) {

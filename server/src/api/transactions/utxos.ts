@@ -23,11 +23,14 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
   try {
     const walletId = req.walletId!;
     const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+    const DEFAULT_UNPAGED_LIMIT = 1000;
     const { limit, offset } = validatePagination(
       req.query.limit as string,
       req.query.offset as string,
-      1000
+      DEFAULT_UNPAGED_LIMIT
     );
+    const effectiveLimit = hasPagination ? limit : DEFAULT_UNPAGED_LIMIT;
+    const effectiveOffset = hasPagination ? offset : 0;
 
     // Get confirmation threshold setting
     const thresholdSetting = await prisma.systemSetting.findUnique({
@@ -61,7 +64,8 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
             },
           },
         },
-        ...(hasPagination ? { take: limit, skip: offset } : {}),
+        take: effectiveLimit,
+        skip: effectiveOffset,
       }),
     ]);
 
@@ -102,6 +106,11 @@ router.get('/wallets/:walletId/utxos', requireWalletAccess('view'), async (req: 
     // Total balance/count across all unspent UTXOs (independent of pagination)
     const totalBalance = bigIntToNumberOrZero(summary._sum.amount);
     const totalCount = summary._count._all;
+
+    if (!hasPagination) {
+      res.setHeader('X-Result-Limit', String(DEFAULT_UNPAGED_LIMIT));
+      res.setHeader('X-Result-Truncated', utxos.length >= DEFAULT_UNPAGED_LIMIT ? 'true' : 'false');
+    }
 
     res.json({
       utxos: serializedUtxos,

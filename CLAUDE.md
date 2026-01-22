@@ -393,3 +393,121 @@ if (!result.success) {
 - Add explicit type annotations to function parameters and return types
 - Use discriminated unions for message types
 - Define interfaces for all API response shapes
+
+## Code Quality & Maintenance Guidelines
+
+These guidelines ensure the codebase remains maintainable and prevents technical debt accumulation.
+
+### Component Size Limits
+
+**Keep components under 500 lines.** When a component grows beyond this threshold, split it proactively:
+
+| Size | Action |
+|------|--------|
+| < 300 lines | Healthy - no action needed |
+| 300-500 lines | Monitor - consider splitting if adding features |
+| > 500 lines | Split immediately into focused sub-components |
+
+**Splitting pattern:**
+```
+components/FeatureName/
+├── index.tsx           # Main component, state coordination (~300 lines max)
+├── FeatureHeader.tsx   # Presentational sub-component
+├── tabs/               # Tab content components
+├── modals/             # Modal dialogs
+└── hooks/              # Feature-specific hooks
+```
+
+Use React Context for shared state between sub-components rather than prop drilling.
+
+### Logging Discipline
+
+**Never use raw `console.log` in production code.** Use the `createLogger` utility:
+
+```typescript
+// GOOD - use createLogger
+import { createLogger } from '../utils/logger';
+const log = createLogger('ComponentName');
+
+log.debug('Processing data', { id, count });
+log.warn('Unexpected state', { state });
+log.error('Operation failed', { error });
+
+// BAD - never use console directly
+console.log('Processing data', data);  // Don't do this
+console.warn('Warning message');       // Don't do this
+```
+
+The logger respects `LOG_LEVEL` environment variable and formats output consistently.
+
+### Error Handling - No Silent Failures
+
+**Never use empty catch blocks.** At minimum, log at debug level:
+
+```typescript
+// GOOD - log the error even if intentionally ignoring
+try {
+  await cleanup();
+} catch (e) {
+  log.debug('Cleanup failed (non-critical)', { error: e });
+}
+
+// GOOD - for promise chains
+connection.disconnect().catch((e) => log.debug('Disconnect failed', { error: e }));
+
+// BAD - silent failure hides bugs
+try {
+  await cleanup();
+} catch {}  // Don't do this
+
+// BAD - silent promise rejection
+connection.disconnect().catch(() => {});  // Don't do this
+```
+
+### Type Safety - No Escape Hatches
+
+**Never use `@ts-ignore`.** If you must suppress a type error, use `@ts-expect-error` with explanation:
+
+```typescript
+// GOOD - explains why suppression is needed
+// @ts-expect-error - Prisma dynamic table access, type validated at runtime
+const records = await prisma[tableName].findMany();
+
+// BAD - unexplained suppression
+// @ts-ignore
+const records = await prisma[tableName].findMany();  // Don't do this
+```
+
+**Prefer proper typing over suppression:**
+```typescript
+// BEST - proper typing eliminates need for suppression
+type PrismaTableName = 'user' | 'wallet' | 'device';
+function getTable<T extends PrismaTableName>(name: T) {
+  return prisma[name];
+}
+```
+
+### Strict TypeScript Configuration
+
+The server uses `strict: true`. Frontend should match. Never disable strict checks:
+
+```json
+// tsconfig.json - required settings
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true
+  }
+}
+```
+
+### Documentation for Technical Decisions
+
+When making architectural decisions or non-obvious implementations:
+
+1. **Add inline comments** explaining "why" not "what"
+2. **Update CLAUDE.md** for patterns that should be followed project-wide
+3. **Create ADRs** (Architecture Decision Records) in `docs/adr/` for major decisions
+
+See `docs/TECHNICAL_DEBT_CLEANUP_PLAN.md` for the current cleanup roadmap.

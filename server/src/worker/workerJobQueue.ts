@@ -301,13 +301,11 @@ export class WorkerJobQueue {
 
     try {
       const jobId = options?.jobId ?? `repeat:${queueName}:${jobName}:${cron}`;
-
-      // Remove existing repeatable job with same key first
       const repeatableJobs = await queueInstance.queue.getRepeatableJobs();
-      const existingJob = repeatableJobs.find(j => j.name === jobName);
+      const existingJob = repeatableJobs.find(j => j.name === jobName && j.id === jobId);
       if (existingJob) {
-        await queueInstance.queue.removeRepeatableByKey(existingJob.key);
-        log.debug(`Removed existing repeatable job: ${jobName}`);
+        log.info(`Repeatable job already scheduled: ${queueName}:${jobName}`, { cron });
+        return null;
       }
 
       const job = await queueInstance.queue.add(jobName, data, {

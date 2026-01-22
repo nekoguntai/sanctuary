@@ -99,6 +99,10 @@
 ```bash
 curl -fsSL {{RAW_URL}}/install.sh | bash
 ```
+**GitLab mirror (one-liner):**
+```bash
+curl -fsSL https://gitlab.com/narusegawa-nekoworks/sanctuary/-/raw/main/install.sh | bash
+```
 This installs the **latest release** to `~/sanctuary` by default. Set `SANCTUARY_DIR` to customize the location.
 
 **Option 2: Clone first** (if you want to choose the directory)
@@ -107,6 +111,7 @@ git clone {{CLONE_URL}}
 cd sanctuary
 ./install.sh
 ```
+To force a source platform: `./install.sh --source github` or `./install.sh --source gitlab`.
 
 Open **https://localhost:8443** and accept the certificate warning.
 
@@ -118,16 +123,20 @@ Open **https://localhost:8443** and accept the certificate warning.
 1. Checks for Docker and Git
 2. Fetches the latest release tag from {{PLATFORM}}
 3. Clones the repository and checks out the release
-4. Generates self-signed SSL certificates (for hardware wallet support)
-5. Generates secure random secrets (JWT_SECRET, ENCRYPTION_KEY, ENCRYPTION_SALT, GATEWAY_SECRET)
-6. Builds and starts the Docker containers
-7. Creates a default `admin` user with password `sanctuary` (must be changed on first login)
-8. Saves your configuration to `.env` for future restarts
+4. Delegates to `scripts/setup.sh` for configuration and startup
+5. Generates self-signed SSL certificates (for hardware wallet support)
+6. Generates secure random secrets (JWT_SECRET, ENCRYPTION_KEY, ENCRYPTION_SALT, GATEWAY_SECRET, POSTGRES_PASSWORD)
+7. Builds and starts the Docker containers
+8. Creates a default `admin` user with password `sanctuary` (must be changed on first login)
+9. Saves your configuration to `.env` for future restarts
 
 **After installation:**
 - **Login credentials:** Username: `admin` / Password: `sanctuary`
 - You'll be required to change the password on first login
 - Start: `./start.sh`
+- Start with AI: `./start.sh --with-ai`
+- Start with monitoring: `./start.sh --with-monitoring`
+- Start with Tor: `./start.sh --with-tor`
 - Stop: `./start.sh --stop`
 - View logs: `./start.sh --logs`
 - Upgrade: `./install.sh` (fetches and installs the latest release)
@@ -340,7 +349,7 @@ The gateway container provides a secure API for iOS and Android mobile apps:
 - Node configuration
 - Backup/restore operations
 
-The gateway runs on port 4000 by default and starts automatically with `docker compose up`.
+The gateway runs on port 4000 by default and starts automatically with Sanctuary (`./start.sh` or `docker compose up`).
 
 ## Network Ports
 
@@ -594,6 +603,9 @@ BITCOIN_NETWORK=mainnet
 ELECTRUM_HOST=your-electrum-server.com
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=true
+
+# Disable server-side Electrum subscriptions (worker owns subscriptions)
+SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=false
 
 # Logging level (debug, info, warn, error)
 LOG_LEVEL=info
@@ -996,7 +1008,7 @@ If you need to rollback to a previous release:
 cd ~/sanctuary
 git fetch --tags
 git tag --sort=-v:refname  # List available versions
-git checkout v0.4.8        # Replace with desired version
+git checkout v0.8.7        # Replace with desired version
 docker compose down
 docker compose build
 docker compose up -d
@@ -1208,15 +1220,22 @@ Sanctuary includes an optional AI assistant that can help with:
 
 2. **Configure AI Provider**
 
-   **Option A: Local AI with Ollama (Recommended - Most Private)**
+   **Option A: Bundled Local AI with Ollama (Recommended - Most Private)**
    ```bash
-   # Install Ollama from https://ollama.ai, then:
-   ollama serve
+   # Start Sanctuary with bundled Ollama:
+   ./start.sh --with-ai
    ```
    - In Sanctuary, click **"Detect"** to auto-configure the endpoint
    - Download a model like `llama3.2:3b` using the **"Pull"** button in settings
 
-   **Option B: Cloud AI (Less Private)**
+   **Option B: Host-installed Ollama (Advanced)**
+   ```bash
+   # Install Ollama from https://ollama.ai, then:
+   ollama serve
+   ```
+   - Set the endpoint to `http://host.docker.internal:11434`
+
+   **Option C: Cloud AI (Less Private)**
    - Enter an OpenAI-compatible endpoint URL
    - Note: Sanitized transaction metadata will be sent to external servers
 

@@ -6,11 +6,13 @@
 
 export { syncJobs } from './syncJobs';
 export { notificationJobs } from './notificationJobs';
+export { maintenanceJobs } from './maintenanceJobs';
 
 import type { WorkerJobQueue } from '../workerJobQueue';
 import type { WorkerJobHandler } from './types';
 import { syncJobs } from './syncJobs';
 import { notificationJobs } from './notificationJobs';
+import { maintenanceJobs } from './maintenanceJobs';
 
 /**
  * Register all job handlers with the worker queue
@@ -19,6 +21,7 @@ export function registerWorkerJobs(queue: WorkerJobQueue): void {
   const allJobs: WorkerJobHandler<unknown, unknown>[] = [
     ...syncJobs,
     ...notificationJobs,
+    ...maintenanceJobs,
   ];
 
   for (const job of allJobs) {

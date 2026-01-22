@@ -278,6 +278,19 @@ class JobQueueService {
     }
 
     try {
+      if (scheduleOptions.cron && jobOptions.jobId) {
+        const repeatableJobs = await this.queue.getRepeatableJobs();
+        const existing = repeatableJobs.find(job => job.name === name && job.id === jobOptions.jobId);
+        if (existing) {
+          log.info('Repeatable job already scheduled', {
+            name,
+            jobId: jobOptions.jobId,
+            cron: scheduleOptions.cron,
+          });
+          return null;
+        }
+      }
+
       const job = await this.queue.add(name, data, jobOptions);
       log.debug('Job scheduled', {
         name,

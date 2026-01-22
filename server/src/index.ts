@@ -276,28 +276,6 @@ registerService({
     // Phase 3: Schedule jobs + initialize remaining services (parallel)
     log.info('Scheduling jobs and finalizing services...');
     await Promise.all([
-      // Job scheduling (only if queue available)
-      (async () => {
-        if (jobQueue.isAvailable()) {
-          // Hourly cleanups
-          await jobQueue.schedule('cleanup:expired-drafts', {}, { cron: '0 * * * *' });
-          await jobQueue.schedule('cleanup:expired-transfers', {}, { cron: '30 * * * *' });
-
-          // Daily cleanups
-          await jobQueue.schedule('cleanup:audit-logs', { retentionDays: 90 }, { cron: '0 2 * * *' });
-          await jobQueue.schedule('cleanup:price-data', { retentionDays: 30 }, { cron: '0 3 * * *' });
-          await jobQueue.schedule('cleanup:fee-estimates', { retentionDays: 7 }, { cron: '0 4 * * *' });
-          await jobQueue.schedule('cleanup:expired-tokens', {}, { cron: '0 5 * * *' });
-
-          // Weekly maintenance (Sunday at 3 AM)
-          await jobQueue.schedule('maintenance:weekly-vacuum', {}, { cron: '0 3 * * 0' });
-
-          // Monthly cleanup (1st of month at 4 AM)
-          await jobQueue.schedule('maintenance:monthly-cleanup', {}, { cron: '0 4 1 * *' });
-
-          log.info('Scheduled recurring maintenance jobs');
-        }
-      })(),
       i18nService.initialize(),
       featureFlagService.initialize(),
     ]);

@@ -13,7 +13,7 @@ export interface WorkerJobHandler<T = unknown, R = void> {
   /** Job name (unique identifier) */
   name: string;
   /** Queue this job belongs to */
-  queue: 'sync' | 'notifications' | 'confirmations';
+  queue: 'sync' | 'notifications' | 'confirmations' | 'maintenance';
   /** Job handler function */
   handler: (job: Job<T>) => Promise<R>;
   /** Default job options */

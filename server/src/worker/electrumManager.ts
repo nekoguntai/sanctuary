@@ -22,6 +22,7 @@ import { setCachedBlockHeight } from '../services/bitcoin/blockchain';
 import { getConfig } from '../config';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
+import { acquireLock, extendLock, releaseLock, type DistributedLock } from '../infrastructure';
 
 const log = createLogger('ElectrumMgr');
 
@@ -58,6 +59,9 @@ const RECONNECT_MAX_DELAY_MS = 60000; // 1 minute
 const RECONNECT_MAX_ATTEMPTS = 10; // After this, log error but keep trying
 const HEALTH_CHECK_INTERVAL_MS = 30000; // 30 seconds
 const SUBSCRIPTION_BATCH_SIZE = 500; // Max addresses per batch subscription
+const ELECTRUM_SUBSCRIPTION_LOCK_KEY = 'electrum:subscriptions';
+const ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS = 2 * 60 * 1000;
+const ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS = 60 * 1000;
 
 // =============================================================================
 // Electrum Subscription Manager
@@ -69,6 +73,8 @@ export class ElectrumSubscriptionManager {
   private callbacks: ElectrumManagerCallbacks;
   private isRunning = false;
   private healthCheckTimer: NodeJS.Timeout | null = null;
+  private subscriptionLock: DistributedLock | null = null;
+  private subscriptionLockRefresh: NodeJS.Timeout | null = null;
 
   constructor(callbacks: ElectrumManagerCallbacks) {
     this.callbacks = callbacks;
@@ -83,7 +89,16 @@ export class ElectrumSubscriptionManager {
       return;
     }
 
+    const lock = await acquireLock(ELECTRUM_SUBSCRIPTION_LOCK_KEY, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+    if (!lock) {
+      log.warn('Electrum subscriptions already owned by another process, skipping startup');
+      return;
+    }
+
+    this.subscriptionLock = lock;
+    this.startSubscriptionLockRefresh();
     this.isRunning = true;
+    log.info('Acquired Electrum subscription ownership');
     log.info('Starting Electrum subscription manager...');
 
     // Get configured network from config
@@ -105,6 +120,42 @@ export class ElectrumSubscriptionManager {
       networks: Array.from(this.networks.keys()),
       subscribedAddresses: this.addressToWallet.size,
     });
+  }
+
+  private startSubscriptionLockRefresh(): void {
+    if (this.subscriptionLockRefresh) return;
+
+    this.subscriptionLockRefresh = setInterval(async () => {
+      if (!this.subscriptionLock) return;
+
+      const refreshed = await extendLock(this.subscriptionLock, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+      if (!refreshed) {
+        log.warn('Lost Electrum subscription lock, stopping manager');
+        this.subscriptionLock = null;
+        this.stopSubscriptionLockRefresh();
+        await this.stop();
+        return;
+      }
+
+      this.subscriptionLock = refreshed;
+    }, ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS);
+
+    this.subscriptionLockRefresh.unref?.();
+  }
+
+  private stopSubscriptionLockRefresh(): void {
+    if (this.subscriptionLockRefresh) {
+      clearInterval(this.subscriptionLockRefresh);
+      this.subscriptionLockRefresh = null;
+    }
+  }
+
+  private async releaseSubscriptionLock(): Promise<void> {
+    this.stopSubscriptionLockRefresh();
+    if (this.subscriptionLock) {
+      await releaseLock(this.subscriptionLock);
+      this.subscriptionLock = null;
+    }
   }
 
   /**
@@ -693,6 +744,8 @@ export class ElectrumSubscriptionManager {
       clearInterval(this.healthCheckTimer);
       this.healthCheckTimer = null;
     }
+
+    await this.releaseSubscriptionLock();
 
     // Clear reconnection timers
     for (const state of this.networks.values()) {

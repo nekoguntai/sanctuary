@@ -103,6 +103,8 @@ describe('Health API', () => {
         queueLength: 0,
         activeSyncs: 0,
         subscribedAddresses: 100,
+        subscriptionsEnabled: true,
+        subscriptionOwnership: 'self',
       }),
     });
     (getWebSocketServer as Mock).mockReturnValue({
@@ -173,6 +175,8 @@ describe('Health API', () => {
           queueLength: 0,
           activeSyncs: 0,
           subscribedAddresses: 0,
+          subscriptionsEnabled: true,
+          subscriptionOwnership: 'external',
         }),
       });
 
@@ -191,6 +195,8 @@ describe('Health API', () => {
           queueLength: 15,
           activeSyncs: 0,
           subscribedAddresses: 100,
+          subscriptionsEnabled: true,
+          subscriptionOwnership: 'self',
         }),
       });
 
@@ -473,6 +479,8 @@ describe('Health API', () => {
           queueLength: 0,
           activeSyncs: 0,
           subscribedAddresses: 0,
+          subscriptionsEnabled: true,
+          subscriptionOwnership: 'external',
         }),
       });
 

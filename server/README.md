@@ -130,11 +130,14 @@ server/
 - `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/refresh` - Refresh JWT token
 - `POST /api/v1/auth/logout` - User logout
+- `POST /api/v1/auth/logout-all` - Logout all sessions
+- `POST /api/v1/auth/2fa/verify` - Verify 2FA token
 
-### Users
-- `GET /api/v1/users/me` - Get current user
-- `PATCH /api/v1/users/me` - Update user profile
-- `PATCH /api/v1/users/me/preferences` - Update preferences
+### Profile
+- `GET /api/v1/auth/me` - Get current user
+- `PATCH /api/v1/auth/me/preferences` - Update preferences
+- `GET /api/v1/auth/me/groups` - Get user's groups
+- `GET /api/v1/auth/users/search` - Search users by username
 
 ### Wallets
 - `GET /api/v1/wallets` - Get user's wallets
@@ -142,11 +145,18 @@ server/
 - `GET /api/v1/wallets/:id` - Get wallet details
 - `PATCH /api/v1/wallets/:id` - Update wallet
 - `DELETE /api/v1/wallets/:id` - Delete wallet
+- `POST /api/v1/wallets/:id/sync` - Sync wallet with blockchain
 
 ### Transactions
 - `GET /api/v1/wallets/:id/transactions` - Get wallet transactions
-- `POST /api/v1/wallets/:id/transactions` - Create/broadcast transaction
 - `GET /api/v1/transactions/:txid` - Get transaction details
+- `GET /api/v1/transactions/:txid/raw` - Get raw tx hex for hardware wallet signing
+- `POST /api/v1/wallets/:id/transactions/create` - Create PSBT for signing
+- `POST /api/v1/wallets/:id/transactions/batch` - Create batch transaction
+- `POST /api/v1/wallets/:id/transactions/estimate` - Estimate fee/size
+- `POST /api/v1/wallets/:id/transactions/broadcast` - Broadcast signed tx/PSBT
+- `POST /api/v1/wallets/:id/psbt/create` - Create PSBT (hardware wallet flow)
+- `POST /api/v1/wallets/:id/psbt/broadcast` - Broadcast signed PSBT
 
 ### Devices
 - `GET /api/v1/devices` - Get user's devices
@@ -155,9 +165,21 @@ server/
 - `DELETE /api/v1/devices/:id` - Remove device
 
 ### Bitcoin
-- `GET /api/v1/bitcoin/price` - Get current BTC price
-- `GET /api/v1/bitcoin/fees` - Get fee estimates
+- `GET /api/v1/bitcoin/status` - Network status
+- `GET /api/v1/bitcoin/fees` - Fee estimates
+- `GET /api/v1/bitcoin/fees/advanced` - Advanced fee estimates
 - `POST /api/v1/bitcoin/address/validate` - Validate Bitcoin address
+- `GET /api/v1/bitcoin/transaction/:txid` - Fetch transaction details
+- `POST /api/v1/bitcoin/transaction/:txid/rbf-check` - RBF eligibility
+- `POST /api/v1/bitcoin/transaction/:txid/rbf` - Create RBF replacement
+- `POST /api/v1/bitcoin/transaction/cpfp` - Create CPFP transaction
+- `POST /api/v1/bitcoin/transaction/batch` - Create batch transaction
+- `POST /api/v1/bitcoin/utils/estimate-optimal-fee` - Optimal fee estimate
+
+### Price
+- `GET /api/v1/price` - Get current BTC price
+- `GET /api/v1/price/multiple` - Get prices for multiple currencies
+- `POST /api/v1/price/convert/to-fiat` - Convert satoshis to fiat
 
 ## Database Schema
 
@@ -197,6 +219,21 @@ ELECTRUM_HOST=electrum.blockstream.info
 ELECTRUM_PORT=50002
 ELECTRUM_PROTOCOL=ssl
 ```
+
+## Background Worker
+
+The worker process owns recurring maintenance jobs and Electrum subscriptions.
+Disable server-side Electrum subscriptions if you want the worker to be the sole
+subscriber:
+
+```env
+SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=false
+```
+
+If you are not running the worker, keep `SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=true`
+so the API server can subscribe to Electrum for real-time block and address
+activity. Background sync still runs via queued jobs either way; subscriptions
+just provide faster, event-driven updates.
 
 ## Security Considerations
 

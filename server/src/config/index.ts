@@ -179,6 +179,7 @@ function loadConfig(): CombinedConfig {
       retryDelaysMs: (process.env.SYNC_RETRY_DELAYS_MS || '5000,15000,45000').split(',').map(s => parseInt(s.trim(), 10)),
       maxSyncDurationMs: parseInt(process.env.SYNC_MAX_DURATION_MS || String(30 * 60 * 1000), 10), // 30 minutes default
       transactionBatchSize: parseInt(process.env.SYNC_TRANSACTION_BATCH_SIZE || '100', 10),
+      electrumSubscriptionsEnabled: process.env.SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED !== 'false',
     },
 
     electrumClient: {

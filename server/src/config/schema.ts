@@ -130,6 +130,7 @@ export const SyncConfigSchema = z.object({
   maxConcurrentSyncs: z.number().int().min(1).max(50),
   maxRetryAttempts: z.number().int().min(0).max(10),
   retryDelaysMs: z.array(z.number().int().min(0)),
+  electrumSubscriptionsEnabled: z.boolean(),
 });
 
 export const ElectrumClientConfigSchema = z.object({

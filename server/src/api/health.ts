@@ -176,6 +176,8 @@ function checkSync(): ComponentHealth {
         queueLength: metrics.queueLength,
         activeSyncs: metrics.activeSyncs,
         subscribedAddresses: metrics.subscribedAddresses,
+        subscriptionsEnabled: metrics.subscriptionsEnabled,
+        subscriptionOwnership: metrics.subscriptionOwnership,
       },
     };
   } catch {

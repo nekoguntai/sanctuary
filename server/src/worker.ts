@@ -94,7 +94,7 @@ async function startWorker(): Promise<void> {
 
   jobQueue = new WorkerJobQueue({
     concurrency: workerConcurrency,
-    queues: ['sync', 'notifications', 'confirmations'],
+    queues: ['sync', 'notifications', 'confirmations', 'maintenance'],
   });
   await jobQueue.initialize();
 
@@ -260,6 +260,63 @@ async function scheduleRecurringJobs(): Promise<void> {
     staleCheckInterval: `${syncIntervalMinutes}m`,
     confirmationUpdateInterval: `${confirmationIntervalMinutes}m`,
   });
+
+  // Maintenance jobs (cron-based)
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:expired-drafts',
+    {},
+    '0 * * * *' // Hourly
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:expired-transfers',
+    {},
+    '30 * * * *' // Hourly, 30 minutes past
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:audit-logs',
+    { retentionDays: config.maintenance.auditLogRetentionDays },
+    '0 2 * * *' // Daily 2 AM
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:price-data',
+    { retentionDays: config.maintenance.priceDataRetentionDays },
+    '0 3 * * *' // Daily 3 AM
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:fee-estimates',
+    { retentionDays: config.maintenance.feeEstimateRetentionDays },
+    '0 4 * * *' // Daily 4 AM
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'cleanup:expired-tokens',
+    {},
+    '0 5 * * *' // Daily 5 AM
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'maintenance:weekly-vacuum',
+    {},
+    '0 3 * * 0' // Sunday 3 AM
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'maintenance:monthly-cleanup',
+    {},
+    '0 4 1 * *' // 1st of month 4 AM
+  );
 
   // Set up job result handler for stale wallet check
   // This queues individual sync jobs for each stale wallet

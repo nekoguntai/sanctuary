@@ -19,10 +19,13 @@ import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
 import { eventService } from './eventService';
 import { recordSyncFailure } from './deadLetterQueue';
-import { acquireLock, releaseLock, type DistributedLock } from '../infrastructure';
+import { acquireLock, extendLock, releaseLock, type DistributedLock } from '../infrastructure';
 import { walletSyncsTotal, walletSyncDuration } from '../observability/metrics';
 
 const log = createLogger('SYNC');
+const ELECTRUM_SUBSCRIPTION_LOCK_KEY = 'electrum:subscriptions';
+const ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS = 2 * 60 * 1000;
+const ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS = 60 * 1000;
 
 // Get sync configuration from centralized config
 function getSyncConfig() {
@@ -36,6 +39,7 @@ function getSyncConfig() {
     retryDelaysMs: config.sync.retryDelaysMs,
     maxSyncDurationMs: config.sync.maxSyncDurationMs,
     transactionBatchSize: config.sync.transactionBatchSize,
+    electrumSubscriptionsEnabled: config.sync.electrumSubscriptionsEnabled,
   };
 }
 
@@ -72,6 +76,10 @@ class SyncService {
   private confirmationInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
   private subscribedToHeaders = false;
+  private subscriptionLock: DistributedLock | null = null;
+  private subscriptionLockRefresh: NodeJS.Timeout | null = null;
+  private subscriptionsEnabled = false;
+  private subscriptionOwnership: 'self' | 'external' | 'disabled' = 'disabled';
   // Track which addresses belong to which wallets for real-time notifications
   private addressToWalletMap: Map<string, string> = new Map();
   // Track pending retry timers for cleanup on shutdown
@@ -103,6 +111,7 @@ class SyncService {
 
     // Get config values
     const syncConfig = getSyncConfig();
+    this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
 
     // Start periodic sync check
     this.syncInterval = setInterval(() => {
@@ -130,6 +139,27 @@ class SyncService {
    */
   private async setupRealTimeSubscriptions(): Promise<void> {
     try {
+      const syncConfig = getSyncConfig();
+      this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
+
+      if (!this.subscriptionsEnabled) {
+        this.subscriptionOwnership = 'disabled';
+        log.info('[SYNC] Server-side Electrum subscriptions disabled by config');
+        return;
+      }
+
+      const lock = await acquireLock(ELECTRUM_SUBSCRIPTION_LOCK_KEY, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+      if (!lock) {
+        this.subscriptionOwnership = 'external';
+        log.info('[SYNC] Electrum subscriptions owned by another process, skipping setup');
+        return;
+      }
+
+      this.subscriptionLock = lock;
+      this.subscriptionOwnership = 'self';
+      this.startSubscriptionLockRefresh();
+      log.info('[SYNC] Acquired Electrum subscription ownership');
+
       // Get the node client to ensure it's connected
       const client = await getNodeClient();
 
@@ -137,6 +167,8 @@ class SyncService {
       const electrumClient = await getElectrumClientIfActive();
       if (!electrumClient) {
         log.info('[SYNC] Real-time subscriptions only available with Electrum (current node type does not support it)');
+        await this.releaseSubscriptionLock();
+        this.subscriptionOwnership = 'disabled';
         return;
       }
 
@@ -170,6 +202,47 @@ class SyncService {
       log.info('[SYNC] Real-time subscriptions active');
     } catch (error) {
       log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(error) });
+      await this.releaseSubscriptionLock();
+      if (this.subscriptionsEnabled) {
+        this.subscriptionOwnership = 'external';
+      }
+    }
+  }
+
+  private startSubscriptionLockRefresh(): void {
+    if (this.subscriptionLockRefresh) return;
+
+    this.subscriptionLockRefresh = setInterval(async () => {
+      if (!this.subscriptionLock) return;
+
+      const refreshed = await extendLock(this.subscriptionLock, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+      if (!refreshed) {
+        log.warn('[SYNC] Lost Electrum subscription lock, disabling subscriptions');
+        this.subscriptionLock = null;
+        this.subscriptionOwnership = 'external';
+        this.stopSubscriptionLockRefresh();
+        await this.teardownRealTimeSubscriptions();
+        return;
+      }
+
+      this.subscriptionLock = refreshed;
+    }, ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS);
+
+    this.subscriptionLockRefresh.unref?.();
+  }
+
+  private stopSubscriptionLockRefresh(): void {
+    if (this.subscriptionLockRefresh) {
+      clearInterval(this.subscriptionLockRefresh);
+      this.subscriptionLockRefresh = null;
+    }
+  }
+
+  private async releaseSubscriptionLock(): Promise<void> {
+    this.stopSubscriptionLockRefresh();
+    if (this.subscriptionLock) {
+      await releaseLock(this.subscriptionLock);
+      this.subscriptionLock = null;
     }
   }
 
@@ -178,6 +251,10 @@ class SyncService {
    * Uses batch subscription for efficiency (single RPC call vs N calls)
    */
   private async subscribeAllWalletAddresses(): Promise<void> {
+    if (this.subscriptionOwnership !== 'self') {
+      return;
+    }
+
     const electrumClient = await getElectrumClientIfActive();
     if (!electrumClient) return;
 
@@ -239,6 +316,10 @@ class SyncService {
    * Prevents memory leak by cleaning up the addressToWalletMap
    */
   async unsubscribeWalletAddresses(walletId: string): Promise<void> {
+    if (this.subscriptionOwnership !== 'self') {
+      return;
+    }
+
     const electrumClient = await getElectrumClientIfActive();
 
     let unsubscribed = 0;
@@ -269,12 +350,16 @@ class SyncService {
     queueLength: number;
     activeSyncs: number;
     subscribedAddresses: number;
+    subscriptionsEnabled: boolean;
+    subscriptionOwnership: 'self' | 'external' | 'disabled';
   } {
     return {
       isRunning: this.isRunning,
       queueLength: this.syncQueue.length,
       activeSyncs: this.activeSyncs.size,
       subscribedAddresses: this.addressToWalletMap.size,
+      subscriptionsEnabled: this.subscriptionsEnabled,
+      subscriptionOwnership: this.subscriptionOwnership,
     };
   }
 
@@ -373,9 +458,8 @@ class SyncService {
       this.confirmationInterval = null;
     }
 
-    // Clean up real-time subscriptions
-    this.subscribedToHeaders = false;
-    this.addressToWalletMap.clear();
+    await this.teardownRealTimeSubscriptions();
+    await this.releaseSubscriptionLock();
 
     // Cancel all pending retry timers
     if (this.pendingRetries.size > 0) {
@@ -406,20 +490,41 @@ class SyncService {
       this.syncQueue.length = 0;
     }
 
-    // Remove event listeners from Electrum client
+    this.subscriptionOwnership = this.subscriptionsEnabled ? 'external' : 'disabled';
+
+    log.info('[SYNC] Background sync service stopped');
+  }
+
+  private async teardownRealTimeSubscriptions(): Promise<void> {
+    this.subscribedToHeaders = false;
+
     const electrumClient = await getElectrumClientIfActive();
+    if (electrumClient && this.addressToWalletMap.size > 0) {
+      for (const address of this.addressToWalletMap.keys()) {
+        try {
+          await electrumClient.unsubscribeAddress(address);
+        } catch {
+          // Ignore unsubscribe errors
+        }
+      }
+    }
+
+    this.addressToWalletMap.clear();
+
     if (electrumClient) {
       electrumClient.removeAllListeners('newBlock');
       electrumClient.removeAllListeners('addressActivity');
     }
-
-    log.info('[SYNC] Background sync service stopped');
   }
 
   /**
    * Subscribe to new addresses for a wallet (called when wallet is created/imported)
    */
   async subscribeNewWalletAddresses(walletId: string): Promise<void> {
+    if (this.subscriptionOwnership !== 'self') {
+      return;
+    }
+
     const electrumClient = await getElectrumClientIfActive();
     if (!electrumClient) return;
 

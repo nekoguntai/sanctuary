@@ -21,6 +21,7 @@ const {
   mockElectrumClient,
   mockNotificationService,
   mockAcquireLock,
+  mockExtendLock,
   mockReleaseLock,
 } = vi.hoisted(() => ({
   mockPrismaClient: {
@@ -68,6 +69,7 @@ const {
     broadcastTransactionNotification: vi.fn<any>(),
   },
   mockAcquireLock: vi.fn<any>(),
+  mockExtendLock: vi.fn<any>(),
   mockReleaseLock: vi.fn<any>(),
 }));
 
@@ -98,6 +100,7 @@ vi.mock('../../../src/config', () => ({
       retryDelaysMs: [1000, 5000, 15000],
       maxSyncDurationMs: 120000,
       transactionBatchSize: 100,
+      electrumSubscriptionsEnabled: true,
     },
     bitcoin: {
       network: 'testnet',
@@ -136,6 +139,7 @@ vi.mock('../../../src/services/eventService', () => ({
 
 vi.mock('../../../src/infrastructure', () => ({
   acquireLock: mockAcquireLock,
+  extendLock: mockExtendLock,
   releaseLock: mockReleaseLock,
 }));
 
@@ -175,9 +179,19 @@ describe('SyncService', () => {
     syncService['activeLocks'] = new Map();
     syncService['addressToWalletMap'] = new Map();
     syncService['pendingRetries'] = new Map();
+    syncService['subscriptionLock'] = null;
+    syncService['subscriptionLockRefresh'] = null;
+    syncService['subscriptionsEnabled'] = false;
+    syncService['subscriptionOwnership'] = 'disabled';
 
     // Default mock implementations
-    mockAcquireLock.mockResolvedValue({ id: 'lock-1', resource: 'test' });
+    mockAcquireLock.mockResolvedValue({
+      key: 'electrum:subscriptions',
+      token: 'test-token',
+      expiresAt: Date.now() + 60000,
+      isLocal: true,
+    });
+    mockExtendLock.mockImplementation(async (lock) => lock);
     mockReleaseLock.mockResolvedValue(undefined);
     mockSyncWallet.mockResolvedValue({ addresses: 10, transactions: 5, utxos: 3 });
     mockPopulateMissingTransactionFields.mockResolvedValue({ updated: 0, confirmationUpdates: [] });
@@ -553,6 +567,7 @@ describe('SyncService', () => {
 
   describe('address subscriptions', () => {
     it('should subscribe to wallet addresses', async () => {
+      syncService['subscriptionOwnership'] = 'self';
       mockPrismaClient.address.findMany.mockResolvedValue([
         { address: 'tb1qaddr1' },
         { address: 'tb1qaddr2' },
@@ -564,6 +579,7 @@ describe('SyncService', () => {
     });
 
     it('should unsubscribe wallet addresses', async () => {
+      syncService['subscriptionOwnership'] = 'self';
       syncService['addressToWalletMap'].set('addr1', 'wallet-1');
       syncService['addressToWalletMap'].set('addr2', 'wallet-1');
       syncService['addressToWalletMap'].set('addr3', 'wallet-2');

@@ -53,6 +53,12 @@ Success Metrics:
 ## Phase 2 — Perf-First (Scalability Without Accuracy Loss)
 Goal: Reduce heavy list payloads and move aggregation server-side with accuracy preserved.
 
+Current state (as of 2026-01-22):
+- Unpaginated calls to addresses/UTXOs are soft-capped at 1000 with
+  `X-Result-Limit` and `X-Result-Truncated` headers in
+  `server/src/api/transactions/addresses.ts` and
+  `server/src/api/transactions/utxos.ts`.
+
 1) Pagination enforcement on heavy lists
 - Require `limit/offset` on addresses and UTXOs where UI calls exist.
 - Add a soft cap for unpaginated calls (default limit) with response headers

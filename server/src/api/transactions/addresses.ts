@@ -9,6 +9,7 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import prisma from '../../models/prisma';
 import * as addressDerivation from '../../services/bitcoin/addressDerivation';
 import { createLogger } from '../../utils/logger';
+import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';
 import { INITIAL_ADDRESS_COUNT } from '../../constants';
 
 const router = Router();
@@ -23,6 +24,12 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
   try {
     const walletId = req.walletId!;
     const { used } = req.query;
+    const hasPagination = req.query.limit !== undefined || req.query.offset !== undefined;
+    const { limit, offset } = validatePagination(
+      req.query.limit as string,
+      req.query.offset as string,
+      1000
+    );
 
     // Get wallet for descriptor
     const wallet = await prisma.wallet.findUnique({
@@ -51,6 +58,7 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
         },
       },
       orderBy: { index: 'asc' },
+      ...(hasPagination ? { take: limit, skip: offset } : {}),
     });
 
     // Auto-generate addresses if none exist and wallet has a descriptor
@@ -101,9 +109,12 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
           data: addressesToCreate,
         });
 
-        // Re-fetch the created addresses
+        // Re-fetch the created addresses (respect pagination)
         addresses = await prisma.address.findMany({
-          where: { walletId },
+          where: {
+            walletId,
+            ...(used !== undefined && { used: used === 'true' }),
+          },
           include: {
             addressLabels: {
               include: {
@@ -112,6 +123,7 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
             },
           },
           orderBy: { index: 'asc' },
+          ...(hasPagination ? { take: limit, skip: offset } : {}),
         });
       } catch (err) {
         log.error('Failed to auto-generate addresses', { error: err });
@@ -120,10 +132,12 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
     }
 
     // Get balances for each address from UTXOs
+    const addressList = addresses.map(addr => addr.address);
     const utxos = await prisma.uTXO.findMany({
       where: {
         walletId,
         spent: false,
+        ...(addressList.length > 0 && { address: { in: addressList } }),
       },
       select: {
         address: true,
@@ -135,11 +149,11 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
     const addressBalances = new Map<string, number>();
     for (const utxo of utxos) {
       const current = addressBalances.get(utxo.address) || 0;
-      addressBalances.set(utxo.address, current + Number(utxo.amount));
+      addressBalances.set(utxo.address, current + bigIntToNumberOrZero(utxo.amount));
     }
 
     // Add balance, labels, and isChange flag to each address
-    const addressesWithBalance = addresses.map(addr => {
+    const addressesWithBalance = addresses.map(({ addressLabels, ...addr }) => {
       // Determine if this is a change address from derivation path
       // Change addresses have /1/ before the final index, receive addresses have /0/
       // e.g., m/84'/0'/0'/1/5 is change, m/84'/0'/0'/0/5 is receive
@@ -149,9 +163,8 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
       return {
         ...addr,
         balance: addressBalances.get(addr.address) || 0,
-        labels: addr.addressLabels.map(al => al.label),
+        labels: addressLabels.map(al => al.label),
         isChange,
-        addressLabels: undefined, // Remove the raw join data
       };
     });
 
@@ -161,6 +174,58 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to fetch addresses',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/wallets/:walletId/addresses/summary
+ * Get summary counts and balances for a wallet's addresses
+ */
+router.get('/wallets/:walletId/addresses/summary', requireWalletAccess('view'), async (req: Request, res: Response) => {
+  try {
+    const walletId = req.walletId!;
+
+    const [totalCount, usedCount, unusedCount, totalBalanceResult, usedBalances] = await Promise.all([
+      prisma.address.count({ where: { walletId } }),
+      prisma.address.count({ where: { walletId, used: true } }),
+      prisma.address.count({ where: { walletId, used: false } }),
+      prisma.uTXO.aggregate({
+        where: { walletId, spent: false },
+        _sum: { amount: true },
+      }),
+      prisma.$queryRaw<Array<{ used: boolean; balance: bigint }>>`
+        SELECT a."used" as used, COALESCE(SUM(u."amount"), 0) as balance
+        FROM "utxos" u
+        JOIN "addresses" a ON a."address" = u."address"
+        WHERE u."walletId" = ${walletId} AND u."spent" = false
+        GROUP BY a."used"
+      `,
+    ]);
+
+    let usedBalance = 0;
+    let unusedBalance = 0;
+    for (const row of usedBalances) {
+      if (row.used) {
+        usedBalance = bigIntToNumberOrZero(row.balance);
+      } else {
+        unusedBalance = bigIntToNumberOrZero(row.balance);
+      }
+    }
+
+    res.json({
+      totalAddresses: totalCount,
+      usedCount,
+      unusedCount,
+      totalBalance: bigIntToNumberOrZero(totalBalanceResult._sum.amount),
+      usedBalance,
+      unusedBalance,
+    });
+  } catch (error) {
+    log.error('Get address summary error', { error });
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to fetch address summary',
     });
   }
 });

@@ -413,34 +413,21 @@ describeWithDb('Transaction API Integration', () => {
       }
     });
 
-    it('should filter receive vs change addresses', async () => {
+    it('should include change classification on addresses', async () => {
       const { token } = await createAndLoginUser(app, prisma);
       const { id: walletId } = await createTestWallet(app, token);
 
-      // Get receive addresses
-      const receiveResponse = await request(app)
+      const response = await request(app)
         .get(`/api/v1/transactions/wallets/${walletId}/addresses`)
-        .query({ type: 'receive' })
         .set(authHeader(token))
         .expect(200);
 
-      expect(Array.isArray(receiveResponse.body)).toBe(true);
-      // All receive addresses should have /0/ in path (receive chain)
-      receiveResponse.body.forEach((addr: { derivationPath: string }) => {
-        expect(addr.derivationPath).toMatch(/\/0\/\d+$/);
-      });
-
-      // Get change addresses
-      const changeResponse = await request(app)
-        .get(`/api/v1/transactions/wallets/${walletId}/addresses`)
-        .query({ type: 'change' })
-        .set(authHeader(token))
-        .expect(200);
-
-      expect(Array.isArray(changeResponse.body)).toBe(true);
-      // All change addresses should have /1/ in path (change chain)
-      changeResponse.body.forEach((addr: { derivationPath: string }) => {
-        expect(addr.derivationPath).toMatch(/\/1\/\d+$/);
+      expect(Array.isArray(response.body)).toBe(true);
+      response.body.forEach((addr: { derivationPath: string; isChange?: boolean }) => {
+        if (addr.derivationPath) {
+          const shouldBeChange = /\/1\/\d+$/.test(addr.derivationPath);
+          expect(Boolean(addr.isChange)).toBe(shouldBeChange);
+        }
       });
     });
   });

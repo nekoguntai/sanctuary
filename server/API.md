@@ -502,6 +502,8 @@ Get all addresses for a wallet.
 
 **Query Parameters:**
 - `used` (optional) - Filter by used status (true/false)
+- `limit` (optional) - Max number of addresses to return (pagination)
+- `offset` (optional) - Offset for pagination
 
 **Response:** `200 OK`
 ```json
@@ -512,9 +514,40 @@ Get all addresses for a wallet.
     "derivationPath": "m/84'/0'/0'/0/0",
     "index": 0,
     "used": false,
+    "balance": 0,
+    "labels": [
+      {
+        "id": "uuid",
+        "name": "Savings",
+        "color": "#00FFAA"
+      }
+    ],
+    "isChange": false,
     "createdAt": "timestamp"
   }
 ]
+```
+
+---
+
+### Get Wallet Address Summary
+
+**GET** `/wallets/:walletId/addresses/summary`
+
+Get summary counts and balances for a wallet's addresses.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:** `200 OK`
+```json
+{
+  "totalAddresses": 120,
+  "usedCount": 42,
+  "unusedCount": 78,
+  "totalBalance": 1500000,
+  "usedBalance": 1200000,
+  "unusedBalance": 300000
+}
 ```
 
 ---

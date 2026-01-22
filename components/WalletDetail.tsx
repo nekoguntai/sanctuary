@@ -176,12 +176,21 @@ export const WalletDetail: React.FC = () => {
   const [transactionStats, setTransactionStats] = useState<transactionsApi.TransactionStats | null>(null);
 
   // Addresses State
+  const ADDRESS_PAGE_SIZE = 25;
   const [addresses, setAddresses] = useState<Address[]>([]);
-  const [addressLimit, setAddressLimit] = useState(20);
+  const [addressOffset, setAddressOffset] = useState(0);
+  const [hasMoreAddresses, setHasMoreAddresses] = useState(true);
+  const [addressSummary, setAddressSummary] = useState<transactionsApi.AddressSummary | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   // Memoize wallet addresses to prevent infinite re-renders in TransactionList
   const walletAddressStrings = useMemo(() => addresses.map(a => a.address), [addresses]);
+
+  useEffect(() => {
+    if (addressSummary) {
+      setHasMoreAddresses(addressOffset < addressSummary.totalAddresses);
+    }
+  }, [addressSummary, addressOffset]);
 
   // Apply AI query filter to transactions
   const filteredTransactions = useMemo(() => {
@@ -782,7 +791,12 @@ export const WalletDetail: React.FC = () => {
 
     // Fetch addresses
     fetchPromises.push(
-      loadAddresses(id, 20, 0, true)
+      loadAddressSummary(id)
+        .catch(err => log.error('Failed to fetch address summary', { error: err }))
+    );
+
+    fetchPromises.push(
+      loadAddresses(id, ADDRESS_PAGE_SIZE, 0, true)
         .catch(err => log.error('Failed to fetch addresses', { error: err }))
     );
 
@@ -890,10 +904,23 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
+  const loadAddressSummary = async (walletId: string) => {
+    try {
+      const summary = await transactionsApi.getAddressSummary(walletId);
+      setAddressSummary(summary);
+    } catch (err) {
+      logError(log, err, 'Failed to load address summary');
+    }
+  };
+
   const loadAddresses = async (walletId: string, limit: number, offset: number, reset = false) => {
     try {
       setLoadingAddresses(true);
-      const apiAddresses = await transactionsApi.getAddresses(walletId);
+      if (reset) {
+        setAddressOffset(0);
+      }
+
+      const apiAddresses = await transactionsApi.getAddresses(walletId, { limit, offset });
 
       // Convert to component format
       const formattedAddrs: Address[] = apiAddresses.map(addr => ({
@@ -903,11 +930,19 @@ export const WalletDetail: React.FC = () => {
         index: addr.index,
         used: addr.used,
         balance: addr.balance || 0,
+        isChange: addr.isChange,
         labels: addr.labels || [], // Include labels from API response
         walletId: walletId,
       }));
 
       setAddresses(prev => reset ? formattedAddrs : [...prev, ...formattedAddrs]);
+      const nextOffset = offset + formattedAddrs.length;
+      setAddressOffset(nextOffset);
+      if (addressSummary) {
+        setHasMoreAddresses(nextOffset < addressSummary.totalAddresses);
+      } else {
+        setHasMoreAddresses(formattedAddrs.length === limit);
+      }
     } catch (err) {
       logError(log, err, 'Failed to load addresses');
       // Non-critical - addresses tab may be empty but wallet is still usable
@@ -981,20 +1016,26 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const handleLoadMoreAddresses = async () => {
-      if (!id) return;
-      setLoadingAddresses(true);
-      try {
-        // Generate more addresses on the backend
-        await transactionsApi.generateAddresses(id, 10);
-        // Reload all addresses
-        await loadAddresses(id, 20, 0, true);
-      } catch (err) {
-        logError(log, err, 'Failed to generate more addresses');
-        handleError(err, 'Failed to Generate Addresses');
-      } finally {
-        setLoadingAddresses(false);
-      }
+  const handleLoadMoreAddressPage = async () => {
+    if (!id || loadingAddresses || !hasMoreAddresses) return;
+    await loadAddresses(id, ADDRESS_PAGE_SIZE, addressOffset, false);
+  };
+
+  const handleGenerateMoreAddresses = async () => {
+    if (!id) return;
+    setLoadingAddresses(true);
+    try {
+      // Generate more addresses on the backend
+      await transactionsApi.generateAddresses(id, 10);
+      await loadAddressSummary(id);
+      // Reload first page to include newly generated addresses
+      await loadAddresses(id, ADDRESS_PAGE_SIZE, 0, true);
+    } catch (err) {
+      logError(log, err, 'Failed to generate more addresses');
+      handleError(err, 'Failed to Generate Addresses');
+    } finally {
+      setLoadingAddresses(false);
+    }
   };
 
   // Note: truncateAddress is now imported from utils/formatters
@@ -1617,8 +1658,11 @@ export const WalletDetail: React.FC = () => {
            // Helper to determine if address is a change address based on derivation path
            // Standard BIP derivation: m/purpose'/coin'/account'/change/index
            // change = 0 for external/receive, 1 for internal/change
-           const isChangeAddress = (path: string): boolean => {
-             const parts = path.split('/');
+           const isChangeAddress = (addr: Address): boolean => {
+             if (typeof addr.isChange === 'boolean') {
+               return addr.isChange;
+             }
+             const parts = addr.derivationPath.split('/');
              if (parts.length >= 2) {
                // Second-to-last part is the change indicator
                const changeIndicator = parts[parts.length - 2];
@@ -1627,8 +1671,8 @@ export const WalletDetail: React.FC = () => {
              return false;
            };
 
-           const receiveAddresses = addresses.filter(addr => !isChangeAddress(addr.derivationPath));
-           const changeAddresses = addresses.filter(addr => isChangeAddress(addr.derivationPath));
+           const receiveAddresses = addresses.filter(addr => !isChangeAddress(addr));
+           const changeAddresses = addresses.filter(addr => isChangeAddress(addr));
 
            // Render the address table content
            const renderAddressTableContent = (addressList: Address[], emptyMessage: string) => (
@@ -1777,6 +1821,37 @@ export const WalletDetail: React.FC = () => {
 
            return (
              <div className="space-y-4 animate-fade-in">
+               {addressSummary && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                   <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+                     <p className="text-xs uppercase tracking-wide text-sanctuary-500">Total Addresses</p>
+                     <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
+                       {addressSummary.totalAddresses}
+                     </p>
+                     <p className="text-xs text-sanctuary-500 mt-2">
+                       {addressSummary.usedCount} used · {addressSummary.unusedCount} unused
+                     </p>
+                   </div>
+                   <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+                     <p className="text-xs uppercase tracking-wide text-sanctuary-500">Total Balance</p>
+                     <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
+                       {format(addressSummary.totalBalance)}
+                     </p>
+                   </div>
+                   <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+                     <p className="text-xs uppercase tracking-wide text-sanctuary-500">Used Balance</p>
+                     <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
+                       {format(addressSummary.usedBalance)}
+                     </p>
+                   </div>
+                   <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-4">
+                     <p className="text-xs uppercase tracking-wide text-sanctuary-500">Unused Balance</p>
+                     <p className="text-2xl font-semibold text-sanctuary-900 dark:text-sanctuary-100 mt-1">
+                       {format(addressSummary.unusedBalance)}
+                     </p>
+                   </div>
+                 </div>
+               )}
                {addresses.length === 0 ? (
                  <div className="surface-elevated rounded-2xl border border-sanctuary-200 dark:border-sanctuary-800 p-12 text-center">
                    <MapPin className="w-12 h-12 mx-auto text-sanctuary-300 dark:text-sanctuary-600 mb-4" />
@@ -1787,7 +1862,7 @@ export const WalletDetail: React.FC = () => {
                        : "No addresses have been generated yet. Click below to generate addresses."}
                    </p>
                    {wallet.descriptor && (
-                     <Button variant="primary" onClick={handleLoadMoreAddresses} isLoading={loadingAddresses}>
+                     <Button variant="primary" onClick={handleGenerateMoreAddresses} isLoading={loadingAddresses}>
                        <Plus className="w-4 h-4 mr-2" /> Generate Addresses
                      </Button>
                    )}
@@ -1835,9 +1910,9 @@ export const WalletDetail: React.FC = () => {
                            </span>
                          </button>
                        </div>
-                       <Button variant="ghost" size="sm" onClick={handleLoadMoreAddresses} isLoading={loadingAddresses}>
-                         <Plus className="w-4 h-4 mr-1" /> More
-                       </Button>
+                      <Button variant="ghost" size="sm" onClick={handleGenerateMoreAddresses} isLoading={loadingAddresses}>
+                        <Plus className="w-4 h-4 mr-1" /> Generate
+                      </Button>
                      </div>
                    </div>
 
@@ -1850,6 +1925,27 @@ export const WalletDetail: React.FC = () => {
                      changeAddresses,
                      "No change addresses used yet. Change addresses are created when you send Bitcoin."
                    )}
+                 </div>
+               )}
+               {addresses.length > 0 && (
+                 <div className="flex items-center justify-between text-sm text-sanctuary-500">
+                   <span>
+                     Showing {addresses.length} of {addressSummary?.totalAddresses ?? addresses.length} addresses
+                   </span>
+                   <div className="flex items-center gap-2">
+                     {hasMoreAddresses ? (
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         onClick={handleLoadMoreAddressPage}
+                         isLoading={loadingAddresses}
+                       >
+                         Load More
+                       </Button>
+                     ) : (
+                       <span className="text-xs text-sanctuary-400">All addresses loaded</span>
+                     )}
+                   </div>
                  </div>
                )}
              </div>

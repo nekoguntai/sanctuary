@@ -17,6 +17,12 @@ export interface GetTransactionsParams {
   [key: string]: string | number | boolean | string[] | undefined | null;
 }
 
+export interface GetAddressesParams {
+  used?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export interface GetUTXOsResponse {
   utxos: UTXO[];
   count: number;
@@ -83,6 +89,15 @@ export interface EstimateTransactionResponse {
   changeAmount: number;
   sufficient: boolean;
   error?: string;
+}
+
+export interface AddressSummary {
+  totalAddresses: number;
+  usedCount: number;
+  unusedCount: number;
+  totalBalance: number;
+  usedBalance: number;
+  unusedBalance: number;
 }
 
 /**
@@ -182,9 +197,15 @@ export async function getUTXOs(walletId: string): Promise<GetUTXOsResponse> {
 /**
  * Get addresses for a wallet
  */
-export async function getAddresses(walletId: string, used?: boolean): Promise<Address[]> {
-  const params = used !== undefined ? { used: String(used) } : undefined;
+export async function getAddresses(walletId: string, params?: GetAddressesParams): Promise<Address[]> {
   return apiClient.get<Address[]>(`/wallets/${walletId}/addresses`, params);
+}
+
+/**
+ * Get address summary for a wallet
+ */
+export async function getAddressSummary(walletId: string): Promise<AddressSummary> {
+  return apiClient.get<AddressSummary>(`/wallets/${walletId}/addresses/summary`);
 }
 
 /**

@@ -569,8 +569,11 @@ describe('UserContext', () => {
         expect(screen.getByTestId('user')).toHaveTextContent('testuser');
       });
 
+      // Wait for the theme effect to apply user preferences after state update
+      await waitFor(() => {
+        expect(themeRegistry.applyPattern).toHaveBeenCalledWith('minimal', 'sanctuary');
+      });
       expect(themeRegistry.applyTheme).toHaveBeenCalledWith('sanctuary', 'dark', 0);
-      expect(themeRegistry.applyPattern).toHaveBeenCalledWith('minimal', 'sanctuary');
     });
 
     it('applies light mode when darkMode is false', async () => {

@@ -493,12 +493,12 @@ function getBlocksAndMempoolSimple(
   fees: FeeEstimates,
   mempoolSizeMB: number
 ) {
-  const avgBlockSize = 1.5; // MB estimate
+  const maxBlockSizeMB = 1.0; // 1M vbytes = Bitcoin block weight limit / 4
   const avgTxCount = 3000; // Average transactions per block estimate
-  const blocksInMempool = Math.ceil(mempoolSizeMB / avgBlockSize);
+  const blocksInMempool = Math.ceil(mempoolSizeMB / maxBlockSizeMB);
 
   const estimateTxCount = (sizeMB: number) => {
-    return Math.round((sizeMB / avgBlockSize) * avgTxCount);
+    return Math.round((sizeMB / maxBlockSizeMB) * avgTxCount);
   };
 
   const avgTxSize = 250;
@@ -550,7 +550,7 @@ function getBlocksAndMempoolSimple(
   }> = [];
 
   if (blocksInMempool >= 1) {
-    const blockSize = Math.min(mempoolSizeMB, avgBlockSize);
+    const blockSize = Math.min(mempoolSizeMB, maxBlockSizeMB);
     const txCount = estimateTxCount(blockSize);
     const totalFees = estimateTotalFees(fees.fastestFee, txCount);
     const minFee = Math.max(fees.fastestFee - 5, 0.1);
@@ -569,7 +569,7 @@ function getBlocksAndMempoolSimple(
   }
 
   if (blocksInMempool >= 2) {
-    const blockSize = Math.min(mempoolSizeMB - avgBlockSize, avgBlockSize);
+    const blockSize = Math.min(mempoolSizeMB - maxBlockSizeMB, maxBlockSizeMB);
     const txCount = estimateTxCount(blockSize);
     const totalFees = estimateTotalFees(fees.halfHourFee, txCount);
     const minFee = Math.max(fees.halfHourFee - 5, 0.1);
@@ -588,7 +588,7 @@ function getBlocksAndMempoolSimple(
   }
 
   if (blocksInMempool >= 3) {
-    const blockSize = Math.min(mempoolSizeMB - (avgBlockSize * 2), avgBlockSize);
+    const blockSize = Math.min(mempoolSizeMB - (maxBlockSizeMB * 2), maxBlockSizeMB);
     const txCount = estimateTxCount(blockSize);
     const totalFees = estimateTotalFees(fees.hourFee, txCount);
     const minFee = Math.max(fees.hourFee - 3, 0.1);
@@ -636,7 +636,7 @@ function getBlocksAndMempoolSimple(
 
   let queuedBlocksSummary = null;
   if (additionalBlocks > 0) {
-    const additionalBlockSize = Math.max(mempoolSizeMB - (avgBlockSize * displayedMempoolBlocks), 0);
+    const additionalBlockSize = Math.max(mempoolSizeMB - (maxBlockSizeMB * displayedMempoolBlocks), 0);
     const totalTxCount = estimateTxCount(additionalBlockSize);
     const avgFee = fees.economyFee;
     const estimatedTotalFees = (avgFee * 250 * totalTxCount) / 100000000;

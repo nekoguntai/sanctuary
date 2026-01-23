@@ -1574,8 +1574,30 @@ export class ElectrumPool extends EventEmitter {
         try {
           await this.createConnection(server);
           log.info(`Created connection to ${server.label}`);
+
+          // Connection succeeded - mark server as healthy
+          const stats = this.serverStats.get(server.id);
+          if (stats) {
+            stats.isHealthy = true;
+            stats.lastHealthCheck = new Date();
+            this.recordServerSuccess(server.id);
+            this.recordHealthCheckResult(server.id, true, 0);
+            this.updateServerHealthInDb(server.id, true, 0);
+          }
         } catch (error) {
-          log.warn(`Failed to create connection to ${server.label}`, { error: String(error) });
+          const errorStr = String(error);
+          log.warn(`Failed to create connection to ${server.label}`, { error: errorStr });
+
+          // Mark server as unhealthy since we can't establish any connection
+          const stats = this.serverStats.get(server.id);
+          if (stats) {
+            stats.isHealthy = false;
+            stats.lastHealthCheck = new Date();
+            this.recordServerFailure(server.id, 'error');
+            this.recordHealthCheckResult(server.id, false, 0, errorStr);
+            this.updateServerHealthInDb(server.id, false, stats.consecutiveFailures, errorStr);
+            log.warn(`Server ${server.label} marked unhealthy - unable to establish connection`);
+          }
         }
       }
     }

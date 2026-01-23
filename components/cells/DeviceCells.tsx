@@ -164,7 +164,7 @@ export function createDeviceCellRenderers(
 
   // Accounts Cell - Shows derivation paths with singlesig/multisig tags
   // Color coded: warning (amber) for multisig, success (green) for single-sig
-  // Note: Dark mode uses inverted color scales per CLAUDE.md - low numbers are dark, high numbers are light
+  // Note: Dark mode uses inverted color scales in this theme (low numbers are dark, high numbers are light)
   const AccountsCell: React.FC<CellRendererProps<DeviceWithWallets>> = ({ item: device }) => {
     const accounts = device.accounts || [];
 

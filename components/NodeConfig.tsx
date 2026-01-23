@@ -539,8 +539,16 @@ export const NodeConfig: React.FC = () => {
 
           {/* Section 3: Proxy / Tor */}
           <div className="surface-elevated rounded-xl border border-sanctuary-200 dark:border-sanctuary-800 overflow-hidden">
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => toggleSection('proxy')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  toggleSection('proxy');
+                }
+              }}
               className="w-full p-4 flex items-center justify-between hover:bg-sanctuary-100 dark:hover:bg-sanctuary-800 transition-colors"
             >
               <div className="flex items-center space-x-3">
@@ -561,7 +569,7 @@ export const NodeConfig: React.FC = () => {
                 </button>
                 <ChevronRight className={`w-5 h-5 text-sanctuary-400 transition-transform ${expandedSection === 'proxy' ? 'rotate-90' : ''}`} />
               </div>
-            </button>
+            </div>
 
             {expandedSection === 'proxy' && nodeConfig.proxyEnabled && (
               <div className="px-4 pb-4 space-y-4 border-t border-sanctuary-100 dark:border-sanctuary-800 pt-4">

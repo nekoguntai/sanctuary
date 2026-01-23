@@ -395,3 +395,53 @@ describe('TransactionList - Transaction Stats', () => {
     // Running balance column should be visible
   });
 });
+
+describe('TransactionList - Additional behaviors', () => {
+  const baseTx = {
+    id: 'tx-1',
+    txid: 'txid-1',
+    walletId: 'wallet-1',
+    amount: 1000,
+    fee: 10,
+    feeRate: 1,
+    timestamp: Date.now(),
+    confirmations: 1,
+    status: 'confirmed',
+    type: 'received',
+  } as Transaction;
+
+  it('filters out replaced transactions', async () => {
+    const { TransactionList } = await import('../../components/TransactionList');
+    const { getAllByTestId } = render(
+      <TransactionList
+        transactions={[
+          { ...baseTx, id: 'tx-keep', rbfStatus: 'pending' },
+          { ...baseTx, id: 'tx-drop', rbfStatus: 'replaced' },
+        ]}
+      />
+    );
+
+    expect(getAllByTestId('transaction-row')).toHaveLength(1);
+  });
+
+  it('calls onWalletClick when wallet badge clicked', async () => {
+    const user = userEvent.setup();
+    const onWalletClick = vi.fn();
+    const onTransactionClick = vi.fn();
+    const { TransactionList } = await import('../../components/TransactionList');
+
+    render(
+      <TransactionList
+        transactions={[baseTx]}
+        showWalletBadge={true}
+        wallets={[{ id: 'wallet-1', name: 'Main Wallet', balance: 0 } as Wallet]}
+        onWalletClick={onWalletClick}
+        onTransactionClick={onTransactionClick}
+      />
+    );
+
+    await user.click(screen.getByText('Main Wallet'));
+    expect(onWalletClick).toHaveBeenCalledWith('wallet-1');
+    expect(onTransactionClick).not.toHaveBeenCalled();
+  });
+});

@@ -15,8 +15,8 @@ import { useUser } from '../contexts/UserContext';
 import { createLogger } from '../utils/logger';
 import { TransferOwnershipModal } from './TransferOwnershipModal';
 import { PendingTransfersPanel } from './PendingTransfersPanel';
-import { ManualAccountForm, AccountList, getAccountTypeInfo } from './DeviceDetail';
-import type { ManualAccountData } from './DeviceDetail';
+import { ManualAccountForm, AccountList, getAccountTypeInfo } from './DeviceDetail/index';
+import type { ManualAccountData } from './DeviceDetail/index';
 
 const log = createLogger('DeviceDetail');
 

@@ -144,7 +144,9 @@ export async function initializeRedis(): Promise<void> {
 
     // Clean up partial connections
     if (redisClient) {
-      await redisClient.quit().catch(() => {});
+      await redisClient.quit().catch((e) => {
+        log.debug('Redis quit failed during error cleanup (non-critical)', { error: String(e) });
+      });
       redisClient = null;
     }
     isRedisEnabled = false;

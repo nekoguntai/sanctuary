@@ -202,7 +202,6 @@ class AuditService {
     } = {}
   ): Promise<void> {
     const { ipAddress, userAgent } = getClientInfo(req);
-    // @ts-ignore - req.user is set by auth middleware
     const user = req.user;
 
     await this.log({

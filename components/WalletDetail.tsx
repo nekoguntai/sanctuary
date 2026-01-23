@@ -87,6 +87,7 @@ import { createLogger } from '../utils/logger';
 import { logError } from '../utils/errorHandler';
 import { WalletTelegramSettings } from './WalletDetail/WalletTelegramSettings';
 import { LogTab } from './WalletDetail/LogTab';
+import { DeleteModal, ReceiveModal, ExportModal, AddressQRModal } from './WalletDetail/modals';
 
 const log = createLogger('WalletDetail');
 
@@ -3017,39 +3018,10 @@ export const WalletDetail: React.FC = () => {
 
       {/* Address QR Code Modal */}
       {qrModalAddress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setQrModalAddress(null)}>
-          <div className="surface-elevated rounded-2xl max-w-sm w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100">Address QR Code</h3>
-              <button
-                onClick={() => setQrModalAddress(null)}
-                className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex flex-col items-center">
-              <div className="bg-white p-4 rounded-xl mb-4">
-                <QRCodeSVG value={qrModalAddress} size={200} level="M" />
-              </div>
-              <div className="w-full">
-                <label className="block text-xs font-medium text-sanctuary-500 mb-1">Full Address</label>
-                <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
-                  <span className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
-                    {qrModalAddress}
-                  </span>
-                  <button
-                    onClick={() => copy(qrModalAddress)}
-                    className={`flex-shrink-0 transition-colors ${isCopied(qrModalAddress) ? 'text-success-500' : 'text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300'}`}
-                    title={isCopied(qrModalAddress) ? 'Copied!' : 'Copy address'}
-                  >
-                    {isCopied(qrModalAddress) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AddressQRModal
+          address={qrModalAddress}
+          onClose={() => setQrModalAddress(null)}
+        />
       )}
 
       {/* Device Share Prompt Modal */}
@@ -3107,53 +3079,22 @@ export const WalletDetail: React.FC = () => {
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
-             <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-4">
-                   <AlertTriangle className="h-6 w-6 text-rose-600 dark:text-rose-400" />
-                </div>
-                <h3 className="text-lg font-medium text-sanctuary-900 dark:text-sanctuary-100 mb-2">Delete Wallet?</h3>
-                <p className="text-sm text-sanctuary-500 mb-6">
-                   This action cannot be undone. This will permanently remove the wallet configuration from Sanctuary. Your funds remain on the blockchain, but you will need your seed or backup to access them again.
-                </p>
-                
-                <div className="mb-6">
-                   <label className="block text-xs font-medium text-sanctuary-500 mb-1 text-left">Type <span className="font-bold text-sanctuary-900 dark:text-sanctuary-100">DELETE</span> to confirm</label>
-                   <input 
-                      type="text" 
-                      value={deleteInput}
-                      onChange={(e) => setDeleteInput(e.target.value)}
-                      className="w-full px-3 py-2 border border-sanctuary-300 dark:border-sanctuary-700 rounded-lg surface-muted focus:outline-none focus:ring-2 focus:ring-rose-500"
-                      placeholder="DELETE"
-                   />
-                </div>
-
-                <div className="flex space-x-3">
-                   <Button variant="ghost" className="flex-1" onClick={() => { setShowDelete(false); setDeleteInput(''); }}>Cancel</Button>
-                   <Button
-                      variant="danger"
-                      className="flex-1"
-                      disabled={deleteInput !== 'DELETE'}
-                      onClick={async () => {
-                         if(wallet && id) {
-                            try {
-                               await walletsApi.deleteWallet(id);
-                               navigate('/wallets');
-                            } catch (err) {
-                               log.error('Failed to delete wallet', { error: err });
-                               handleError(err, 'Delete Failed');
-                            }
-                         }
-                      }}
-                   >
-                      Delete Forever
-                   </Button>
-                </div>
-             </div>
-          </div>
-        </div>
+      {showDelete && wallet && (
+        <DeleteModal
+          walletName={wallet.name}
+          onConfirm={async () => {
+            if (id) {
+              try {
+                await walletsApi.deleteWallet(id);
+                navigate('/wallets');
+              } catch (err) {
+                log.error('Failed to delete wallet', { error: err });
+                handleError(err, 'Delete Failed');
+              }
+            }
+          }}
+          onClose={() => setShowDelete(false)}
+        />
       )}
 
       {/* Transfer Ownership Modal */}

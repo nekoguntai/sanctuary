@@ -33,7 +33,10 @@ import { calculateUTXOAge, getAgeCategoryColor } from '../../../utils/utxoAge';
 import { analyzeSpendPrivacy, getWalletPrivacy, type SpendPrivacyAnalysis, type UtxoPrivacyInfo } from '../../../src/api/transactions';
 import SpendPrivacyCard from '../../SpendPrivacyCard';
 import { PrivacyBadge } from '../../PrivacyBadge';
+import { createLogger } from '../../../utils/logger';
 import type { UTXO } from '../../../types';
+
+const log = createLogger('OutputsStep');
 
 export function OutputsStep() {
   const {
@@ -238,10 +241,10 @@ export function OutputsStep() {
           } else {
             // Network mismatch: disable payjoin for this transaction
             dispatch({ type: 'SET_PAYJOIN_URL', url: null });
-            console.warn(
-              `Payjoin disabled: Address network doesn't match wallet network (${walletNetwork}). ` +
-              `Payjoin requires sender and receiver to be on the same network.`
-            );
+            log.warn('Payjoin disabled: Address network mismatch', {
+              walletNetwork,
+              message: 'Payjoin requires sender and receiver to be on the same network',
+            });
           }
         }
         return;

@@ -315,17 +315,17 @@ export function ReviewStep({
   const handleDeviceFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, deviceId: string) => {
     const device = devices.find(d => d.id === deviceId);
     const fingerprint = device?.fingerprint;
-    console.log('[ReviewStep] handleDeviceFileUpload called', { deviceId, fingerprint, hasFile: !!event.target.files?.[0], hasCallback: !!onUploadSignedPsbt });
+    log.debug('handleDeviceFileUpload called', { deviceId, fingerprint, hasFile: !!event.target.files?.[0], hasCallback: !!onUploadSignedPsbt });
     const file = event.target.files?.[0];
     if (file && onUploadSignedPsbt) {
-      console.log('[ReviewStep] Calling onUploadSignedPsbt', { fileName: file.name, fileSize: file.size, fingerprint });
+      log.debug('Calling onUploadSignedPsbt', { fileName: file.name, fileSize: file.size, fingerprint });
       setUploadingDeviceId(deviceId);
       try {
         // Pass deviceId and fingerprint to validate and track which device signed
         await onUploadSignedPsbt(file, deviceId, fingerprint);
-        console.log('[ReviewStep] onUploadSignedPsbt completed');
+        log.debug('onUploadSignedPsbt completed');
       } catch (err: unknown) {
-        console.error('[ReviewStep] onUploadSignedPsbt failed', err);
+        log.error('onUploadSignedPsbt failed', { error: err });
         // Show error to user
         if (err instanceof Error) {
           alert(err.message);
@@ -334,7 +334,7 @@ export function ReviewStep({
         setUploadingDeviceId(null);
       }
     } else {
-      console.log('[ReviewStep] Upload skipped - no file or no callback');
+      log.debug('Upload skipped - no file or no callback');
     }
     // Reset input
     const inputRef = deviceFileInputRefs.current[deviceId];

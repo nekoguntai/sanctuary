@@ -12,6 +12,10 @@
  * - PartIndex (2 chars): Base36 encoded index of this part (0-based)
  */
 
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('BBQr');
+
 // File type codes
 export type BBQrFileType = 'P' | 'T' | 'J' | 'C' | 'U' | 'B' | 'X';
 
@@ -76,13 +80,13 @@ export function parseBBQrHeader(content: string): BBQrHeader | null {
 
   // Validate encoding
   if (!['H', '2', 'Z'].includes(encoding)) {
-    console.warn('BBQr: Unknown encoding:', encoding);
+    log.warn('Unknown encoding', { encoding });
     return null;
   }
 
   // Validate file type
   if (!['P', 'T', 'J', 'C', 'U', 'B', 'X'].includes(fileType)) {
-    console.warn('BBQr: Unknown file type:', fileType);
+    log.warn('Unknown file type', { fileType });
     return null;
   }
 

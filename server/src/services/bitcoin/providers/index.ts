@@ -91,7 +91,9 @@ class ProviderPool {
     // Clear existing provider so it gets recreated with new config
     const existing = this.providers.get(network);
     if (existing) {
-      existing.disconnect().catch(() => {});
+      existing.disconnect().catch((e) => {
+        log.debug('Provider disconnect failed during reconfigure (non-critical)', { network, error: String(e) });
+      });
       this.providers.delete(network);
     }
   }

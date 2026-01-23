@@ -8,6 +8,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { encodePsbtToUrFrames } from '../../utils/urPsbt';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('AnimatedQRCode');
 
 interface AnimatedQRCodeProps {
   /** Base64-encoded PSBT data */
@@ -36,7 +39,7 @@ export const AnimatedQRCode: React.FC<AnimatedQRCodeProps> = ({
     try {
       return encodePsbtToUrFrames(psbtBase64, maxFragmentLength);
     } catch (error) {
-      console.error('Failed to encode PSBT:', error);
+      log.error('Failed to encode PSBT', { error });
       return [];
     }
   }, [psbtBase64, maxFragmentLength]);

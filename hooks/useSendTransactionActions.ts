@@ -716,7 +716,7 @@ export function useSendTransactionActions({
           // Use provided deviceId or fallback to 'psbt-signed' for single-sig
           const effectiveDeviceId = deviceId || 'psbt-signed';
 
-          console.log('[uploadSignedPsbt] Uploaded', {
+          log.debug('Uploaded signed PSBT', {
             preview: base64Psbt.substring(0, 50) + '...',
             deviceId: effectiveDeviceId,
             deviceFingerprint,
@@ -742,7 +742,7 @@ export function useSendTransactionActions({
                     );
                     if (derivation) {
                       const sigFingerprint = derivation.masterFingerprint.toString('hex');
-                      console.log('[uploadSignedPsbt] Signature fingerprint check', {
+                      log.debug('Signature fingerprint check', {
                         sigFingerprint,
                         expectedFingerprint: deviceFingerprint,
                         matches: sigFingerprint === deviceFingerprint,
@@ -763,9 +763,9 @@ export function useSendTransactionActions({
                 reject(new Error(error));
                 return;
               }
-              console.log('[uploadSignedPsbt] Signature validation passed');
+              log.debug('Signature validation passed');
             } catch (validationError) {
-              console.warn('[uploadSignedPsbt] Could not validate signature', validationError);
+              log.warn('Could not validate signature', { error: validationError });
               // Continue anyway if validation fails - might be a format issue
             }
           }
@@ -773,7 +773,7 @@ export function useSendTransactionActions({
           // For multisig, combine new signatures with existing PSBT instead of replacing
           let combinedPsbt = base64Psbt;
           if (unsignedPsbt && isMultisigType(wallet.type)) {
-            console.log('[uploadSignedPsbt] Will combine PSBTs');
+            log.debug('Will combine PSBTs');
             try {
               const existingPsbtObj = bitcoin.Psbt.fromBase64(unsignedPsbt);
               const newPsbtObj = bitcoin.Psbt.fromBase64(base64Psbt);
@@ -796,7 +796,7 @@ export function useSendTransactionActions({
                 }
               }
 
-              console.log('[uploadSignedPsbt] Combining', {
+              log.debug('Combining PSBTs', {
                 existingSigCount,
                 newSigCount,
                 existingPubkeys,
@@ -813,15 +813,15 @@ export function useSendTransactionActions({
                 if (input.partialSig) totalSigs += input.partialSig.length;
               }
 
-              console.log('[uploadSignedPsbt] Combined', { totalSignatures: totalSigs });
+              log.debug('Combined PSBTs', { totalSignatures: totalSigs });
               combinedPsbt = existingPsbtObj.toBase64();
             } catch (combineError) {
-              console.error('[uploadSignedPsbt] Combine failed', combineError);
+              log.error('PSBT combine failed', { error: combineError });
               // Fall back to just using the new PSBT
               combinedPsbt = base64Psbt;
             }
           } else {
-            console.log('[uploadSignedPsbt] Not combining - no existing PSBT or not multisig');
+            log.debug('Not combining - no existing PSBT or not multisig');
           }
 
           setUnsignedPsbt(combinedPsbt);

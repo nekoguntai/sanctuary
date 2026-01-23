@@ -1,0 +1,228 @@
+/**
+ * ReceiveModal Component
+ *
+ * Modal for generating and displaying receive addresses with QR codes.
+ * Supports Payjoin and BIP21 URI generation.
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { X, RefreshCw, Copy, Check } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { PayjoinSection } from '../../PayjoinSection';
+import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
+import * as payjoinApi from '../../../src/api/payjoin';
+import { createLogger } from '../../../utils/logger';
+import type { Address } from '../../../types';
+
+const log = createLogger('ReceiveModal');
+
+interface ReceiveModalProps {
+  walletId: string;
+  addresses: Address[];
+  network: string;
+  onClose: () => void;
+  onNavigateToSettings: () => void;
+}
+
+export const ReceiveModal: React.FC<ReceiveModalProps> = ({
+  walletId,
+  addresses,
+  network,
+  onClose,
+  onNavigateToSettings,
+}) => {
+  const { copy, isCopied } = useCopyToClipboard();
+
+  // Get unused receive addresses (not change addresses)
+  const unusedReceiveAddresses = useMemo(() => {
+    return addresses.filter((a) => !a.isChange && !a.used);
+  }, [addresses]);
+
+  // Selected address state
+  const [selectedReceiveAddressId, setSelectedReceiveAddressId] = useState<string | null>(null);
+
+  // Payjoin state
+  const [payjoinEnabled, setPayjoinEnabled] = useState(false);
+  const [payjoinUri, setPayjoinUri] = useState<string | null>(null);
+  const [payjoinLoading, setPayjoinLoading] = useState(false);
+  const [receiveAmount, setReceiveAmount] = useState('');
+
+  // Get the selected address or first unused
+  const selectedReceiveAddress = useMemo(() => {
+    if (selectedReceiveAddressId) {
+      return unusedReceiveAddresses.find((a) => a.id === selectedReceiveAddressId);
+    }
+    return unusedReceiveAddresses[0];
+  }, [unusedReceiveAddresses, selectedReceiveAddressId]);
+
+  const receiveAddress = selectedReceiveAddress?.address || '';
+  const displayValue = payjoinUri || receiveAddress;
+
+  // Generate Payjoin URI when enabled
+  useEffect(() => {
+    if (!payjoinEnabled || !receiveAddress || !walletId) {
+      setPayjoinUri(null);
+      return;
+    }
+
+    const generatePayjoinUri = async () => {
+      setPayjoinLoading(true);
+      try {
+        const amountBtc = receiveAmount ? parseFloat(receiveAmount) : undefined;
+        const response = await payjoinApi.generatePayjoinUri(walletId, receiveAddress, amountBtc);
+        setPayjoinUri(response.uri);
+      } catch (err) {
+        log.error('Failed to generate Payjoin URI', { error: err });
+        setPayjoinUri(null);
+      } finally {
+        setPayjoinLoading(false);
+      }
+    };
+
+    generatePayjoinUri();
+  }, [payjoinEnabled, receiveAddress, walletId, receiveAmount]);
+
+  const handleClose = () => {
+    setPayjoinEnabled(false);
+    setPayjoinUri(null);
+    setReceiveAmount('');
+    setSelectedReceiveAddressId(null);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+      onClick={handleClose}
+    >
+      <div
+        className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">
+            Receive Bitcoin
+          </h3>
+          <button
+            onClick={handleClose}
+            className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {receiveAddress ? (
+          <div className="flex flex-col items-center">
+            <div className="bg-white p-4 rounded-xl mb-4 shadow-sm">
+              {payjoinLoading ? (
+                <div className="w-[200px] h-[200px] flex items-center justify-center">
+                  <RefreshCw className="w-8 h-8 animate-spin text-sanctuary-400" />
+                </div>
+              ) : (
+                <QRCodeSVG value={displayValue} size={200} level="M" />
+              )}
+            </div>
+
+            {/* Address Selector */}
+            {unusedReceiveAddresses.length > 1 && (
+              <div className="w-full mb-4">
+                <label className="block text-xs font-medium text-sanctuary-500 mb-1">
+                  Select Address ({unusedReceiveAddresses.length} unused)
+                </label>
+                <select
+                  value={selectedReceiveAddress?.id || ''}
+                  onChange={(e) => setSelectedReceiveAddressId(e.target.value || null)}
+                  className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  {unusedReceiveAddresses.map((addr) => (
+                    <option key={addr.id} value={addr.id}>
+                      #{addr.index} - {addr.address.slice(0, 12)}...{addr.address.slice(-8)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Payjoin Section */}
+            <PayjoinSection
+              walletId={walletId}
+              enabled={payjoinEnabled}
+              onToggle={setPayjoinEnabled}
+              className="w-full mb-4"
+            />
+
+            {/* Amount Input (optional, for BIP21) */}
+            {payjoinEnabled && (
+              <div className="w-full mb-4">
+                <label className="block text-xs font-medium text-sanctuary-500 mb-1">
+                  Amount (optional)
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    step="0.00000001"
+                    min="0"
+                    value={receiveAmount}
+                    onChange={(e) => setReceiveAmount(e.target.value)}
+                    placeholder="0.00000000"
+                    className="flex-1 px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono"
+                  />
+                  <span className="text-sm text-sanctuary-500">BTC</span>
+                </div>
+              </div>
+            )}
+
+            <div className="w-full">
+              <label className="block text-xs font-medium text-sanctuary-500 mb-1">
+                {payjoinEnabled ? 'BIP21 URI (with Payjoin)' : 'Receive Address'}
+              </label>
+              <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
+                <code className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
+                  {displayValue}
+                </code>
+                <button
+                  onClick={() => copy(displayValue)}
+                  className={`flex-shrink-0 p-2 rounded transition-colors ${
+                    isCopied(displayValue)
+                      ? 'bg-success-100 dark:bg-success-500/20 text-success-600 dark:text-success-400'
+                      : 'hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-400'
+                  }`}
+                  title={isCopied(displayValue) ? 'Copied!' : 'Copy'}
+                >
+                  {isCopied(displayValue) ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-sanctuary-500 mt-4 text-center">
+              {payjoinEnabled
+                ? 'Share this URI with a Payjoin-capable wallet for enhanced privacy.'
+                : 'Send only Bitcoin (BTC) to this address.'}
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-sanctuary-500 mb-4">
+              No receive address available. Please link a hardware device with an xpub
+              first.
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                handleClose();
+                onNavigateToSettings();
+              }}
+            >
+              Go to Settings
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

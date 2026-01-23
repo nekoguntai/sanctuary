@@ -1592,7 +1592,9 @@ export class ElectrumPool extends EventEmitter {
       conn.state = 'closed';
       try {
         conn.client.disconnect();
-      } catch {}
+      } catch (e) {
+        log.debug('Disconnect failed during connection error handling (non-critical)', { error: String(e) });
+      }
       this.connections.delete(conn.id);
 
       // Ensure minimum connections (at least 1 per server)
@@ -1619,7 +1621,9 @@ export class ElectrumPool extends EventEmitter {
         // Disconnect old socket
         try {
           conn.client.disconnect();
-        } catch {}
+        } catch (e) {
+          log.debug('Disconnect failed during reconnect (non-critical)', { error: String(e) });
+        }
 
         // Reconnect
         await conn.client.connect();
@@ -1680,7 +1684,9 @@ export class ElectrumPool extends EventEmitter {
         conn.state = 'closed';
         try {
           conn.client.disconnect();
-        } catch {}
+        } catch (e) {
+          log.debug('Disconnect failed during idle cleanup (non-critical)', { error: String(e) });
+        }
         this.connections.delete(id);
       }
     }

@@ -3,12 +3,15 @@ import { websocketClient, WebSocketEvent, WebSocketEventType } from '../services
 import apiClient from '../src/api/client';
 import { getWalletLogs } from '../src/api/sync';
 import { getQueryClient } from '../providers/QueryProvider';
+import { createLogger } from '../utils/logger';
 import type {
   WebSocketTransactionData,
   WebSocketBalanceData,
   WebSocketConfirmationData,
   WebSocketSyncData,
 } from '../src/types';
+
+const log = createLogger('useWebSocket');
 
 // Log entry type matching backend WalletLogEntry
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -258,7 +261,7 @@ export const useWalletLogs = (
       })
       .catch(err => {
         // Silently fail - logs are optional
-        console.warn('Failed to fetch historical logs:', err);
+        log.warn('Failed to fetch historical logs', { error: err });
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

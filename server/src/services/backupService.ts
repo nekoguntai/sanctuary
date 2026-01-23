@@ -218,7 +218,7 @@ export class BackupService {
 
     for (const table of tablesToExport) {
       try {
-        // @ts-ignore - Dynamic table access
+        // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
         const records = await prisma[table].findMany();
         // Convert BigInt values to strings for JSON serialization
         data[table] = records.map((record: any) => this.serializeRecord(record));
@@ -436,7 +436,7 @@ export class BackupService {
           }
 
           try {
-            // @ts-ignore - Dynamic table access
+            // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
             await tx[table].deleteMany({});
             log.debug(`[BACKUP] Deleted all records from ${table}`);
           } catch (error) {
@@ -518,7 +518,7 @@ export class BackupService {
             }
 
             // Use createMany for bulk insert
-            // @ts-ignore - Dynamic table access
+            // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
             await tx[table].createMany({
               data: processedRecords,
               skipDuplicates: false,

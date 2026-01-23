@@ -18,6 +18,15 @@ import * as useAIStatusHook from '../../hooks/useAIStatus';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
 import * as bitcoinApi from '../../src/api/bitcoin';
+
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
 import * as devicesApi from '../../src/api/devices';
 import * as draftsApi from '../../src/api/drafts';
 

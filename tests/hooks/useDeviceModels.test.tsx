@@ -102,6 +102,11 @@ const mockModels: HardwareDeviceModel[] = [
 ];
 
 describe('useDeviceModels', () => {
+  const renderWithPendingFetch = () => {
+    mockGetDeviceModels.mockImplementation(() => new Promise(() => {}));
+    return renderHook(() => useDeviceModels());
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetDeviceModels.mockResolvedValue(mockModels);
@@ -109,31 +114,31 @@ describe('useDeviceModels', () => {
 
   describe('Initial State', () => {
     it('should start with loading true', () => {
-      const { result } = renderHook(() => useDeviceModels());
+      const { result } = renderWithPendingFetch();
 
       expect(result.current.loading).toBe(true);
     });
 
     it('should have empty device models initially', () => {
-      const { result } = renderHook(() => useDeviceModels());
+      const { result } = renderWithPendingFetch();
 
       expect(result.current.deviceModels).toEqual([]);
     });
 
     it('should have no error initially', () => {
-      const { result } = renderHook(() => useDeviceModels());
+      const { result } = renderWithPendingFetch();
 
       expect(result.current.error).toBeNull();
     });
 
     it('should have no selected manufacturer initially', () => {
-      const { result } = renderHook(() => useDeviceModels());
+      const { result } = renderWithPendingFetch();
 
       expect(result.current.selectedManufacturer).toBeNull();
     });
 
     it('should have empty search query initially', () => {
-      const { result } = renderHook(() => useDeviceModels());
+      const { result } = renderWithPendingFetch();
 
       expect(result.current.searchQuery).toBe('');
     });

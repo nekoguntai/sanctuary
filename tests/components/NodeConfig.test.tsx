@@ -12,6 +12,16 @@ import { NodeConfig } from '../../components/NodeConfig';
 import * as adminApi from '../../src/api/admin';
 import * as bitcoinApi from '../../src/api/bitcoin';
 
+// Mock logger
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock the APIs
 vi.mock('../../src/api/admin', () => ({
   getNodeConfig: vi.fn(),

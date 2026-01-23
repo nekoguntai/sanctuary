@@ -9,6 +9,15 @@ import { TransferOwnershipModal } from '../../components/TransferOwnershipModal'
 import * as authApi from '../../src/api/auth';
 import * as transfersApi from '../../src/api/transfers';
 
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock APIs
 vi.mock('../../src/api/auth', () => ({
   searchUsers: vi.fn(),

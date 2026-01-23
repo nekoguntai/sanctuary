@@ -19,6 +19,15 @@ import { UserProvider } from '../../contexts/UserContext';
 import * as priceApi from '../../src/api/price';
 import * as authApi from '../../src/api/auth';
 
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock the APIs
 vi.mock('../../src/api/price', () => ({
   getPrice: vi.fn(),
@@ -68,6 +77,14 @@ function renderWithProviders(ui: React.ReactNode) {
   );
 }
 
+async function renderWithProvidersAndWait(ui: React.ReactNode) {
+  const view = renderWithProviders(ui);
+  await waitFor(() => {
+    expect(priceApi.getPrice).toHaveBeenCalled();
+  });
+  return view;
+}
+
 describe('CurrencyContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,7 +104,7 @@ describe('CurrencyContext', () => {
 
   describe('Provider initialization', () => {
     it('initializes with default values', async () => {
-      renderWithProviders(<TestConsumer />);
+      await renderWithProvidersAndWait(<TestConsumer />);
 
       expect(screen.getByTestId('show-fiat')).toHaveTextContent('false');
       expect(screen.getByTestId('fiat-currency')).toHaveTextContent('USD');
@@ -146,14 +163,14 @@ describe('CurrencyContext', () => {
 
   describe('Currency formatting', () => {
     it('formats sats correctly', async () => {
-      renderWithProviders(<TestConsumer />);
+      await renderWithProvidersAndWait(<TestConsumer />);
 
       expect(screen.getByTestId('formatted-sats')).toHaveTextContent('100,000 sats');
     });
 
     it('formats as BTC when unit is btc', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderWithProviders(<TestConsumer />);
+      await renderWithProvidersAndWait(<TestConsumer />);
 
       await user.click(screen.getByTestId('set-btc'));
 
@@ -370,6 +387,10 @@ describe('CurrencyContext', () => {
 
       renderWithProviders(<TestFormatter />);
 
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalled();
+      });
+
       expect(screen.getByTestId('format')).toHaveTextContent('50,000 sats');
       expect(screen.getByTestId('symbol')).toHaveTextContent('$');
       expect(screen.getByTestId('unit')).toHaveTextContent('sats');
@@ -413,6 +434,10 @@ describe('CurrencyContext', () => {
       };
 
       renderWithProviders(<TestSettings />);
+
+      await waitFor(() => {
+        expect(priceApi.getPrice).toHaveBeenCalled();
+      });
 
       expect(screen.getByTestId('showFiat')).toHaveTextContent('false');
       expect(screen.getByTestId('providers')).toHaveTextContent('auto,coingecko,mempool,kraken,coinbase,binance');

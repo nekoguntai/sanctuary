@@ -355,6 +355,8 @@ describe('ElectrumServerSettings', () => {
     });
 
     it('shows confirmation before deleting', async () => {
+      window.confirm = vi.fn(() => false);
+
       render(<ElectrumServerSettings />);
 
       await waitForLoadingToComplete();

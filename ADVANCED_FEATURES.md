@@ -1,8 +1,28 @@
 # Advanced Bitcoin Transaction Features
 
-This document describes the advanced Bitcoin transaction features that have been implemented in Sanctuary.
+This document describes the advanced Bitcoin transaction features that are implemented in Sanctuary, including fee management, privacy tools, and advanced send flows.
 
 ## Features Implemented
+
+### Advanced Send Flow (Overview)
+
+```
+User selects outputs & fee
+        │
+        ├─ Optional: Coin control + privacy analysis
+        │
+        ├─ Optional: Decoy change outputs
+        │
+        ├─ Create PSBT (single or batch)
+        │
+        ├─ Optional: Payjoin attempt (fallback to normal send)
+        │
+        ├─ Sign on hardware wallet
+        │
+        ├─ Broadcast
+        │
+        └─ Post-send options: RBF fee bump / CPFP acceleration
+```
 
 ### 1. RBF (Replace-By-Fee)
 
@@ -27,7 +47,7 @@ Replace-By-Fee allows you to speed up stuck transactions by creating a replaceme
 
 #### How It Works
 1. Transaction must be unconfirmed and signal RBF (sequence < 0xfffffffe)
-2. New fee rate must be higher than current by at least 1 sat/vB
+2. New fee rate must be higher than current by at least 1 sat/vB **or** 10% (whichever is greater)
 3. Fee increase is deducted from change output
 4. Original transaction is replaced in mempool
 
@@ -36,7 +56,9 @@ Replace-By-Fee allows you to speed up stuck transactions by creating a replaceme
 Child-Pays-For-Parent allows you to speed up transactions by spending from them with a higher fee.
 
 #### Backend Implementation
-- **File**: `server/src/services/bitcoin/advancedTx.ts`
+- **Files**:
+  - `server/src/services/bitcoin/advancedTx.ts`
+  - `server/src/services/bitcoin/transactionService.ts` (wallet-specific batch creation)
 - **Functions**:
   - `calculateCPFPFee(parentTxSize, parentFeeRate, childTxSize, targetFeeRate)` - Calculate required child fee
   - `createCPFPTransaction(parentTxid, parentVout, targetFeeRate, recipientAddress, walletId)` - Create child transaction
@@ -68,7 +90,8 @@ Send to multiple recipients in a single transaction, saving significant fees.
   - Calculates fee savings vs individual transactions
 
 #### API Endpoints
-- `POST /api/v1/bitcoin/transaction/batch` - Create batch transaction
+- `POST /api/v1/bitcoin/transaction/batch` - Create batch transaction (global bitcoin API)
+- `POST /api/v1/wallets/:walletId/transactions/batch` - Create batch transaction scoped to wallet
 
 #### Frontend Component
 - **File**: `components/BatchSend.tsx`
@@ -112,6 +135,74 @@ All transactions now signal RBF by default for maximum flexibility.
 - **File**: `server/src/services/bitcoin/utils.ts`
 - Updated `createTransaction()` to use RBF sequence (0xfffffffd) by default
 - Can be disabled with `enableRBF: false` option
+
+### 6. Coin Control & UTXO Privacy Analysis
+
+Spend from specific UTXOs and get privacy impact analysis before you sign.
+
+#### Backend Implementation
+- **Files**:
+  - `server/src/services/bitcoin/utxoSelection.ts`
+  - `server/src/services/privacyService.ts`
+
+#### API Endpoints
+- `GET /api/v1/wallets/:walletId/privacy` - UTXO privacy scores and summary
+- `POST /api/v1/wallets/:walletId/privacy/spend-analysis` - Analyze privacy impact of a UTXO set
+
+#### Frontend Components
+- **Files**:
+  - `components/CoinControlPanel.tsx`
+  - `components/SpendPrivacyCard.tsx`
+  - `components/StrategySelector.tsx`
+
+#### How It Works
+1. Users can select specific UTXOs to spend (`selectedUtxoIds`)
+2. Wallet privacy scoring highlights linkability and exposure
+3. Spend analysis scores the combined privacy impact before signing
+
+### 7. Decoy Change Outputs (Privacy)
+
+Optional change-splitting to reduce address clustering and improve spend privacy.
+
+#### Backend Implementation
+- **Files**:
+  - `server/src/services/bitcoin/transactionService.ts`
+  - `server/src/services/bitcoin/psbtBuilder.ts`
+
+#### Frontend Components
+- **Files**:
+  - `components/send/AdvancedOptions.tsx`
+  - `components/DraftList.tsx`
+
+#### How It Works
+1. If enabled, change is split into multiple outputs (decoys)
+2. Output count is clamped (2–4) and validated against available change
+3. If change is insufficient, falls back to a single change output
+
+### 8. Payjoin (BIP78)
+
+Privacy-preserving send and receive flows using BIP78 Payjoin.
+
+#### Backend Implementation
+- **File**: `server/src/services/payjoinService.ts`
+
+#### API Endpoints
+- `GET /api/v1/payjoin/eligibility/:walletId` - Check wallet readiness
+- `GET /api/v1/payjoin/address/:addressId/uri` - Generate BIP21 with `pj=` param
+- `POST /api/v1/payjoin/parse-uri` - Parse BIP21 with Payjoin
+- `POST /api/v1/payjoin/attempt` - Attempt Payjoin send (fallback to regular send on failure)
+- `POST /api/v1/payjoin/:addressId` - Payjoin receiver endpoint (v1)
+
+#### Frontend Components
+- **Files**:
+  - `components/PayjoinSection.tsx`
+  - `components/WalletDetail.tsx`
+  - `components/send/steps/OutputsStep.tsx`
+
+#### How It Works
+1. Receiver generates a BIP21 URI with `pj=` param
+2. Sender detects Payjoin, attempts collaborative PSBT update
+3. If Payjoin fails, send falls back to a normal transaction
 
 ## Usage Examples
 
@@ -182,12 +273,13 @@ console.log(`Medium: ${fees.medium.feeRate} sat/vB (~${fees.medium.minutes} min)
 ### Fee Calculation
 - Uses virtual bytes (vBytes) for SegWit transactions
 - Accurate size estimation for different script types
-- Minimum fee bump of 1 sat/vB for RBF
+- Minimum fee bump of max(1 sat/vB, 10% of current) for RBF
 
 ### UTXO Selection
 - Largest-first selection for batch transactions
 - Automatic change output creation
 - Configurable dust threshold (default: 546 sats, see Admin → Variables)
+- Optional manual UTXO selection via coin control (`selectedUtxoIds`)
 
 ### Safety Features
 - Validates all addresses before creating transactions
@@ -195,6 +287,7 @@ console.log(`Medium: ${fees.medium.feeRate} sat/vB (~${fees.medium.minutes} min)
 - Prevents creating dust outputs
 - Verifies RBF eligibility before replacement
 - Calculates accurate fee requirements
+- Payjoin attempts validate and sanitize Payjoin URLs before network calls
 
 ## Integration Points
 
@@ -206,6 +299,7 @@ console.log(`Medium: ${fees.medium.feeRate} sat/vB (~${fees.medium.minutes} min)
 - Enhanced fee selection with time estimates
 - RBF enabled by default on all transactions
 - Link to batch send for multiple recipients
+- Coin control, privacy analysis, and decoy outputs integrated in the send flow
 
 ### Wallet Routes
 - Add `/wallets/:id/batch-send` route for `BatchSend` component
@@ -214,7 +308,7 @@ console.log(`Medium: ${fees.medium.feeRate} sat/vB (~${fees.medium.minutes} min)
 
 Potential improvements for future versions:
 
-1. **Manual UTXO Selection for RBF**: Allow users to add/remove inputs when bumping fees
+1. **RBF Input Editing**: Allow adding/removing inputs when bumping fees
 2. **CPFP Multiple Outputs**: Support spending multiple outputs in one child transaction
 3. **Batch Import**: CSV import for batch sending
 4. **Fee Bumping Recommendations**: Suggest optimal fee bumps based on mempool
@@ -237,3 +331,5 @@ Potential improvements for future versions:
 4. Confirm fee estimation matches actual network conditions
 5. Test edge cases (minimum fees, maximum recipients, etc.)
 6. Verify hardware wallet signing for all transaction types
+7. Test payjoin eligibility, parsing, and fallback behavior
+8. Validate coin control + decoy output combinations

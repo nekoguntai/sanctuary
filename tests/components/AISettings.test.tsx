@@ -140,7 +140,15 @@ describe('AISettings', () => {
 
   describe('Initial Loading', () => {
     it('should show loading spinner initially', () => {
-      mockGetSystemSettings.mockImplementation(() => new Promise(() => {})); // Never resolves
+      const pending = new Promise(() => {});
+      mockGetSystemSettings.mockReturnValue(pending);
+      mockGetOllamaContainerStatus.mockReturnValue(pending as any);
+      mockGetAIStatus.mockReturnValue(pending as any);
+      mockDetectOllama.mockReturnValue(pending as any);
+      mockListModels.mockReturnValue(pending as any);
+      mockPullModel.mockReturnValue(pending as any);
+      mockGetSystemResources.mockReturnValue(pending as any);
+      global.fetch = vi.fn(() => pending as any);
       const { container } = render(<AISettings />);
 
       // Look for the spinner via class since there's no role="status"

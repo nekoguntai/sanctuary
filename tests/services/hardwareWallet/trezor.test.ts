@@ -5,6 +5,7 @@
  * satoshi amount validation and BIP derivation path handling.
  */
 
+import { vi } from 'vitest';
 import {
   validateSatoshiAmount,
   getTrezorScriptType,
@@ -13,6 +14,15 @@ import {
   buildTrezorMultisig,
   convertToStandardXpub,
 } from '@/services/hardwareWallet/adapters/trezor';
+
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
 
 /**
  * Helper to create a valid multisig witnessScript

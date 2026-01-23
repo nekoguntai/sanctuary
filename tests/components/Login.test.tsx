@@ -61,6 +61,13 @@ vi.mock('../../components/ui/Button', () => ({
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+const renderLogin = async (Login: React.ComponentType) => {
+  render(<Login />);
+  await waitFor(() => {
+    expect(mockFetch).toHaveBeenCalled();
+  });
+};
+
 describe('Login Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,7 +92,7 @@ describe('Login Component', () => {
   it('should render login form by default', async () => {
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     expect(screen.getByText('Sanctuary')).toBeInTheDocument();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
@@ -96,7 +103,7 @@ describe('Login Component', () => {
   it('should display registration toggle when enabled', async () => {
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     await waitFor(() => {
       expect(screen.getByText(/don't have an account\? register/i)).toBeInTheDocument();
@@ -107,7 +114,7 @@ describe('Login Component', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     const toggleButton = await screen.findByText(/don't have an account\? register/i);
     await user.click(toggleButton);
@@ -121,7 +128,7 @@ describe('Login Component', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     const usernameInput = screen.getByLabelText(/username/i);
     const passwordInput = screen.getByLabelText(/password/i);
@@ -139,7 +146,7 @@ describe('Login Component', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     // Toggle to register mode
     const toggleButton = await screen.findByText(/don't have an account\? register/i);
@@ -162,7 +169,7 @@ describe('Login Component', () => {
   it('should check API health status on mount', async () => {
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/health');
@@ -173,7 +180,7 @@ describe('Login Component', () => {
     mockFetch.mockResolvedValue({ ok: true });
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     await waitFor(() => {
       expect(screen.getByText(/connected/i)).toBeInTheDocument();
@@ -184,7 +191,7 @@ describe('Login Component', () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     await waitFor(() => {
       expect(screen.getByText(/error/i)).toBeInTheDocument();
@@ -195,7 +202,7 @@ describe('Login Component', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     const usernameInput = screen.getByLabelText(/username/i) as HTMLInputElement;
     const passwordInput = screen.getByLabelText(/password/i) as HTMLInputElement;
@@ -249,7 +256,7 @@ describe('Login Component - 2FA Flow', () => {
     vi.resetModules();
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     expect(screen.getByText(/two-factor authentication/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument();
@@ -273,7 +280,7 @@ describe('Login Component - 2FA Flow', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     const codeInput = screen.getByLabelText(/verification code/i);
     await user.type(codeInput, '123456');
@@ -303,7 +310,7 @@ describe('Login Component - 2FA Flow', () => {
     const { Login } = await import('../../components/Login');
     const user = userEvent.setup();
 
-    render(<Login />);
+    await renderLogin(Login);
 
     const backButton = screen.getByText(/back to login/i);
     await user.click(backButton);
@@ -346,7 +353,7 @@ describe('Login Component - Error Display', () => {
     vi.resetModules();
     const { Login } = await import('../../components/Login');
 
-    render(<Login />);
+    await renderLogin(Login);
 
     expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
   });

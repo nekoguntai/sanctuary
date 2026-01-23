@@ -94,18 +94,24 @@ In Sanctuary Admin → AI Assistant:
 
 1. Enable AI Features
 2. Set AI Endpoint URL:
-   - Local: `http://host.docker.internal:11434` (Ollama on host)
+   - Bundled Ollama: `http://ollama:11434` (when started with `./start.sh --with-ai`)
+   - Host Ollama: `http://host.docker.internal:11434`
    - Cloud: `https://api.openai.com` (requires internet access)
 3. Set Model Name: e.g., `llama3.2:3b` or `gpt-4`
 
 ### Running Local AI (Ollama)
 
 ```bash
-# On Docker host (not in container)
+# Option A: Bundled Ollama container
+./start.sh --with-ai
+
+# Option B: Host-installed Ollama (not in container)
 ollama serve
 ollama pull llama3.2:3b
 
-# Endpoint: http://host.docker.internal:11434
+# Endpoints:
+# - Bundled: http://ollama:11434
+# - Host: http://host.docker.internal:11434
 ```
 
 ## API Endpoints

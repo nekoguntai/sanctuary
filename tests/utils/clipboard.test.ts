@@ -7,6 +7,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { copyToClipboard } from '../../utils/clipboard';
 
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 describe('clipboard', () => {
   let originalClipboard: typeof navigator.clipboard;
   let originalExecCommand: typeof document.execCommand;

@@ -11,6 +11,16 @@ import * as walletsApi from '../../src/api/wallets';
 import * as hardwareWallet from '../../services/hardwareWallet';
 import * as useWalletsHooks from '../../hooks/queries/useWallets';
 
+// Mock logger
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock navigation
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {

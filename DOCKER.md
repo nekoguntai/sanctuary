@@ -79,7 +79,7 @@ Use the analysis script to diagnose performance issues:
 
 ```bash
 # Copy the example environment file
-cp .env.docker.example .env
+cp .env.example .env
 
 # Edit the configuration (REQUIRED: change JWT_SECRET and POSTGRES_PASSWORD)
 nano .env
@@ -121,7 +121,7 @@ docker compose ps
 # Start services (recommended)
 ./start.sh
 
-# Start with AI features
+# Start with bundled AI (Ollama container)
 ./start.sh --with-ai
 
 # Stop services

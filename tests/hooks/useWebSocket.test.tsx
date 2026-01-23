@@ -735,26 +735,34 @@ describe('useWalletLogs', () => {
     });
   });
 
-  it('should subscribe to wallet log channel when enabled', () => {
-    renderHook(() => useWalletLogs('wallet-123', { enabled: true }));
+  const renderWalletLogs = async (walletId?: string, options?: { enabled?: boolean; maxEntries?: number }) => {
+    const hook = renderHook(() => useWalletLogs(walletId as any, options));
+    await waitFor(() => {
+      expect(hook.result.current.isLoading).toBe(false);
+    });
+    return hook;
+  };
+
+  it('should subscribe to wallet log channel when enabled', async () => {
+    await renderWalletLogs('wallet-123', { enabled: true });
 
     expect(mockSubscribe).toHaveBeenCalledWith('wallet:wallet-123:log');
   });
 
-  it('should not subscribe when walletId is undefined', () => {
-    renderHook(() => useWalletLogs(undefined));
+  it('should not subscribe when walletId is undefined', async () => {
+    await renderWalletLogs(undefined);
 
     expect(mockSubscribe).not.toHaveBeenCalled();
   });
 
-  it('should not subscribe when disabled', () => {
-    renderHook(() => useWalletLogs('wallet-123', { enabled: false }));
+  it('should not subscribe when disabled', async () => {
+    await renderWalletLogs('wallet-123', { enabled: false });
 
     expect(mockSubscribe).not.toHaveBeenCalled();
   });
 
-  it('should unsubscribe on unmount', () => {
-    const { unmount } = renderHook(() => useWalletLogs('wallet-456'));
+  it('should unsubscribe on unmount', async () => {
+    const { unmount } = await renderWalletLogs('wallet-456');
 
     unmount();
 
@@ -762,12 +770,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should accumulate log entries', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-789'));
-
-    // Wait for initial loading to complete before sending events
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    const { result } = await renderWalletLogs('wallet-789');
 
     const logEvent1 = {
       event: 'log',
@@ -813,7 +816,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should ignore log events from other wallets', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-abc'));
+    const { result } = await renderWalletLogs('wallet-abc');
 
     const logEvent = {
       event: 'log',
@@ -836,7 +839,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should ignore non-log events', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-def'));
+    const { result } = await renderWalletLogs('wallet-def');
 
     const transactionEvent = {
       event: 'transaction',
@@ -852,7 +855,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should respect maxEntries limit', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-ghi', { maxEntries: 3 }));
+    const { result } = await renderWalletLogs('wallet-ghi', { maxEntries: 3 });
 
     const createLog = (id: number) => ({
       event: 'log',
@@ -883,7 +886,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should clear logs when clearLogs is called', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-jkl'));
+    const { result } = await renderWalletLogs('wallet-jkl');
 
     const logEvent = {
       event: 'log',
@@ -912,8 +915,8 @@ describe('useWalletLogs', () => {
     expect(result.current.logs).toHaveLength(0);
   });
 
-  it('should toggle pause state', () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-mno'));
+  it('should toggle pause state', async () => {
+    const { result } = await renderWalletLogs('wallet-mno');
 
     expect(result.current.isPaused).toBe(false);
 
@@ -931,7 +934,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should not add logs when paused', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-pqr'));
+    const { result } = await renderWalletLogs('wallet-pqr');
 
     act(() => {
       result.current.togglePause();
@@ -958,7 +961,7 @@ describe('useWalletLogs', () => {
   });
 
   it('should use default maxEntries of 500', async () => {
-    const { result } = renderHook(() => useWalletLogs('wallet-stu'));
+    const { result } = await renderWalletLogs('wallet-stu');
 
     // This just checks that the hook renders without error
     expect(result.current.logs).toEqual([]);

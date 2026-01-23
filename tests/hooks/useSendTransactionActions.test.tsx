@@ -14,6 +14,15 @@ import { WalletType } from '../../types';
 import type { Wallet } from '../../types';
 import type { TransactionState } from '../../contexts/send/types';
 
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock the APIs
 vi.mock('../../src/api/transactions');
 vi.mock('../../src/api/drafts');

@@ -297,12 +297,20 @@ describe('LabelSelector', () => {
       it('disables trigger button when disabled', async () => {
         render(<LabelSelector {...defaultProps} disabled={true} />);
 
+        await waitFor(() => {
+          expect(labelsApi.getLabels).toHaveBeenCalled();
+        });
+
         const button = screen.getByRole('button');
         expect(button).toBeDisabled();
       });
 
       it('does not open dropdown when disabled', async () => {
         render(<LabelSelector {...defaultProps} disabled={true} />);
+
+        await waitFor(() => {
+          expect(labelsApi.getLabels).toHaveBeenCalled();
+        });
 
         fireEvent.click(screen.getByRole('button'));
 
@@ -386,6 +394,8 @@ describe('LabelSelector', () => {
 
   describe('className prop', () => {
     it('applies custom className', async () => {
+      vi.mocked(labelsApi.getLabels).mockImplementation(() => new Promise(() => {}));
+
       const { container } = render(
         <LabelSelector {...defaultProps} className="custom-class" />
       );

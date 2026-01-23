@@ -78,12 +78,15 @@ describe('AuditLogs', () => {
 
       expect(screen.getByText('Audit Logs')).toBeInTheDocument();
       expect(screen.getByText(/Security and activity logs/)).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(adminApi.getAuditLogs).toHaveBeenCalled();
+      });
     });
 
     it('shows loading state initially', () => {
-      vi.mocked(adminApi.getAuditLogs).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve({ logs: [], total: 0 } as any), 100))
-      );
+      vi.mocked(adminApi.getAuditLogs).mockImplementation(() => new Promise(() => {}));
+      vi.mocked(adminApi.getAuditLogStats).mockImplementation(() => new Promise(() => {}));
 
       render(<AuditLogs />);
 

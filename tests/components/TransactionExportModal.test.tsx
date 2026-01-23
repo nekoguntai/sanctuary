@@ -7,6 +7,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TransactionExportModal } from '../../components/TransactionExportModal';
 
+// Mock logger
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock transactions API
 vi.mock('../../src/api/transactions', () => ({
   exportTransactions: vi.fn(),

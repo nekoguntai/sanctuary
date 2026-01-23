@@ -70,9 +70,17 @@ describe('useHardwareWallet', () => {
     vi.restoreAllMocks();
   });
 
+  const renderHardwareWallet = async () => {
+    const hook = renderHook(() => useHardwareWallet());
+    await waitFor(() => {
+      expect(mockGetDevices).toHaveBeenCalled();
+    });
+    return hook;
+  };
+
   describe('Initial State', () => {
     it('should return initial state with no device connected', async () => {
-      const { result } = renderHook(() => useHardwareWallet());
+      const { result } = await renderHardwareWallet();
 
       expect(result.current.device).toBeNull();
       expect(result.current.isConnected).toBe(false);
@@ -481,8 +489,8 @@ describe('useHardwareWallet', () => {
   });
 
   describe('isSupported', () => {
-    it('should reflect hardware wallet support', () => {
-      const { result } = renderHook(() => useHardwareWallet());
+    it('should reflect hardware wallet support', async () => {
+      const { result } = await renderHardwareWallet();
 
       // Our mock returns true
       expect(result.current.isSupported).toBe(true);
@@ -517,8 +525,8 @@ describe('useHardwareWallet', () => {
       expect(result.current.isConnected).toBe(false);
     });
 
-    it('should be false when no device', () => {
-      const { result } = renderHook(() => useHardwareWallet());
+    it('should be false when no device', async () => {
+      const { result } = await renderHardwareWallet();
 
       expect(result.current.isConnected).toBe(false);
     });

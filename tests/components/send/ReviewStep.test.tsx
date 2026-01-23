@@ -9,6 +9,15 @@ import { ReviewStep } from '../../../components/send/steps/ReviewStep';
 import * as SendContext from '../../../contexts/send';
 import * as CurrencyContext from '../../../contexts/CurrencyContext';
 
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock the contexts
 vi.mock('../../../contexts/send', () => ({
   useSendTransaction: vi.fn(),
@@ -47,7 +56,7 @@ vi.mock('../../../components/ui/Button', () => ({
 
 // Mock API
 vi.mock('../../../src/api/bitcoin', () => ({
-  lookupAddresses: vi.fn().mockResolvedValue({ lookup: {} }),
+  lookupAddresses: vi.fn().mockImplementation(() => new Promise(() => {})),
 }));
 
 describe('ReviewStep', () => {

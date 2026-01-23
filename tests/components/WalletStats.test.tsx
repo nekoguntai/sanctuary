@@ -37,11 +37,11 @@ vi.mock('recharts', () => ({
     <div data-testid="responsive-container">{children}</div>
   ),
   AreaChart: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="area-chart">{children}</div>
+    <svg data-testid="area-chart">{children}</svg>
   ),
   Area: () => <div data-testid="area" />,
   BarChart: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="bar-chart">{children}</div>
+    <svg data-testid="bar-chart">{children}</svg>
   ),
   Bar: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="bar">{children}</div>

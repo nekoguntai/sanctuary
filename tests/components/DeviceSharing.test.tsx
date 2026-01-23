@@ -74,6 +74,8 @@ describe('DeviceSharing', () => {
       vi.mocked(devicesApi.getDeviceShareInfo).mockImplementation(
         () => new Promise(() => {}) // Never resolves
       );
+      vi.mocked(authApi.getUserGroups).mockImplementation(() => new Promise(() => {}));
+      vi.mocked(authApi.searchUsers).mockImplementation(() => new Promise(() => {}));
 
       render(<DeviceSharing {...defaultProps} />);
 

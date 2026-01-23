@@ -86,6 +86,13 @@ const createWrapper = () => {
   );
 };
 
+const renderBackupRestore = async (BackupRestore: React.ComponentType) => {
+  render(<BackupRestore />, { wrapper: createWrapper() });
+  await waitFor(() => {
+    expect(mockGetEncryptionKeys).toHaveBeenCalled();
+  });
+};
+
 describe('BackupRestore Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +108,7 @@ describe('BackupRestore Component', () => {
   it('should render backup tab by default', async () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     expect(screen.getByText(/backup & restore/i)).toBeInTheDocument();
     expect(screen.getByText(/create backup/i)).toBeInTheDocument();
@@ -112,7 +119,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Click the Restore tab
     const restoreTab = screen.getByRole('button', { name: /restore/i });
@@ -127,7 +134,7 @@ describe('BackupRestore Component', () => {
   it('should show encryption keys section', async () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Encryption keys section is always visible
     await waitFor(() => {
@@ -138,7 +145,7 @@ describe('BackupRestore Component', () => {
   it('should load encryption keys on mount', async () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     await waitFor(() => {
       expect(mockGetEncryptionKeys).toHaveBeenCalled();
@@ -149,7 +156,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Wait for keys to load
     await waitFor(() => {
@@ -177,7 +184,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     const descriptionInput = screen.getByPlaceholderText(/before migration/i);
     await user.type(descriptionInput, 'Test backup');
@@ -198,7 +205,7 @@ describe('BackupRestore Component', () => {
     global.URL.createObjectURL = mockCreateObjectURL;
     global.URL.revokeObjectURL = mockRevokeObjectURL;
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     const downloadButton = screen.getByText(/download backup/i);
     await user.click(downloadButton);
@@ -215,7 +222,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Click the Restore tab
     const restoreTab = screen.getByRole('button', { name: /restore/i });
@@ -230,7 +237,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Click the Restore tab
     const restoreTab = screen.getByRole('button', { name: /restore/i });
@@ -244,7 +251,7 @@ describe('BackupRestore Component', () => {
   it('should show about backups info when on backup tab', async () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     expect(screen.getByText(/about backups/i)).toBeInTheDocument();
     expect(screen.getByText(/backups include all users/i)).toBeInTheDocument();
@@ -254,7 +261,7 @@ describe('BackupRestore Component', () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
     const user = userEvent.setup();
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     // Click the Restore tab
     const restoreTab = screen.getByRole('button', { name: /restore/i });
@@ -280,7 +287,7 @@ describe('BackupRestore Component - Encryption Keys', () => {
   it('should display masked encryption keys by default', async () => {
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     await waitFor(() => {
       expect(screen.getByText(/encryption_key/i)).toBeInTheDocument();
@@ -296,7 +303,7 @@ describe('BackupRestore Component - Encryption Keys', () => {
 
     const { BackupRestore } = await import('../../components/BackupRestore');
 
-    render(<BackupRestore />, { wrapper: createWrapper() });
+    await renderBackupRestore(BackupRestore);
 
     await waitFor(() => {
       expect(screen.getByText(/failed to load encryption keys/i)).toBeInTheDocument();

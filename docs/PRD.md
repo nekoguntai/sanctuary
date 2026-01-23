@@ -1,6 +1,6 @@
 # Sanctuary - Product Requirements Document
 
-> **Version**: 0.7.19
+> **Version**: 0.8.7
 > **Last Updated**: January 2026
 > **Status**: Production
 
@@ -528,8 +528,14 @@ POST   /api/v1/wallets/:id/sync
 ### Transactions
 ```
 GET  /api/v1/wallets/:id/transactions
-POST /api/v1/wallets/:id/transactions
-POST /api/v1/transactions/:txid/rbf
+GET  /api/v1/transactions/:txid
+GET  /api/v1/transactions/:txid/raw
+POST /api/v1/wallets/:id/transactions/create
+POST /api/v1/wallets/:id/transactions/batch
+POST /api/v1/wallets/:id/transactions/broadcast
+POST /api/v1/wallets/:id/transactions/estimate
+POST /api/v1/wallets/:id/psbt/create
+POST /api/v1/wallets/:id/psbt/broadcast
 ```
 
 ### Devices
@@ -543,6 +549,18 @@ DELETE /api/v1/devices/:id
 ### Bitcoin
 ```
 GET  /api/v1/bitcoin/fees
-GET  /api/v1/bitcoin/price
+GET  /api/v1/bitcoin/fees/advanced
 POST /api/v1/bitcoin/broadcast
+POST /api/v1/bitcoin/transaction/:txid/rbf-check
+POST /api/v1/bitcoin/transaction/:txid/rbf
+POST /api/v1/bitcoin/transaction/cpfp
+POST /api/v1/bitcoin/transaction/batch
+POST /api/v1/bitcoin/utils/estimate-optimal-fee
+```
+
+### Price
+```
+GET  /api/v1/price
+GET  /api/v1/price/multiple
+POST /api/v1/price/convert/to-fiat
 ```

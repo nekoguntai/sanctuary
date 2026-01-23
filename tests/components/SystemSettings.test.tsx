@@ -43,34 +43,54 @@ describe('SystemSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-
     vi.mocked(adminApi.getSystemSettings).mockResolvedValue(mockSettings as any);
     vi.mocked(adminApi.updateSystemSettings).mockResolvedValue(undefined);
     vi.mocked(adminApi.getWebSocketStats).mockResolvedValue(mockWebSocketStats as any);
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  const renderSystemSettings = async () => {
+    render(<SystemSettings />);
+    await waitFor(() => {
+      expect(adminApi.getSystemSettings).toHaveBeenCalled();
+    });
+  };
+
+  const openWebSocketTab = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText('WebSocket'));
+    await waitFor(() => {
+      expect(adminApi.getWebSocketStats).toHaveBeenCalled();
+    });
+  };
 
   describe('rendering', () => {
     it('renders page header', async () => {
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
       expect(screen.getByText('System Settings')).toBeInTheDocument();
       expect(screen.getByText(/Configure system-wide settings/)).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(adminApi.getSystemSettings).toHaveBeenCalled();
+      });
     });
 
     it('renders tab navigation', async () => {
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
-      expect(screen.getByText('Access Control')).toBeInTheDocument();
-      expect(screen.getByText('WebSocket')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Access Control' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'WebSocket' })).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(adminApi.getSystemSettings).toHaveBeenCalled();
+      });
     });
 
     it('shows access control tab by default', async () => {
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText('Public Registration')).toBeInTheDocument();
@@ -80,9 +100,8 @@ describe('SystemSettings', () => {
 
   describe('access control tab', () => {
     it('shows loading state initially', async () => {
-      vi.mocked(adminApi.getSystemSettings).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve(mockSettings as any), 100))
-      );
+      vi.mocked(adminApi.getSystemSettings).mockImplementation(() => new Promise(() => {}));
+      vi.mocked(adminApi.getWebSocketStats).mockImplementation(() => new Promise(() => {}));
 
       render(<SystemSettings />);
 
@@ -90,7 +109,7 @@ describe('SystemSettings', () => {
     });
 
     it('displays registration status when enabled', async () => {
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText(/Public registration is enabled/)).toBeInTheDocument();
@@ -102,7 +121,7 @@ describe('SystemSettings', () => {
         registrationEnabled: false,
       } as any);
 
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText(/Public registration is disabled/)).toBeInTheDocument();
@@ -110,7 +129,7 @@ describe('SystemSettings', () => {
     });
 
     it('shows info about user management', async () => {
-      render(<SystemSettings />);
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText(/About User Management/)).toBeInTheDocument();
@@ -119,8 +138,8 @@ describe('SystemSettings', () => {
     });
 
     it('toggles registration setting', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText('Public Registration')).toBeInTheDocument();
@@ -142,8 +161,8 @@ describe('SystemSettings', () => {
     });
 
     it('shows success message after saving', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText('Public Registration')).toBeInTheDocument();
@@ -164,8 +183,8 @@ describe('SystemSettings', () => {
     it('shows error message when save fails', async () => {
       vi.mocked(adminApi.updateSystemSettings).mockRejectedValue(new Error('Permission denied'));
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
       await waitFor(() => {
         expect(screen.getByText('Public Registration')).toBeInTheDocument();
@@ -186,10 +205,10 @@ describe('SystemSettings', () => {
 
   describe('websocket tab', () => {
     it('switches to websocket tab when clicked', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('WebSocket Status')).toBeInTheDocument();
@@ -197,10 +216,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows connection stats', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Connections')).toBeInTheDocument();
@@ -210,10 +229,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows subscription stats', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Subscriptions')).toBeInTheDocument();
@@ -223,10 +242,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows unique users count', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Unique Users Connected')).toBeInTheDocument();
@@ -235,10 +254,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows rate limit configuration', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Rate Limit Configuration')).toBeInTheDocument();
@@ -250,10 +269,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows active channels expandable section', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText(/Active Channels/)).toBeInTheDocument();
@@ -261,10 +280,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows rate limit events section', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Rate Limit Events')).toBeInTheDocument();
@@ -286,10 +305,10 @@ describe('SystemSettings', () => {
 
       vi.mocked(adminApi.getWebSocketStats).mockResolvedValue(statsWithEvents as any);
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // Badge showing count
@@ -302,10 +321,10 @@ describe('SystemSettings', () => {
         () => new Promise(resolve => setTimeout(() => resolve(mockWebSocketStats as any), 100))
       );
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       // Should show loading skeleton
       expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
@@ -314,10 +333,10 @@ describe('SystemSettings', () => {
     it('shows error when websocket stats fail to load', async () => {
       vi.mocked(adminApi.getWebSocketStats).mockRejectedValue(new Error('Network error'));
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Network error')).toBeInTheDocument();
@@ -325,10 +344,10 @@ describe('SystemSettings', () => {
     });
 
     it('has refresh button', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // Find refresh button by its SVG icon class
@@ -340,10 +359,10 @@ describe('SystemSettings', () => {
 
   describe('connection progress bar', () => {
     it('shows green progress when connections low', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // 5/100 = 5% should be green (success)
@@ -358,10 +377,10 @@ describe('SystemSettings', () => {
         connections: { ...mockWebSocketStats.connections, current: 60 },
       } as any);
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // 60/100 = 60% should be warning
@@ -376,10 +395,10 @@ describe('SystemSettings', () => {
         connections: { ...mockWebSocketStats.connections, current: 85 },
       } as any);
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // 85/100 = 85% should be rose
@@ -391,10 +410,10 @@ describe('SystemSettings', () => {
 
   describe('channel grouping', () => {
     it('groups wallet channels by wallet ID', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         // Should show wallet count
@@ -403,10 +422,10 @@ describe('SystemSettings', () => {
     });
 
     it('shows global channels separately', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<SystemSettings />);
+      const user = userEvent.setup();
+      await renderSystemSettings();
 
-      await user.click(screen.getByText('WebSocket'));
+      await openWebSocketTab(user);
 
       await waitFor(() => {
         expect(screen.getByText('Global')).toBeInTheDocument();

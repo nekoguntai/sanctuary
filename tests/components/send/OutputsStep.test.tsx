@@ -166,79 +166,86 @@ describe('OutputsStep', () => {
     vi.mocked(TransactionsApi.analyzeSpendPrivacy).mockResolvedValue({} as any);
   });
 
+  const renderOutputsStep = async () => {
+    render(<OutputsStep />);
+    await waitFor(() => {
+      expect(TransactionsApi.getWalletPrivacy).toHaveBeenCalled();
+    });
+  };
+
   describe('Rendering', () => {
-    it('renders header for standard transaction', () => {
-      render(<OutputsStep />);
+    it('renders header for standard transaction', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByText('Compose Transaction')).toBeInTheDocument();
       expect(screen.getByText('Configure your transaction')).toBeInTheDocument();
     });
 
-    it('renders header for consolidation transaction', () => {
+    it('renders header for consolidation transaction', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: { ...defaultContext.state, transactionType: 'consolidation' },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText('Consolidation')).toBeInTheDocument();
       expect(screen.getByText('Select UTXOs to consolidate and destination')).toBeInTheDocument();
     });
 
-    it('renders header for sweep transaction', () => {
+    it('renders header for sweep transaction', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: { ...defaultContext.state, transactionType: 'sweep' },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText('Sweep')).toBeInTheDocument();
       expect(screen.getByText('Sweep all funds to a destination')).toBeInTheDocument();
     });
 
-    it('renders summary bar with balances', () => {
-      render(<OutputsStep />);
+    it('renders summary bar with balances', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByText('Available:')).toBeInTheDocument();
       expect(screen.getByText('Fee:')).toBeInTheDocument();
       expect(screen.getByText('Max:')).toBeInTheDocument();
     });
 
-    it('renders output rows', () => {
-      render(<OutputsStep />);
+    it('renders output rows', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByTestId('output-row-0')).toBeInTheDocument();
     });
 
-    it('renders Add Recipient button for standard transaction', () => {
-      render(<OutputsStep />);
+    it('renders Add Recipient button for standard transaction', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByText('Add Recipient')).toBeInTheDocument();
     });
 
-    it('does not render Add Recipient button for consolidation', () => {
+    it('does not render Add Recipient button for consolidation', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: { ...defaultContext.state, transactionType: 'consolidation' },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.queryByText('Add Recipient')).not.toBeInTheDocument();
     });
 
-    it('renders collapsible panels', () => {
-      render(<OutputsStep />);
+    it('renders collapsible panels', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByText('Coin Control')).toBeInTheDocument();
       expect(screen.getByText('Network Fee')).toBeInTheDocument();
       expect(screen.getByText('Advanced Options')).toBeInTheDocument();
     });
 
-    it('renders wizard navigation', () => {
-      render(<OutputsStep />);
+    it('renders wizard navigation', async () => {
+      await renderOutputsStep();
 
       expect(screen.getByTestId('wizard-navigation')).toBeInTheDocument();
     });
@@ -247,14 +254,14 @@ describe('OutputsStep', () => {
   describe('Output management', () => {
     it('calls addOutput when clicking Add Recipient', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Add Recipient'));
 
       expect(mockAddOutput).toHaveBeenCalled();
     });
 
-    it('displays multiple outputs', () => {
+    it('displays multiple outputs', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: {
@@ -267,7 +274,7 @@ describe('OutputsStep', () => {
         },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByTestId('output-row-0')).toBeInTheDocument();
       expect(screen.getByTestId('output-row-1')).toBeInTheDocument();
@@ -277,7 +284,7 @@ describe('OutputsStep', () => {
   describe('Coin Control panel', () => {
     it('expands coin control panel when clicked', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
 
@@ -285,7 +292,7 @@ describe('OutputsStep', () => {
       expect(screen.getByText('Clear')).toBeInTheDocument();
     });
 
-    it('shows UTXO count badge when UTXOs are selected', () => {
+    it('shows UTXO count badge when UTXOs are selected', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: {
@@ -295,14 +302,14 @@ describe('OutputsStep', () => {
         },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText('2 UTXOs')).toBeInTheDocument();
     });
 
     it('calls selectAllUtxos when clicking Select All', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
       await user.click(screen.getByText('Select All'));
@@ -312,7 +319,7 @@ describe('OutputsStep', () => {
 
     it('calls clearUtxoSelection when clicking Clear', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
       await user.click(screen.getByText('Clear'));
@@ -333,7 +340,7 @@ describe('OutputsStep', () => {
         estimatedFee: 1000,
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       // Panel is already expanded (showCoinControl: true), so warning should be visible
       expect(screen.getByText(/Need.*more to cover transaction/)).toBeInTheDocument();
@@ -347,7 +354,7 @@ describe('OutputsStep', () => {
         spendableUtxos: [],
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
 
@@ -364,7 +371,7 @@ describe('OutputsStep', () => {
         ],
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
 
@@ -381,7 +388,7 @@ describe('OutputsStep', () => {
         ],
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Coin Control'));
 
@@ -392,15 +399,15 @@ describe('OutputsStep', () => {
   describe('Fee panel', () => {
     it('expands fee panel when clicked', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getByText('Network Fee'));
 
       expect(screen.getByTestId('fee-selector')).toBeInTheDocument();
     });
 
-    it('shows current fee rate in panel header', () => {
-      render(<OutputsStep />);
+    it('shows current fee rate in panel header', async () => {
+      await renderOutputsStep();
 
       // Multiple elements may show the fee rate (panel header and warning)
       const feeRateElements = screen.getAllByText(/25 sat\/vB/);
@@ -411,14 +418,14 @@ describe('OutputsStep', () => {
   describe('Advanced Options panel', () => {
     it('expands advanced options panel when clicked', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await user.click(screen.getAllByText('Advanced Options')[0]);
 
       expect(screen.getByTestId('advanced-options')).toBeInTheDocument();
     });
 
-    it('shows active options in panel header', () => {
+    it('shows active options in panel header', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: {
@@ -429,37 +436,37 @@ describe('OutputsStep', () => {
         },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText(/RBF, Decoys, Subtract/)).toBeInTheDocument();
     });
   });
 
   describe('Warnings', () => {
-    it('shows no spendable funds warning when wallet is empty', () => {
+    it('shows no spendable funds warning when wallet is empty', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         spendableUtxos: [],
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText('No spendable funds available')).toBeInTheDocument();
     });
 
-    it('shows fee warning when fee is excessive', () => {
+    it('shows fee warning when fee is excessive', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         totalOutputAmount: 10000,
         estimatedFee: 5000, // 50% fee
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText(/Fee is.*% of the amount being sent/)).toBeInTheDocument();
     });
 
-    it('shows fee rate warning when much higher than economy', () => {
+    it('shows fee rate warning when much higher than economy', async () => {
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({
         ...defaultContext,
         state: {
@@ -469,7 +476,7 @@ describe('OutputsStep', () => {
         fees: { fastestFee: 50, halfHourFee: 25, hourFee: 10, economyFee: 5, minimumFee: 1 },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       expect(screen.getByText(/Fee rate.*is.*x the economy rate/)).toBeInTheDocument();
     });
@@ -478,7 +485,7 @@ describe('OutputsStep', () => {
   describe('BIP21 parsing', () => {
     it('parses BIP21 URI and updates address', async () => {
       const user = userEvent.setup();
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       const addressInput = screen.getByTestId('address-input-0');
       await user.clear(addressInput);
@@ -500,7 +507,7 @@ describe('OutputsStep', () => {
         },
       } as any);
 
-      render(<OutputsStep />);
+      await renderOutputsStep();
 
       await waitFor(() => {
         expect(TransactionsApi.analyzeSpendPrivacy).toHaveBeenCalled();

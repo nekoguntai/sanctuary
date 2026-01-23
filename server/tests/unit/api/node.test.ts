@@ -66,6 +66,16 @@ import tls from 'tls';
 const mockNetConnect = net.connect as ReturnType<typeof vi.fn>;
 const mockTlsConnect = tls.connect as ReturnType<typeof vi.fn>;
 
+const waitForListener = async (emitter: EventEmitter, event: string) => {
+  for (let i = 0; i < 50; i += 1) {
+    if (emitter.listenerCount(event) > 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Listener not attached for event: ${event}`);
+};
+
 describe('Node API Routes', () => {
   let app: Express;
 
@@ -152,10 +162,8 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ nodeType: 'electrum', host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        // Simulate connection error after short delay
-        setTimeout(() => {
-          mockTlsSocket.emit('error', new Error('Connection refused'));
-        }, 10);
+        await waitForListener(mockTlsSocket, 'error');
+        mockTlsSocket.emit('error', new Error('Connection refused'));
 
         const response = await responsePromise;
         // Should not be a 400 validation error
@@ -200,18 +208,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        // Simulate connection and response
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: ['ElectrumX 1.16.0', '1.4'],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: ['ElectrumX 1.16.0', '1.4'],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -230,17 +236,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: ['ElectrumX 1.16.0', '1.4'],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: ['ElectrumX 1.16.0', '1.4'],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -259,17 +264,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50001, protocol: 'tcp' });
 
-        setTimeout(() => {
-          mockSocket.emit('connect');
-          mockSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: ['Fulcrum 1.9.0', '1.4.2'],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockSocket, 'connect');
+        mockSocket.emit('connect');
+        mockSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: ['Fulcrum 1.9.0', '1.4.2'],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -287,17 +291,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50001, protocol: 'tcp' });
 
-        setTimeout(() => {
-          mockSocket.emit('connect');
-          mockSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: ['Fulcrum 1.9.0', '1.4.2'],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockSocket, 'connect');
+        mockSocket.emit('connect');
+        mockSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: ['Fulcrum 1.9.0', '1.4.2'],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -316,9 +319,8 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('error', new Error('Connection refused'));
-        }, 10);
+        await waitForListener(mockTlsSocket, 'error');
+        mockTlsSocket.emit('error', new Error('Connection refused'));
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -332,9 +334,8 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('timeout');
-        }, 10);
+        await waitForListener(mockTlsSocket, 'timeout');
+        mockTlsSocket.emit('timeout');
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -348,17 +349,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              error: { code: -32600, message: 'Invalid version' },
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            error: { code: -32600, message: 'Invalid version' },
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -372,17 +372,16 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: [],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: [],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -399,21 +398,20 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          // Verify write was called with JSON-RPC request
-          expect(mockTlsSocket.write).toHaveBeenCalledWith(
-            expect.stringContaining('"method":"server.version"')
-          );
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-              result: ['Test', '1.4'],
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        // Verify write was called with JSON-RPC request
+        expect(mockTlsSocket.write).toHaveBeenCalledWith(
+          expect.stringContaining('"method":"server.version"')
+        );
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: ['Test', '1.4'],
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -425,12 +423,11 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          // Send response in two chunks
-          mockTlsSocket.emit('data', '{"jsonrpc":"2.0","id":1,');
-          mockTlsSocket.emit('data', '"result":["ElectrumX","1.4"]}\n');
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        // Send response in two chunks
+        mockTlsSocket.emit('data', '{"jsonrpc":"2.0","id":1,');
+        mockTlsSocket.emit('data', '"result":["ElectrumX","1.4"]}\n');
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -443,16 +440,15 @@ describe('Node API Routes', () => {
           .set('Authorization', 'Bearer valid-token')
           .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
 
-        setTimeout(() => {
-          mockTlsSocket.emit('connect');
-          mockTlsSocket.emit(
-            'data',
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id: 1,
-            }) + '\n'
-          );
-        }, 10);
+        await waitForListener(mockTlsSocket, 'connect');
+        mockTlsSocket.emit('connect');
+        mockTlsSocket.emit(
+          'data',
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+          }) + '\n'
+        );
 
         const response = await responsePromise;
         expect(response.status).toBe(200);

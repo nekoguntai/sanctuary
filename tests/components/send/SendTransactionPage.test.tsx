@@ -12,6 +12,15 @@ import * as transactionsApi from '../../../src/api/transactions';
 import * as bitcoinApi from '../../../src/api/bitcoin';
 import * as devicesApi from '../../../src/api/devices';
 
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock navigate
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {

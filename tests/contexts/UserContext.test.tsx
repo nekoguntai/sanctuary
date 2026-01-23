@@ -20,6 +20,15 @@ import * as authApi from '../../src/api/auth';
 import * as twoFactorApi from '../../src/api/twoFactor';
 import { ApiError } from '../../src/api/client';
 
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock the APIs
 vi.mock('../../src/api/auth', () => ({
   isAuthenticated: vi.fn(() => false),
@@ -539,7 +548,9 @@ describe('UserContext', () => {
 
       render(<UserProvider><Test2FA /></UserProvider>);
 
-      expect(screen.getByTestId('pending')).toHaveTextContent('no');
+      await waitFor(() => {
+        expect(screen.getByTestId('pending')).toHaveTextContent('no');
+      });
     });
   });
 

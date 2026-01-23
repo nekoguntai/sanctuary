@@ -12,6 +12,16 @@ import * as SendContext from '../../../contexts/send';
 import * as useSendTransactionActionsHook from '../../../hooks/useSendTransactionActions';
 import * as useHardwareWalletHook from '../../../hooks/useHardwareWallet';
 
+// Mock logger
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock context
 vi.mock('../../../contexts/send', () => ({
   SendTransactionProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

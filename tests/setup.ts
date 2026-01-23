@@ -1,6 +1,14 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+const originalConsoleWarn = console.warn.bind(console);
+vi.spyOn(console, 'warn').mockImplementation((message?: unknown, ...args: unknown[]) => {
+  if (typeof message === 'string' && message.startsWith('[API] Request failed')) {
+    return;
+  }
+  originalConsoleWarn(message, ...args);
+});
+
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

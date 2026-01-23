@@ -110,10 +110,7 @@ vi.mock('lucide-react', () => ({
 vi.mock('../../components/ui/CustomIcons', () => ({
   SingleSigIcon: ({ className }: { className?: string }) => <span data-testid="single-sig-icon" className={className} />,
   MultiSigIcon: ({ className }: { className?: string }) => <span data-testid="multi-sig-icon" className={className} />,
-  getDeviceIcon: () => {
-    const DeviceIcon = () => <span data-testid="device-icon" />;
-    return DeviceIcon;
-  },
+  getDeviceIcon: () => <span data-testid="device-icon" />,
 }));
 
 // Mock Button component
@@ -139,6 +136,13 @@ const createWrapper = () => {
   );
 };
 
+const renderCreateWallet = async (CreateWallet: React.ComponentType) => {
+  render(<CreateWallet />, { wrapper: createWrapper() });
+  await waitFor(() => {
+    expect(screen.getByText(/select wallet topology/i)).toBeInTheDocument();
+  });
+};
+
 describe('CreateWallet Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,7 +151,7 @@ describe('CreateWallet Component', () => {
   it('should render step 1 with wallet type selection', async () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     expect(screen.getByText(/select wallet topology/i)).toBeInTheDocument();
     expect(screen.getByText(/single signature/i)).toBeInTheDocument();
@@ -158,7 +162,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
     await user.click(singleSigButton!);
@@ -170,7 +174,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     const multiSigButton = screen.getByText(/multi signature/i).closest('button');
     await user.click(multiSigButton!);
@@ -182,7 +186,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select single-sig
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -202,7 +206,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select single-sig
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -223,7 +227,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select single-sig
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -243,7 +247,7 @@ describe('CreateWallet Component', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select single-sig
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -276,7 +280,7 @@ describe('CreateWallet Component - Multi-step Navigation', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Go to step 2
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -299,7 +303,7 @@ describe('CreateWallet Component - Multi-step Navigation', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Step 1: Select single-sig
     const singleSigButton = screen.getByText(/single signature/i).closest('button');
@@ -360,7 +364,7 @@ describe('CreateWallet Component - Multi-sig Validation', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select multi-sig
     const multiSigButton = screen.getByText(/multi signature/i).closest('button');
@@ -390,7 +394,7 @@ describe('CreateWallet Component - Multi-sig Validation', () => {
     const { CreateWallet } = await import('../../components/CreateWallet');
     const user = userEvent.setup();
 
-    render(<CreateWallet />, { wrapper: createWrapper() });
+    await renderCreateWallet(CreateWallet);
 
     // Select multi-sig
     const multiSigButton = screen.getByText(/multi signature/i).closest('button');

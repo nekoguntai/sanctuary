@@ -8,6 +8,16 @@ import userEvent from '@testing-library/user-event';
 import { ChangePasswordModal } from '../../components/ChangePasswordModal';
 import * as authApi from '../../src/api/auth';
 
+// Mock logger
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock API
 vi.mock('../../src/api/auth', () => ({
   changePassword: vi.fn(),

@@ -7,6 +7,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QRSigningModal } from '../../../components/qr/QRSigningModal';
 
+// Mock logger
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 // Mock AnimatedQRCode component
 vi.mock('../../../components/qr/AnimatedQRCode', () => ({
   AnimatedQRCode: ({ psbtBase64 }: { psbtBase64: string }) => (

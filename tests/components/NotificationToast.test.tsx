@@ -45,14 +45,17 @@ describe('NotificationToast', () => {
   });
 
   it('dismisses when close button clicked', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.useRealTimers(); // Use real timers for this test since userEvent needs them
+    const user = userEvent.setup();
     const onDismiss = vi.fn();
 
     render(<NotificationToast notification={baseNotification} onDismiss={onDismiss} />);
 
     await user.click(screen.getByLabelText('Dismiss notification'));
-    vi.advanceTimersByTime(300);
+    // Wait for animation timeout
+    await new Promise((resolve) => setTimeout(resolve, 350));
     expect(onDismiss).toHaveBeenCalledWith('notif-1');
+    vi.useFakeTimers(); // Restore fake timers for other tests
   });
 
   it('auto-dismisses after duration', () => {

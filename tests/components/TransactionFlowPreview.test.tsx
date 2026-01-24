@@ -47,15 +47,16 @@ describe('TransactionFlowPreview', () => {
     expect(screen.getByText('(est.)')).toBeInTheDocument();
     expect(screen.getByText('1 in')).toBeInTheDocument();
     expect(screen.getByText('2 out')).toBeInTheDocument();
-    expect(screen.getByText('~50000 sats')).toBeInTheDocument();
+    // ~50000 sats appears twice (input amount and total input) - use getAllByText
+    expect(screen.getAllByText('~50000 sats')).toHaveLength(2);
     expect(screen.getByText('~30000 sats')).toBeInTheDocument();
     expect(screen.getByText('~18000 sats')).toBeInTheDocument();
     expect(screen.getByText('Fee (5 sat/vB)')).toBeInTheDocument();
-    expect(screen.getByText('~2000 sats')).toBeInTheDocument();
+    // Fee uses toLocaleString() which adds comma formatting
+    expect(screen.getByText('~2,000 sats')).toBeInTheDocument();
     expect(screen.getByText('Savings')).toBeInTheDocument();
     expect(screen.getByText('change')).toBeInTheDocument();
     expect(screen.getByText('Change')).toBeInTheDocument();
-    expect(screen.getByText('~50000 sats')).toBeInTheDocument();
     expect(screen.getByText('~48000 sats')).toBeInTheDocument();
   });
 });

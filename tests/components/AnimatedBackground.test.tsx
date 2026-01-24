@@ -6,6 +6,74 @@
 
 import { render } from '@testing-library/react';
 import { vi } from 'vitest';
+
+// Define hook names inline in the mock factory to avoid hoisting issues
+vi.mock('../../components/animations', () => {
+  const hookNames = [
+    'useSakuraPetals',
+    'useFloatingShields',
+    'useBitcoinParticles',
+    'useStackingBlocks',
+    'useDigitalRain',
+    'useConstellation',
+    'useSanctuaryLogo',
+    'useSnowfall',
+    'useFireflies',
+    'useInkDrops',
+    'useRipplingWater',
+    'useFallingLeaves',
+    'useEmbersRising',
+    'useGentleRain',
+    'useNorthernLights',
+    'useKoiShadows',
+    'useBambooSway',
+    'useLotusBloom',
+    'useFloatingLanterns',
+    'useMoonlitClouds',
+    'useTidePools',
+    'useTrainStation',
+    'useSereneMeadows',
+    'useStillPonds',
+    'useDesertDunes',
+    'useDucklingParade',
+    'useBunnyMeadow',
+    'useStargazing',
+    'useMountainMist',
+    'useLavenderFields',
+    'useZenSandGarden',
+    'useSunsetSailing',
+    'useRaindropWindow',
+    'useButterflyGarden',
+    'useDandelionWishes',
+    'useMistyValley',
+    'useGentleWaves',
+    'useJellyfishDrift',
+    'useWindChimes',
+    'useSakuraRedux',
+    'useSatsSymbol',
+    'useFireworks',
+    'useHashStorm',
+    'useIceCrystals',
+    'useAutumnWind',
+    'useSmokeCalligraphy',
+    'useBreath',
+    'useMyceliumNetwork',
+    'useOilSlick',
+    'useBioluminescentBeach',
+    'useVolcanicIslands',
+    'useTidalPatterns',
+    'useEclipse',
+    'usePaperBoats',
+    'usePaperAirplanes',
+    'useThunderstorm',
+  ];
+  const exports: Record<string, unknown> = {};
+  hookNames.forEach((name) => {
+    exports[name] = vi.fn();
+  });
+  return exports;
+});
+
 import {
   ANIMATED_PATTERNS,
   isAnimatedPattern,
@@ -14,73 +82,6 @@ import {
 } from '../../components/AnimatedBackground';
 import * as animations from '../../components/animations';
 import { globalPatterns } from '../../themes/patterns';
-
-const hookNames = [
-  'useSakuraPetals',
-  'useFloatingShields',
-  'useBitcoinParticles',
-  'useStackingBlocks',
-  'useDigitalRain',
-  'useConstellation',
-  'useSanctuaryLogo',
-  'useSnowfall',
-  'useFireflies',
-  'useInkDrops',
-  'useRipplingWater',
-  'useFallingLeaves',
-  'useEmbersRising',
-  'useGentleRain',
-  'useNorthernLights',
-  'useKoiShadows',
-  'useBambooSway',
-  'useLotusBloom',
-  'useFloatingLanterns',
-  'useMoonlitClouds',
-  'useTidePools',
-  'useTrainStation',
-  'useSereneMeadows',
-  'useStillPonds',
-  'useDesertDunes',
-  'useDucklingParade',
-  'useBunnyMeadow',
-  'useStargazing',
-  'useMountainMist',
-  'useLavenderFields',
-  'useZenSandGarden',
-  'useSunsetSailing',
-  'useRaindropWindow',
-  'useButterflyGarden',
-  'useDandelionWishes',
-  'useMistyValley',
-  'useGentleWaves',
-  'useJellyfishDrift',
-  'useWindChimes',
-  'useSakuraRedux',
-  'useSatsSymbol',
-  'useFireworks',
-  'useHashStorm',
-  'useIceCrystals',
-  'useAutumnWind',
-  'useSmokeCalligraphy',
-  'useBreath',
-  'useMyceliumNetwork',
-  'useOilSlick',
-  'useBioluminescentBeach',
-  'useVolcanicIslands',
-  'useTidalPatterns',
-  'useEclipse',
-  'usePaperBoats',
-  'usePaperAirplanes',
-  'useThunderstorm',
-];
-
-vi.mock('../../components/animations', () => {
-  const exports: Record<string, unknown> = {};
-  hookNames.forEach((name) => {
-    exports[name] = vi.fn();
-  });
-  return exports;
-});
 
 describe('AnimatedBackground', () => {
   describe('ANIMATED_PATTERNS array', () => {

@@ -13,81 +13,86 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
-class MockUR {
-  type: string;
-  private cbor: unknown;
-  constructor(cbor: unknown, type: string) {
-    this.cbor = cbor;
-    this.type = type;
-  }
-  decodeCBOR() {
-    return this.cbor;
-  }
-}
-
-class MockUREncoder {
-  fragmentsLength: number;
-  private counter = 0;
-  constructor(_ur: MockUR, maxFragmentLength: number) {
-    this.fragmentsLength = maxFragmentLength >= 100 ? 1 : 2;
-  }
-  nextPart() {
-    this.counter += 1;
-    return `ur:part:${this.counter}`;
-  }
-}
-
-class MockURDecoder {
-  complete = false;
-  success = true;
-  error: string | null = null;
-  progress = 0.5;
-  ur: MockUR | null = null;
-
-  receivePart(_part: string) {
-    // no-op
-  }
-  estimatedPercentComplete() {
-    return this.progress;
-  }
-  isComplete() {
-    return this.complete;
-  }
-  isError() {
-    return Boolean(this.error);
-  }
-  resultError() {
-    return this.error;
-  }
-  isSuccess() {
-    return this.success;
-  }
-  resultUR() {
-    return this.ur as MockUR;
-  }
-}
-
-class MockCryptoPSBT {
-  private buffer: Buffer;
-  constructor(buffer: Buffer) {
-    this.buffer = buffer;
-  }
-  toCBOR() {
-    return this.buffer;
-  }
-  getPSBT() {
-    return this.buffer;
-  }
-  static fromCBOR = vi.fn((data: unknown) => {
-    if (data instanceof Uint8Array) {
-      return new MockCryptoPSBT(Buffer.from(data));
+// Use vi.hoisted to define mock classes before vi.mock hoisting
+const { MockUR, MockUREncoder, MockURDecoder, MockCryptoPSBT } = vi.hoisted(() => {
+  class MockUR {
+    type: string;
+    private cbor: unknown;
+    constructor(cbor: unknown, type: string) {
+      this.cbor = cbor;
+      this.type = type;
     }
-    if (data && typeof data === 'object' && 'data' in (data as Record<string, unknown>)) {
-      return new MockCryptoPSBT(Buffer.from((data as { data: Uint8Array }).data));
+    decodeCBOR() {
+      return this.cbor;
     }
-    throw new Error('Invalid CBOR');
-  });
-}
+  }
+
+  class MockUREncoder {
+    fragmentsLength: number;
+    private counter = 0;
+    constructor(_ur: MockUR, maxFragmentLength: number) {
+      this.fragmentsLength = maxFragmentLength >= 100 ? 1 : 2;
+    }
+    nextPart() {
+      this.counter += 1;
+      return `ur:part:${this.counter}`;
+    }
+  }
+
+  class MockURDecoder {
+    complete = false;
+    success = true;
+    error: string | null = null;
+    progress = 0.5;
+    ur: MockUR | null = null;
+
+    receivePart(_part: string) {
+      // no-op
+    }
+    estimatedPercentComplete() {
+      return this.progress;
+    }
+    isComplete() {
+      return this.complete;
+    }
+    isError() {
+      return Boolean(this.error);
+    }
+    resultError() {
+      return this.error;
+    }
+    isSuccess() {
+      return this.success;
+    }
+    resultUR() {
+      return this.ur as MockUR;
+    }
+  }
+
+  class MockCryptoPSBT {
+    private buffer: Buffer;
+    constructor(buffer: Buffer) {
+      this.buffer = buffer;
+    }
+    toCBOR() {
+      return this.buffer;
+    }
+    getPSBT() {
+      return this.buffer;
+    }
+    static fromCBOR = vi.fn((data: unknown) => {
+      if (data instanceof Uint8Array) {
+        return new MockCryptoPSBT(Buffer.from(data));
+      }
+      if (data && typeof data === 'object' && 'data' in (data as Record<string, unknown>)) {
+        return new MockCryptoPSBT(Buffer.from((data as { data: Uint8Array }).data));
+      }
+      throw new Error('Invalid CBOR');
+    });
+  }
+
+  return { MockUR, MockUREncoder, MockURDecoder, MockCryptoPSBT };
+});
 
 vi.mock('@keystonehq/bc-ur-registry', () => ({
   CryptoPSBT: MockCryptoPSBT,

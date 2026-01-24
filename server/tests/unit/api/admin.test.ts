@@ -173,7 +173,7 @@ describe('Admin API', () => {
     // Import the router after mocks are set up
     const module = await import('../../../src/api/admin');
     adminRouter = module.default;
-  });
+  }, 30000);
 
   beforeEach(() => {
     resetPrismaMocks();

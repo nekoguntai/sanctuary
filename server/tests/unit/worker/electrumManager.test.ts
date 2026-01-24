@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
 
 // Mock prisma before importing the module
 vi.mock('../../../src/models/prisma', () => ({
@@ -21,15 +22,7 @@ vi.mock('../../../src/models/prisma', () => ({
 
 // Mock the electrum client
 vi.mock('../../../src/services/bitcoin/electrum', () => ({
-  getElectrumClientForNetwork: vi.fn(() => ({
-    connect: vi.fn().mockResolvedValue(undefined),
-    getServerVersion: vi.fn().mockResolvedValue({ server: 'test', protocol: '1.4' }),
-    subscribeHeaders: vi.fn().mockResolvedValue({ height: 100000, hex: '00'.repeat(80) }),
-    subscribeAddress: vi.fn().mockResolvedValue('status'),
-    subscribeAddressBatch: vi.fn().mockResolvedValue([]),
-    on: vi.fn(),
-    off: vi.fn(),
-  })),
+  getElectrumClientForNetwork: vi.fn(),
   closeAllElectrumClients: vi.fn(),
 }));
 
@@ -45,11 +38,38 @@ vi.mock('../../../src/services/bitcoin/blockchain', () => ({
   setCachedBlockHeight: vi.fn(),
 }));
 
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
+vi.mock('../../../src/infrastructure', () => ({
+  acquireLock: vi.fn(),
+  extendLock: vi.fn(),
+  releaseLock: vi.fn(),
+}));
+
 import prisma from '../../../src/models/prisma';
+import { acquireLock, extendLock, releaseLock } from '../../../src/infrastructure';
+import { getElectrumClientForNetwork } from '../../../src/services/bitcoin/electrum';
+import { setCachedBlockHeight } from '../../../src/services/bitcoin/blockchain';
 import { ElectrumSubscriptionManager } from '../../../src/worker/electrumManager';
+
+class MockElectrumClient extends EventEmitter {
+  connect = vi.fn().mockResolvedValue(undefined);
+  getServerVersion = vi.fn().mockResolvedValue({ server: 'test', protocol: '1.4' });
+  subscribeHeaders = vi.fn().mockResolvedValue({ height: 100000, hex: '00'.repeat(80) });
+  subscribeAddress = vi.fn().mockResolvedValue('status');
+  subscribeAddressBatch = vi.fn().mockResolvedValue([]);
+}
 
 describe('ElectrumSubscriptionManager', () => {
   let manager: ElectrumSubscriptionManager;
+  let mockClient: MockElectrumClient;
   const mockCallbacks = {
     onNewBlock: vi.fn(),
     onAddressActivity: vi.fn(),
@@ -57,6 +77,8 @@ describe('ElectrumSubscriptionManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClient = new MockElectrumClient();
+    vi.mocked(getElectrumClientForNetwork).mockReturnValue(mockClient as unknown as any);
     manager = new ElectrumSubscriptionManager(mockCallbacks);
   });
 
@@ -195,6 +217,79 @@ describe('ElectrumSubscriptionManager', () => {
       expect(result.removed).toBe(0);
       expect(result.added).toBe(0);
       expect(addressToWallet.size).toBe(2);
+    });
+  });
+
+  describe('start', () => {
+    it('returns early when subscription lock is not acquired', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce(null);
+
+      await manager.start();
+
+      expect(getElectrumClientForNetwork).not.toHaveBeenCalled();
+      expect(manager.getHealthMetrics().isRunning).toBe(false);
+    });
+
+    it('connects to primary network and subscribes to headers', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce({ key: 'lock', token: 'token' });
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([]);
+
+      await manager.start();
+
+      expect(mockClient.connect).toHaveBeenCalled();
+      expect(mockClient.subscribeHeaders).toHaveBeenCalled();
+      expect(setCachedBlockHeight).toHaveBeenCalledWith(100000, 'mainnet');
+      expect(manager.isConnected()).toBe(true);
+    });
+  });
+
+  describe('event handling', () => {
+    it('invokes callbacks for new blocks and address activity', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce({ key: 'lock', token: 'token' });
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([]);
+
+      await manager.start();
+
+      (manager as unknown as { addressToWallet: Map<string, { walletId: string; network: string }> })
+        .addressToWallet
+        .set('addr1', { walletId: 'wallet1', network: 'mainnet' });
+
+      mockClient.emit('newBlock', { height: 123, hex: 'a'.repeat(80) });
+      mockClient.emit('addressActivity', { scriptHash: 'hash', address: 'addr1', status: 'updated' });
+
+      expect(mockCallbacks.onNewBlock).toHaveBeenCalledWith('mainnet', 123, 'a'.repeat(64));
+      expect(mockCallbacks.onAddressActivity).toHaveBeenCalledWith('mainnet', 'wallet1', 'addr1');
+    });
+  });
+
+  describe('subscribeWalletAddresses', () => {
+    it('subscribes and tracks addresses for a wallet', async () => {
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+
+      (manager as unknown as { networks: Map<string, unknown> }).networks.set('mainnet', state);
+
+      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce({ network: 'mainnet' } as any);
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([
+        { address: 'addr1' },
+        { address: 'addr2' },
+      ] as any);
+
+      await manager.subscribeWalletAddresses('wallet1');
+
+      expect(mockClient.subscribeAddressBatch).toHaveBeenCalledWith(['addr1', 'addr2']);
+      const tracked = (manager as unknown as { addressToWallet: Map<string, { walletId: string; network: string }> })
+        .addressToWallet;
+      expect(tracked.get('addr1')).toEqual({ walletId: 'wallet1', network: 'mainnet' });
+      expect(tracked.get('addr2')).toEqual({ walletId: 'wallet1', network: 'mainnet' });
     });
   });
 

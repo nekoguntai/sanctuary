@@ -188,26 +188,105 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 // Import after mocks
-import request from 'supertest';
 import express from 'express';
 
-// Create test app - must import router AFTER mocks are set up
-const createTestApp = async () => {
-  const app = express();
-  app.use(express.json());
-
-  // Import router dynamically after mocks
-  const walletsModule = await import('../../../src/api/wallets');
-  app.use('/api/v1/wallets', walletsModule.default);
-
-  return app;
+type HandlerResponse = {
+  status: number;
+  headers: Record<string, string>;
+  body?: any;
+  text?: string;
 };
 
+class RequestBuilder {
+  private headers: Record<string, string> = {};
+  private body: unknown;
+
+  constructor(private method: string, private url: string, private router: express.Router) {}
+
+  set(key: string, value: string): this {
+    this.headers[key] = value;
+    return this;
+  }
+
+  send(body?: unknown): Promise<HandlerResponse> {
+    this.body = body;
+    return this.exec();
+  }
+
+  then<TResult1 = HandlerResponse, TResult2 = never>(
+    onfulfilled?: ((value: HandlerResponse) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): Promise<TResult1 | TResult2> {
+    return this.exec().then(onfulfilled, onrejected);
+  }
+
+  private async exec(): Promise<HandlerResponse> {
+    let normalizedUrl = this.url.replace(/^\/api\/v1\/wallets/, '') || '/';
+    if (normalizedUrl.startsWith('?')) {
+      normalizedUrl = `/${normalizedUrl}`;
+    }
+    const [pathOnly, queryString] = normalizedUrl.split('?');
+    const headers = Object.fromEntries(
+      Object.entries(this.headers).map(([key, value]) => [key.toLowerCase(), value])
+    );
+    const query = queryString ? Object.fromEntries(new URLSearchParams(queryString)) : {};
+
+    return new Promise<HandlerResponse>((resolve, reject) => {
+      const req: any = {
+        method: this.method,
+        url: normalizedUrl,
+        path: pathOnly,
+        headers,
+        body: this.body ?? {},
+        query,
+      };
+
+      const res: any = {
+        statusCode: 200,
+        headers: {},
+        setHeader: (key: string, value: string) => {
+          res.headers[key.toLowerCase()] = value;
+        },
+        status: (code: number) => {
+          res.statusCode = code;
+          return res;
+        },
+        json: (body: unknown) => {
+          res.body = body;
+          res.text = typeof body === 'string' ? body : res.text;
+          resolve({ status: res.statusCode, headers: res.headers, body: res.body, text: res.text });
+        },
+        send: (body?: unknown) => {
+          res.body = body;
+          res.text = typeof body === 'string' ? body : res.text;
+          resolve({ status: res.statusCode, headers: res.headers, body: res.body, text: res.text });
+        },
+      };
+
+      this.router.handle(req, res, (err?: Error) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
+      });
+    });
+  }
+}
+
+const request = (router: express.Router) => ({
+  get: (url: string) => new RequestBuilder('GET', url, router),
+  post: (url: string) => new RequestBuilder('POST', url, router),
+  patch: (url: string) => new RequestBuilder('PATCH', url, router),
+  delete: (url: string) => new RequestBuilder('DELETE', url, router),
+});
+
 describe('Wallets API', () => {
-  let app: express.Application;
+  let walletRouter: express.Router;
 
   beforeAll(async () => {
-    app = await createTestApp();
+    const walletsModule = await import('../../../src/api/wallets');
+    walletRouter = walletsModule.default;
   });
 
   beforeEach(() => {
@@ -226,7 +305,7 @@ describe('Wallets API', () => {
 
       mockGetUserWallets.mockResolvedValue(mockWallets);
 
-      const response = await request(app).get('/api/v1/wallets');
+      const response = await request(walletRouter).get('/api/v1/wallets');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
@@ -237,7 +316,7 @@ describe('Wallets API', () => {
     it('should return empty array when user has no wallets', async () => {
       mockGetUserWallets.mockResolvedValue([]);
 
-      const response = await request(app).get('/api/v1/wallets');
+      const response = await request(walletRouter).get('/api/v1/wallets');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
@@ -246,7 +325,7 @@ describe('Wallets API', () => {
     it('should handle service errors gracefully', async () => {
       mockGetUserWallets.mockRejectedValue(new Error('Database error'));
 
-      const response = await request(app).get('/api/v1/wallets');
+      const response = await request(walletRouter).get('/api/v1/wallets');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -264,7 +343,7 @@ describe('Wallets API', () => {
 
       mockCreateWallet.mockResolvedValue({ id: 'wallet-new', ...walletData, createdAt: new Date() });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send(walletData);
 
@@ -285,7 +364,7 @@ describe('Wallets API', () => {
 
       mockCreateWallet.mockResolvedValue({ id: 'wallet-multisig', ...walletData, createdAt: new Date() });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send(walletData);
 
@@ -295,7 +374,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject wallet without required fields', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send({ name: 'Incomplete Wallet' });
 
@@ -304,7 +383,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject invalid wallet type', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send({ name: 'Bad Wallet', type: 'invalid_type', scriptType: 'native_segwit' });
 
@@ -316,7 +395,7 @@ describe('Wallets API', () => {
       const { isValidScriptType } = await import('../../../src/services/scriptTypes');
       vi.mocked(isValidScriptType).mockReturnValueOnce(false);
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send({ name: 'Bad Wallet', type: 'single_sig', scriptType: 'invalid_script' });
 
@@ -327,7 +406,7 @@ describe('Wallets API', () => {
     it('should handle service creation error', async () => {
       mockCreateWallet.mockRejectedValue(new Error('Invalid descriptor format'));
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets')
         .send({ name: 'Bad Wallet', type: 'single_sig', scriptType: 'native_segwit' });
 
@@ -349,7 +428,7 @@ describe('Wallets API', () => {
 
       mockGetWalletById.mockResolvedValue(mockWallet);
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(200);
       expect(response.body.id).toBe('wallet-123');
@@ -359,7 +438,7 @@ describe('Wallets API', () => {
     it('should return 404 for non-existent wallet', async () => {
       mockGetWalletById.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/v1/wallets/non-existent');
+      const response = await request(walletRouter).get('/api/v1/wallets/non-existent');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not Found');
@@ -368,7 +447,7 @@ describe('Wallets API', () => {
     it('should handle service errors', async () => {
       mockGetWalletById.mockRejectedValue(new Error('Database error'));
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -384,7 +463,7 @@ describe('Wallets API', () => {
         scriptType: 'native_segwit',
       });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .patch('/api/v1/wallets/wallet-123')
         .send({ name: 'Renamed Wallet' });
 
@@ -395,7 +474,7 @@ describe('Wallets API', () => {
     it('should handle update error', async () => {
       mockUpdateWallet.mockRejectedValue(new Error('Update failed'));
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .patch('/api/v1/wallets/wallet-123')
         .send({ name: 'New Name' });
 
@@ -408,7 +487,7 @@ describe('Wallets API', () => {
     it('should delete wallet', async () => {
       mockDeleteWallet.mockResolvedValue({ success: true });
 
-      const response = await request(app).delete('/api/v1/wallets/wallet-123');
+      const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(204);
       expect(mockDeleteWallet).toHaveBeenCalled();
@@ -417,7 +496,7 @@ describe('Wallets API', () => {
     it('should handle delete error', async () => {
       mockDeleteWallet.mockRejectedValue(new Error('Cannot delete'));
 
-      const response = await request(app).delete('/api/v1/wallets/wallet-123');
+      const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -437,7 +516,7 @@ describe('Wallets API', () => {
 
       mockGetWalletStats.mockResolvedValue(mockStats);
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/stats');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/stats');
 
       expect(response.status).toBe(200);
       expect(response.body.balance).toBe(100000);
@@ -447,7 +526,7 @@ describe('Wallets API', () => {
     it('should handle stats error', async () => {
       mockGetWalletStats.mockRejectedValue(new Error('Stats error'));
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/stats');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/stats');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -462,7 +541,7 @@ describe('Wallets API', () => {
       ]);
       mockUtxoRepository.getUnspentBalance.mockResolvedValue(BigInt(100000));
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/balance-history?timeframe=1M');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history?timeframe=1M');
 
       expect(response.status).toBe(200);
       expect(response.body.timeframe).toBe('1M');
@@ -477,7 +556,7 @@ describe('Wallets API', () => {
         dataPoints: [{ timestamp: '2024-01-01', balance: 200000 }],
       });
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/balance-history');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history');
 
       expect(response.status).toBe(200);
       expect(response.body.currentBalance).toBe(200000);
@@ -487,7 +566,7 @@ describe('Wallets API', () => {
     it('should handle balance history error', async () => {
       mockTransactionRepository.findForBalanceHistory.mockRejectedValue(new Error('DB error'));
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/balance-history');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -505,7 +584,7 @@ describe('Wallets API', () => {
         group: { name: 'Test Group' },
       });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/group')
         .send({ groupId: 'group-1', role: 'viewer' });
 
@@ -515,7 +594,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject invalid role', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/group')
         .send({ groupId: 'group-1', role: 'admin' });
 
@@ -526,7 +605,7 @@ describe('Wallets API', () => {
     it('should reject when user is not group member', async () => {
       mockWalletSharingRepository.isGroupMember.mockResolvedValue(false);
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/group')
         .send({ groupId: 'group-1' });
 
@@ -541,7 +620,7 @@ describe('Wallets API', () => {
       mockWalletSharingRepository.findWalletUser.mockResolvedValue(null);
       mockWalletSharingRepository.addUserToWallet.mockResolvedValue({ id: 'wu-1' });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')
         .send({ targetUserId: 'target-user', role: 'viewer' });
 
@@ -555,7 +634,7 @@ describe('Wallets API', () => {
       mockWalletSharingRepository.findWalletUser.mockResolvedValue({ id: 'wu-1', role: 'viewer' });
       mockWalletSharingRepository.updateUserRole.mockResolvedValue({ id: 'wu-1', role: 'signer' });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')
         .send({ targetUserId: 'target-user', role: 'signer' });
 
@@ -564,7 +643,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject without targetUserId', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')
         .send({ role: 'viewer' });
 
@@ -573,7 +652,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject invalid role', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')
         .send({ targetUserId: 'target-user', role: 'admin' });
 
@@ -584,7 +663,7 @@ describe('Wallets API', () => {
     it('should return 404 for non-existent user', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')
         .send({ targetUserId: 'non-existent', role: 'viewer' });
 
@@ -598,7 +677,7 @@ describe('Wallets API', () => {
       mockWalletSharingRepository.findWalletUser.mockResolvedValue({ id: 'wu-1', role: 'viewer' });
       mockWalletSharingRepository.removeUserFromWallet.mockResolvedValue({ count: 1 });
 
-      const response = await request(app).delete('/api/v1/wallets/wallet-123/share/user/target-user');
+      const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123/share/user/target-user');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -607,7 +686,7 @@ describe('Wallets API', () => {
     it('should return 404 for user without access', async () => {
       mockWalletSharingRepository.findWalletUser.mockResolvedValue(null);
 
-      const response = await request(app).delete('/api/v1/wallets/wallet-123/share/user/target-user');
+      const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123/share/user/target-user');
 
       expect(response.status).toBe(404);
       expect(response.body.message).toContain('does not have access');
@@ -616,7 +695,7 @@ describe('Wallets API', () => {
     it('should reject removing owner', async () => {
       mockWalletSharingRepository.findWalletUser.mockResolvedValue({ id: 'wu-1', role: 'owner' });
 
-      const response = await request(app).delete('/api/v1/wallets/wallet-123/share/user/owner-user');
+      const response = await request(walletRouter).delete('/api/v1/wallets/wallet-123/share/user/owner-user');
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('Cannot remove the owner');
@@ -634,7 +713,7 @@ describe('Wallets API', () => {
         ],
       });
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/share');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/share');
 
       expect(response.status).toBe(200);
       expect(response.body.group).toBeDefined();
@@ -644,7 +723,7 @@ describe('Wallets API', () => {
     it('should return 404 if wallet not found', async () => {
       mockWalletSharingRepository.getWalletSharingInfo.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/v1/wallets/non-existent/share');
+      const response = await request(walletRouter).get('/api/v1/wallets/non-existent/share');
 
       expect(response.status).toBe(404);
     });
@@ -654,7 +733,7 @@ describe('Wallets API', () => {
 
   describe('GET /wallets/import/formats', () => {
     it('should return available import formats', async () => {
-      const response = await request(app).get('/api/v1/wallets/import/formats');
+      const response = await request(walletRouter).get('/api/v1/wallets/import/formats');
 
       expect(response.status).toBe(200);
       expect(response.body.formats).toBeDefined();
@@ -671,7 +750,7 @@ describe('Wallets API', () => {
         deviceCount: 1,
       });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import/validate')
         .send({ descriptor: 'wpkh([aabbccdd/84h/0h/0h]xpub.../0/*)' });
 
@@ -687,7 +766,7 @@ describe('Wallets API', () => {
         totalSigners: 3,
       });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import/validate')
         .send({ json: '{"name": "test", "descriptor": "wsh(...)"}' });
 
@@ -696,7 +775,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject when neither descriptor nor json provided', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import/validate')
         .send({});
 
@@ -712,7 +791,7 @@ describe('Wallets API', () => {
         devicesCreated: 1,
       });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import')
         .send({ data: 'wpkh([aabbccdd/84h/0h/0h]xpub...)', name: 'Imported Wallet' });
 
@@ -721,7 +800,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject without data', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import')
         .send({ name: 'Wallet' });
 
@@ -730,7 +809,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject without name', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import')
         .send({ data: 'wpkh(...)' });
 
@@ -741,7 +820,7 @@ describe('Wallets API', () => {
     it('should handle import error', async () => {
       mockImportWallet.mockRejectedValue(new Error('Import failed'));
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/import')
         .send({ data: 'wpkh(...)', name: 'Wallet' });
 
@@ -762,7 +841,7 @@ describe('Wallets API', () => {
         { address: 'bc1qtest', derivationPath: "m/84'/0'/0'/0/0", addressLabels: [{ label: { name: 'Deposit' } }] },
       ]);
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/export/labels');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/export/labels');
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('jsonl');
@@ -772,7 +851,7 @@ describe('Wallets API', () => {
     it('should return 404 if wallet not found', async () => {
       mockWalletRepository.getName.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/v1/wallets/non-existent/export/labels');
+      const response = await request(walletRouter).get('/api/v1/wallets/non-existent/export/labels');
 
       expect(response.status).toBe(404);
     });
@@ -790,7 +869,7 @@ describe('Wallets API', () => {
         createdAt: new Date(),
       });
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/export/formats');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/export/formats');
 
       expect(response.status).toBe(200);
       expect(response.body.formats).toBeDefined();
@@ -799,7 +878,7 @@ describe('Wallets API', () => {
     it('should return 404 if wallet not found', async () => {
       mockWalletRepository.findByIdWithDevices.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/v1/wallets/non-existent/export/formats');
+      const response = await request(walletRouter).get('/api/v1/wallets/non-existent/export/formats');
 
       expect(response.status).toBe(404);
     });
@@ -818,7 +897,7 @@ describe('Wallets API', () => {
         createdAt: new Date(),
       });
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/export');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/export');
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('json');
@@ -827,7 +906,7 @@ describe('Wallets API', () => {
     it('should return 404 if wallet not found', async () => {
       mockWalletRepository.findByIdWithDevices.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/v1/wallets/non-existent/export');
+      const response = await request(walletRouter).get('/api/v1/wallets/non-existent/export');
 
       expect(response.status).toBe(404);
     });
@@ -846,7 +925,7 @@ describe('Wallets API', () => {
       const { exportFormatRegistry } = await import('../../../src/services/export');
       vi.mocked(exportFormatRegistry.has).mockReturnValueOnce(false);
 
-      const response = await request(app).get('/api/v1/wallets/wallet-123/export?format=unknown');
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/export?format=unknown');
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('Unknown export format');
@@ -859,7 +938,7 @@ describe('Wallets API', () => {
     it('should generate new address', async () => {
       mockGenerateAddress.mockResolvedValue('bc1qnewaddress123');
 
-      const response = await request(app).post('/api/v1/wallets/wallet-123/addresses');
+      const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/addresses');
 
       expect(response.status).toBe(201);
       expect(response.body.address).toBe('bc1qnewaddress123');
@@ -868,7 +947,7 @@ describe('Wallets API', () => {
     it('should handle address generation error', async () => {
       mockGenerateAddress.mockRejectedValue(new Error('Address generation failed'));
 
-      const response = await request(app).post('/api/v1/wallets/wallet-123/addresses');
+      const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/addresses');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -879,7 +958,7 @@ describe('Wallets API', () => {
     it('should add device to wallet', async () => {
       mockAddDeviceToWallet.mockResolvedValue({ success: true });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/devices')
         .send({ deviceId: 'device-1', signerIndex: 0 });
 
@@ -888,7 +967,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject without deviceId', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/devices')
         .send({});
 
@@ -904,7 +983,7 @@ describe('Wallets API', () => {
         message: 'Generated descriptor and 40 addresses',
       });
 
-      const response = await request(app).post('/api/v1/wallets/wallet-123/repair');
+      const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/repair');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -913,7 +992,7 @@ describe('Wallets API', () => {
     it('should handle repair error', async () => {
       mockRepairWalletDescriptor.mockRejectedValue(new Error('Repair failed'));
 
-      const response = await request(app).post('/api/v1/wallets/wallet-123/repair');
+      const response = await request(walletRouter).post('/api/v1/wallets/wallet-123/repair');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
@@ -924,7 +1003,7 @@ describe('Wallets API', () => {
 
   describe('POST /wallets/validate-xpub', () => {
     it('should validate xpub and generate descriptor', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/validate-xpub')
         .send({ xpub: 'xpub6CUG...', scriptType: 'native_segwit' });
 
@@ -935,7 +1014,7 @@ describe('Wallets API', () => {
     });
 
     it('should reject without xpub', async () => {
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/validate-xpub')
         .send({});
 
@@ -947,7 +1026,7 @@ describe('Wallets API', () => {
       const addressDerivation = await import('../../../src/services/bitcoin/addressDerivation');
       vi.mocked(addressDerivation.validateXpub).mockReturnValueOnce({ valid: false, error: 'Invalid xpub format' });
 
-      const response = await request(app)
+      const response = await request(walletRouter)
         .post('/api/v1/wallets/validate-xpub')
         .send({ xpub: 'invalid-xpub' });
 

@@ -5,7 +5,7 @@ import {
   BroadcastTransactionSchema,
   GenerateAddressSchema,
   TransactionOutputSchema,
-} from '../../../src/api/schemas/wallet';
+} from '../../../../src/api/schemas/wallet';
 
 describe('Wallet Schemas', () => {
   it('validates single-sig wallet creation', () => {

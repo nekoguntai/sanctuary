@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { validate, validateAll } from '../../../src/api/schemas/middleware';
+import { validate, validateAll } from '../../../../src/api/schemas/middleware';
 
 const makeRes = () => {
   const res: any = {};

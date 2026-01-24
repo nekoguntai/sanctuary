@@ -9,7 +9,7 @@ import {
   FingerprintSchema,
   PaginationSchema,
   FeeRateSchema,
-} from '../../../src/api/schemas/common';
+} from '../../../../src/api/schemas/common';
 
 describe('Common Schemas', () => {
   it('validates email and lowercases', () => {

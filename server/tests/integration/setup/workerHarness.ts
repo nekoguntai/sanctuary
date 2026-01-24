@@ -1,0 +1,190 @@
+import { vi } from 'vitest';
+
+interface WorkerHarnessOptions {
+  redisConnected?: boolean;
+  gatewaySecret?: string;
+  configOverrides?: Record<string, any>;
+}
+
+interface WorkerHarnessHandle {
+  jobQueue: any;
+  electrumManager: any;
+  healthServer: { close: ReturnType<typeof vi.fn> };
+  registerWorkerJobs: ReturnType<typeof vi.fn>;
+  electrumOptions: { onNewBlock?: (...args: any[]) => void; onAddressActivity?: (...args: any[]) => void };
+  exitSpy: ReturnType<typeof vi.spyOn>;
+  shutdown: () => Promise<void>;
+  stopProcessExitSpy: () => void;
+}
+
+const createDeferred = () => {
+  let resolve: () => void;
+  let reject: (err: unknown) => void;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve: resolve!, reject: reject! };
+};
+
+export const createWorkerTestHarness = async (
+  options: WorkerHarnessOptions = {}
+): Promise<WorkerHarnessHandle> => {
+  vi.resetModules();
+  process.removeAllListeners('SIGTERM');
+  process.removeAllListeners('SIGINT');
+
+  const redisConnected = options.redisConnected ?? true;
+
+  const jobQueueInstance = {
+    initialize: vi.fn(async () => undefined),
+    addJob: vi.fn(async () => undefined),
+    addBulkJobs: vi.fn(async () => []),
+    scheduleRecurring: vi.fn(async () => undefined),
+    getRegisteredJobs: vi.fn(() => ['test-job']),
+    getHealth: vi.fn(async () => ({ queues: {} })),
+    isHealthy: vi.fn(() => true),
+    shutdown: vi.fn(async () => undefined),
+  };
+
+  const electrumManagerInstance = {
+    start: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+    reconcileSubscriptions: vi.fn(async () => undefined),
+    isConnected: vi.fn(() => true),
+    getHealthMetrics: vi.fn(() => ({
+      totalSubscribedAddresses: 0,
+      networks: {},
+    })),
+  };
+
+  const healthServerHandle = {
+    close: vi.fn(async () => undefined),
+  };
+
+  const registerWorkerJobs = vi.fn();
+  const otelInit = createDeferred();
+
+  vi.doMock('../../../src/utils/tracing/otel', () => ({
+    initializeOpenTelemetry: vi.fn(async () => {
+      otelInit.resolve();
+      return undefined;
+    }),
+  }));
+
+  vi.doMock('../../../src/config', () => ({
+    getConfig: () => ({
+      bitcoin: { network: 'testnet' },
+      sync: {
+        intervalMs: 5 * 60 * 1000,
+        confirmationUpdateIntervalMs: 2 * 60 * 1000,
+      },
+      maintenance: {
+        auditLogRetentionDays: 30,
+        priceDataRetentionDays: 14,
+        feeEstimateRetentionDays: 7,
+      },
+      gatewaySecret: options.gatewaySecret ?? 'test-secret',
+      ...options.configOverrides,
+    }),
+    default: {
+      gatewaySecret: options.gatewaySecret ?? 'test-secret',
+    },
+  }));
+
+  const errorLogs: string[] = [];
+  vi.doMock('../../../src/utils/logger', () => ({
+    createLogger: () => ({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn((message: string, meta?: { error?: unknown }) => {
+        if (message) {
+          errorLogs.push(message);
+        }
+        if (meta?.error instanceof Error) {
+          errorLogs.push(meta.error.message);
+        } else if (meta?.error) {
+          errorLogs.push(String(meta.error));
+        }
+      }),
+      debug: vi.fn(),
+    }),
+  }));
+
+  vi.doMock('../../../src/models/prisma', () => ({
+    connectWithRetry: vi.fn(async () => undefined),
+    disconnect: vi.fn(async () => undefined),
+  }));
+
+  vi.doMock('../../../src/infrastructure', () => ({
+    initializeRedis: vi.fn(async () => undefined),
+    shutdownRedis: vi.fn(async () => undefined),
+    isRedisConnected: vi.fn(() => redisConnected),
+    shutdownDistributedLock: vi.fn(() => undefined),
+  }));
+
+  vi.doMock('../../../src/worker/workerJobQueue', () => ({
+    WorkerJobQueue: class {
+      constructor() {
+        return jobQueueInstance;
+      }
+    },
+  }));
+
+  const electrumOptions: { onNewBlock?: (...args: any[]) => void; onAddressActivity?: (...args: any[]) => void } = {};
+  vi.doMock('../../../src/worker/electrumManager', () => ({
+    ElectrumSubscriptionManager: class {
+      constructor(options: typeof electrumOptions) {
+        Object.assign(electrumOptions, options ?? {});
+        return electrumManagerInstance;
+      }
+    },
+  }));
+
+  vi.doMock('../../../src/worker/healthServer', () => ({
+    startHealthServer: vi.fn(() => healthServerHandle),
+  }));
+
+  vi.doMock('../../../src/worker/jobs', () => ({
+    registerWorkerJobs,
+  }));
+
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+  await import('../../../src/worker');
+  await otelInit.promise;
+
+  const waitForInit = async () => {
+    for (let i = 0; i < 50; i += 1) {
+      if (jobQueueInstance.initialize.mock.calls.length > 0) {
+        return;
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+
+  await waitForInit();
+  if (jobQueueInstance.initialize.mock.calls.length === 0) {
+    const exitCalls = exitSpy.mock.calls.map((call) => call[0]);
+    const logInfo = errorLogs.length ? ` logs: ${errorLogs.join(' | ')}` : '';
+    throw new Error(
+      `Worker did not initialize job queue. process.exit calls: ${exitCalls.join(', ') || 'none'}${logInfo}`
+    );
+  }
+
+  return {
+    jobQueue: jobQueueInstance,
+    electrumManager: electrumManagerInstance,
+    healthServer: healthServerHandle,
+    registerWorkerJobs,
+    electrumOptions,
+    exitSpy,
+    shutdown: async () => {
+      process.emit('SIGTERM');
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+    stopProcessExitSpy: () => {
+      exitSpy.mockRestore();
+    },
+  };
+};

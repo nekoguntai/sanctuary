@@ -4,7 +4,7 @@ import {
   CreateLabelSchema,
   UpdateLabelSchema,
   LabelIdsSchema,
-} from '../../../src/api/schemas/labels';
+} from '../../../../src/api/schemas/labels';
 
 describe('Label Schemas', () => {
   it('accepts valid colors', () => {

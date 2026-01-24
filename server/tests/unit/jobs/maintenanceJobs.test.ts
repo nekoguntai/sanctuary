@@ -5,14 +5,16 @@ import {
   cleanupFeeEstimatesJob,
 } from '../../../src/jobs/definitions/maintenance';
 
-vi.mock('../../../src/models/prisma', () => ({
-  priceData: {
-    deleteMany: vi.fn(),
-  },
-  feeEstimate: {
-    deleteMany: vi.fn(),
-  },
-}));
+vi.mock('../../../src/models/prisma', () => {
+  const priceData = { deleteMany: vi.fn() };
+  const feeEstimate = { deleteMany: vi.fn() };
+  return {
+    __esModule: true,
+    default: { priceData, feeEstimate },
+    priceData,
+    feeEstimate,
+  };
+});
 
 vi.mock('../../../src/services/auditService', () => ({
   auditService: {

@@ -5,7 +5,7 @@ import {
   ApnsTokenSchema,
   RegisterDeviceSchema,
   GatewayAuditEventSchema,
-} from '../../../src/api/schemas/push';
+} from '../../../../src/api/schemas/push';
 
 describe('Push Schemas', () => {
   it('validates platform enum', () => {

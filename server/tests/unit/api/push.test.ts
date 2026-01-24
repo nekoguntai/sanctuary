@@ -6,7 +6,6 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import express, { Express, Request, Response, NextFunction } from 'express';
-import request from 'supertest';
 import { createHmac, createHash } from 'crypto';
 
 // Mock config before imports
@@ -104,6 +103,88 @@ describe('Push API Routes', () => {
   const validAndroidToken = 'a'.repeat(150); // FCM tokens are 100-500 chars
   const validIosToken = 'a'.repeat(64); // APNs tokens are 64+ hex chars
 
+  type HandlerResponse = {
+    status: number;
+    headers: Record<string, string>;
+    body?: any;
+  };
+
+  class RequestBuilder {
+    private headers: Record<string, string> = {};
+    private body: unknown;
+
+    constructor(private method: string, private url: string) {}
+
+    set(key: string, value: string): this {
+      this.headers[key] = value;
+      return this;
+    }
+
+    send(body?: unknown): Promise<HandlerResponse> {
+      this.body = body;
+      return this.exec();
+    }
+
+    then<TResult1 = HandlerResponse, TResult2 = never>(
+      onfulfilled?: ((value: HandlerResponse) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | undefined | null
+    ): Promise<TResult1 | TResult2> {
+      return this.exec().then(onfulfilled, onrejected);
+    }
+
+    private async exec(): Promise<HandlerResponse> {
+      const normalizedUrl = this.url.replace(/^\/api\/v1\/push/, '') || '/';
+      const [pathOnly] = normalizedUrl.split('?');
+      const headers = Object.fromEntries(
+        Object.entries(this.headers).map(([key, value]) => [key.toLowerCase(), value])
+      );
+
+      return new Promise<HandlerResponse>((resolve, reject) => {
+        const req: any = {
+          method: this.method,
+          url: normalizedUrl,
+          path: pathOnly,
+          headers,
+          body: this.body ?? {},
+        };
+
+        const res: any = {
+          statusCode: 200,
+          headers: {},
+          setHeader: (key: string, value: string) => {
+            res.headers[key.toLowerCase()] = value;
+          },
+          status: (code: number) => {
+            res.statusCode = code;
+            return res;
+          },
+          json: (body: unknown) => {
+            res.body = body;
+            resolve({ status: res.statusCode, headers: res.headers, body: res.body });
+          },
+          send: (body?: unknown) => {
+            res.body = body;
+            resolve({ status: res.statusCode, headers: res.headers, body: res.body });
+          },
+        };
+
+        pushRouter.handle(req, res, (err?: Error) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
+        });
+      });
+    }
+  }
+
+  const request = (_app: unknown) => ({
+    get: (url: string) => new RequestBuilder('GET', url),
+    post: (url: string) => new RequestBuilder('POST', url),
+    delete: (url: string) => new RequestBuilder('DELETE', url),
+  });
+
   describe('POST /api/v1/push/register', () => {
     it('should register a new Android device successfully', async () => {
       const now = new Date();
@@ -162,6 +243,39 @@ describe('Push API Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.deviceId).toBe('device-2');
+    });
+
+    it('should accept APNs provider-style token format', async () => {
+      const now = new Date();
+      const providerToken = `${'a'.repeat(30)}.${'b'.repeat(33)}`; // 64 chars with dot
+
+      mockUpsert.mockResolvedValue({
+        id: 'device-3',
+        token: providerToken,
+        platform: 'ios',
+        userId: 'test-user-123',
+        deviceName: 'iPhone 15',
+        createdAt: now,
+        lastUsedAt: now,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/push/register')
+        .set('Authorization', 'Bearer test-token')
+        .send({
+          token: providerToken,
+          platform: 'ios',
+          deviceName: 'iPhone 15',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(mockUpsert).toHaveBeenCalledWith({
+        token: providerToken,
+        userId: 'test-user-123',
+        platform: 'ios',
+        deviceName: 'iPhone 15',
+      });
     });
 
     it('should update an existing device token', async () => {

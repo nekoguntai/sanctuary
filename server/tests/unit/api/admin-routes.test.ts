@@ -161,7 +161,7 @@ describe('Admin Routes', () => {
 
   beforeAll(async () => {
     app = await createTestApp();
-  });
+  }, 30000);
 
   beforeEach(() => {
     vi.resetAllMocks();

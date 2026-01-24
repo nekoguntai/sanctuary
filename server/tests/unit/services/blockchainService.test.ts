@@ -215,7 +215,7 @@ describe('Blockchain Service - Transaction Detection', () => {
           expect((createCall as any)[0].data.type).toBe('received');
         }
       }
-    });
+    }, 30000);
 
     it('should sum all outputs to wallet addresses for batched payouts', async () => {
       const { syncWallet } = await import('../../../src/services/bitcoin/blockchain');

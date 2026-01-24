@@ -5,7 +5,6 @@
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import express, { Express, NextFunction, Request, Response } from 'express';
-import request from 'supertest';
 import { EventEmitter } from 'events';
 
 // Mock JWT verification
@@ -20,32 +19,48 @@ vi.mock('jsonwebtoken', () => ({
   },
 }));
 
-// Mock net module
-const mockSocket = new EventEmitter() as EventEmitter & {
-  write: ReturnType<typeof vi.fn>;
-  destroy: ReturnType<typeof vi.fn>;
+const createMockSocket = () => {
+  const socket = new EventEmitter() as EventEmitter & {
+    write: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  };
+  socket.write = vi.fn();
+  socket.destroy = vi.fn();
+  return socket;
 };
-mockSocket.write = vi.fn();
-mockSocket.destroy = vi.fn();
+
+// Mock net module
+let mockSocket = createMockSocket();
 
 vi.mock('net', () => ({
+  __esModule: true,
   default: {
-    connect: vi.fn(() => mockSocket),
+    connect: vi.fn(() => {
+      mockSocket = createMockSocket();
+      return mockSocket;
+    }),
   },
+  connect: vi.fn(() => {
+    mockSocket = createMockSocket();
+    return mockSocket;
+  }),
 }));
 
 // Mock tls module
-const mockTlsSocket = new EventEmitter() as EventEmitter & {
-  write: ReturnType<typeof vi.fn>;
-  destroy: ReturnType<typeof vi.fn>;
-};
-mockTlsSocket.write = vi.fn();
-mockTlsSocket.destroy = vi.fn();
+let mockTlsSocket = createMockSocket();
 
 vi.mock('tls', () => ({
+  __esModule: true,
   default: {
-    connect: vi.fn(() => mockTlsSocket),
+    connect: vi.fn(() => {
+      mockTlsSocket = createMockSocket();
+      return mockTlsSocket;
+    }),
   },
+  connect: vi.fn(() => {
+    mockTlsSocket = createMockSocket();
+    return mockTlsSocket;
+  }),
 }));
 
 // Mock logger
@@ -58,6 +73,20 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+vi.mock('../../../src/middleware/auth', () => ({
+  authenticate: (req: Request, res: Response, next: NextFunction) => {
+    const auth = req.headers.authorization;
+    if (!auth) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'No authentication token provided' });
+    }
+    if (auth !== 'Bearer valid-token') {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
+    }
+    (req as any).user = { userId: 'user-1', username: 'test-user', isAdmin: false };
+    return next();
+  },
+}));
+
 // Import router and mocked modules
 import nodeRouter from '../../../src/api/node';
 import net from 'net';
@@ -66,8 +95,25 @@ import tls from 'tls';
 const mockNetConnect = net.connect as ReturnType<typeof vi.fn>;
 const mockTlsConnect = tls.connect as ReturnType<typeof vi.fn>;
 
-const waitForListener = async (emitter: EventEmitter, event: string) => {
+const waitForCall = async (mockFn: ReturnType<typeof vi.fn>) => {
   for (let i = 0; i < 50; i += 1) {
+    if (mockFn.mock.calls.length > 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error('Expected socket connect to be called');
+};
+
+const getLastSocket = async (mockFn: ReturnType<typeof vi.fn>) => {
+  await waitForCall(mockFn);
+  const result = mockFn.mock.results[mockFn.mock.results.length - 1];
+  return result?.value as EventEmitter;
+};
+
+const waitForListener = async (getEmitter: () => EventEmitter, event: string) => {
+  for (let i = 0; i < 50; i += 1) {
+    const emitter = getEmitter();
     if (emitter.listenerCount(event) > 0) {
       return;
     }
@@ -75,6 +121,95 @@ const waitForListener = async (emitter: EventEmitter, event: string) => {
   }
   throw new Error(`Listener not attached for event: ${event}`);
 };
+
+type HandlerResponse = {
+  status: number;
+  headers: Record<string, string>;
+  body?: any;
+};
+
+class RequestBuilder {
+  private headers: Record<string, string> = {};
+  private body: unknown;
+
+  constructor(private method: string, private url: string) {}
+
+  set(key: string, value: string): this {
+    this.headers[key] = value;
+    return this;
+  }
+
+  send(body?: unknown): Promise<HandlerResponse> {
+    this.body = body;
+    return this.exec();
+  }
+
+  then<TResult1 = HandlerResponse, TResult2 = never>(
+    onfulfilled?: ((value: HandlerResponse) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): Promise<TResult1 | TResult2> {
+    return this.exec().then(onfulfilled, onrejected);
+  }
+
+  private async exec(): Promise<HandlerResponse> {
+    let normalizedUrl = this.url.replace(/^\/api\/v1\/node/, '') || '/';
+    if (normalizedUrl.startsWith('?')) {
+      normalizedUrl = `/${normalizedUrl}`;
+    }
+    const [pathOnly] = normalizedUrl.split('?');
+    const headers = Object.fromEntries(
+      Object.entries(this.headers).map(([key, value]) => [key.toLowerCase(), value])
+    );
+
+    return new Promise<HandlerResponse>((resolve, reject) => {
+      const req: any = {
+        method: this.method,
+        url: normalizedUrl,
+        path: pathOnly,
+        headers,
+        body: this.body ?? {},
+      };
+
+      const res: any = {
+        statusCode: 200,
+        headers: {},
+        setHeader: (key: string, value: string) => {
+          res.headers[key.toLowerCase()] = value;
+        },
+        status: (code: number) => {
+          res.statusCode = code;
+          return res;
+        },
+        json: (body: unknown) => {
+          res.body = body;
+          resolve({ status: res.statusCode, headers: res.headers, body: res.body });
+        },
+        send: (body?: unknown) => {
+          res.body = body;
+          resolve({ status: res.statusCode, headers: res.headers, body: res.body });
+        },
+      };
+
+      nodeRouter.handle(req, res, (err?: Error) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        reject(new Error(`Route not handled: ${this.method} ${normalizedUrl}`));
+      });
+    });
+  }
+}
+
+const request = (_app: unknown) => ({
+  post: (url: string) => new RequestBuilder('POST', url),
+});
+
+const startAuthedRequest = (app: Express, body: Record<string, unknown>) =>
+  request(app)
+    .post('/api/v1/node/test')
+    .set('Authorization', 'Bearer valid-token')
+    .send(body);
 
 describe('Node API Routes', () => {
   let app: Express;
@@ -88,10 +223,10 @@ describe('Node API Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset socket mocks
+    mockSocket = createMockSocket();
+    mockTlsSocket = createMockSocket();
     mockNetConnect.mockReturnValue(mockSocket);
     mockTlsConnect.mockReturnValue(mockTlsSocket);
-    mockSocket.removeAllListeners();
-    mockTlsSocket.removeAllListeners();
   });
 
   describe('POST /test', () => {
@@ -157,13 +292,16 @@ describe('Node API Routes', () => {
 
       it('should accept electrum node type', async () => {
         // Start the request but don't await it yet
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ nodeType: 'electrum', host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          nodeType: 'electrum',
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'error');
-        mockTlsSocket.emit('error', new Error('Connection refused'));
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'error');
+        tlsSocket.emit('error', new Error('Connection refused'));
 
         const response = await responsePromise;
         // Should not be a 400 validation error
@@ -203,14 +341,16 @@ describe('Node API Routes', () => {
 
     describe('SSL Connection', () => {
       it('should use tls.connect for ssl protocol', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
-        mockTlsSocket.emit(
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -231,14 +371,16 @@ describe('Node API Routes', () => {
       });
 
       it('should return server info on successful SSL connection', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
-        mockTlsSocket.emit(
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -259,14 +401,16 @@ describe('Node API Routes', () => {
 
     describe('TCP Connection', () => {
       it('should use net.connect for tcp protocol', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50001, protocol: 'tcp' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50001,
+          protocol: 'tcp',
+        });
 
-        await waitForListener(mockSocket, 'connect');
-        mockSocket.emit('connect');
-        mockSocket.emit(
+        const netSocket = await getLastSocket(mockNetConnect);
+        await waitForListener(() => netSocket, 'connect');
+        netSocket.emit('connect');
+        netSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -286,14 +430,16 @@ describe('Node API Routes', () => {
       });
 
       it('should return server info on successful TCP connection', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50001, protocol: 'tcp' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50001,
+          protocol: 'tcp',
+        });
 
-        await waitForListener(mockSocket, 'connect');
-        mockSocket.emit('connect');
-        mockSocket.emit(
+        const netSocket = await getLastSocket(mockNetConnect);
+        await waitForListener(() => netSocket, 'connect');
+        netSocket.emit('connect');
+        netSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -314,13 +460,15 @@ describe('Node API Routes', () => {
 
     describe('Error Handling', () => {
       it('should handle connection errors', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'error');
-        mockTlsSocket.emit('error', new Error('Connection refused'));
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'error');
+        tlsSocket.emit('error', new Error('Connection refused'));
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -329,13 +477,15 @@ describe('Node API Routes', () => {
       });
 
       it('should handle socket timeout', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'timeout');
-        mockTlsSocket.emit('timeout');
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'timeout');
+        tlsSocket.emit('timeout');
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -344,14 +494,16 @@ describe('Node API Routes', () => {
       });
 
       it('should handle Electrum protocol errors', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
-        mockTlsSocket.emit(
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -367,14 +519,16 @@ describe('Node API Routes', () => {
       });
 
       it('should handle empty server version result', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
-        mockTlsSocket.emit(
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -393,18 +547,20 @@ describe('Node API Routes', () => {
 
     describe('Protocol Behavior', () => {
       it('should send server.version request on connect', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
         // Verify write was called with JSON-RPC request
-        expect(mockTlsSocket.write).toHaveBeenCalledWith(
+        expect(tlsSocket.write).toHaveBeenCalledWith(
           expect.stringContaining('"method":"server.version"')
         );
-        mockTlsSocket.emit(
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',
@@ -418,16 +574,18 @@ describe('Node API Routes', () => {
       });
 
       it('should handle chunked data', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
         // Send response in two chunks
-        mockTlsSocket.emit('data', '{"jsonrpc":"2.0","id":1,');
-        mockTlsSocket.emit('data', '"result":["ElectrumX","1.4"]}\n');
+        tlsSocket.emit('data', '{"jsonrpc":"2.0","id":1,');
+        tlsSocket.emit('data', '"result":["ElectrumX","1.4"]}\n');
 
         const response = await responsePromise;
         expect(response.status).toBe(200);
@@ -435,14 +593,16 @@ describe('Node API Routes', () => {
       });
 
       it('should handle response without result', async () => {
-        const responsePromise = request(app)
-          .post('/api/v1/node/test')
-          .set('Authorization', 'Bearer valid-token')
-          .send({ host: 'electrum.example.com', port: 50002, protocol: 'ssl' });
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
 
-        await waitForListener(mockTlsSocket, 'connect');
-        mockTlsSocket.emit('connect');
-        mockTlsSocket.emit(
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
           'data',
           JSON.stringify({
             jsonrpc: '2.0',

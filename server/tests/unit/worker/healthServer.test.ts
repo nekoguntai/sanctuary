@@ -2,16 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let capturedHandler: ((req: any, res: any) => Promise<void> | void) | null = null;
 
-vi.mock('http', () => ({
-  createServer: (handler: any) => {
+vi.mock('http', () => {
+  const createServer = (handler: any) => {
     capturedHandler = handler;
     return {
       on: vi.fn(),
       listen: vi.fn((_port: number, cb?: () => void) => cb && cb()),
       close: vi.fn((cb?: (err?: Error | null) => void) => cb && cb(null)),
     };
-  },
-}));
+  };
+  return {
+    __esModule: true,
+    default: { createServer },
+    createServer,
+  };
+});
 
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({

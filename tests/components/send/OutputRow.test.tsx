@@ -12,6 +12,11 @@ vi.mock('../../../contexts/CurrencyContext', () => ({
   })),
 }));
 
+// Mock the QR Scanner component
+vi.mock('@yudiel/react-qr-scanner', () => ({
+  Scanner: vi.fn(() => <div data-testid="qr-scanner">Mock Scanner</div>),
+}));
+
 describe('OutputRow', () => {
   // Use vi.fn() directly - these will be reset in beforeEach
   const mockOnAddressChange = vi.fn();
@@ -397,32 +402,22 @@ describe('OutputRow', () => {
     });
 
     it('should show scanner interface when scanning this output', () => {
-      const videoRef = React.createRef<HTMLVideoElement>();
-      const canvasRef = React.createRef<HTMLCanvasElement>();
-
       renderRow({
         showScanner: true,
         scanningOutputIndex: 0,
-        videoRef,
-        canvasRef,
       });
 
-      expect(screen.getByText('Scan Bitcoin QR Code')).toBeInTheDocument();
+      expect(screen.getByText('Scan a Bitcoin address or BIP21 payment URI')).toBeInTheDocument();
     });
 
     it('should not show scanner when scanning different output', () => {
-      const videoRef = React.createRef<HTMLVideoElement>();
-      const canvasRef = React.createRef<HTMLCanvasElement>();
-
       renderRow({
         showScanner: true,
         scanningOutputIndex: 1,
         index: 0,
-        videoRef,
-        canvasRef,
       });
 
-      expect(screen.queryByText('Scan Bitcoin QR Code')).not.toBeInTheDocument();
+      expect(screen.queryByText('Scan a Bitcoin address or BIP21 payment URI')).not.toBeInTheDocument();
     });
   });
 

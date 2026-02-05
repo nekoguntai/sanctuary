@@ -11,11 +11,17 @@
  * Extracted from SendTransaction.tsx for maintainability.
  */
 
-import React, { RefObject } from 'react';
-import { Check, X, Shield, QrCode, ChevronDown, Trash2 } from 'lucide-react';
+import React, { RefObject, useState, useCallback, useEffect } from 'react';
+import { Scanner, IDetectedBarcode } from '@yudiel/react-qr-scanner';
+import { Check, X, Shield, QrCode, ChevronDown, Trash2, Camera, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { FiatDisplaySubtle } from '../FiatDisplay';
 import type { OutputEntry, WalletAddress } from '../../contexts/send/types';
+
+/** Check if running in secure context (HTTPS or localhost) - required for camera access */
+const isSecureContext = (): boolean => {
+  return typeof window !== 'undefined' && window.isSecureContext;
+};
 
 export interface OutputRowProps {
   // Output data
@@ -45,7 +51,7 @@ export interface OutputRowProps {
   payjoinUrl?: string | null;
   payjoinStatus?: 'idle' | 'attempting' | 'success' | 'failed';
 
-  // QR Scanner refs (only needed when scanner is active for this output)
+  // QR Scanner refs (legacy - no longer needed, kept for compatibility)
   videoRef?: RefObject<HTMLVideoElement>;
   canvasRef?: RefObject<HTMLCanvasElement>;
 
@@ -80,8 +86,6 @@ export function OutputRow({
   scanningOutputIndex = null,
   payjoinUrl = null,
   payjoinStatus = 'idle',
-  videoRef,
-  canvasRef,
   unit,
   unitLabel,
   displayValue,
@@ -92,6 +96,58 @@ export function OutputRow({
   const isMultiOutput = totalOutputs > 1;
   const isScanningThis = showScanner && scanningOutputIndex === index;
   const hasPayjoin = payjoinUrl && index === 0;
+
+  // QR Scanner state
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const isSecure = isSecureContext();
+
+  // Reset scanner state when toggled off externally (e.g., parent changes scanningOutputIndex)
+  useEffect(() => {
+    if (!isScanningThis) {
+      setCameraActive(false);
+      setCameraError(null);
+    }
+  }, [isScanningThis]);
+
+  // Handle QR scan result
+  const handleQrScan = useCallback((detectedCodes: IDetectedBarcode[]) => {
+    if (detectedCodes.length > 0) {
+      const scannedValue = detectedCodes[0].rawValue;
+      if (scannedValue) {
+        // Update the address field with the scanned value
+        onAddressChange(index, scannedValue);
+        // Close the scanner
+        setCameraActive(false);
+        onScanQR(index); // Toggle off the scanner
+      }
+    }
+  }, [index, onAddressChange, onScanQR]);
+
+  // Handle camera error
+  const handleCameraError = useCallback((error: unknown) => {
+    const err = error as Error;
+    if (err.name === 'NotAllowedError') {
+      setCameraError('Camera access denied. Please allow camera permissions and try again.');
+    } else if (err.name === 'NotFoundError') {
+      setCameraError('No camera found on this device.');
+    } else {
+      setCameraError(`Camera error: ${err.message}`);
+    }
+  }, []);
+
+  // Start camera
+  const handleStartCamera = useCallback(() => {
+    setCameraError(null);
+    setCameraActive(true);
+  }, []);
+
+  // Stop camera
+  const handleStopCamera = useCallback(() => {
+    setCameraActive(false);
+    setCameraError(null);
+    onScanQR(index); // Toggle off the scanner
+  }, [index, onScanQR]);
 
   // Determine border color for address input
   const getAddressBorderClass = () => {
@@ -194,12 +250,75 @@ export function OutputRow({
       )}
 
       {/* QR Scanner */}
-      {isScanningThis && videoRef && canvasRef && (
-        <div className="relative overflow-hidden rounded-xl bg-black aspect-video flex items-center justify-center">
-          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
-          <canvas ref={canvasRef} className="hidden" />
-          <div className="z-10 border-2 border-white/50 w-48 h-48 rounded-lg"></div>
-          <p className="absolute bottom-4 z-10 text-white bg-black/50 px-3 py-1 rounded-full text-xs">Scan Bitcoin QR Code</p>
+      {isScanningThis && (
+        <div className="surface-muted rounded-xl border border-dashed border-sanctuary-300 dark:border-sanctuary-700 overflow-hidden">
+          {/* Initial Camera State */}
+          {!cameraActive && !cameraError && (
+            <div className="text-center py-6">
+              <Camera className="w-10 h-10 mx-auto text-sanctuary-400 mb-3" />
+              <p className="text-sm text-sanctuary-600 dark:text-sanctuary-300 mb-3 px-4">
+                Scan a Bitcoin address or BIP21 payment URI
+              </p>
+              {!isSecure && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mb-3 px-4">
+                  Camera access requires HTTPS. Please use https://localhost:8443
+                </p>
+              )}
+              <div className="flex justify-center gap-2">
+                <Button size="sm" onClick={handleStartCamera}>
+                  Start Camera
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleStopCamera}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Active Camera */}
+          {cameraActive && (
+            <div className="relative">
+              <div className="aspect-square max-w-xs mx-auto">
+                <Scanner
+                  onScan={handleQrScan}
+                  onError={handleCameraError}
+                  constraints={{ facingMode: 'environment' }}
+                  scanDelay={100}
+                  styles={{
+                    container: { width: '100%', height: '100%' },
+                    video: { width: '100%', height: '100%', objectFit: 'cover' },
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleStopCamera}
+                className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <p className="text-xs text-center text-sanctuary-500 py-2">
+                Position the QR code within the frame
+              </p>
+            </div>
+          )}
+
+          {/* Camera Error */}
+          {cameraError && (
+            <div className="text-center py-6">
+              <AlertCircle className="w-10 h-10 mx-auto text-rose-400 mb-3" />
+              <p className="text-sm text-rose-600 dark:text-rose-400 mb-3 px-4">
+                {cameraError}
+              </p>
+              <div className="flex justify-center gap-2">
+                <Button size="sm" onClick={handleStartCamera}>
+                  Try Again
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleStopCamera}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

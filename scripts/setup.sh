@@ -318,16 +318,16 @@ check_all_ports() {
 prompt_optional_features() {
     # Skip prompts in non-interactive mode
     if [ "$OPT_NON_INTERACTIVE" = true ]; then
-        # Use defaults if not set
-        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no"
-        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no"
+        # Use defaults if not set (|| true prevents set -e exit when already set)
+        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no" || true
+        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no" || true
         return
     fi
 
     # Skip if not a terminal
     if [ ! -t 0 ]; then
-        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no"
-        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no"
+        [ -z "$OPT_ENABLE_MONITORING" ] && OPT_ENABLE_MONITORING="no" || true
+        [ -z "$OPT_ENABLE_TOR" ] && OPT_ENABLE_TOR="no" || true
         return
     fi
 

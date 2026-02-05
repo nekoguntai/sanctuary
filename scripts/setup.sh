@@ -221,10 +221,12 @@ run_prerequisite_checks() {
     echo "Checking prerequisites..."
     echo ""
 
-    check_docker_installed
-    check_docker_access
-    check_docker_compose
-    check_openssl
+    # Run checks with || true to prevent set -e from exiting early
+    # Errors are collected in PREREQ_ERRORS and shown at the end
+    check_docker_installed || true
+    check_docker_access || true
+    check_docker_compose || true
+    check_openssl || true
 
     echo ""
 

@@ -31,6 +31,25 @@ services:
       - sanctuary-network
 
   # ============================================
+  # Redis (required for worker + backend coordination)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: sanctuary-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sanctuary-network
+
+  # ============================================
   # Backend API Server (from GHCR)
   # ============================================
   backend:
@@ -39,6 +58,10 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
         condition: service_healthy
     environment:
       # Server
@@ -50,9 +73,20 @@ services:
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public
 
+      # Redis (required)
+      REDIS_URL: redis://redis:6379
+
       # JWT
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # Encryption and internal auth (required)
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT:-sanctuary-node-config}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?GATEWAY_SECRET is required}
+
+      # Worker heartbeat (required)
+      WORKER_HEALTH_URL: ${WORKER_HEALTH_URL:-http://worker:3002/health}
 
       # Bitcoin Network
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
@@ -68,6 +102,47 @@ services:
       KRAKEN_API: ${KRAKEN_API:-https://api.kraken.com/0/public}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - sanctuary-network
+
+  # ============================================
+  # Background Worker (from GHCR)
+  # ============================================
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY:-nekoguntai/sanctuary}-backend:${IMAGE_TAG:-latest}
+    container_name: sanctuary-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sanctuary}:${POSTGRES_PASSWORD:-sanctuary}@postgres:5432/${POSTGRES_DB:-sanctuary}?schema=public
+      REDIS_URL: redis://redis:6379
+
+      WORKER_HEALTH_PORT: 3002
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+
+      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
+      ELECTRUM_HOST: ${ELECTRUM_HOST:-electrum.blockstream.info}
+      ELECTRUM_PORT: ${ELECTRUM_PORT:-50002}
+      ELECTRUM_PROTOCOL: ${ELECTRUM_PROTOCOL:-ssl}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required (at least 32 chars)}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT:-sanctuary-node-config}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?GATEWAY_SECRET is required}
+    command: ["node", "dist/app/src/worker.js"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -127,4 +202,6 @@ networks:
 # ============================================
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local

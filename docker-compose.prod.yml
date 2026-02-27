@@ -5,6 +5,9 @@
 # =============================================
 
 services:
+  # Required infrastructure for worker-owned architecture:
+  # - redis: queue/event coordination and distributed locking
+  # - worker: sole owner of background sync + subscriptions
   postgres:
     # Don't expose postgres port in production
     # ports: [] # Explicitly empty to override any dev settings
@@ -20,6 +23,9 @@ services:
           memory: 256M
 
   backend:
+    # NOTE: backend health/readiness depends on worker health via base compose
+    # (docker-compose.yml). Do not remove that dependency in production.
+
     # Resource limits
     deploy:
       resources:
@@ -32,6 +38,40 @@ services:
       replicas: 1
 
     # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  redis:
+    # Required by both backend and worker in production
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    # Redis must write append-only data; do not set read_only=true
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    # Required service in worker-owned architecture
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 768M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      replicas: 1
+
+    # Security options (matches backend hardening profile)
     security_opt:
       - no-new-privileges:true
     read_only: true

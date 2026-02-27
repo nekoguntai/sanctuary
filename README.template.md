@@ -604,8 +604,8 @@ ELECTRUM_HOST=your-electrum-server.com
 ELECTRUM_PORT=50002
 ELECTRUM_SSL=true
 
-# Disable server-side Electrum subscriptions (worker owns subscriptions)
-SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=false
+# Worker health endpoint used by backend readiness checks
+WORKER_HEALTH_URL=http://worker:3002/health
 
 # Logging level (debug, info, warn, error)
 LOG_LEVEL=info

@@ -563,12 +563,16 @@ start_services() {
         # only the missing ones. If all images exist, it won't rebuild.
         if docker compose $COMPOSE_FILES up -d --wait; then
             FRONTEND_RUNNING=true
+            WORKER_RUNNING=true
         else
             echo ""
             echo -e "${YELLOW}Note: Some services may still be starting.${NC}"
-            # Check if frontend is actually running despite the timeout
+            # Check if key services are actually running despite the timeout
             if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
                 FRONTEND_RUNNING=true
+            fi
+            if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "worker.*healthy"; then
+                WORKER_RUNNING=true
             fi
         fi
         USED_WAIT_FLAG=true
@@ -596,6 +600,13 @@ wait_for_healthy() {
     while [ $WAITED -lt $MAX_WAIT ]; do
         if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "frontend.*healthy"; then
             FRONTEND_RUNNING=true
+        fi
+
+        if docker compose ps --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -q "worker.*healthy"; then
+            WORKER_RUNNING=true
+        fi
+
+        if [ "$FRONTEND_RUNNING" = true ] && [ "$WORKER_RUNNING" = true ]; then
             break
         fi
 
@@ -614,7 +625,7 @@ wait_for_healthy() {
         echo "  Still starting... ($WAITED/${MAX_WAIT}s)"
     done
 
-    if [ $WAITED -ge $MAX_WAIT ] && [ "$FRONTEND_RUNNING" = false ]; then
+    if [ $WAITED -ge $MAX_WAIT ] && { [ "$FRONTEND_RUNNING" = false ] || [ "$WORKER_RUNNING" = false ]; }; then
         echo -e "${YELLOW}Timeout waiting for services. They may still be starting.${NC}"
         echo "  Check status with: docker compose ps"
         echo "  View logs with: docker compose logs -f"
@@ -634,7 +645,7 @@ show_completion_banner() {
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC}                                                           ${BLUE}║${NC}"
 
-    if [ "$FRONTEND_RUNNING" = true ]; then
+    if [ "$FRONTEND_RUNNING" = true ] && [ "$WORKER_RUNNING" = true ]; then
         echo -e "${BLUE}║${NC}            ${GREEN}Setup complete! Sanctuary is running.${NC}       ${BLUE}║${NC}"
     elif [ "$STARTED" = true ]; then
         echo -e "${BLUE}║${NC}          ${YELLOW}Setup complete! Services starting...${NC}          ${BLUE}║${NC}"
@@ -807,6 +818,7 @@ main() {
     # Start services
     STARTED=false
     FRONTEND_RUNNING=false
+    WORKER_RUNNING=false
 
     if [ "$OPT_NO_START" != true ]; then
         if [ "$OPT_NON_INTERACTIVE" = true ] || [ ! -t 0 ]; then

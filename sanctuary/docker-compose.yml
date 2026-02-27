@@ -13,7 +13,8 @@ services:
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     environment:
       BACKEND_HOST: sanctuary_server_1
       BACKEND_PORT: 3001
@@ -27,18 +28,28 @@ services:
     restart: on-failure
     stop_grace_period: 1m
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3001
       LOG_LEVEL: info
       # Database
       DATABASE_URL: postgresql://sanctuary:sanctuary@sanctuary_db_1:5432/sanctuary?schema=public
+      # Redis (required)
+      REDIS_URL: redis://sanctuary_redis_1:6379
       # JWT - generated per installation
       JWT_SECRET: ${APP_SANCTUARY_JWT_SECRET}
       JWT_EXPIRES_IN: 7d
       # Encryption key for sensitive data
       ENCRYPTION_KEY: ${APP_SANCTUARY_ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${APP_SANCTUARY_ENCRYPTION_SALT}
+      GATEWAY_SECRET: ${APP_SANCTUARY_GATEWAY_SECRET}
+      WORKER_HEALTH_URL: http://sanctuary_worker_1:3002/health
       # Bitcoin Network
       BITCOIN_NETWORK: mainnet
       # Electrum - connect to Umbrel's electrs
@@ -48,6 +59,12 @@ services:
       # Price APIs (public)
       MEMPOOL_API: https://mempool.space/api/v1
       COINGECKO_API: https://api.coingecko.com/api/v3
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       default:
         ipv4_address: $APP_SANCTUARY_SERVER_IP
@@ -71,6 +88,58 @@ services:
     networks:
       default:
         ipv4_address: $APP_SANCTUARY_DB_IP
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    stop_grace_period: 1m
+    command: redis-server --appendonly yes
+    volumes:
+      - ${APP_DATA_DIR}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_REDIS_IP
+
+  worker:
+    image: ghcr.io/nekoguntai/sanctuary-backend:v0.8.8@sha256:1085eb5f2869858ab9586cc9b9f53cfda000f008f809a8d04769ae9ad0e65a8e
+    restart: on-failure
+    stop_grace_period: 1m
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://sanctuary:sanctuary@sanctuary_db_1:5432/sanctuary?schema=public
+      REDIS_URL: redis://sanctuary_redis_1:6379
+      WORKER_HEALTH_PORT: 3002
+      WORKER_CONCURRENCY: 5
+      BITCOIN_NETWORK: mainnet
+      ELECTRUM_HOST: ${APP_ELECTRS_NODE_IP}
+      ELECTRUM_PORT: ${APP_ELECTRS_NODE_PORT}
+      ELECTRUM_PROTOCOL: tcp
+      JWT_SECRET: ${APP_SANCTUARY_JWT_SECRET}
+      ENCRYPTION_KEY: ${APP_SANCTUARY_ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${APP_SANCTUARY_ENCRYPTION_SALT}
+      GATEWAY_SECRET: ${APP_SANCTUARY_GATEWAY_SECRET}
+    command: ["node", "dist/app/src/worker.js"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      default:
+        ipv4_address: $APP_SANCTUARY_WORKER_IP
 
   migrate:
     image: ghcr.io/nekoguntai/sanctuary-backend:v0.8.8@sha256:1085eb5f2869858ab9586cc9b9f53cfda000f008f809a8d04769ae9ad0e65a8e

@@ -123,6 +123,8 @@ Umbrel will likely adjust these IP addresses during review:
 | server | 10.21.22.51 |
 | db | 10.21.22.52 |
 | migrate | 10.21.22.53 |
+| redis | 10.21.22.54 |
+| worker | 10.21.22.55 |
 
 ## Dependencies
 

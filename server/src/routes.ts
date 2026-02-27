@@ -26,6 +26,7 @@ import transferRoutes from './api/transfers';
 import openApiRoutes from './api/openapi';
 import mobilePermissionsRoutes, { mobilePermissionsInternalRoutes } from './api/mobilePermissions';
 import { metricsHandler } from './middleware/metrics';
+import { getWorkerHealthStatus } from './services/workerHealth';
 
 type RouteDefinition = {
   method: 'use' | 'get';
@@ -34,10 +35,14 @@ type RouteDefinition = {
 };
 
 function healthHandler(req: Request, res: Response): void {
-  res.json({
-    status: 'ok',
+  const worker = getWorkerHealthStatus();
+  const workerReady = worker.healthy;
+
+  res.status(workerReady ? 200 : 503).json({
+    status: workerReady ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
+    worker,
   });
 }
 
@@ -76,4 +81,3 @@ export function registerRoutes(app: Express): void {
     }
   }
 }
-

@@ -6,6 +6,8 @@ export APP_SANCTUARY_WEB_IP="10.21.22.50"
 export APP_SANCTUARY_SERVER_IP="10.21.22.51"
 export APP_SANCTUARY_DB_IP="10.21.22.52"
 export APP_SANCTUARY_MIGRATE_IP="10.21.22.53"
+export APP_SANCTUARY_REDIS_IP="10.21.22.54"
+export APP_SANCTUARY_WORKER_IP="10.21.22.55"
 
 # Generate a unique JWT secret for this installation
 # This is generated once and persisted
@@ -22,6 +24,20 @@ if [ ! -f "$ENCRYPTION_KEY_FILE" ]; then
   openssl rand -base64 32 | tr -d '=/+' | head -c 48 > "$ENCRYPTION_KEY_FILE"
 fi
 export APP_SANCTUARY_ENCRYPTION_KEY=$(cat "$ENCRYPTION_KEY_FILE")
+
+# Generate a unique gateway secret for backend <-> gateway auth checks
+GATEWAY_SECRET_FILE="${EXPORTS_APP_DIR}/gateway_secret"
+if [ ! -f "$GATEWAY_SECRET_FILE" ]; then
+  openssl rand -base64 32 | tr -d '=/+' | head -c 48 > "$GATEWAY_SECRET_FILE"
+fi
+export APP_SANCTUARY_GATEWAY_SECRET=$(cat "$GATEWAY_SECRET_FILE")
+
+# Generate encryption salt used for key derivation (stable across restarts)
+ENCRYPTION_SALT_FILE="${EXPORTS_APP_DIR}/encryption_salt"
+if [ ! -f "$ENCRYPTION_SALT_FILE" ]; then
+  openssl rand -base64 16 | tr -d '\n' > "$ENCRYPTION_SALT_FILE"
+fi
+export APP_SANCTUARY_ENCRYPTION_SALT=$(cat "$ENCRYPTION_SALT_FILE")
 
 # Port for accessing Sanctuary (via Umbrel's app proxy)
 export APP_SANCTUARY_PORT="3010"

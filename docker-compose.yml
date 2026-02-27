@@ -159,6 +159,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      worker:
+        condition: service_healthy
     environment:
       # Node.js memory settings (increase heap for large wallet syncs)
       NODE_OPTIONS: "--max-old-space-size=1536"
@@ -199,6 +201,9 @@ services:
 
       # Bitcoin Network
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}
+
+      # Worker architecture (single owner for background processing)
+      WORKER_HEALTH_URL: ${WORKER_HEALTH_URL:-http://worker:3002/health}
 
       # Electrum Server
       ELECTRUM_HOST: ${ELECTRUM_HOST:-electrum.blockstream.info}
@@ -266,8 +271,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      backend:
         condition: service_healthy
     environment:
       # Node.js memory settings

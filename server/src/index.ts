@@ -31,13 +31,12 @@ import { requestLogger } from './middleware/requestLogger';
 import { requestTimeout } from './middleware/requestTimeout';
 import { apiVersionMiddleware } from './middleware/apiVersion';
 import { migrationService } from './services/migrationService';
-import { maintenanceService } from './services/maintenanceService';
 import { getStartupStatus, isSystemDegraded } from './services/startupManager';
 import { registerService, startRegisteredServices, stopRegisteredServices } from './services/serviceRegistry';
 import { initializeRevocationService, shutdownRevocationService } from './services/tokenRevocation';
 import { featureFlagService } from './services/featureFlagService';
 import { rateLimitService } from './services/rateLimiting';
-import { jobQueue, maintenanceJobs } from './jobs';
+import { jobQueue } from './jobs';
 import { metricsService } from './observability';
 import { metricsMiddleware } from './middleware/metrics';
 import { i18nMiddleware } from './middleware/i18n';
@@ -49,6 +48,7 @@ import { cache, warmCaches } from './services/cache/cacheService';
 import { walletLogBuffer } from './services/walletLogBuffer';
 import { deadLetterQueue } from './services/deadLetterQueue';
 import { initializeCacheInvalidation, shutdownCacheInvalidation } from './services/cacheInvalidation';
+import { startWorkerHealthMonitor, stopWorkerHealthMonitor } from './services/workerHealth';
 
 const log = createLogger('SERVER');
 
@@ -215,6 +215,16 @@ registerService({
   maxRetries: 2,
   backoffMs: [1000, 3000],
 });
+
+registerService({
+  name: 'worker-heartbeat',
+  start: () => startWorkerHealthMonitor(),
+  stop: () => stopWorkerHealthMonitor(),
+  critical: true,
+  maxRetries: 10,
+  backoffMs: [1000, 2000, 5000, 10000],
+});
+
 registerService({
   name: 'sync',
   start: () => syncService.start(),
@@ -223,20 +233,7 @@ registerService({
   maxRetries: 3,
   backoffMs: [2000, 5000, 10000],
 });
-registerService({
-  name: 'maintenance',
-  start: async () => {
-    if (jobQueue.isAvailable()) {
-      log.info('Skipping in-process maintenance service (job queue enabled)');
-      return;
-    }
-    maintenanceService.start();
-  },
-  stop: () => maintenanceService.stop(),
-  critical: false,
-  maxRetries: 2,
-  backoffMs: [1000, 2000],
-});
+log.info('Worker-owned architecture: in-process maintenance fallback disabled');
 
 // Run database connection and migrations before starting server
 (async () => {
@@ -261,18 +258,16 @@ registerService({
 
     // Phase 2: Initialize services that need Redis (parallel)
     log.info('Initializing Redis-dependent services...');
-    await Promise.all([
+    const redisDependentTasks: Promise<unknown>[] = [
       initializeRedisBridge(),
       (async () => { initializeCacheInvalidation(); })(),
       (async () => { rateLimitService.initialize(); })(),
       (async () => { deadLetterQueue.start(); })(),
-      jobQueue.initialize(),
-    ]);
+    ];
 
-    // Register maintenance jobs
-    for (const job of maintenanceJobs) {
-      jobQueue.register(job);
-    }
+    log.info('Worker-owned architecture: skipping local job queue initialization');
+
+    await Promise.all(redisDependentTasks);
 
     // Phase 3: Schedule jobs + initialize remaining services (parallel)
     log.info('Scheduling jobs and finalizing services...');
@@ -332,7 +327,7 @@ registerService({
         });
       } catch (err) {
         log.error('Critical service startup failure', { error: getErrorMessage(err) });
-        // Critical service failed - this would have thrown, but handle gracefully
+        process.exit(1);
       }
 
       // Log final migration status

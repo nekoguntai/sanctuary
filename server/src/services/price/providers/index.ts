@@ -6,6 +6,7 @@
 
 import { ProviderRegistry } from '../../../providers';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import type { IPriceProvider } from '../types';
 
 // Export provider classes
@@ -72,7 +73,7 @@ export async function initializePriceProviders(
     } catch (error) {
       log.error('Failed to register price provider', {
         name: provider.name,
-        error: (error as Error).message,
+        error: getErrorMessage(error),
       });
     }
   }

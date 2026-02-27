@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
 import { useLoadingState } from '../hooks/useLoadingState';
 import { createLogger } from '../utils/logger';
+import { extractErrorMessage } from '../utils/errorHandler';
 import { ConfigurableTable } from './ui/ConfigurableTable';
 import { ColumnConfigButton } from './ui/ColumnConfigButton';
 import {
@@ -161,11 +162,9 @@ export const DeviceList: React.FC = () => {
       await deleteDevice(device.id);
       setDevices(prev => prev.filter(d => d.id !== device.id));
       setDeleteConfirmId(null);
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to delete device', { error });
-      // Show error message from API
-      const message = error.message || 'Failed to delete device';
-      setDeleteError(message);
+      setDeleteError(extractErrorMessage(error, 'Failed to delete device'));
     }
   };
 

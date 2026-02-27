@@ -39,6 +39,7 @@
     "bitbox02-api": "^0.15.1",
     "bitcoinjs-lib": "^6.1.7",
     "cbor-x": "^1.6.0",
+    "express": "^5.2.1",
     "jsqr": "^1.4.0",
     "ledger-bitcoin": "^0.2.3",
     "lucide-react": "^0.556.0",

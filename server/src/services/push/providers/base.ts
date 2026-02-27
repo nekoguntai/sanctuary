@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import type { IPushProvider, PushMessage, PushResult, PushPlatform } from '../types';
 
 export interface BasePushProviderConfig {
@@ -52,7 +53,7 @@ export abstract class BasePushProvider implements IPushProvider {
     try {
       return await this.sendNotification(deviceToken, message);
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = getErrorMessage(error);
       log.error(`${this.name} send failed`, { error: errorMsg });
       return {
         success: false,

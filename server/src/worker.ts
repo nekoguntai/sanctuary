@@ -22,6 +22,7 @@ const otelPromise = initializeOpenTelemetry();
 
 import { getConfig } from './config';
 import { createLogger } from './utils/logger';
+import { getErrorMessage } from './utils/errors';
 import { connectWithRetry, disconnect } from './models/prisma';
 import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock } from './infrastructure';
 import { WorkerJobQueue } from './worker/workerJobQueue';
@@ -59,7 +60,7 @@ process.on('uncaughtException', (error: Error) => {
 
 process.on('unhandledRejection', (reason: unknown) => {
   log.error('Unhandled promise rejection in worker', {
-    reason: reason instanceof Error ? reason.message : String(reason),
+    reason: getErrorMessage(reason),
     stack: reason instanceof Error ? reason.stack : undefined,
   });
 });
@@ -164,7 +165,7 @@ function startReconciliationTimer(): void {
       await electrumManager.reconcileSubscriptions();
     } catch (error) {
       log.error('Subscription reconciliation failed', {
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }, RECONCILIATION_INTERVAL_MS);
@@ -193,7 +194,7 @@ function handleNewBlock(network: BitcoinNetwork, height: number, hash: string): 
     jobId: `confirmations:${height}`, // Deduplicate by height
   }).catch(err => {
     log.error('Failed to queue confirmation update job', {
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
       height,
       network,
     });
@@ -216,7 +217,7 @@ function handleAddressActivity(network: BitcoinNetwork, walletId: string, addres
     jobId: `sync:${walletId}:${Date.now()}`, // Allow multiple syncs
   }).catch(err => {
     log.error('Failed to queue sync job', {
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
       walletId,
       address,
       network,

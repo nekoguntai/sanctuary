@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { getDistributedCache } from '../infrastructure';
 
 const log = createLogger('DLQ');
@@ -113,7 +114,7 @@ class DeadLetterQueue {
       category,
       operation,
       payload,
-      error: error instanceof Error ? error.message : error,
+      error: getErrorMessage(error),
       errorStack: error instanceof Error ? error.stack : undefined,
       attempts,
       firstFailedAt: now,
@@ -156,7 +157,7 @@ class DeadLetterQueue {
     const entry = this.entries.get(existingId);
     if (!entry) return;
 
-    entry.error = error instanceof Error ? error.message : error;
+    entry.error = getErrorMessage(error);
     entry.errorStack = error instanceof Error ? error.stack : undefined;
     entry.attempts = attempts;
     entry.lastFailedAt = new Date();

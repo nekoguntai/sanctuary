@@ -19,6 +19,7 @@ import {
 import * as adminApi from '../src/api/admin';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 const log = createLogger('ElectrumServerSettings');
 
@@ -180,9 +181,9 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
 
       setIsAddingServer(false);
       setNewServer({ label: '', host: '', port: 50002, useSsl: true });
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to add server', { error });
-      alert(error.response?.data?.message || 'Failed to add server');
+      alert(extractErrorMessage(error, 'Failed to add server'));
     } finally {
       setServerActionLoading(null);
     }
@@ -204,9 +205,9 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
         setEditingServerId(null);
         setNewServer({ label: '', host: '', port: 50002, useSsl: true });
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to update server', { error });
-      alert(error.response?.data?.message || 'Failed to update server');
+      alert(extractErrorMessage(error, 'Failed to update server'));
     } finally {
       setServerActionLoading(null);
     }
@@ -247,10 +248,10 @@ export const ElectrumServerSettings: React.FC<ElectrumServerSettingsProps> = ({
         setServerTestStatus((prev) => ({ ...prev, [id]: 'error' }));
         setServerTestErrors((prev) => ({ ...prev, [id]: result.message || 'Connection failed' }));
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Server test failed', { error });
       setServerTestStatus((prev) => ({ ...prev, [id]: 'error' }));
-      setServerTestErrors((prev) => ({ ...prev, [id]: error.message || 'Test failed' }));
+      setServerTestErrors((prev) => ({ ...prev, [id]: extractErrorMessage(error, 'Test failed') }));
     }
   };
 

@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import type {
   NotificationChannelHandler,
   TransactionNotification,
@@ -119,7 +120,7 @@ class NotificationChannelRegistry {
           success: false,
           channelId: handler.id,
           usersNotified: 0,
-          errors: [err instanceof Error ? err.message : String(err)],
+          errors: [getErrorMessage(err)],
         };
       }
     });
@@ -170,7 +171,7 @@ class NotificationChannelRegistry {
           success: false,
           channelId: handler.id,
           usersNotified: 0,
-          errors: [err instanceof Error ? err.message : String(err)],
+          errors: [getErrorMessage(err)],
         };
       }
     });

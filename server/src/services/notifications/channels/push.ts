@@ -5,6 +5,7 @@
  */
 
 import * as pushService from '../../push/pushService';
+import { getErrorMessage } from '../../../utils/errors';
 import type {
   NotificationChannelHandler,
   TransactionNotification,
@@ -51,7 +52,7 @@ export const pushChannelHandler: NotificationChannelHandler = {
         success: false,
         channelId: 'push',
         usersNotified: 0,
-        errors: [err instanceof Error ? err.message : String(err)],
+        errors: [getErrorMessage(err)],
       };
     }
   },

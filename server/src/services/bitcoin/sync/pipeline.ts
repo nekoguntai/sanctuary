@@ -8,6 +8,7 @@ import prisma from '../../../models/prisma';
 import { getNodeClient } from '../nodeClient';
 import { getElectrumPool } from '../electrumPool';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import { walletLog } from '../../../websocket/notifications';
 import { getBlockHeight } from '../utils/blockHeight';
 
@@ -124,7 +125,7 @@ export async function executeSyncPipeline(
     } catch (error) {
       const pipelineError: SyncPipelineError = {
         name: 'SyncPipelineError',
-        message: `Sync pipeline failed at phase "${phase.name}": ${error instanceof Error ? error.message : String(error)}`,
+        message: `Sync pipeline failed at phase "${phase.name}": ${getErrorMessage(error)}`,
         cause: error instanceof Error ? error : new Error(String(error)),
         completedPhases: ctx.completedPhases,
         failedPhase: phase.name,

@@ -12,6 +12,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import {
   initiateTransfer,
   acceptTransfer,
@@ -84,7 +85,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(transfer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to initiate transfer';
+    const message = getErrorMessage(error, 'Failed to initiate transfer');
 
     // Determine appropriate status code
     if (message.includes('not found')) {
@@ -223,7 +224,7 @@ router.post('/:id/accept', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to accept transfer';
+    const message = getErrorMessage(error, 'Failed to accept transfer');
 
     if (message.includes('not found')) {
       return res.status(404).json({ error: 'Not Found', message });
@@ -259,7 +260,7 @@ router.post('/:id/decline', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to decline transfer';
+    const message = getErrorMessage(error, 'Failed to decline transfer');
 
     if (message.includes('not found')) {
       return res.status(404).json({ error: 'Not Found', message });
@@ -295,7 +296,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to cancel transfer';
+    const message = getErrorMessage(error, 'Failed to cancel transfer');
 
     if (message.includes('not found')) {
       return res.status(404).json({ error: 'Not Found', message });
@@ -336,7 +337,7 @@ router.post('/:id/confirm', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to confirm transfer';
+    const message = getErrorMessage(error, 'Failed to confirm transfer');
 
     if (message.includes('not found')) {
       return res.status(404).json({ error: 'Not Found', message });

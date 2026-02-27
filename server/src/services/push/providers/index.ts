@@ -6,6 +6,7 @@
 
 import { ProviderRegistry } from '../../../providers';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import type { IPushProvider, PushPlatform } from '../types';
 
 // Export provider classes
@@ -57,7 +58,7 @@ export async function initializePushProviders(
     } catch (error) {
       log.error('Failed to register push provider', {
         name: provider.name,
-        error: (error as Error).message,
+        error: getErrorMessage(error),
       });
     }
   }

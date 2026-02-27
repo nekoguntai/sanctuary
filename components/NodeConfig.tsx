@@ -18,6 +18,7 @@ import {
 import * as adminApi from '../src/api/admin';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
+import { extractErrorMessage } from '../utils/errorHandler';
 import { NetworkConnectionCard } from './NetworkConnectionCard';
 
 const log = createLogger('NodeConfig');
@@ -153,10 +154,10 @@ export const NodeConfig: React.FC = () => {
         useSsl: ssl,
       });
       return result;
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error.message || 'Connection failed',
+        message: extractErrorMessage(error, 'Connection failed'),
       };
     }
   };
@@ -195,10 +196,10 @@ export const NodeConfig: React.FC = () => {
         setProxyTestStatus('error');
         setProxyTestMessage(result.message || 'Proxy connection failed');
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Proxy test error', { error });
       setProxyTestStatus('error');
-      setProxyTestMessage(error.response?.data?.message || error.message || 'Failed to test proxy');
+      setProxyTestMessage(extractErrorMessage(error, 'Failed to test proxy'));
     }
 
     setTimeout(() => {
@@ -266,9 +267,9 @@ export const NodeConfig: React.FC = () => {
           setTorContainerMessage(result.message);
         }
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Tor container toggle error', { error });
-      setTorContainerMessage(error.message || 'Failed to toggle Tor container');
+      setTorContainerMessage(extractErrorMessage(error, 'Failed to toggle Tor container'));
     } finally {
       setIsTorContainerLoading(false);
       setTimeout(async () => {

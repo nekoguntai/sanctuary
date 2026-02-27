@@ -100,6 +100,7 @@ vi.mock('../../../src/config', () => ({
       retryDelaysMs: [1000, 5000, 15000],
       maxSyncDurationMs: 120000,
       transactionBatchSize: 100,
+      electrumSubscriptionsEnabled: true,
     },
     bitcoin: {
       network: 'testnet',
@@ -249,23 +250,6 @@ describe('SyncService', () => {
         where: { syncInProgress: true },
         data: { syncInProgress: false },
       });
-    });
-
-    it('should drain queued sync jobs when starting', async () => {
-      const executeSyncJobSpy = vi
-        .spyOn(syncService as any, 'executeSyncJob')
-        .mockResolvedValue({ success: true, addresses: 0, transactions: 0, utxos: 0 });
-
-      // Queue before startup: processQueue is a no-op while not running.
-      syncService.queueSync('wallet-prestart');
-      expect(syncService['syncQueue']).toHaveLength(1);
-
-      await syncService.start();
-
-      expect(syncService['syncQueue']).toHaveLength(0);
-      expect(executeSyncJobSpy).toHaveBeenCalledWith('wallet-prestart');
-
-      executeSyncJobSpy.mockRestore();
     });
   });
 

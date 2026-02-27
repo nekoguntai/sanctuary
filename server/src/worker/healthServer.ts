@@ -13,6 +13,7 @@
 
 import http from 'http';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('WorkerHealth');
 
@@ -137,11 +138,11 @@ export function startHealthServer(options: HealthServerOptions): HealthServerHan
         }
       }
     } catch (error) {
-      log.error('Health check error', { error: error instanceof Error ? error.message : error });
+      log.error('Health check error', { error: getErrorMessage(error) });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: getErrorMessage(error, 'Unknown error'),
       }));
     }
   });

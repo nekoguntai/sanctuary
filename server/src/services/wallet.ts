@@ -14,6 +14,7 @@ import { createLogger } from '../utils/logger';
 import { INITIAL_ADDRESS_COUNT } from '../constants';
 import { hookRegistry, Operations } from './hooks';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
+import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('WALLET');
 
@@ -791,7 +792,7 @@ export async function addDeviceToWallet(
       // Log but don't fail - device was still added
       log.warn('Failed to generate descriptor after device link', {
         walletId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorMessage(err),
       });
     }
   }
@@ -1012,9 +1013,9 @@ export async function repairWalletDescriptor(
   } catch (err) {
     log.error('Failed to repair wallet descriptor', {
       walletId,
-      error: err instanceof Error ? err.message : String(err),
+      error: getErrorMessage(err),
     });
-    throw new Error(`Failed to generate descriptor: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Failed to generate descriptor: ${getErrorMessage(err)}`);
   }
 }
 

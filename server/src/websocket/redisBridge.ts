@@ -20,6 +20,7 @@
 import { Redis } from 'ioredis';
 import { randomBytes } from 'crypto';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { getRedisClient, isRedisConnected } from '../infrastructure/redis';
 
 const log = createLogger('WS_REDIS_BRIDGE');
@@ -142,7 +143,7 @@ class RedisWebSocketBridge {
       log.info('Redis WebSocket bridge initialized', { instanceId });
     } catch (error) {
       log.error('Failed to initialize Redis WebSocket bridge', {
-        error: (error as Error).message,
+        error: getErrorMessage(error),
       });
       // Clean up partial initialization
       await this.cleanup();
@@ -177,7 +178,7 @@ class RedisWebSocketBridge {
       this.metrics.published++;
     } catch (error) {
       log.error('Failed to publish WebSocket broadcast', {
-        error: (error as Error).message,
+        error: getErrorMessage(error),
         eventType: event.type,
       });
       this.metrics.errors++;
@@ -208,7 +209,7 @@ class RedisWebSocketBridge {
       }
     } catch (error) {
       log.error('Failed to handle WebSocket broadcast message', {
-        error: (error as Error).message,
+        error: getErrorMessage(error),
       });
       this.metrics.errors++;
     }

@@ -12,6 +12,7 @@
 
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { execSync } from 'child_process';
 
 const log = createLogger('MIGRATION');
@@ -216,7 +217,7 @@ class MigrationService {
 
       return { success: true, applied };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       log.error('Failed to run database migrations', { error: message });
       return { success: false, applied: 0, error: message };
     }

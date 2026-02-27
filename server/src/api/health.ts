@@ -6,15 +6,16 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { db as prisma } from '../repositories/db';
+import prisma from '../models/prisma';
 import { circuitBreakerRegistry } from '../services/circuitBreaker';
 import { getSyncService } from '../services/syncService';
 import { getWebSocketServer } from '../websocket/server';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { checkRedisHealth } from '../infrastructure/redis';
+import { jobQueue } from '../jobs';
 import { getCacheInvalidationStatus } from '../services/cacheInvalidation';
 import { getStartupStatus } from '../services/startupManager';
-import { probeWorkerHealth } from '../services/workerHealth';
 
 const router = Router();
 const log = createLogger('HEALTH');
@@ -25,7 +26,7 @@ export interface ComponentHealth {
   status: HealthStatus;
   message?: string;
   latency?: number;
-  details?: unknown;
+  details?: Record<string, unknown>;
 }
 
 export interface HealthResponse {
@@ -36,7 +37,6 @@ export interface HealthResponse {
   components: {
     database: ComponentHealth;
     redis: ComponentHealth;
-    worker: ComponentHealth;
     electrum: ComponentHealth;
     websocket: ComponentHealth;
     sync: ComponentHealth;
@@ -65,7 +65,7 @@ async function checkDatabase(): Promise<ComponentHealth> {
     log.error('Database health check failed', { error });
     return {
       status: 'unhealthy',
-      message: error instanceof Error ? error.message : 'Database unreachable',
+      message: getErrorMessage(error, 'Database unreachable'),
       latency: Date.now() - start,
     };
   }
@@ -213,37 +213,20 @@ async function checkRedis(): Promise<ComponentHealth> {
  * Check job queue status
  */
 async function checkJobQueue(): Promise<ComponentHealth> {
-  return {
-    status: 'healthy',
-    message: 'Handled by dedicated worker process',
-  };
-}
-
-/**
- * Check dedicated worker status
- */
-async function checkWorker(): Promise<ComponentHealth> {
-  const status = await probeWorkerHealth();
-
-  if (!status.healthy || status.availability === 'unhealthy') {
-    return {
-      status: 'unhealthy',
-      message: status.error || 'Worker unavailable',
-      details: status,
-    };
-  }
-
-  if (status.availability === 'degraded') {
-    return {
-      status: 'degraded',
-      message: status.error || 'Worker reachable but degraded',
-      details: status,
-    };
-  }
+  const health = await jobQueue.getHealth();
+  const status = health.healthy ? 'healthy' : 'unhealthy';
 
   return {
-    status: 'healthy',
-    details: status,
+    status,
+    details: {
+      queueName: health.queueName,
+      waiting: health.waiting,
+      active: health.active,
+      completed: health.completed,
+      failed: health.failed,
+      delayed: health.delayed,
+      paused: health.paused,
+    },
   };
 }
 
@@ -407,10 +390,6 @@ function determineOverallStatus(components: Record<string, ComponentHealth>): He
     return 'unhealthy';
   }
 
-  if (components.worker?.status === 'unhealthy') {
-    return 'unhealthy';
-  }
-
   // Any unhealthy = overall degraded (unless database)
   if (statuses.includes('unhealthy')) {
     return 'degraded';
@@ -432,7 +411,6 @@ router.get('/', async (req: Request, res: Response) => {
   const components = {
     database: await checkDatabase(),
     redis: await checkRedis(),
-    worker: await checkWorker(),
     electrum: checkElectrum(),
     websocket: checkWebSocket(),
     sync: checkSync(),
@@ -477,14 +455,6 @@ router.get('/ready', async (req: Request, res: Response) => {
     return res.status(503).json({
       status: 'not ready',
       reason: 'Database unavailable',
-    });
-  }
-
-  const workerHealth = await checkWorker();
-  if (workerHealth.status === 'unhealthy') {
-    return res.status(503).json({
-      status: 'not ready',
-      reason: 'Worker unavailable',
     });
   }
 

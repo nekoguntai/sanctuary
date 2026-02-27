@@ -11,6 +11,7 @@ import type { TransactionDetails, TransactionOutput, TransactionInput } from './
 import prisma from '../../models/prisma';
 import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { walletLog } from '../../websocket/notifications';
 
 // Import modular utilities
@@ -632,8 +633,7 @@ export async function broadcastTransaction(rawTx: string): Promise<{
       broadcasted: true,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to broadcast transaction: ${message}`);
+    throw new Error(`Failed to broadcast transaction: ${getErrorMessage(error, 'Unknown error')}`);
   }
 }
 

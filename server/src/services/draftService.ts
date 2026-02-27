@@ -14,6 +14,7 @@ import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';
 import { notifyNewDraft } from './notifications/notificationService';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 import * as walletService from './wallet';
 
@@ -310,7 +311,7 @@ export async function updateDraft(
       // If combining fails (e.g., incompatible PSBTs), log and use the new one
       log.warn('Failed to combine PSBTs, using new PSBT directly', {
         draftId,
-        error: combineError instanceof Error ? combineError.message : String(combineError),
+        error: getErrorMessage(combineError),
       });
       updateData.signedPsbtBase64 = data.signedPsbtBase64;
     }

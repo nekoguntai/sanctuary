@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { TabNetwork } from './NetworkTabs';
 import * as syncApi from '../src/api/sync';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 interface NetworkSyncActionsProps {
   network: TabNetwork;
@@ -38,10 +39,10 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
         message: `Queued ${response.queued} wallet${response.queued !== 1 ? 's' : ''} for sync`,
       });
       onSyncStarted?.();
-    } catch (error: any) {
+    } catch (error) {
       setResult({
         type: 'error',
-        message: error.message || 'Failed to queue wallets for sync',
+        message: extractErrorMessage(error, 'Failed to queue wallets for sync'),
       });
     } finally {
       setSyncing(false);
@@ -62,10 +63,10 @@ export const NetworkSyncActions: React.FC<NetworkSyncActionsProps> = ({
         message: `Cleared ${response.deletedTransactions} transactions. Queued ${response.queued} wallet${response.queued !== 1 ? 's' : ''} for resync.`,
       });
       onSyncStarted?.();
-    } catch (error: any) {
+    } catch (error) {
       setResult({
         type: 'error',
-        message: error.message || 'Failed to resync wallets',
+        message: extractErrorMessage(error, 'Failed to resync wallets'),
       });
     } finally {
       setResyncing(false);

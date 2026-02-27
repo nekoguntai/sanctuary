@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { createLogger } from './logger';
+import { getErrorMessage } from './errors';
 
 const log = createLogger('SafeJson');
 
@@ -54,7 +55,7 @@ export function safeJsonParse<T>(
   } catch (error) {
     log.warn('JSON parse failed', {
       context,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
       valuePreview: value.substring(0, 100),
     });
     return defaultValue;
@@ -88,7 +89,7 @@ export function safeJsonParseUntyped<T>(
   } catch (error) {
     log.warn('JSON parse failed', {
       context,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
       valuePreview: value.substring(0, 100),
     });
     return defaultValue;

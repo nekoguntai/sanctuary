@@ -5,14 +5,9 @@
  * Handles reconnection, subscriptions, and event dispatching
  */
 
-// Conditional logging - only in development mode
-// Use type assertion for Vite's import.meta.env
-const isDev = (import.meta as any).env?.DEV ?? false;
-const log = {
-  debug: (...args: unknown[]) => isDev && console.log('[WS]', ...args),
-  warn: (...args: unknown[]) => isDev && console.warn('[WS]', ...args),
-  error: (...args: unknown[]) => console.error('[WS]', ...args), // Always log errors
-};
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('WebSocket');
 
 export type WebSocketEventType =
   | 'transaction'
@@ -70,7 +65,7 @@ export class WebSocketClient {
     this.token = token || null;
 
     // Connect without token in URL (security: avoid token exposure in logs/history)
-    log.debug('Connecting to:', this.url);
+    log.debug('Connecting', { url: this.url });
 
     try {
       this.ws = new WebSocket(this.url);
@@ -102,17 +97,17 @@ export class WebSocketClient {
           const message: WebSocketEvent = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (err) {
-          log.error('Failed to parse message:', err);
+          log.error('Failed to parse message', { error: err });
         }
       };
 
       this.ws.onerror = (error) => {
-        log.error('Connection error:', error);
+        log.error('Connection error', { error });
         this.isConnecting = false;
       };
 
       this.ws.onclose = (event) => {
-        log.debug('Closed:', event.code, event.reason);
+        log.debug('Closed', { code: event.code, reason: event.reason });
         this.isConnecting = false;
         this.ws = null;
 
@@ -125,7 +120,7 @@ export class WebSocketClient {
         }
       };
     } catch (err) {
-      log.error('Failed to create connection:', err);
+      log.error('Failed to create connection', { error: err });
       this.isConnecting = false;
     }
   }
@@ -184,7 +179,7 @@ export class WebSocketClient {
         break;
 
       case 'authenticated':
-        log.debug('Authenticated:', message.data?.success ? 'success' : 'failed');
+        log.debug('Authenticated', { success: message.data?.success });
         // Now that auth is confirmed, resubscribe to channels
         // This fixes the race condition where subscriptions were rejected
         // because they arrived before auth completed
@@ -194,19 +189,19 @@ export class WebSocketClient {
         break;
 
       case 'subscribed':
-        log.debug('Subscribed to:', message.data?.channel);
+        log.debug('Subscribed', { channel: message.data?.channel });
         break;
 
       case 'subscribed_batch':
-        log.debug('Batch subscribed to:', message.data?.subscribed?.length, 'channels');
+        log.debug('Batch subscribed', { count: message.data?.subscribed?.length });
         break;
 
       case 'unsubscribed':
-        log.debug('Unsubscribed from:', message.data?.channel);
+        log.debug('Unsubscribed', { channel: message.data?.channel });
         break;
 
       case 'unsubscribed_batch':
-        log.debug('Batch unsubscribed from:', message.data?.unsubscribed?.length, 'channels');
+        log.debug('Batch unsubscribed', { count: message.data?.unsubscribed?.length });
         break;
 
       case 'event':
@@ -214,7 +209,7 @@ export class WebSocketClient {
         break;
 
       case 'error':
-        log.error('Server error:', message.data);
+        log.error('Server error', { data: message.data });
         break;
 
       case 'pong':
@@ -222,7 +217,7 @@ export class WebSocketClient {
         break;
 
       default:
-        log.warn('Unknown message type:', message.type);
+        log.warn('Unknown message type', { type: message.type });
     }
   }
 
@@ -240,7 +235,7 @@ export class WebSocketClient {
           try {
             callback(message);
           } catch (err) {
-            log.error('Event listener error:', err);
+            log.error('Event listener error', { error: err });
           }
         }
       }
@@ -254,7 +249,7 @@ export class WebSocketClient {
           try {
             callback(message);
           } catch (err) {
-            log.error('Channel listener error:', err);
+            log.error('Channel listener error', { error: err });
           }
         }
       }
@@ -267,7 +262,7 @@ export class WebSocketClient {
         try {
           callback(message);
         } catch (err) {
-          log.error('Wildcard listener error:', err);
+          log.error('Wildcard listener error', { error: err });
         }
       }
     }
@@ -403,7 +398,7 @@ export class WebSocketClient {
       try {
         callback(connected);
       } catch (err) {
-        log.error('Connection listener error:', err);
+        log.error('Connection listener error', { error: err });
       }
     }
   }

@@ -31,6 +31,7 @@
 
 import { getDistributedCache } from '../infrastructure/redis';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('RepoCache');
 
@@ -111,7 +112,7 @@ export async function withCache<T>(
       // Cache read failed, continue to database
       log.warn('Cache read failed, falling back to database', {
         key: fullKey,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: getErrorMessage(error, 'Unknown error'),
       });
     }
   }
@@ -129,7 +130,7 @@ export async function withCache<T>(
       // Cache write failed, continue without caching
       log.warn('Cache write failed', {
         key: fullKey,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: getErrorMessage(error, 'Unknown error'),
       });
     }
   }

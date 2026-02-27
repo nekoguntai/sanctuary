@@ -8,7 +8,7 @@
  * - Notifies frontend via WebSocket when data changes
  */
 
-import { db as prisma } from '../repositories/db';
+import prisma from '../models/prisma';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields, setCachedBlockHeight } from './bitcoin/blockchain';
 import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
@@ -39,6 +39,7 @@ function getSyncConfig() {
     retryDelaysMs: config.sync.retryDelaysMs,
     maxSyncDurationMs: config.sync.maxSyncDurationMs,
     transactionBatchSize: config.sync.transactionBatchSize,
+    electrumSubscriptionsEnabled: config.sync.electrumSubscriptionsEnabled,
   };
 }
 
@@ -108,26 +109,104 @@ class SyncService {
     // Reset any stuck syncInProgress flags from previous server sessions
     await this.resetStuckSyncs();
 
-    // Worker owns recurring sync scheduling and Electrum subscriptions.
-    // Keep this service available for direct API-triggered sync operations.
-    this.subscriptionsEnabled = false;
-    this.subscriptionOwnership = 'disabled';
-    log.info('[SYNC] Worker-owned architecture: in-process background scheduling disabled');
+    // Get config values
+    const syncConfig = getSyncConfig();
+    this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
 
-    // Drain any jobs queued before startup completed.
-    if (this.syncQueue.length > 0) {
-      log.info(`[SYNC] Draining ${this.syncQueue.length} queued sync jobs after startup`);
-    }
-    await this.processQueue();
+    // Start periodic sync check
+    this.syncInterval = setInterval(() => {
+      this.checkAndQueueStaleSyncs();
+    }, syncConfig.syncIntervalMs);
+
+    // Start periodic confirmation updates
+    this.confirmationInterval = setInterval(() => {
+      this.updateAllConfirmations();
+    }, syncConfig.confirmationUpdateIntervalMs);
+
+    // Process any existing queue
+    this.processQueue();
+
+    // Set up real-time subscriptions (async, don't block startup)
+    this.setupRealTimeSubscriptions().catch(err => {
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(err) });
+    });
+
+    log.info('[SYNC] Background sync service started');
   }
 
   /**
    * Set up real-time subscriptions for block and address notifications
    */
   private async setupRealTimeSubscriptions(): Promise<void> {
-    this.subscriptionsEnabled = false;
-    this.subscriptionOwnership = 'disabled';
-    log.info('[SYNC] Server-side Electrum subscriptions disabled (worker-owned)');
+    try {
+      const syncConfig = getSyncConfig();
+      this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
+
+      if (!this.subscriptionsEnabled) {
+        this.subscriptionOwnership = 'disabled';
+        log.info('[SYNC] Server-side Electrum subscriptions disabled by config');
+        return;
+      }
+
+      const lock = await acquireLock(ELECTRUM_SUBSCRIPTION_LOCK_KEY, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+      if (!lock) {
+        this.subscriptionOwnership = 'external';
+        log.info('[SYNC] Electrum subscriptions owned by another process, skipping setup');
+        return;
+      }
+
+      this.subscriptionLock = lock;
+      this.subscriptionOwnership = 'self';
+      this.startSubscriptionLockRefresh();
+      log.info('[SYNC] Acquired Electrum subscription ownership');
+
+      // Get the node client to ensure it's connected
+      const client = await getNodeClient();
+
+      // Only Electrum supports real-time subscriptions
+      const electrumClient = await getElectrumClientIfActive();
+      if (!electrumClient) {
+        log.info('[SYNC] Real-time subscriptions only available with Electrum (current node type does not support it)');
+        await this.releaseSubscriptionLock();
+        this.subscriptionOwnership = 'disabled';
+        return;
+      }
+
+      // Negotiate protocol version first (required by some servers like Blockstream)
+      try {
+        const version = await electrumClient.getServerVersion();
+        log.info(`[SYNC] Connected to Electrum server: ${version.server} (protocol ${version.protocol})`);
+      } catch (versionError) {
+        log.warn('[SYNC] Could not get server version, continuing anyway', { error: String(versionError) });
+      }
+
+      // Subscribe to new block headers
+      if (!this.subscribedToHeaders) {
+        const currentHeader = await electrumClient.subscribeHeaders();
+        this.subscribedToHeaders = true;
+        log.info(`[SYNC] Subscribed to block headers, current height: ${currentHeader.height}`);
+
+        // Cache the current block height for the configured network
+        setCachedBlockHeight(currentHeader.height, getConfig().bitcoin.network);
+
+        // Listen for new blocks
+        electrumClient.on('newBlock', this.handleNewBlock.bind(this));
+
+        // Listen for address activity
+        electrumClient.on('addressActivity', this.handleAddressActivity.bind(this));
+      }
+
+      // Subscribe to all wallet addresses
+      await this.subscribeAllWalletAddresses();
+
+      log.info('[SYNC] Real-time subscriptions active');
+    } catch (error) {
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(error) });
+      await this.releaseSubscriptionLock();
+      if (this.subscriptionsEnabled) {
+        this.subscriptionOwnership = 'external';
+      }
+    }
   }
 
   private startSubscriptionLockRefresh(): void {

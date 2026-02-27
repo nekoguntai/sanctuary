@@ -9,6 +9,7 @@ import nodemailer, { Transporter } from 'nodemailer';
 import { systemSettingRepository, SystemSettingKeys } from '../../repositories';
 import { decrypt, isEncrypted } from '../../utils/encryption';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import type { SmtpConfig, EmailMessage, EmailSendResult } from './types';
 
 const log = createLogger('email-service');
@@ -148,7 +149,7 @@ export async function sendEmail(message: EmailMessage): Promise<EmailSendResult>
       messageId: result.messageId,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error, 'Unknown error');
     log.error('Failed to send email', {
       to: message.to,
       subject: message.subject,
@@ -180,7 +181,7 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
     log.info('SMTP connection verified successfully');
     return { success: true };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error, 'Unknown error');
     log.error('SMTP connection verification failed', { error: errorMessage });
     return {
       success: false,

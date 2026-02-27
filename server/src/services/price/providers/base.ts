@@ -6,6 +6,7 @@
 
 import axios, { AxiosError } from 'axios';
 import { createLogger } from '../../../utils/logger';
+import { getErrorMessage } from '../../../utils/errors';
 import { createCircuitBreaker, CircuitBreaker, CircuitOpenError } from '../../circuitBreaker';
 import type { IPriceProvider, PriceData } from '../types';
 
@@ -70,7 +71,7 @@ export abstract class BasePriceProvider implements IPriceProvider {
       await this.getPrice('USD');
       return true;
     } catch (error) {
-      this.log.debug('Health check failed', { error: (error as Error).message });
+      this.log.debug('Health check failed', { error: getErrorMessage(error) });
       return false;
     }
   }

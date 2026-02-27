@@ -9,6 +9,7 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('PSBT-VALIDATION');
 
@@ -39,7 +40,7 @@ export function parsePsbt(
   try {
     return bitcoin.Psbt.fromBase64(psbtBase64, { network });
   } catch (error) {
-    throw new Error(`Invalid PSBT format: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid PSBT format: ${getErrorMessage(error)}`);
   }
 }
 
@@ -103,7 +104,7 @@ export function validatePsbtStructure(psbtBase64: string): ValidationResult {
       }
     }
   } catch (error) {
-    errors.push(`Failed to parse PSBT: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`Failed to parse PSBT: ${getErrorMessage(error)}`);
   }
 
   return {
@@ -228,7 +229,7 @@ export function validatePayjoinProposal(
     }
 
   } catch (error) {
-    errors.push(`Validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`Validation failed: ${getErrorMessage(error)}`);
   }
 
   return {

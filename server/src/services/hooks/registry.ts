@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import type {
   HookPhase,
   HookHandler,
@@ -314,7 +315,7 @@ class HookRegistry {
       }).catch((afterError) => {
         log.error('After hooks failed', {
           operation,
-          error: afterError instanceof Error ? afterError.message : String(afterError),
+          error: getErrorMessage(afterError),
         });
       });
 
@@ -330,7 +331,7 @@ class HookRegistry {
     }).catch((afterError) => {
       log.error('After hooks failed', {
         operation,
-        error: afterError instanceof Error ? afterError.message : String(afterError),
+        error: getErrorMessage(afterError),
       });
     });
 

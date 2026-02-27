@@ -14,6 +14,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 import prisma from '../models/prisma';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import {
   parsePsbt,
   validatePsbtStructure,
@@ -264,7 +265,7 @@ export async function processPayjoinRequest(
     return {
       success: false,
       error: PayjoinErrors.RECEIVER_ERROR,
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorMessage: getErrorMessage(error, 'Unknown error'),
     };
   }
 }
@@ -426,7 +427,7 @@ export async function attemptPayjoinSend(
     return {
       success: false,
       isPayjoin: false,
-      error: error instanceof Error ? error.message : 'Payjoin failed',
+      error: getErrorMessage(error, 'Payjoin failed'),
     };
   }
 }

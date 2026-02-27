@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import type {
   ImportFormatHandler,
   ImportFormatRegistryConfig,
@@ -97,7 +98,7 @@ class ImportFormatRegistry {
         // canHandle should not throw, but handle gracefully
         log.warn('Handler canHandle threw error', {
           handler: handler.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: getErrorMessage(error),
         });
       }
     }

@@ -14,6 +14,7 @@ import {
 import { sendEmail, isSmtpConfigured } from './emailService';
 import { generateVerificationEmail } from './templates/verification';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import config from '../../config';
 
 const log = createLogger('email-verification');
@@ -156,7 +157,7 @@ export async function createVerificationToken(
       expiresAt,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error, 'Unknown error');
     log.error('Failed to create verification token', { userId, email, error: errorMessage });
     return {
       success: false,
@@ -253,7 +254,7 @@ export async function verifyEmail(token: string): Promise<{
       email: verificationToken.email,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error, 'Unknown error');
     log.error('Failed to verify email', { error: errorMessage });
     return {
       success: false,
@@ -316,7 +317,7 @@ export async function resendVerification(
       error: result.error,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = getErrorMessage(error, 'Unknown error');
     log.error('Failed to resend verification', { userId, error: errorMessage });
     return {
       success: false,

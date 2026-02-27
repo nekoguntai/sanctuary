@@ -7,6 +7,7 @@
 
 import prisma from '../../models/prisma';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('TELEGRAM');
 
@@ -65,7 +66,7 @@ export async function sendTelegramMessage(
 
     return { success: true };
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    const errorMsg = getErrorMessage(err, 'Unknown error');
     log.error(`Telegram send failed: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
@@ -114,7 +115,7 @@ export async function getChatIdFromBot(
       username: chat.username || chat.first_name || undefined,
     };
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    const errorMsg = getErrorMessage(err, 'Unknown error');
     log.error(`Failed to get chat ID: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }

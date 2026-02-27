@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { normalizeDerivationPath } from '../../../../shared/utils/bitcoin';
 
 const log = createLogger('DESCRIPTOR');
@@ -333,7 +334,7 @@ export function validateDescriptor(descriptor: string): DescriptorParseError | n
     return null;
   } catch (error) {
     return {
-      message: error instanceof Error ? error.message : 'Invalid descriptor',
+      message: getErrorMessage(error, 'Invalid descriptor'),
     };
   }
 }

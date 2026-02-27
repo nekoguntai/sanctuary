@@ -32,6 +32,7 @@
  */
 
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('JobQueue');
 
@@ -381,7 +382,7 @@ export class JobQueue {
       });
     } catch (error) {
       const duration = Date.now() - start;
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errorMsg = getErrorMessage(error, 'Unknown error');
 
       log.warn('Job failed', {
         jobId: job.id,

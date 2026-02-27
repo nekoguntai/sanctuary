@@ -28,6 +28,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('BitcoinPlugin');
 
@@ -336,7 +337,7 @@ export async function initializeAllPlugins(): Promise<void> {
         log.error('Plugin initialization failed', {
           type,
           id,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: getErrorMessage(error, 'Unknown error'),
         });
         entry.enabled = false;
       }
@@ -359,7 +360,7 @@ export async function shutdownAllPlugins(): Promise<void> {
         log.error('Plugin shutdown failed', {
           type,
           id,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: getErrorMessage(error, 'Unknown error'),
         });
       }
     }
@@ -388,7 +389,7 @@ export async function checkAllPluginsHealth(): Promise<
           type,
           status: {
             healthy: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: getErrorMessage(error, 'Unknown error'),
           },
         });
       }

@@ -25,6 +25,7 @@ import { initializeRedisBridge, shutdownRedisBridge } from './websocket/redisBri
 import { notificationService } from './websocket/notifications';
 import { getSyncService } from './services/syncService';
 import { createLogger } from './utils/logger';
+import { getErrorMessage } from './utils/errors';
 import { validateEncryptionKey } from './utils/encryption';
 import { requestLogger } from './middleware/requestLogger';
 import { requestTimeout } from './middleware/requestTimeout';
@@ -67,7 +68,7 @@ process.on('uncaughtException', (error: Error) => {
 
 process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
   log.error('Unhandled promise rejection', {
-    reason: reason instanceof Error ? reason.message : String(reason),
+    reason: getErrorMessage(reason),
     stack: reason instanceof Error ? reason.stack : undefined,
   });
   // Don't exit for unhandled rejections, but log them
@@ -79,7 +80,7 @@ try {
   validateEncryptionKey();
 } catch (error) {
   console.error('FATAL: Missing required environment variable');
-  console.error((error as Error).message);
+  console.error(getErrorMessage(error));
   console.error('Please set ENCRYPTION_KEY in your .env file (at least 32 characters)');
   process.exit(1);
 }
@@ -330,7 +331,7 @@ registerService({
           degraded: startupResults.filter(r => r.degraded).length,
         });
       } catch (err) {
-        log.error('Critical service startup failure', { error: (err as Error).message });
+        log.error('Critical service startup failure', { error: getErrorMessage(err) });
         // Critical service failed - this would have thrown, but handle gracefully
       }
 
@@ -339,7 +340,7 @@ registerService({
     });
   } catch (error) {
     log.error('Failed to start server', {
-      error: (error as Error).message,
+      error: getErrorMessage(error),
     });
     process.exit(1);
   }
@@ -390,7 +391,7 @@ const handleShutdown = async (signal: string) => {
     log.info('Electrum pool closed');
   } catch (error) {
     log.error('Error closing Electrum pool', {
-      error: (error as Error).message,
+      error: getErrorMessage(error),
     });
   }
 
@@ -414,7 +415,7 @@ const handleShutdown = async (signal: string) => {
     await disconnect();
   } catch (error) {
     log.error('Error disconnecting from database', {
-      error: (error as Error).message,
+      error: getErrorMessage(error),
     });
   }
 

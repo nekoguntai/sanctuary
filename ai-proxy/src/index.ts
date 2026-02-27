@@ -19,6 +19,13 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import { RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS, AI_REQUEST_TIMEOUT_MS } from './constants';
+import {
+  extractErrorMessage,
+  normalizeOllamaBaseUrl,
+  normalizeOllamaChatUrl,
+  fetchFromBackend,
+  BackendFetchResult,
+} from './utils';
 
 // ========================================
 // GLOBAL EXCEPTION HANDLERS
@@ -35,8 +42,8 @@ process.on('uncaughtException', (error: Error) => {
 
 process.on('unhandledRejection', (reason: unknown) => {
   console.error('[AI] Unhandled promise rejection', {
-    reason: reason instanceof Error ? reason.message : String(reason),
-    stack: reason instanceof Error ? (reason as Error).stack : undefined,
+    reason: extractErrorMessage(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
   });
 });
 
@@ -185,11 +192,7 @@ async function callExternalAI(prompt: string, timeout = AI_REQUEST_TIMEOUT_MS): 
   }
 
   try {
-    let endpoint = aiConfig.endpoint.trim();
-    if (!endpoint.endsWith('/')) endpoint += '/';
-    if (!endpoint.includes('/v1/chat/completions')) {
-      endpoint = endpoint.replace(/\/$/, '') + '/v1/chat/completions';
-    }
+    const endpoint = normalizeOllamaChatUrl(aiConfig.endpoint);
 
     console.log(`[AI] Calling external AI: ${endpoint}`);
 
@@ -222,25 +225,14 @@ async function callExternalAI(prompt: string, timeout = AI_REQUEST_TIMEOUT_MS): 
     }
 
     return data.choices[0].message.content.trim();
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
       console.error('[AI] Request timeout');
     } else {
-      console.error(`[AI] Request failed: ${error.message}`);
+      console.error(`[AI] Request failed: ${extractErrorMessage(error)}`);
     }
     return null;
   }
-}
-
-/**
- * Backend fetch result with explicit error handling
- * SECURITY: Distinguishes between auth failures and other errors
- */
-interface BackendFetchResult<T> {
-  success: boolean;
-  data?: T;
-  error?: 'auth_failed' | 'not_found' | 'server_error' | 'network_error';
-  status?: number;
 }
 
 /**
@@ -249,64 +241,15 @@ interface BackendFetchResult<T> {
  * SECURITY: Explicitly validates backend response before proceeding
  */
 async function fetchTransactionContext(txId: string, authToken: string): Promise<BackendFetchResult<any>> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/internal/ai/tx/${txId}`, {
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
-
-    // SECURITY: Explicit status code validation
-    if (response.status === 401 || response.status === 403) {
-      console.warn(`[AI] Auth failed for tx context: ${response.status}`);
-      return { success: false, error: 'auth_failed', status: response.status };
-    }
-
-    if (response.status === 404) {
-      console.warn(`[AI] Transaction not found: ${txId}`);
-      return { success: false, error: 'not_found', status: response.status };
-    }
-
-    if (!response.ok) {
-      console.error(`[AI] Failed to fetch tx context: ${response.status}`);
-      return { success: false, error: 'server_error', status: response.status };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error: any) {
-    console.error(`[AI] Failed to fetch tx context: ${error.message}`);
-    return { success: false, error: 'network_error' };
-  }
+  return fetchFromBackend(BACKEND_URL, `/internal/ai/tx/${txId}`, authToken, 'tx context');
 }
 
 /**
  * Fetch wallet labels from backend
  * SECURITY: Validates backend response before returning data
  */
-async function fetchWalletLabels(walletId: string, authToken: string): Promise<BackendFetchResult<string[]>> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/internal/ai/wallet/${walletId}/labels`, {
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
-
-    // SECURITY: Explicit status code validation
-    if (response.status === 401 || response.status === 403) {
-      console.warn(`[AI] Auth failed for wallet labels: ${response.status}`);
-      return { success: false, error: 'auth_failed', status: response.status };
-    }
-
-    if (response.status === 404) {
-      return { success: false, error: 'not_found', status: response.status };
-    }
-
-    if (!response.ok) {
-      return { success: false, error: 'server_error', status: response.status };
-    }
-
-    const data = await response.json() as { labels?: string[] };
-    return { success: true, data: data.labels || [] };
-  } catch {
-    return { success: false, error: 'network_error' };
-  }
+async function fetchWalletLabels(walletId: string, authToken: string): Promise<BackendFetchResult<{ labels?: string[] }>> {
+  return fetchFromBackend(BACKEND_URL, `/internal/ai/wallet/${walletId}/labels`, authToken, 'wallet labels');
 }
 
 /**
@@ -314,30 +257,7 @@ async function fetchWalletLabels(walletId: string, authToken: string): Promise<B
  * SECURITY: Validates backend response before returning data
  */
 async function fetchWalletContext(walletId: string, authToken: string): Promise<BackendFetchResult<any>> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/internal/ai/wallet/${walletId}/context`, {
-      headers: { 'Authorization': `Bearer ${authToken}` },
-    });
-
-    // SECURITY: Explicit status code validation
-    if (response.status === 401 || response.status === 403) {
-      console.warn(`[AI] Auth failed for wallet context: ${response.status}`);
-      return { success: false, error: 'auth_failed', status: response.status };
-    }
-
-    if (response.status === 404) {
-      return { success: false, error: 'not_found', status: response.status };
-    }
-
-    if (!response.ok) {
-      return { success: false, error: 'server_error', status: response.status };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch {
-    return { success: false, error: 'network_error' };
-  }
+  return fetchFromBackend(BACKEND_URL, `/internal/ai/wallet/${walletId}/context`, authToken, 'wallet context');
 }
 
 /**
@@ -389,7 +309,7 @@ app.post('/suggest-label', rateLimit, async (req: Request, res: Response) => {
     return res.status(labelsResult.status || 401).json({ error: 'Authentication failed' });
   }
 
-  const existingLabels = labelsResult.success ? labelsResult.data || [] : [];
+  const existingLabels = labelsResult.success ? labelsResult.data?.labels || [] : [];
 
   // Build prompt with ONLY sanitized data
   // Note: We intentionally do NOT include addresses or txids in the prompt
@@ -504,8 +424,8 @@ JSON:`;
 
     const parsed = JSON.parse(cleanJson);
     res.json({ query: parsed });
-  } catch (err: any) {
-    console.error('[AI] Failed to parse JSON:', err.message, 'Response:', result.substring(0, 200));
+  } catch (err) {
+    console.error(`[AI] Failed to parse JSON: ${extractErrorMessage(err)}`, 'Response:', result.substring(0, 200));
     res.status(500).json({ error: 'Failed to parse AI response' });
   }
 });
@@ -564,9 +484,9 @@ app.post('/detect-ollama', rateLimit, async (_req: Request, res: Response) => {
           models: data.models?.map(m => m.name) || [],
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       // Continue to next endpoint
-      console.log(`[AI] No Ollama at ${endpoint}: ${error.message}`);
+      console.log(`[AI] No Ollama at ${endpoint}: ${extractErrorMessage(error)}`);
     }
   }
 
@@ -585,9 +505,7 @@ app.get('/list-models', rateLimit, async (_req: Request, res: Response) => {
   }
 
   try {
-    let endpoint = aiConfig.endpoint.trim();
-    // Ensure we're hitting the Ollama API, not OpenAI-compatible endpoint
-    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+    const endpoint = normalizeOllamaBaseUrl(aiConfig.endpoint);
 
     const response = await fetch(`${endpoint}/api/tags`, {
       signal: AbortSignal.timeout(5000),
@@ -606,8 +524,8 @@ app.get('/list-models', rateLimit, async (_req: Request, res: Response) => {
         modifiedAt: m.modified_at,
       })) || [],
     });
-  } catch (error: any) {
-    console.error(`[AI] Failed to list models: ${error.message}`);
+  } catch (error) {
+    console.error(`[AI] Failed to list models: ${extractErrorMessage(error)}`);
     res.status(502).json({ error: 'Cannot connect to AI endpoint' });
   }
 });
@@ -627,8 +545,7 @@ app.post('/pull-model', rateLimit, async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'No AI endpoint configured' });
   }
 
-  let endpoint = aiConfig.endpoint.trim();
-  endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+  const endpoint = normalizeOllamaBaseUrl(aiConfig.endpoint);
 
   console.log(`[AI] Starting pull for model: ${model}`);
 
@@ -663,8 +580,8 @@ async function streamModelPull(model: string, ollamaEndpoint: string): Promise<v
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(5000),
       });
-    } catch (err: any) {
-      console.warn(`[AI] Failed to send progress: ${err.message}`);
+    } catch (err) {
+      console.warn(`[AI] Failed to send progress: ${extractErrorMessage(err)}`);
     }
   };
 
@@ -738,9 +655,9 @@ async function streamModelPull(model: string, ollamaEndpoint: string): Promise<v
     console.log(`[AI] Pull completed for ${model}`);
     await sendProgress({ model, status: 'complete' });
 
-  } catch (error: any) {
-    console.error(`[AI] Pull error: ${error.message}`);
-    await sendProgress({ model, status: 'error', error: error.message });
+  } catch (error) {
+    console.error(`[AI] Pull error: ${extractErrorMessage(error)}`);
+    await sendProgress({ model, status: 'error', error: extractErrorMessage(error) });
   }
 }
 
@@ -759,8 +676,7 @@ app.delete('/delete-model', rateLimit, async (req: Request, res: Response) => {
   }
 
   try {
-    let endpoint = aiConfig.endpoint.trim();
-    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1$/, '').replace(/\/$/, '');
+    const endpoint = normalizeOllamaBaseUrl(aiConfig.endpoint);
 
     console.log(`[AI] Deleting model: ${model}`);
 
@@ -779,9 +695,9 @@ app.delete('/delete-model', rateLimit, async (req: Request, res: Response) => {
 
     console.log(`[AI] Successfully deleted ${model}`);
     res.json({ success: true, model });
-  } catch (error: any) {
-    console.error(`[AI] Delete error: ${error.message}`);
-    res.status(502).json({ error: `Delete failed: ${error.message}` });
+  } catch (error) {
+    console.error(`[AI] Delete error: ${extractErrorMessage(error)}`);
+    res.status(502).json({ error: `Delete failed: ${extractErrorMessage(error)}` });
   }
 });
 

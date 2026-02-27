@@ -10,6 +10,10 @@
  * - Token-based authentication
  */
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ApiClient');
+
 // Retry configuration
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_INITIAL_DELAY_MS = 1000;
@@ -91,7 +95,7 @@ async function withRetry<T>(
       if (retryEnabled && isRetryableError(error, status) && attempt < maxRetries) {
         lastError = apiError;
         const delay = Math.min(initialDelayMs * Math.pow(backoffMultiplier, attempt), maxDelayMs);
-        console.warn(`[API] Request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`, {
+        log.warn(`Request failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms`, {
           context,
           status,
         });

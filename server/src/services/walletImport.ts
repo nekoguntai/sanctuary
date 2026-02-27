@@ -17,6 +17,7 @@ import type {
 } from './bitcoin/descriptorParser';
 import { parseJsonImport } from './bitcoin/descriptorParser';
 import { parseImportInput } from './import';
+import { getErrorMessage } from '../utils/errors';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
@@ -199,7 +200,7 @@ export async function validateImport(
   } catch (e) {
     return {
       valid: false,
-      error: e instanceof Error ? e.message : String(e),
+      error: getErrorMessage(e),
       format: input.json ? 'json' : 'descriptor',
       walletType: 'single_sig',
       scriptType: 'native_segwit',

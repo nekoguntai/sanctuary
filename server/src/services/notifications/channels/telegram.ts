@@ -5,6 +5,7 @@
  */
 
 import * as telegramService from '../../telegram/telegramService';
+import { getErrorMessage } from '../../../utils/errors';
 import type {
   NotificationChannelHandler,
   TransactionNotification,
@@ -52,7 +53,7 @@ export const telegramChannelHandler: NotificationChannelHandler = {
         success: false,
         channelId: 'telegram',
         usersNotified: 0,
-        errors: [err instanceof Error ? err.message : String(err)],
+        errors: [getErrorMessage(err)],
       };
     }
   },
@@ -75,7 +76,7 @@ export const telegramChannelHandler: NotificationChannelHandler = {
         success: false,
         channelId: 'telegram',
         usersNotified: 0,
-        errors: [err instanceof Error ? err.message : String(err)],
+        errors: [getErrorMessage(err)],
       };
     }
   },

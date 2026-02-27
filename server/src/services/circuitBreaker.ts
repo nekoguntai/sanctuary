@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('CIRCUIT');
 
@@ -173,7 +174,7 @@ export class CircuitBreaker<T = unknown> {
     this.failures++;
     this.totalFailures++;
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = getErrorMessage(error);
     log.warn(`[${this.name}] Operation failed (${this.failures}/${this.failureThreshold})`, {
       error: errorMessage,
     });

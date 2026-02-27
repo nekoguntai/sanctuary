@@ -30,6 +30,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import prisma from '../models/prisma';
 
 const log = createLogger('ReadReplica');
@@ -77,7 +78,7 @@ export async function initializeReadReplica(): Promise<void> {
     log.info('Read replica initialized successfully');
   } catch (error) {
     log.error('Failed to initialize read replica, falling back to primary', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
     });
     readReplicaClient = null;
     isReplicaEnabled = false;
@@ -151,7 +152,7 @@ export async function checkReadReplicaHealth(): Promise<{
     return {
       enabled: true,
       healthy: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
     };
   }
 }
@@ -240,7 +241,7 @@ export async function estimateReplicationLag(): Promise<number> {
     return estimatedLagMs;
   } catch (error) {
     log.error('Failed to estimate replication lag', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
     });
     return -1;
   }

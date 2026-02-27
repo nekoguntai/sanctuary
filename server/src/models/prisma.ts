@@ -21,6 +21,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { dbQueryDuration } from '../observability/metrics';
 
 const log = createLogger('DB');
@@ -137,7 +138,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     return true;
   } catch (error) {
     log.error('Database health check failed', {
-      error: (error as Error).message,
+      error: getErrorMessage(error),
     });
     return false;
   }
@@ -162,7 +163,7 @@ export async function getDatabaseInfo(): Promise<{
     return {
       connected: false,
       latencyMs: Date.now() - start,
-      error: (error as Error).message,
+      error: getErrorMessage(error),
     };
   }
 }
@@ -278,7 +279,7 @@ export function startDatabaseHealthCheck(intervalMs: number = 30000): void {
         log.info('Database reconnection successful');
       } catch (error) {
         log.error('Database reconnection failed', {
-          error: (error as Error).message,
+          error: getErrorMessage(error),
         });
       } finally {
         isReconnecting = false;

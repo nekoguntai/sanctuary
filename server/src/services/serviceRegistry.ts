@@ -6,6 +6,7 @@
 
 import { startAllServices, type ServiceDefinition, type ServiceStartupResult } from './startupManager';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 
 export interface ManagedService extends ServiceDefinition {
   stop?: () => Promise<void> | void;
@@ -39,7 +40,7 @@ export async function stopRegisteredServices(): Promise<void> {
     } catch (error) {
       log.warn('Failed to stop service', {
         name: service.name,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }

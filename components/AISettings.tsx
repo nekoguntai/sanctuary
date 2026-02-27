@@ -10,6 +10,7 @@ import { Brain, Check, AlertCircle, AlertTriangle, Loader2, Shield, Server, Exte
 import * as adminApi from '../src/api/admin';
 import * as aiApi from '../src/api/ai';
 import { createLogger } from '../utils/logger';
+import { extractErrorMessage } from '../utils/errorHandler';
 import { useModelDownloadProgress, ModelDownloadProgress } from '../hooks/useWebSocket';
 import { invalidateAIStatusCache } from '../hooks/useAIStatus';
 
@@ -122,7 +123,7 @@ export default function AISettings() {
       } else {
         throw new Error('Invalid response format');
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to fetch popular models', { error });
       setPopularModelsError('Unable to fetch the latest popular models list. Please check your connection and try again.');
     } finally {
@@ -408,9 +409,9 @@ export default function AISettings() {
       }
       // If success, progress will come via WebSocket
       // The handleDownloadProgress callback will handle completion
-    } catch (error: any) {
+    } catch (error) {
       log.error('Pull model failed', { error });
-      setPullProgress(`Error: ${error.message || 'Pull failed'}`);
+      setPullProgress(`Error: ${extractErrorMessage(error, 'Pull failed')}`);
       setIsPulling(false);
       setTimeout(() => {
         setPullProgress('');
@@ -443,9 +444,9 @@ export default function AISettings() {
       } else {
         alert(`Failed to delete: ${result.error}`);
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Delete model failed', { error });
-      alert(`Error: ${error.message || 'Delete failed'}`);
+      alert(`Error: ${extractErrorMessage(error, 'Delete failed')}`);
     } finally {
       setIsDeleting(false);
       setDeleteModelName('');
@@ -504,9 +505,9 @@ export default function AISettings() {
       } else {
         setContainerMessage(`Failed: ${result.message}`);
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to start container', { error });
-      setContainerMessage(`Error: ${error.message || 'Failed to start'}`);
+      setContainerMessage(`Error: ${extractErrorMessage(error, 'Failed to start')}`);
     } finally {
       setIsStartingContainer(false);
       setTimeout(() => setContainerMessage(''), 8000);
@@ -524,9 +525,9 @@ export default function AISettings() {
       } else {
         setContainerMessage(`Failed: ${result.message}`);
       }
-    } catch (error: any) {
+    } catch (error) {
       log.error('Failed to stop container', { error });
-      setContainerMessage(`Error: ${error.message || 'Failed to stop'}`);
+      setContainerMessage(`Error: ${extractErrorMessage(error, 'Failed to stop')}`);
     } finally {
       setTimeout(() => setContainerMessage(''), 5000);
     }

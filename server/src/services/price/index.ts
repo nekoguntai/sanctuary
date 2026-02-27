@@ -212,7 +212,7 @@ class PriceService {
       try {
         return await provider.getPrice(currency);
       } catch (error) {
-        log.debug(`Failed to fetch from ${provider.name}`, { error: (error as Error).message });
+        log.debug(`Failed to fetch from ${provider.name}`, { error: getErrorMessage(error) });
         return null;
       }
     });
@@ -230,7 +230,7 @@ class PriceService {
         const price = await this.getPrice(currency);
         return { currency, price };
       } catch (error) {
-        log.error(`Failed to get price for ${currency}`, { error: (error as Error).message });
+        log.error(`Failed to get price for ${currency}`, { error: getErrorMessage(error) });
         return null;
       }
     });

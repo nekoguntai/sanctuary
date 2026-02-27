@@ -28,6 +28,7 @@
 import Redis from 'ioredis';
 import { getConfig } from '../config';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { cache as memoryCache, type ICacheService } from '../services/cache/cacheService';
 import { RedisCache } from '../services/cache/redisCache';
 import { eventBus as localEventBus, type EventName, type EventTypes, type EventHandler } from '../events/eventBus';
@@ -269,7 +270,7 @@ export async function checkRedisHealth(): Promise<{
   } catch (error) {
     return {
       status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: getErrorMessage(error, 'Unknown error'),
     };
   }
 }

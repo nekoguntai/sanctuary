@@ -22,6 +22,7 @@ import {
 import * as adminApi from '../src/api/admin';
 import * as bitcoinApi from '../src/api/bitcoin';
 import { createLogger } from '../utils/logger';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 const log = createLogger('NetworkConnectionCard');
 
@@ -234,9 +235,9 @@ export const NetworkConnectionCard: React.FC<NetworkConnectionCardProps> = ({
       const result = await onTestConnection(singletonHost, singletonPort, singletonSsl);
       setTestStatus(result.success ? 'success' : 'error');
       setTestMessage(result.message);
-    } catch (error: any) {
+    } catch (error) {
       setTestStatus('error');
-      setTestMessage(error.message || 'Connection failed');
+      setTestMessage(extractErrorMessage(error, 'Connection failed'));
     }
   };
 

@@ -9,6 +9,7 @@
 import prisma from '../../models/prisma';
 import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
 import { type WalletTelegramSettings } from '../telegram/telegramService';
 import {
   createPushProviderRegistry,
@@ -104,7 +105,7 @@ class PushService {
           log.info(`Removed invalid ${device.platform} token for user ${userId}`);
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = getErrorMessage(err);
         log.error(`Push to ${device.platform} device failed: ${errorMsg}`);
 
         // Remove invalid tokens

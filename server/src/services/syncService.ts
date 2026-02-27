@@ -14,7 +14,6 @@ import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
-import { withTimeout } from '../utils/async';
 import { ElectrumClient } from './bitcoin/electrum';
 import { getConfig } from '../config';
 import { eventService } from './eventService';
@@ -811,13 +810,38 @@ class SyncService {
       const previousBalances = await this.getWalletBalance(walletId);
       const previousTotal = previousBalances.confirmed + previousBalances.unconfirmed;
 
-      // Execute the sync with timeout protection
-      // Prevents runaway syncs from blocking other wallets
-      const result = await withTimeout(
-        syncWallet(walletId),
-        syncConfig.maxSyncDurationMs,
-        `Sync timeout: exceeded ${syncConfig.maxSyncDurationMs / 1000}s limit`
-      );
+      // Execute sync and keep lock ownership until the underlying promise settles.
+      // Important: Promise.race timeouts do not cancel syncWallet(), which could otherwise
+      // keep mutating DB after lock release and race with retries/other workers.
+      const syncPromise = syncWallet(walletId);
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve({ timedOut: true }), syncConfig.maxSyncDurationMs);
+      });
+
+      let result: Awaited<ReturnType<typeof syncWallet>>;
+      const raced = await Promise.race([
+        syncPromise.then((value) => ({ timedOut: false as const, value })),
+        timeoutPromise,
+      ]);
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+
+      if (raced.timedOut) {
+        log.warn(
+          `[SYNC] Wallet ${walletId} exceeded configured sync threshold (${syncConfig.maxSyncDurationMs / 1000}s); waiting for completion`
+        );
+        walletLog(
+          walletId,
+          'warn',
+          'SYNC',
+          `Sync is taking longer than expected (${Math.round(syncConfig.maxSyncDurationMs / 1000)}s), continuing...`
+        );
+        result = await syncPromise;
+      } else {
+        result = raced.value;
+      }
 
       // Populate missing fields for any existing transactions
       walletLog(walletId, 'info', 'SYNC', 'Completing sync (populating transaction details)...');

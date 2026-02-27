@@ -30,6 +30,10 @@ import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 
 const log = createLogger('SyncJobs');
+const appConfig = getConfig();
+
+// Keep lock alive beyond expected sync duration to avoid concurrent sync overlap.
+const SYNC_LOCK_TTL_MS = appConfig.sync.maxSyncDurationMs + 60_000;
 
 // =============================================================================
 // Sync Wallet Job
@@ -54,7 +58,7 @@ export const syncWalletJob: WorkerJobHandler<SyncWalletJobData, SyncWalletJobRes
   },
   lockOptions: {
     lockKey: (data) => `sync:wallet:${data.walletId}`,
-    lockTtlMs: 5 * 60 * 1000, // 5 minute lock
+    lockTtlMs: SYNC_LOCK_TTL_MS,
   },
   handler: async (job: Job<SyncWalletJobData>): Promise<SyncWalletJobResult> => {
     const { walletId, reason } = job.data;

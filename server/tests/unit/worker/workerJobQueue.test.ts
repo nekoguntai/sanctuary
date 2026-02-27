@@ -89,6 +89,7 @@ vi.mock('../../../src/infrastructure', () => ({
 // Mock distributed lock
 vi.mock('../../../src/infrastructure/distributedLock', () => ({
   acquireLock: vi.fn().mockResolvedValue({ key: 'test', token: 'token' }),
+  extendLock: vi.fn().mockResolvedValue({ key: 'test', token: 'token' }),
   releaseLock: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -14,7 +14,12 @@
 
 import { Queue, Worker, Job, QueueEvents, type ConnectionOptions, type JobsOptions } from 'bullmq';
 import { getRedisClient, isRedisConnected } from '../infrastructure';
-import { acquireLock, releaseLock, type DistributedLock } from '../infrastructure/distributedLock';
+import {
+  acquireLock,
+  extendLock,
+  releaseLock,
+  type DistributedLock,
+} from '../infrastructure/distributedLock';
 import { createLogger } from '../utils/logger';
 import type { WorkerJobHandler } from './jobs/types';
 
@@ -188,6 +193,47 @@ export class WorkerJobQueue {
     }
 
     let lock: DistributedLock | null = null;
+    let lockRefreshTimer: NodeJS.Timeout | null = null;
+
+    const stopLockRefresh = () => {
+      if (lockRefreshTimer) {
+        clearInterval(lockRefreshTimer);
+        lockRefreshTimer = null;
+      }
+    };
+
+    const startLockRefresh = (lockTtlMs: number) => {
+      // Refresh well before expiry to prevent lock loss during long-running jobs.
+      const refreshIntervalMs = Math.max(1000, Math.floor(lockTtlMs / 3));
+
+      lockRefreshTimer = setInterval(async () => {
+        if (!lock) {
+          return;
+        }
+
+        try {
+          const refreshed = await extendLock(lock, lockTtlMs);
+          if (refreshed) {
+            lock = refreshed;
+            return;
+          }
+
+          log.warn(`Lost distributed lock while job is still running: ${handlerKey}`, {
+            jobId: job.id,
+            lockKey: lock.key,
+          });
+          stopLockRefresh();
+        } catch (error) {
+          log.warn(`Failed to refresh distributed lock for job: ${handlerKey}`, {
+            jobId: job.id,
+            lockKey: lock.key,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }, refreshIntervalMs);
+
+      lockRefreshTimer.unref?.();
+    };
 
     try {
       // Acquire lock if configured
@@ -205,11 +251,15 @@ export class WorkerJobQueue {
           // Return without error - another worker is handling this
           return { skipped: true, reason: 'lock_held' };
         }
+
+        startLockRefresh(lockTtlMs);
       }
 
       // Execute the job handler
       return await registered.handler(job);
     } finally {
+      stopLockRefresh();
+
       // Always release lock if we acquired one
       if (lock) {
         await releaseLock(lock);

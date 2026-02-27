@@ -52,6 +52,11 @@ function loadConfig(): CombinedConfig {
   const apiUrl = process.env.API_URL || 'http://localhost:3001';
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
   const databaseUrl = process.env.DATABASE_URL || '';
+  const workerHealthPort = parseInt(process.env.WORKER_HEALTH_PORT || '3002', 10);
+  const defaultWorkerHost = nodeEnv === 'production' ? 'worker' : 'localhost';
+  const workerHealthUrl = process.env.WORKER_HEALTH_URL || `http://${defaultWorkerHost}:${workerHealthPort}/health`;
+  const workerHealthTimeoutMs = parseInt(process.env.WORKER_HEALTH_TIMEOUT_MS || '3000', 10);
+  const workerHealthCheckIntervalMs = parseInt(process.env.WORKER_HEALTH_CHECK_INTERVAL_MS || '10000', 10);
 
   const bitcoin = {
     network: parseBitcoinNetwork(),
@@ -212,7 +217,10 @@ function loadConfig(): CombinedConfig {
     },
 
     worker: {
-      healthPort: parseInt(process.env.WORKER_HEALTH_PORT || '3002', 10),
+      healthPort: workerHealthPort,
+      healthUrl: workerHealthUrl,
+      healthTimeoutMs: workerHealthTimeoutMs,
+      healthCheckIntervalMs: workerHealthCheckIntervalMs,
       concurrency: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
     },
 
@@ -277,6 +285,10 @@ function validateConfig(config: CombinedConfig): void {
         'Generate one with: openssl rand -base64 32'
       );
     }
+  }
+
+  if (!config.worker.healthUrl) {
+    throw new Error('WORKER_HEALTH_URL is required');
   }
 }
 

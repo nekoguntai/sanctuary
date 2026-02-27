@@ -180,6 +180,12 @@ export interface DockerConfig {
 export interface WorkerConfig {
   /** Health check endpoint port (default: 3002) */
   healthPort: number;
+  /** Worker health endpoint URL (default: http://worker:3002/health in production) */
+  healthUrl: string;
+  /** Worker health request timeout in milliseconds */
+  healthTimeoutMs: number;
+  /** Worker health monitor interval in milliseconds */
+  healthCheckIntervalMs: number;
   /** Job processing concurrency (default: 5) */
   concurrency: number;
 }

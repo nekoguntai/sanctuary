@@ -130,6 +130,8 @@ export const SyncConfigSchema = z.object({
   maxConcurrentSyncs: z.number().int().min(1).max(50),
   maxRetryAttempts: z.number().int().min(0).max(10),
   retryDelaysMs: z.array(z.number().int().min(0)),
+  maxSyncDurationMs: z.number().int().min(1000),
+  transactionBatchSize: z.number().int().min(1).max(10000),
   electrumSubscriptionsEnabled: z.boolean(),
 });
 
@@ -168,6 +170,9 @@ export const DockerConfigSchema = z.object({
 
 export const WorkerConfigSchema = z.object({
   healthPort: z.number().int().min(1).max(65535),
+  healthUrl: z.string().min(1),
+  healthTimeoutMs: z.number().int().min(100).max(60000),
+  healthCheckIntervalMs: z.number().int().min(1000).max(300000),
   concurrency: z.number().int().min(1).max(50),
 });
 

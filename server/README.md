@@ -222,18 +222,21 @@ ELECTRUM_PROTOCOL=ssl
 
 ## Background Worker
 
-The worker process owns recurring maintenance jobs and Electrum subscriptions.
-Disable server-side Electrum subscriptions if you want the worker to be the sole
-subscriber:
+The worker process is the required owner for recurring maintenance jobs,
+Electrum subscriptions, and background processing.
 
 ```env
-SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=false
+WORKER_HEALTH_URL=http://worker:3002/health
+WORKER_HEALTH_TIMEOUT_MS=3000
+WORKER_HEALTH_CHECK_INTERVAL_MS=10000
+SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=true
 ```
 
-If you are not running the worker, keep `SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=true`
-so the API server can subscribe to Electrum for real-time block and address
-activity. Background sync still runs via queued jobs either way; subscriptions
-just provide faster, event-driven updates.
+The API server will fail startup/readiness if the worker heartbeat is
+unavailable.
+
+Set `SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED=false` only when subscription
+ownership is intentionally handled by another process.
 
 ## Security Considerations
 

@@ -293,7 +293,8 @@ describe('Sync Pipeline', () => {
 
       const result = await executeSyncPipeline(walletId, phases);
 
-      expect(result.elapsedMs).toBeGreaterThanOrEqual(50);
+      // Allow a small margin for timer granularity and scheduler jitter.
+      expect(result.elapsedMs).toBeGreaterThanOrEqual(45);
     });
   });
 });

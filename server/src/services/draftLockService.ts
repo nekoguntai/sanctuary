@@ -11,7 +11,8 @@
  * - RBF drafts skip locking (they reuse same UTXOs as original tx)
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
+import { Prisma } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('DRAFT-LOCK');
@@ -32,6 +33,13 @@ export interface UtxoLockInfo {
   lockedAt: Date;
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2002';
+  }
+  return String(error).includes('Unique constraint');
+}
+
 /**
  * Lock UTXOs for a draft transaction
  * Returns success only if ALL UTXOs can be locked (atomic operation)
@@ -41,6 +49,8 @@ export async function lockUtxosForDraft(
   utxoIds: string[],
   options: { isRBF?: boolean } = {}
 ): Promise<LockResult> {
+  const uniqueUtxoIds = [...new Set(utxoIds)];
+
   // RBF drafts skip locking - they reuse UTXOs from the original transaction
   if (options.isRBF) {
     log.debug(`Skipping UTXO locking for RBF draft ${draftId}`);
@@ -52,7 +62,7 @@ export async function lockUtxosForDraft(
     };
   }
 
-  if (utxoIds.length === 0) {
+  if (uniqueUtxoIds.length === 0) {
     return {
       success: true,
       lockedCount: 0,
@@ -74,7 +84,7 @@ export async function lockUtxosForDraft(
       // This check is now inside the transaction to prevent race conditions
       const existingLocks = await tx.draftUtxoLock.findMany({
         where: {
-          utxoId: { in: utxoIds },
+          utxoId: { in: uniqueUtxoIds },
           draftId: { not: draftId }, // Exclude our own draft
         },
         include: {
@@ -105,17 +115,32 @@ export async function lockUtxosForDraft(
       }
 
       // Create new locks
-      await tx.draftUtxoLock.createMany({
-        data: utxoIds.map(utxoId => ({
+      const createdLocks = await tx.draftUtxoLock.createMany({
+        data: uniqueUtxoIds.map(utxoId => ({
           draftId,
           utxoId,
         })),
-        skipDuplicates: true,
       });
+
+      if (createdLocks.count !== uniqueUtxoIds.length) {
+        const conflictingLocks = await tx.draftUtxoLock.findMany({
+          where: {
+            utxoId: { in: uniqueUtxoIds },
+            draftId: { not: draftId },
+          },
+        });
+
+        return {
+          success: false,
+          lockedCount: createdLocks.count,
+          failedUtxoIds: conflictingLocks.map(lock => lock.utxoId),
+          lockedByDraftIds: [...new Set(conflictingLocks.map(lock => lock.draftId))],
+        };
+      }
 
       return {
         success: true,
-        lockedCount: utxoIds.length,
+        lockedCount: createdLocks.count,
         failedUtxoIds: [],
         lockedByDraftIds: [],
       };
@@ -125,19 +150,44 @@ export async function lockUtxosForDraft(
       return lockResult;
     }
 
-    log.debug(`Locked ${utxoIds.length} UTXOs for draft ${draftId}`);
+    log.debug(`Locked ${lockResult.lockedCount} UTXOs for draft ${draftId}`);
 
     return lockResult;
   } catch (error) {
     log.error(`Failed to lock UTXOs for draft ${draftId}`, { error: String(error) });
 
     // Check if it's a unique constraint violation (race condition)
-    if (String(error).includes('Unique constraint')) {
+    if (isUniqueConstraintError(error)) {
+      let failedUtxoIds = uniqueUtxoIds;
+      let lockedByDraftIds: string[] = [];
+
+      try {
+        const conflictingLocks = await prisma.draftUtxoLock.findMany({
+          where: {
+            utxoId: { in: uniqueUtxoIds },
+            draftId: { not: draftId },
+          },
+          select: {
+            utxoId: true,
+            draftId: true,
+          },
+        });
+
+        if (conflictingLocks.length > 0) {
+          failedUtxoIds = [...new Set(conflictingLocks.map(lock => lock.utxoId))];
+          lockedByDraftIds = [...new Set(conflictingLocks.map(lock => lock.draftId))];
+        }
+      } catch (lookupError) {
+        log.warn(`Failed to inspect conflicting draft locks for ${draftId}`, {
+          error: String(lookupError),
+        });
+      }
+
       return {
         success: false,
         lockedCount: 0,
-        failedUtxoIds: utxoIds,
-        lockedByDraftIds: [],
+        failedUtxoIds,
+        lockedByDraftIds,
       };
     }
 

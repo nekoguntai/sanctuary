@@ -7,7 +7,7 @@
 
 import type { DraftTransaction, Prisma } from '@prisma/client';
 import * as bitcoin from 'bitcoinjs-lib';
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { draftRepository, DraftStatus } from '../repositories';
 import { requireWalletAccess, checkWalletAccess } from './accessControl';
 import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';
@@ -19,6 +19,7 @@ import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 import * as walletService from './wallet';
 
 const log = createLogger('DRAFT_SVC');
+const MAX_SIGNATURE_UPDATE_RETRIES = 3;
 
 /**
  * Input for creating a draft
@@ -240,111 +241,147 @@ export async function updateDraft(
     throw new NotFoundError('Draft');
   }
 
-  // Build update data
-  const updateData: {
-    signedPsbtBase64?: string;
-    signedDeviceIds?: string[];
-    status?: DraftStatus;
-    label?: string | null;
-    memo?: string | null;
-  } = {};
+  // Validate status once before retry loop
+  if (data.status !== undefined && !['unsigned', 'partial', 'signed'].includes(data.status)) {
+    throw new ValidationError('Invalid status. Must be unsigned, partial, or signed');
+  }
 
-  if (data.signedPsbtBase64 !== undefined) {
-    // For multisig: combine new signatures with existing ones
-    // This is critical for m-of-n multisig where multiple signers need to add signatures
-    const existingPsbt = existingDraft.signedPsbtBase64 || existingDraft.psbtBase64;
+  const requiresOptimisticRetry = data.signedPsbtBase64 !== undefined || !!data.signedDeviceId;
+  let latestDraft = existingDraft;
+  const maxAttempts = requiresOptimisticRetry ? MAX_SIGNATURE_UPDATE_RETRIES : 1;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Build update data from the latest known draft state
+    const updateData: {
+      signedPsbtBase64?: string;
+      signedDeviceIds?: string[];
+      status?: DraftStatus;
+      label?: string | null;
+      memo?: string | null;
+      expectedUpdatedAt?: Date;
+    } = {};
+
+    if (data.signedPsbtBase64 !== undefined) {
+      // For multisig: combine new signatures with existing ones
+      // This is critical for m-of-n multisig where multiple signers need to add signatures
+      const existingPsbt = latestDraft.signedPsbtBase64 || latestDraft.psbtBase64;
+
+      try {
+        const existingPsbtObj = bitcoin.Psbt.fromBase64(existingPsbt);
+        const newPsbtObj = bitcoin.Psbt.fromBase64(data.signedPsbtBase64);
+
+        // Log signature state BEFORE combining
+        const existingSigs: string[] = [];
+        const newSigs: string[] = [];
+        for (const input of existingPsbtObj.data.inputs) {
+          if (input.partialSig) {
+            for (const ps of input.partialSig) {
+              existingSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+            }
+          }
+        }
+        for (const input of newPsbtObj.data.inputs) {
+          if (input.partialSig) {
+            for (const ps of input.partialSig) {
+              newSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+            }
+          }
+        }
+
+        log.info('PSBT combine - before', {
+          draftId,
+          existingSource: latestDraft.signedPsbtBase64 ? 'signedPsbt' : 'unsignedPsbt',
+          existingSigCount: existingSigs.length,
+          existingSigPubkeys: existingSigs,
+          newSigCount: newSigs.length,
+          newSigPubkeys: newSigs,
+          attempt: attempt + 1,
+        });
+
+        // Combine PSBTs - this merges partial signatures from both
+        existingPsbtObj.combine(newPsbtObj);
+
+        // Count total signatures after combining
+        let totalSigs = 0;
+        const combinedSigs: string[] = [];
+        for (const input of existingPsbtObj.data.inputs) {
+          if (input.partialSig) {
+            totalSigs += input.partialSig.length;
+            for (const ps of input.partialSig) {
+              combinedSigs.push(ps.pubkey.toString('hex').substring(0, 16));
+            }
+          }
+        }
+
+        log.info('PSBT combine - after', {
+          draftId,
+          totalSignatures: totalSigs,
+          combinedSigPubkeys: combinedSigs,
+          attempt: attempt + 1,
+        });
+
+        updateData.signedPsbtBase64 = existingPsbtObj.toBase64();
+      } catch (combineError) {
+        // If combining fails (e.g., incompatible PSBTs), log and use the new one
+        log.warn('Failed to combine PSBTs, using new PSBT directly', {
+          draftId,
+          error: getErrorMessage(combineError),
+        });
+        updateData.signedPsbtBase64 = data.signedPsbtBase64;
+      }
+    }
+
+    if (data.signedDeviceId) {
+      // Add device to signed list if not already there
+      const currentSigned = latestDraft.signedDeviceIds || [];
+      if (!currentSigned.includes(data.signedDeviceId)) {
+        updateData.signedDeviceIds = [...currentSigned, data.signedDeviceId];
+      }
+    }
+
+    if (data.status !== undefined) {
+      updateData.status = data.status;
+    }
+
+    if (data.label !== undefined) {
+      updateData.label = data.label;
+    }
+
+    if (data.memo !== undefined) {
+      updateData.memo = data.memo;
+    }
+
+    if (requiresOptimisticRetry) {
+      updateData.expectedUpdatedAt = latestDraft.updatedAt;
+    }
 
     try {
-      const existingPsbtObj = bitcoin.Psbt.fromBase64(existingPsbt);
-      const newPsbtObj = bitcoin.Psbt.fromBase64(data.signedPsbtBase64);
-
-      // Log signature state BEFORE combining
-      const existingSigs: string[] = [];
-      const newSigs: string[] = [];
-      for (const input of existingPsbtObj.data.inputs) {
-        if (input.partialSig) {
-          for (const ps of input.partialSig) {
-            existingSigs.push(ps.pubkey.toString('hex').substring(0, 16));
-          }
-        }
-      }
-      for (const input of newPsbtObj.data.inputs) {
-        if (input.partialSig) {
-          for (const ps of input.partialSig) {
-            newSigs.push(ps.pubkey.toString('hex').substring(0, 16));
-          }
-        }
+      const draft = await draftRepository.update(draftId, updateData);
+      log.info('Updated draft', { draftId, walletId, status: draft.status });
+      return draft;
+    } catch (error) {
+      if (!requiresOptimisticRetry || !(error instanceof Error) || error.message !== 'DRAFT_UPDATE_CONFLICT') {
+        throw error;
       }
 
-      log.info('PSBT combine - before', {
-        draftId,
-        existingSource: existingDraft.signedPsbtBase64 ? 'signedPsbt' : 'unsignedPsbt',
-        existingSigCount: existingSigs.length,
-        existingSigPubkeys: existingSigs,
-        newSigCount: newSigs.length,
-        newSigPubkeys: newSigs,
-      });
-
-      // Combine PSBTs - this merges partial signatures from both
-      existingPsbtObj.combine(newPsbtObj);
-
-      // Count total signatures after combining
-      let totalSigs = 0;
-      const combinedSigs: string[] = [];
-      for (const input of existingPsbtObj.data.inputs) {
-        if (input.partialSig) {
-          totalSigs += input.partialSig.length;
-          for (const ps of input.partialSig) {
-            combinedSigs.push(ps.pubkey.toString('hex').substring(0, 16));
-          }
-        }
+      if (attempt >= maxAttempts - 1) {
+        throw new ConflictError('Draft was modified concurrently. Please retry your update.');
       }
 
-      log.info('PSBT combine - after', {
-        draftId,
-        totalSignatures: totalSigs,
-        combinedSigPubkeys: combinedSigs,
-      });
+      const refreshedDraft = await draftRepository.findByIdInWallet(draftId, walletId);
+      if (!refreshedDraft) {
+        throw new NotFoundError('Draft');
+      }
 
-      updateData.signedPsbtBase64 = existingPsbtObj.toBase64();
-    } catch (combineError) {
-      // If combining fails (e.g., incompatible PSBTs), log and use the new one
-      log.warn('Failed to combine PSBTs, using new PSBT directly', {
+      latestDraft = refreshedDraft;
+      log.debug('Retrying draft update after concurrent modification', {
         draftId,
-        error: getErrorMessage(combineError),
+        attempt: attempt + 2,
       });
-      updateData.signedPsbtBase64 = data.signedPsbtBase64;
     }
   }
 
-  if (data.signedDeviceId) {
-    // Add device to signed list if not already there
-    const currentSigned = existingDraft.signedDeviceIds || [];
-    if (!currentSigned.includes(data.signedDeviceId)) {
-      updateData.signedDeviceIds = [...currentSigned, data.signedDeviceId];
-    }
-  }
-
-  if (data.status !== undefined) {
-    if (!['unsigned', 'partial', 'signed'].includes(data.status)) {
-      throw new ValidationError('Invalid status. Must be unsigned, partial, or signed');
-    }
-    updateData.status = data.status;
-  }
-
-  if (data.label !== undefined) {
-    updateData.label = data.label;
-  }
-
-  if (data.memo !== undefined) {
-    updateData.memo = data.memo;
-  }
-
-  const draft = await draftRepository.update(draftId, updateData);
-
-  log.info('Updated draft', { draftId, walletId, status: draft.status });
-
-  return draft;
+  throw new ConflictError('Draft update could not be completed due to concurrent modifications');
 }
 
 /**

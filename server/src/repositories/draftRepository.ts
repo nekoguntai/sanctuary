@@ -55,6 +55,7 @@ export interface UpdateDraftInput {
   status?: DraftStatus;
   label?: string | null;
   memo?: string | null;
+  expectedUpdatedAt?: Date;
 }
 
 /**
@@ -154,16 +155,45 @@ export async function update(
   draftId: string,
   data: UpdateDraftInput
 ): Promise<DraftTransaction> {
+  const updateData = {
+    ...(data.signedPsbtBase64 !== undefined && { signedPsbtBase64: data.signedPsbtBase64 }),
+    ...(data.signedDeviceIds !== undefined && { signedDeviceIds: data.signedDeviceIds }),
+    ...(data.status !== undefined && { status: data.status }),
+    ...(data.label !== undefined && { label: data.label }),
+    ...(data.memo !== undefined && { memo: data.memo }),
+    updatedAt: new Date(),
+  };
+
+  // Optional compare-and-swap update for optimistic concurrency control.
+  // Useful for signature aggregation where concurrent updates may otherwise
+  // overwrite each other.
+  if (data.expectedUpdatedAt) {
+    const result = await prisma.draftTransaction.updateMany({
+      where: {
+        id: draftId,
+        updatedAt: data.expectedUpdatedAt,
+      },
+      data: updateData,
+    });
+
+    if (result.count === 0) {
+      throw new Error('DRAFT_UPDATE_CONFLICT');
+    }
+
+    const updated = await prisma.draftTransaction.findUnique({
+      where: { id: draftId },
+    });
+
+    if (!updated) {
+      throw new Error('Draft not found after update');
+    }
+
+    return updated;
+  }
+
   return prisma.draftTransaction.update({
     where: { id: draftId },
-    data: {
-      ...(data.signedPsbtBase64 !== undefined && { signedPsbtBase64: data.signedPsbtBase64 }),
-      ...(data.signedDeviceIds !== undefined && { signedDeviceIds: data.signedDeviceIds }),
-      ...(data.status !== undefined && { status: data.status }),
-      ...(data.label !== undefined && { label: data.label }),
-      ...(data.memo !== undefined && { memo: data.memo }),
-      updatedAt: new Date(),
-    },
+    data: updateData,
   });
 }
 

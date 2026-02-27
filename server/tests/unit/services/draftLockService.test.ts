@@ -54,6 +54,7 @@ describe('Draft UTXO Lock Service', () => {
     it('should lock UTXOs when none are already locked', async () => {
       // No existing locks
       mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([]);
+      mockPrismaClient.draftUtxoLock.createMany.mockResolvedValue({ count: utxoIds.length });
 
       const result = await lockUtxosForDraft(draftId, utxoIds);
 
@@ -113,6 +114,7 @@ describe('Draft UTXO Lock Service', () => {
     it('should allow re-locking by the same draft', async () => {
       // Locks exist but belong to the same draft (excluded by query)
       mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([]);
+      mockPrismaClient.draftUtxoLock.createMany.mockResolvedValue({ count: utxoIds.length });
       // Reset the $transaction mock to default success behavior
       mockPrismaClient.$transaction.mockImplementation(async (callback) => {
         if (typeof callback === 'function') {
@@ -378,6 +380,7 @@ describe('Draft UTXO Lock Service', () => {
       // Reset all relevant mocks for this test
       resetPrismaMocks();
       mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([]);
+      mockPrismaClient.draftUtxoLock.createMany.mockResolvedValue({ count: 1 });
 
       const result = await lockUtxosForDraft('draft-1', ['single-utxo']);
 

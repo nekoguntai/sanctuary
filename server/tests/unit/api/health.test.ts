@@ -50,6 +50,10 @@ vi.mock('../../../src/services/startupManager', () => ({
   getStartupStatus: vi.fn(),
 }));
 
+vi.mock('../../../src/services/workerHealth', () => ({
+  probeWorkerHealth: vi.fn(),
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -68,6 +72,7 @@ import { checkRedisHealth } from '../../../src/infrastructure/redis';
 import { jobQueue } from '../../../src/jobs';
 import { getCacheInvalidationStatus } from '../../../src/services/cacheInvalidation';
 import { getStartupStatus } from '../../../src/services/startupManager';
+import { probeWorkerHealth } from '../../../src/services/workerHealth';
 
 // Import the router after mocks
 import healthRouter from '../../../src/api/health';
@@ -137,6 +142,13 @@ describe('Health API', () => {
       started: true,
       overallSuccess: true,
       services: [],
+    });
+    (probeWorkerHealth as Mock).mockResolvedValue({
+      healthy: true,
+      availability: 'healthy',
+      url: 'http://localhost:3002/health',
+      checkedAt: new Date().toISOString(),
+      latencyMs: 1,
     });
   });
 
@@ -260,6 +272,23 @@ describe('Health API', () => {
       expect(response.body.components.database.latency).toBeDefined();
       expect(typeof response.body.components.database.latency).toBe('number');
     });
+
+    it('should treat degraded worker as degraded overall (not unhealthy)', async () => {
+      (probeWorkerHealth as Mock).mockResolvedValue({
+        healthy: true,
+        availability: 'degraded',
+        url: 'http://worker:3002/health',
+        checkedAt: new Date().toISOString(),
+        latencyMs: 10,
+        error: 'Worker reachable but reports degraded',
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('degraded');
+      expect(response.body.components.worker.status).toBe('degraded');
+    });
   });
 
   describe('GET /api/v1/health/live', () => {
@@ -296,6 +325,39 @@ describe('Health API', () => {
       expect(response.status).toBe(503);
       expect(response.body.status).toBe('not ready');
       expect(response.body.reason).toBe('Database unavailable');
+    });
+
+    it('should return not ready when worker is unhealthy', async () => {
+      (probeWorkerHealth as Mock).mockResolvedValue({
+        healthy: false,
+        availability: 'unhealthy',
+        url: 'http://worker:3002/health',
+        checkedAt: new Date().toISOString(),
+        latencyMs: 12,
+        error: 'connect ECONNREFUSED',
+      });
+
+      const response = await request(app).get('/api/v1/health/ready');
+
+      expect(response.status).toBe(503);
+      expect(response.body.status).toBe('not ready');
+      expect(response.body.reason).toBe('Worker unavailable');
+    });
+
+    it('should remain ready when worker is degraded but reachable', async () => {
+      (probeWorkerHealth as Mock).mockResolvedValue({
+        healthy: true,
+        availability: 'degraded',
+        url: 'http://worker:3002/health',
+        checkedAt: new Date().toISOString(),
+        latencyMs: 15,
+        error: 'Worker reachable but reports degraded',
+      });
+
+      const response = await request(app).get('/api/v1/health/ready');
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('ready');
     });
   });
 

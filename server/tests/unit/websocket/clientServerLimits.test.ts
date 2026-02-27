@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
-const mockCheckWalletAccess = vi.fn(async () => true);
+const mockCheckWalletAccess = vi.fn(async () => ({ hasAccess: true, canEdit: true, role: 'owner' }));
 
-vi.mock('../../../src/services/wallet', () => ({
+vi.mock('../../../src/services/accessControl', () => ({
   checkWalletAccess: mockCheckWalletAccess,
 }));
 
@@ -113,7 +113,9 @@ describe('SanctauryWebSocketServer limits', () => {
     const server = new Server();
     const client = createClient({ userId: 'user-1' });
 
-    mockCheckWalletAccess.mockImplementation(async (walletId: string) => walletId !== 'deadbeef');
+    mockCheckWalletAccess.mockImplementation(
+      async (walletId: string) => ({ hasAccess: walletId !== 'deadbeef', canEdit: true, role: 'owner' })
+    );
 
     await (server as any).handleMessage(
       client,

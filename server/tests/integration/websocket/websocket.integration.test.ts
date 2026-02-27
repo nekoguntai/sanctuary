@@ -3,14 +3,14 @@ import { WebSocket } from 'ws';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWebSocketTestServer } from '../setup/websocketHarness';
 import { verifyToken } from '../../../src/utils/jwt';
-import { checkWalletAccess } from '../../../src/services/wallet';
+import { checkWalletAccess } from '../../../src/services/accessControl';
 
 vi.mock('../../../src/utils/jwt', () => ({
   verifyToken: vi.fn(async (token: string) => ({ userId: token === 'good-token' ? 'user-1' : 'user-2' })),
 }));
 
-vi.mock('../../../src/services/wallet', () => ({
-  checkWalletAccess: vi.fn(async () => true),
+vi.mock('../../../src/services/accessControl', () => ({
+  checkWalletAccess: vi.fn(async () => ({ hasAccess: true, canEdit: true, role: 'owner' })),
 }));
 
 vi.mock('../../../src/observability/metrics', () => ({
@@ -141,6 +141,45 @@ describeWebSocket('websocket integration', () => {
 
     gateway.close();
     await waitForClose(gateway);
+    await harness.close();
+  });
+
+  it('handles mixed access in batch wallet subscriptions', async () => {
+    let harness: Awaited<ReturnType<typeof createWebSocketTestServer>> | null = null;
+    try {
+      harness = await createWebSocketTestServer();
+    } catch (err: any) {
+      if (err?.code === 'EPERM') {
+        return;
+      }
+      throw err;
+    }
+    const client = await harness.connectClient();
+
+    await waitForJsonMessage(client, (msg) => msg.type === 'connected');
+
+    client.send(JSON.stringify({ type: 'auth', data: { token: 'good-token' } }));
+    await waitForJsonMessage(client, (msg) => msg.type === 'authenticated');
+
+    (checkWalletAccess as ReturnType<typeof vi.fn>).mockImplementation(async (walletId: string) => ({
+      hasAccess: walletId !== 'deadbeef',
+      canEdit: true,
+      role: 'owner',
+    }));
+
+    client.send(
+      JSON.stringify({
+        type: 'subscribe_batch',
+        data: { channels: ['wallet:deadbeef', 'wallet:cafebabe', 'system'] },
+      })
+    );
+
+    const batch = await waitForJsonMessage(client, (msg) => msg.type === 'subscribed_batch');
+    expect(batch.data.subscribed).toEqual(['wallet:cafebabe', 'system']);
+    expect(batch.data.errors).toEqual([{ channel: 'wallet:deadbeef', reason: 'Access denied' }]);
+
+    client.close();
+    await waitForClose(client);
     await harness.close();
   });
 });

@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
+import { NotFoundError, ForbiddenError } from '../../../src/errors';
 
 // Mock JWT verification
 vi.mock('jsonwebtoken', () => ({
@@ -52,23 +53,6 @@ vi.mock('../../../src/services/labelService', () => ({
     addAddressLabels: (...args: unknown[]) => mockAddAddressLabels(...args),
     replaceAddressLabels: (...args: unknown[]) => mockReplaceAddressLabels(...args),
     removeAddressLabel: (...args: unknown[]) => mockRemoveAddressLabel(...args),
-  },
-}));
-
-// Mock service errors
-vi.mock('../../../src/services/errors', () => ({
-  isServiceError: (error: unknown) => error && typeof error === 'object' && 'code' in error,
-  toHttpError: (error: { code: string; message: string }) => {
-    const statusMap: Record<string, number> = {
-      NOT_FOUND: 404,
-      UNAUTHORIZED: 401,
-      FORBIDDEN: 403,
-      BAD_REQUEST: 400,
-    };
-    return {
-      status: statusMap[error.code] || 500,
-      body: { error: error.code, message: error.message },
-    };
   },
 }));
 
@@ -144,7 +128,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when wallet not found', async () => {
-      mockGetLabelsForWallet.mockRejectedValue({ code: 'NOT_FOUND', message: 'Wallet not found' });
+      mockGetLabelsForWallet.mockRejectedValue(new NotFoundError('Wallet not found'));
 
       const response = await request(app)
         .get('/api/v1/wallets/nonexistent/labels')
@@ -188,7 +172,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when label not found', async () => {
-      mockGetLabel.mockRejectedValue({ code: 'NOT_FOUND', message: 'Label not found' });
+      mockGetLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
         .get('/api/v1/wallets/wallet-1/labels/nonexistent')
@@ -235,7 +219,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 403 when user lacks edit access', async () => {
-      mockCreateLabel.mockRejectedValue({ code: 'FORBIDDEN', message: 'Edit access required' });
+      mockCreateLabel.mockRejectedValue(new ForbiddenError('Edit access required'));
 
       const response = await request(app)
         .post('/api/v1/wallets/wallet-1/labels')
@@ -285,7 +269,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when label not found', async () => {
-      mockUpdateLabel.mockRejectedValue({ code: 'NOT_FOUND', message: 'Label not found' });
+      mockUpdateLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
         .put('/api/v1/wallets/wallet-1/labels/nonexistent')
@@ -327,7 +311,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when label not found', async () => {
-      mockDeleteLabel.mockRejectedValue({ code: 'NOT_FOUND', message: 'Label not found' });
+      mockDeleteLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
         .delete('/api/v1/wallets/wallet-1/labels/nonexistent')
@@ -372,7 +356,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when transaction not found', async () => {
-      mockGetTransactionLabels.mockRejectedValue({ code: 'NOT_FOUND', message: 'Transaction not found' });
+      mockGetTransactionLabels.mockRejectedValue(new NotFoundError('Transaction not found'));
 
       const response = await request(app)
         .get('/api/v1/transactions/nonexistent/labels')
@@ -414,7 +398,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 403 when user lacks edit access', async () => {
-      mockAddTransactionLabels.mockRejectedValue({ code: 'FORBIDDEN', message: 'Edit access required' });
+      mockAddTransactionLabels.mockRejectedValue(new ForbiddenError('Edit access required'));
 
       const response = await request(app)
         .post('/api/v1/transactions/tx-1/labels')
@@ -489,7 +473,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when label not found', async () => {
-      mockRemoveTransactionLabel.mockRejectedValue({ code: 'NOT_FOUND', message: 'Label not found' });
+      mockRemoveTransactionLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
         .delete('/api/v1/transactions/tx-1/labels/nonexistent')
@@ -534,7 +518,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when address not found', async () => {
-      mockGetAddressLabels.mockRejectedValue({ code: 'NOT_FOUND', message: 'Address not found' });
+      mockGetAddressLabels.mockRejectedValue(new NotFoundError('Address not found'));
 
       const response = await request(app)
         .get('/api/v1/addresses/nonexistent/labels')
@@ -576,7 +560,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 403 when user lacks edit access', async () => {
-      mockAddAddressLabels.mockRejectedValue({ code: 'FORBIDDEN', message: 'Edit access required' });
+      mockAddAddressLabels.mockRejectedValue(new ForbiddenError('Edit access required'));
 
       const response = await request(app)
         .post('/api/v1/addresses/addr-1/labels')
@@ -651,7 +635,7 @@ describe('Labels API Routes', () => {
     });
 
     it('should return 404 when label not found', async () => {
-      mockRemoveAddressLabel.mockRejectedValue({ code: 'NOT_FOUND', message: 'Label not found' });
+      mockRemoveAddressLabel.mockRejectedValue(new NotFoundError('Label not found'));
 
       const response = await request(app)
         .delete('/api/v1/addresses/addr-1/labels/nonexistent')

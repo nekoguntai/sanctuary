@@ -94,6 +94,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
+          RUN_WS_INTEGRATION: 'true'
         run: npm run test:integration
 
       - name: Upload backend coverage

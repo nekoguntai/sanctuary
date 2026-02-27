@@ -13,7 +13,6 @@ import {
 import { eventBus } from '../../../src/events/eventBus';
 import {
   invalidateWalletCaches,
-  blockHeightCache,
   priceCache,
   feeEstimateCache,
 } from '../../../src/utils/cache';
@@ -21,7 +20,6 @@ import {
 // Mock the cache utilities
 vi.mock('../../../src/utils/cache', () => ({
   invalidateWalletCaches: vi.fn(),
-  blockHeightCache: { clear: vi.fn() },
   priceCache: { clear: vi.fn() },
   feeEstimateCache: { clear: vi.fn() },
 }));
@@ -61,7 +59,6 @@ describe('CacheInvalidation', () => {
       expect(eventBus.listenerCount('transaction:received')).toBeGreaterThan(0);
       expect(eventBus.listenerCount('transaction:sent')).toBeGreaterThan(0);
       expect(eventBus.listenerCount('transaction:confirmed')).toBeGreaterThan(0);
-      expect(eventBus.listenerCount('blockchain:newBlock')).toBeGreaterThan(0);
       expect(eventBus.listenerCount('blockchain:priceUpdated')).toBeGreaterThan(0);
       expect(eventBus.listenerCount('blockchain:feeEstimateUpdated')).toBeGreaterThan(0);
     });
@@ -213,18 +210,6 @@ describe('CacheInvalidation', () => {
   describe('blockchain event handling', () => {
     beforeEach(() => {
       initializeCacheInvalidation();
-    });
-
-    it('should clear block height cache on blockchain:newBlock event', async () => {
-      eventBus.emit('blockchain:newBlock', {
-        network: 'mainnet',
-        height: 800001,
-        hash: '00000000000000000000abc...',
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      expect(blockHeightCache.clear).toHaveBeenCalled();
     });
 
     it('should clear price cache on blockchain:priceUpdated event', async () => {

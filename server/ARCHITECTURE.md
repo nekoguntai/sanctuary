@@ -158,14 +158,14 @@ Services contain business logic and domain operations.
 
 ### Error Handling
 
-Services throw domain-specific errors defined in `src/services/errors.ts`:
+Services throw domain-specific errors defined in `src/errors/ApiError.ts`:
 
 ```typescript
-import { NotFoundError, ForbiddenError, ValidationError } from '../services/errors';
+import { WalletNotFoundError, ForbiddenError, InvalidInputError } from '../errors';
 
-// In service
+// In service — use domain-specific errors where available
 if (!wallet) {
-  throw new NotFoundError('Wallet', walletId);
+  throw new WalletNotFoundError(walletId);
 }
 
 if (!hasAccess) {
@@ -173,23 +173,7 @@ if (!hasAccess) {
 }
 ```
 
-Routes translate these to HTTP responses:
-
-```typescript
-import { isServiceError, toHttpError } from '../services/errors';
-
-try {
-  const result = await labelService.createLabel(data);
-  res.json(result);
-} catch (error) {
-  if (isServiceError(error)) {
-    const { status, body } = toHttpError(error);
-    res.status(status).json(body);
-    return;
-  }
-  throw error;
-}
-```
+The error handler middleware (`src/errors/errorHandler.ts`) automatically converts `ApiError` subclasses to HTTP responses using `error.toResponse()`.
 
 ### Error Types
 

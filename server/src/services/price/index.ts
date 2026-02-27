@@ -3,12 +3,16 @@
  *
  * Aggregates Bitcoin price data from multiple sources using the
  * ProviderRegistry pattern with caching and fallback mechanisms.
+ *
+ * Uses the System 2 priceCache (ICacheService) for all caching.
+ * Stale fallback is implemented via a separate long-TTL cache entry
+ * that persists even after the primary entry expires.
  */
 
-import { LRUCache } from 'lru-cache';
 import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
+import { priceCache, CacheTTL } from '../cache';
 import {
   createPriceProviderRegistry,
   initializePriceProviders,
@@ -27,21 +31,26 @@ import { hasHistoricalSupport } from './types';
 
 const log = createLogger('PRICE');
 
-interface CachedPrice {
-  data?: PriceData;
-  expiresAt?: Date;
-  fetchedAt?: Date;
-  price?: number;
+/**
+ * Stale TTL multiplier: stale fallback entries live 10x longer than fresh entries.
+ * For btcPrice (60s), stale lives 600s (10 min).
+ * For priceHistory (3600s), stale lives 36000s (~10 hr).
+ */
+const STALE_TTL_MULTIPLIER = 10;
+
+/** Cache key prefix for stale fallback entries */
+const STALE_PREFIX = 'stale:';
+
+/** Wrapper for data stored in the price history / historical caches */
+interface CachedHistorical {
+  price: number;
   prices?: PriceHistoryPoint[];
-  provider?: string;
-  currency?: string;
-  timestamp?: Date;
+  provider: string;
+  currency: string;
 }
 
 class PriceService {
-  private cache = new LRUCache<string, CachedPrice>({ max: 500 });
-  private cacheDuration = 60 * 1000; // 1 minute default
-  private cacheTimeout = 24 * 60 * 60 * 1000; // 24 hours for historical data
+  private cacheDurationSec: number = CacheTTL.btcPrice; // 60 seconds default
   private registry: ProviderRegistry<IPriceProvider>;
   private initialized = false;
 
@@ -78,11 +87,11 @@ class PriceService {
   ): Promise<AggregatedPrice> {
     await this.ensureInitialized();
 
-    const cacheKey = `price:${currency.toUpperCase()}`;
+    const cacheKey = `current:${currency.toUpperCase()}`;
 
     // Check cache first
     if (useCache) {
-      const cached = this.getFromCache(cacheKey);
+      const cached = await priceCache.get<PriceData>(cacheKey);
       if (cached) {
         return {
           price: cached.price,
@@ -122,8 +131,8 @@ class PriceService {
     const results = await this.fetchFromProviders(providersToTry, currency);
 
     if (results.length === 0) {
-      // Try stale cache as fallback
-      const stale = this.getStaleFromCache(cacheKey);
+      // Try stale cache as fallback (longer-lived entry)
+      const stale = await priceCache.get<PriceData>(`${STALE_PREFIX}${cacheKey}`);
       if (stale) {
         log.warn('Using stale cached price due to provider failures', { currency });
         return {
@@ -173,7 +182,7 @@ class PriceService {
       if (change24h !== undefined && !sourceToCache.change24h) {
         sourceToCache.change24h = change24h;
       }
-      this.setCache(cacheKey, sourceToCache);
+      await this.setCacheEntry(cacheKey, sourceToCache, this.cacheDurationSec);
     }
 
     return aggregated;
@@ -284,10 +293,10 @@ class PriceService {
       const normalizedDate = new Date(date);
       normalizedDate.setHours(0, 0, 0, 0);
 
-      const cacheKey = `historical_${currency}_${normalizedDate.toISOString()}`;
-      const cached = this.cache.get(cacheKey);
+      const cacheKey = `historical:${currency}:${normalizedDate.toISOString()}`;
+      const cached = await priceCache.get<CachedHistorical>(cacheKey);
 
-      if (cached && cached.fetchedAt && cached.price !== undefined && Date.now() - cached.fetchedAt.getTime() < this.cacheTimeout) {
+      if (cached && cached.price !== undefined) {
         log.debug(`Using cached historical price for ${currency} on ${normalizedDate.toDateString()}`);
         return cached.price;
       }
@@ -301,10 +310,11 @@ class PriceService {
 
       const priceData = await provider.getHistoricalPrice(normalizedDate, currency);
 
-      this.cache.set(cacheKey, {
-        ...priceData,
-        fetchedAt: new Date(),
-      });
+      await priceCache.set<CachedHistorical>(cacheKey, {
+        price: priceData.price,
+        provider: priceData.provider,
+        currency: priceData.currency,
+      }, CacheTTL.priceHistory);
 
       log.debug(`Fetched historical price from ${priceData.provider}: ${priceData.price} ${priceData.currency}`);
 
@@ -325,12 +335,12 @@ class PriceService {
     await this.ensureInitialized();
 
     try {
-      const cacheKey = `history_${currency}_${days}d`;
-      const cached = this.cache.get(cacheKey);
+      const cacheKey = `history:${currency}:${days}d`;
+      const cached = await priceCache.get<CachedHistorical>(cacheKey);
 
-      if (cached && cached.fetchedAt && Date.now() - cached.fetchedAt.getTime() < this.cacheTimeout) {
+      if (cached && cached.prices) {
         log.debug(`Using cached price history for ${currency} (${days} days)`);
-        return cached.prices || [];
+        return cached.prices;
       }
 
       const provider = await this.getHistoricalProvider();
@@ -341,14 +351,12 @@ class PriceService {
 
       const priceHistory = await provider.getPriceHistory(days, currency);
 
-      this.cache.set(cacheKey, {
+      await priceCache.set<CachedHistorical>(cacheKey, {
         provider: 'coingecko',
         price: priceHistory[priceHistory.length - 1]?.price || 0,
         currency,
-        timestamp: new Date(),
-        fetchedAt: new Date(),
         prices: priceHistory,
-      });
+      }, CacheTTL.priceHistory);
 
       log.debug(`Fetched price history: ${priceHistory.length} data points`);
 
@@ -379,26 +387,31 @@ class PriceService {
 
   /**
    * Get cache statistics
+   *
+   * Returns stats from the shared System 2 priceCache namespace.
    */
   getCacheStats(): { size: number; entries: string[] } {
+    const stats = priceCache.getStats();
     return {
-      size: this.cache.size,
-      entries: Array.from(this.cache.keys()),
+      size: stats.size,
+      entries: [],
     };
   }
 
   /**
    * Clear cache
    */
-  clearCache(): void {
-    this.cache.clear();
+  async clearCache(): Promise<void> {
+    await priceCache.clear();
   }
 
   /**
-   * Set cache duration (in milliseconds)
+   * Set cache duration (in seconds for System 2 cache)
+   *
+   * Note: Duration is in milliseconds for API compatibility but stored in seconds.
    */
   setCacheDuration(ms: number): void {
-    this.cacheDuration = ms;
+    this.cacheDurationSec = Math.max(1, Math.round(ms / 1000));
   }
 
   /**
@@ -453,33 +466,15 @@ class PriceService {
     log.info('Price service shut down');
   }
 
-  private getFromCache(key: string): PriceData | null {
-    const cached = this.cache.get(key);
-
-    if (!cached) {
-      return null;
-    }
-
-    if (cached.expiresAt && new Date() > cached.expiresAt) {
-      // Don't delete - keep for stale fallback
-      return null;
-    }
-
-    return cached.data || null;
-  }
-
   /**
-   * Get stale data from cache (expired but still usable as fallback)
+   * Store a cache entry with both a fresh TTL and a longer-lived stale fallback.
+   * The stale entry allows graceful degradation when all providers are down.
    */
-  private getStaleFromCache(key: string): PriceData | null {
-    const cached = this.cache.get(key);
-    if (!cached) return null;
-    return cached.data || null;
-  }
-
-  private setCache(key: string, data: PriceData): void {
-    const expiresAt = new Date(Date.now() + this.cacheDuration);
-    this.cache.set(key, { data, expiresAt });
+  private async setCacheEntry<T>(key: string, data: T, ttlSeconds: number): Promise<void> {
+    await Promise.all([
+      priceCache.set(key, data, ttlSeconds),
+      priceCache.set(`${STALE_PREFIX}${key}`, data, ttlSeconds * STALE_TTL_MULTIPLIER),
+    ]);
   }
 
   private calculateMedian(values: number[]): number {

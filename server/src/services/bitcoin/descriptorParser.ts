@@ -8,6 +8,7 @@
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { normalizeDerivationPath } from '../../../../shared/utils/bitcoin';
+import { JsonImportConfigSchema, WalletExportDetectionSchema, ColdcardDetectionSchema } from '../import/schemas';
 
 const log = createLogger('DESCRIPTOR');
 
@@ -361,72 +362,15 @@ export interface JsonImportConfig {
 
 /**
  * Validate JSON import configuration
+ * Delegates to Zod schema for consistent validation.
  */
 export function validateJsonImport(config: unknown): DescriptorParseError | null {
-  if (!config || typeof config !== 'object') {
-    return { message: 'Invalid JSON: expected an object' };
+  const result = JsonImportConfigSchema.safeParse(config);
+  if (!result.success) {
+    // Return the first error message for backwards compatibility
+    const firstIssue = result.error.issues[0];
+    return { message: firstIssue.message };
   }
-
-  const obj = config as Record<string, unknown>;
-
-  // Validate type
-  if (!obj.type || !['single_sig', 'multi_sig'].includes(obj.type as string)) {
-    return { message: 'Invalid or missing type: must be "single_sig" or "multi_sig"' };
-  }
-
-  // Validate script type
-  const validScriptTypes = ['native_segwit', 'nested_segwit', 'taproot', 'legacy'];
-  if (!obj.scriptType || !validScriptTypes.includes(obj.scriptType as string)) {
-    return { message: 'Invalid or missing scriptType' };
-  }
-
-  // Validate devices array
-  if (!Array.isArray(obj.devices) || obj.devices.length === 0) {
-    return { message: 'devices must be a non-empty array' };
-  }
-
-  // Validate quorum for multisig
-  if (obj.type === 'multi_sig') {
-    if (typeof obj.quorum !== 'number' || obj.quorum < 1) {
-      return { message: 'Multi-sig requires a valid quorum (positive integer)' };
-    }
-    if (obj.quorum > obj.devices.length) {
-      return { message: 'Quorum cannot exceed total number of devices' };
-    }
-  }
-
-  // Validate single_sig has exactly one device
-  if (obj.type === 'single_sig' && obj.devices.length !== 1) {
-    return { message: 'Single-sig requires exactly one device' };
-  }
-
-  // Validate each device
-  for (let i = 0; i < obj.devices.length; i++) {
-    const device = obj.devices[i] as Record<string, unknown>;
-
-    if (!device.fingerprint || typeof device.fingerprint !== 'string') {
-      return { message: `Device ${i + 1}: missing or invalid fingerprint` };
-    }
-
-    // Validate fingerprint format (8 hex chars)
-    if (!/^[a-fA-F0-9]{8}$/.test(device.fingerprint)) {
-      return { message: `Device ${i + 1}: fingerprint must be 8 hex characters` };
-    }
-
-    if (!device.derivationPath || typeof device.derivationPath !== 'string') {
-      return { message: `Device ${i + 1}: missing or invalid derivationPath` };
-    }
-
-    if (!device.xpub || typeof device.xpub !== 'string') {
-      return { message: `Device ${i + 1}: missing or invalid xpub` };
-    }
-
-    // Basic xpub format check
-    if (!/^[xyztuvYZTUVpub][a-zA-Z0-9]{100,120}$/.test(device.xpub)) {
-      return { message: `Device ${i + 1}: xpub format appears invalid` };
-    }
-  }
-
   return null;
 }
 
@@ -722,36 +666,18 @@ export function parseBlueWalletTextImport(input: string): ParsedDescriptor {
 
 /**
  * Check if JSON is a wallet export format (has descriptor field)
+ * Delegates to Zod schema for consistent validation.
  */
 export function isWalletExportFormat(obj: unknown): obj is WalletExportFormat {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'descriptor' in obj &&
-    typeof (obj as WalletExportFormat).descriptor === 'string'
-  );
+  return WalletExportDetectionSchema.safeParse(obj).success;
 }
 
 /**
  * Check if JSON is a Coldcard export format (has xfp and bip paths)
- * Supports both nested format (bip44/bip49/bip84) and flat format (p2sh/p2wsh/p2sh_p2wsh)
+ * Delegates to Zod schema for consistent validation.
  */
 export function isColdcardExportFormat(obj: unknown): obj is ColdcardJsonExport {
-  if (typeof obj !== 'object' || obj === null) return false;
-  const cc = obj as ColdcardJsonExport;
-  // Coldcard exports have xfp (fingerprint) - 8 hex characters
-  if (typeof cc.xfp !== 'string' || cc.xfp.length !== 8) return false;
-
-  // Check for nested format (standard single-sig export)
-  const hasNestedFormat =
-    cc.bip44 !== undefined || cc.bip49 !== undefined || cc.bip84 !== undefined ||
-    cc.bip48_1 !== undefined || cc.bip48_2 !== undefined;
-
-  // Check for flat format (generic multisig export)
-  const hasFlatFormat =
-    cc.p2sh !== undefined || cc.p2sh_p2wsh !== undefined || cc.p2wsh !== undefined;
-
-  return hasNestedFormat || hasFlatFormat;
+  return ColdcardDetectionSchema.safeParse(obj).success;
 }
 
 /**

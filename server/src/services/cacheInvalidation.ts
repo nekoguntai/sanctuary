@@ -6,17 +6,25 @@
  */
 
 import { eventBus } from '../events/eventBus';
-import {
-  invalidateWalletCaches,
-  priceCache,
-  feeEstimateCache,
-} from '../utils/cache';
+import { walletCache, feeCache, priceCache } from './cache';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('CacheInvalidation');
 
 let isInitialized = false;
 const unsubscribers: Array<() => void> = [];
+
+/**
+ * Invalidate all wallet-related caches for a given walletId
+ * Clears both balance-history and tx-stats entries in the System 2 wallet cache
+ */
+async function invalidateWalletCaches(walletId: string): Promise<void> {
+  await Promise.all([
+    walletCache.deletePattern(`balance-history:${walletId}:*`),
+    walletCache.delete(`tx-stats:${walletId}`),
+  ]);
+  log.debug(`Invalidated wallet caches for ${walletId}`);
+}
 
 /**
  * Initialize cache invalidation listeners
@@ -32,62 +40,62 @@ export function initializeCacheInvalidation(): void {
 
   // Wallet sync events - invalidate all wallet caches
   unsubscribers.push(
-    eventBus.on('wallet:synced', ({ walletId }) => {
+    eventBus.on('wallet:synced', async ({ walletId }) => {
       log.debug(`Invalidating caches for synced wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   // Wallet deletion - clean up caches
   unsubscribers.push(
-    eventBus.on('wallet:deleted', ({ walletId }) => {
+    eventBus.on('wallet:deleted', async ({ walletId }) => {
       log.debug(`Invalidating caches for deleted wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   // Balance changes - invalidate wallet caches
   unsubscribers.push(
-    eventBus.on('wallet:balanceChanged', ({ walletId }) => {
+    eventBus.on('wallet:balanceChanged', async ({ walletId }) => {
       log.debug(`Invalidating caches for balance change in wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   // Transaction events - invalidate affected wallet caches
   unsubscribers.push(
-    eventBus.on('transaction:received', ({ walletId }) => {
+    eventBus.on('transaction:received', async ({ walletId }) => {
       log.debug(`Invalidating caches for received transaction in wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   unsubscribers.push(
-    eventBus.on('transaction:sent', ({ walletId }) => {
+    eventBus.on('transaction:sent', async ({ walletId }) => {
       log.debug(`Invalidating caches for sent transaction in wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   unsubscribers.push(
-    eventBus.on('transaction:confirmed', ({ walletId }) => {
+    eventBus.on('transaction:confirmed', async ({ walletId }) => {
       log.debug(`Invalidating caches for confirmed transaction in wallet ${walletId}`);
-      invalidateWalletCaches(walletId);
+      await invalidateWalletCaches(walletId);
     })
   );
 
   // Blockchain events - invalidate global caches
   unsubscribers.push(
-    eventBus.on('blockchain:priceUpdated', () => {
+    eventBus.on('blockchain:priceUpdated', async () => {
       log.debug('Invalidating price cache for price update');
-      priceCache.clear();
+      await priceCache.clear();
     })
   );
 
   unsubscribers.push(
-    eventBus.on('blockchain:feeEstimateUpdated', () => {
+    eventBus.on('blockchain:feeEstimateUpdated', async () => {
       log.debug('Invalidating fee estimate cache');
-      feeEstimateCache.clear();
+      await feeCache.clear();
     })
   );
 

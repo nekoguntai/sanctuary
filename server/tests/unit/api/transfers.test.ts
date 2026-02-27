@@ -71,8 +71,8 @@ import {
   NotFoundError,
   ForbiddenError,
   ConflictError,
-  ValidationError,
-} from '../../../src/services/errors';
+  InvalidInputError,
+} from '../../../src/errors';
 
 // Get typed references to mocked functions
 const mockInitiateTransfer = initiateTransfer as ReturnType<typeof vi.fn>;
@@ -634,7 +634,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be accepted', async () => {
-      mockAcceptTransfer.mockRejectedValue(new ValidationError('Transfer cannot be accepted'));
+      mockAcceptTransfer.mockRejectedValue(new InvalidInputError('Transfer cannot be accepted'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/accept`)
@@ -644,7 +644,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer expired', async () => {
-      mockAcceptTransfer.mockRejectedValue(new ValidationError('Transfer has expired'));
+      mockAcceptTransfer.mockRejectedValue(new InvalidInputError('Transfer has expired'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/accept`)
@@ -711,7 +711,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be declined', async () => {
-      mockDeclineTransfer.mockRejectedValue(new ValidationError('Transfer cannot be declined'));
+      mockDeclineTransfer.mockRejectedValue(new InvalidInputError('Transfer cannot be declined'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/decline`)
@@ -761,7 +761,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be cancelled', async () => {
-      mockCancelTransfer.mockRejectedValue(new ValidationError('Transfer cannot be cancelled'));
+      mockCancelTransfer.mockRejectedValue(new InvalidInputError('Transfer cannot be cancelled'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/cancel`)
@@ -823,7 +823,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be confirmed', async () => {
-      mockConfirmTransfer.mockRejectedValue(new ValidationError('Transfer cannot be confirmed'));
+      mockConfirmTransfer.mockRejectedValue(new InvalidInputError('Transfer cannot be confirmed'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)
@@ -833,7 +833,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer expired', async () => {
-      mockConfirmTransfer.mockRejectedValue(new ValidationError('Transfer has expired'));
+      mockConfirmTransfer.mockRejectedValue(new InvalidInputError('Transfer has expired'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)

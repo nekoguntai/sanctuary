@@ -15,7 +15,7 @@ import {
   requireAddressAccess,
   requireAddressEditAccess,
 } from './accessControl';
-import { NotFoundError, ConflictError, ValidationError } from './errors';
+import { NotFoundError, ConflictError, InvalidInputError } from '../errors';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('LABEL_SVC');
@@ -47,7 +47,7 @@ export async function getLabel(
 
   const label = await labelRepository.findByIdWithAssociations(labelId, walletId);
   if (!label) {
-    throw new NotFoundError('Label');
+    throw new NotFoundError('Label not found');
   }
 
   return label;
@@ -65,7 +65,7 @@ export async function createLabel(
 
   // Validate name
   if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
-    throw new ValidationError('Label name is required', 'name');
+    throw new InvalidInputError('Label name is required', 'name');
   }
 
   const name = data.name.trim();
@@ -101,7 +101,7 @@ export async function updateLabel(
   // Check label exists
   const existing = await labelRepository.findByIdInWallet(labelId, walletId);
   if (!existing) {
-    throw new NotFoundError('Label');
+    throw new NotFoundError('Label not found');
   }
 
   // Check for duplicate name if changing
@@ -135,7 +135,7 @@ export async function deleteLabel(
   // Check label exists
   const label = await labelRepository.findByIdInWallet(labelId, walletId);
   if (!label) {
-    throw new NotFoundError('Label');
+    throw new NotFoundError('Label not found');
   }
 
   await labelRepository.remove(labelId);
@@ -166,7 +166,7 @@ export async function addTransactionLabels(
   labelIds: string[]
 ): Promise<Label[]> {
   if (!Array.isArray(labelIds) || labelIds.length === 0) {
-    throw new ValidationError('labelIds array is required');
+    throw new InvalidInputError('labelIds array is required');
   }
 
   const { walletId } = await requireTransactionEditAccess(transactionId, userId);
@@ -174,7 +174,7 @@ export async function addTransactionLabels(
   // Verify all labels belong to the same wallet
   const labels = await labelRepository.findManyByIdsInWallet(labelIds, walletId);
   if (labels.length !== labelIds.length) {
-    throw new ValidationError('One or more labels not found or belong to a different wallet');
+    throw new InvalidInputError('One or more labels not found or belong to a different wallet');
   }
 
   await labelRepository.addLabelsToTransaction(transactionId, labelIds);
@@ -192,7 +192,7 @@ export async function replaceTransactionLabels(
   labelIds: string[]
 ): Promise<Label[]> {
   if (!Array.isArray(labelIds)) {
-    throw new ValidationError('labelIds array is required');
+    throw new InvalidInputError('labelIds array is required');
   }
 
   const { walletId } = await requireTransactionEditAccess(transactionId, userId);
@@ -201,7 +201,7 @@ export async function replaceTransactionLabels(
   if (labelIds.length > 0) {
     const labels = await labelRepository.findManyByIdsInWallet(labelIds, walletId);
     if (labels.length !== labelIds.length) {
-      throw new ValidationError('One or more labels not found or belong to a different wallet');
+      throw new InvalidInputError('One or more labels not found or belong to a different wallet');
     }
   }
 
@@ -248,7 +248,7 @@ export async function addAddressLabels(
   labelIds: string[]
 ): Promise<Label[]> {
   if (!Array.isArray(labelIds) || labelIds.length === 0) {
-    throw new ValidationError('labelIds array is required');
+    throw new InvalidInputError('labelIds array is required');
   }
 
   const { walletId } = await requireAddressEditAccess(addressId, userId);
@@ -256,7 +256,7 @@ export async function addAddressLabels(
   // Verify all labels belong to the same wallet
   const labels = await labelRepository.findManyByIdsInWallet(labelIds, walletId);
   if (labels.length !== labelIds.length) {
-    throw new ValidationError('One or more labels not found or belong to a different wallet');
+    throw new InvalidInputError('One or more labels not found or belong to a different wallet');
   }
 
   await labelRepository.addLabelsToAddress(addressId, labelIds);
@@ -274,7 +274,7 @@ export async function replaceAddressLabels(
   labelIds: string[]
 ): Promise<Label[]> {
   if (!Array.isArray(labelIds)) {
-    throw new ValidationError('labelIds array is required');
+    throw new InvalidInputError('labelIds array is required');
   }
 
   const { walletId } = await requireAddressEditAccess(addressId, userId);
@@ -283,7 +283,7 @@ export async function replaceAddressLabels(
   if (labelIds.length > 0) {
     const labels = await labelRepository.findManyByIdsInWallet(labelIds, walletId);
     if (labels.length !== labelIds.length) {
-      throw new ValidationError('One or more labels not found or belong to a different wallet');
+      throw new InvalidInputError('One or more labels not found or belong to a different wallet');
     }
   }
 

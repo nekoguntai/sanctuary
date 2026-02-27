@@ -10,7 +10,7 @@ import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { handleApiError, validatePagination, bigIntToNumber, bigIntToNumberOrZero } from '../../utils/errors';
 import { recalculateWalletBalances, getCachedBlockHeight } from '../../services/bitcoin/blockchain';
-import { transactionStatsCache, getOrCompute } from '../../utils/cache';
+import { walletCache } from '../../services/cache';
 
 const router = Router();
 const log = createLogger('TX:WALLET');
@@ -124,8 +124,24 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
   try {
     const walletId = req.walletId!;
 
-    // Use cache to reduce database load for frequently accessed stats
-    const stats = await getOrCompute(transactionStatsCache, walletId, async () => {
+    // Use cache to reduce database load for frequently accessed stats (30 second TTL)
+    const cacheKey = `tx-stats:${walletId}`;
+
+    interface TxStatsCache {
+      totalSent: string;
+      totalReceived: string;
+      transactionCount: number;
+      avgFee: string;
+      totalFees: string;
+      currentBalance: string;
+      _receivedCount: number;
+      _sentCount: number;
+      _consolidationCount: number;
+    }
+
+    let stats = await walletCache.get<TxStatsCache>(cacheKey);
+
+    if (!stats) {
       // OPTIMIZED: Use aggregate queries instead of loading all transactions
       const [typeStats, feeStats, lastTx] = await Promise.all([
         prisma.transaction.groupBy({
@@ -180,7 +196,7 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
       const walletBalance = lastTx?.balanceAfter ?? BigInt(0);
 
       // Store as strings for cache (BigInt not serializable)
-      return {
+      stats = {
         totalSent: totalSent.toString(),
         totalReceived: totalReceived.toString(),
         transactionCount: totalCount,
@@ -192,7 +208,9 @@ router.get('/wallets/:walletId/transactions/stats', requireWalletAccess('view'),
         _sentCount: sentCount,
         _consolidationCount: consolidationCount,
       };
-    });
+
+      await walletCache.set(cacheKey, stats, 30);
+    }
 
     res.json({
       totalCount: stats.transactionCount,

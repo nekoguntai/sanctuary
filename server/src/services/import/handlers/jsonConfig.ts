@@ -6,24 +6,8 @@
  */
 
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
-import { parseJsonImport, validateJsonImport, type JsonImportConfig } from '../../bitcoin/descriptorParser';
-
-/**
- * Check if JSON matches our config format
- */
-function isJsonConfigFormat(json: unknown): json is JsonImportConfig {
-  if (typeof json !== 'object' || json === null) return false;
-
-  const obj = json as Record<string, unknown>;
-
-  // Must have devices array
-  if (!Array.isArray(obj.devices)) return false;
-
-  // Must have type or scriptType
-  if (!obj.type && !obj.scriptType) return false;
-
-  return true;
-}
+import { parseJsonImport, type JsonImportConfig } from '../../bitcoin/descriptorParser';
+import { JsonImportConfigSchema, JsonConfigDetectionSchema } from '../schemas';
 
 export const jsonConfigHandler: ImportFormatHandler = {
   id: 'json',
@@ -42,8 +26,9 @@ export const jsonConfigHandler: ImportFormatHandler = {
 
     try {
       const json = JSON.parse(trimmed);
+      const result = JsonConfigDetectionSchema.safeParse(json);
 
-      if (isJsonConfigFormat(json)) {
+      if (result.success) {
         // Check for more specific fields to increase confidence
         const hasType = 'type' in json;
         const hasScriptType = 'scriptType' in json;
@@ -67,12 +52,13 @@ export const jsonConfigHandler: ImportFormatHandler = {
   },
 
   parse(input: string): ImportParseResult {
-    const json = JSON.parse(input.trim()) as JsonImportConfig;
+    const json = JSON.parse(input.trim());
+    const validated = JsonImportConfigSchema.parse(json);
 
     return {
-      parsed: parseJsonImport(json),
-      originalDevices: json.devices,
-      suggestedName: json.name,
+      parsed: parseJsonImport(validated as JsonImportConfig),
+      originalDevices: validated.devices,
+      suggestedName: validated.name,
     };
   },
 

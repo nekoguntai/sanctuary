@@ -6,7 +6,8 @@
  */
 
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
-import { parseDescriptorForImport, isWalletExportFormat } from '../../bitcoin/descriptorParser';
+import { parseDescriptorForImport } from '../../bitcoin/descriptorParser';
+import { WalletExportDetectionSchema } from '../schemas';
 
 export const walletExportHandler: ImportFormatHandler = {
   id: 'wallet_export',
@@ -25,8 +26,9 @@ export const walletExportHandler: ImportFormatHandler = {
 
     try {
       const json = JSON.parse(trimmed);
+      const result = WalletExportDetectionSchema.safeParse(json);
 
-      if (isWalletExportFormat(json)) {
+      if (result.success) {
         // High confidence if it has descriptor and other expected fields
         const hasLabel = 'label' in json || 'name' in json;
         const hasKeystores = 'keystores' in json;

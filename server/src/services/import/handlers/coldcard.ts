@@ -6,7 +6,8 @@
  */
 
 import type { ImportFormatHandler, FormatDetectionResult, ImportParseResult } from '../types';
-import { parseColdcardExport, isColdcardExportFormat } from '../../bitcoin/descriptorParser';
+import { parseColdcardExport } from '../../bitcoin/descriptorParser';
+import { ColdcardDetectionSchema } from '../schemas';
 
 export const coldcardHandler: ImportFormatHandler = {
   id: 'coldcard',
@@ -25,8 +26,9 @@ export const coldcardHandler: ImportFormatHandler = {
 
     try {
       const json = JSON.parse(trimmed);
+      const result = ColdcardDetectionSchema.safeParse(json);
 
-      if (isColdcardExportFormat(json)) {
+      if (result.success) {
         // High confidence if it has the expected Coldcard structure
         // Nested format (standard single-sig export)
         const hasNestedPaths =

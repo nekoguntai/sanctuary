@@ -10,7 +10,7 @@ import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
 import { INITIAL_ADDRESS_COUNT } from '../constants';
 import { hookRegistry, Operations } from './hooks';
-import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError, DeviceNotFoundError } from '../errors';
 import { getErrorMessage } from '../utils/errors';
 
 const log = createLogger('WALLET');
@@ -183,10 +183,10 @@ export async function createWallet(
   // Validate multi-sig parameters
   if (input.type === 'multi_sig') {
     if (!input.quorum || !input.totalSigners) {
-      throw new ValidationError('Quorum and totalSigners required for multi-sig wallets');
+      throw new InvalidInputError('Quorum and totalSigners required for multi-sig wallets');
     }
     if (input.quorum > input.totalSigners) {
-      throw new ValidationError('Quorum cannot exceed total signers');
+      throw new InvalidInputError('Quorum cannot exceed total signers');
     }
   }
 
@@ -207,15 +207,15 @@ export async function createWallet(
     });
 
     if (devices.length !== input.deviceIds.length) {
-      throw new NotFoundError('One or more devices not found or not owned by user');
+      throw new DeviceNotFoundError();
     }
 
     // Validate device count for wallet type
     if (input.type === 'single_sig' && devices.length !== 1) {
-      throw new ValidationError('Single-sig wallet requires exactly 1 device');
+      throw new InvalidInputError('Single-sig wallet requires exactly 1 device');
     }
     if (input.type === 'multi_sig' && devices.length < 2) {
-      throw new ValidationError('Multi-sig wallet requires at least 2 devices');
+      throw new InvalidInputError('Multi-sig wallet requires at least 2 devices');
     }
 
     // Determine purpose based on wallet type
@@ -704,7 +704,7 @@ export async function addDeviceToWallet(
   });
 
   if (!wallet) {
-    throw new NotFoundError('Wallet not found or access denied');
+    throw new WalletNotFoundError(walletId);
   }
 
   // Check device belongs to user
@@ -716,7 +716,7 @@ export async function addDeviceToWallet(
   });
 
   if (!device) {
-    throw new NotFoundError('Device');
+    throw new DeviceNotFoundError(deviceId);
   }
 
   // Check if device is already attached to this wallet
@@ -803,7 +803,7 @@ export async function generateAddress(
   });
 
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   // Get next index
@@ -811,7 +811,7 @@ export async function generateAddress(
 
   // Check if wallet has descriptor or xpub
   if (!wallet.descriptor) {
-    throw new ValidationError(
+    throw new InvalidInputError(
       'Wallet does not have a descriptor. Cannot derive addresses. ' +
       'Please import wallet with xpub or descriptor.'
     );
@@ -886,7 +886,7 @@ export async function repairWalletDescriptor(
   });
 
   if (!wallet) {
-    throw new NotFoundError('Wallet not found or access denied');
+    throw new WalletNotFoundError(walletId);
   }
 
   if (wallet.descriptor) {
@@ -988,7 +988,7 @@ export async function getWalletStats(walletId: string, userId: string) {
   });
 
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   // Use aggregate queries for all statistics (efficient for wallets with many records)

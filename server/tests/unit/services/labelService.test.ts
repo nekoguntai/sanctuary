@@ -56,7 +56,7 @@ import {
   requireAddressAccess,
   requireAddressEditAccess,
 } from '../../../src/services/accessControl';
-import { NotFoundError, ConflictError, ValidationError } from '../../../src/services/errors';
+import { NotFoundError, ConflictError, InvalidInputError } from '../../../src/errors';
 import {
   getLabelsForWallet,
   getLabel,
@@ -141,9 +141,9 @@ describe('LabelService', () => {
         expect(result).toEqual(mockLabel);
       });
 
-      it('should throw ValidationError for empty name', async () => {
-        await expect(createLabel(walletId, userId, { name: '' })).rejects.toThrow(ValidationError);
-        await expect(createLabel(walletId, userId, { name: '   ' })).rejects.toThrow(ValidationError);
+      it('should throw InvalidInputError for empty name', async () => {
+        await expect(createLabel(walletId, userId, { name: '' })).rejects.toThrow(InvalidInputError);
+        await expect(createLabel(walletId, userId, { name: '   ' })).rejects.toThrow(InvalidInputError);
       });
 
       it('should throw ConflictError for duplicate name', async () => {
@@ -250,14 +250,14 @@ describe('LabelService', () => {
         expect(result).toEqual(mockLabels);
       });
 
-      it('should throw ValidationError for empty labelIds', async () => {
-        await expect(addTransactionLabels(transactionId, userId, [])).rejects.toThrow(ValidationError);
+      it('should throw InvalidInputError for empty labelIds', async () => {
+        await expect(addTransactionLabels(transactionId, userId, [])).rejects.toThrow(InvalidInputError);
       });
 
-      it('should throw ValidationError if some labels not found', async () => {
+      it('should throw InvalidInputError if some labels not found', async () => {
         (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
 
-        await expect(addTransactionLabels(transactionId, userId, ['label-1', 'label-2'])).rejects.toThrow(ValidationError);
+        await expect(addTransactionLabels(transactionId, userId, ['label-1', 'label-2'])).rejects.toThrow(InvalidInputError);
       });
     });
 
@@ -283,8 +283,8 @@ describe('LabelService', () => {
         expect(result).toEqual([]);
       });
 
-      it('should throw ValidationError if not an array', async () => {
-        await expect(replaceTransactionLabels(transactionId, userId, null as any)).rejects.toThrow(ValidationError);
+      it('should throw InvalidInputError if not an array', async () => {
+        await expect(replaceTransactionLabels(transactionId, userId, null as any)).rejects.toThrow(InvalidInputError);
       });
     });
 
@@ -331,14 +331,14 @@ describe('LabelService', () => {
         expect(result).toEqual(mockLabels);
       });
 
-      it('should throw ValidationError for empty labelIds', async () => {
-        await expect(addAddressLabels(addressId, userId, [])).rejects.toThrow(ValidationError);
+      it('should throw InvalidInputError for empty labelIds', async () => {
+        await expect(addAddressLabels(addressId, userId, [])).rejects.toThrow(InvalidInputError);
       });
 
-      it('should throw ValidationError if some labels not found', async () => {
+      it('should throw InvalidInputError if some labels not found', async () => {
         (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
 
-        await expect(addAddressLabels(addressId, userId, ['label-1', 'label-2'])).rejects.toThrow(ValidationError);
+        await expect(addAddressLabels(addressId, userId, ['label-1', 'label-2'])).rejects.toThrow(InvalidInputError);
       });
     });
 

@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { transactionRepository, utxoRepository } from '../../repositories';
 import { createLogger } from '../../utils/logger';
-import { balanceHistoryCache } from '../../utils/cache';
+import { walletCache } from '../../services/cache';
 import * as walletService from '../../services/wallet';
 
 const router = Router();
@@ -46,8 +46,11 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
     const timeframe = (req.query.timeframe as string) || '1M';
 
     // Check cache first
-    const cacheKey = `${walletId}:${timeframe}`;
-    const cached = balanceHistoryCache.get(cacheKey);
+    const cacheKey = `balance-history:${walletId}:${timeframe}`;
+    const cached = await walletCache.get<{
+      currentBalance: number;
+      dataPoints: Array<{ timestamp: string; balance: number }>;
+    }>(cacheKey);
     if (cached) {
       return res.json({
         timeframe,
@@ -93,12 +96,12 @@ router.get('/:id/balance-history', requireWalletAccess('view'), async (req: Requ
       });
     }
 
-    // Cache the result
+    // Cache the result (10 second TTL matching original)
     const result = {
       currentBalance: balance,
       dataPoints: data,
     };
-    balanceHistoryCache.set(cacheKey, result);
+    await walletCache.set(cacheKey, result, 10);
 
     res.json({
       timeframe,

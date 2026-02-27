@@ -202,9 +202,9 @@ router.get('/cache/stats', authenticate, requireAdmin, (req: Request, res: Respo
  * POST /api/v1/price/cache/clear
  * Clear price cache (admin only)
  */
-router.post('/cache/clear', authenticate, requireAdmin, (req: Request, res: Response) => {
+router.post('/cache/clear', authenticate, requireAdmin, async (req: Request, res: Response) => {
   log.info('Cache cleared by admin', { userId: (req as any).user?.id });
-  priceService.clearCache();
+  await priceService.clearCache();
   res.json({
     message: 'Cache cleared successfully',
   });

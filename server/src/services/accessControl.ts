@@ -6,7 +6,7 @@
  */
 
 import { db as prisma } from '../repositories/db';
-import { NotFoundError, ForbiddenError } from './errors';
+import { NotFoundError, ForbiddenError, WalletNotFoundError } from '../errors';
 import { createLogger } from '../utils/logger';
 import { getNamespacedCache } from '../infrastructure/redis';
 import type { ICacheService } from './cache/cacheService';
@@ -179,7 +179,7 @@ export async function checkWalletAccess(walletId: string, userId: string): Promi
 export async function requireWalletAccess(walletId: string, userId: string): Promise<ResourceContext> {
   const access = await checkWalletAccess(walletId, userId);
   if (!access.hasAccess) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
   return {
     walletId,
@@ -194,7 +194,7 @@ export async function requireWalletAccess(walletId: string, userId: string): Pro
 export async function requireWalletEditAccess(walletId: string, userId: string): Promise<ResourceContext> {
   const access = await checkWalletAccess(walletId, userId);
   if (!access.hasAccess) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
   if (!access.canEdit) {
     throw new ForbiddenError('You do not have permission to edit this wallet');
@@ -212,7 +212,7 @@ export async function requireWalletEditAccess(walletId: string, userId: string):
 export async function requireWalletOwnerAccess(walletId: string, userId: string): Promise<ResourceContext> {
   const access = await checkWalletAccess(walletId, userId);
   if (!access.hasAccess) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
   if (access.role !== 'owner') {
     throw new ForbiddenError('Only the wallet owner can perform this action');
@@ -260,7 +260,7 @@ export async function requireTransactionAccess(
 ): Promise<{ walletId: string; canEdit: boolean }> {
   const access = await checkTransactionAccess(transactionId, userId);
   if (!access.hasAccess || !access.walletId) {
-    throw new NotFoundError('Transaction');
+    throw new NotFoundError('Transaction not found');
   }
   return {
     walletId: access.walletId,
@@ -277,7 +277,7 @@ export async function requireTransactionEditAccess(
 ): Promise<{ walletId: string }> {
   const access = await checkTransactionAccess(transactionId, userId);
   if (!access.hasAccess || !access.walletId) {
-    throw new NotFoundError('Transaction');
+    throw new NotFoundError('Transaction not found');
   }
   if (!access.canEdit) {
     throw new ForbiddenError('You do not have permission to edit this wallet');
@@ -321,7 +321,7 @@ export async function requireAddressAccess(
 ): Promise<{ walletId: string; canEdit: boolean }> {
   const access = await checkAddressAccess(addressId, userId);
   if (!access.hasAccess || !access.walletId) {
-    throw new NotFoundError('Address');
+    throw new NotFoundError('Address not found');
   }
   return {
     walletId: access.walletId,
@@ -338,7 +338,7 @@ export async function requireAddressEditAccess(
 ): Promise<{ walletId: string }> {
   const access = await checkAddressAccess(addressId, userId);
   if (!access.hasAccess || !access.walletId) {
-    throw new NotFoundError('Address');
+    throw new NotFoundError('Address not found');
   }
   if (!access.canEdit) {
     throw new ForbiddenError('You do not have permission to edit this wallet');

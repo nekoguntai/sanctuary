@@ -57,7 +57,7 @@ import {
   requireTransactionAccess,
   buildWalletAccessWhere,
 } from '../../../src/services/accessControl';
-import { NotFoundError, ForbiddenError } from '../../../src/services/errors';
+import { NotFoundError, ForbiddenError, WalletNotFoundError } from '../../../src/errors';
 
 describe('Access Control Service', () => {
   const userId = faker.string.uuid();

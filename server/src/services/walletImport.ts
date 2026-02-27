@@ -470,8 +470,13 @@ export async function importFromJson(
     network?: Network;
   }
 ): Promise<ImportWalletResult> {
-  // Parse JSON
-  const jsonConfig = JSON.parse(input.json) as JsonImportConfig;
+  // Parse and validate JSON with Zod schema
+  const { JsonImportConfigSchema } = await import('./import/schemas');
+  const parseResult = JsonImportConfigSchema.safeParse(JSON.parse(input.json));
+  if (!parseResult.success) {
+    throw new Error(parseResult.error.issues[0].message);
+  }
+  const jsonConfig = parseResult.data as JsonImportConfig;
   const parsed = parseJsonImport(jsonConfig);
   const network = input.network || parsed.network;
 

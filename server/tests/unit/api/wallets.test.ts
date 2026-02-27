@@ -169,12 +169,15 @@ vi.mock('../../../src/services/scriptTypes', () => ({
   },
 }));
 
-// Mock cache
-vi.mock('../../../src/utils/cache', () => ({
-  balanceHistoryCache: {
-    get: vi.fn().mockReturnValue(null),
-    set: vi.fn(),
+// Mock System 2 cache (walletCache used by analytics.ts)
+const { mockWalletCache } = vi.hoisted(() => ({
+  mockWalletCache: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
   },
+}));
+vi.mock('../../../src/services/cache', () => ({
+  walletCache: mockWalletCache,
 }));
 
 // Mock logger
@@ -550,8 +553,7 @@ describe('Wallets API', () => {
     });
 
     it('should use cached data when available', async () => {
-      const { balanceHistoryCache } = await import('../../../src/utils/cache');
-      vi.mocked(balanceHistoryCache.get).mockReturnValueOnce({
+      mockWalletCache.get.mockResolvedValueOnce({
         currentBalance: 200000,
         dataPoints: [{ timestamp: '2024-01-01', balance: 200000 }],
       });

@@ -12,7 +12,7 @@
 import { db as prisma } from '../repositories/db';
 import type { Prisma, OwnershipTransfer } from '@prisma/client';
 import { createLogger } from '../utils/logger';
-import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, UserNotFoundError } from '../errors';
 import { checkWalletOwnerAccess } from './wallet';
 import { checkDeviceOwnerAccess } from './deviceAccess';
 
@@ -165,7 +165,7 @@ export async function initiateTransfer(
 
   // Validation: can't transfer to yourself
   if (ownerId === toUserId) {
-    throw new ValidationError('Cannot transfer ownership to yourself');
+    throw new InvalidInputError('Cannot transfer ownership to yourself');
   }
 
   // Validation: check target user exists (this can be done outside transaction)
@@ -174,7 +174,7 @@ export async function initiateTransfer(
     select: { id: true, username: true },
   });
   if (!targetUser) {
-    throw new NotFoundError('User', toUserId);
+    throw new UserNotFoundError(toUserId);
   }
 
   // Use a transaction to ensure atomicity - prevents race condition where
@@ -252,7 +252,7 @@ export async function acceptTransfer(
   });
 
   if (!transfer) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   // Validation: only recipient can accept
@@ -267,7 +267,7 @@ export async function acceptTransfer(
       where: { id: transferId, status: { in: ['pending', 'accepted'] } },
       data: { status: 'expired' },
     });
-    throw new ValidationError('Transfer has expired');
+    throw new InvalidInputError('Transfer has expired');
   }
 
   // Atomic update: only succeeds if status is still 'pending'
@@ -293,7 +293,7 @@ export async function acceptTransfer(
     if (current?.status === 'accepted') {
       throw new ConflictError('Transfer has already been accepted');
     }
-    throw new ValidationError(`Transfer cannot be accepted (current status: ${current?.status || 'unknown'})`);
+    throw new InvalidInputError(`Transfer cannot be accepted (current status: ${current?.status || 'unknown'})`);
   }
 
   // Fetch updated record for return
@@ -306,7 +306,7 @@ export async function acceptTransfer(
   });
 
   if (!updated) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   log.info('Transfer accepted', {
@@ -331,7 +331,7 @@ export async function declineTransfer(
   });
 
   if (!transfer) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   // Validation: only recipient can decline
@@ -357,7 +357,7 @@ export async function declineTransfer(
     const current = await prisma.ownershipTransfer.findUnique({
       where: { id: transferId },
     });
-    throw new ValidationError(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
+    throw new InvalidInputError(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
   }
 
   const updated = await prisma.ownershipTransfer.findUnique({
@@ -369,7 +369,7 @@ export async function declineTransfer(
   });
 
   if (!updated) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   log.info('Transfer declined', {
@@ -395,7 +395,7 @@ export async function cancelTransfer(
   });
 
   if (!transfer) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   // Validation: only owner can cancel
@@ -420,7 +420,7 @@ export async function cancelTransfer(
     const current = await prisma.ownershipTransfer.findUnique({
       where: { id: transferId },
     });
-    throw new ValidationError(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
+    throw new InvalidInputError(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
   }
 
   const updated = await prisma.ownershipTransfer.findUnique({
@@ -432,7 +432,7 @@ export async function cancelTransfer(
   });
 
   if (!updated) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   log.info('Transfer cancelled', {
@@ -458,7 +458,7 @@ export async function confirmTransfer(
   });
 
   if (!transfer) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   if (transfer.fromUserId !== ownerId) {
@@ -477,7 +477,7 @@ export async function confirmTransfer(
       if (current?.status === 'confirmed') {
         throw new ConflictError('Transfer has already been completed');
       }
-      throw new ValidationError(`Transfer cannot be confirmed (current status: ${current?.status || 'unknown'})`);
+      throw new InvalidInputError(`Transfer cannot be confirmed (current status: ${current?.status || 'unknown'})`);
     }
 
     // Check expiration
@@ -486,7 +486,7 @@ export async function confirmTransfer(
         where: { id: transferId },
         data: { status: 'expired' },
       });
-      throw new ValidationError('Transfer has expired');
+      throw new InvalidInputError('Transfer has expired');
     }
 
     // Execute the ownership transfer based on resource type
@@ -509,7 +509,7 @@ export async function confirmTransfer(
   });
 
   if (!updated) {
-    throw new NotFoundError('Transfer', transferId);
+    throw new NotFoundError(`Transfer '${transferId}' not found`);
   }
 
   log.info('Transfer confirmed and executed', {

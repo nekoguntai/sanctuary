@@ -7,7 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
-import { getAllCacheStats } from '../../utils/cache';
+import { cache } from '../../services/cache';
 import { deadLetterQueue, type DeadLetterCategory } from '../../services/deadLetterQueue';
 import { getWebSocketServer, getRateLimitEvents } from '../../websocket/server';
 import * as docker from '../../utils/docker';
@@ -111,25 +111,15 @@ router.post('/tor-container/stop', authenticate, requireAdmin, async (req: Reque
  */
 router.get('/metrics/cache', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const cacheStats = getAllCacheStats();
-    const totals = cacheStats.reduce(
-      (acc, cache) => ({
-        hits: acc.hits + cache.hits,
-        misses: acc.misses + cache.misses,
-        size: acc.size + cache.size,
-      }),
-      { hits: 0, misses: 0, size: 0 }
-    );
+    const stats = cache.getStats();
+    const total = stats.hits + stats.misses;
 
     res.json({
       timestamp: new Date().toISOString(),
-      caches: cacheStats,
-      totals: {
-        ...totals,
-        hitRate: (totals.hits + totals.misses) > 0
-          ? ((totals.hits / (totals.hits + totals.misses)) * 100).toFixed(1) + '%'
-          : 'N/A',
-      },
+      stats,
+      hitRate: total > 0
+        ? ((stats.hits / total) * 100).toFixed(1) + '%'
+        : 'N/A',
     });
   } catch (error) {
     log.error('Get cache metrics failed', { error: String(error) });

@@ -68,7 +68,7 @@ import { draftRepository } from '../../../src/repositories';
 import { lockUtxosForDraft, resolveUtxoIds } from '../../../src/services/draftLockService';
 import { notifyNewDraft } from '../../../src/services/notifications/notificationService';
 import * as walletService from '../../../src/services/wallet';
-import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../../../src/services/errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../../../src/errors';
 import {
   getDraftsForWallet,
   getDraft,
@@ -193,9 +193,9 @@ describe('DraftService', () => {
       await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(ForbiddenError);
     });
 
-    it('should throw ValidationError for missing required fields', async () => {
-      await expect(createDraft(walletId, userId, { ...validInput, recipient: '' })).rejects.toThrow(ValidationError);
-      await expect(createDraft(walletId, userId, { ...validInput, psbtBase64: '' })).rejects.toThrow(ValidationError);
+    it('should throw InvalidInputError for missing required fields', async () => {
+      await expect(createDraft(walletId, userId, { ...validInput, recipient: '' })).rejects.toThrow(InvalidInputError);
+      await expect(createDraft(walletId, userId, { ...validInput, psbtBase64: '' })).rejects.toThrow(InvalidInputError);
     });
 
     it('should throw ConflictError when UTXOs are already locked', async () => {
@@ -282,8 +282,8 @@ describe('DraftService', () => {
       await expect(updateDraft(walletId, draftId, userId, {})).rejects.toThrow(NotFoundError);
     });
 
-    it('should throw ValidationError for invalid status', async () => {
-      await expect(updateDraft(walletId, draftId, userId, { status: 'invalid' as any })).rejects.toThrow(ValidationError);
+    it('should throw InvalidInputError for invalid status', async () => {
+      await expect(updateDraft(walletId, draftId, userId, { status: 'invalid' as any })).rejects.toThrow(InvalidInputError);
     });
 
     it('should update label and memo', async () => {

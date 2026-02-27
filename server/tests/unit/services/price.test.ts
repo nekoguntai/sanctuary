@@ -22,6 +22,65 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
+// In-memory mock cache for priceCache (System 2 ICacheService)
+const { mockCacheStore } = vi.hoisted(() => ({
+  mockCacheStore: new Map<string, { value: unknown; expiresAt: number }>(),
+}));
+
+vi.mock('../../../src/services/cache', () => {
+  const createMockCache = () => ({
+    get: vi.fn(async <T>(key: string): Promise<T | null> => {
+      const entry = mockCacheStore.get(`price:${key}`);
+      if (!entry) return null;
+      if (Date.now() > entry.expiresAt) {
+        mockCacheStore.delete(`price:${key}`);
+        return null;
+      }
+      return entry.value as T;
+    }),
+    set: vi.fn(async <T>(key: string, value: T, ttlSeconds?: number): Promise<void> => {
+      const ttl = ttlSeconds ?? 300;
+      mockCacheStore.set(`price:${key}`, { value, expiresAt: Date.now() + ttl * 1000 });
+    }),
+    delete: vi.fn(async (key: string): Promise<boolean> => {
+      return mockCacheStore.delete(`price:${key}`);
+    }),
+    deletePattern: vi.fn(async (): Promise<number> => 0),
+    has: vi.fn(async (key: string): Promise<boolean> => {
+      const entry = mockCacheStore.get(`price:${key}`);
+      return !!entry && Date.now() <= entry.expiresAt;
+    }),
+    clear: vi.fn(async (): Promise<void> => {
+      for (const key of mockCacheStore.keys()) {
+        if (key.startsWith('price:')) {
+          mockCacheStore.delete(key);
+        }
+      }
+    }),
+    getStats: vi.fn(() => {
+      let size = 0;
+      for (const key of mockCacheStore.keys()) {
+        if (key.startsWith('price:')) size++;
+      }
+      return { hits: 0, misses: 0, sets: 0, deletes: 0, size };
+    }),
+    namespace: vi.fn(),
+  });
+
+  return {
+    priceCache: createMockCache(),
+    CacheTTL: {
+      balance: 30,
+      blockHeight: 10,
+      feeEstimates: 60,
+      btcPrice: 60,
+      userPreferences: 300,
+      priceHistory: 3600,
+      walletInfo: 3600,
+    },
+  };
+});
+
 import PriceService, { getPriceService } from '../../../src/services/price/index';
 import { supportedCurrencies } from '../../../src/services/price/providers';
 import { circuitBreakerRegistry } from '../../../src/services/circuitBreaker';
@@ -29,10 +88,12 @@ import { circuitBreakerRegistry } from '../../../src/services/circuitBreaker';
 describe('Price Service', () => {
   let priceService: PriceService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Clear shared mock cache store
+    mockCacheStore.clear();
     // Create fresh instance for each test
     priceService = new PriceService();
-    priceService.clearCache();
+    await priceService.clearCache();
     // Reset all circuit breakers to CLOSED state
     circuitBreakerRegistry.resetAll();
     vi.clearAllMocks();
@@ -387,7 +448,6 @@ describe('Price Service', () => {
       const stats = priceService.getCacheStats();
 
       expect(stats.size).toBeGreaterThan(0);
-      expect(stats.entries.length).toBeGreaterThan(0);
     });
 
     it('should clear cache', async () => {
@@ -396,7 +456,7 @@ describe('Price Service', () => {
       });
 
       await priceService.getPrice('USD', true);
-      priceService.clearCache();
+      await priceService.clearCache();
 
       const stats = priceService.getCacheStats();
       expect(stats.size).toBe(0);

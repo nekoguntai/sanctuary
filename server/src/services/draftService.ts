@@ -12,7 +12,7 @@ import { draftRepository, DraftStatus } from '../repositories';
 import { requireWalletAccess, checkWalletAccess } from './accessControl';
 import { lockUtxosForDraft, resolveUtxoIds } from './draftLockService';
 import { notifyNewDraft } from './notifications/notificationService';
-import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
+import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../errors';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
@@ -90,7 +90,7 @@ export async function getDraftsForWallet(
   // Verify user has access to this wallet
   const wallet = await walletService.getWalletById(walletId, userId);
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   return draftRepository.findByWalletId(walletId);
@@ -107,12 +107,12 @@ export async function getDraft(
   // Verify user has access to this wallet
   const wallet = await walletService.getWalletById(walletId, userId);
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   const draft = await draftRepository.findByIdInWallet(draftId, walletId);
   if (!draft) {
-    throw new NotFoundError('Draft');
+    throw new NotFoundError('Draft not found');
   }
 
   return draft;
@@ -129,7 +129,7 @@ export async function createDraft(
   // Verify user has access and is at least a signer
   const wallet = await walletService.getWalletById(walletId, userId);
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   if (wallet.userRole === 'viewer') {
@@ -138,7 +138,7 @@ export async function createDraft(
 
   // Validation
   if (!data.recipient || data.amount === undefined || !data.feeRate || !data.psbtBase64) {
-    throw new ValidationError('recipient, amount, feeRate, and psbtBase64 are required');
+    throw new InvalidInputError('recipient, amount, feeRate, and psbtBase64 are required');
   }
 
   // Get expiration from system settings
@@ -227,7 +227,7 @@ export async function updateDraft(
   // Verify user has access and is at least a signer
   const wallet = await walletService.getWalletById(walletId, userId);
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   if (wallet.userRole === 'viewer') {
@@ -237,12 +237,12 @@ export async function updateDraft(
   // Get existing draft
   const existingDraft = await draftRepository.findByIdInWallet(draftId, walletId);
   if (!existingDraft) {
-    throw new NotFoundError('Draft');
+    throw new NotFoundError('Draft not found');
   }
 
   // Validate status once before retry loop
   if (data.status !== undefined && !['unsigned', 'partial', 'signed'].includes(data.status)) {
-    throw new ValidationError('Invalid status. Must be unsigned, partial, or signed');
+    throw new InvalidInputError('Invalid status. Must be unsigned, partial, or signed');
   }
 
   const requiresOptimisticRetry = data.signedPsbtBase64 !== undefined || !!data.signedDeviceId;
@@ -369,7 +369,7 @@ export async function updateDraft(
 
       const refreshedDraft = await draftRepository.findByIdInWallet(draftId, walletId);
       if (!refreshedDraft) {
-        throw new NotFoundError('Draft');
+        throw new NotFoundError('Draft not found');
       }
 
       latestDraft = refreshedDraft;
@@ -394,13 +394,13 @@ export async function deleteDraft(
   // Verify user has access to this wallet
   const wallet = await walletService.getWalletById(walletId, userId);
   if (!wallet) {
-    throw new NotFoundError('Wallet');
+    throw new WalletNotFoundError(walletId);
   }
 
   // Get existing draft
   const existingDraft = await draftRepository.findByIdInWallet(draftId, walletId);
   if (!existingDraft) {
-    throw new NotFoundError('Draft');
+    throw new NotFoundError('Draft not found');
   }
 
   // Only creator or wallet owner can delete

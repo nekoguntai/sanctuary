@@ -491,7 +491,7 @@ describe('Wallet Service', () => {
             scriptType: 'native_segwit',
             deviceIds: ['non-existent-device'],
           })
-        ).rejects.toThrow('One or more devices not found');
+        ).rejects.toThrow('Device not found');
       });
     });
   });

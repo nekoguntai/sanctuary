@@ -8,3 +8,4 @@ export { DeleteModal } from './DeleteModal';
 export { ReceiveModal } from './ReceiveModal';
 export { ExportModal } from './ExportModal';
 export { AddressQRModal } from './AddressQRModal';
+export { DeviceSharePromptModal } from './DeviceSharePromptModal';

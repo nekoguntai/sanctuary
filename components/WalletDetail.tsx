@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, Transaction, UTXO, Device, User, Group, Address, WalletType, Label, WalletTelegramSettings as WalletTelegramSettingsType, getQuorumM, getQuorumN, isMultisigType, getWalletTypeLabel } from '../types';
-import { satsToBTC, btcToSats, formatBTC } from '@shared/utils/bitcoin';
+import { satsToBTC, formatBTC } from '@shared/utils/bitcoin';
 import * as walletsApi from '../src/api/wallets';
 import * as transactionsApi from '../src/api/transactions';
 import * as labelsApi from '../src/api/labels';
@@ -11,7 +11,6 @@ import * as syncApi from '../src/api/sync';
 import * as authApi from '../src/api/auth';
 import * as adminApi from '../src/api/admin';
 import * as draftsApi from '../src/api/drafts';
-import * as payjoinApi from '../src/api/payjoin';
 import * as privacyApi from '../src/api/transactions';
 import { truncateAddress } from '../utils/formatters';
 import { getAddressExplorerUrl } from '../utils/explorer';
@@ -28,14 +27,12 @@ import { WalletStats } from './WalletStats';
 import { DraftList } from './DraftList';
 import { LabelManager } from './LabelManager';
 import { LabelBadges } from './LabelSelector';
-import { PayjoinSection } from './PayjoinSection';
 import { AIQueryInput } from './AIQueryInput';
 import { NaturalQueryResult } from '../src/api/ai';
 import { useAIStatus } from '../hooks/useAIStatus';
 import { Button } from './ui/Button';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { Amount } from './Amount';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -47,8 +44,6 @@ import {
   Trash2,
   Plus,
   Download,
-  FileJson,
-  FileText,
   QrCode,
   MapPin,
   Check,
@@ -83,58 +78,6 @@ import { DeleteModal, ReceiveModal, ExportModal, AddressQRModal } from './Wallet
 
 const log = createLogger('WalletDetail');
 
-/**
- * Generate Coldcard/Passport compatible multisig config text.
- *
- * Format follows Coldcard spec (https://coldcard.com/docs/multisig/):
- * - Name: wallet name (up to 20 chars)
- * - Policy: M of N
- * - Format: P2WSH, P2SH-P2WSH, or P2SH
- * - Derivation: single line before all xpubs (applies to all subsequent keys)
- * - FINGERPRINT: xpub... (one per cosigner)
- */
-function generateMultisigConfigText(
-  name: string,
-  quorum: number,
-  totalSigners: number,
-  scriptType: string,
-  devices: Array<{ fingerprint: string; derivationPath: string; xpub: string }>
-): string {
-  const lines: string[] = [];
-
-  // Header
-  lines.push(`Name: ${name}`);
-  lines.push(`Policy: ${quorum} of ${totalSigners}`);
-
-  // Script type format
-  const formatMap: Record<string, string> = {
-    native_segwit: 'P2WSH',
-    nested_segwit: 'P2SH-P2WSH',
-    legacy: 'P2SH',
-  };
-  lines.push(`Format: ${formatMap[scriptType] || 'P2WSH'}`);
-  lines.push('');
-
-  // Derivation path - use first device's path (all cosigners should use same derivation)
-  // Coldcard expects ONE Derivation line that applies to all subsequent xpubs
-  if (devices.length > 0) {
-    // Normalize to 'h' notation (Coldcard's preferred format)
-    const normalizedPath = devices[0].derivationPath.replace(/'/g, 'h');
-    lines.push(`Derivation: ${normalizedPath}`);
-    lines.push('');
-  }
-
-  // Fingerprint: xpub pairs (sorted by fingerprint for consistency)
-  const sortedDevices = [...devices].sort((a, b) =>
-    a.fingerprint.toLowerCase().localeCompare(b.fingerprint.toLowerCase())
-  );
-
-  for (const device of sortedDevices) {
-    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub}`);
-  }
-
-  return lines.join('\n').trim();
-}
 
 export const WalletDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -319,11 +262,6 @@ export const WalletDetail: React.FC = () => {
   
   // Export Modal State
   const [showExport, setShowExport] = useState(false);
-  const [exportTab, setExportTab] = useState<'qr' | 'json' | 'text' | 'labels' | 'device'>('qr');
-  const [exportFormats, setExportFormats] = useState<walletsApi.ExportFormat[]>([]);
-  const [loadingFormats, setLoadingFormats] = useState(false);
-  const [qrFormat, setQrFormat] = useState<'descriptor' | 'passport'>('passport'); // Default to passport for better compatibility
-  const [qrSize, setQrSize] = useState(280); // QR code size in pixels
 
   // Transaction Export Modal State
   const [showTransactionExport, setShowTransactionExport] = useState(false);
@@ -374,113 +312,7 @@ export const WalletDetail: React.FC = () => {
 
   // Receive Modal State
   const [showReceive, setShowReceive] = useState(false);
-  const [payjoinEnabled, setPayjoinEnabled] = useState(false);
-  const [payjoinUri, setPayjoinUri] = useState<string | null>(null);
-  const [payjoinLoading, setPayjoinLoading] = useState(false);
-  const [receiveAmount, setReceiveAmount] = useState<string>('');
-  const [selectedReceiveAddressId, setSelectedReceiveAddressId] = useState<string | null>(null);
 
-  // Helper to check if an address is a receive address (not change)
-  const isReceiveAddress = useCallback((path: string): boolean => {
-    // Filter out change addresses - standard BIP derivation: m/purpose'/coin'/account'/change/index
-    // change = 0 for external/receive, 1 for internal/change
-    const parts = path.split('/');
-    if (parts.length >= 2) {
-      const changeIndicator = parts[parts.length - 2];
-      return changeIndicator === '0';
-    }
-    return true; // Default to receive if can't determine
-  }, []);
-
-  // Get all unused receive addresses for the dropdown
-  const unusedReceiveAddresses = useMemo(() => {
-    return addresses
-      .filter(a => isReceiveAddress(a.derivationPath) && !a.used)
-      .sort((a, b) => a.index - b.index);
-  }, [addresses, isReceiveAddress]);
-
-  // Get the selected receive address (or default to first unused)
-  const selectedReceiveAddress = useMemo(() => {
-    if (selectedReceiveAddressId) {
-      const selected = unusedReceiveAddresses.find(a => a.id === selectedReceiveAddressId);
-      if (selected) return selected;
-    }
-    // Default to first unused, or first receive address if none unused
-    if (unusedReceiveAddresses.length > 0) {
-      return unusedReceiveAddresses[0];
-    }
-    // Fallback to first receive address even if used
-    const allReceive = addresses.filter(a => isReceiveAddress(a.derivationPath));
-    return allReceive[0] || null;
-  }, [selectedReceiveAddressId, unusedReceiveAddresses, addresses, isReceiveAddress]);
-
-  // Legacy alias for Payjoin integration
-  const receiveAddressForPayjoin = selectedReceiveAddress;
-
-  // Fetch Payjoin URI when enabled
-  useEffect(() => {
-    if (!payjoinEnabled || !receiveAddressForPayjoin?.id) {
-      setPayjoinUri(null);
-      return;
-    }
-
-    let cancelled = false;
-    const abortController = new AbortController();
-
-    const fetchUri = async () => {
-      setPayjoinLoading(true);
-      try {
-        const result = await payjoinApi.getPayjoinUri(receiveAddressForPayjoin.id, {
-          amount: receiveAmount ? btcToSats(parseFloat(receiveAmount)) : undefined,
-        });
-        if (!cancelled) {
-          setPayjoinUri(result.uri);
-        }
-      } catch (err) {
-        // Ignore aborted requests
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        log.error('Failed to generate Payjoin URI', err);
-        if (!cancelled) {
-          setPayjoinUri(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setPayjoinLoading(false);
-        }
-      }
-    };
-
-    // Debounce amount changes
-    const timeoutId = setTimeout(fetchUri, 300);
-    return () => {
-      cancelled = true;
-      abortController.abort();
-      clearTimeout(timeoutId);
-    };
-  }, [payjoinEnabled, receiveAmount, receiveAddressForPayjoin?.id]);
-
-  // Fetch export formats when export modal opens
-  useEffect(() => {
-    if (!showExport || !id) return;
-
-    const fetchFormats = async () => {
-      setLoadingFormats(true);
-      try {
-        const result = await walletsApi.getExportFormats(id);
-        setExportFormats(result.formats);
-      } catch (err) {
-        log.error('Failed to fetch export formats', err);
-        // Don't set error state - formats are optional enhancement
-        setExportFormats([]);
-      } finally {
-        setLoadingFormats(false);
-      }
-    };
-
-    fetchFormats();
-  }, [showExport, id]);
 
   // Clipboard functionality
   const { copy, isCopied } = useCopyToClipboard();
@@ -1363,23 +1195,6 @@ export const WalletDetail: React.FC = () => {
     }
   };
 
-  const downloadJson = async () => {
-     if(!wallet || !id) return;
-     try {
-       // Fetch Sparrow-compatible export from backend
-       const exportData = await walletsApi.exportWallet(id);
-       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-       const downloadAnchorNode = document.createElement('a');
-       downloadAnchorNode.setAttribute("href", dataStr);
-       downloadAnchorNode.setAttribute("download", `${wallet.name.replace(/\s+/g, '_')}_backup.json`);
-       document.body.appendChild(downloadAnchorNode); // required for firefox
-       downloadAnchorNode.click();
-       downloadAnchorNode.remove();
-     } catch (err) {
-       log.error('Failed to export wallet', { error: err });
-       handleError(err, 'Export Failed');
-     }
-  }
 
   if (loading) return <div className="p-8 text-center animate-pulse">Loading wallet...</div>;
 
@@ -2604,213 +2419,20 @@ export const WalletDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Export Modal Overlay */}
-      {showExport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-          <div className="surface-elevated rounded-2xl max-w-lg w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-light">Export Wallet</h3>
-              <button onClick={() => setShowExport(false)} className="text-sanctuary-400 hover:text-sanctuary-600"><X className="w-5 h-5"/></button>
-            </div>
-
-            {/* Export Tabs */}
-            <div className="flex border-b border-sanctuary-200 dark:border-sanctuary-800 mb-6">
-                 <button onClick={() => setExportTab('qr')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'qr' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
-                   <QrCode className="w-4 h-4 mx-auto mb-1" />
-                   QR Code
-                 </button>
-                 <button onClick={() => setExportTab('json')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'json' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
-                   <FileJson className="w-4 h-4 mx-auto mb-1" />
-                   JSON File
-                 </button>
-                 <button onClick={() => setExportTab('text')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'text' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
-                   <FileText className="w-4 h-4 mx-auto mb-1" />
-                   Descriptor
-                 </button>
-                 <button onClick={() => setExportTab('labels')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'labels' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
-                   <Tag className="w-4 h-4 mx-auto mb-1" />
-                   Labels
-                 </button>
-                 {isMultisigType(wallet.type) && (
-                   <button onClick={() => setExportTab('device')} className={`flex-1 py-2 text-sm font-medium border-b-2 ${exportTab === 'device' ? 'border-primary-600 dark:border-primary-400 text-primary-700 dark:text-primary-300' : 'border-transparent text-sanctuary-400'}`}>
-                     <HardDrive className="w-4 h-4 mx-auto mb-1" />
-                     Device
-                   </button>
-                 )}
-            </div>
-            
-            <div className="flex flex-col items-center space-y-6">
-               {exportTab === 'qr' && (
-                  <div className="w-full">
-                    {/* QR Format Selector - only show for multisig */}
-                    {isMultisigType(wallet.type) && devices.length > 0 && (
-                      <div className="flex gap-2 mb-4 justify-center">
-                        <button
-                          onClick={() => setQrFormat('passport')}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                            qrFormat === 'passport'
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
-                          }`}
-                        >
-                          Passport/Coldcard
-                        </button>
-                        <button
-                          onClick={() => setQrFormat('descriptor')}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                            qrFormat === 'descriptor'
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400 hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700'
-                          }`}
-                        >
-                          Raw Descriptor
-                        </button>
-                      </div>
-                    )}
-                    {/* QR Size Slider */}
-                    <div className="w-full mb-4">
-                      <div className="flex items-center justify-between text-xs text-sanctuary-500 mb-1">
-                        <span>QR Code Size</span>
-                        <span>{qrSize}px</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="180"
-                        max="400"
-                        step="20"
-                        value={qrSize}
-                        onChange={(e) => setQrSize(Number(e.target.value))}
-                        className="w-full h-2 bg-sanctuary-200 dark:bg-sanctuary-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                      />
-                    </div>
-
-                    <div className="p-4 bg-white rounded-xl shadow-inner border border-sanctuary-100 flex flex-col items-center overflow-auto max-h-[500px]">
-                      <QRCodeSVG
-                        value={
-                          isMultisigType(wallet.type) && qrFormat === 'passport' && devices.length > 0
-                            ? generateMultisigConfigText(
-                                wallet.name,
-                                getQuorumM(wallet.quorum),
-                                getQuorumN(wallet.quorum, wallet.totalSigners),
-                                wallet.scriptType,
-                                devices.map(d => ({
-                                  fingerprint: d.fingerprint,
-                                  derivationPath: d.derivationPath,
-                                  xpub: d.xpub,
-                                }))
-                              )
-                            : wallet.descriptor
-                        }
-                        size={qrSize}
-                        level="M"
-                      />
-                      <p className="text-center text-xs text-sanctuary-400 mt-2">
-                        {isMultisigType(wallet.type) && qrFormat === 'passport'
-                          ? 'Coldcard/Passport compatible format'
-                          : 'Scan to import into another device'}
-                      </p>
-                    </div>
-                    {isMultisigType(wallet.type) && qrFormat === 'passport' && devices.length === 0 && (
-                      <p className="text-center text-xs text-amber-500 mt-2">
-                        Note: No devices found. Using raw descriptor format instead.
-                      </p>
-                    )}
-                  </div>
-               )}
-
-               {exportTab === 'json' && (
-                   <div className="text-center w-full">
-                       <FileJson className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
-                       <p className="text-sm text-sanctuary-500 mb-6">Download the full wallet backup in JSON format. Store this file securely.</p>
-                       <Button onClick={downloadJson} className="w-full">
-                           <Download className="w-4 h-4 mr-2" /> Download Backup
-                       </Button>
-                   </div>
-               )}
-
-               {exportTab === 'text' && (
-                    <div className="w-full">
-                        <label className="block text-xs font-medium text-sanctuary-500 mb-1">Output Descriptor</label>
-                        <textarea
-                        readOnly
-                        className="w-full h-32 p-3 text-xs font-mono surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
-                        value={wallet.descriptor}
-                        />
-                         <Button className="w-full mt-4" variant={isCopied(wallet.descriptor) ? 'primary' : 'secondary'} onClick={() => copy(wallet.descriptor)}>
-                            {isCopied(wallet.descriptor) ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-                            {isCopied(wallet.descriptor) ? 'Copied!' : 'Copy to Clipboard'}
-                        </Button>
-                    </div>
-               )}
-
-               {exportTab === 'labels' && (
-                   <div className="text-center w-full">
-                       <Tag className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
-                       <p className="text-sm text-sanctuary-500 mb-2">Export wallet labels in BIP 329 format.</p>
-                       <p className="text-xs text-sanctuary-400 mb-6">This exports transaction and address labels as a JSON Lines file compatible with Sparrow, Electrum, and other BIP 329 supporting wallets.</p>
-                       <Button onClick={async () => {
-                           try {
-                             await walletsApi.exportLabelsBip329(id!, wallet.name);
-                           } catch (err) {
-                             log.error('Failed to export labels', { error: err });
-                             handleError(err, 'Export Labels Failed');
-                           }
-                       }} className="w-full">
-                           <Download className="w-4 h-4 mr-2" /> Download Labels (BIP 329)
-                       </Button>
-                   </div>
-               )}
-
-               {exportTab === 'device' && (
-                   <div className="w-full">
-                       <HardDrive className="w-16 h-16 text-sanctuary-300 mx-auto mb-4" />
-                       <p className="text-sm text-sanctuary-500 mb-2 text-center">Export wallet configuration for hardware devices.</p>
-                       <p className="text-xs text-sanctuary-400 mb-6 text-center">Download a file that can be imported directly onto your hardware wallet to set up the multisig configuration.</p>
-
-                       {loadingFormats ? (
-                           <div className="text-center text-sanctuary-400 py-4">
-                               Loading export formats...
-                           </div>
-                       ) : exportFormats.length === 0 ? (
-                           <div className="text-center text-sanctuary-400 py-4">
-                               No device export formats available for this wallet type.
-                           </div>
-                       ) : (
-                           <div className="space-y-3">
-                               {exportFormats.filter(f => f.id !== 'sparrow' && f.id !== 'descriptor').map((format) => (
-                                   <Button
-                                       key={format.id}
-                                       onClick={async () => {
-                                           try {
-                                               await walletsApi.exportWalletFormat(id!, format.id, wallet.name);
-                                           } catch (err) {
-                                               log.error(`Failed to export wallet in ${format.name} format`, { error: err });
-                                               handleError(err, `Export Failed`);
-                                           }
-                                       }}
-                                       variant="secondary"
-                                       className="w-full justify-between"
-                                   >
-                                       <div className="flex items-center">
-                                           <Download className="w-4 h-4 mr-2" />
-                                           <span>{format.name}</span>
-                                       </div>
-                                       <span className="text-xs text-sanctuary-400">{format.extension}</span>
-                                   </Button>
-                               ))}
-                           </div>
-                       )}
-                   </div>
-               )}
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-sanctuary-100 dark:border-sanctuary-800">
-                <Button className="w-full" variant="ghost" onClick={() => setShowExport(false)}>
-                   Close
-                 </Button>
-            </div>
-          </div>
-        </div>
+      {/* Export Modal */}
+      {showExport && wallet && id && (
+        <ExportModal
+          walletId={id}
+          walletName={wallet.name}
+          walletType={wallet.type}
+          scriptType={wallet.scriptType}
+          descriptor={wallet.descriptor}
+          quorum={wallet.quorum}
+          totalSigners={wallet.totalSigners}
+          devices={devices}
+          onClose={() => setShowExport(false)}
+          onError={handleError}
+        />
       )}
 
       {/* Transaction Export Modal */}
@@ -2823,125 +2445,15 @@ export const WalletDetail: React.FC = () => {
       )}
 
       {/* Receive Modal */}
-      {showReceive && (() => {
-        const receiveAddress = receiveAddressForPayjoin?.address || '';
-        // Generate display value based on Payjoin state
-        const displayValue = payjoinUri || receiveAddress;
-
-        const closeReceiveModal = () => {
-          setShowReceive(false);
-          setPayjoinEnabled(false);
-          setPayjoinUri(null);
-          setReceiveAmount('');
-          setSelectedReceiveAddressId(null);
-        };
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closeReceiveModal}>
-            <div className="surface-elevated rounded-2xl max-w-md w-full p-6 shadow-xl border border-sanctuary-200 dark:border-sanctuary-700 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-light text-sanctuary-900 dark:text-sanctuary-50">Receive Bitcoin</h3>
-                <button
-                  onClick={closeReceiveModal}
-                  className="text-sanctuary-400 hover:text-sanctuary-600 dark:hover:text-sanctuary-300"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              {receiveAddress ? (
-                <div className="flex flex-col items-center">
-                  <div className="bg-white p-4 rounded-xl mb-4 shadow-sm">
-                    {payjoinLoading ? (
-                      <div className="w-[200px] h-[200px] flex items-center justify-center">
-                        <RefreshCw className="w-8 h-8 animate-spin text-sanctuary-400" />
-                      </div>
-                    ) : (
-                      <QRCodeSVG value={displayValue} size={200} level="M" />
-                    )}
-                  </div>
-
-                  {/* Address Selector */}
-                  {unusedReceiveAddresses.length > 1 && (
-                    <div className="w-full mb-4">
-                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">
-                        Select Address ({unusedReceiveAddresses.length} unused)
-                      </label>
-                      <select
-                        value={selectedReceiveAddress?.id || ''}
-                        onChange={(e) => setSelectedReceiveAddressId(e.target.value || null)}
-                        className="w-full px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        {unusedReceiveAddresses.map((addr) => (
-                          <option key={addr.id} value={addr.id}>
-                            #{addr.index} - {addr.address.slice(0, 12)}...{addr.address.slice(-8)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Payjoin Section */}
-                  <PayjoinSection
-                    walletId={wallet?.id || ''}
-                    enabled={payjoinEnabled}
-                    onToggle={setPayjoinEnabled}
-                    className="w-full mb-4"
-                  />
-
-                  {/* Amount Input (optional, for BIP21) */}
-                  {payjoinEnabled && (
-                    <div className="w-full mb-4">
-                      <label className="block text-xs font-medium text-sanctuary-500 mb-1">Amount (optional)</label>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="number"
-                          step="0.00000001"
-                          min="0"
-                          value={receiveAmount}
-                          onChange={(e) => setReceiveAmount(e.target.value)}
-                          placeholder="0.00000000"
-                          className="flex-1 px-3 py-2 rounded-lg border border-sanctuary-200 dark:border-sanctuary-700 surface-muted text-sm font-mono"
-                        />
-                        <span className="text-sm text-sanctuary-500">BTC</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="w-full">
-                    <label className="block text-xs font-medium text-sanctuary-500 mb-1">
-                      {payjoinEnabled ? 'BIP21 URI (with Payjoin)' : 'Receive Address'}
-                    </label>
-                    <div className="flex items-center space-x-2 surface-muted border border-sanctuary-200 dark:border-sanctuary-700 rounded-lg p-3">
-                      <code className="text-xs font-mono text-sanctuary-700 dark:text-sanctuary-300 break-all flex-1">
-                        {displayValue}
-                      </code>
-                      <button
-                        onClick={() => copy(displayValue)}
-                        className={`flex-shrink-0 p-2 rounded transition-colors ${isCopied(displayValue) ? 'bg-success-100 dark:bg-success-500/20 text-success-600 dark:text-success-400' : 'hover:bg-sanctuary-200 dark:hover:bg-sanctuary-700 text-sanctuary-400'}`}
-                        title={isCopied(displayValue) ? 'Copied!' : 'Copy'}
-                      >
-                        {isCopied(displayValue) ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-sanctuary-500 mt-4 text-center">
-                    {payjoinEnabled
-                      ? 'Share this URI with a Payjoin-capable wallet for enhanced privacy.'
-                      : 'Send only Bitcoin (BTC) to this address.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-sanctuary-500 mb-4">No receive address available. Please link a hardware device with an xpub first.</p>
-                  <Button variant="secondary" onClick={() => { setShowReceive(false); setActiveTab('settings'); }}>
-                    Go to Settings
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {showReceive && wallet && (
+        <ReceiveModal
+          walletId={wallet.id}
+          addresses={addresses}
+          network={wallet.network || 'mainnet'}
+          onClose={() => setShowReceive(false)}
+          onNavigateToSettings={() => { setShowReceive(false); setActiveTab('settings'); }}
+        />
+      )}
 
       {/* Address QR Code Modal */}
       {qrModalAddress && (

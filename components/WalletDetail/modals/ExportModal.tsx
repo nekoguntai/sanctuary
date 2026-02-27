@@ -49,10 +49,10 @@ interface ExportModalProps {
   walletId: string;
   walletName: string;
   walletType: string;
-  scriptType: string;
-  descriptor: string;
-  quorum: number | null;
-  totalSigners: number | null;
+  scriptType?: string;
+  descriptor?: string;
+  quorum?: number | null;
+  totalSigners?: number;
   devices: Device[];
   onClose: () => void;
   onError: (error: unknown, title: string) => void;
@@ -167,11 +167,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         walletName,
         getQuorumM(quorum),
         getQuorumN(quorum, totalSigners),
-        scriptType,
+        scriptType || 'native_segwit',
         devices
       );
     }
-    return descriptor;
+    return descriptor || '';
   };
 
   return (

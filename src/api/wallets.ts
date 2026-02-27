@@ -4,9 +4,8 @@
  * API calls for wallet management
  */
 
-import apiClient, { API_BASE_URL } from './client';
+import apiClient from './client';
 import type { Wallet, WalletRole } from '../types';
-import { downloadBlob } from '../../utils/download';
 
 // Re-export types for backward compatibility
 export type { Wallet, WalletRole } from '../types';
@@ -311,31 +310,12 @@ export async function exportWalletFormat(
   formatId: string,
   walletName: string
 ): Promise<void> {
-  const token = apiClient.getToken();
-  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/export?format=${formatId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to export wallet (${response.status})`);
-  }
-
-  // Get filename from Content-Disposition header or generate one
-  const contentDisposition = response.headers.get('Content-Disposition');
-  let filename = `${walletName.replace(/[^a-zA-Z0-9-_]/g, '_')}_export`;
-  if (contentDisposition) {
-    const match = contentDisposition.match(/filename="?([^"]+)"?/);
-    if (match) {
-      filename = match[1];
-    }
-  }
-
-  // Download the file
-  const blob = await response.blob();
-  downloadBlob(blob, filename);
+  const fallbackFilename = `${walletName.replace(/[^a-zA-Z0-9-_]/g, '_')}_export`;
+  await apiClient.download(
+    `/wallets/${walletId}/export`,
+    fallbackFilename,
+    { params: { format: formatId } }
+  );
 }
 
 /**
@@ -343,21 +323,8 @@ export async function exportWalletFormat(
  * Downloads the file directly
  */
 export async function exportLabelsBip329(walletId: string, walletName: string): Promise<void> {
-  const token = apiClient.getToken();
-  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/export/labels`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Failed to export labels (${response.status})`);
-  }
-
-  const blob = await response.blob();
   const filename = `${walletName.replace(/[^a-zA-Z0-9]/g, '_')}_labels_bip329.jsonl`;
-  downloadBlob(blob, filename);
+  await apiClient.download(`/wallets/${walletId}/export/labels`, filename);
 }
 
 // ============================================================================

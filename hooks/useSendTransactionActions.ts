@@ -18,6 +18,7 @@ import { useHardwareWallet } from './useHardwareWallet';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { queryClient } from '../providers/QueryProvider';
 import { createLogger } from '../utils/logger';
+import { downloadBinary } from '../utils/download';
 import { isMultisigType } from '../types';
 import type { Wallet, UTXO, Device } from '../types';
 import type { TransactionState } from '../contexts/send/types';
@@ -673,15 +674,7 @@ export function useSendTransactionActions({
       });
     }
 
-    const blob = new Blob([bytes], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${wallet.name || 'transaction'}_unsigned.psbt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadBinary(bytes, `${wallet.name || 'transaction'}_unsigned.psbt`);
   }, [unsignedPsbt, txData, wallet.name]);
 
   // Upload signed PSBT (supports both binary and base64 formats)

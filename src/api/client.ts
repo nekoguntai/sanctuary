@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from '../../utils/logger';
+import { downloadBlob } from '../../utils/download';
 
 const log = createLogger('ApiClient');
 
@@ -320,6 +321,89 @@ class ApiClient {
       },
       retryOptions
     );
+  }
+
+  /**
+   * Fetch an endpoint as a Blob (for callers that handle the download themselves)
+   */
+  async fetchBlob(
+    endpoint: string,
+    options: { method?: string; params?: Record<string, string> } = {}
+  ): Promise<Blob> {
+    let url = `${API_BASE_URL}${endpoint}`;
+    if (options.params) {
+      const searchParams = new URLSearchParams(options.params);
+      url += `?${searchParams}`;
+    }
+
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      method: options.method || 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+      throw new ApiError(
+        error.message || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        error
+      );
+    }
+
+    return response.blob();
+  }
+
+  /**
+   * Download a file from an API endpoint.
+   * Handles auth, error checking, blob extraction, Content-Disposition parsing, and triggers browser download.
+   */
+  async download(
+    endpoint: string,
+    filename?: string,
+    options: { method?: string; params?: Record<string, string> } = {}
+  ): Promise<void> {
+    let url = `${API_BASE_URL}${endpoint}`;
+    if (options.params) {
+      const searchParams = new URLSearchParams(options.params);
+      url += `?${searchParams}`;
+    }
+
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      method: options.method || 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }));
+      throw new ApiError(
+        error.message || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        error
+      );
+    }
+
+    // Prefer Content-Disposition filename from server, fall back to provided filename
+    let resolvedFilename = filename || 'download';
+    const contentDisposition = response.headers.get('Content-Disposition');
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match) {
+        resolvedFilename = match[1];
+      }
+    }
+
+    const blob = await response.blob();
+    downloadBlob(blob, resolvedFilename);
   }
 
   /**

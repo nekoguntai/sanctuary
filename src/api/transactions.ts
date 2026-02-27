@@ -4,9 +4,8 @@
  * API calls for transaction and UTXO management
  */
 
-import apiClient, { API_BASE_URL } from './client';
+import apiClient from './client';
 import type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
-import { downloadBlob } from '../../utils/download';
 
 // Re-export types for backward compatibility
 export type { Label, Transaction, UTXO, Address, PendingTransaction, SelectionStrategy } from '../types';
@@ -166,29 +165,16 @@ export async function exportTransactions(
   walletName: string,
   options: ExportTransactionsOptions
 ): Promise<void> {
-  const params = new URLSearchParams();
-  params.set('format', options.format);
-  if (options.startDate) params.set('startDate', options.startDate);
-  if (options.endDate) params.set('endDate', options.endDate);
+  const params: Record<string, string> = { format: options.format };
+  if (options.startDate) params.startDate = options.startDate;
+  if (options.endDate) params.endDate = options.endDate;
 
-  const response = await fetch(`${API_BASE_URL}/wallets/${walletId}/transactions/export?${params}`, {
-    headers: {
-      'Authorization': `Bearer ${apiClient.getToken()}`,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Export failed' }));
-    throw new Error(error.message || 'Export failed');
-  }
-
-  // Get the blob and trigger download
-  const blob = await response.blob();
   const timestamp = new Date().toISOString().slice(0, 10);
   const safeName = walletName.replace(/[^a-zA-Z0-9]/g, '_');
   const extension = options.format === 'json' ? 'json' : 'csv';
   const filename = `${safeName}_transactions_${timestamp}.${extension}`;
-  downloadBlob(blob, filename);
+
+  await apiClient.download(`/wallets/${walletId}/transactions/export`, filename, { params });
 }
 
 /**

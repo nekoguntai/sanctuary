@@ -8,7 +8,6 @@
 import { eventBus } from '../events/eventBus';
 import {
   invalidateWalletCaches,
-  blockHeightCache,
   priceCache,
   feeEstimateCache,
 } from '../utils/cache';
@@ -78,13 +77,6 @@ export function initializeCacheInvalidation(): void {
   );
 
   // Blockchain events - invalidate global caches
-  unsubscribers.push(
-    eventBus.on('blockchain:newBlock', ({ height }) => {
-      log.debug(`Invalidating block height cache for new block ${height}`);
-      blockHeightCache.clear();
-    })
-  );
-
   unsubscribers.push(
     eventBus.on('blockchain:priceUpdated', () => {
       log.debug('Invalidating price cache for price update');

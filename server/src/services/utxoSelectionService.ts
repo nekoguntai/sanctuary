@@ -431,20 +431,18 @@ export async function selectUtxos(options: SelectionOptions): Promise<SelectionR
     };
   }
 
-  // Use the strategy registry for extensible selection
-  const { selectionStrategyRegistry } = await import('./utxoSelection');
-  const result = selectionStrategyRegistry.select(strategy, {
-    utxos,
-    targetAmount,
-    feeRate,
-    scriptType,
-  });
-
-  // Cast to local SelectionResult type for backward compatibility
-  return {
-    ...result,
-    strategy: result.strategy as SelectionStrategy,
-  };
+  switch (strategy) {
+    case 'privacy':
+      return selectForPrivacy(utxos, targetAmount, feeRate, scriptType);
+    case 'efficiency':
+      return selectForEfficiency(utxos, targetAmount, feeRate, scriptType);
+    case 'oldest_first':
+      return selectOldestFirst(utxos, targetAmount, feeRate, scriptType);
+    case 'largest_first':
+      return selectLargestFirst(utxos, targetAmount, feeRate, scriptType);
+    case 'smallest_first':
+      return selectSmallestFirst(utxos, targetAmount, feeRate, scriptType);
+  }
 }
 
 /**

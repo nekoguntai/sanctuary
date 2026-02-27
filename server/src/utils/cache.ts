@@ -133,18 +133,6 @@ export const feeEstimateCache = new ApplicationCache<{
 });
 
 /**
- * Cache for current block height
- * Key: 'block-height'
- * Value: { height } block number
- * TTL: 10 seconds (new blocks ~10 minutes, but we want fresh data)
- */
-export const blockHeightCache = new ApplicationCache<{ height: number }>({
-  ttlMs: 10000,
-  maxItems: 1,
-  name: 'block-height',
-});
-
-/**
  * Cache for Bitcoin price
  * Key: currency code (e.g., 'USD')
  * Value: price in fiat
@@ -250,7 +238,6 @@ export function getAllCacheStats(): Array<{ name: string; size: number; hits: nu
   return [
     walletBalanceCache.getStats(),
     feeEstimateCache.getStats(),
-    blockHeightCache.getStats(),
     priceCache.getStats(),
     balanceHistoryCache.getStats(),
     transactionStatsCache.getStats(),

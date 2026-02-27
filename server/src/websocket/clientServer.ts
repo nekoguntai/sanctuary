@@ -14,7 +14,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { verifyToken } from '../utils/jwt';
 import { createLogger } from '../utils/logger';
-import { checkWalletAccess } from '../services/wallet';
+import { checkWalletAccess } from '../services/accessControl';
 import { redisBridge } from './redisBridge';
 import { parseClientMessage } from './schemas';
 import {
@@ -495,8 +495,8 @@ export class SanctauryWebSocketServer {
       const walletIdMatch = channel.match(/^wallet:([a-f0-9-]+)/);
       if (walletIdMatch) {
         const walletId = walletIdMatch[1];
-        const hasAccess = await checkWalletAccess(walletId, client.userId);
-        if (!hasAccess) {
+        const access = await checkWalletAccess(walletId, client.userId);
+        if (!access.hasAccess) {
           log.warn(`User ${client.userId} denied access to wallet ${walletId}`);
           this.sendToClient(client, {
             type: 'error',
@@ -589,8 +589,8 @@ export class SanctauryWebSocketServer {
         const walletIdMatch = channel.match(/^wallet:([a-f0-9-]+)/);
         if (walletIdMatch) {
           const walletId = walletIdMatch[1];
-          const hasAccess = await checkWalletAccess(walletId, client.userId);
-          if (!hasAccess) {
+          const access = await checkWalletAccess(walletId, client.userId);
+          if (!access.hasAccess) {
             errors.push({ channel, reason: 'Access denied' });
             continue;
           }

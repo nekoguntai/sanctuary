@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
-import { checkWalletEditAccess } from '../../services/wallet';
+import { checkWalletAccess } from '../../services/accessControl';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';
 import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';
 
@@ -174,8 +174,8 @@ router.patch('/utxos/:utxoId/freeze', async (req: Request, res: Response) => {
     }
 
     // Check if user has edit access (owner or signer)
-    const canEdit = await checkWalletEditAccess(utxo.walletId, userId);
-    if (!canEdit) {
+    const access = await checkWalletAccess(utxo.walletId, userId);
+    if (!access.canEdit) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You do not have permission to modify UTXOs in this wallet',

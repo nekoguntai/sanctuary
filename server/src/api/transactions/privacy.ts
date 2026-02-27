@@ -9,7 +9,7 @@ import { requireWalletAccess } from '../../middleware/walletAccess';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { handleApiError } from '../../utils/errors';
-import { checkWalletAccess } from '../../services/wallet';
+import { checkWalletAccess } from '../../services/accessControl';
 
 const router = Router();
 const log = createLogger('TX:PRIVACY');
@@ -63,8 +63,8 @@ router.get('/utxos/:utxoId/privacy', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'UTXO not found' });
     }
 
-    const hasAccess = await checkWalletAccess(utxo.walletId, userId);
-    if (!hasAccess) {
+    const access = await checkWalletAccess(utxo.walletId, userId);
+    if (!access.hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

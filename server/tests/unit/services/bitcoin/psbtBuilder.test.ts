@@ -1,0 +1,495 @@
+/**
+ * PSBT Builder Tests
+ *
+ * Tests for BIP32 derivation, witness script construction,
+ * multisig script parsing, input finalization, and decoy amounts.
+ */
+
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
+import { BIP32Factory } from 'bip32';
+import { ECPairFactory } from 'ecpair';
+import {
+  buildMultisigBip32Derivations,
+  buildMultisigWitnessScript,
+  parseMultisigScript,
+  finalizeMultisigInput,
+  witnessStackToScriptWitness,
+  generateDecoyAmounts,
+} from '../../../../src/services/bitcoin/psbtBuilder';
+import type { MultisigKeyInfo } from '../../../../src/services/bitcoin/addressDerivation';
+
+// Initialize ECC library for bitcoinjs-lib and create ECPair factory
+bitcoin.initEccLib(ecc);
+const bip32 = BIP32Factory(ecc);
+const ECPair = ECPairFactory(ecc);
+
+const network = bitcoin.networks.testnet;
+
+// Valid test multisig key info with verified-good xpubs
+// Generated from deterministic seeds with BIP48 path m/48'/1'/0'/2'
+const testMultisigKeys: MultisigKeyInfo[] = [
+  {
+    fingerprint: '01ef24b4',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDFVykm8BAr81EooDYzRXphJC6Z28HKji4iJFopTrMH8wXnxn1WVkx29rP1wCAPmFV8huHhhzXJBhRJFtyuvrtBD5NAevCxes3AGLaQNVFCK',
+    derivationPath: '0/*',
+  },
+  {
+    fingerprint: '315ebe52',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDELwCusfNrWrYvRp9aquUwkDpxtzdPruvKTRi1ojCaQASdsK2716zTBTGB464yMLRREf2hhxQsCMBVr9LBjQNYFt1ME7A4vJYL52XV7zbGY',
+    derivationPath: '0/*',
+  },
+  {
+    fingerprint: '6648bb48',
+    accountPath: "48'/1'/0'/2'",
+    xpub: 'tpubDFThhNWT71SDtGQcBFTNSgHcf82LPZZi9hErv3pYSsubcxyx1qpB3AE29Eng3ZXS1a7GAdjiodJYNDysqa8gvQuUgqNveG2T3Gbg3HwhoRG',
+    derivationPath: '0/*',
+  },
+];
+
+describe('PSBT Builder', () => {
+  // ========================================
+  // buildMultisigBip32Derivations
+  // ========================================
+  describe('buildMultisigBip32Derivations', () => {
+    it('should build derivations for all cosigners at a given path', () => {
+      // m/48'/1'/0'/2'/0/5 — external chain, address index 5
+      const derivationPath = "m/48'/1'/0'/2'/0/5";
+      const result = buildMultisigBip32Derivations(derivationPath, testMultisigKeys, network);
+
+      expect(result).toHaveLength(3);
+
+      // Verify each entry has correct structure
+      for (let i = 0; i < result.length; i++) {
+        expect(result[i].masterFingerprint).toBeInstanceOf(Buffer);
+        expect(result[i].masterFingerprint.toString('hex')).toBe(testMultisigKeys[i].fingerprint);
+        expect(result[i].path).toContain("48'");
+        expect(result[i].path).toContain('/0/5');
+        expect(result[i].pubkey).toBeInstanceOf(Buffer);
+        expect(result[i].pubkey.length).toBe(33); // Compressed pubkey
+      }
+    });
+
+    it('should produce correct full paths for each cosigner', () => {
+      const derivationPath = "m/48'/1'/0'/2'/1/10";
+      const result = buildMultisigBip32Derivations(derivationPath, testMultisigKeys, network);
+
+      // All keys share accountPath "48'/1'/0'/2'" but with change=1, index=10
+      for (const entry of result) {
+        expect(entry.path).toMatch(/^m\/48'\/1'\/0'\/2'\/1\/10$/);
+      }
+    });
+
+    it('should derive unique public keys for each cosigner', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const result = buildMultisigBip32Derivations(derivationPath, testMultisigKeys, network);
+
+      const pubkeyHexes = result.map(r => r.pubkey.toString('hex'));
+      const uniquePubkeys = new Set(pubkeyHexes);
+      expect(uniquePubkeys.size).toBe(3);
+    });
+
+    it('should return empty array for invalid derivation path', () => {
+      const result = buildMultisigBip32Derivations('invalid', testMultisigKeys, network);
+      expect(result).toEqual([]);
+    });
+
+    it('should handle single cosigner', () => {
+      const singleKey = [testMultisigKeys[0]];
+      const result = buildMultisigBip32Derivations("m/48'/1'/0'/2'/0/0", singleKey, network);
+      expect(result).toHaveLength(1);
+      expect(result[0].masterFingerprint.toString('hex')).toBe(singleKey[0].fingerprint);
+    });
+
+    it('should skip keys that fail to derive and continue', () => {
+      const keysWithBadOne: MultisigKeyInfo[] = [
+        testMultisigKeys[0],
+        { ...testMultisigKeys[1], xpub: 'tpubINVALIDxpub' },
+        testMultisigKeys[2],
+      ];
+      const result = buildMultisigBip32Derivations("m/48'/1'/0'/2'/0/0", keysWithBadOne, network);
+      // Should have 2 valid derivations (skipping the bad one)
+      expect(result).toHaveLength(2);
+    });
+
+    it('should normalize h notation to apostrophe', () => {
+      // The function calls normalizeDerivationPath internally
+      const derivationPath = "m/48h/1h/0h/2h/0/3";
+      const result = buildMultisigBip32Derivations(derivationPath, [testMultisigKeys[0]], network);
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toContain("48'");
+    });
+  });
+
+  // ========================================
+  // buildMultisigWitnessScript
+  // ========================================
+  describe('buildMultisigWitnessScript', () => {
+    it('should build a valid 2-of-3 witness script', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const quorum = 2;
+
+      const script = buildMultisigWitnessScript(derivationPath, testMultisigKeys, quorum, network);
+
+      expect(script).toBeDefined();
+      expect(script).toBeInstanceOf(Buffer);
+      // A 2-of-3 multisig script: OP_2 <pubkey1> <pubkey2> <pubkey3> OP_3 OP_CHECKMULTISIG
+      // Should be relatively long (100+ bytes for 3 compressed pubkeys)
+      expect(script!.length).toBeGreaterThan(100);
+    });
+
+    it('should produce a script that parses as valid multisig', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const script = buildMultisigWitnessScript(derivationPath, testMultisigKeys, 2, network);
+
+      expect(script).toBeDefined();
+      const parsed = parseMultisigScript(script!);
+      expect(parsed.isMultisig).toBe(true);
+      expect(parsed.m).toBe(2);
+      expect(parsed.n).toBe(3);
+      expect(parsed.pubkeys).toHaveLength(3);
+    });
+
+    it('should sort public keys lexicographically (BIP-67)', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/0";
+      const script = buildMultisigWitnessScript(derivationPath, testMultisigKeys, 2, network);
+
+      expect(script).toBeDefined();
+      const parsed = parseMultisigScript(script!);
+
+      // Verify pubkeys are sorted
+      for (let i = 0; i < parsed.pubkeys.length - 1; i++) {
+        expect(parsed.pubkeys[i].compare(parsed.pubkeys[i + 1])).toBeLessThan(0);
+      }
+    });
+
+    it('should return undefined for invalid derivation path', () => {
+      const script = buildMultisigWitnessScript('invalid', testMultisigKeys, 2, network);
+      expect(script).toBeUndefined();
+    });
+
+    it('should return undefined when a key fails to derive', () => {
+      const badKeys: MultisigKeyInfo[] = [
+        testMultisigKeys[0],
+        { ...testMultisigKeys[1], xpub: 'not-a-valid-xpub' },
+        testMultisigKeys[2],
+      ];
+      // When not all pubkeys can be derived, it returns undefined
+      const script = buildMultisigWitnessScript("m/48'/1'/0'/2'/0/0", badKeys, 2, network);
+      expect(script).toBeUndefined();
+    });
+
+    it('should produce consistent scripts for the same inputs', () => {
+      const derivationPath = "m/48'/1'/0'/2'/0/7";
+      const script1 = buildMultisigWitnessScript(derivationPath, testMultisigKeys, 2, network);
+      const script2 = buildMultisigWitnessScript(derivationPath, testMultisigKeys, 2, network);
+
+      expect(script1).toBeDefined();
+      expect(script1!.equals(script2!)).toBe(true);
+    });
+
+    it('should produce different scripts for different address indices', () => {
+      const script0 = buildMultisigWitnessScript("m/48'/1'/0'/2'/0/0", testMultisigKeys, 2, network);
+      const script1 = buildMultisigWitnessScript("m/48'/1'/0'/2'/0/1", testMultisigKeys, 2, network);
+
+      expect(script0).toBeDefined();
+      expect(script1).toBeDefined();
+      expect(script0!.equals(script1!)).toBe(false);
+    });
+  });
+
+  // ========================================
+  // parseMultisigScript
+  // ========================================
+  describe('parseMultisigScript', () => {
+    it('should parse a valid 2-of-3 multisig script', () => {
+      // Generate 3 keypairs and build a p2ms
+      const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
+      const result = parseMultisigScript(p2ms.output!);
+
+      expect(result.isMultisig).toBe(true);
+      expect(result.m).toBe(2);
+      expect(result.n).toBe(3);
+      expect(result.pubkeys).toHaveLength(3);
+    });
+
+    it('should parse a 1-of-2 multisig script', () => {
+      const keys = Array.from({ length: 2 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys, network });
+      const result = parseMultisigScript(p2ms.output!);
+
+      expect(result.isMultisig).toBe(true);
+      expect(result.m).toBe(1);
+      expect(result.n).toBe(2);
+    });
+
+    it('should parse a 3-of-3 multisig script', () => {
+      const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 3, pubkeys, network });
+      const result = parseMultisigScript(p2ms.output!);
+
+      expect(result.isMultisig).toBe(true);
+      expect(result.m).toBe(3);
+      expect(result.n).toBe(3);
+    });
+
+    it('should return isMultisig false for non-multisig script', () => {
+      // P2WPKH script is not multisig
+      const key = ECPair.makeRandom({ network });
+      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: key.publicKey, network });
+      const result = parseMultisigScript(p2wpkh.output!);
+
+      expect(result.isMultisig).toBe(false);
+      expect(result.m).toBe(0);
+      expect(result.n).toBe(0);
+      expect(result.pubkeys).toEqual([]);
+    });
+
+    it('should return isMultisig false for empty buffer', () => {
+      const result = parseMultisigScript(Buffer.alloc(0));
+      expect(result.isMultisig).toBe(false);
+    });
+
+    it('should return isMultisig false for too-short script', () => {
+      const result = parseMultisigScript(Buffer.from([0x51, 0x52, 0xae]));
+      expect(result.isMultisig).toBe(false);
+    });
+
+    it('should extract correct pubkeys from script', () => {
+      const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
+      const result = parseMultisigScript(p2ms.output!);
+
+      expect(result.pubkeys).toHaveLength(3);
+      // Each extracted pubkey should be 33 bytes (compressed)
+      for (const pk of result.pubkeys) {
+        expect(pk.length).toBe(33);
+      }
+      // Pubkeys should match the originals (in sorted order)
+      for (let i = 0; i < pubkeys.length; i++) {
+        expect(result.pubkeys[i].equals(pubkeys[i])).toBe(true);
+      }
+    });
+  });
+
+  // ========================================
+  // witnessStackToScriptWitness
+  // ========================================
+  describe('witnessStackToScriptWitness', () => {
+    it('should serialize an empty witness stack', () => {
+      const result = witnessStackToScriptWitness([]);
+      // Just the varint count (0)
+      expect(result).toEqual(Buffer.from([0x00]));
+    });
+
+    it('should serialize a single empty element', () => {
+      const result = witnessStackToScriptWitness([Buffer.alloc(0)]);
+      // count=1, element_length=0
+      expect(result).toEqual(Buffer.from([0x01, 0x00]));
+    });
+
+    it('should serialize a witness stack with multiple elements', () => {
+      const stack = [
+        Buffer.alloc(0),                         // OP_0 (for CHECKMULTISIG bug)
+        Buffer.from('aa'.repeat(71), 'hex'),    // sig1 (71 bytes)
+        Buffer.from('bb'.repeat(71), 'hex'),    // sig2 (71 bytes)
+        Buffer.from('cc'.repeat(105), 'hex'),   // witnessScript (105 bytes)
+      ];
+
+      const result = witnessStackToScriptWitness(stack);
+
+      // First byte should be item count (4)
+      expect(result[0]).toBe(4);
+      // Total length: 1 (count) + 1 (len=0) + 1+71 + 1+71 + 1+105 = 251
+      expect(result.length).toBe(1 + 1 + (1 + 71) + (1 + 71) + (1 + 105));
+    });
+
+    it('should handle elements larger than 252 bytes with varint encoding', () => {
+      const bigElement = Buffer.alloc(300, 0xab);
+      const result = witnessStackToScriptWitness([bigElement]);
+
+      // count=1, varint length (0xfd + 2 bytes for 300) + 300 bytes data
+      expect(result[0]).toBe(1); // count
+      expect(result[1]).toBe(0xfd); // varint prefix for 2-byte length
+      expect(result.length).toBe(1 + 3 + 300); // count + varint(300) + data
+    });
+  });
+
+  // ========================================
+  // generateDecoyAmounts
+  // ========================================
+  describe('generateDecoyAmounts', () => {
+    const dustThreshold = 546;
+
+    it('should return single amount when count < 2', () => {
+      const result = generateDecoyAmounts(100000, 1, dustThreshold);
+      expect(result).toEqual([100000]);
+    });
+
+    it('should return single amount when count is 0', () => {
+      const result = generateDecoyAmounts(100000, 0, dustThreshold);
+      expect(result).toEqual([100000]);
+    });
+
+    it('should split into exactly the requested count', () => {
+      const result = generateDecoyAmounts(1000000, 3, dustThreshold);
+      expect(result).toHaveLength(3);
+    });
+
+    it('should sum to the total change amount', () => {
+      for (let trial = 0; trial < 10; trial++) {
+        const totalChange = 500000;
+        const result = generateDecoyAmounts(totalChange, 3, dustThreshold);
+        const sum = result.reduce((a, b) => a + b, 0);
+        expect(sum).toBe(totalChange);
+      }
+    });
+
+    it('should produce amounts above dust threshold', () => {
+      for (let trial = 0; trial < 10; trial++) {
+        const result = generateDecoyAmounts(100000, 3, dustThreshold);
+        for (const amount of result) {
+          expect(amount).toBeGreaterThanOrEqual(dustThreshold);
+        }
+      }
+    });
+
+    it('should return single output when not enough for split', () => {
+      // Total change barely above 2 * dustThreshold = 1092
+      const result = generateDecoyAmounts(1000, 3, dustThreshold);
+      // Not enough to split 3 ways above dust, falls back to single
+      expect(result).toEqual([1000]);
+    });
+
+    it('should handle large count with sufficient change', () => {
+      const result = generateDecoyAmounts(10000000, 5, dustThreshold);
+      expect(result).toHaveLength(5);
+      const sum = result.reduce((a, b) => a + b, 0);
+      expect(sum).toBe(10000000);
+    });
+
+    it('should produce varied amounts (not all equal)', () => {
+      // Run multiple times to check randomness produces variation
+      let allSame = true;
+      for (let trial = 0; trial < 5; trial++) {
+        const result = generateDecoyAmounts(1000000, 3, dustThreshold);
+        if (new Set(result).size > 1) {
+          allSame = false;
+          break;
+        }
+      }
+      expect(allSame).toBe(false);
+    });
+  });
+
+  // ========================================
+  // finalizeMultisigInput
+  // ========================================
+  describe('finalizeMultisigInput', () => {
+    it('should throw when witnessScript is missing', () => {
+      const psbt = new bitcoin.Psbt({ network });
+
+      // Add a dummy input/output so PSBT is valid
+      const key = ECPair.makeRandom({ network });
+      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: key.publicKey, network });
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xaa),
+        index: 0,
+        witnessUtxo: { script: p2wpkh.output!, value: 100000 },
+      });
+      psbt.addOutput({ address: p2wpkh.address!, value: 90000 });
+
+      expect(() => finalizeMultisigInput(psbt, 0)).toThrow('missing witnessScript');
+    });
+
+    it('should throw when no partial signatures exist', () => {
+      const psbt = new bitcoin.Psbt({ network });
+      const keys = Array.from({ length: 2 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys, network });
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
+
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xbb),
+        index: 0,
+        witnessUtxo: { script: p2wsh.output!, value: 100000 },
+        witnessScript: p2ms.output!,
+      });
+      psbt.addOutput({ address: p2wsh.address!, value: 90000 });
+
+      expect(() => finalizeMultisigInput(psbt, 0)).toThrow('no partial signatures');
+    });
+
+    it('should throw when witnessScript is not a valid multisig script', () => {
+      const psbt = new bitcoin.Psbt({ network });
+      const key = ECPair.makeRandom({ network });
+
+      // Use a P2PK script as witnessScript (valid for P2WSH but not multisig)
+      const p2pkScript = bitcoin.script.compile([key.publicKey, bitcoin.opcodes.OP_CHECKSIG]);
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: { output: p2pkScript, network }, network });
+
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xcc),
+        index: 0,
+        witnessUtxo: { script: p2wsh.output!, value: 100000 },
+        witnessScript: p2pkScript,
+      });
+      psbt.addOutput({ address: p2wsh.address!, value: 90000 });
+
+      // Manually add a fake partial sig
+      psbt.data.inputs[0].partialSig = [{
+        pubkey: key.publicKey,
+        signature: Buffer.alloc(72, 0x30),
+      }];
+
+      expect(() => finalizeMultisigInput(psbt, 0)).toThrow('not a valid multisig script');
+    });
+
+    it('should throw when signature count does not match quorum', () => {
+      const psbt = new bitcoin.Psbt({ network });
+      const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
+      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+
+      const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
+
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xdd),
+        index: 0,
+        witnessUtxo: { script: p2wsh.output!, value: 100000 },
+        witnessScript: p2ms.output!,
+      });
+      psbt.addOutput({ address: p2wsh.address!, value: 90000 });
+
+      // Only 1 signature for a 2-of-3 (need 2)
+      const matchingKey = keys.find(k => k.publicKey.equals(pubkeys[0]))!;
+      // Build a dummy DER sig
+      const dummySig = Buffer.concat([
+        Buffer.from('3045022100', 'hex'),
+        Buffer.alloc(32, 0x01), // r
+        Buffer.from('0220', 'hex'),
+        Buffer.alloc(32, 0x02), // s
+        Buffer.from([0x01]), // sighash
+      ]);
+
+      psbt.data.inputs[0].partialSig = [{
+        pubkey: matchingKey.publicKey,
+        signature: dummySig,
+      }];
+
+      expect(() => finalizeMultisigInput(psbt, 0)).toThrow('has 1 signatures but needs exactly 2');
+    });
+  });
+});

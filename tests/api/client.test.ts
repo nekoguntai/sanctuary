@@ -1,0 +1,515 @@
+/**
+ * API Client Tests
+ *
+ * Tests for the base HTTP client: request/response handling,
+ * retry with exponential backoff, auth token management, and error handling.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock logger before importing
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+// Mock import.meta.env
+vi.stubGlobal('import', { meta: { env: {} } });
+
+// We need to test the module's internals, so we import after mocks
+// but the module uses import.meta.env at top level. We'll test via the default export.
+import apiClient, { ApiError } from '../../src/api/client';
+
+describe('API Client', () => {
+  const mockFetch = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = mockFetch;
+    // Reset token
+    apiClient.setToken(null);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // ========================================
+  // ApiError
+  // ========================================
+  describe('ApiError', () => {
+    it('should create an error with status and response', () => {
+      const error = new ApiError('Not Found', 404, { detail: 'missing' });
+      expect(error.message).toBe('Not Found');
+      expect(error.status).toBe(404);
+      expect(error.response).toEqual({ detail: 'missing' });
+      expect(error.name).toBe('ApiError');
+      expect(error).toBeInstanceOf(Error);
+    });
+
+    it('should work without response data', () => {
+      const error = new ApiError('Server Error', 500);
+      expect(error.status).toBe(500);
+      expect(error.response).toBeUndefined();
+    });
+  });
+
+  // ========================================
+  // Token Management
+  // ========================================
+  describe('Token Management', () => {
+    it('should set and get token', () => {
+      apiClient.setToken('test-token');
+      expect(apiClient.getToken()).toBe('test-token');
+      expect(apiClient.isAuthenticated()).toBe(true);
+    });
+
+    it('should report authenticated when token is set', () => {
+      apiClient.setToken('some-token');
+      expect(apiClient.isAuthenticated()).toBe(true);
+    });
+
+    it('should clear token on null', () => {
+      apiClient.setToken('temp');
+      apiClient.setToken(null);
+      expect(apiClient.getToken()).toBeNull();
+      expect(apiClient.isAuthenticated()).toBe(false);
+    });
+
+    it('should interact with localStorage when setting token', () => {
+      // The test setup mocks localStorage - verify setToken calls it
+      // by checking the token round-trips correctly
+      apiClient.setToken('round-trip');
+      expect(apiClient.getToken()).toBe('round-trip');
+
+      apiClient.setToken(null);
+      expect(apiClient.getToken()).toBeNull();
+    });
+  });
+
+  // ========================================
+  // GET Requests
+  // ========================================
+  describe('GET Requests', () => {
+    it('should make a successful GET request', async () => {
+      const mockData = { users: [{ id: 1 }] };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockData),
+      });
+
+      const result = await apiClient.get('/users');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(mockData);
+    });
+
+    it('should build query string from params', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+      });
+
+      await apiClient.get('/users', { limit: 10, offset: 0, active: true });
+
+      const calledUrl = mockFetch.mock.calls[0][0];
+      expect(calledUrl).toContain('limit=10');
+      expect(calledUrl).toContain('offset=0');
+      expect(calledUrl).toContain('active=true');
+    });
+
+    it('should skip undefined and null params', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+      });
+
+      await apiClient.get('/users', { limit: 10, filter: undefined, sort: null });
+
+      const calledUrl = mockFetch.mock.calls[0][0];
+      expect(calledUrl).toContain('limit=10');
+      expect(calledUrl).not.toContain('filter');
+      expect(calledUrl).not.toContain('sort');
+    });
+
+    it('should include auth token in headers', async () => {
+      apiClient.setToken('my-token');
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+      await apiClient.get('/protected');
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.headers['Authorization']).toBe('Bearer my-token');
+    });
+
+    it('should not include auth header when no token', async () => {
+      apiClient.setToken(null);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+      await apiClient.get('/public');
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.headers['Authorization']).toBeUndefined();
+    });
+  });
+
+  // ========================================
+  // POST Requests
+  // ========================================
+  describe('POST Requests', () => {
+    it('should send JSON body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ id: 1 }),
+      });
+
+      const body = { username: 'test', password: 'pass' };
+      await apiClient.post('/auth/login', body);
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.method).toBe('POST');
+      expect(calledOptions.body).toBe(JSON.stringify(body));
+      expect(calledOptions.headers['Content-Type']).toBe('application/json');
+    });
+
+    it('should handle POST without body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+      await apiClient.post('/action');
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.body).toBeUndefined();
+    });
+  });
+
+  // ========================================
+  // PUT / PATCH / DELETE
+  // ========================================
+  describe('PUT/PATCH/DELETE Requests', () => {
+    it('should make PUT request', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ updated: true }),
+      });
+
+      await apiClient.put('/resource/1', { name: 'updated' });
+
+      expect(mockFetch.mock.calls[0][1].method).toBe('PUT');
+    });
+
+    it('should make PATCH request', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ patched: true }),
+      });
+
+      await apiClient.patch('/resource/1', { field: 'value' });
+
+      expect(mockFetch.mock.calls[0][1].method).toBe('PATCH');
+    });
+
+    it('should make DELETE request', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ deleted: true }),
+      });
+
+      await apiClient.delete('/resource/1');
+
+      expect(mockFetch.mock.calls[0][1].method).toBe('DELETE');
+    });
+
+    it('should handle DELETE with body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+      await apiClient.delete('/resource/batch', { ids: ['1', '2'] });
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.body).toBe(JSON.stringify({ ids: ['1', '2'] }));
+    });
+  });
+
+  // ========================================
+  // 204 No Content
+  // ========================================
+  describe('204 No Content', () => {
+    it('should handle 204 response without parsing body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 204,
+        json: () => Promise.reject(new Error('No body')),
+      });
+
+      const result = await apiClient.delete('/resource/1');
+      expect(result).toEqual({});
+    });
+  });
+
+  // ========================================
+  // Error Handling
+  // ========================================
+  describe('Error Handling', () => {
+    it('should throw ApiError for 4xx responses', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        json: () => Promise.resolve({ message: 'Validation failed' }),
+      });
+
+      await expect(apiClient.get('/bad-request')).rejects.toThrow(ApiError);
+      try {
+        await apiClient.get('/bad-request');
+      } catch (error) {
+        expect((error as ApiError).status).toBe(400);
+        expect((error as ApiError).message).toBe('Validation failed');
+      }
+    });
+
+    it('should throw ApiError for 401 Unauthorized', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: () => Promise.resolve({ message: 'Invalid token' }),
+      });
+
+      await expect(apiClient.get('/protected')).rejects.toThrow(ApiError);
+    });
+
+    it('should throw ApiError for 404 Not Found', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: () => Promise.resolve({ message: 'Resource not found' }),
+      });
+
+      await expect(apiClient.get('/missing')).rejects.toThrow('Resource not found');
+    });
+
+    it('should use statusText as fallback message', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: () => Promise.resolve({}),
+      });
+
+      try {
+        await apiClient.get('/forbidden');
+      } catch (error) {
+        expect((error as ApiError).message).toContain('403');
+      }
+    });
+  });
+
+  // ========================================
+  // Retry Behavior
+  // ========================================
+  describe('Retry Behavior', () => {
+    it('should retry on 500 server error', async () => {
+      // First call: 500, second call: success
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          json: () => Promise.resolve({ message: 'Server error' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ success: true }),
+        });
+
+      const result = await apiClient.get('/flaky', undefined, {
+        maxRetries: 2,
+        initialDelayMs: 1, // Fast for testing
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on 502 Bad Gateway', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          statusText: 'Bad Gateway',
+          json: () => Promise.resolve({ message: 'Bad Gateway' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: 'ok' }),
+        });
+
+      const result = await apiClient.get('/endpoint', undefined, {
+        maxRetries: 1,
+        initialDelayMs: 1,
+      });
+
+      expect(result).toEqual({ data: 'ok' });
+    });
+
+    it('should retry on 429 Too Many Requests', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          json: () => Promise.resolve({ message: 'Rate limited' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ success: true }),
+        });
+
+      const result = await apiClient.get('/rate-limited', undefined, {
+        maxRetries: 1,
+        initialDelayMs: 1,
+      });
+
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should NOT retry on 400 client error', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        json: () => Promise.resolve({ message: 'Bad input' }),
+      });
+
+      await expect(
+        apiClient.get('/bad', undefined, { maxRetries: 3, initialDelayMs: 1 })
+      ).rejects.toThrow('Bad input');
+
+      // Should NOT have retried
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT retry on 401 Unauthorized', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: () => Promise.resolve({ message: 'Invalid token' }),
+      });
+
+      await expect(
+        apiClient.get('/protected', undefined, { maxRetries: 3, initialDelayMs: 1 })
+      ).rejects.toThrow('Invalid token');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry on network errors (TypeError)', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ recovered: true }),
+        });
+
+      const result = await apiClient.get('/network-flaky', undefined, {
+        maxRetries: 1,
+        initialDelayMs: 1,
+      });
+
+      expect(result).toEqual({ recovered: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw after exhausting all retries', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: () => Promise.resolve({ message: 'Down for maintenance' }),
+      });
+
+      await expect(
+        apiClient.get('/always-down', undefined, {
+          maxRetries: 2,
+          initialDelayMs: 1,
+        })
+      ).rejects.toThrow();
+
+      // Initial attempt + 2 retries = 3 calls total
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not retry when retry is disabled', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ message: 'Error' }),
+      });
+
+      await expect(
+        apiClient.get('/no-retry', undefined, { enabled: false })
+      ).rejects.toThrow();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ========================================
+  // Upload
+  // ========================================
+  describe('Upload', () => {
+    it('should send FormData without Content-Type header', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ uploaded: true }),
+      });
+
+      const formData = new FormData();
+      formData.append('file', new Blob(['test']), 'test.txt');
+
+      apiClient.setToken('upload-token');
+      await apiClient.upload('/upload', formData);
+
+      const calledOptions = mockFetch.mock.calls[0][1];
+      expect(calledOptions.method).toBe('POST');
+      expect(calledOptions.body).toBe(formData);
+      // Should NOT set Content-Type (browser sets it with boundary)
+      expect(calledOptions.headers['Content-Type']).toBeUndefined();
+      expect(calledOptions.headers['Authorization']).toBe('Bearer upload-token');
+    });
+  });
+});

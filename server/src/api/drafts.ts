@@ -11,7 +11,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { draftService } from '../services/draftService';
-import { isServiceError, toHttpError } from '../services/errors';
+import { ApiError } from '../errors';
 import { serializeDraftTransaction, serializeDraftTransactions } from '../utils/serialization';
 import { createLogger } from '../utils/logger';
 
@@ -33,9 +33,8 @@ router.get('/wallets/:walletId/drafts', async (req: Request, res: Response) => {
     const drafts = await draftService.getDraftsForWallet(walletId, userId);
     res.json(serializeDraftTransactions(drafts));
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get drafts error', { error });
     res.status(500).json({
@@ -57,9 +56,8 @@ router.get('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Respo
     const draft = await draftService.getDraft(walletId, draftId, userId);
     res.json(serializeDraftTransaction(draft));
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get draft error', { error });
     res.status(500).json({
@@ -129,9 +127,8 @@ router.post('/wallets/:walletId/drafts', async (req: Request, res: Response) => 
 
     res.status(201).json(serializeDraftTransaction(draft));
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Create draft error', { error });
     res.status(500).json({
@@ -161,9 +158,8 @@ router.patch('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Res
 
     res.json(serializeDraftTransaction(draft));
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Update draft error', { error });
     res.status(500).json({
@@ -185,9 +181,8 @@ router.delete('/wallets/:walletId/drafts/:draftId', async (req: Request, res: Re
     await draftService.deleteDraft(walletId, draftId, userId);
     res.status(204).send();
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Delete draft error', { error });
     res.status(500).json({

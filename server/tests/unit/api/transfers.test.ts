@@ -67,6 +67,12 @@ import {
   getPendingIncomingCount,
   getAwaitingConfirmationCount,
 } from '../../../src/services/transferService';
+import {
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+  ValidationError,
+} from '../../../src/services/errors';
 
 // Get typed references to mocked functions
 const mockInitiateTransfer = initiateTransfer as ReturnType<typeof vi.fn>;
@@ -271,7 +277,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 404 when resource not found', async () => {
-      mockInitiateTransfer.mockRejectedValue(new Error('Resource not found'));
+      mockInitiateTransfer.mockRejectedValue(new NotFoundError('Resource', 'non-existent'));
 
       const res = await request(app)
         .post('/api/v1/transfers')
@@ -286,7 +292,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 403 when user is not owner', async () => {
-      mockInitiateTransfer.mockRejectedValue(new Error('not the owner'));
+      mockInitiateTransfer.mockRejectedValue(new ForbiddenError('You are not the owner of this wallet'));
 
       const res = await request(app)
         .post('/api/v1/transfers')
@@ -301,7 +307,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 409 when transfer already pending', async () => {
-      mockInitiateTransfer.mockRejectedValue(new Error('already has a pending transfer'));
+      mockInitiateTransfer.mockRejectedValue(new ConflictError('This wallet already has a pending transfer'));
 
       const res = await request(app)
         .post('/api/v1/transfers')
@@ -608,7 +614,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 404 when transfer not found', async () => {
-      mockAcceptTransfer.mockRejectedValue(new Error('Transfer not found'));
+      mockAcceptTransfer.mockRejectedValue(new NotFoundError('Transfer', 'non-existent'));
 
       const res = await request(app)
         .post('/api/v1/transfers/non-existent/accept')
@@ -618,7 +624,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 403 when not recipient', async () => {
-      mockAcceptTransfer.mockRejectedValue(new Error('Only the recipient can accept'));
+      mockAcceptTransfer.mockRejectedValue(new ForbiddenError('Only the recipient can accept this transfer'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/accept`)
@@ -628,7 +634,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be accepted', async () => {
-      mockAcceptTransfer.mockRejectedValue(new Error('Transfer cannot be accepted'));
+      mockAcceptTransfer.mockRejectedValue(new ValidationError('Transfer cannot be accepted'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/accept`)
@@ -638,7 +644,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer expired', async () => {
-      mockAcceptTransfer.mockRejectedValue(new Error('Transfer has expired'));
+      mockAcceptTransfer.mockRejectedValue(new ValidationError('Transfer has expired'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/accept`)
@@ -685,7 +691,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 404 when transfer not found', async () => {
-      mockDeclineTransfer.mockRejectedValue(new Error('Transfer not found'));
+      mockDeclineTransfer.mockRejectedValue(new NotFoundError('Transfer', 'non-existent'));
 
       const res = await request(app)
         .post('/api/v1/transfers/non-existent/decline')
@@ -695,7 +701,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 403 when not recipient', async () => {
-      mockDeclineTransfer.mockRejectedValue(new Error('Only the recipient can decline'));
+      mockDeclineTransfer.mockRejectedValue(new ForbiddenError('Only the recipient can decline this transfer'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/decline`)
@@ -705,7 +711,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be declined', async () => {
-      mockDeclineTransfer.mockRejectedValue(new Error('Transfer cannot be declined'));
+      mockDeclineTransfer.mockRejectedValue(new ValidationError('Transfer cannot be declined'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/decline`)
@@ -735,7 +741,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 404 when transfer not found', async () => {
-      mockCancelTransfer.mockRejectedValue(new Error('Transfer not found'));
+      mockCancelTransfer.mockRejectedValue(new NotFoundError('Transfer', 'non-existent'));
 
       const res = await request(app)
         .post('/api/v1/transfers/non-existent/cancel')
@@ -745,7 +751,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 403 when not initiator', async () => {
-      mockCancelTransfer.mockRejectedValue(new Error('Only the transfer initiator can cancel'));
+      mockCancelTransfer.mockRejectedValue(new ForbiddenError('Only the transfer initiator can cancel'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/cancel`)
@@ -755,7 +761,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer cannot be cancelled', async () => {
-      mockCancelTransfer.mockRejectedValue(new Error('Transfer cannot be cancelled'));
+      mockCancelTransfer.mockRejectedValue(new ValidationError('Transfer cannot be cancelled'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/cancel`)
@@ -787,7 +793,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 404 when transfer not found', async () => {
-      mockConfirmTransfer.mockRejectedValue(new Error('Transfer not found'));
+      mockConfirmTransfer.mockRejectedValue(new NotFoundError('Transfer', 'non-existent'));
 
       const res = await request(app)
         .post('/api/v1/transfers/non-existent/confirm')
@@ -797,7 +803,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 403 when not initiator', async () => {
-      mockConfirmTransfer.mockRejectedValue(new Error('Only the transfer initiator can confirm'));
+      mockConfirmTransfer.mockRejectedValue(new ForbiddenError('Only the transfer initiator can confirm'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)
@@ -806,18 +812,18 @@ describe('Transfers API Routes', () => {
       expect(res.status).toBe(403);
     });
 
-    it('should return 403 when no longer owner', async () => {
-      mockConfirmTransfer.mockRejectedValue(new Error('You no longer own this resource'));
+    it('should return 409 when no longer owner', async () => {
+      mockConfirmTransfer.mockRejectedValue(new ConflictError('Transfer failed: owner no longer owns this wallet'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)
         .set('Authorization', authHeader);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(409);
     });
 
     it('should return 400 when transfer cannot be confirmed', async () => {
-      mockConfirmTransfer.mockRejectedValue(new Error('Transfer cannot be confirmed'));
+      mockConfirmTransfer.mockRejectedValue(new ValidationError('Transfer cannot be confirmed'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)
@@ -827,7 +833,7 @@ describe('Transfers API Routes', () => {
     });
 
     it('should return 400 when transfer expired', async () => {
-      mockConfirmTransfer.mockRejectedValue(new Error('Transfer has expired'));
+      mockConfirmTransfer.mockRejectedValue(new ValidationError('Transfer has expired'));
 
       const res = await request(app)
         .post(`/api/v1/transfers/${transferId}/confirm`)
@@ -844,7 +850,7 @@ describe('Transfers API Routes', () => {
         .set('Authorization', authHeader);
 
       expect(res.status).toBe(500);
-      expect(res.body.error).toBe('Transfer Failed');
+      expect(res.body.error).toBe('Internal Server Error');
     });
   });
 

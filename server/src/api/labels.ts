@@ -12,7 +12,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { labelService } from '../services/labelService';
-import { isServiceError, toHttpError } from '../services/errors';
+import { ApiError } from '../errors';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('LABELS');
@@ -38,9 +38,8 @@ router.get('/wallets/:walletId/labels', async (req: Request, res: Response) => {
     const labels = await labelService.getLabelsForWallet(walletId, userId);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get labels error', { error });
     res.status(500).json({
@@ -72,9 +71,8 @@ router.get('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
     res.json(response);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get label error', { error });
     res.status(500).json({
@@ -102,9 +100,8 @@ router.post('/wallets/:walletId/labels', async (req: Request, res: Response) => 
 
     res.status(201).json(label);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Create label error', { error });
     res.status(500).json({
@@ -132,9 +129,8 @@ router.put('/wallets/:walletId/labels/:labelId', async (req: Request, res: Respo
 
     res.json(label);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Update label error', { error });
     res.status(500).json({
@@ -156,9 +152,8 @@ router.delete('/wallets/:walletId/labels/:labelId', async (req: Request, res: Re
     await labelService.deleteLabel(walletId, labelId, userId);
     res.status(204).send();
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Delete label error', { error });
     res.status(500).json({
@@ -184,9 +179,8 @@ router.get('/transactions/:transactionId/labels', async (req: Request, res: Resp
     const labels = await labelService.getTransactionLabels(transactionId, userId);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get transaction labels error', { error });
     res.status(500).json({
@@ -210,9 +204,8 @@ router.post('/transactions/:transactionId/labels', async (req: Request, res: Res
     const labels = await labelService.addTransactionLabels(transactionId, userId, labelIds);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Add transaction labels error', { error });
     res.status(500).json({
@@ -236,9 +229,8 @@ router.put('/transactions/:transactionId/labels', async (req: Request, res: Resp
     const labels = await labelService.replaceTransactionLabels(transactionId, userId, labelIds);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Replace transaction labels error', { error });
     res.status(500).json({
@@ -260,9 +252,8 @@ router.delete('/transactions/:transactionId/labels/:labelId', async (req: Reques
     await labelService.removeTransactionLabel(transactionId, labelId, userId);
     res.status(204).send();
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Remove transaction label error', { error });
     res.status(500).json({
@@ -288,9 +279,8 @@ router.get('/addresses/:addressId/labels', async (req: Request, res: Response) =
     const labels = await labelService.getAddressLabels(addressId, userId);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Get address labels error', { error });
     res.status(500).json({
@@ -314,9 +304,8 @@ router.post('/addresses/:addressId/labels', async (req: Request, res: Response) 
     const labels = await labelService.addAddressLabels(addressId, userId, labelIds);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Add address labels error', { error });
     res.status(500).json({
@@ -340,9 +329,8 @@ router.put('/addresses/:addressId/labels', async (req: Request, res: Response) =
     const labels = await labelService.replaceAddressLabels(addressId, userId, labelIds);
     res.json(labels);
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Replace address labels error', { error });
     res.status(500).json({
@@ -364,9 +352,8 @@ router.delete('/addresses/:addressId/labels/:labelId', async (req: Request, res:
     await labelService.removeAddressLabel(addressId, labelId, userId);
     res.status(204).send();
   } catch (error) {
-    if (isServiceError(error)) {
-      const { status, body } = toHttpError(error);
-      return res.status(status).json(body);
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({ error: error.code, message: error.message });
     }
     log.error('Remove address label error', { error });
     res.status(500).json({

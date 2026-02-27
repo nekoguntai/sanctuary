@@ -13,7 +13,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
-import { isServiceError, toHttpError } from '../services/errors';
+import { ApiError } from '../errors';
 import {
   initiateTransfer,
   acceptTransfer,
@@ -38,9 +38,8 @@ const log = createLogger('TRANSFERS');
  * unknown errors fall through as 500.
  */
 function handleTransferError(error: unknown, res: Response, defaultMessage: string): void {
-  if (isServiceError(error)) {
-    const { status, body } = toHttpError(error);
-    res.status(status).json(body);
+  if (error instanceof ApiError) {
+    res.status(error.statusCode).json({ error: error.code, message: error.message });
     return;
   }
   log.error(defaultMessage, { error: getErrorMessage(error) });

@@ -207,7 +207,7 @@ describe('PSBT Builder', () => {
     it('should parse a valid 2-of-3 multisig script', () => {
       // Generate 3 keypairs and build a p2ms
       const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
       const result = parseMultisigScript(p2ms.output!);
@@ -220,7 +220,7 @@ describe('PSBT Builder', () => {
 
     it('should parse a 1-of-2 multisig script', () => {
       const keys = Array.from({ length: 2 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys, network });
       const result = parseMultisigScript(p2ms.output!);
@@ -232,7 +232,7 @@ describe('PSBT Builder', () => {
 
     it('should parse a 3-of-3 multisig script', () => {
       const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 3, pubkeys, network });
       const result = parseMultisigScript(p2ms.output!);
@@ -245,7 +245,7 @@ describe('PSBT Builder', () => {
     it('should return isMultisig false for non-multisig script', () => {
       // P2WPKH script is not multisig
       const key = ECPair.makeRandom({ network });
-      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: key.publicKey, network });
+      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(key.publicKey), network });
       const result = parseMultisigScript(p2wpkh.output!);
 
       expect(result.isMultisig).toBe(false);
@@ -266,7 +266,7 @@ describe('PSBT Builder', () => {
 
     it('should extract correct pubkeys from script', () => {
       const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
       const result = parseMultisigScript(p2ms.output!);
@@ -402,7 +402,7 @@ describe('PSBT Builder', () => {
 
       // Add a dummy input/output so PSBT is valid
       const key = ECPair.makeRandom({ network });
-      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: key.publicKey, network });
+      const p2wpkh = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(key.publicKey), network });
       psbt.addInput({
         hash: Buffer.alloc(32, 0xaa),
         index: 0,
@@ -416,7 +416,7 @@ describe('PSBT Builder', () => {
     it('should throw when no partial signatures exist', () => {
       const psbt = new bitcoin.Psbt({ network });
       const keys = Array.from({ length: 2 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys, network });
       const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
@@ -435,9 +435,10 @@ describe('PSBT Builder', () => {
     it('should throw when witnessScript is not a valid multisig script', () => {
       const psbt = new bitcoin.Psbt({ network });
       const key = ECPair.makeRandom({ network });
+      const pubkey = Buffer.from(key.publicKey);
 
       // Use a P2PK script as witnessScript (valid for P2WSH but not multisig)
-      const p2pkScript = bitcoin.script.compile([key.publicKey, bitcoin.opcodes.OP_CHECKSIG]);
+      const p2pkScript = bitcoin.script.compile([pubkey, bitcoin.opcodes.OP_CHECKSIG]);
       const p2wsh = bitcoin.payments.p2wsh({ redeem: { output: p2pkScript, network }, network });
 
       psbt.addInput({
@@ -450,7 +451,7 @@ describe('PSBT Builder', () => {
 
       // Manually add a fake partial sig
       psbt.data.inputs[0].partialSig = [{
-        pubkey: key.publicKey,
+        pubkey,
         signature: Buffer.alloc(72, 0x30),
       }];
 
@@ -460,7 +461,7 @@ describe('PSBT Builder', () => {
     it('should throw when signature count does not match quorum', () => {
       const psbt = new bitcoin.Psbt({ network });
       const keys = Array.from({ length: 3 }, () => ECPair.makeRandom({ network }));
-      const pubkeys = keys.map(k => k.publicKey).sort((a, b) => a.compare(b));
+      const pubkeys = keys.map(k => Buffer.from(k.publicKey)).sort(Buffer.compare);
 
       const p2ms = bitcoin.payments.p2ms({ m: 2, pubkeys, network });
       const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
@@ -474,7 +475,6 @@ describe('PSBT Builder', () => {
       psbt.addOutput({ address: p2wsh.address!, value: 90000 });
 
       // Only 1 signature for a 2-of-3 (need 2)
-      const matchingKey = keys.find(k => k.publicKey.equals(pubkeys[0]))!;
       // Build a dummy DER sig
       const dummySig = Buffer.concat([
         Buffer.from('3045022100', 'hex'),
@@ -485,7 +485,7 @@ describe('PSBT Builder', () => {
       ]);
 
       psbt.data.inputs[0].partialSig = [{
-        pubkey: matchingKey.publicKey,
+        pubkey: pubkeys[0],
         signature: dummySig,
       }];
 

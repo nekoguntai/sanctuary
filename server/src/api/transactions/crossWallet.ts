@@ -6,7 +6,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { handleApiError, bigIntToNumber, bigIntToNumberOrZero } from '../../utils/errors';
 import { getCachedBlockHeight, type Network } from '../../services/bitcoin/blockchain';

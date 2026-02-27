@@ -6,7 +6,7 @@
  * when fingerprints match, or creating new devices otherwise.
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import type {
   ParsedDescriptor,
   ParsedDevice,

@@ -7,7 +7,7 @@
  * Run with: npx ts-node src/scripts/backfillTransactionIO.ts
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { getNodeClient } from '../services/bitcoin/nodeClient';
 import { createLogger } from '../utils/logger';
 

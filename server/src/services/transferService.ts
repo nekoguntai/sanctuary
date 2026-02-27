@@ -9,7 +9,7 @@
  * Owner can cancel at any point before final confirmation.
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import type { Prisma, OwnershipTransfer } from '@prisma/client';
 import { createLogger } from '../utils/logger';
 import { checkWalletOwnerAccess } from './wallet';

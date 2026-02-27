@@ -19,7 +19,7 @@
  * 3. In auth middleware, call isTokenRevoked(jti)
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { getNamespacedCache } from '../infrastructure/redis';
 import type { ICacheService } from './cache/cacheService';

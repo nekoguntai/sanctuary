@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import * as addressDerivation from '../../services/bitcoin/addressDerivation';
 import { createLogger } from '../../utils/logger';
 import { bigIntToNumberOrZero, validatePagination } from '../../utils/errors';

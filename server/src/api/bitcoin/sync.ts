@@ -7,7 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
 import * as blockchain from '../../services/bitcoin/blockchain';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 
 const router = Router();

@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';

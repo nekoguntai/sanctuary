@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
 import { validatePasswordStrength } from '../../utils/password';

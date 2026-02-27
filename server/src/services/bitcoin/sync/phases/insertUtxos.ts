@@ -5,7 +5,7 @@
  * Also logs the total value of new UTXOs found.
  */
 
-import prisma from '../../../../models/prisma';
+import { db as prisma } from '../../../../repositories/db';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext, UTXOCreateData } from '../types';

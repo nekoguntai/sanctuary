@@ -10,7 +10,7 @@
  * 6. Sending notifications
  */
 
-import prisma from '../../../../models/prisma';
+import { db as prisma } from '../../../../repositories/db';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import { getBlockTimestamp } from '../../utils/blockHeight';

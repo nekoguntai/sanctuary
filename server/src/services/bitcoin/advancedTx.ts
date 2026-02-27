@@ -14,7 +14,7 @@ import * as ecc from 'tiny-secp256k1';
 import { getNetwork, estimateTransactionSize, calculateFee, parseTransaction } from './utils';
 import { parseDescriptor } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { DEFAULT_DUST_THRESHOLD } from '../../constants';

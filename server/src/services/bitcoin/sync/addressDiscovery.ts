@@ -5,7 +5,7 @@
  * sufficient unused addresses at the end of both receive and change chains.
  */
 
-import prisma from '../../../models/prisma';
+import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
 import { walletLog } from '../../../websocket/notifications';
 import { ADDRESS_GAP_LIMIT } from '../../../constants';

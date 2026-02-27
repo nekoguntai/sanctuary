@@ -8,7 +8,7 @@
 
 import axios from 'axios';
 import config from '../../config';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 

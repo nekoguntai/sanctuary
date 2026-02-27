@@ -12,7 +12,7 @@ import { EventEmitter } from 'events';
 import { SocksClient, SocksClientOptions } from 'socks';
 import { z } from 'zod';
 import config, { getConfig } from '../../config';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 

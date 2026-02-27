@@ -16,7 +16,7 @@
  *   - Monthly orphaned record cleanup
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { auditService, AuditAction, AuditCategory } from './auditService';
 import { expireOldTransfers } from './transferService';

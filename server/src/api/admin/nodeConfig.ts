@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { testNodeConfig, resetNodeClient, NodeConfig } from '../../services/bitcoin/nodeClient';
 import { createLogger } from '../../utils/logger';

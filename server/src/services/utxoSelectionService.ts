@@ -9,7 +9,7 @@
  * - Smallest First: Use smallest UTXOs (consolidation mode)
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { INPUT_VBYTES, DEFAULT_INPUT_VBYTES, OUTPUT_VBYTES, OVERHEAD_VBYTES } from './bitcoin/constants';
 

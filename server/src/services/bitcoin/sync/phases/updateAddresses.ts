@@ -5,7 +5,7 @@
  * This enables proper gap limit tracking for BIP-44 wallets.
  */
 
-import prisma from '../../../../models/prisma';
+import { db as prisma } from '../../../../repositories/db';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';

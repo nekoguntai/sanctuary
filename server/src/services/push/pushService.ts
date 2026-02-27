@@ -6,7 +6,7 @@
  * Uses the same per-wallet notification settings as Telegram.
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { ProviderRegistry } from '../../providers';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';

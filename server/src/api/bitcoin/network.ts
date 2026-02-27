@@ -9,7 +9,7 @@ import * as blockchain from '../../services/bitcoin/blockchain';
 import { getElectrumClient } from '../../services/bitcoin/electrum';
 import { getElectrumPoolAsync } from '../../services/bitcoin/electrumPool';
 import * as mempool from '../../services/bitcoin/mempool';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 import { DEFAULT_CONFIRMATION_THRESHOLD, DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../constants';

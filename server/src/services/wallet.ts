@@ -4,7 +4,7 @@
  * Business logic for wallet management operations
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as bip39 from 'bip39';
 import * as bip32 from 'bip32';

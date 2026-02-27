@@ -5,7 +5,7 @@
  * transaction fields from the blockchain.
  */
 
-import prisma from '../../../models/prisma';
+import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
 import { DEFAULT_DEEP_CONFIRMATION_THRESHOLD } from '../../../constants';
 import { getNodeClient } from '../nodeClient';

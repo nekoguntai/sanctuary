@@ -4,7 +4,7 @@
  * Strategies and algorithms for selecting UTXOs for transactions.
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { estimateTransactionSize, calculateFee } from './utils';
 import { DEFAULT_CONFIRMATION_THRESHOLD } from '../../constants';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';

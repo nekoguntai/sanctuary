@@ -43,7 +43,7 @@
  */
 
 import { getConfig, type FeatureFlags, type FeatureFlagKey, type ExperimentalFeatures } from '../config';
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { getDistributedCache } from '../infrastructure';
 import { createLogger } from '../utils/logger';
 

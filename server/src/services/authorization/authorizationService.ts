@@ -28,7 +28,7 @@
  * ```
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, UnauthorizedError } from '../../errors';
 import { createNamespacedCache, type ICacheService } from '../cache';

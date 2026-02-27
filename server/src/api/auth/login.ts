@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import type { RequestHandler } from 'express';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../../utils/password';
 import { generateToken, generate2FAToken } from '../../utils/jwt';

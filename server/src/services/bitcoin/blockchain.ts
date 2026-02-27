@@ -8,7 +8,7 @@
 import { getNodeClient } from './nodeClient';
 import { getElectrumPool } from './electrumPool';
 import type { TransactionDetails, TransactionOutput, TransactionInput } from './electrum';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { validateAddress, parseTransaction, getNetwork } from './utils';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';

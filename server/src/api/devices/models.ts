@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 
 const router = Router();

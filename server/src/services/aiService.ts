@@ -18,7 +18,7 @@
  * 6. Backend returns to user (suggestions only - user must confirm)
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { createHash } from 'crypto';
 

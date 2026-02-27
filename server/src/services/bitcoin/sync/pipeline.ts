@@ -4,7 +4,7 @@
  * Orchestrates the execution of sync phases in sequence.
  */
 
-import prisma from '../../../models/prisma';
+import { db as prisma } from '../../../repositories/db';
 import { getNodeClient } from '../nodeClient';
 import { getElectrumPool } from '../electrumPool';
 import { createLogger } from '../../../utils/logger';

@@ -32,7 +32,7 @@
  * ```
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { ForbiddenError, NotFoundError } from '../../errors';
 import { mobilePermissionRepository } from '../../repositories';

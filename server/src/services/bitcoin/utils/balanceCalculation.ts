@@ -5,7 +5,7 @@
  * and correction of misclassified transactions.
  */
 
-import prisma from '../../../models/prisma';
+import { db as prisma } from '../../../repositories/db';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('BALANCE');

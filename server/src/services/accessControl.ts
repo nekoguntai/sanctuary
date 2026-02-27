@@ -5,7 +5,7 @@
  * Provides consistent authorization patterns across the application.
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { NotFoundError, ForbiddenError } from './errors';
 import { createLogger } from '../utils/logger';
 import { getNamespacedCache } from '../infrastructure/redis';

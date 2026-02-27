@@ -12,7 +12,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import dns from 'dns';
 import { promisify } from 'util';
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import {

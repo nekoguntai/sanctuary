@@ -10,7 +10,7 @@
  *   const isValid = await migrationService.verifyMigrations();
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
 import { execSync } from 'child_process';

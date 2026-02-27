@@ -38,7 +38,7 @@
 import { EventEmitter } from 'events';
 import { ElectrumClient } from './electrum';
 import { createLogger } from '../../utils/logger';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { CircuitBreaker, createCircuitBreaker, circuitBreakerRegistry } from '../circuitBreaker';
 import {
   updateElectrumPoolMetrics,

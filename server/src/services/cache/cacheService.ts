@@ -347,8 +347,8 @@ export async function warmCaches(config: CacheWarmConfig = {}): Promise<{
     warmingTasks.push(
       (async () => {
         try {
-          const { getFeatureFlagService } = await import('../featureFlags');
-          const flags = await getFeatureFlagService().getAllStatus();
+          const { featureFlagService } = await import('../featureFlagService');
+          const flags = await featureFlagService.getAllFlags();
           if (flags.length > 0) {
             warmed.push('featureFlags');
           } else {

@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import { requireWalletAccess } from '../../middleware/walletAccess';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { handleApiError } from '../../utils/errors';
 import { checkWalletAccess } from '../../services/wallet';

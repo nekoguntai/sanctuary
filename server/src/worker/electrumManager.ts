@@ -12,7 +12,7 @@
  * - Health monitoring and logging
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import {
   ElectrumClient,
   getElectrumClientForNetwork,

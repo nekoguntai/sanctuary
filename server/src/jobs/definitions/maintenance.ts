@@ -7,7 +7,7 @@
 
 import type { Job } from 'bullmq';
 import type { JobDefinition } from '../types';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { auditService, AuditCategory } from '../../services/auditService';
 import { expireOldTransfers } from '../../services/transferService';
 import { createLogger } from '../../utils/logger';

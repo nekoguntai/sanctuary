@@ -4,7 +4,7 @@
  * Fee and transaction size estimation utilities.
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { DEFAULT_DUST_THRESHOLD } from '../../constants';
 import { getErrorMessage } from '../../utils/errors';
 import { safeJsonParse, SystemSettingSchemas } from '../../utils/safeJson';

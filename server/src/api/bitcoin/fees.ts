@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import * as blockchain from '../../services/bitcoin/blockchain';
 import * as utils from '../../services/bitcoin/utils';
 import * as mempool from '../../services/bitcoin/mempool';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 
 const router = Router();

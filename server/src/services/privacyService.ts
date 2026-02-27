@@ -9,7 +9,7 @@
  * - Change output identification: Obvious change outputs reduce privacy
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { getPrivacyGrade } from '../utils/privacy';
 

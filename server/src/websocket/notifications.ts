@@ -8,7 +8,7 @@
 
 import { getWebSocketServer, WebSocketEvent } from './server';
 import { getElectrumClient } from '../services/bitcoin/electrum';
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { walletLogBuffer } from '../services/walletLogBuffer';
 

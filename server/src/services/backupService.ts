@@ -53,7 +53,7 @@
  *   - The restore process requires explicit confirmation
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
 import { version as appVersion } from '../../package.json';
 import { migrationService, getExpectedSchemaVersion } from './migrationService';

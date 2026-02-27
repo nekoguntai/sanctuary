@@ -5,7 +5,7 @@
  * Each user provides their own bot token and chat ID.
  */
 
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
 

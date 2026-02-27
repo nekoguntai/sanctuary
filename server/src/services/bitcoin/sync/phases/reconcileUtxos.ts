@@ -7,7 +7,7 @@
  * - Invalidates draft transactions using spent UTXOs
  */
 
-import prisma from '../../../../models/prisma';
+import { db as prisma } from '../../../../repositories/db';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';
 import type { SyncContext } from '../types';

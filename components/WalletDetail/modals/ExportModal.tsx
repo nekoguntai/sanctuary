@@ -25,7 +25,13 @@ import {
 import { Button } from '../../ui/Button';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import * as walletsApi from '../../../src/api/wallets';
-import { isMultisigType, getQuorumM, getQuorumN } from '../../../types';
+import { isMultisigType, getQuorumM, getQuorumN, type Quorum } from '../../../types';
+
+interface ExportDevice {
+  fingerprint: string;
+  derivationPath?: string;
+  xpub?: string;
+}
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('ExportModal');
@@ -39,21 +45,15 @@ interface ExportFormat {
   extension: string;
 }
 
-interface Device {
-  fingerprint: string;
-  derivationPath: string;
-  xpub: string;
-}
-
 interface ExportModalProps {
   walletId: string;
   walletName: string;
   walletType: string;
   scriptType?: string;
   descriptor?: string;
-  quorum?: number | null;
-  totalSigners?: number;
-  devices: Device[];
+  quorum?: Quorum | number | null;
+  totalSigners?: number | null;
+  devices: ExportDevice[];
   onClose: () => void;
   onError: (error: unknown, title: string) => void;
 }
@@ -66,7 +66,7 @@ function generateMultisigConfigText(
   quorum: number,
   totalSigners: number,
   scriptType: string,
-  devices: Device[]
+  devices: ExportDevice[]
 ): string {
   const lines: string[] = [];
 
@@ -82,7 +82,7 @@ function generateMultisigConfigText(
   lines.push('');
 
   if (devices.length > 0) {
-    const normalizedPath = devices[0].derivationPath.replace(/'/g, 'h');
+    const normalizedPath = (devices[0].derivationPath || '').replace(/'/g, 'h');
     lines.push(`Derivation: ${normalizedPath}`);
     lines.push('');
   }
@@ -92,7 +92,7 @@ function generateMultisigConfigText(
   );
 
   for (const device of sortedDevices) {
-    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub}`);
+    lines.push(`${device.fingerprint.toUpperCase()}: ${device.xpub || ''}`);
   }
 
   return lines.join('\n').trim();
@@ -166,7 +166,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       return generateMultisigConfigText(
         walletName,
         getQuorumM(quorum),
-        getQuorumN(quorum, totalSigners),
+        getQuorumN(quorum, totalSigners ?? undefined),
         scriptType || 'native_segwit',
         devices
       );
@@ -333,19 +333,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <textarea
                 readOnly
                 className="w-full h-32 p-3 text-xs font-mono surface-muted border border-sanctuary-200 dark:border-sanctuary-800 rounded-lg resize-none focus:outline-none"
-                value={descriptor}
+                value={descriptor || ''}
               />
               <Button
                 className="w-full mt-4"
-                variant={isCopied(descriptor) ? 'primary' : 'secondary'}
-                onClick={() => copy(descriptor)}
+                variant={isCopied(descriptor || '') ? 'primary' : 'secondary'}
+                onClick={() => copy(descriptor || '')}
               >
-                {isCopied(descriptor) ? (
+                {isCopied(descriptor || '') ? (
                   <Check className="w-4 h-4 mr-2" />
                 ) : (
                   <Copy className="w-4 h-4 mr-2" />
                 )}
-                {isCopied(descriptor) ? 'Copied!' : 'Copy to Clipboard'}
+                {isCopied(descriptor || '') ? 'Copied!' : 'Copy to Clipboard'}
               </Button>
             </div>
           )}

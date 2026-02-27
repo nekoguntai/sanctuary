@@ -64,6 +64,9 @@ const log = createLogger('BACKUP');
 // Current backup format version
 const BACKUP_FORMAT_VERSION = '1.0.0';
 
+/** Generic record shape for backup serialization (Prisma rows, JSON objects) */
+type BackupRecord = Record<string, unknown>;
+
 /**
  * Tables in dependency order for export/import.
  * Tables with no foreign keys come first, then tables that depend on them.
@@ -127,7 +130,7 @@ export interface BackupMeta {
  */
 export interface SanctuaryBackup {
   meta: BackupMeta;
-  data: Record<string, any[]>;
+  data: Record<string, BackupRecord[]>;
 }
 
 /**
@@ -208,7 +211,7 @@ export class BackupService {
 
     log.info('[BACKUP] Creating backup', { adminUser, includeCache });
 
-    const data: Record<string, any[]> = {};
+    const data: Record<string, BackupRecord[]> = {};
     const recordCounts: Record<string, number> = {};
 
     // Export all tables in dependency order
@@ -221,7 +224,7 @@ export class BackupService {
         // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
         const records = await prisma[table].findMany();
         // Convert BigInt values to strings for JSON serialization
-        data[table] = records.map((record: any) => this.serializeRecord(record));
+        data[table] = records.map((record: BackupRecord) => this.serializeRecord(record));
         recordCounts[table] = records.length;
         log.debug(`[BACKUP] Exported ${records.length} records from ${table}`);
       } catch (error) {
@@ -257,7 +260,7 @@ export class BackupService {
   /**
    * Validate a backup file before restore
    */
-  async validateBackup(backup: any): Promise<ValidationResult> {
+  async validateBackup(backup: unknown): Promise<ValidationResult> {
     const issues: string[] = [];
     const warnings: string[] = [];
 
@@ -265,7 +268,7 @@ export class BackupService {
     const currentSchemaVersion = await migrationService.getSchemaVersion();
 
     // Structure validation
-    if (!backup || typeof backup !== 'object') {
+    if (backup === null || backup === undefined || typeof backup !== 'object') {
       issues.push('Invalid backup format: not an object');
       return {
         valid: false,
@@ -275,11 +278,13 @@ export class BackupService {
       };
     }
 
-    if (!backup.meta) {
+    const backupObj = backup as BackupRecord;
+
+    if (!backupObj.meta) {
       issues.push('Missing meta section');
     }
 
-    if (!backup.data) {
+    if (!backupObj.data) {
       issues.push('Missing data section');
     }
 
@@ -292,7 +297,7 @@ export class BackupService {
       };
     }
 
-    const meta = backup.meta as BackupMeta;
+    const meta = backupObj.meta as BackupMeta;
 
     // Version validation
     if (!meta.version) {
@@ -317,7 +322,7 @@ export class BackupService {
     }
 
     // Data validation
-    const data = backup.data as Record<string, any[]>;
+    const data = backupObj.data as Record<string, BackupRecord[]>;
     const tables = Object.keys(data);
 
     // Check for required tables
@@ -334,7 +339,7 @@ export class BackupService {
       if (data.user.length === 0) {
         issues.push('Backup must contain at least one user');
       } else {
-        const hasAdmin = data.user.some((u: any) => u.isAdmin === true);
+        const hasAdmin = data.user.some((u: BackupRecord) => u.isAdmin === true);
         if (!hasAdmin) {
           issues.push('Backup must contain at least one admin user');
         }
@@ -343,7 +348,7 @@ export class BackupService {
 
     // Referential integrity checks
     if (data.user && data.device) {
-      const userIds = new Set(data.user.map((u: any) => u.id));
+      const userIds = new Set(data.user.map((u: BackupRecord) => u.id));
       for (const device of data.device) {
         if (!userIds.has(device.userId)) {
           issues.push(`Device ${device.id} references non-existent user ${device.userId}`);
@@ -352,8 +357,8 @@ export class BackupService {
     }
 
     if (data.wallet && data.walletUser && data.user) {
-      const walletIds = new Set(data.wallet.map((w: any) => w.id));
-      const userIds = new Set(data.user.map((u: any) => u.id));
+      const walletIds = new Set(data.wallet.map((w: BackupRecord) => w.id));
+      const userIds = new Set(data.user.map((u: BackupRecord) => u.id));
       for (const wu of data.walletUser) {
         if (!walletIds.has(wu.walletId)) {
           issues.push(`WalletUser references non-existent wallet ${wu.walletId}`);
@@ -467,10 +472,11 @@ export class BackupService {
             // Special handling for nodeConfig - check if encrypted passwords can be decrypted
             if (table === 'nodeConfig') {
               processedRecords = processedRecords.map((record) => {
-                if (record.password && isEncrypted(record.password)) {
+                const password = record.password;
+                if (typeof password === 'string' && isEncrypted(password)) {
                   try {
                     // Try to decrypt with current ENCRYPTION_KEY
-                    decrypt(record.password);
+                    decrypt(password);
                     // If successful, keep the password
                   } catch (error) {
                     // Can't decrypt - password was encrypted with different key
@@ -491,10 +497,11 @@ export class BackupService {
             // Special handling for user - check if encrypted 2FA secrets can be decrypted
             if (table === 'user') {
               processedRecords = processedRecords.map((record) => {
-                if (record.twoFactorSecret && isEncrypted(record.twoFactorSecret)) {
+                const secret = record.twoFactorSecret;
+                if (typeof secret === 'string' && isEncrypted(secret)) {
                   try {
                     // Try to decrypt with current ENCRYPTION_KEY/ENCRYPTION_SALT
-                    decrypt(record.twoFactorSecret);
+                    decrypt(secret);
                     // If successful, keep the 2FA secret
                   } catch (error) {
                     // Can't decrypt - 2FA secret was encrypted with different key/salt
@@ -560,13 +567,8 @@ export class BackupService {
   /**
    * Serialize a record for JSON export (converts BigInt to string)
    */
-  private serializeRecord(record: any): any {
-    // Handle arrays - serialize each element but preserve array structure
-    if (Array.isArray(record)) {
-      return record.map((item) => this.serializeValue(item));
-    }
-
-    const serialized: any = {};
+  private serializeRecord(record: BackupRecord): BackupRecord {
+    const serialized: BackupRecord = {};
 
     for (const key of Object.keys(record)) {
       serialized[key] = this.serializeValue(record[key]);
@@ -578,7 +580,7 @@ export class BackupService {
   /**
    * Serialize a single value for JSON export
    */
-  private serializeValue(value: any): any {
+  private serializeValue(value: unknown): unknown {
     if (value === null || value === undefined) {
       return value;
     }
@@ -591,11 +593,11 @@ export class BackupService {
     }
     if (Array.isArray(value)) {
       // Preserve arrays, serialize each element
-      return value.map((item) => this.serializeValue(item));
+      return value.map((item: unknown) => this.serializeValue(item));
     }
     if (typeof value === 'object') {
       // Recursively handle nested objects
-      return this.serializeRecord(value);
+      return this.serializeRecord(value as BackupRecord);
     }
     return value;
   }
@@ -604,8 +606,8 @@ export class BackupService {
    * Process a record to convert string dates back to Date objects
    * and BigInt markers back to BigInt
    */
-  private processRecord(record: any): any {
-    const processed = { ...record };
+  private processRecord(record: BackupRecord): BackupRecord {
+    const processed: BackupRecord = { ...record };
 
     for (const key of Object.keys(processed)) {
       processed[key] = this.processValue(processed[key]);
@@ -617,7 +619,7 @@ export class BackupService {
   /**
    * Process a single value during restore
    */
-  private processValue(value: any): any {
+  private processValue(value: unknown): unknown {
     if (value === null || value === undefined) {
       return value;
     }
@@ -636,24 +638,25 @@ export class BackupService {
 
     if (Array.isArray(value)) {
       // Process each array element
-      return value.map((item) => this.processValue(item));
+      return value.map((item: unknown) => this.processValue(item));
     }
 
     if (typeof value === 'object') {
+      const obj = value as BackupRecord;
       // Check if this is a legacy array serialized as object with numeric keys
       // e.g., {0: "usb", 1: "bluetooth"} should become ["usb", "bluetooth"]
-      const keys = Object.keys(value);
+      const keys = Object.keys(obj);
       const isNumericObject = keys.length > 0 && keys.every((k) => /^\d+$/.test(k));
       if (isNumericObject) {
         // Convert back to array, sorted by numeric key
         const sortedKeys = keys.map(Number).sort((a, b) => a - b);
-        return sortedKeys.map((k) => this.processValue(value[k]));
+        return sortedKeys.map((k) => this.processValue(obj[k]));
       }
 
       // Regular object - process recursively
-      const processed: any = {};
+      const processed: BackupRecord = {};
       for (const k of keys) {
-        processed[k] = this.processValue(value[k]);
+        processed[k] = this.processValue(obj[k]);
       }
       return processed;
     }

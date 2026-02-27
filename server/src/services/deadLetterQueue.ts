@@ -285,8 +285,8 @@ class DeadLetterQueue {
           ENTRY_TTL_MS / 1000
         );
       }
-    } catch {
-      // Silently ignore Redis errors - memory is the primary store
+    } catch (error) {
+      log.debug('Redis DLQ persist failed (non-critical)', { error: getErrorMessage(error) });
     }
   }
 
@@ -299,8 +299,8 @@ class DeadLetterQueue {
       if (cache) {
         await cache.delete(`${REDIS_KEY_PREFIX}${id}`);
       }
-    } catch {
-      // Silently ignore Redis errors
+    } catch (error) {
+      log.debug('Redis DLQ delete failed (non-critical)', { error: getErrorMessage(error) });
     }
   }
 
@@ -316,8 +316,8 @@ class DeadLetterQueue {
       // For full implementation, we'd need direct Redis access
       // For now, the in-memory store is primary and Redis is backup
       log.debug('Redis DLQ restoration skipped - using in-memory primary');
-    } catch {
-      // Silently ignore
+    } catch (error) {
+      log.debug('Redis DLQ load failed (non-critical)', { error: getErrorMessage(error) });
     }
   }
 }

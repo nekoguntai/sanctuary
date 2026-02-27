@@ -39,6 +39,7 @@ import { EventEmitter } from 'events';
 import { ElectrumClient } from './electrum';
 import { createLogger } from '../../utils/logger';
 import { db as prisma } from '../../repositories/db';
+import { getErrorMessage } from '../../utils/errors';
 import { CircuitBreaker, createCircuitBreaker, circuitBreakerRegistry } from '../circuitBreaker';
 import {
   updateElectrumPoolMetrics,
@@ -420,7 +421,7 @@ export class ElectrumPool extends EventEmitter {
           log.info('Subscription connection was disconnected, will be reassigned');
         }
       } catch (error) {
-        log.warn(`Error disconnecting connection ${connId}`, { error: String(error) });
+        log.warn(`Error disconnecting connection ${connId}`, { error: getErrorMessage(error) });
       }
     }
 
@@ -552,7 +553,7 @@ export class ElectrumPool extends EventEmitter {
         }
       }
     } catch (error) {
-      log.error('Failed to reload servers from database', { error: String(error) });
+      log.error('Failed to reload servers from database', { error: getErrorMessage(error) });
     }
   }
 
@@ -644,7 +645,7 @@ export class ElectrumPool extends EventEmitter {
     for (let i = 0; i < effectiveMin; i++) {
       initPromises.push(
         this.createConnection().then(() => {}).catch((err) => {
-          log.error(`Failed to create initial connection ${i + 1}`, { error: String(err) });
+          log.error(`Failed to create initial connection ${i + 1}`, { error: getErrorMessage(err) });
         })
       );
     }
@@ -708,7 +709,7 @@ export class ElectrumPool extends EventEmitter {
         conn.client.disconnect();
         conn.state = 'closed';
       } catch (error) {
-        log.warn(`Error closing connection ${id}`, { error: String(error) });
+        log.warn(`Error closing connection ${id}`, { error: getErrorMessage(error) });
       }
     }
     this.connections.clear();
@@ -770,7 +771,7 @@ export class ElectrumPool extends EventEmitter {
         const newConn = await this.createConnection();
         return this.activateConnection(newConn, options.purpose, startTime);
       } catch (error) {
-        log.warn('Failed to create new connection', { error: String(error) });
+        log.warn('Failed to create new connection', { error: getErrorMessage(error) });
         // Fall through to queue
       }
     }
@@ -1314,7 +1315,7 @@ export class ElectrumPool extends EventEmitter {
 
     // Set up error handling
     client.on('error', (error) => {
-      log.error(`Connection ${id} error (${conn.serverLabel})`, { error: String(error) });
+      log.error(`Connection ${id} error (${conn.serverLabel})`, { error: getErrorMessage(error) });
       this.handleConnectionError(conn);
     });
 
@@ -1435,7 +1436,7 @@ export class ElectrumPool extends EventEmitter {
           const latencyMs = Date.now() - startTime;
           this.stats.healthCheckFailures++;
           electrumPoolHealthCheckFailures.inc({ network: this.network });
-          const errorStr = String(error);
+          const errorStr = getErrorMessage(error);
           log.warn(`Health check failed for connection ${id} (${conn.serverLabel})`, { error: errorStr });
 
           // Track failure for this server
@@ -1585,7 +1586,7 @@ export class ElectrumPool extends EventEmitter {
             this.updateServerHealthInDb(server.id, true, 0);
           }
         } catch (error) {
-          const errorStr = String(error);
+          const errorStr = getErrorMessage(error);
           log.warn(`Failed to create connection to ${server.label}`, { error: errorStr });
 
           // Mark server as unhealthy since we can't establish any connection
@@ -1622,7 +1623,7 @@ export class ElectrumPool extends EventEmitter {
       // Ensure minimum connections (at least 1 per server)
       if (this.connections.size < this.getEffectiveMinConnections() && !this.isShuttingDown) {
         this.createConnection().catch((err) => {
-          log.error('Failed to create replacement connection', { error: String(err) });
+          log.error('Failed to create replacement connection', { error: getErrorMessage(err) });
         });
       }
     }
@@ -1663,7 +1664,7 @@ export class ElectrumPool extends EventEmitter {
         return;
       } catch (error) {
         log.warn(`Reconnect attempt ${attempt} failed for ${conn.id}`, {
-          error: String(error),
+          error: getErrorMessage(error),
         });
 
         if (attempt < this.config.maxReconnectAttempts) {
@@ -1805,7 +1806,7 @@ async function loadPoolConfigFromDatabase(network: NetworkType = 'mainnet'): Pro
       };
     }
   } catch (error) {
-    log.warn('Failed to load pool config from database, using defaults', { error: String(error), network });
+    log.warn('Failed to load pool config from database, using defaults', { error: getErrorMessage(error), network });
   }
 
   return { config: {}, servers: [], proxy: null };

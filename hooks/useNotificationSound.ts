@@ -4,6 +4,12 @@ import type { SoundType, EventSoundConfig } from '../types';
 import { createLogger } from '../utils/logger';
 import { SOUND_PRESETS } from './soundPresets';
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 const log = createLogger('NotificationSound');
 
 // Event types that can have custom sounds
@@ -52,7 +58,7 @@ export function useNotificationSound() {
   // Get or create AudioContext (lazy initialization)
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext!)();
     }
     return audioContextRef.current;
   }, []);

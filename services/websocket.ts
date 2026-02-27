@@ -26,7 +26,7 @@ export type WebSocketEventType =
 export interface WebSocketEvent {
   type: string;
   event?: WebSocketEventType;
-  data: any;
+  data: unknown;
   channel?: string;
   timestamp?: number;
 }
@@ -172,6 +172,9 @@ export class WebSocketClient {
    * Handle incoming message
    */
   private handleMessage(message: WebSocketEvent) {
+    // Narrow data to a record for safe property access in control messages
+    const data = message.data as Record<string, unknown> | undefined;
+
     // Handle special message types
     switch (message.type) {
       case 'connected':
@@ -179,30 +182,34 @@ export class WebSocketClient {
         break;
 
       case 'authenticated':
-        log.debug('Authenticated', { success: message.data?.success });
+        log.debug('Authenticated', { success: data?.success });
         // Now that auth is confirmed, resubscribe to channels
         // This fixes the race condition where subscriptions were rejected
         // because they arrived before auth completed
-        if (message.data?.success) {
+        if (data?.success) {
           this.resubscribe();
         }
         break;
 
       case 'subscribed':
-        log.debug('Subscribed', { channel: message.data?.channel });
+        log.debug('Subscribed', { channel: data?.channel });
         break;
 
-      case 'subscribed_batch':
-        log.debug('Batch subscribed', { count: message.data?.subscribed?.length });
+      case 'subscribed_batch': {
+        const subscribed = data?.subscribed;
+        log.debug('Batch subscribed', { count: Array.isArray(subscribed) ? subscribed.length : 0 });
         break;
+      }
 
       case 'unsubscribed':
-        log.debug('Unsubscribed', { channel: message.data?.channel });
+        log.debug('Unsubscribed', { channel: data?.channel });
         break;
 
-      case 'unsubscribed_batch':
-        log.debug('Batch unsubscribed', { count: message.data?.unsubscribed?.length });
+      case 'unsubscribed_batch': {
+        const unsubscribed = data?.unsubscribed;
+        log.debug('Batch unsubscribed', { count: Array.isArray(unsubscribed) ? unsubscribed.length : 0 });
         break;
+      }
 
       case 'event':
         this.dispatchEvent(message);

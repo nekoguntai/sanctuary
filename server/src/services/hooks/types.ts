@@ -153,6 +153,59 @@ export const Operations = {
 
 export type OperationName = (typeof Operations)[keyof typeof Operations];
 
+// ========================================
+// Hook Payload Interfaces
+// ========================================
+
+export interface WalletCreatePayload {
+  name: string;
+  type: string;
+}
+
+export interface WalletDeletePayload {
+  walletId: string;
+}
+
+export interface WalletSharePayload {
+  walletId: string;
+  targetUserId: string;
+  role: string;
+}
+
+export interface DeviceRegisterPayload {
+  name: string;
+  type: string;
+}
+
+export interface DeviceDeletePayload {
+  deviceId: string;
+}
+
+export interface TransactionBroadcastPayload {
+  walletId: string;
+}
+
+export interface TransactionSignPayload {
+  walletId: string;
+}
+
+export interface AuthLoginPayload {
+  username: string;
+}
+
+export interface UserCreatePayload {
+  username: string;
+  isAdmin?: boolean;
+}
+
+export interface UserDeletePayload {
+  userId: string;
+}
+
+export interface AddressGeneratePayload {
+  walletId: string;
+}
+
 /**
  * Registry configuration
  */

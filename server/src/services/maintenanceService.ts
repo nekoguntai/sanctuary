@@ -18,6 +18,7 @@
 
 import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
 import { auditService, AuditAction, AuditCategory } from './auditService';
 import { expireOldTransfers } from './transferService';
 import { exec } from 'child_process';
@@ -109,35 +110,35 @@ class MaintenanceService {
     // Run initial cleanup after a short delay
     this.initialTimer = setTimeout(() => {
       this.runAllCleanups().catch((err) => {
-        log.error('Initial cleanup failed', { error: String(err) });
+        log.error('Initial cleanup failed', { error: getErrorMessage(err) });
       });
     }, this.config.initialDelayMs);
 
     // Schedule daily cleanup tasks
     this.dailyTimer = setInterval(() => {
       this.runDailyCleanups().catch((err) => {
-        log.error('Daily cleanup failed', { error: String(err) });
+        log.error('Daily cleanup failed', { error: getErrorMessage(err) });
       });
     }, this.config.dailyCleanupInterval);
 
     // Schedule hourly cleanup tasks
     this.hourlyTimer = setInterval(() => {
       this.runHourlyCleanups().catch((err) => {
-        log.error('Hourly cleanup failed', { error: String(err) });
+        log.error('Hourly cleanup failed', { error: getErrorMessage(err) });
       });
     }, this.config.hourlyCleanupInterval);
 
     // Schedule weekly maintenance tasks
     this.weeklyTimer = setInterval(() => {
       this.checkAndRunWeeklyMaintenance().catch((err) => {
-        log.error('Weekly maintenance check failed', { error: String(err) });
+        log.error('Weekly maintenance check failed', { error: getErrorMessage(err) });
       });
     }, this.config.dailyCleanupInterval); // Check daily, run weekly
 
     // Schedule monthly maintenance tasks
     this.monthlyTimer = setInterval(() => {
       this.checkAndRunMonthlyMaintenance().catch((err) => {
-        log.error('Monthly maintenance check failed', { error: String(err) });
+        log.error('Monthly maintenance check failed', { error: getErrorMessage(err) });
       });
     }, this.config.dailyCleanupInterval); // Check daily, run monthly
   }
@@ -204,7 +205,7 @@ class MaintenanceService {
 
     for (const result of results) {
       if (result.status === 'rejected') {
-        log.error('Daily cleanup task failed', { error: String(result.reason) });
+        log.error('Daily cleanup task failed', { error: getErrorMessage(result.reason) });
       }
     }
   }
@@ -222,7 +223,7 @@ class MaintenanceService {
 
     for (const result of results) {
       if (result.status === 'rejected') {
-        log.error('Hourly cleanup task failed', { error: String(result.reason) });
+        log.error('Hourly cleanup task failed', { error: getErrorMessage(result.reason) });
       }
     }
   }
@@ -246,7 +247,7 @@ class MaintenanceService {
 
       return deleted;
     } catch (error) {
-      log.error('Audit log cleanup failed', { error: String(error) });
+      log.error('Audit log cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -274,7 +275,7 @@ class MaintenanceService {
 
       return result.count;
     } catch (error) {
-      log.error('Price data cleanup failed', { error: String(error) });
+      log.error('Price data cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -302,7 +303,7 @@ class MaintenanceService {
 
       return result.count;
     } catch (error) {
-      log.error('Fee estimate cleanup failed', { error: String(error) });
+      log.error('Fee estimate cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -337,7 +338,7 @@ class MaintenanceService {
 
       return result.count;
     } catch (error) {
-      log.error('Expired draft cleanup failed', { error: String(error) });
+      log.error('Expired draft cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -366,7 +367,7 @@ class MaintenanceService {
 
       return count;
     } catch (error) {
-      log.error('Expired ownership transfers cleanup failed', { error: String(error) });
+      log.error('Expired ownership transfers cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -392,7 +393,7 @@ class MaintenanceService {
 
       return result.count;
     } catch (error) {
-      log.error('Expired refresh token cleanup failed', { error: String(error) });
+      log.error('Expired refresh token cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -417,7 +418,7 @@ class MaintenanceService {
 
       return result;
     } catch (error) {
-      log.error('Orphaned draft cleanup failed', { error: String(error) });
+      log.error('Orphaned draft cleanup failed', { error: getErrorMessage(error) });
       throw error;
     }
   }
@@ -495,13 +496,13 @@ class MaintenanceService {
           // Log but don't fail - volume might not exist yet
           log.debug('Could not check disk usage for volume', {
             volume: volumeName,
-            error: String(volumeError),
+            error: getErrorMessage(volumeError),
           });
         }
       }
     } catch (error) {
       // Don't throw - disk monitoring is optional and shouldn't break maintenance
-      log.warn('Disk usage check failed', { error: String(error) });
+      log.warn('Disk usage check failed', { error: getErrorMessage(error) });
     }
   }
 
@@ -569,14 +570,14 @@ class MaintenanceService {
         success: true,
       });
     } catch (error) {
-      log.error('Weekly database maintenance failed', { error: String(error) });
+      log.error('Weekly database maintenance failed', { error: getErrorMessage(error) });
 
       // Log failure to audit
       await auditService.log({
         username: 'system',
         action: 'maintenance.weekly_db_maintenance',
         category: AuditCategory.SYSTEM,
-        details: { error: String(error) },
+        details: { error: getErrorMessage(error) },
         success: false,
       });
 
@@ -638,14 +639,14 @@ class MaintenanceService {
         success: true,
       });
     } catch (error) {
-      log.error('Monthly stale record cleanup failed', { error: String(error) });
+      log.error('Monthly stale record cleanup failed', { error: getErrorMessage(error) });
 
       // Log failure to audit
       await auditService.log({
         username: 'system',
         action: 'maintenance.monthly_stale_cleanup',
         category: AuditCategory.SYSTEM,
-        details: { error: String(error) },
+        details: { error: getErrorMessage(error) },
         success: false,
       });
 

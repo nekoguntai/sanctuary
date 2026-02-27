@@ -13,6 +13,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
+import { isServiceError, toHttpError } from '../services/errors';
 import {
   initiateTransfer,
   acceptTransfer,
@@ -30,6 +31,21 @@ import {
 } from '../services/transferService';
 
 const log = createLogger('TRANSFERS');
+
+/**
+ * Handle errors from transfer service operations.
+ * Typed service errors map directly to HTTP status codes;
+ * unknown errors fall through as 500.
+ */
+function handleTransferError(error: unknown, res: Response, defaultMessage: string): void {
+  if (isServiceError(error)) {
+    const { status, body } = toHttpError(error);
+    res.status(status).json(body);
+    return;
+  }
+  log.error(defaultMessage, { error: getErrorMessage(error) });
+  res.status(500).json({ error: 'Internal Server Error', message: defaultMessage });
+}
 
 const router = Router();
 
@@ -85,24 +101,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(transfer);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to initiate transfer');
-
-    // Determine appropriate status code
-    if (message.includes('not found')) {
-      return res.status(404).json({ error: 'Not Found', message });
-    }
-    if (message.includes('not the owner') || message.includes('Cannot transfer')) {
-      return res.status(403).json({ error: 'Forbidden', message });
-    }
-    if (message.includes('already has a pending') || message.includes('already an owner')) {
-      return res.status(409).json({ error: 'Conflict', message });
-    }
-
-    log.error('Initiate transfer error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to initiate transfer',
-    });
+    handleTransferError(error, res, 'Failed to initiate transfer');
   }
 });
 
@@ -224,23 +223,7 @@ router.post('/:id/accept', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to accept transfer');
-
-    if (message.includes('not found')) {
-      return res.status(404).json({ error: 'Not Found', message });
-    }
-    if (message.includes('Only the recipient')) {
-      return res.status(403).json({ error: 'Forbidden', message });
-    }
-    if (message.includes('cannot be accepted') || message.includes('expired')) {
-      return res.status(400).json({ error: 'Bad Request', message });
-    }
-
-    log.error('Accept transfer error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to accept transfer',
-    });
+    handleTransferError(error, res, 'Failed to accept transfer');
   }
 });
 
@@ -260,23 +243,7 @@ router.post('/:id/decline', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to decline transfer');
-
-    if (message.includes('not found')) {
-      return res.status(404).json({ error: 'Not Found', message });
-    }
-    if (message.includes('Only the recipient')) {
-      return res.status(403).json({ error: 'Forbidden', message });
-    }
-    if (message.includes('cannot be declined')) {
-      return res.status(400).json({ error: 'Bad Request', message });
-    }
-
-    log.error('Decline transfer error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to decline transfer',
-    });
+    handleTransferError(error, res, 'Failed to decline transfer');
   }
 });
 
@@ -296,23 +263,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to cancel transfer');
-
-    if (message.includes('not found')) {
-      return res.status(404).json({ error: 'Not Found', message });
-    }
-    if (message.includes('Only the transfer initiator')) {
-      return res.status(403).json({ error: 'Forbidden', message });
-    }
-    if (message.includes('cannot be cancelled')) {
-      return res.status(400).json({ error: 'Bad Request', message });
-    }
-
-    log.error('Cancel transfer error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to cancel transfer',
-    });
+    handleTransferError(error, res, 'Failed to cancel transfer');
   }
 });
 
@@ -337,26 +288,7 @@ router.post('/:id/confirm', async (req: Request, res: Response) => {
 
     res.json(transfer);
   } catch (error) {
-    const message = getErrorMessage(error, 'Failed to confirm transfer');
-
-    if (message.includes('not found')) {
-      return res.status(404).json({ error: 'Not Found', message });
-    }
-    if (message.includes('Only the transfer initiator') || message.includes('no longer own')) {
-      return res.status(403).json({ error: 'Forbidden', message });
-    }
-    if (message.includes('cannot be confirmed') || message.includes('expired')) {
-      return res.status(400).json({ error: 'Bad Request', message });
-    }
-    if (message.includes('Transfer failed')) {
-      return res.status(500).json({ error: 'Transfer Failed', message });
-    }
-
-    log.error('Confirm transfer error', { error });
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to confirm transfer',
-    });
+    handleTransferError(error, res, 'Failed to confirm transfer');
   }
 });
 

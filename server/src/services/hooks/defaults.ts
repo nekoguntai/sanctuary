@@ -7,7 +7,14 @@
  */
 
 import { hookRegistry } from './registry';
-import { Operations, HookPriorities } from './types';
+import {
+  Operations, HookPriorities,
+  type WalletCreatePayload, type WalletDeletePayload, type WalletSharePayload,
+  type DeviceRegisterPayload, type DeviceDeletePayload,
+  type TransactionBroadcastPayload, type TransactionSignPayload,
+  type AuthLoginPayload, type UserCreatePayload, type UserDeletePayload,
+  type AddressGeneratePayload,
+} from './types';
 import { createLogger } from '../../utils/logger';
 
 const auditLog = createLogger('AUDIT');
@@ -17,39 +24,39 @@ const auditLog = createLogger('AUDIT');
  */
 export function registerAuditHooks(): void {
   // Wallet operations - after hooks for audit logging
-  hookRegistry.after(
+  hookRegistry.after<WalletCreatePayload>(
     Operations.WALLET_CREATE,
     (ctx) => {
       auditLog.info('Wallet created', {
         userId: ctx.userId,
-        walletName: (ctx.payload as any)?.name,
-        walletType: (ctx.payload as any)?.type,
+        walletName: ctx.payload.name,
+        walletType: ctx.payload.type,
         success: ctx.success,
       });
     },
     { priority: HookPriorities.HIGH, description: 'Audit log wallet creation' }
   );
 
-  hookRegistry.after(
+  hookRegistry.after<WalletDeletePayload>(
     Operations.WALLET_DELETE,
     (ctx) => {
       auditLog.info('Wallet deleted', {
         userId: ctx.userId,
-        walletId: (ctx.payload as any)?.walletId,
+        walletId: ctx.payload.walletId,
         success: ctx.success,
       });
     },
     { priority: HookPriorities.HIGH, description: 'Audit log wallet deletion' }
   );
 
-  hookRegistry.after(
+  hookRegistry.after<WalletSharePayload>(
     Operations.WALLET_SHARE,
     (ctx) => {
       auditLog.info('Wallet shared', {
         userId: ctx.userId,
-        walletId: (ctx.payload as any)?.walletId,
-        sharedWith: (ctx.payload as any)?.targetUserId,
-        role: (ctx.payload as any)?.role,
+        walletId: ctx.payload.walletId,
+        sharedWith: ctx.payload.targetUserId,
+        role: ctx.payload.role,
         success: ctx.success,
       });
     },
@@ -57,25 +64,25 @@ export function registerAuditHooks(): void {
   );
 
   // Device operations
-  hookRegistry.after(
+  hookRegistry.after<DeviceRegisterPayload>(
     Operations.DEVICE_REGISTER,
     (ctx) => {
       auditLog.info('Device registered', {
         userId: ctx.userId,
-        deviceName: (ctx.payload as any)?.name,
-        deviceType: (ctx.payload as any)?.type,
+        deviceName: ctx.payload.name,
+        deviceType: ctx.payload.type,
         success: ctx.success,
       });
     },
     { priority: HookPriorities.HIGH, description: 'Audit log device registration' }
   );
 
-  hookRegistry.after(
+  hookRegistry.after<DeviceDeletePayload>(
     Operations.DEVICE_DELETE,
     (ctx) => {
       auditLog.info('Device deleted', {
         userId: ctx.userId,
-        deviceId: (ctx.payload as any)?.deviceId,
+        deviceId: ctx.payload.deviceId,
         success: ctx.success,
       });
     },
@@ -83,12 +90,12 @@ export function registerAuditHooks(): void {
   );
 
   // Transaction operations
-  hookRegistry.after(
+  hookRegistry.after<TransactionBroadcastPayload>(
     Operations.TRANSACTION_BROADCAST,
     (ctx) => {
       auditLog.info('Transaction broadcasted', {
         userId: ctx.userId,
-        walletId: (ctx.payload as any)?.walletId,
+        walletId: ctx.payload.walletId,
         txid: ctx.result,
         success: ctx.success,
         error: ctx.error?.message,
@@ -97,12 +104,12 @@ export function registerAuditHooks(): void {
     { priority: HookPriorities.HIGH, description: 'Audit log transaction broadcast' }
   );
 
-  hookRegistry.after(
+  hookRegistry.after<TransactionSignPayload>(
     Operations.TRANSACTION_SIGN,
     (ctx) => {
       auditLog.info('Transaction signed', {
         userId: ctx.userId,
-        walletId: (ctx.payload as any)?.walletId,
+        walletId: ctx.payload.walletId,
         success: ctx.success,
       });
     },
@@ -110,12 +117,13 @@ export function registerAuditHooks(): void {
   );
 
   // Auth operations
-  hookRegistry.after(
+  hookRegistry.after<AuthLoginPayload>(
     Operations.AUTH_LOGIN,
     (ctx) => {
+      const result = ctx.result as { userId?: string } | undefined;
       auditLog.info('User login', {
-        userId: ctx.result ? (ctx.result as any).userId : undefined,
-        username: (ctx.payload as any)?.username,
+        userId: result?.userId,
+        username: ctx.payload.username,
         success: ctx.success,
         error: ctx.error ? 'Authentication failed' : undefined,
       });
@@ -135,25 +143,25 @@ export function registerAuditHooks(): void {
   );
 
   // User management
-  hookRegistry.after(
+  hookRegistry.after<UserCreatePayload>(
     Operations.USER_CREATE,
     (ctx) => {
       auditLog.info('User created', {
         createdBy: ctx.userId,
-        newUsername: (ctx.payload as any)?.username,
-        isAdmin: (ctx.payload as any)?.isAdmin,
+        newUsername: ctx.payload.username,
+        isAdmin: ctx.payload.isAdmin,
         success: ctx.success,
       });
     },
     { priority: HookPriorities.HIGH, description: 'Audit log user creation' }
   );
 
-  hookRegistry.after(
+  hookRegistry.after<UserDeletePayload>(
     Operations.USER_DELETE,
     (ctx) => {
       auditLog.warn('User deleted', {
         deletedBy: ctx.userId,
-        deletedUserId: (ctx.payload as any)?.userId,
+        deletedUserId: ctx.payload.userId,
         success: ctx.success,
       });
     },
@@ -161,12 +169,12 @@ export function registerAuditHooks(): void {
   );
 
   // Address operations
-  hookRegistry.after(
+  hookRegistry.after<AddressGeneratePayload>(
     Operations.ADDRESS_GENERATE,
     (ctx) => {
       auditLog.debug('Address generated', {
         userId: ctx.userId,
-        walletId: (ctx.payload as any)?.walletId,
+        walletId: ctx.payload.walletId,
         address: ctx.result,
         success: ctx.success,
       });

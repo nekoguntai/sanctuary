@@ -20,6 +20,8 @@
 
 import { db as prisma } from '../repositories/db';
 import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errors';
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 import { createHash } from 'crypto';
 
 const log = createLogger('AI');
@@ -170,20 +172,18 @@ async function getAIConfig(): Promise<AIConfig> {
 
     for (const setting of settings) {
       const key = setting.key;
-      try {
-        const value = JSON.parse(setting.value);
-        if (key === 'aiEnabled') config.enabled = value;
-        else if (key === 'aiEndpoint') config.endpoint = value;
-        else if (key === 'aiModel') config.model = value;
-      } catch {
-        if (key === 'aiEndpoint') config.endpoint = setting.value;
-        else if (key === 'aiModel') config.model = setting.value;
+      if (key === 'aiEnabled') {
+        config.enabled = safeJsonParse(setting.value, SystemSettingSchemas.boolean, false, 'aiEnabled');
+      } else if (key === 'aiEndpoint') {
+        config.endpoint = safeJsonParse(setting.value, SystemSettingSchemas.string, '', 'aiEndpoint');
+      } else if (key === 'aiModel') {
+        config.model = safeJsonParse(setting.value, SystemSettingSchemas.string, '', 'aiModel');
       }
     }
 
     return config;
   } catch (error) {
-    log.error('Failed to get AI config', { error: String(error) });
+    log.error('Failed to get AI config', { error: getErrorMessage(error) });
     return {
       enabled: false,
       endpoint: '',
@@ -247,7 +247,7 @@ async function syncConfigToContainer(config: AIConfig, force = false): Promise<b
 
     return success;
   } catch (error) {
-    log.error('Failed to sync config to AI container', { error: String(error) });
+    log.error('Failed to sync config to AI container', { error: getErrorMessage(error) });
     configSyncState.syncSuccess = false;
     return false;
   }
@@ -423,7 +423,7 @@ export async function suggestTransactionLabel(
 
     return result.suggestion || null;
   } catch (error) {
-    log.error('AI label suggestion error', { error: String(error) });
+    log.error('AI label suggestion error', { error: getErrorMessage(error) });
     return null;
   }
 }
@@ -476,7 +476,7 @@ export async function executeNaturalQuery(
 
     return result.query || null;
   } catch (error) {
-    log.error('AI query error', { error: String(error) });
+    log.error('AI query error', { error: getErrorMessage(error) });
     return null;
   }
 }
@@ -511,7 +511,7 @@ export async function detectOllama(): Promise<{
 
     return result;
   } catch (error) {
-    log.error('Ollama detection error', { error: String(error) });
+    log.error('Ollama detection error', { error: getErrorMessage(error) });
     return { found: false, message: 'AI container not available' };
   }
 }
@@ -554,7 +554,7 @@ export async function listModels(): Promise<{
 
     return result;
   } catch (error) {
-    log.error('List models error', { error: String(error) });
+    log.error('List models error', { error: getErrorMessage(error) });
     return { models: [], error: 'Cannot connect to AI container' };
   }
 }
@@ -601,7 +601,7 @@ export async function pullModel(model: string): Promise<{
 
     return result;
   } catch (error) {
-    log.error('Pull model error', { error: String(error) });
+    log.error('Pull model error', { error: getErrorMessage(error) });
     return { success: false, error: 'Pull operation failed' };
   }
 }
@@ -640,7 +640,7 @@ export async function deleteModel(model: string): Promise<{
     const json = await response.json() as { model?: string };
     return { success: true, model: json.model };
   } catch (error) {
-    log.error('Delete model error', { error: String(error) });
+    log.error('Delete model error', { error: getErrorMessage(error) });
     return { success: false, error: 'Delete operation failed' };
   }
 }

@@ -2,7 +2,9 @@ import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { z } from 'zod';
 import { encrypt, decryptIfEncrypted } from '../utils/encryption';
+import { safeJsonParse } from '../utils/safeJson';
 
 // Configure TOTP settings
 authenticator.options = {
@@ -12,6 +14,8 @@ authenticator.options = {
 const ISSUER = 'Sanctuary';
 const BACKUP_CODE_COUNT = 10;
 const BACKUP_CODE_LENGTH = 8;
+
+const BackupCodesSchema = z.array(z.object({ hash: z.string(), used: z.boolean() }));
 
 /**
  * Generate a new TOTP secret and QR code for 2FA setup
@@ -92,25 +96,25 @@ export async function verifyBackupCode(
     return { valid: false, updatedCodesJson: null };
   }
 
-  try {
-    const codes: Array<{ hash: string; used: boolean }> = JSON.parse(hashedCodesJson);
-    const normalizedInput = inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-
-    for (let i = 0; i < codes.length; i++) {
-      if (codes[i].used) continue;
-
-      const match = await bcrypt.compare(normalizedInput, codes[i].hash);
-      if (match) {
-        // Mark code as used
-        codes[i].used = true;
-        return { valid: true, updatedCodesJson: JSON.stringify(codes) };
-      }
-    }
-
-    return { valid: false, updatedCodesJson: null };
-  } catch {
+  const codes = safeJsonParse(hashedCodesJson, BackupCodesSchema, [], 'backupCodes');
+  if (codes.length === 0) {
     return { valid: false, updatedCodesJson: null };
   }
+
+  const normalizedInput = inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  for (let i = 0; i < codes.length; i++) {
+    if (codes[i].used) continue;
+
+    const match = await bcrypt.compare(normalizedInput, codes[i].hash);
+    if (match) {
+      // Mark code as used
+      codes[i].used = true;
+      return { valid: true, updatedCodesJson: JSON.stringify(codes) };
+    }
+  }
+
+  return { valid: false, updatedCodesJson: null };
 }
 
 /**
@@ -119,12 +123,8 @@ export async function verifyBackupCode(
 export function getRemainingBackupCodeCount(hashedCodesJson: string | null): number {
   if (!hashedCodesJson) return 0;
 
-  try {
-    const codes: Array<{ hash: string; used: boolean }> = JSON.parse(hashedCodesJson);
-    return codes.filter((c) => !c.used).length;
-  } catch {
-    return 0;
-  }
+  const codes = safeJsonParse(hashedCodesJson, BackupCodesSchema, [], 'backupCodes');
+  return codes.filter((c) => !c.used).length;
 }
 
 /**

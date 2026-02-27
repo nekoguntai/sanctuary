@@ -8,6 +8,8 @@ import { Router, Request, Response } from 'express';
 import { db as prisma } from '../../repositories/db';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { createLogger } from '../../utils/logger';
+import { getErrorMessage } from '../../utils/errors';
+import { safeJsonParseUntyped } from '../../utils/safeJson';
 import { auditService, AuditAction, AuditCategory } from '../../services/auditService';
 import {
   DEFAULT_CONFIRMATION_THRESHOLD,
@@ -37,13 +39,9 @@ router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) 
     const settings = await prisma.systemSetting.findMany();
 
     // Convert to key-value object with parsed JSON values
-    const settingsObj: Record<string, any> = {};
+    const settingsObj: Record<string, unknown> = {};
     for (const setting of settings) {
-      try {
-        settingsObj[setting.key] = JSON.parse(setting.value);
-      } catch {
-        settingsObj[setting.key] = setting.value;
-      }
+      settingsObj[setting.key] = safeJsonParseUntyped(setting.value, setting.value, `setting:${setting.key}`);
     }
 
     // Return defaults for any missing settings
@@ -79,7 +77,7 @@ router.get('/', authenticate, requireAdmin, async (req: Request, res: Response) 
 
     res.json(response);
   } catch (error) {
-    log.error('Get settings error', { error: String(error) });
+    log.error('Get settings error', { error: getErrorMessage(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get system settings',
@@ -106,11 +104,7 @@ router.put('/', authenticate, requireAdmin, async (req: Request, res: Response) 
         deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
       };
       for (const s of currentSettings) {
-        try {
-          currentValues[s.key] = JSON.parse(s.value);
-        } catch {
-          // Keep default
-        }
+        currentValues[s.key] = safeJsonParseUntyped<number>(s.value, currentValues[s.key], `setting:${s.key}`);
       }
 
       const newConfirmation = updates.confirmationThreshold ?? currentValues.confirmationThreshold;
@@ -161,7 +155,7 @@ router.put('/', authenticate, requireAdmin, async (req: Request, res: Response) 
 
     // Return updated settings
     const settings = await prisma.systemSetting.findMany();
-    const settingsObj: Record<string, any> = {
+    const settingsObj: Record<string, unknown> = {
       registrationEnabled: false, // Default to disabled (admin-only)
       confirmationThreshold: DEFAULT_CONFIRMATION_THRESHOLD,
       deepConfirmationThreshold: DEFAULT_DEEP_CONFIRMATION_THRESHOLD,
@@ -183,11 +177,7 @@ router.put('/', authenticate, requireAdmin, async (req: Request, res: Response) 
       'smtp.configured': false,
     };
     for (const setting of settings) {
-      try {
-        settingsObj[setting.key] = JSON.parse(setting.value);
-      } catch {
-        settingsObj[setting.key] = setting.value;
-      }
+      settingsObj[setting.key] = safeJsonParseUntyped(setting.value, setting.value, `setting:${setting.key}`);
     }
 
     // Check if SMTP is configured
@@ -198,7 +188,7 @@ router.put('/', authenticate, requireAdmin, async (req: Request, res: Response) 
 
     res.json(settingsObj);
   } catch (error) {
-    log.error('Update settings error', { error: String(error) });
+    log.error('Update settings error', { error: getErrorMessage(error) });
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to update system settings',

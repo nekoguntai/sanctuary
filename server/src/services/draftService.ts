@@ -15,6 +15,7 @@ import { notifyNewDraft } from './notifications/notificationService';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
 import { createLogger } from '../utils/logger';
 import { getErrorMessage } from '../utils/errors';
+import { safeJsonParse, SystemSettingSchemas } from '../utils/safeJson';
 import { DEFAULT_DRAFT_EXPIRATION_DAYS } from '../constants';
 import * as walletService from './wallet';
 
@@ -64,17 +65,15 @@ export interface UpdateDraftInput {
  * Get draft expiration days from system settings
  */
 async function getDraftExpirationDays(): Promise<number> {
-  try {
-    const setting = await prisma.systemSetting.findUnique({
-      where: { key: 'draftExpirationDays' },
-    });
-    if (setting) {
-      return JSON.parse(setting.value);
-    }
-  } catch (error) {
-    log.warn('Failed to get draftExpirationDays from settings', { error: String(error) });
-  }
-  return DEFAULT_DRAFT_EXPIRATION_DAYS;
+  const setting = await prisma.systemSetting.findUnique({
+    where: { key: 'draftExpirationDays' },
+  });
+  return safeJsonParse(
+    setting?.value,
+    SystemSettingSchemas.number,
+    DEFAULT_DRAFT_EXPIRATION_DAYS,
+    'draftExpirationDays'
+  );
 }
 
 // ========================================
@@ -210,7 +209,7 @@ export async function createDraft(
     label: draft.label,
     feeRate: draft.feeRate,
   }, userId).catch(err => {
-    log.warn('Failed to send draft notification', { error: String(err) });
+    log.warn('Failed to send draft notification', { error: getErrorMessage(err) });
   });
 
   return draft;

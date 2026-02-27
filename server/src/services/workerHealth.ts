@@ -99,7 +99,8 @@ async function runHealthCheck(): Promise<boolean> {
       let payload: WorkerHealthPayload | undefined;
       try {
         payload = parseWorkerPayload(await response.json());
-      } catch {
+      } catch (error) {
+        log.debug('Failed to parse worker health payload (non-critical)', { error: getErrorMessage(error) });
         payload = undefined;
       }
 

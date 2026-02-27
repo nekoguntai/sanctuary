@@ -8,7 +8,7 @@
  * - Notifies frontend via WebSocket when data changes
  */
 
-import prisma from '../models/prisma';
+import { db as prisma } from '../repositories/db';
 import { syncWallet, syncAddress, updateTransactionConfirmations, getBlockHeight, populateMissingTransactionFields, setCachedBlockHeight } from './bitcoin/blockchain';
 import { getNodeClient, getElectrumClientIfActive } from './bitcoin/nodeClient';
 import { getNotificationService, walletLog } from '../websocket/notifications';
@@ -25,33 +25,6 @@ const log = createLogger('SYNC');
 const ELECTRUM_SUBSCRIPTION_LOCK_KEY = 'electrum:subscriptions';
 const ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS = 2 * 60 * 1000;
 const ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS = 60 * 1000;
-
-// Get sync configuration from centralized config
-function getSyncConfig() {
-  const config = getConfig();
-  return {
-    syncIntervalMs: config.sync.intervalMs,
-    confirmationUpdateIntervalMs: config.sync.confirmationUpdateIntervalMs,
-    staleThresholdMs: config.sync.staleThresholdMs,
-    maxConcurrentSyncs: config.sync.maxConcurrentSyncs,
-    maxRetryAttempts: config.sync.maxRetryAttempts,
-    retryDelaysMs: config.sync.retryDelaysMs,
-    maxSyncDurationMs: config.sync.maxSyncDurationMs,
-    transactionBatchSize: config.sync.transactionBatchSize,
-    electrumSubscriptionsEnabled: config.sync.electrumSubscriptionsEnabled,
-  };
-}
-
-/**
- * Timeout error class for sync operations
- */
-class SyncTimeoutError extends Error {
-  constructor(walletId: string, durationMs: number) {
-    super(`Sync timeout: wallet ${walletId} exceeded ${durationMs / 1000}s limit`);
-    this.name = 'SyncTimeoutError';
-  }
-}
-
 
 interface SyncJob {
   walletId: string;
@@ -109,13 +82,13 @@ class SyncService {
     await this.resetStuckSyncs();
 
     // Get config values
-    const syncConfig = getSyncConfig();
+    const syncConfig = getConfig().sync;
     this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
 
     // Start periodic sync check
     this.syncInterval = setInterval(() => {
       this.checkAndQueueStaleSyncs();
-    }, syncConfig.syncIntervalMs);
+    }, syncConfig.intervalMs);
 
     // Start periodic confirmation updates
     this.confirmationInterval = setInterval(() => {
@@ -127,7 +100,7 @@ class SyncService {
 
     // Set up real-time subscriptions (async, don't block startup)
     this.setupRealTimeSubscriptions().catch(err => {
-      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(err) });
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: getErrorMessage(err) });
     });
 
     log.info('[SYNC] Background sync service started');
@@ -138,7 +111,7 @@ class SyncService {
    */
   private async setupRealTimeSubscriptions(): Promise<void> {
     try {
-      const syncConfig = getSyncConfig();
+      const syncConfig = getConfig().sync;
       this.subscriptionsEnabled = syncConfig.electrumSubscriptionsEnabled;
 
       if (!this.subscriptionsEnabled) {
@@ -176,7 +149,7 @@ class SyncService {
         const version = await electrumClient.getServerVersion();
         log.info(`[SYNC] Connected to Electrum server: ${version.server} (protocol ${version.protocol})`);
       } catch (versionError) {
-        log.warn('[SYNC] Could not get server version, continuing anyway', { error: String(versionError) });
+        log.warn('[SYNC] Could not get server version, continuing anyway', { error: getErrorMessage(versionError) });
       }
 
       // Subscribe to new block headers
@@ -200,7 +173,7 @@ class SyncService {
 
       log.info('[SYNC] Real-time subscriptions active');
     } catch (error) {
-      log.error('[SYNC] Failed to set up real-time subscriptions', { error: String(error) });
+      log.error('[SYNC] Failed to set up real-time subscriptions', { error: getErrorMessage(error) });
       await this.releaseSubscriptionLock();
       if (this.subscriptionsEnabled) {
         this.subscriptionOwnership = 'external';
@@ -290,7 +263,7 @@ class SyncService {
 
       log.info(`[SYNC] Batch subscribed to ${subscribed} addresses for real-time notifications`);
     } catch (error) {
-      log.error('[SYNC] Batch subscription failed, falling back to individual subscriptions', { error: String(error) });
+      log.error('[SYNC] Batch subscription failed, falling back to individual subscriptions', { error: getErrorMessage(error) });
 
       // Fallback to individual subscriptions if batch fails
       let subscribed = 0;
@@ -303,7 +276,7 @@ class SyncService {
             subscribed++;
           }
         } catch (err) {
-          log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(err) });
+          log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: getErrorMessage(err) });
         }
       }
       log.info(`[SYNC] Fallback: subscribed to ${subscribed} addresses individually`);
@@ -385,7 +358,7 @@ class SyncService {
         height: block.height,
       });
     } catch (error) {
-      log.error('[SYNC] Failed to update confirmations after new block', { error: String(error) });
+      log.error('[SYNC] Failed to update confirmations after new block', { error: getErrorMessage(error) });
     }
   }
 
@@ -436,7 +409,7 @@ class SyncService {
         log.info(`[SYNC] Reset ${result.count} stuck sync flags from previous session`);
       }
     } catch (error) {
-      log.error('[SYNC] Failed to reset stuck sync flags', { error: String(error) });
+      log.error('[SYNC] Failed to reset stuck sync flags', { error: getErrorMessage(error) });
     }
   }
 
@@ -502,8 +475,8 @@ class SyncService {
       for (const address of this.addressToWalletMap.keys()) {
         try {
           await electrumClient.unsubscribeAddress(address);
-        } catch {
-          // Ignore unsubscribe errors
+        } catch (error) {
+          log.debug(`[SYNC] Failed to unsubscribe address ${address} (non-critical)`, { error: getErrorMessage(error) });
         }
       }
     }
@@ -539,7 +512,7 @@ class SyncService {
           this.addressToWalletMap.set(address, walletId);
         }
       } catch (error) {
-        log.error(`[SYNC] Failed to subscribe to new address ${address}`, { error: String(error) });
+        log.error(`[SYNC] Failed to subscribe to new address ${address}`, { error: getErrorMessage(error) });
       }
     }
 
@@ -648,7 +621,7 @@ class SyncService {
     }
 
     const queuePosition = this.syncQueue.findIndex(j => j.walletId === walletId);
-    const { staleThresholdMs } = getSyncConfig();
+    const { staleThresholdMs } = getConfig().sync;
     const isStale = !wallet.lastSyncedAt ||
       (Date.now() - wallet.lastSyncedAt.getTime()) > staleThresholdMs;
 
@@ -707,14 +680,14 @@ class SyncService {
   private async processQueue(): Promise<void> {
     if (!this.isRunning) return;
 
-    const { maxConcurrentSyncs } = getSyncConfig();
+    const { maxConcurrentSyncs } = getConfig().sync;
     while (this.syncQueue.length > 0 && this.activeSyncs.size < maxConcurrentSyncs) {
       const job = this.syncQueue.shift();
       if (!job) break;
 
       // Don't await - run concurrently
       this.executeSyncJob(job.walletId).catch(err => {
-        log.error(`[SYNC] Failed to sync wallet ${job.walletId}`, { error: String(err) });
+        log.error(`[SYNC] Failed to sync wallet ${job.walletId}`, { error: getErrorMessage(err) });
       });
     }
   }
@@ -731,7 +704,7 @@ class SyncService {
       return false;
     }
 
-    const syncConfig = getSyncConfig();
+    const syncConfig = getConfig().sync;
     // Lock TTL should be slightly longer than max sync duration to prevent premature expiration
     const lockTtlMs = syncConfig.maxSyncDurationMs + 60000; // +1 minute buffer
 
@@ -786,7 +759,7 @@ class SyncService {
     });
 
     // Get retry config
-    const syncConfig = getSyncConfig();
+    const syncConfig = getConfig().sync;
 
     // Notify sync starting via WebSocket
     const notificationService = getNotificationService();
@@ -950,7 +923,7 @@ class SyncService {
         const retryTimer = setTimeout(() => {
           this.pendingRetries.delete(walletId);
           this.executeSyncJob(walletId, nextRetry).catch(err => {
-            log.error(`[SYNC] Retry failed for wallet ${walletId}`, { error: String(err) });
+            log.error(`[SYNC] Retry failed for wallet ${walletId}`, { error: getErrorMessage(err) });
           });
         }, delayMs);
         this.pendingRetries.set(walletId, retryTimer);
@@ -1082,7 +1055,7 @@ class SyncService {
       }
 
       // Now check for stale wallets that need syncing
-      const { staleThresholdMs } = getSyncConfig();
+      const { staleThresholdMs } = getConfig().sync;
       const staleWallets = await prisma.wallet.findMany({
         where: {
           OR: [
@@ -1102,7 +1075,7 @@ class SyncService {
         log.info(`[SYNC] Queued ${staleWallets.length} stale wallets for background sync`);
       }
     } catch (error) {
-      log.error('[SYNC] Failed to check for stale syncs', { error: String(error) });
+      log.error('[SYNC] Failed to check for stale syncs', { error: getErrorMessage(error) });
     }
   }
 
@@ -1166,7 +1139,7 @@ class SyncService {
             }
           }
         } catch (error) {
-          log.error(`[SYNC] Failed to update confirmations for wallet ${walletId}`, { error: String(error) });
+          log.error(`[SYNC] Failed to update confirmations for wallet ${walletId}`, { error: getErrorMessage(error) });
         }
       }
 
@@ -1174,7 +1147,7 @@ class SyncService {
         log.info(`[SYNC] Updated ${totalUpdated} transaction confirmations`);
       }
     } catch (error) {
-      log.error('[SYNC] Failed to update confirmations', { error: String(error) });
+      log.error('[SYNC] Failed to update confirmations', { error: getErrorMessage(error) });
     }
   }
 
@@ -1202,7 +1175,7 @@ class SyncService {
         // Subscribe to address - Electrum/RPC will notify on changes (if supported)
         await client.subscribeAddress(address);
       } catch (error) {
-        log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: String(error) });
+        log.error(`[SYNC] Failed to subscribe to address ${address}`, { error: getErrorMessage(error) });
       }
     }
 

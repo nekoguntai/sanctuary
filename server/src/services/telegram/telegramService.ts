@@ -5,9 +5,35 @@
  * Each user provides their own bot token and chat ID.
  */
 
+import { Prisma } from '@prisma/client';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
+
+/** Shape of a Telegram Bot API error response */
+interface TelegramErrorResponse {
+  ok: false;
+  error_code: number;
+  description: string;
+}
+
+/** Shape of a Telegram Bot API getUpdates success response */
+interface TelegramGetUpdatesResponse {
+  ok: true;
+  result: TelegramUpdate[];
+}
+
+interface TelegramChat {
+  id: number;
+  username?: string;
+  first_name?: string;
+}
+
+interface TelegramUpdate {
+  update_id: number;
+  message?: { chat: TelegramChat };
+  my_chat_member?: { chat: TelegramChat };
+}
 
 const log = createLogger('TELEGRAM');
 
@@ -58,8 +84,9 @@ export async function sendTelegramMessage(
     );
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMsg = (errorData as any)?.description || `HTTP ${response.status}`;
+      const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+      const errorMsg =
+        'description' in errorData ? errorData.description : `HTTP ${response.status}`;
       log.error(`Telegram API error: ${errorMsg}`);
       return { success: false, error: errorMsg };
     }
@@ -83,13 +110,14 @@ export async function getChatIdFromBot(
     const response = await fetch(`${TELEGRAM_API}${botToken}/getUpdates?limit=10`);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMsg = (errorData as any)?.description || `HTTP ${response.status}`;
+      const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+      const errorMsg =
+        'description' in errorData ? errorData.description : `HTTP ${response.status}`;
       return { success: false, error: errorMsg };
     }
 
-    const data = await response.json();
-    const updates = (data as any)?.result || [];
+    const data = await response.json() as TelegramGetUpdatesResponse;
+    const updates = data.result ?? [];
 
     if (updates.length === 0) {
       return {
@@ -214,7 +242,7 @@ export async function notifyNewTransactions(
     const users = await getWalletUsers(walletId);
 
     for (const user of users) {
-      const prefs = user.preferences as Record<string, any> | null;
+      const prefs = user.preferences as Record<string, unknown> | null;
       const telegram = prefs?.telegram as TelegramConfig | undefined;
 
       // Skip if Telegram not configured or not enabled
@@ -318,7 +346,7 @@ export async function notifyNewDraft(
       // Skip notifying the creator (they already know)
       if (user.id === createdByUserId) continue;
 
-      const prefs = user.preferences as Record<string, any> | null;
+      const prefs = user.preferences as Record<string, unknown> | null;
       const telegram = prefs?.telegram as TelegramConfig | undefined;
 
       // Skip if Telegram not configured or not enabled
@@ -363,7 +391,7 @@ export async function updateWalletTelegramSettings(
     throw new Error('User not found');
   }
 
-  const prefs = (user.preferences as Record<string, any>) || {};
+  const prefs = (user.preferences as Record<string, unknown>) || {};
   const telegram = (prefs.telegram as TelegramConfig) || {
     botToken: '',
     chatId: '',
@@ -375,7 +403,7 @@ export async function updateWalletTelegramSettings(
   telegram.wallets = telegram.wallets || {};
   telegram.wallets[walletId] = settings;
 
-  // Save updated preferences - cast to any for Prisma JSON compatibility
+  // Save updated preferences
   const updatedPrefs = {
     ...prefs,
     telegram: {
@@ -389,7 +417,7 @@ export async function updateWalletTelegramSettings(
   await prisma.user.update({
     where: { id: userId },
     data: {
-      preferences: updatedPrefs as any,
+      preferences: updatedPrefs as Prisma.InputJsonValue,
     },
   });
 }
@@ -408,7 +436,7 @@ export async function getWalletTelegramSettings(
 
   if (!user) return null;
 
-  const prefs = user.preferences as Record<string, any> | null;
+  const prefs = user.preferences as Record<string, unknown> | null;
   const telegram = prefs?.telegram as TelegramConfig | undefined;
 
   return telegram?.wallets?.[walletId] || null;

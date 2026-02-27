@@ -12,6 +12,7 @@
 import { db as prisma } from '../repositories/db';
 import type { Prisma, OwnershipTransfer } from '@prisma/client';
 import { createLogger } from '../utils/logger';
+import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from './errors';
 import { checkWalletOwnerAccess } from './wallet';
 import { checkDeviceOwnerAccess } from './deviceAccess';
 
@@ -164,7 +165,7 @@ export async function initiateTransfer(
 
   // Validation: can't transfer to yourself
   if (ownerId === toUserId) {
-    throw new Error('Cannot transfer ownership to yourself');
+    throw new ValidationError('Cannot transfer ownership to yourself');
   }
 
   // Validation: check target user exists (this can be done outside transaction)
@@ -173,7 +174,7 @@ export async function initiateTransfer(
     select: { id: true, username: true },
   });
   if (!targetUser) {
-    throw new Error('Target user not found');
+    throw new NotFoundError('User', toUserId);
   }
 
   // Use a transaction to ensure atomicity - prevents race condition where
@@ -182,7 +183,7 @@ export async function initiateTransfer(
     // Validation: check ownership
     const isOwner = await checkResourceOwnership(resourceType, resourceId, ownerId);
     if (!isOwner) {
-      throw new Error(`You are not the owner of this ${resourceType}`);
+      throw new ForbiddenError(`You are not the owner of this ${resourceType}`);
     }
 
     // Validation: check no active transfer exists for this resource
@@ -195,13 +196,13 @@ export async function initiateTransfer(
       },
     });
     if (activeTransferCount > 0) {
-      throw new Error(`This ${resourceType} already has a pending transfer`);
+      throw new ConflictError(`This ${resourceType} already has a pending transfer`);
     }
 
     // Validation: check target user is not already owner
     const targetIsOwner = await checkResourceOwnership(resourceType, resourceId, toUserId);
     if (targetIsOwner) {
-      throw new Error('Target user is already an owner of this resource');
+      throw new ConflictError('Target user is already an owner of this resource');
     }
 
     // Create transfer record - within the same transaction
@@ -251,12 +252,12 @@ export async function acceptTransfer(
   });
 
   if (!transfer) {
-    throw new Error('Transfer not found');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   // Validation: only recipient can accept
   if (transfer.toUserId !== recipientId) {
-    throw new Error('Only the recipient can accept this transfer');
+    throw new ForbiddenError('Only the recipient can accept this transfer');
   }
 
   // Check if already expired
@@ -266,7 +267,7 @@ export async function acceptTransfer(
       where: { id: transferId, status: { in: ['pending', 'accepted'] } },
       data: { status: 'expired' },
     });
-    throw new Error('Transfer has expired');
+    throw new ValidationError('Transfer has expired');
   }
 
   // Atomic update: only succeeds if status is still 'pending'
@@ -290,9 +291,9 @@ export async function acceptTransfer(
       where: { id: transferId },
     });
     if (current?.status === 'accepted') {
-      throw new Error('Transfer has already been accepted');
+      throw new ConflictError('Transfer has already been accepted');
     }
-    throw new Error(`Transfer cannot be accepted (current status: ${current?.status || 'unknown'})`);
+    throw new ValidationError(`Transfer cannot be accepted (current status: ${current?.status || 'unknown'})`);
   }
 
   // Fetch updated record for return
@@ -305,7 +306,7 @@ export async function acceptTransfer(
   });
 
   if (!updated) {
-    throw new Error('Transfer not found after update');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   log.info('Transfer accepted', {
@@ -330,12 +331,12 @@ export async function declineTransfer(
   });
 
   if (!transfer) {
-    throw new Error('Transfer not found');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   // Validation: only recipient can decline
   if (transfer.toUserId !== recipientId) {
-    throw new Error('Only the recipient can decline this transfer');
+    throw new ForbiddenError('Only the recipient can decline this transfer');
   }
 
   // Atomic update: only succeeds if status is still 'pending'
@@ -356,7 +357,7 @@ export async function declineTransfer(
     const current = await prisma.ownershipTransfer.findUnique({
       where: { id: transferId },
     });
-    throw new Error(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
+    throw new ValidationError(`Transfer cannot be declined (current status: ${current?.status || 'unknown'})`);
   }
 
   const updated = await prisma.ownershipTransfer.findUnique({
@@ -368,7 +369,7 @@ export async function declineTransfer(
   });
 
   if (!updated) {
-    throw new Error('Transfer not found after update');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   log.info('Transfer declined', {
@@ -394,12 +395,12 @@ export async function cancelTransfer(
   });
 
   if (!transfer) {
-    throw new Error('Transfer not found');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   // Validation: only owner can cancel
   if (transfer.fromUserId !== ownerId) {
-    throw new Error('Only the transfer initiator can cancel');
+    throw new ForbiddenError('Only the transfer initiator can cancel');
   }
 
   // Atomic update: only succeeds if status is still cancellable
@@ -419,7 +420,7 @@ export async function cancelTransfer(
     const current = await prisma.ownershipTransfer.findUnique({
       where: { id: transferId },
     });
-    throw new Error(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
+    throw new ValidationError(`Transfer cannot be cancelled (current status: ${current?.status || 'unknown'})`);
   }
 
   const updated = await prisma.ownershipTransfer.findUnique({
@@ -431,7 +432,7 @@ export async function cancelTransfer(
   });
 
   if (!updated) {
-    throw new Error('Transfer not found after update');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   log.info('Transfer cancelled', {
@@ -457,11 +458,11 @@ export async function confirmTransfer(
   });
 
   if (!transfer) {
-    throw new Error('Transfer not found');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   if (transfer.fromUserId !== ownerId) {
-    throw new Error('Only the transfer initiator can confirm');
+    throw new ForbiddenError('Only the transfer initiator can confirm');
   }
 
   // Execute everything in a serializable transaction to prevent race conditions
@@ -474,9 +475,9 @@ export async function confirmTransfer(
 
     if (!current || current.status !== 'accepted') {
       if (current?.status === 'confirmed') {
-        throw new Error('Transfer has already been completed');
+        throw new ConflictError('Transfer has already been completed');
       }
-      throw new Error(`Transfer cannot be confirmed (current status: ${current?.status || 'unknown'})`);
+      throw new ValidationError(`Transfer cannot be confirmed (current status: ${current?.status || 'unknown'})`);
     }
 
     // Check expiration
@@ -485,7 +486,7 @@ export async function confirmTransfer(
         where: { id: transferId },
         data: { status: 'expired' },
       });
-      throw new Error('Transfer has expired');
+      throw new ValidationError('Transfer has expired');
     }
 
     // Execute the ownership transfer based on resource type
@@ -508,7 +509,7 @@ export async function confirmTransfer(
   });
 
   if (!updated) {
-    throw new Error('Transfer not found after update');
+    throw new NotFoundError('Transfer', transferId);
   }
 
   log.info('Transfer confirmed and executed', {
@@ -534,7 +535,7 @@ async function executeWalletTransferTx(tx: PrismaTx, transfer: OwnershipTransfer
   });
 
   if (!currentOwner) {
-    throw new Error('Transfer failed: owner no longer owns this wallet');
+    throw new ConflictError('Transfer failed: owner no longer owns this wallet');
   }
 
   // 2. Check if recipient already has access
@@ -595,7 +596,7 @@ async function executeDeviceTransferTx(tx: PrismaTx, transfer: OwnershipTransfer
   });
 
   if (!currentOwner) {
-    throw new Error('Transfer failed: owner no longer owns this device');
+    throw new ConflictError('Transfer failed: owner no longer owns this device');
   }
 
   // 2. Update Device.userId (legacy field for backward compatibility)

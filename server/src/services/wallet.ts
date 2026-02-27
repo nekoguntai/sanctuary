@@ -5,9 +5,6 @@
  */
 
 import { db as prisma } from '../repositories/db';
-import * as bitcoin from 'bitcoinjs-lib';
-import * as bip39 from 'bip39';
-import * as bip32 from 'bip32';
 import * as descriptorBuilder from './bitcoin/descriptorBuilder';
 import * as addressDerivation from './bitcoin/addressDerivation';
 import { createLogger } from '../utils/logger';
@@ -20,6 +17,29 @@ const log = createLogger('WALLET');
 
 // Roles that can edit wallet data (labels, etc.)
 const EDIT_ROLES = ['owner', 'signer'];
+
+/**
+ * Generate initial receive and change addresses for a wallet descriptor.
+ * Returns address records ready for bulk insert.
+ */
+function generateInitialAddresses(
+  walletId: string,
+  descriptor: string,
+  network: 'mainnet' | 'testnet' | 'regtest'
+): Array<{ walletId: string; address: string; derivationPath: string; index: number; used: boolean }> {
+  const addresses = [];
+  for (const change of [false, true]) {
+    for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
+      const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
+        descriptor,
+        i,
+        { network, change }
+      );
+      addresses.push({ walletId, address, derivationPath, index: i, used: false });
+    }
+  }
+  return addresses;
+}
 
 /**
  * Result of checking wallet access with edit permission
@@ -314,45 +334,9 @@ export async function createWallet(
   // Generate initial addresses if wallet has a descriptor
   if (descriptor) {
     try {
-      const addressesToCreate = [];
       const network = (input.network || 'mainnet') as 'mainnet' | 'testnet' | 'regtest';
-
-      // Generate receive addresses (change = false)
-      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
-        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-          descriptor,
-          i,
-          { network, change: false }
-        );
-        addressesToCreate.push({
-          walletId: wallet.id,
-          address,
-          derivationPath,
-          index: i,
-          used: false,
-        });
-      }
-
-      // Generate change addresses (change = true)
-      for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
-        const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-          descriptor,
-          i,
-          { network, change: true }
-        );
-        addressesToCreate.push({
-          walletId: wallet.id,
-          address,
-          derivationPath,
-          index: i,
-          used: false,
-        });
-      }
-
-      // Bulk insert addresses
-      await prisma.address.createMany({
-        data: addressesToCreate,
-      });
+      const addressesToCreate = generateInitialAddresses(wallet.id, descriptor, network);
+      await prisma.address.createMany({ data: addressesToCreate });
     } catch (err) {
       log.error('Failed to generate initial addresses', { error: err });
       // Don't fail wallet creation if address generation fails
@@ -958,41 +942,8 @@ export async function repairWalletDescriptor(
 
     // Generate initial addresses
     const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
-    const addressesToCreate = [];
+    const addressesToCreate = generateInitialAddresses(wallet.id, descriptorResult.descriptor, network);
 
-    // Generate receive addresses
-    for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
-      const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-        descriptorResult.descriptor,
-        i,
-        { network, change: false }
-      );
-      addressesToCreate.push({
-        walletId: wallet.id,
-        address,
-        derivationPath,
-        index: i,
-        used: false,
-      });
-    }
-
-    // Generate change addresses
-    for (let i = 0; i < INITIAL_ADDRESS_COUNT; i++) {
-      const { address, derivationPath } = addressDerivation.deriveAddressFromDescriptor(
-        descriptorResult.descriptor,
-        i,
-        { network, change: true }
-      );
-      addressesToCreate.push({
-        walletId: wallet.id,
-        address,
-        derivationPath,
-        index: i,
-        used: false,
-      });
-    }
-
-    // Bulk insert addresses
     // skipDuplicates ensures idempotency - if repair is called multiple times
     // or addresses already exist from a partial repair, they won't cause errors
     await prisma.address.createMany({

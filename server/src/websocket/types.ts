@@ -111,7 +111,7 @@ export interface WebSocketMessage {
  */
 export interface WebSocketEvent {
   type: 'transaction' | 'balance' | 'confirmation' | 'block' | 'newBlock' | 'mempool' | 'sync' | 'log' | 'modelDownload';
-  data: any;
+  data: unknown;
   walletId?: string;
   addressId?: string;
 }

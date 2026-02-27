@@ -1,0 +1,779 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import express, { type Express } from 'express';
+import request from 'supertest';
+import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
+
+const {
+  mockGetCachedBlockHeight,
+  mockRecalculateWalletBalances,
+  mockWalletCacheGet,
+  mockWalletCacheSet,
+  mockValidateAddress,
+  mockAuditLogFromRequest,
+  mockCreateTransaction,
+  mockCreateBatchTransaction,
+  mockBroadcastAndSave,
+  mockEstimateTransaction,
+  mockGetPSBTInfo,
+  mockFetch,
+} = vi.hoisted(() => ({
+  mockGetCachedBlockHeight: vi.fn(),
+  mockRecalculateWalletBalances: vi.fn(),
+  mockWalletCacheGet: vi.fn(),
+  mockWalletCacheSet: vi.fn(),
+  mockValidateAddress: vi.fn(),
+  mockAuditLogFromRequest: vi.fn(),
+  mockCreateTransaction: vi.fn(),
+  mockCreateBatchTransaction: vi.fn(),
+  mockBroadcastAndSave: vi.fn(),
+  mockEstimateTransaction: vi.fn(),
+  mockGetPSBTInfo: vi.fn(),
+  mockFetch: vi.fn(),
+}));
+
+vi.mock('../../../src/repositories/db', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    db: prisma,
+    default: prisma,
+  };
+});
+
+vi.mock('../../../src/middleware/walletAccess', () => ({
+  requireWalletAccess: () => (req: any, _res: any, next: () => void) => {
+    req.walletId = req.params.walletId || req.params.id;
+    next();
+  },
+}));
+
+vi.mock('../../../src/services/bitcoin/blockchain', () => ({
+  getCachedBlockHeight: mockGetCachedBlockHeight,
+  recalculateWalletBalances: mockRecalculateWalletBalances,
+}));
+
+vi.mock('../../../src/services/cache', () => ({
+  walletCache: {
+    get: mockWalletCacheGet,
+    set: mockWalletCacheSet,
+  },
+}));
+
+vi.mock('../../../src/services/bitcoin/utils', () => ({
+  validateAddress: mockValidateAddress,
+}));
+
+vi.mock('../../../src/services/auditService', () => ({
+  auditService: {
+    logFromRequest: mockAuditLogFromRequest,
+  },
+  AuditCategory: {
+    WALLET: 'WALLET',
+  },
+  AuditAction: {
+    TRANSACTION_BROADCAST: 'TRANSACTION_BROADCAST',
+    TRANSACTION_BROADCAST_FAILED: 'TRANSACTION_BROADCAST_FAILED',
+  },
+}));
+
+vi.mock('../../../src/services/bitcoin/transactionService', () => ({
+  createTransaction: mockCreateTransaction,
+  createBatchTransaction: mockCreateBatchTransaction,
+  broadcastAndSave: mockBroadcastAndSave,
+  estimateTransaction: mockEstimateTransaction,
+  getPSBTInfo: mockGetPSBTInfo,
+}));
+
+import walletTransactionsRouter from '../../../src/api/transactions/walletTransactions';
+import creationRouter from '../../../src/api/transactions/creation';
+
+describe('Transaction HTTP Routes', () => {
+  let app: Express;
+  const walletId = 'wallet-123';
+
+  beforeAll(() => {
+    vi.stubGlobal('fetch', mockFetch);
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1', walletTransactionsRouter);
+    app.use('/api/v1', creationRouter);
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
+
+  beforeEach(() => {
+    resetPrismaMocks();
+    vi.clearAllMocks();
+
+    mockGetCachedBlockHeight.mockReturnValue(850000);
+    mockRecalculateWalletBalances.mockResolvedValue(undefined);
+    mockWalletCacheGet.mockResolvedValue(null);
+    mockWalletCacheSet.mockResolvedValue(undefined);
+    mockValidateAddress.mockReturnValue({ valid: true });
+    mockAuditLogFromRequest.mockResolvedValue(undefined);
+    mockCreateTransaction.mockResolvedValue({
+      psbtBase64: 'cHNi',
+      fee: 150,
+      totalInput: 10150,
+      totalOutput: 10000,
+      changeAmount: 0,
+      changeAddress: null,
+      utxos: [],
+      inputPaths: {},
+      effectiveAmount: 10000,
+      decoyOutputs: [],
+    });
+    mockCreateBatchTransaction.mockResolvedValue({
+      psbtBase64: 'cHNi',
+      fee: 250,
+      totalInput: 20250,
+      totalOutput: 20000,
+      changeAmount: 0,
+      changeAddress: null,
+      utxos: [],
+      inputPaths: {},
+      outputs: [{ address: 'tb1qrecipient', amount: 20000 }],
+    });
+    mockBroadcastAndSave.mockResolvedValue({
+      txid: 'a'.repeat(64),
+      broadcasted: true,
+    });
+    mockEstimateTransaction.mockResolvedValue({
+      fee: 120,
+      totalInput: 20120,
+      totalOutput: 20000,
+    });
+    mockGetPSBTInfo.mockReturnValue({
+      fee: 400,
+      outputs: [{ address: 'tb1qrecipient', value: 20000 }],
+      inputs: [{ txid: 'b'.repeat(64), vout: 0 }],
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ weight: 560, fee: 500 }),
+    });
+  });
+
+  it('lists wallet transactions with pagination and dynamic confirmations', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-1',
+        txid: 'c'.repeat(64),
+        walletId,
+        type: 'sent',
+        amount: BigInt(-10000),
+        fee: BigInt(120),
+        balanceAfter: BigInt(90000),
+        blockHeight: BigInt(849999),
+        confirmations: 0,
+        blockTime: new Date('2025-01-01T00:00:00.000Z'),
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+        address: { address: 'tb1qdest', derivationPath: "m/84'/1'/0'/0/1" },
+        transactionLabels: [{ label: { id: 'label-1', name: 'Rent', color: '#ff0000' } }],
+      },
+    ]);
+
+    const response = await request(app)
+      .get(`/api/v1/wallets/${walletId}/transactions`)
+      .query({ limit: '2', offset: '1' });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.transaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ walletId }),
+        take: 2,
+        skip: 1,
+      })
+    );
+    expect(response.body[0].amount).toBe(-10000);
+    expect(response.body[0].confirmations).toBe(2);
+    expect(response.body[0].labels).toHaveLength(1);
+  });
+
+  it('returns internal server error when transaction listing fails', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'mainnet' });
+    mockPrismaClient.transaction.findMany.mockRejectedValue(new Error('db offline'));
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions`);
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+    });
+  });
+
+  it('builds and caches transaction stats on cache miss', async () => {
+    mockWalletCacheGet.mockResolvedValue(null);
+    mockPrismaClient.transaction.groupBy.mockResolvedValue([
+      { type: 'received', _count: { id: 2 }, _sum: { amount: BigInt(1500) } },
+      { type: 'sent', _count: { id: 1 }, _sum: { amount: BigInt(-800) } },
+      { type: 'consolidation', _count: { id: 1 }, _sum: { amount: BigInt(-200) } },
+    ]);
+    mockPrismaClient.transaction.aggregate.mockResolvedValue({ _sum: { fee: BigInt(200) } });
+    mockPrismaClient.transaction.findFirst.mockResolvedValue({ balanceAfter: BigInt(700) });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      totalCount: 4,
+      receivedCount: 2,
+      sentCount: 1,
+      consolidationCount: 1,
+      totalReceived: 1500,
+      totalSent: 800,
+      totalFees: 200,
+      walletBalance: 700,
+    });
+    expect(mockWalletCacheSet).toHaveBeenCalledWith(
+      `tx-stats:${walletId}`,
+      expect.objectContaining({
+        totalSent: '800',
+        totalReceived: '1500',
+      }),
+      30
+    );
+  });
+
+  it('serves transaction stats from cache without querying database', async () => {
+    mockWalletCacheGet.mockResolvedValue({
+      totalSent: '300',
+      totalReceived: '900',
+      transactionCount: 3,
+      avgFee: '20',
+      totalFees: '60',
+      currentBalance: '600',
+      _receivedCount: 2,
+      _sentCount: 1,
+      _consolidationCount: 0,
+    });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.totalCount).toBe(3);
+    expect(response.body.totalSent).toBe(300);
+    expect(mockPrismaClient.transaction.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('returns empty pending list when no unconfirmed transactions exist', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Test Wallet',
+      network: 'mainnet',
+    });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([]);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('falls back to raw transaction size for fee rate when mempool fetch fails', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Test Wallet',
+      network: 'testnet',
+    });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: 'd'.repeat(64),
+        walletId,
+        type: 'sent',
+        amount: BigInt(-20000),
+        fee: BigInt(500),
+        createdAt: new Date(Date.now() - 2000),
+        counterpartyAddress: 'tb1qcounterparty',
+        rawTx: 'aa'.repeat(200),
+        blockHeight: null,
+      },
+    ]);
+    mockFetch.mockRejectedValueOnce(new Error('mempool unavailable'));
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      txid: 'd'.repeat(64),
+      type: 'sent',
+      amount: -20000,
+      recipient: 'tb1qcounterparty',
+    });
+    expect(response.body[0].feeRate).toBe(2.5);
+    expect(response.body[0].timeInQueue).toBeGreaterThanOrEqual(0);
+  });
+
+  it('exports transactions in JSON format with sanitized filename', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ name: 'My Wallet!' });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: 'e'.repeat(64),
+        type: 'received',
+        amount: BigInt(100000),
+        balanceAfter: BigInt(100000),
+        fee: BigInt(0),
+        confirmations: 3,
+        label: 'Salary',
+        memo: '',
+        counterpartyAddress: 'tb1qincoming',
+        blockHeight: BigInt(850000),
+        blockTime: new Date('2025-01-01T00:00:00.000Z'),
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+        transactionLabels: [],
+      },
+    ]);
+
+    const response = await request(app)
+      .get(`/api/v1/wallets/${walletId}/transactions/export`)
+      .query({ format: 'json', startDate: '2025-01-01', endDate: '2025-01-31' });
+
+    expect(response.status).toBe(200);
+    expect(response.header['content-type']).toContain('application/json');
+    expect(response.header['content-disposition']).toContain('My_Wallet_');
+    expect(response.body[0]).toMatchObject({
+      txid: 'e'.repeat(64),
+      amountSats: 100000,
+      balanceAfterSats: 100000,
+    });
+    const findManyArg = mockPrismaClient.transaction.findMany.mock.calls[0][0];
+    expect(findManyArg.where.blockTime.gte).toBeInstanceOf(Date);
+    expect(findManyArg.where.blockTime.lte).toBeInstanceOf(Date);
+  });
+
+  it('exports transactions in CSV format and escapes commas', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ name: 'CSV Wallet' });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: 'f'.repeat(64),
+        type: 'sent',
+        amount: BigInt(-5000),
+        balanceAfter: BigInt(95000),
+        fee: BigInt(100),
+        confirmations: 1,
+        label: 'Payment',
+        memo: 'note,with,comma',
+        counterpartyAddress: 'tb1qrecipient',
+        blockHeight: BigInt(849999),
+        blockTime: new Date('2025-01-02T00:00:00.000Z'),
+        createdAt: new Date('2025-01-02T00:00:00.000Z'),
+        transactionLabels: [],
+      },
+    ]);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/export`);
+
+    expect(response.status).toBe(200);
+    expect(response.header['content-type']).toContain('text/csv');
+    expect(response.text).toContain('Transaction ID');
+    expect(response.text).toContain('"note,with,comma"');
+  });
+
+  it('recalculates wallet balances and returns final amount', async () => {
+    mockPrismaClient.transaction.findFirst.mockResolvedValue({
+      balanceAfter: BigInt(123456),
+    });
+
+    const response = await request(app).post(`/api/v1/wallets/${walletId}/transactions/recalculate`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Balances recalculated',
+      finalBalance: 123456,
+      finalBalanceBtc: 0.00123456,
+    });
+    expect(mockRecalculateWalletBalances).toHaveBeenCalledWith(walletId);
+  });
+
+  it('returns error when balance recalculation fails', async () => {
+    mockRecalculateWalletBalances.mockRejectedValueOnce(new Error('recalc failed'));
+
+    const response = await request(app).post(`/api/v1/wallets/${walletId}/transactions/recalculate`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to recalculate balances');
+  });
+
+  it('validates required fields for transaction creation', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({ recipient: 'tb1qrecipient' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('required');
+  });
+
+  it('enforces minimum fee rate for transaction creation', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 0.01,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('feeRate must be at least');
+  });
+
+  it('returns 404 when creating a transaction for missing wallet', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1,
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain('Wallet not found');
+  });
+
+  it('rejects invalid recipient address during transaction creation', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+    mockValidateAddress.mockReturnValueOnce({
+      valid: false,
+      error: 'bad checksum',
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'bad-address',
+        amount: 10000,
+        feeRate: 1,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Invalid Bitcoin address');
+  });
+
+  it('creates transaction and returns PSBT payload', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'testnet' });
+    mockCreateTransaction.mockResolvedValue({
+      psbtBase64: 'cHNiYmFzZTY0',
+      fee: 160,
+      totalInput: 10160,
+      totalOutput: 10000,
+      changeAmount: 0,
+      changeAddress: null,
+      utxos: [],
+      inputPaths: { '0': "m/84'/1'/0'/0/0" },
+      effectiveAmount: 10000,
+      decoyOutputs: [],
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1.5,
+        label: 'rent',
+        memo: 'jan',
+        sendMax: false,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.psbtBase64).toBe('cHNiYmFzZTY0');
+    expect(mockCreateTransaction).toHaveBeenCalledWith(
+      walletId,
+      'tb1qrecipient',
+      10000,
+      1.5,
+      expect.objectContaining({
+        label: 'rent',
+        memo: 'jan',
+      })
+    );
+  });
+
+  it('returns bad request when transaction creation service throws', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+    mockCreateTransaction.mockRejectedValueOnce(new Error('insufficient funds'));
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/create`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('insufficient funds');
+  });
+
+  it('validates batch transaction output list', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({ feeRate: 1 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('outputs array is required');
+  });
+
+  it('rejects batch transaction when more than one output uses sendMax', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [
+          { address: 'tb1qone', sendMax: true },
+          { address: 'tb1qtwo', sendMax: true },
+        ],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Only one output can have sendMax');
+  });
+
+  it('creates batch transaction with validated outputs', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'testnet' });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1.2,
+        outputs: [
+          { address: 'tb1qone', amount: 10000 },
+          { address: 'tb1qtwo', amount: 5000 },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.psbtBase64).toBe('cHNi');
+    expect(mockCreateBatchTransaction).toHaveBeenCalledWith(
+      walletId,
+      expect.any(Array),
+      1.2,
+      expect.objectContaining({ enableRBF: true })
+    );
+  });
+
+  it('validates broadcast payload before sending', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/broadcast`)
+      .send({ recipient: 'tb1qrecipient' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Either signedPsbtBase64 or rawTxHex is required');
+  });
+
+  it('broadcasts signed transaction and writes audit event', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/broadcast`)
+      .send({
+        rawTxHex: 'deadbeef',
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        fee: 150,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.txid).toHaveLength(64);
+    expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+      expect.any(Object),
+      'TRANSACTION_BROADCAST',
+      'WALLET',
+      expect.objectContaining({ success: true })
+    );
+  });
+
+  it('captures failed broadcast attempts in audit log', async () => {
+    mockBroadcastAndSave.mockRejectedValueOnce(new Error('broadcast failed'));
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/broadcast`)
+      .send({
+        signedPsbtBase64: 'cHNi',
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('broadcast failed');
+    expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+      expect.any(Object),
+      'TRANSACTION_BROADCAST_FAILED',
+      'WALLET',
+      expect.objectContaining({ success: false })
+    );
+  });
+
+  it('validates estimate payload fields', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/estimate`)
+      .send({
+        recipient: 'tb1qrecipient',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('recipient, amount, and feeRate are required');
+  });
+
+  it('estimates transaction cost for valid request', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/estimate`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1.2,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      fee: 120,
+      totalInput: 20120,
+      totalOutput: 20000,
+    });
+  });
+
+  it('returns server error when estimate service throws', async () => {
+    mockEstimateTransaction.mockRejectedValueOnce(new Error('estimator unavailable'));
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/estimate`)
+      .send({
+        recipient: 'tb1qrecipient',
+        amount: 10000,
+        feeRate: 1.2,
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('estimator unavailable');
+  });
+
+  it('validates PSBT creation recipients array', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/create`)
+      .send({ feeRate: 1 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('recipients array is required');
+  });
+
+  it('validates each PSBT recipient fields', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/create`)
+      .send({
+        feeRate: 1,
+        recipients: [{ address: 'tb1qrecipient' }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Each recipient must have address and amount');
+  });
+
+  it('creates PSBT for hardware wallet signing', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/create`)
+      .send({
+        feeRate: 1.4,
+        recipients: [{ address: 'tb1qrecipient', amount: 15000 }],
+        utxoIds: ['utxo-1'],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      psbt: expect.any(String),
+      fee: 150,
+      totalInput: 10150,
+      totalOutput: 10000,
+    });
+  });
+
+  it('returns bad request when PSBT creation fails', async () => {
+    mockCreateTransaction.mockRejectedValueOnce(new Error('psbt build failed'));
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/create`)
+      .send({
+        feeRate: 1.4,
+        recipients: [{ address: 'tb1qrecipient', amount: 15000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('psbt build failed');
+  });
+
+  it('validates signed PSBT on PSBT broadcast endpoint', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/broadcast`)
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('signedPsbt is required');
+  });
+
+  it('broadcasts PSBT and returns txid', async () => {
+    mockGetPSBTInfo.mockReturnValue({
+      fee: 450,
+      outputs: [
+        { address: 'tb1qdest', value: 25000 },
+        { address: 'tb1qchange', value: 5000 },
+      ],
+      inputs: [{ txid: 'f'.repeat(64), vout: 1 }],
+    });
+    mockBroadcastAndSave.mockResolvedValue({
+      txid: '9'.repeat(64),
+      broadcasted: true,
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/broadcast`)
+      .send({
+        signedPsbt: 'cHNi',
+        label: 'hardware send',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      txid: '9'.repeat(64),
+      broadcasted: true,
+    });
+    expect(mockBroadcastAndSave).toHaveBeenCalledWith(
+      walletId,
+      'cHNi',
+      expect.objectContaining({
+        recipient: 'tb1qdest',
+        amount: 25000,
+        fee: 450,
+      })
+    );
+    expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+      expect.any(Object),
+      'TRANSACTION_BROADCAST',
+      'WALLET',
+      expect.objectContaining({ success: true })
+    );
+  });
+
+  it('logs failed PSBT broadcast attempts', async () => {
+    mockGetPSBTInfo.mockImplementationOnce(() => {
+      throw new Error('invalid psbt');
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/broadcast`)
+      .send({
+        signedPsbt: 'bad-psbt',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('invalid psbt');
+    expect(mockAuditLogFromRequest).toHaveBeenCalledWith(
+      expect.any(Object),
+      'TRANSACTION_BROADCAST_FAILED',
+      'WALLET',
+      expect.objectContaining({ success: false })
+    );
+  });
+});

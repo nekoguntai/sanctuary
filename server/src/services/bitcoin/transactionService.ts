@@ -13,14 +13,14 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { BIP32Factory } from 'bip32';
+import { Prisma } from '@prisma/client';
 import { getNetwork, estimateTransactionSize, calculateFee } from './utils';
 import { broadcastTransaction, recalculateWalletBalances } from './blockchain';
 import { RBF_SEQUENCE } from './advancedTx';
-import prisma from '../../models/prisma';
+import { db as prisma } from '../../repositories/db';
 import { parseDescriptor, convertToStandardXpub, MultisigKeyInfo } from './addressDerivation';
 import { getNodeClient } from './nodeClient';
 import { DEFAULT_CONFIRMATION_THRESHOLD } from '../../constants';
-import { unlockUtxosForDraft } from '../draftLockService';
 import { createLogger } from '../../utils/logger';
 import { eventService } from '../eventService';
 import { mapWithConcurrency } from '../../utils/async';
@@ -52,6 +52,13 @@ const log = createLogger('TRANSACTION');
  */
 function isLegacyScriptType(scriptType: string | null): boolean {
   return scriptType === 'legacy' || scriptType === 'p2pkh' || scriptType === 'P2PKH';
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2002';
+  }
+  return String(error).includes('Unique constraint');
 }
 
 /**
@@ -899,371 +906,448 @@ export async function broadcastAndSave(
   // Record broadcast success metric
   transactionBroadcastsTotal.inc({ status: 'success' });
 
-  // Mark UTXOs as spent
-  for (const utxo of metadata.utxos) {
-    await prisma.uTXO.update({
-      where: {
-        txid_vout: {
-          txid: utxo.txid,
-          vout: utxo.vout,
-        },
-      },
-      data: {
-        spent: true,
-      },
-    });
-  }
-
-  // Release UTXO locks if broadcasting from a draft
-  if (metadata.draftId) {
-    const unlockedCount = await unlockUtxosForDraft(metadata.draftId);
-    if (unlockedCount > 0) {
-      log.debug(`Released ${unlockedCount} UTXO locks for draft ${metadata.draftId}`);
-    }
-  }
-
-  // Check if recipient is a wallet address (consolidation) or external (sent)
-  const isConsolidation = await prisma.address.findFirst({
-    where: {
-      walletId,
-      address: metadata.recipient,
-    },
-  });
-
-  // Check if this is an RBF transaction (memo starts with "Replacing transaction ")
-  let replacementForTxid: string | undefined;
-  let labelToUse = metadata.label;
-  let memoToUse = metadata.memo;
-
-  if (metadata.memo && metadata.memo.startsWith('Replacing transaction ')) {
-    // Extract original txid from memo
-    replacementForTxid = metadata.memo.replace('Replacing transaction ', '').trim();
-
-    // Find the original transaction
-    const originalTx = await prisma.transaction.findFirst({
-      where: {
-        txid: replacementForTxid,
-        walletId,
-      },
-    });
-
-    if (originalTx) {
-      // Mark original transaction as replaced
-      await prisma.transaction.update({
-        where: { id: originalTx.id },
-        data: {
-          rbfStatus: 'replaced',
-          replacedByTxid: txid,
-        },
-      });
-
-      // Copy label from original if not already set
-      if (!labelToUse && originalTx.label) {
-        labelToUse = originalTx.label;
-      }
-    }
-  }
-
-  // Save transaction to database
-  const txType = isConsolidation ? 'consolidation' : 'sent';
-  // For consolidation: amount is negative fee (only fee is lost, funds stay in wallet)
-  // For sent: amount is negative (funds leaving wallet = amount + fee)
-  const txAmount = isConsolidation
-    ? -metadata.fee  // Consolidation: only fee is lost
-    : -(metadata.amount + metadata.fee);  // Sent: amount + fee leaves wallet
-  const txRecord = await prisma.transaction.create({
-    data: {
-      txid,
-      walletId,
-      type: txType,
-      amount: BigInt(txAmount),
-      fee: BigInt(metadata.fee),
-      confirmations: 0,
-      label: labelToUse,
-      memo: memoToUse,
-      blockHeight: null,
-      blockTime: null,
-      replacementForTxid,
-      rbfStatus: 'active',
-      rawTx,
-      counterpartyAddress: metadata.recipient,
-    },
-  });
-
-  // Store transaction inputs if provided
-  if (metadata.inputs && metadata.inputs.length > 0) {
-    const inputData = metadata.inputs.map((input, index) => ({
-      transactionId: txRecord.id,
-      inputIndex: index,
-      txid: input.txid,
-      vout: input.vout,
-      address: input.address,
-      amount: BigInt(input.amount),
-      derivationPath: input.derivationPath,
-    }));
-
-    await prisma.transactionInput.createMany({ data: inputData });
-    log.debug(`Stored ${inputData.length} transaction inputs for ${txid}`);
-  } else {
-    // Fallback: try to get input data from UTXO table if not provided
-    // OPTIMIZED: Batch fetch all UTXOs and addresses to avoid N+1 queries
-    const utxoKeys = metadata.utxos.map(u => ({ txid: u.txid, vout: u.vout }));
-
-    // Batch fetch all required UTXOs
-    const utxoRecords = await prisma.uTXO.findMany({
-      where: {
-        OR: utxoKeys.map(k => ({ txid: k.txid, vout: k.vout })),
-      },
-    });
-    const utxoLookup = new Map(utxoRecords.map(u => [`${u.txid}:${u.vout}`, u]));
-
-    // Batch fetch all wallet addresses for derivation paths
-    const utxoAddresses = utxoRecords.map(u => u.address);
-    const addressRecords = await prisma.address.findMany({
-      where: {
-        walletId,
-        address: { in: utxoAddresses },
-      },
-      select: { address: true, derivationPath: true },
-    });
-    const addressPathLookup = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
-
-    // Build input data using lookups (O(1) per input instead of O(n) queries)
-    const utxoInputs = metadata.utxos.map((utxo, index) => {
-      const utxoRecord = utxoLookup.get(`${utxo.txid}:${utxo.vout}`);
-      if (!utxoRecord) return null;
-
-      return {
-        transactionId: txRecord.id,
-        inputIndex: index,
-        txid: utxo.txid,
-        vout: utxo.vout,
-        address: utxoRecord.address,
-        amount: utxoRecord.amount,
-        derivationPath: addressPathLookup.get(utxoRecord.address),
-      };
-    });
-
-    const validInputs = utxoInputs.filter(Boolean) as Array<{
-      transactionId: string;
-      inputIndex: number;
-      txid: string;
-      vout: number;
-      address: string;
-      amount: bigint;
-      derivationPath: string | null | undefined;
-    }>;
-
-    if (validInputs.length > 0) {
-      await prisma.transactionInput.createMany({ data: validInputs });
-      log.debug(`Stored ${validInputs.length} transaction inputs (from UTXO fallback) for ${txid}`);
-    }
-  }
-
-  // Store transaction outputs if provided
-  if (metadata.outputs && metadata.outputs.length > 0) {
-    const outputData = metadata.outputs.map((output, index) => ({
-      transactionId: txRecord.id,
-      outputIndex: index,
-      address: output.address,
-      amount: BigInt(output.amount),
-      outputType: output.outputType,
-      isOurs: output.isOurs,
-      scriptPubKey: output.scriptPubKey,
-    }));
-
-    await prisma.transactionOutput.createMany({ data: outputData });
-    log.debug(`Stored ${outputData.length} transaction outputs for ${txid}`);
-  } else {
-    // Fallback: try to parse outputs from the raw transaction or PSBT
-    try {
-      const tx = bitcoin.Transaction.fromHex(rawTx);
-      const network = await prisma.wallet.findUnique({
-        where: { id: walletId },
-        select: { network: true },
-      });
-      const networkObj = getNetwork(network?.network === 'testnet' ? 'testnet' : 'mainnet');
-
-      // Get all wallet addresses to check ownership
-      const walletAddresses = await prisma.address.findMany({
-        where: { walletId },
-        select: { address: true },
-      });
-      const walletAddressSet = new Set(walletAddresses.map(a => a.address));
-
-      const outputData = tx.outs.map((output, index) => {
-        let address = '';
-        try {
-          address = bitcoin.address.fromOutputScript(output.script, networkObj);
-        } catch (e) {
-          // OP_RETURN or non-standard output
-        }
-
-        const isOurs = walletAddressSet.has(address);
-        let outputType: string = 'unknown';
-
-        if (address === metadata.recipient) {
-          outputType = 'recipient';
-        } else if (isOurs) {
-          outputType = isConsolidation ? 'consolidation' : 'change';
-        } else if (address) {
-          outputType = 'recipient'; // External address, must be a recipient
-        } else {
-          outputType = 'op_return';
-        }
-
-        return {
-          transactionId: txRecord.id,
-          outputIndex: index,
-          address,
-          amount: BigInt(output.value),
-          outputType,
-          isOurs,
-          scriptPubKey: output.script.toString('hex'),
-        };
-      });
-
-      if (outputData.length > 0) {
-        await prisma.transactionOutput.createMany({ data: outputData });
-        log.debug(`Stored ${outputData.length} transaction outputs (from raw tx) for ${txid}`);
-      }
-    } catch (e) {
-      log.warn(`Failed to parse outputs from raw transaction: ${e}`);
-    }
-  }
-
-  // Recalculate running balances for all transactions in this wallet
-  await recalculateWalletBalances(walletId);
-
-  // Send notifications for the broadcast transaction (Telegram + Push)
-  // This is async and fire-and-forget to not block the response
-  import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
-    notifyNewTransactions(walletId, [{
-      txid,
-      type: txType,
-      amount: BigInt(metadata.amount),
-    }]).catch(err => {
-      // Log but don't fail the broadcast
-      log.warn('Failed to send notifications', { error: String(err) });
-    });
-  });
-
-  // Emit transaction sent event for real-time updates
-  eventService.emitTransactionSent({
-    walletId,
-    txid,
-    amount: BigInt(metadata.amount),
-    fee: BigInt(metadata.fee),
-    recipients: [{ address: metadata.recipient, amount: BigInt(metadata.amount) }],
-    rawTx,
-  });
-
-  // Check if any output addresses belong to other wallets in the app
-  // If so, create pending "received" transactions for those wallets immediately
-  // This handles both single-recipient and multi-recipient (batch) transactions
-  try {
-    const tx = bitcoin.Transaction.fromHex(rawTx);
-    const wallet = await prisma.wallet.findUnique({
-      where: { id: walletId },
-      select: { network: true },
-    });
-    const networkObj = getNetwork(wallet?.network === 'testnet' ? 'testnet' : 'mainnet');
-
-    // Extract all output addresses
-    const outputAddresses: Array<{ address: string; amount: number }> = [];
-    for (const output of tx.outs) {
-      try {
-        const addr = bitcoin.address.fromOutputScript(output.script, networkObj);
-        outputAddresses.push({ address: addr, amount: output.value });
-      } catch (e) {
-        // Skip OP_RETURN or non-standard outputs
-      }
-    }
-
-    // Find which output addresses belong to OTHER wallets in the app
-    const recipientAddresses = await prisma.address.findMany({
-      where: {
-        address: { in: outputAddresses.map(o => o.address) },
-        walletId: { not: walletId }, // Not the sending wallet
-      },
-      select: {
-        walletId: true,
-        address: true,
-      },
-    });
-
-    // Group outputs by receiving wallet
-    const walletOutputs = new Map<string, { address: string; amount: number }[]>();
-    for (const addrRecord of recipientAddresses) {
-      const outputs = outputAddresses.filter(o => o.address === addrRecord.address);
-      const existing = walletOutputs.get(addrRecord.walletId) || [];
-      walletOutputs.set(addrRecord.walletId, [...existing, ...outputs]);
-    }
-
-    // Create pending received transaction for each receiving wallet
-    for (const [receivingWalletId, outputs] of walletOutputs) {
-      const totalAmount = outputs.reduce((sum, o) => sum + o.amount, 0);
-
-      log.info('Creating pending received transaction for internal wallet', {
-        txid,
-        sendingWalletId: walletId,
-        receivingWalletId,
-        outputCount: outputs.length,
-        totalAmount,
-      });
-
-      // Check if transaction already exists for receiving wallet (avoid duplicates)
-      const existingReceivedTx = await prisma.transaction.findFirst({
+  const persisted = await prisma.$transaction(async (tx) => {
+    // Mark UTXOs as spent
+    for (const utxo of metadata.utxos) {
+      await tx.uTXO.update({
         where: {
-          txid,
-          walletId: receivingWalletId,
+          txid_vout: {
+            txid: utxo.txid,
+            vout: utxo.vout,
+          },
+        },
+        data: {
+          spent: true,
+        },
+      });
+    }
+
+    // Release UTXO locks if broadcasting from a draft
+    let unlockedCount = 0;
+    if (metadata.draftId) {
+      const unlockResult = await tx.draftUtxoLock.deleteMany({
+        where: { draftId: metadata.draftId },
+      });
+      unlockedCount = unlockResult.count;
+    }
+
+    // Check if recipient is a wallet address (consolidation) or external (sent)
+    const isConsolidation = await tx.address.findFirst({
+      where: {
+        walletId,
+        address: metadata.recipient,
+      },
+    });
+
+    // Check if this is an RBF transaction (memo starts with "Replacing transaction ")
+    let replacementForTxid: string | undefined;
+    let labelToUse = metadata.label;
+    let memoToUse = metadata.memo;
+
+    if (metadata.memo && metadata.memo.startsWith('Replacing transaction ')) {
+      // Extract original txid from memo
+      replacementForTxid = metadata.memo.replace('Replacing transaction ', '').trim();
+
+      // Find the original transaction
+      const originalTx = await tx.transaction.findFirst({
+        where: {
+          txid: replacementForTxid,
+          walletId,
         },
       });
 
-      if (!existingReceivedTx) {
-        // Create pending received transaction for the receiving wallet
-        await prisma.transaction.create({
+      if (originalTx) {
+        // Mark original transaction as replaced
+        await tx.transaction.update({
+          where: { id: originalTx.id },
           data: {
-            txid,
-            walletId: receivingWalletId,
-            type: 'received',
-            amount: BigInt(totalAmount),
-            fee: BigInt(0), // Receiver doesn't pay fee
-            confirmations: 0,
-            label: metadata.label,
-            blockHeight: null,
-            blockTime: null,
-            rawTx,
-            counterpartyAddress: null,
+            rbfStatus: 'replaced',
+            replacedByTxid: txid,
           },
         });
 
-        // Recalculate balances for receiving wallet
-        await recalculateWalletBalances(receivingWalletId);
-
-        // Emit transaction received event for real-time updates
-        eventService.emitTransactionReceived({
-          walletId: receivingWalletId,
-          txid,
-          amount: BigInt(totalAmount),
-          address: outputs[0].address,
-          confirmations: 0,
-        });
-
-        // Send notifications for the receiving wallet
-        import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
-          notifyNewTransactions(receivingWalletId, [{
-            txid,
-            type: 'received',
-            amount: BigInt(totalAmount),
-          }]).catch(err => {
-            log.warn('Failed to send notifications for receiving wallet', { error: String(err) });
-          });
-        });
+        // Copy label from original if not already set
+        if (!labelToUse && originalTx.label) {
+          labelToUse = originalTx.label;
+        }
       }
     }
-  } catch (e) {
-    log.warn('Failed to create pending transactions for receiving wallets', { error: String(e) });
+
+    // Save transaction to database
+    const txType = isConsolidation ? 'consolidation' : 'sent';
+    // For consolidation: amount is negative fee (only fee is lost, funds stay in wallet)
+    // For sent: amount is negative (funds leaving wallet = amount + fee)
+    const txAmount = isConsolidation
+      ? -metadata.fee  // Consolidation: only fee is lost
+      : -(metadata.amount + metadata.fee);  // Sent: amount + fee leaves wallet
+    let txRecord: Awaited<ReturnType<typeof tx.transaction.create>>;
+    let mainTransactionCreated = true;
+    try {
+      txRecord = await tx.transaction.create({
+        data: {
+          txid,
+          walletId,
+          type: txType,
+          amount: BigInt(txAmount),
+          fee: BigInt(metadata.fee),
+          confirmations: 0,
+          label: labelToUse,
+          memo: memoToUse,
+          blockHeight: null,
+          blockTime: null,
+          replacementForTxid,
+          rbfStatus: 'active',
+          rawTx,
+          counterpartyAddress: metadata.recipient,
+        },
+      });
+    } catch (error) {
+      // Race-safe idempotency: if another sync/process inserted this tx first,
+      // reuse that record instead of failing after successful broadcast.
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const existingTxRecord = await tx.transaction.findUnique({
+        where: {
+          txid_walletId: {
+            txid,
+            walletId,
+          },
+        },
+      });
+
+      if (!existingTxRecord) {
+        throw error;
+      }
+
+      txRecord = existingTxRecord;
+      mainTransactionCreated = false;
+      log.warn(`Transaction ${txid} already existed for wallet ${walletId} during broadcast save`);
+    }
+
+    // Store transaction inputs if provided
+    if (metadata.inputs && metadata.inputs.length > 0) {
+      const inputData = metadata.inputs.map((input, index) => ({
+        transactionId: txRecord.id,
+        inputIndex: index,
+        txid: input.txid,
+        vout: input.vout,
+        address: input.address,
+        amount: BigInt(input.amount),
+        derivationPath: input.derivationPath,
+      }));
+
+      await tx.transactionInput.createMany({
+        data: inputData,
+        skipDuplicates: true,
+      });
+      log.debug(`Stored ${inputData.length} transaction inputs for ${txid}`);
+    } else {
+      // Fallback: try to get input data from UTXO table if not provided
+      // OPTIMIZED: Batch fetch all UTXOs and addresses to avoid N+1 queries
+      const utxoKeys = metadata.utxos.map(u => ({ txid: u.txid, vout: u.vout }));
+
+      // Batch fetch all required UTXOs
+      const utxoRecords = await tx.uTXO.findMany({
+        where: {
+          OR: utxoKeys.map(k => ({ txid: k.txid, vout: k.vout })),
+        },
+      });
+      const utxoLookup = new Map(utxoRecords.map(u => [`${u.txid}:${u.vout}`, u]));
+
+      // Batch fetch all wallet addresses for derivation paths
+      const utxoAddresses = utxoRecords.map(u => u.address);
+      const addressRecords = await tx.address.findMany({
+        where: {
+          walletId,
+          address: { in: utxoAddresses },
+        },
+        select: { address: true, derivationPath: true },
+      });
+      const addressPathLookup = new Map(addressRecords.map(a => [a.address, a.derivationPath]));
+
+      // Build input data using lookups (O(1) per input instead of O(n) queries)
+      const utxoInputs = metadata.utxos.map((utxo, index) => {
+        const utxoRecord = utxoLookup.get(`${utxo.txid}:${utxo.vout}`);
+        if (!utxoRecord) return null;
+
+        return {
+          transactionId: txRecord.id,
+          inputIndex: index,
+          txid: utxo.txid,
+          vout: utxo.vout,
+          address: utxoRecord.address,
+          amount: utxoRecord.amount,
+          derivationPath: addressPathLookup.get(utxoRecord.address),
+        };
+      });
+
+      const validInputs = utxoInputs.filter(Boolean) as Array<{
+        transactionId: string;
+        inputIndex: number;
+        txid: string;
+        vout: number;
+        address: string;
+        amount: bigint;
+        derivationPath: string | null | undefined;
+      }>;
+
+      if (validInputs.length > 0) {
+        await tx.transactionInput.createMany({
+          data: validInputs,
+          skipDuplicates: true,
+        });
+        log.debug(`Stored ${validInputs.length} transaction inputs (from UTXO fallback) for ${txid}`);
+      }
+    }
+
+    // Store transaction outputs if provided
+    if (metadata.outputs && metadata.outputs.length > 0) {
+      const outputData = metadata.outputs.map((output, index) => ({
+        transactionId: txRecord.id,
+        outputIndex: index,
+        address: output.address,
+        amount: BigInt(output.amount),
+        outputType: output.outputType,
+        isOurs: output.isOurs,
+        scriptPubKey: output.scriptPubKey,
+      }));
+
+      await tx.transactionOutput.createMany({
+        data: outputData,
+        skipDuplicates: true,
+      });
+      log.debug(`Stored ${outputData.length} transaction outputs for ${txid}`);
+    } else {
+      // Fallback: try to parse outputs from the raw transaction or PSBT
+      try {
+        const txParsed = bitcoin.Transaction.fromHex(rawTx);
+        const network = await tx.wallet.findUnique({
+          where: { id: walletId },
+          select: { network: true },
+        });
+        const networkObj = getNetwork(network?.network === 'testnet' ? 'testnet' : 'mainnet');
+
+        // Get all wallet addresses to check ownership
+        const walletAddresses = await tx.address.findMany({
+          where: { walletId },
+          select: { address: true },
+        });
+        const walletAddressSet = new Set(walletAddresses.map(a => a.address));
+
+        const outputData = txParsed.outs.map((output, index) => {
+          let address = '';
+          try {
+            address = bitcoin.address.fromOutputScript(output.script, networkObj);
+          } catch (e) {
+            // OP_RETURN or non-standard output
+          }
+
+          const isOurs = walletAddressSet.has(address);
+          let outputType: string = 'unknown';
+
+          if (address === metadata.recipient) {
+            outputType = 'recipient';
+          } else if (isOurs) {
+            outputType = isConsolidation ? 'consolidation' : 'change';
+          } else if (address) {
+            outputType = 'recipient'; // External address, must be a recipient
+          } else {
+            outputType = 'op_return';
+          }
+
+          return {
+            transactionId: txRecord.id,
+            outputIndex: index,
+            address,
+            amount: BigInt(output.value),
+            outputType,
+            isOurs,
+            scriptPubKey: output.script.toString('hex'),
+          };
+        });
+
+        if (outputData.length > 0) {
+          await tx.transactionOutput.createMany({
+            data: outputData,
+            skipDuplicates: true,
+          });
+          log.debug(`Stored ${outputData.length} transaction outputs (from raw tx) for ${txid}`);
+        }
+      } catch (e) {
+        log.warn(`Failed to parse outputs from raw transaction: ${e}`);
+      }
+    }
+
+    const createdReceivingTransactions: Array<{ walletId: string; amount: number; address: string }> = [];
+
+    // Check if any output addresses belong to other wallets in the app
+    // If so, create pending "received" transactions for those wallets immediately
+    // This handles both single-recipient and multi-recipient (batch) transactions
+    try {
+      const txParsed = bitcoin.Transaction.fromHex(rawTx);
+      const wallet = await tx.wallet.findUnique({
+        where: { id: walletId },
+        select: { network: true },
+      });
+      const networkObj = getNetwork(wallet?.network === 'testnet' ? 'testnet' : 'mainnet');
+
+      // Extract all output addresses
+      const outputAddresses: Array<{ address: string; amount: number }> = [];
+      for (const output of txParsed.outs) {
+        try {
+          const addr = bitcoin.address.fromOutputScript(output.script, networkObj);
+          outputAddresses.push({ address: addr, amount: output.value });
+        } catch (e) {
+          // Skip OP_RETURN or non-standard outputs
+        }
+      }
+
+      // Find which output addresses belong to OTHER wallets in the app
+      const recipientAddresses = await tx.address.findMany({
+        where: {
+          address: { in: outputAddresses.map(o => o.address) },
+          walletId: { not: walletId }, // Not the sending wallet
+        },
+        select: {
+          walletId: true,
+          address: true,
+        },
+      });
+
+      // Group outputs by receiving wallet
+      const walletOutputs = new Map<string, { address: string; amount: number }[]>();
+      for (const addrRecord of recipientAddresses) {
+        const outputs = outputAddresses.filter(o => o.address === addrRecord.address);
+        const existing = walletOutputs.get(addrRecord.walletId) || [];
+        walletOutputs.set(addrRecord.walletId, [...existing, ...outputs]);
+      }
+
+      // Create pending received transaction for each receiving wallet
+      for (const [receivingWalletId, outputs] of walletOutputs) {
+        const totalAmount = outputs.reduce((sum, o) => sum + o.amount, 0);
+
+        log.info('Creating pending received transaction for internal wallet', {
+          txid,
+          sendingWalletId: walletId,
+          receivingWalletId,
+          outputCount: outputs.length,
+          totalAmount,
+        });
+
+        // Check if transaction already exists for receiving wallet (avoid duplicates)
+        const existingReceivedTx = await tx.transaction.findFirst({
+          where: {
+            txid,
+            walletId: receivingWalletId,
+          },
+        });
+
+        if (existingReceivedTx) {
+          continue;
+        }
+
+        try {
+          // Create pending received transaction for the receiving wallet
+          await tx.transaction.create({
+            data: {
+              txid,
+              walletId: receivingWalletId,
+              type: 'received',
+              amount: BigInt(totalAmount),
+              fee: BigInt(0), // Receiver doesn't pay fee
+              confirmations: 0,
+              label: metadata.label,
+              blockHeight: null,
+              blockTime: null,
+              rawTx,
+              counterpartyAddress: null,
+            },
+          });
+        } catch (error) {
+          if (!isUniqueConstraintError(error)) {
+            throw error;
+          }
+          log.debug('Skipping duplicate pending receive record', {
+            txid,
+            receivingWalletId,
+          });
+          continue;
+        }
+
+        createdReceivingTransactions.push({
+          walletId: receivingWalletId,
+          amount: totalAmount,
+          address: outputs[0]?.address || '',
+        });
+      }
+    } catch (e) {
+      log.warn('Failed to create pending transactions for receiving wallets', { error: String(e) });
+    }
+
+    return {
+      txType: txType as 'sent' | 'consolidation',
+      mainTransactionCreated,
+      unlockedCount,
+      createdReceivingTransactions,
+    };
+  });
+
+  if (metadata.draftId && persisted.unlockedCount > 0) {
+    log.debug(`Released ${persisted.unlockedCount} UTXO locks for draft ${metadata.draftId}`);
+  }
+
+  // Recalculate running balances for all affected wallets
+  await recalculateWalletBalances(walletId);
+
+  if (persisted.mainTransactionCreated) {
+    // Send notifications for the broadcast transaction (Telegram + Push)
+    // This is async and fire-and-forget to not block the response
+    import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
+      notifyNewTransactions(walletId, [{
+        txid,
+        type: persisted.txType,
+        amount: BigInt(metadata.amount),
+      }]).catch(err => {
+        // Log but don't fail the broadcast
+        log.warn('Failed to send notifications', { error: String(err) });
+      });
+    });
+
+    // Emit transaction sent event for real-time updates
+    eventService.emitTransactionSent({
+      walletId,
+      txid,
+      amount: BigInt(metadata.amount),
+      fee: BigInt(metadata.fee),
+      recipients: [{ address: metadata.recipient, amount: BigInt(metadata.amount) }],
+      rawTx,
+    });
+  }
+
+  for (const receivingTx of persisted.createdReceivingTransactions) {
+    await recalculateWalletBalances(receivingTx.walletId);
+
+    // Emit transaction received event for real-time updates
+    eventService.emitTransactionReceived({
+      walletId: receivingTx.walletId,
+      txid,
+      amount: BigInt(receivingTx.amount),
+      address: receivingTx.address,
+      confirmations: 0,
+    });
+
+    // Send notifications for the receiving wallet
+    import('../notifications/notificationService').then(({ notifyNewTransactions }) => {
+      notifyNewTransactions(receivingTx.walletId, [{
+        txid,
+        type: 'received',
+        amount: BigInt(receivingTx.amount),
+      }]).catch(err => {
+        log.warn('Failed to send notifications for receiving wallet', { error: String(err) });
+      });
+    });
   }
 
   return {
@@ -1814,4 +1898,3 @@ export async function createBatchTransaction(
     outputs: finalOutputs,
   };
 }
-

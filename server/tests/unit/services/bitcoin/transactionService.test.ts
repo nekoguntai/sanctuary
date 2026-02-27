@@ -54,11 +54,6 @@ vi.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
   }),
 }));
 
-// Mock draft lock service
-vi.mock('../../../../src/services/draftLockService', () => ({
-  unlockUtxosForDraft: vi.fn().mockResolvedValue(0),
-}));
-
 // Now import the service after mocks are set up
 import {
   selectUTXOs,
@@ -74,7 +69,6 @@ import {
 } from '../../../../src/services/bitcoin/transactionService';
 import { estimateTransactionSize, calculateFee } from '../../../../src/services/bitcoin/utils';
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
-import * as draftLockService from '../../../../src/services/draftLockService';
 import * as nodeClient from '../../../../src/services/bitcoin/nodeClient';
 
 describe('Transaction Service', () => {
@@ -1045,9 +1039,6 @@ describe('Transaction Service', () => {
       it('should release UTXO locks when broadcasting from a draft', async () => {
         const draftId = 'draft-to-broadcast';
 
-        // Mock the unlockUtxosForDraft function behavior
-        vi.mocked(draftLockService.unlockUtxosForDraft).mockResolvedValue(2);
-
         const metadata = {
           recipient,
           amount: 50000,
@@ -1062,7 +1053,9 @@ describe('Transaction Service', () => {
 
         await broadcastAndSave(walletId, undefined, metadata);
 
-        expect(draftLockService.unlockUtxosForDraft).toHaveBeenCalledWith(draftId);
+        expect(mockPrismaClient.draftUtxoLock.deleteMany).toHaveBeenCalledWith({
+          where: { draftId },
+        });
       });
     });
   });

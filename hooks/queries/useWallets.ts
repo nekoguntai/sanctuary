@@ -2,8 +2,6 @@ import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import * as walletsApi from '../../src/api/wallets';
 import * as transactionsApi from '../../src/api/transactions';
-import * as bitcoinApi from '../../src/api/bitcoin';
-import * as devicesApi from '../../src/api/devices';
 
 // Stable empty arrays to prevent re-renders when data is loading
 const EMPTY_TRANSACTIONS: Awaited<ReturnType<typeof transactionsApi.getTransactions>> = [];
@@ -29,42 +27,6 @@ export function useWallets() {
   return useQuery({
     queryKey: walletKeys.lists(),
     queryFn: walletsApi.getWallets,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch a single wallet by ID
- */
-export function useWallet(id: string | undefined) {
-  return useQuery({
-    queryKey: walletKeys.detail(id!),
-    queryFn: () => walletsApi.getWallet(id!),
-    enabled: !!id,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch UTXOs for a wallet
- */
-export function useWalletUtxos(walletId: string | undefined) {
-  return useQuery({
-    queryKey: walletKeys.utxos(walletId!),
-    queryFn: () => transactionsApi.getUTXOs(walletId!),
-    enabled: !!walletId,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch addresses for a wallet
- */
-export function useWalletAddresses(walletId: string | undefined) {
-  return useQuery({
-    queryKey: walletKeys.addresses(walletId!),
-    queryFn: () => transactionsApi.getAddresses(walletId!),
-    enabled: !!walletId,
     placeholderData: keepPreviousData,
   });
 }
@@ -96,86 +58,6 @@ export function useImportWallet() {
       // Invalidate wallet list to refetch
       queryClient.invalidateQueries({ queryKey: walletKeys.lists() });
     },
-  });
-}
-
-/**
- * Hook to delete a wallet
- */
-export function useDeleteWallet() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (walletId: string) => walletsApi.deleteWallet(walletId),
-    onSuccess: (_data, walletId) => {
-      // Invalidate wallet list
-      queryClient.invalidateQueries({ queryKey: walletKeys.lists() });
-      // Remove the specific wallet from cache
-      queryClient.removeQueries({ queryKey: walletKeys.detail(walletId) });
-    },
-  });
-}
-
-/**
- * Hook to sync a wallet
- */
-export function useSyncWallet() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (walletId: string) => bitcoinApi.syncWallet(walletId),
-    onSuccess: (_data, walletId) => {
-      // Invalidate wallet data after sync
-      queryClient.invalidateQueries({ queryKey: walletKeys.detail(walletId) });
-      queryClient.invalidateQueries({ queryKey: walletKeys.utxos(walletId) });
-      queryClient.invalidateQueries({ queryKey: walletKeys.transactions(walletId) });
-    },
-  });
-}
-
-/**
- * Hook to generate new addresses for a wallet
- */
-export function useGenerateAddresses() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ walletId, count }: { walletId: string; count: number }) =>
-      transactionsApi.generateAddresses(walletId, count),
-    onSuccess: (_data, { walletId }) => {
-      queryClient.invalidateQueries({ queryKey: walletKeys.addresses(walletId) });
-    },
-  });
-}
-
-/**
- * Helper to invalidate all wallet data (useful after WebSocket updates)
- * Returns a stable function reference to prevent re-renders
- */
-export function useInvalidateWallet() {
-  const queryClient = useQueryClient();
-
-  return useCallback((walletId: string) => {
-    queryClient.invalidateQueries({ queryKey: walletKeys.detail(walletId) });
-    queryClient.invalidateQueries({ queryKey: walletKeys.utxos(walletId) });
-    queryClient.invalidateQueries({ queryKey: walletKeys.transactions(walletId) });
-    queryClient.invalidateQueries({ queryKey: walletKeys.addresses(walletId) });
-    queryClient.invalidateQueries({ queryKey: walletKeys.balance(walletId) });
-  }, [queryClient]);
-}
-
-/**
- * Hook to fetch transactions for a specific wallet
- */
-export function useWalletTransactions(
-  walletId: string | undefined,
-  params?: { limit?: number; offset?: number }
-) {
-  return useQuery({
-    queryKey: walletKeys.transactions(walletId!, params),
-    queryFn: () => transactionsApi.getTransactions(walletId!, params),
-    enabled: !!walletId,
-    placeholderData: keepPreviousData,
   });
 }
 
@@ -290,46 +172,6 @@ export function useUpdateWalletSyncStatus() {
       };
     });
   }, [queryClient]);
-}
-
-/**
- * Hook to fetch devices for a wallet
- * Fetches all devices and filters to those associated with the wallet
- */
-export function useWalletDevices(walletId: string | undefined) {
-  return useQuery({
-    queryKey: [...walletKeys.detail(walletId!), 'devices'] as const,
-    queryFn: async () => {
-      const allDevices = await devicesApi.getDevices();
-      return allDevices.filter((d) => d.wallets?.some((w) => w.wallet.id === walletId));
-    },
-    enabled: !!walletId,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch wallet stats
- */
-export function useWalletStats(walletId: string | undefined) {
-  return useQuery({
-    queryKey: [...walletKeys.detail(walletId!), 'stats'] as const,
-    queryFn: () => walletsApi.getWalletStats(walletId!),
-    enabled: !!walletId,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch wallet share info
- */
-export function useWalletShareInfo(walletId: string | undefined) {
-  return useQuery({
-    queryKey: [...walletKeys.detail(walletId!), 'share'] as const,
-    queryFn: () => walletsApi.getWalletShareInfo(walletId!),
-    enabled: !!walletId,
-    placeholderData: keepPreviousData,
-  });
 }
 
 type Timeframe = '1D' | '1W' | '1M' | '1Y' | 'ALL';

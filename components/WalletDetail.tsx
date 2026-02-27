@@ -15,16 +15,8 @@ import * as payjoinApi from '../src/api/payjoin';
 import * as privacyApi from '../src/api/transactions';
 import { truncateAddress } from '../utils/formatters';
 import { getAddressExplorerUrl } from '../utils/explorer';
-import {
-  useWallet,
-  useWalletUtxos,
-  useWalletAddresses,
-  useWalletTransactions,
-  useWalletDevices,
-  useInvalidateWallet,
-  useSyncWallet,
-} from '../hooks/queries/useWallets';
 import { useBitcoinStatus } from '../hooks/queries/useBitcoin';
+import { formatApiTransaction, formatApiUtxo } from './WalletDetail/mappers';
 import { ApiError } from '../src/api/client';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { TransactionList } from './TransactionList';
@@ -755,28 +747,7 @@ export const WalletDetail: React.FC = () => {
     fetchPromises.push(
       transactionsApi.getTransactions(id, { limit: TX_PAGE_SIZE, offset: 0 })
         .then(apiTransactions => {
-          const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
-            id: tx.id,
-            txid: tx.txid,
-            type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-            // Amount is already signed by the API: positive for received, negative for sent/consolidation
-            amount: Number(tx.amount),
-            balanceAfter: tx.balanceAfter != null ? Number(tx.balanceAfter) : undefined,
-            timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
-            confirmations: tx.confirmations,
-            confirmed: tx.confirmations >= 1,
-            fee: tx.fee ? Number(tx.fee) : 0,
-            walletId: id,
-            label: tx.label || tx.memo || '',
-            labels: tx.labels || [], // Map labels from API
-            address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
-            blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
-            counterpartyAddress: tx.counterpartyAddress || undefined,
-            // RBF tracking
-            rbfStatus: tx.rbfStatus as 'active' | 'replaced' | 'confirmed' | undefined,
-            replacedByTxid: tx.replacedByTxid || undefined,
-          }));
-          setTransactions(formattedTxs);
+          setTransactions(apiTransactions.map(tx => formatApiTransaction(tx, id)));
           setTxOffset(TX_PAGE_SIZE);
           setHasMoreTx(apiTransactions.length === TX_PAGE_SIZE);
         })
@@ -888,27 +859,7 @@ export const WalletDetail: React.FC = () => {
       setLoadingMoreTx(true);
       const apiTransactions = await transactionsApi.getTransactions(id, { limit: TX_PAGE_SIZE, offset: txOffset });
 
-      const formattedTxs: Transaction[] = apiTransactions.map(tx => ({
-        id: tx.id,
-        txid: tx.txid,
-        type: tx.type as 'sent' | 'received' | 'consolidation' | undefined,
-        // Amount is already signed by the API: positive for received, negative for sent/consolidation
-        amount: Number(tx.amount),
-        balanceAfter: tx.balanceAfter != null ? Number(tx.balanceAfter) : undefined,
-        timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
-        confirmations: tx.confirmations,
-        confirmed: tx.confirmations >= 1,
-        fee: tx.fee ? Number(tx.fee) : 0,
-        walletId: id,
-        label: tx.label || tx.memo || '',
-        labels: tx.labels || [],
-        address: tx.address && typeof tx.address === 'object' ? tx.address.address : tx.address as string | undefined,
-        blockHeight: tx.blockHeight ? Number(tx.blockHeight) : undefined,
-        counterpartyAddress: tx.counterpartyAddress || undefined,
-        // RBF tracking
-        rbfStatus: tx.rbfStatus as 'active' | 'replaced' | 'confirmed' | undefined,
-        replacedByTxid: tx.replacedByTxid || undefined,
-      }));
+      const formattedTxs = apiTransactions.map(tx => formatApiTransaction(tx, id));
 
       setTransactions(prev => [...prev, ...formattedTxs]);
       setTxOffset(prev => prev + TX_PAGE_SIZE);
@@ -986,19 +937,7 @@ export const WalletDetail: React.FC = () => {
       const utxoData = await transactionsApi.getUTXOs(walletId, { limit, offset });
       setUtxoSummary({ count: utxoData.count, totalBalance: utxoData.totalBalance });
 
-      const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
-        id: utxo.id,
-        txid: utxo.txid,
-        vout: utxo.vout,
-        amount: Number(utxo.amount),
-        address: utxo.address,
-        confirmations: utxo.confirmations,
-        frozen: utxo.frozen ?? false,
-        spendable: utxo.spendable,
-        date: new Date(utxo.createdAt).getTime(),
-        lockedByDraftId: utxo.lockedByDraftId,
-        lockedByDraftLabel: utxo.lockedByDraftLabel,
-      }));
+      const formattedUTXOs = utxoData.utxos.map(formatApiUtxo);
 
       setUTXOs(prev => reset ? formattedUTXOs : [...prev, ...formattedUTXOs]);
       const nextOffset = offset + formattedUTXOs.length;
@@ -1017,19 +956,7 @@ export const WalletDetail: React.FC = () => {
     setLoadingUtxoStats(true);
     try {
       const utxoData = await transactionsApi.getUTXOs(walletId);
-      const formattedUTXOs: UTXO[] = utxoData.utxos.map(utxo => ({
-        id: utxo.id,
-        txid: utxo.txid,
-        vout: utxo.vout,
-        amount: Number(utxo.amount),
-        address: utxo.address,
-        confirmations: utxo.confirmations,
-        frozen: utxo.frozen ?? false,
-        spendable: utxo.spendable,
-        date: new Date(utxo.createdAt).getTime(),
-        lockedByDraftId: utxo.lockedByDraftId,
-        lockedByDraftLabel: utxo.lockedByDraftLabel,
-      }));
+      const formattedUTXOs = utxoData.utxos.map(formatApiUtxo);
       setUtxoStats(formattedUTXOs);
     } catch (err) {
       logError(log, err, 'Failed to load UTXOs for stats');

@@ -20,9 +20,8 @@ import {
   formatSats as sharedFormatSats,
   formatBTC as sharedFormatBTC,
   SATS_PER_BTC,
-  NetworkType,
-  AddressType,
-} from '../../../../shared';
+} from '../../../../shared/utils/bitcoin';
+import type { NetworkType, AddressType } from '../../../../shared/constants/bitcoin';
 
 export { satsToBTC, btcToSats, SATS_PER_BTC, NetworkType, AddressType };
 

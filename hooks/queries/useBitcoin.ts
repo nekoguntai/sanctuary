@@ -1,4 +1,4 @@
-import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import * as bitcoinApi from '../../src/api/bitcoin';
 
 // Query key factory for bitcoin-related queries
@@ -6,8 +6,6 @@ export const bitcoinKeys = {
   all: ['bitcoin'] as const,
   status: () => [...bitcoinKeys.all, 'status'] as const,
   fees: () => [...bitcoinKeys.all, 'fees'] as const,
-  addressInfo: (address: string) => [...bitcoinKeys.all, 'address', address] as const,
-  transaction: (txid: string) => [...bitcoinKeys.all, 'transaction', txid] as const,
 };
 
 /**
@@ -35,50 +33,6 @@ export function useFeeEstimates() {
     // Keep stale time short for fees
     staleTime: 15_000,
     placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch address info from blockchain
- */
-export function useAddressInfo(address: string | undefined, network?: string) {
-  return useQuery({
-    queryKey: bitcoinKeys.addressInfo(address!),
-    queryFn: () => bitcoinApi.getAddressInfo(address!, network),
-    enabled: !!address,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to fetch transaction details from blockchain
- */
-export function useTransactionDetails(txid: string | undefined) {
-  return useQuery({
-    queryKey: bitcoinKeys.transaction(txid!),
-    queryFn: () => bitcoinApi.getTransactionDetails(txid!),
-    enabled: !!txid,
-    // Transaction details rarely change once confirmed
-    staleTime: 5 * 60 * 1000,
-    placeholderData: keepPreviousData,
-  });
-}
-
-/**
- * Hook to validate a Bitcoin address
- */
-export function useValidateAddress() {
-  return useMutation({
-    mutationFn: bitcoinApi.validateAddress,
-  });
-}
-
-/**
- * Hook to broadcast a transaction
- */
-export function useBroadcastTransaction() {
-  return useMutation({
-    mutationFn: bitcoinApi.broadcastTransaction,
   });
 }
 

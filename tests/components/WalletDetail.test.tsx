@@ -11,7 +11,6 @@ import * as UserContext from '../../contexts/UserContext';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as NotificationContext from '../../contexts/NotificationContext';
 import * as AppNotificationContext from '../../contexts/AppNotificationContext';
-import * as useWalletsHooks from '../../hooks/queries/useWallets';
 import * as useBitcoinHooks from '../../hooks/queries/useBitcoin';
 import * as useWebSocketHooks from '../../hooks/useWebSocket';
 import * as useAIStatusHook from '../../hooks/useAIStatus';
@@ -45,17 +44,6 @@ vi.mock('../../contexts/NotificationContext', () => ({
 
 vi.mock('../../contexts/AppNotificationContext', () => ({
   useAppNotifications: vi.fn(),
-}));
-
-// Mock query hooks
-vi.mock('../../hooks/queries/useWallets', () => ({
-  useWallet: vi.fn(),
-  useWalletUtxos: vi.fn(),
-  useWalletAddresses: vi.fn(),
-  useWalletTransactions: vi.fn(),
-  useWalletDevices: vi.fn(),
-  useInvalidateWallet: vi.fn(),
-  useSyncWallet: vi.fn(),
 }));
 
 vi.mock('../../hooks/queries/useBitcoin', () => ({

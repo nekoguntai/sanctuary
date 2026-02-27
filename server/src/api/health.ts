@@ -211,8 +211,21 @@ async function checkRedis(): Promise<ComponentHealth> {
 
 /**
  * Check job queue status
+ *
+ * In the worker-owned architecture, the API process does not initialize
+ * the job queue locally — only the worker process does. When the queue
+ * is not available in this process, report it as not applicable rather
+ * than unhealthy, to avoid false degraded status on health checks.
  */
 async function checkJobQueue(): Promise<ComponentHealth> {
+  if (!jobQueue.isAvailable()) {
+    return {
+      status: 'healthy',
+      message: 'Job queue runs in worker process',
+      details: { process: 'api', queueLocal: false },
+    };
+  }
+
   const health = await jobQueue.getHealth();
   const status = health.healthy ? 'healthy' : 'unhealthy';
 

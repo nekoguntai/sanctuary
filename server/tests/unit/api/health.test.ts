@@ -38,6 +38,7 @@ vi.mock('../../../src/infrastructure/redis', () => ({
 
 vi.mock('../../../src/jobs', () => ({
   jobQueue: {
+    isAvailable: vi.fn().mockReturnValue(true),
     getHealth: vi.fn(),
   },
 }));

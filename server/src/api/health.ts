@@ -218,29 +218,51 @@ async function checkRedis(): Promise<ComponentHealth> {
  * than unhealthy, to avoid false degraded status on health checks.
  */
 async function checkJobQueue(): Promise<ComponentHealth> {
-  if (!jobQueue.isAvailable()) {
+  try {
+    const hasIsAvailable = typeof (jobQueue as { isAvailable?: unknown }).isAvailable === 'function';
+    const queueAvailable = hasIsAvailable ? jobQueue.isAvailable() : false;
+
+    if (!queueAvailable) {
+      return {
+        status: 'healthy',
+        message: 'Job queue runs in worker process',
+        details: { process: 'api', queueLocal: false },
+      };
+    }
+
+    if (typeof (jobQueue as { getHealth?: unknown }).getHealth !== 'function') {
+      return {
+        status: 'degraded',
+        message: 'Job queue health unavailable',
+        details: { process: 'api', queueLocal: true },
+      };
+    }
+
+    const health = await jobQueue.getHealth();
+    const status = health.healthy ? 'healthy' : 'unhealthy';
+
     return {
-      status: 'healthy',
-      message: 'Job queue runs in worker process',
-      details: { process: 'api', queueLocal: false },
+      status,
+      details: {
+        queueName: health.queueName,
+        waiting: health.waiting,
+        active: health.active,
+        completed: health.completed,
+        failed: health.failed,
+        delayed: health.delayed,
+        paused: health.paused,
+      },
+    };
+  } catch (error) {
+    log.warn('Job queue health check unavailable', {
+      error: getErrorMessage(error, 'Unknown job queue error'),
+    });
+
+    return {
+      status: 'degraded',
+      message: 'Job queue health check unavailable',
     };
   }
-
-  const health = await jobQueue.getHealth();
-  const status = health.healthy ? 'healthy' : 'unhealthy';
-
-  return {
-    status,
-    details: {
-      queueName: health.queueName,
-      waiting: health.waiting,
-      active: health.active,
-      completed: health.completed,
-      failed: health.failed,
-      delayed: health.delayed,
-      paused: health.paused,
-    },
-  };
 }
 
 /**

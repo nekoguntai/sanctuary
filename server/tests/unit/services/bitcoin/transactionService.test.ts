@@ -89,8 +89,10 @@ import * as nodeClient from '../../../../src/services/bitcoin/nodeClient';
 import * as psbtBuilder from '../../../../src/services/bitcoin/psbtBuilder';
 
 const flushPromises = async () => {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 4; i++) {
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
 };
 
 const createRawTxHex = (outputs: Array<{ address: string; value: number }>, network: bitcoin.Network = bitcoin.networks.testnet) => {

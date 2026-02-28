@@ -169,6 +169,49 @@ describe('Bitcoin Plugin Registry', () => {
       // p2 should become active
       expect(getPlugin<BlockchainProvider>('blockchain')).toBe(provider2);
     });
+
+    it('should keep active plugin unchanged when removing a non-active plugin', () => {
+      const active = createMockBlockchainProvider('active', 'Active');
+      const inactive = createMockBlockchainProvider('inactive', 'Inactive');
+
+      registerPlugin('blockchain', 'active', active);
+      registerPlugin('blockchain', 'inactive', inactive);
+
+      unregisterPlugin('blockchain', 'inactive');
+
+      expect(getPlugin<BlockchainProvider>('blockchain')).toBe(active);
+    });
+
+    it('should handle unregistering from an unknown type map', () => {
+      expect(() => unregisterPlugin('price', 'missing')).not.toThrow();
+    });
+
+    it('should select later higher-priority plugin when active plugin is removed', () => {
+      const active = createMockBlockchainProvider('active', 'Active');
+      const low = createMockBlockchainProvider('low', 'Low');
+      const high = createMockBlockchainProvider('high', 'High');
+
+      registerPlugin('blockchain', 'active', active, { priority: 0 });
+      registerPlugin('blockchain', 'low', low, { priority: 1 });
+      registerPlugin('blockchain', 'high', high, { priority: 10 });
+
+      unregisterPlugin('blockchain', 'active');
+
+      expect(getPlugin<BlockchainProvider>('blockchain')).toBe(high);
+    });
+
+    it('should clear active plugin when remaining candidates are disabled', () => {
+      const active = createMockBlockchainProvider('active', 'Active');
+      const disabledFallback = createMockBlockchainProvider('disabled-fallback', 'Disabled Fallback');
+
+      registerPlugin('blockchain', 'active', active, { priority: 1 });
+      registerPlugin('blockchain', 'disabled-fallback', disabledFallback, { priority: 10 });
+      setPluginEnabled('blockchain', 'disabled-fallback', false);
+
+      unregisterPlugin('blockchain', 'active');
+
+      expect(getPlugin<BlockchainProvider>('blockchain')).toBeNull();
+    });
   });
 
   describe('getPlugins', () => {
@@ -232,6 +275,16 @@ describe('Bitcoin Plugin Registry', () => {
 
       expect(getPlugin<BlockchainProvider>('blockchain')).toBe(provider);
     });
+
+    it('should no-op when toggling plugin state for unknown type or id', () => {
+      setPluginEnabled('fee', 'missing', false);
+
+      const provider = createMockBlockchainProvider('known', 'Known');
+      registerPlugin('blockchain', 'known', provider);
+      setPluginEnabled('blockchain', 'missing', false);
+
+      expect(getPlugin<BlockchainProvider>('blockchain')).toBe(provider);
+    });
   });
 
   describe('lifecycle', () => {
@@ -256,6 +309,21 @@ describe('Bitcoin Plugin Registry', () => {
       await shutdownAllPlugins();
 
       expect(provider.shutdown).toHaveBeenCalled();
+    });
+
+    it('should continue shutdown when a plugin throws during shutdown', async () => {
+      const failingProvider: BlockchainProvider = {
+        ...createMockBlockchainProvider('fail-shutdown', 'Fail Shutdown'),
+        shutdown: vi.fn().mockRejectedValue(new Error('Shutdown failed')),
+      };
+      const healthyProvider = createMockBlockchainProvider('healthy-shutdown', 'Healthy Shutdown');
+
+      registerPlugin('blockchain', 'fail-shutdown', failingProvider);
+      registerPlugin('fee', 'healthy-shutdown', healthyProvider as any);
+
+      await expect(shutdownAllPlugins()).resolves.toBeUndefined();
+      expect(failingProvider.shutdown).toHaveBeenCalled();
+      expect(healthyProvider.shutdown).toHaveBeenCalled();
     });
 
     it('should handle initialization errors gracefully', async () => {

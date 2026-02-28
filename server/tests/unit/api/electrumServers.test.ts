@@ -119,6 +119,15 @@ describe('admin electrum servers router', () => {
     expect(response.body).toHaveLength(1);
   });
 
+  it('GET / returns 500 when lookup fails', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('db failure'));
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers');
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to get Electrum servers');
+  });
+
   it('POST /test-connection validates required params', async () => {
     const response = await request(app)
       .post('/api/v1/admin/electrum-servers/test-connection')
@@ -146,6 +155,20 @@ describe('admin electrum servers router', () => {
     });
   });
 
+  it('POST /test-connection returns 500 on unexpected error', async () => {
+    mocks.testNodeConfig.mockRejectedValue(new Error('connection test failed'));
+
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers/test-connection')
+      .send({ host: 'electrum.example.com', port: '50002', useSsl: true });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      success: false,
+      message: 'Failed to test Electrum connection',
+    });
+  });
+
   it('PUT /reorder validates serverIds payload', async () => {
     const response = await request(app)
       .put('/api/v1/admin/electrum-servers/reorder')
@@ -167,6 +190,17 @@ describe('admin electrum servers router', () => {
       data: { priority: 0 },
     });
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('PUT /reorder returns 500 when priority updates fail', async () => {
+    mockPrismaClient.electrumServer.update.mockRejectedValue(new Error('update failed'));
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/reorder')
+      .send({ serverIds: ['srv-1'] });
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to reorder Electrum servers');
   });
 
   it('GET /:network rejects invalid networks', async () => {
@@ -195,6 +229,24 @@ describe('admin electrum servers router', () => {
     expect(response.body[0].id).toBe('srv-testnet');
   });
 
+  it('GET /:network returns empty array when node config is missing', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers/mainnet');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('GET /:network returns 500 on database error', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('lookup failed'));
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers/mainnet');
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to get Electrum servers');
+  });
+
   it('POST / validates required fields', async () => {
     const response = await request(app)
       .post('/api/v1/admin/electrum-servers')
@@ -220,6 +272,20 @@ describe('admin electrum servers router', () => {
 
     expect(response.status).toBe(409);
     expect(response.body.message).toContain('already exists');
+  });
+
+  it('POST / rejects invalid network values', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
+        label: 'Bad Network',
+        host: 'electrum.example.com',
+        port: 50002,
+        network: 'bitcoin-mainnet',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Invalid network');
   });
 
   it('POST / creates server (and default node config if absent)', async () => {
@@ -256,6 +322,22 @@ describe('admin electrum servers router', () => {
       })
     );
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST / returns 500 when create flow throws', async () => {
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValueOnce(null);
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('node config read failed'));
+
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
+        label: 'New Server',
+        host: 'new.electrum.example',
+        port: 50001,
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to add Electrum server');
   });
 
   it('PUT /:id returns 404 for unknown server', async () => {
@@ -304,6 +386,30 @@ describe('admin electrum servers router', () => {
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
   });
 
+  it('PUT /:id rejects invalid network values', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-1')
+      .send({ network: 'btc-mainnet' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Invalid network');
+  });
+
+  it('PUT /:id returns 500 when update flow throws', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValue(null);
+    mockPrismaClient.electrumServer.update.mockRejectedValue(new Error('write failed'));
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-1')
+      .send({ label: 'Updated Label' });
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to update Electrum server');
+  });
+
   it('DELETE /:id returns 404 for unknown server', async () => {
     mockPrismaClient.electrumServer.findUnique.mockResolvedValue(null);
 
@@ -325,6 +431,16 @@ describe('admin electrum servers router', () => {
       where: { id: 'srv-1' },
     });
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('DELETE /:id returns 500 when delete throws', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mockPrismaClient.electrumServer.delete.mockRejectedValue(new Error('delete failed'));
+
+    const response = await request(app).delete('/api/v1/admin/electrum-servers/srv-1');
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to delete Electrum server');
   });
 
   it('POST /:id/test returns 404 for unknown server', async () => {
@@ -372,5 +488,15 @@ describe('admin electrum servers router', () => {
       success: true,
       info: { blockHeight: 850000, supportsVerbose: true },
     });
+  });
+
+  it('POST /:id/test returns 500 when test throws', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mocks.testNodeConfig.mockRejectedValue(new Error('health check failed'));
+
+    const response = await request(app).post('/api/v1/admin/electrum-servers/srv-1/test');
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to test Electrum server');
   });
 });

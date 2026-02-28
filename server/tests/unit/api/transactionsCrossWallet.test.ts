@@ -132,6 +132,30 @@ describe('transactions cross-wallet routes', () => {
     expect(response.body[0].feeRate).toBeGreaterThan(response.body[1].feeRate);
   });
 
+  it('GET /transactions/pending returns empty array when no wallets are accessible', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([]);
+
+    const response = await request(app).get('/api/v1/transactions/pending');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('GET /transactions/pending returns 500 on query failure', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([
+      { id: 'wallet-1', name: 'Main Wallet' },
+    ]);
+    mockPrismaClient.transaction.findMany.mockRejectedValue(new Error('transaction query failed'));
+
+    const response = await request(app).get('/api/v1/transactions/pending');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+    });
+  });
+
   it('GET /transactions/balance-history returns flat line when no wallets are accessible', async () => {
     mockPrismaClient.wallet.findMany.mockResolvedValue([]);
 
@@ -159,6 +183,79 @@ describe('transactions cross-wallet routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.map((p: any) => p.value)).toEqual([950, 1050, 1000]);
+  });
+
+  it('GET /transactions/balance-history returns flat line when there are no bucketed deltas', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([{ id: 'wallet-1' }]);
+    (mockPrismaClient as any).$queryRawUnsafe.mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/transactions/balance-history')
+      .query({ timeframe: '1W', totalBalance: '1500' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { name: 'Start', value: 1500 },
+      { name: 'Now', value: 1500 },
+    ]);
+  });
+
+  it.each([
+    { timeframe: '1D', expectedUnit: 'hour', expectedDays: 1 },
+    { timeframe: '1M', expectedUnit: 'day', expectedDays: 30 },
+    { timeframe: '1Y', expectedUnit: 'week', expectedDays: 365 },
+    { timeframe: 'ALL', expectedUnit: 'month', expectedDays: null as number | null },
+  ])(
+    'GET /transactions/balance-history uses correct bucket config for $timeframe',
+    async ({ timeframe, expectedUnit, expectedDays }) => {
+      mockPrismaClient.wallet.findMany.mockResolvedValue([{ id: 'wallet-1' }]);
+      (mockPrismaClient as any).$queryRawUnsafe.mockResolvedValue([
+        { bucket: new Date('2026-01-01T00:00:00.000Z'), amount: BigInt(0) },
+      ]);
+
+      const before = Date.now();
+      const response = await request(app)
+        .get('/api/v1/transactions/balance-history')
+        .query({ timeframe, totalBalance: '2000' });
+      const after = Date.now();
+
+      expect(response.status).toBe(200);
+      expect((mockPrismaClient as any).$queryRawUnsafe).toHaveBeenCalledTimes(1);
+
+      const callArgs = (mockPrismaClient as any).$queryRawUnsafe.mock.calls[0];
+      const query = callArgs[0] as string;
+      const walletIds = callArgs[1] as string[];
+      const startDate = callArgs[2] as Date;
+
+      expect(query).toContain(`date_trunc('${expectedUnit}'`);
+      expect(walletIds).toEqual(['wallet-1']);
+      expect(startDate).toBeInstanceOf(Date);
+
+      if (expectedDays === null) {
+        expect(startDate.getTime()).toBe(0);
+      } else {
+        const expectedMs = expectedDays * 24 * 60 * 60 * 1000;
+        expect(startDate.getTime()).toBeGreaterThanOrEqual(before - expectedMs - 1500);
+        expect(startDate.getTime()).toBeLessThanOrEqual(after - expectedMs + 1500);
+      }
+
+      expect(response.body).toHaveLength(2);
+    }
+  );
+
+  it('GET /transactions/balance-history returns 500 when aggregation query fails', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([{ id: 'wallet-1' }]);
+    (mockPrismaClient as any).$queryRawUnsafe.mockRejectedValue(new Error('aggregation failed'));
+
+    const response = await request(app)
+      .get('/api/v1/transactions/balance-history')
+      .query({ timeframe: '1W', totalBalance: '1000' });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+    });
   });
 
   it('returns 500 when wallet lookup fails for recent transactions', async () => {

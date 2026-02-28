@@ -228,6 +228,18 @@ describe('Admin Node Config Routes', () => {
     expect(response.body.proxyPassword).toBe('********');
   });
 
+  it('returns 500 when loading node config fails', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('read failed'));
+
+    const response = await request(app).get('/api/v1/admin/node-config');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'Failed to get node configuration',
+    });
+  });
+
   it('validates required fields on update', async () => {
     const response = await request(app)
       .put('/api/v1/admin/node-config')
@@ -323,6 +335,25 @@ describe('Admin Node Config Routes', () => {
     );
   });
 
+  it('returns 500 when updating node config fails', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue({ id: 'default-existing' });
+    mockPrismaClient.nodeConfig.update.mockRejectedValue(new Error('write failed'));
+
+    const response = await request(app)
+      .put('/api/v1/admin/node-config')
+      .send({
+        type: 'electrum',
+        host: 'updated.example.com',
+        port: 50002,
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'Failed to update node configuration',
+    });
+  });
+
   it('tests node connection successfully', async () => {
     mockTestNodeConfig.mockResolvedValue({
       success: true,
@@ -373,6 +404,43 @@ describe('Admin Node Config Routes', () => {
     });
   });
 
+  it('validates required node test fields', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/node-config/test')
+      .send({ type: 'electrum', host: 'electrum.example.com' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('required');
+  });
+
+  it('rejects unsupported node type on test endpoint', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/node-config/test')
+      .send({ type: 'rpc', host: 'example.com', port: 8332 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain('Only Electrum');
+  });
+
+  it('handles unexpected node test errors', async () => {
+    mockTestNodeConfig.mockRejectedValue(new Error('test failed'));
+
+    const response = await request(app)
+      .post('/api/v1/admin/node-config/test')
+      .send({
+        type: 'electrum',
+        host: 'electrum.example.com',
+        port: 50002,
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: 'Internal Server Error',
+    });
+  });
+
   it('validates proxy test inputs', async () => {
     const response = await request(app)
       .post('/api/v1/admin/proxy/test')
@@ -407,5 +475,20 @@ describe('Admin Node Config Routes', () => {
     expect(response.body.exitIp).toBeDefined();
     expect(typeof response.body.isTorExit).toBe('boolean');
     expect(mockSocksCreateConnection).toHaveBeenCalled();
+  });
+
+  it('handles proxy verification setup errors', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/proxy/test')
+      .send({
+        host: '127.0.0.1',
+        port: { toString: null },
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: 'Tor Verification Failed',
+    });
   });
 });

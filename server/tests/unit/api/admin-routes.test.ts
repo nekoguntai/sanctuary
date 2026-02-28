@@ -9,6 +9,16 @@ import { vi, Mock } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
+const {
+  mockEncrypt,
+  mockIsEncrypted,
+  mockClearTransporterCache,
+} = vi.hoisted(() => ({
+  mockEncrypt: vi.fn((value: string) => `enc:${value}`),
+  mockIsEncrypted: vi.fn((value: string) => typeof value === 'string' && value.startsWith('enc:')),
+  mockClearTransporterCache: vi.fn(),
+}));
+
 // Mock logger first
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
@@ -148,6 +158,15 @@ vi.mock('../../../src/services/versionService', () => ({
   },
 }));
 
+vi.mock('../../../src/utils/encryption', () => ({
+  encrypt: mockEncrypt,
+  isEncrypted: mockIsEncrypted,
+}));
+
+vi.mock('../../../src/services/email', () => ({
+  clearTransporterCache: mockClearTransporterCache,
+}));
+
 const createTestApp = async () => {
   const app = express();
   app.use(express.json());
@@ -170,6 +189,8 @@ describe('Admin Routes', () => {
     mockAuditService.logFromRequest.mockResolvedValue(undefined);
     mockAuditService.query.mockResolvedValue({ logs: [], total: 0 });
     mockAuditService.getStats.mockResolvedValue({ total: 0, byAction: {}, byCategory: {} });
+    mockEncrypt.mockImplementation((value: string) => `enc:${value}`);
+    mockIsEncrypted.mockImplementation((value: string) => typeof value === 'string' && value.startsWith('enc:'));
   });
 
   // ========================================
@@ -387,6 +408,24 @@ describe('Admin Routes', () => {
       expect(response.status).toBe(201);
       expect(response.body.email).toBe('new@test.com');
     });
+
+    it('should handle create errors', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockPrisma.user.create.mockRejectedValue(new Error('DB error'));
+
+      const response = await request(app)
+        .post('/api/v1/admin/users')
+        .send({
+          username: 'newuser',
+          password: 'StrongPass123!',
+          email: 'new@test.com',
+        });
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('Failed to create user');
+    });
   });
 
   describe('PUT /api/v1/admin/users/:userId', () => {
@@ -482,6 +521,104 @@ describe('Admin Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.email).toBe('new@test.com');
+    });
+
+    it('should remove email and mark it unverified when email is cleared', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'old@test.com',
+        emailVerified: true,
+        isAdmin: false,
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: null,
+        emailVerified: false,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ email: '' });
+
+      expect(response.status).toBe(200);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            email: null,
+            emailVerified: false,
+            emailVerifiedAt: null,
+          }),
+        })
+      );
+    });
+
+    it('should reject weak password on update', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ password: 'weak' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('security requirements');
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should log admin grant action when isAdmin is set to true', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        isAdmin: false,
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        emailVerified: true,
+        isAdmin: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ isAdmin: true });
+
+      expect(response.status).toBe(200);
+      expect(mockAuditService.logFromRequest).toHaveBeenCalledWith(
+        expect.any(Object),
+        'user.admin_grant',
+        'user',
+        expect.objectContaining({
+          details: expect.objectContaining({ userId: 'user-1' }),
+        })
+      );
+    });
+
+    it('should handle update errors', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+      });
+      mockPrisma.user.update.mockRejectedValue(new Error('update failed'));
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ isAdmin: false });
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('Failed to update user');
     });
 
     // Note: Email format is NOT validated on update in the admin endpoint
@@ -653,6 +790,37 @@ describe('Admin Routes', () => {
 
       expect(response.status).toBe(500);
     });
+
+    it('should encrypt plaintext SMTP password and clear transporter cache', async () => {
+      mockPrisma.systemSetting.upsert.mockResolvedValue({ key: 'smtp.password', value: '"enc:new-secret"' });
+      mockPrisma.systemSetting.findMany.mockResolvedValue([
+        { key: 'smtp.host', value: '"smtp.example.com"' },
+        { key: 'smtp.fromAddress', value: '"noreply@example.com"' },
+        { key: 'smtp.password', value: '"enc:new-secret"' },
+      ]);
+
+      const response = await request(app)
+        .put('/api/v1/admin/settings')
+        .send({
+          'smtp.host': 'smtp.example.com',
+          'smtp.fromAddress': 'noreply@example.com',
+          'smtp.password': 'new-secret',
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockIsEncrypted).toHaveBeenCalledWith('new-secret');
+      expect(mockEncrypt).toHaveBeenCalledWith('new-secret');
+      expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'smtp.password' },
+          update: { value: JSON.stringify('enc:new-secret') },
+          create: { key: 'smtp.password', value: JSON.stringify('enc:new-secret') },
+        })
+      );
+      expect(mockClearTransporterCache).toHaveBeenCalledTimes(1);
+      expect(response.body['smtp.configured']).toBe(true);
+      expect(response.body['smtp.password']).toBeUndefined();
+    });
   });
 
   // ========================================
@@ -818,6 +986,20 @@ describe('Admin Routes', () => {
       const response = await request(app).delete('/api/v1/admin/users/nonexistent');
 
       expect(response.status).toBe(404);
+    });
+
+    it('should handle delete errors', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-to-delete',
+        username: 'deleteuser',
+        isAdmin: false,
+      });
+      mockPrisma.user.delete.mockRejectedValue(new Error('delete failed'));
+
+      const response = await request(app).delete('/api/v1/admin/users/user-to-delete');
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('Failed to delete user');
     });
   });
 

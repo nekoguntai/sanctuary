@@ -260,6 +260,18 @@ describe('Transaction HTTP Routes', () => {
     expect(mockPrismaClient.transaction.groupBy).not.toHaveBeenCalled();
   });
 
+  it('returns internal server error when transaction stats lookup fails', async () => {
+    mockWalletCacheGet.mockRejectedValue(new Error('cache unavailable'));
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+    });
+  });
+
   it('returns empty pending list when no unconfirmed transactions exist', async () => {
     mockPrismaClient.wallet.findUnique.mockResolvedValue({
       name: 'Test Wallet',
@@ -304,6 +316,53 @@ describe('Transaction HTTP Routes', () => {
     });
     expect(response.body[0].feeRate).toBe(2.5);
     expect(response.body[0].timeInQueue).toBeGreaterThanOrEqual(0);
+  });
+
+  it('uses mempool transaction weight and fee when available for pending fee rate', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Test Wallet',
+      network: 'mainnet',
+    });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: '1'.repeat(64),
+        walletId,
+        type: 'sent',
+        amount: BigInt(-30000),
+        fee: BigInt(0),
+        createdAt: new Date(Date.now() - 3000),
+        counterpartyAddress: 'bc1qrecipient',
+        rawTx: null,
+        blockHeight: null,
+      },
+    ]);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ weight: 800, fee: 1200 }),
+    });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      txid: '1'.repeat(64),
+      fee: 1200,
+      vsize: 200,
+      feeRate: 6,
+    });
+  });
+
+  it('returns 500 when pending transaction query fails', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Test Wallet',
+      network: 'mainnet',
+    });
+    mockPrismaClient.transaction.findMany.mockRejectedValue(new Error('pending query failed'));
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to fetch pending transactions');
   });
 
   it('exports transactions in JSON format with sanitized filename', async () => {
@@ -369,6 +428,16 @@ describe('Transaction HTTP Routes', () => {
     expect(response.header['content-type']).toContain('text/csv');
     expect(response.text).toContain('Transaction ID');
     expect(response.text).toContain('"note,with,comma"');
+  });
+
+  it('returns error when transaction export fails', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ name: 'Err Wallet' });
+    mockPrismaClient.transaction.findMany.mockRejectedValue(new Error('export failed'));
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/export`);
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toContain('Failed to export transactions');
   });
 
   it('recalculates wallet balances and returns final amount', async () => {

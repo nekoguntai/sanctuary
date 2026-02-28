@@ -9,10 +9,14 @@ import { vi, Mock } from 'vitest';
 import { mockPrismaClient, resetPrismaMocks } from '../../../mocks/prisma';
 import { sampleUtxos, sampleWallets, testnetAddresses, multisigKeyInfo } from '../../../fixtures/bitcoin';
 import * as bitcoin from 'bitcoinjs-lib';
+import { Prisma } from '@prisma/client';
 
 // Hoist mock variables for use in vi.mock() factories
-const { mockParseDescriptor } = vi.hoisted(() => ({
+const { mockParseDescriptor, mockNotifyNewTransactions, mockEmitTransactionSent, mockEmitTransactionReceived } = vi.hoisted(() => ({
   mockParseDescriptor: vi.fn(),
+  mockNotifyNewTransactions: vi.fn(),
+  mockEmitTransactionSent: vi.fn(),
+  mockEmitTransactionReceived: vi.fn(),
 }));
 
 // Mock the Prisma client before importing the service
@@ -45,6 +49,17 @@ vi.mock('../../../../src/services/bitcoin/blockchain', () => ({
   recalculateWalletBalances: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../../../src/services/eventService', () => ({
+  eventService: {
+    emitTransactionSent: mockEmitTransactionSent,
+    emitTransactionReceived: mockEmitTransactionReceived,
+  },
+}));
+
+vi.mock('../../../../src/services/notifications/notificationService', () => ({
+  notifyNewTransactions: mockNotifyNewTransactions,
+}));
+
 // Mock address derivation - supports both single-sig and multisig
 vi.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
   parseDescriptor: mockParseDescriptor,
@@ -58,6 +73,7 @@ vi.mock('../../../../src/services/bitcoin/addressDerivation', () => ({
 import {
   selectUTXOs,
   createTransaction,
+  createAndBroadcastTransaction,
   estimateTransaction,
   broadcastAndSave,
   createBatchTransaction,
@@ -70,10 +86,30 @@ import {
 import { estimateTransactionSize, calculateFee } from '../../../../src/services/bitcoin/utils';
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
 import * as nodeClient from '../../../../src/services/bitcoin/nodeClient';
+import * as psbtBuilder from '../../../../src/services/bitcoin/psbtBuilder';
+
+const flushPromises = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+const createRawTxHex = (outputs: Array<{ address: string; value: number }>, network: bitcoin.Network = bitcoin.networks.testnet) => {
+  const tx = new bitcoin.Transaction();
+  tx.version = 2;
+  tx.addInput(Buffer.alloc(32, 0), 0, 0xffffffff, Buffer.alloc(0));
+  outputs.forEach(({ address, value }) => {
+    tx.addOutput(bitcoin.address.toOutputScript(address, network), value);
+  });
+  return tx.toHex();
+};
 
 describe('Transaction Service', () => {
   beforeEach(() => {
     resetPrismaMocks();
+    mockNotifyNewTransactions.mockReset();
+    mockNotifyNewTransactions.mockResolvedValue(undefined);
+    mockEmitTransactionSent.mockReset();
+    mockEmitTransactionReceived.mockReset();
     // Set up default system settings
     mockPrismaClient.systemSetting.findUnique.mockImplementation((query: any) => {
       if (query.where.key === 'confirmationThreshold') {
@@ -102,6 +138,26 @@ describe('Transaction Service', () => {
             {
               fingerprint: 'eeff0011',
               accountPath: "48'/1'/0'/2'",
+              xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
+              derivationPath: '0/*',
+            },
+          ],
+        };
+      }
+      if (descriptor.startsWith('sh(wsh(sortedmulti(') || descriptor.startsWith('sh(wsh(multi(')) {
+        return {
+          type: 'sh-wsh-sortedmulti',
+          quorum: 2,
+          keys: [
+            {
+              fingerprint: 'aabbccdd',
+              accountPath: "48'/1'/0'/1'",
+              xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+              derivationPath: '0/*',
+            },
+            {
+              fingerprint: 'eeff0011',
+              accountPath: "48'/1'/0'/1'",
               xpub: 'tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba',
               derivationPath: '0/*',
             },
@@ -345,6 +401,19 @@ describe('Transaction Service', () => {
       ).rejects.toThrow('Wallet not found');
     });
 
+    it('should treat non-testnet wallets as mainnet during recipient validation', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        network: 'mainnet',
+        devices: [],
+      });
+
+      await expect(
+        createTransaction(walletId, recipient, 50_000, 10)
+      ).rejects.toThrow('Invalid recipient address');
+    });
+
     it('should enable RBF by default', async () => {
       const result = await createTransaction(walletId, recipient, 50000, 10);
 
@@ -391,6 +460,53 @@ describe('Transaction Service', () => {
       expect(result.effectiveAmount).toBe(amount - result.fee);
     });
 
+    it('should throw when subtractFees would leave effective amount at or below dust', async () => {
+      await expect(
+        createTransaction(walletId, recipient, 500, 10, {
+          subtractFees: true,
+        })
+      ).rejects.toThrow('not enough to cover fee');
+    });
+
+    it('should throw when subtractFees selectedUtxoIds removes all spendable UTXOs', async () => {
+      await expect(
+        createTransaction(walletId, recipient, 20_000, 10, {
+          subtractFees: true,
+          selectedUtxoIds: ['does-not-exist:0'],
+        })
+      ).rejects.toThrow('No spendable UTXOs available');
+    });
+
+    it('should throw when sendMax amount cannot cover fees', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          amount: BigInt(500),
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 0, 10, { sendMax: true })
+      ).rejects.toThrow('Insufficient funds');
+    });
+
+    it('should throw when subtractFees amount exceeds available selected inputs', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          amount: BigInt(12_000),
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 20_000, 5, { subtractFees: true })
+      ).rejects.toThrow('Insufficient funds');
+    });
+
     it('should include change output when change exceeds dust threshold', async () => {
       const amount = 50000; // Half of available UTXO
       const result = await createTransaction(walletId, recipient, amount, 5);
@@ -399,6 +515,295 @@ describe('Transaction Service', () => {
       expect(result.psbt.txOutputs.length).toBe(2);
       expect(result.changeAmount).toBeGreaterThan(546); // Above dust threshold
       expect(result.changeAddress).toBeDefined();
+    });
+
+    it('should throw when sendMax selectedUtxoIds removes all spendable UTXOs', async () => {
+      await expect(
+        createTransaction(walletId, recipient, 0, 10, {
+          sendMax: true,
+          selectedUtxoIds: ['missing-txid:999'],
+        })
+      ).rejects.toThrow('No spendable UTXOs found');
+    });
+
+    it('should throw when a selected SegWit UTXO is missing scriptPubKey', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: '',
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 50000, 10)
+      ).rejects.toThrow('missing scriptPubKey');
+    });
+
+    it('should fail sendMax when selected UTXO has missing scriptPubKey', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: null as any,
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 0, 10, { sendMax: true })
+      ).rejects.toThrow('missing scriptPubKey');
+    });
+
+    it('should fail subtractFees when selected UTXO has missing scriptPubKey', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: null as any,
+        },
+      ]);
+
+      await expect(
+        createTransaction(walletId, recipient, 20_000, 10, { subtractFees: true })
+      ).rejects.toThrow('missing scriptPubKey');
+    });
+
+    it('should throw when decoy output count exceeds available change addresses', async () => {
+      mockPrismaClient.address.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 'addr-input',
+            address: sampleUtxos[2].address,
+            derivationPath: "m/84'/1'/0'/0/0",
+            walletId,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'addr-change',
+            address: testnetAddresses.nativeSegwit[1],
+            derivationPath: "m/84'/1'/0'/1/0",
+            walletId,
+            used: false,
+            index: 0,
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      await expect(
+        createTransaction(walletId, recipient, 20_000, 5, {
+          decoyOutputs: { enabled: true, count: 4 },
+        })
+      ).rejects.toThrow('Not enough change addresses');
+    });
+
+    it('should create decoy outputs when enough change and addresses are available', async () => {
+      mockPrismaClient.address.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 'addr-input',
+            address: sampleUtxos[2].address,
+            derivationPath: "m/84'/1'/0'/0/0",
+            walletId,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'change-1',
+            address: testnetAddresses.nativeSegwit[1],
+            derivationPath: "m/84'/1'/0'/1/0",
+            walletId,
+            used: false,
+            index: 0,
+          },
+          {
+            id: 'change-2',
+            address: testnetAddresses.nestedSegwit[0],
+            derivationPath: "m/84'/1'/0'/1/1",
+            walletId,
+            used: false,
+            index: 1,
+          },
+          {
+            id: 'change-3',
+            address: testnetAddresses.legacy[0],
+            derivationPath: "m/84'/1'/0'/1/2",
+            walletId,
+            used: false,
+            index: 2,
+          },
+        ]);
+
+      const result = await createTransaction(walletId, recipient, 50_000, 5, {
+        decoyOutputs: { enabled: true, count: 3 },
+      });
+
+      expect(result.decoyOutputs?.length).toBe(3);
+      expect(result.changeAmount).toBe(0);
+      expect(result.changeAddress).toBeUndefined();
+    });
+
+    it('should fall back to a single change output when decoys become uneconomical', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          amount: BigInt(10_000),
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+
+      const result = await createTransaction(walletId, recipient, 8_300, 5, {
+        decoyOutputs: { enabled: true, count: 4 },
+      });
+
+      expect(result.decoyOutputs).toBeUndefined();
+      expect(result.changeAddress).toBeDefined();
+      expect(result.changeAmount).toBeGreaterThan(0);
+    });
+
+    it('should derive single-sig BIP32 info from primary device xpub', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        descriptor: null,
+        fingerprint: null,
+        devices: [
+          {
+            device: {
+              id: 'primary-device',
+              fingerprint: 'aabbccdd',
+              xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+            },
+          },
+        ],
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
+      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+    });
+
+    it('should use descriptor xpub and fingerprint fallback when device metadata is absent', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+        fingerprint: null,
+        descriptor: "wpkh([aabbccdd/84'/1'/0']tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*)",
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
+      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+    });
+
+    it('should skip single-sig BIP32 derivation when device has no fingerprint/xpub and no wallet fallback', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        descriptor: null,
+        fingerprint: null,
+        devices: [
+          {
+            device: {
+              id: 'missing-metadata-device',
+              fingerprint: null,
+              xpub: null,
+            },
+          },
+        ],
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation).toBeUndefined();
+    });
+
+    it('should fall back to receiving address when no dedicated change address exists', async () => {
+      mockPrismaClient.address.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'receive-addr-fallback',
+          address: testnetAddresses.legacy[1],
+          derivationPath: "m/84'/1'/0'/0/10",
+          walletId,
+          used: false,
+          index: 10,
+        });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+
+      expect(result.changeAddress).toBe(testnetAddresses.legacy[1]);
+      expect(result.changeAmount).toBeGreaterThan(0);
+    });
+
+    it('should continue when single-sig account xpub parsing fails', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        descriptor: null,
+        fingerprint: 'aabbccdd',
+        devices: [
+          {
+            device: {
+              id: 'bad-xpub-device',
+              fingerprint: 'aabbccdd',
+              xpub: 'not-a-valid-xpub',
+            },
+          },
+        ],
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      expect(result.psbtBase64).toBeDefined();
+    });
+  });
+
+  describe('createAndBroadcastTransaction', () => {
+    const walletId = 'test-wallet-id';
+    const recipient = testnetAddresses.nativeSegwit[0];
+
+    beforeEach(() => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+      });
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: '0014' + 'a'.repeat(40),
+        },
+      ]);
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'addr-1',
+        address: testnetAddresses.nativeSegwit[1],
+        derivationPath: "m/84'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'addr-input',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/84'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+    });
+
+    it('always throws until automatic signing is implemented', async () => {
+      await expect(
+        createAndBroadcastTransaction(walletId, recipient, 50_000, 10)
+      ).rejects.toThrow('Automatic signing not implemented');
     });
   });
 
@@ -514,6 +919,33 @@ describe('Transaction Service', () => {
       for (const path of result.inputPaths) {
         expect(path).toMatch(/^m\/48'\/\d+'\/\d+'\/\d+'\/\d+\/\d+$/);
       }
+    });
+
+    it('should add redeemScript for sh-wsh-sortedmulti descriptors', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.multiSig2of3,
+        id: walletId,
+        descriptor: "sh(wsh(sortedmulti(2,[aabbccdd/48'/1'/0'/1']tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*,[eeff0011/48'/1'/0'/1']tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba/0/*)))",
+        devices: [
+          { device: { id: 'device-1', fingerprint: 'aabbccdd', xpub: multisigKeyInfo[0].xpub } },
+          { device: { id: 'device-2', fingerprint: 'eeff0011', xpub: multisigKeyInfo[1].xpub } },
+        ],
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].witnessScript).toBeDefined();
+      expect(psbt.data.inputs[0].redeemScript).toBeDefined();
+    });
+
+    it('should continue when multisig descriptor parsing fails', async () => {
+      mockParseDescriptor.mockImplementationOnce(() => {
+        throw new Error('descriptor parse failed');
+      });
+
+      const result = await createTransaction(walletId, recipient, 50_000, 10);
+      expect(result.psbtBase64).toBeDefined();
     });
   });
 
@@ -804,6 +1236,618 @@ describe('Transaction Service', () => {
       expect(recalculateWalletBalances).toHaveBeenCalledWith(walletId);
     });
 
+    it('should persist provided transaction inputs and outputs metadata directly', async () => {
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+            derivationPath: "m/84'/1'/0'/0/0",
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 50_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+            scriptPubKey: '0014' + 'ff'.repeat(20),
+          },
+        ],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(mockPrismaClient.transactionInput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              address: sampleUtxos[0].address,
+              derivationPath: "m/84'/1'/0'/0/0",
+            }),
+          ]),
+        })
+      );
+      expect(mockPrismaClient.transactionOutput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              address: recipient,
+              outputType: 'recipient',
+              isOurs: false,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should broadcast from signed PSBT and exercise finalization branches', async () => {
+      const finalizeInput = vi.fn();
+      const extractedRawTx = '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000';
+
+      const fakePsbt = {
+        data: {
+          inputs: [
+            { finalScriptWitness: Buffer.from('00', 'hex') },
+            {
+              witnessScript: Buffer.from('51ae', 'hex'),
+              partialSig: [{ pubkey: Buffer.alloc(33, 2), signature: Buffer.from('300602010102010101', 'hex') }],
+            },
+            {
+              witnessScript: Buffer.from('51ae', 'hex'),
+              partialSig: [{ pubkey: Buffer.alloc(33, 3), signature: Buffer.from('300602010102010101', 'hex') }],
+            },
+            {},
+          ],
+        },
+        finalizeInput,
+        extractTransaction: vi.fn().mockReturnValue({
+          toHex: () => extractedRawTx,
+          getId: () => 'signed-psbt-txid',
+        }),
+      } as unknown as bitcoin.Psbt;
+
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64').mockReturnValue(fakePsbt);
+      const parseMultisigSpy = vi.spyOn(psbtBuilder, 'parseMultisigScript')
+        .mockReturnValueOnce({ isMultisig: true, m: 2, n: 2, pubkeys: [] })
+        .mockReturnValueOnce({ isMultisig: false, m: 0, n: 0, pubkeys: [] });
+      const finalizeMultisigSpy = vi.spyOn(psbtBuilder, 'finalizeMultisigInput').mockImplementation(() => undefined);
+
+      const metadata = {
+        recipient,
+        amount: 50000,
+        fee: 1000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+      };
+
+      const result = await broadcastAndSave(walletId, 'signed-psbt-base64', metadata);
+
+      expect(result.broadcasted).toBe(true);
+      expect(finalizeMultisigSpy).toHaveBeenCalledWith(fakePsbt, 1);
+      expect(finalizeInput).toHaveBeenCalledWith(2);
+      expect(finalizeInput).toHaveBeenCalledWith(3);
+
+      finalizeMultisigSpy.mockRestore();
+      parseMultisigSpy.mockRestore();
+      fromBase64Spy.mockRestore();
+    });
+
+    it('should skip finalization when all PSBT inputs are already finalized', async () => {
+      const finalizeInput = vi.fn();
+      const extractedRawTx = '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000';
+
+      const fakePsbt = {
+        data: {
+          inputs: [{ finalScriptWitness: Buffer.from('00', 'hex') }],
+        },
+        finalizeInput,
+        extractTransaction: vi.fn().mockReturnValue({
+          toHex: () => extractedRawTx,
+          getId: () => 'already-finalized-txid',
+        }),
+      } as unknown as bitcoin.Psbt;
+
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64').mockReturnValue(fakePsbt);
+
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+      };
+
+      const result = await broadcastAndSave(walletId, 'already-finalized-psbt', metadata);
+
+      expect(result.broadcasted).toBe(true);
+      expect(finalizeInput).not.toHaveBeenCalled();
+      fromBase64Spy.mockRestore();
+    });
+
+    it('should build fallback transaction inputs from UTXO lookups', async () => {
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [
+          { txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout },
+          { txid: 'missing-utxo-txid', vout: 99 },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 50_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[0],
+          walletId,
+          spent: false,
+          amount: BigInt(100_000),
+        },
+      ]);
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+
+      await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(mockPrismaClient.transactionInput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              txid: sampleUtxos[0].txid,
+              vout: sampleUtxos[0].vout,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should parse fallback outputs and create pending receive records for internal wallets', async () => {
+      const ourAddress = testnetAddresses.nativeSegwit[1];
+      const internalAddress = testnetAddresses.legacy[1];
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+        { address: ourAddress, value: 10_000 },
+        { address: internalAddress, value: 7_000 },
+      ]);
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockImplementation((query: any) => {
+        if (query?.where?.walletId === walletId) {
+          return Promise.resolve([{ address: ourAddress }]);
+        }
+        if (query?.where?.walletId?.not === walletId) {
+          return Promise.resolve([{ walletId: 'receiving-wallet-id', address: internalAddress }]);
+        }
+        return Promise.resolve([]);
+      });
+      mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+      mockPrismaClient.transaction.create.mockResolvedValueOnce({
+        id: 'tx-1',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+      });
+      mockPrismaClient.transaction.create.mockResolvedValueOnce({
+        id: 'received-tx-1',
+        txid: 'new-txid-from-broadcast',
+        walletId: 'receiving-wallet-id',
+        type: 'received',
+      });
+      mockNotifyNewTransactions.mockRejectedValueOnce(new Error('notify failed (sender)'));
+      mockNotifyNewTransactions.mockRejectedValueOnce(new Error('notify failed (receiver)'));
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        rawTxHex,
+      };
+
+      await broadcastAndSave(walletId, undefined, metadata);
+      await flushPromises();
+
+      expect(mockPrismaClient.transactionOutput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({ address: recipient, outputType: 'recipient' }),
+            expect.objectContaining({ address: ourAddress, outputType: 'change' }),
+            expect.objectContaining({ address: internalAddress, outputType: 'recipient' }),
+          ]),
+        })
+      );
+      expect(recalculateWalletBalances).toHaveBeenCalledWith('receiving-wallet-id');
+      expect(mockEmitTransactionSent).toHaveBeenCalled();
+      expect(mockEmitTransactionReceived).toHaveBeenCalled();
+    });
+
+    it('should skip creating duplicate pending receive transaction records', async () => {
+      const internalAddress = testnetAddresses.legacy[1];
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+        { address: internalAddress, value: 7_000 },
+      ]);
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockResolvedValue([{ walletId: 'receiving-wallet-id', address: internalAddress }]);
+      mockPrismaClient.transaction.findFirst.mockResolvedValue({ id: 'existing-received' });
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 30_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex,
+      };
+
+      await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(mockPrismaClient.transaction.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore unique-constraint races while creating pending receive records', async () => {
+      const internalAddress = testnetAddresses.legacy[1];
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+        { address: internalAddress, value: 7_000 },
+      ]);
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockResolvedValue([{ walletId: 'receiving-wallet-id', address: internalAddress }]);
+      mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+      mockPrismaClient.transaction.create.mockResolvedValueOnce({
+        id: 'tx-1',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+      });
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(
+        new Error('Unique constraint failed on the fields')
+      );
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 30_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex,
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+      expect(result.broadcasted).toBe(true);
+    });
+
+    it('should continue when fallback raw transaction output parsing fails', async () => {
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+      ]);
+      const originalFromHex = bitcoin.Transaction.fromHex;
+      const fromHexSpy = vi.spyOn(bitcoin.Transaction, 'fromHex');
+      fromHexSpy
+        .mockImplementationOnce((hex: string) => originalFromHex(hex))
+        .mockImplementationOnce(() => {
+          throw new Error('raw output parse failure');
+        })
+        .mockImplementation((hex: string) => originalFromHex(hex));
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        rawTxHex,
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+      expect(result.broadcasted).toBe(true);
+
+      fromHexSpy.mockRestore();
+    });
+
+    it('reuses existing transaction record when create hits a unique constraint race', async () => {
+      mockPrismaClient.transaction.create.mockReset();
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(
+        new Error('Unique constraint failed on the fields')
+      );
+      mockPrismaClient.transaction.findUnique.mockResolvedValueOnce({
+        id: 'existing-tx-id',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+        amount: BigInt(-51_000),
+        fee: BigInt(1_000),
+        confirmations: 0,
+      });
+
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 50_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(result.broadcasted).toBe(true);
+      expect(mockPrismaClient.transaction.findUnique).toHaveBeenCalled();
+      expect(mockPrismaClient.transactionInput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              transactionId: 'existing-tx-id',
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should rethrow unique-constraint errors when existing transaction record cannot be found', async () => {
+      mockPrismaClient.transaction.create.mockReset();
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(
+        new Error('Unique constraint failed on the fields')
+      );
+      mockPrismaClient.transaction.findUnique.mockResolvedValueOnce(null);
+
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      await expect(
+        broadcastAndSave(walletId, undefined, metadata)
+      ).rejects.toThrow('Unique constraint failed');
+    });
+
+    it('should classify fallback parsed wallet-owned output as consolidation output type', async () => {
+      const internalWalletAddress = testnetAddresses.legacy[1];
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+        { address: internalWalletAddress, value: 7_000 },
+      ]);
+
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'consolidation-addr',
+        walletId,
+        address: recipient,
+      });
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockImplementation((query: any) => {
+        if (query?.where?.walletId === walletId) {
+          return Promise.resolve([{ address: recipient }, { address: internalWalletAddress }]);
+        }
+        if (query?.where?.walletId?.not === walletId) {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex,
+      };
+
+      await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(mockPrismaClient.transactionOutput.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              address: internalWalletAddress,
+              outputType: 'consolidation',
+              isOurs: true,
+            }),
+          ]),
+        })
+      );
+    });
+
+    it('should continue when creating internal receiving transaction fails with non-unique error', async () => {
+      const internalAddress = testnetAddresses.legacy[1];
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+        { address: internalAddress, value: 7_000 },
+      ]);
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockImplementation((query: any) => {
+        if (query?.where?.walletId?.not === walletId) {
+          return Promise.resolve([{ walletId: 'receiving-wallet-id', address: internalAddress }]);
+        }
+        return Promise.resolve([]);
+      });
+      mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+      mockPrismaClient.transaction.create.mockResolvedValueOnce({
+        id: 'tx-1',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+      });
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(new Error('db timeout'));
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        outputs: [
+          {
+            address: recipient,
+            amount: 30_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex,
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(result.broadcasted).toBe(true);
+    });
+
+    it('reuses existing transaction record for Prisma known unique-constraint errors', async () => {
+      const uniqueError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test-client',
+      });
+
+      mockPrismaClient.transaction.create.mockReset();
+      mockPrismaClient.transaction.create.mockRejectedValueOnce(uniqueError);
+      mockPrismaClient.transaction.findUnique.mockResolvedValueOnce({
+        id: 'existing-known-prisma',
+        txid: 'new-txid-from-broadcast',
+        walletId,
+        type: 'sent',
+        amount: BigInt(-51_000),
+        fee: BigInt(1_000),
+        confirmations: 0,
+      });
+
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 50_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+
+      expect(result.broadcasted).toBe(true);
+      expect(mockPrismaClient.transaction.findUnique).toHaveBeenCalled();
+    });
+
+    it('should continue when internal wallet matching fails', async () => {
+      mockPrismaClient.wallet.findUnique.mockRejectedValueOnce(new Error('wallet lookup failed'));
+
+      const metadata = {
+        recipient,
+        amount: 50_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        inputs: [
+          {
+            txid: sampleUtxos[0].txid,
+            vout: sampleUtxos[0].vout,
+            address: sampleUtxos[0].address,
+            amount: Number(sampleUtxos[0].amount),
+          },
+        ],
+        outputs: [
+          {
+            address: recipient,
+            amount: 50_000,
+            outputType: 'recipient' as const,
+            isOurs: false,
+          },
+        ],
+        rawTxHex: '0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0100000000000000000000000000',
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+      expect(result.broadcasted).toBe(true);
+    });
+
     it('should not call recalculateWalletBalances when broadcast fails', async () => {
       (broadcastTransaction as Mock).mockResolvedValue({
         txid: null,
@@ -1038,6 +2082,7 @@ describe('Transaction Service', () => {
 
       it('should release UTXO locks when broadcasting from a draft', async () => {
         const draftId = 'draft-to-broadcast';
+        mockPrismaClient.draftUtxoLock.deleteMany.mockResolvedValue({ count: 2 });
 
         const metadata = {
           recipient,
@@ -1193,6 +2238,170 @@ describe('Transaction Service', () => {
       // Should have change output
       expect(result.changeAmount).toBeGreaterThan(546);
       expect(result.changeAddress).toBeDefined();
+    });
+
+    it('should throw when selectedUtxoIds filtering leaves no batch inputs', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 10_000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10, {
+          selectedUtxoIds: ['not-present:999'],
+        })
+      ).rejects.toThrow('No spendable UTXOs available');
+    });
+
+    it('should reject batch transactions containing UTXOs with missing scriptPubKey', async () => {
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: '',
+        },
+      ]);
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 10_000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow('missing scriptPubKey data');
+    });
+
+    it('should fail sendMax when fixed outputs consume all value plus fees', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 300_000 },
+        { address: testnetAddresses.nativeSegwit[1], amount: 0, sendMax: true },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow('Insufficient funds');
+    });
+
+    it('should fall back to receiving address when no change branch address is available', async () => {
+      mockPrismaClient.address.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'receive-addr-1',
+          address: testnetAddresses.legacy[1],
+          derivationPath: "m/84'/1'/0'/0/10",
+          walletId,
+          used: false,
+          index: 10,
+        });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.changeAddress).toBe(testnetAddresses.legacy[1]);
+    });
+
+    it('should throw when no change or receiving address is available for batch', async () => {
+      mockPrismaClient.address.findFirst.mockResolvedValue(null);
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow('No change address available');
+    });
+
+    it('should add single-sig bip32 derivation from device data in batch mode', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        descriptor: null,
+        fingerprint: null,
+        devices: [
+          {
+            device: {
+              id: 'batch-device',
+              fingerprint: 'aabbccdd',
+              xpub: 'tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M',
+            },
+          },
+        ],
+      });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation?.length).toBe(1);
+      expect(psbt.data.inputs[0].bip32Derivation?.[0].masterFingerprint.toString('hex')).toBe('aabbccdd');
+    });
+
+    it('should continue when batch account xpub parsing fails', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        descriptor: null,
+        fingerprint: 'aabbccdd',
+        devices: [
+          {
+            device: {
+              id: 'bad-xpub-device',
+              fingerprint: 'aabbccdd',
+              xpub: 'not-a-valid-xpub',
+            },
+          },
+        ],
+      });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.psbtBase64).toBeDefined();
+    });
+
+    it('should use nonWitnessUtxo for legacy batch wallet inputs', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigLegacy,
+        id: walletId,
+        devices: [],
+      });
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: '76a914' + 'a'.repeat(40) + '88ac',
+        },
+      ]);
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'legacy-input-addr',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/44'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'legacy-change-addr',
+        address: testnetAddresses.legacy[1],
+        derivationPath: "m/44'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      const outputs = [
+        { address: testnetAddresses.legacy[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(nodeClient.getNodeClient).toHaveBeenCalled();
+      expect(psbt.data.inputs[0].nonWitnessUtxo).toBeDefined();
     });
   });
 
@@ -1376,6 +2585,40 @@ describe('Transaction Service', () => {
       expect(script[0]).toBe(0x52); // OP_2 (m)
       expect(script[script.length - 2]).toBe(0x52); // OP_2 (n)
       expect(script[script.length - 1]).toBe(0xae); // OP_CHECKMULTISIG
+    });
+
+    it('should include redeemScript for sh-wsh-sortedmulti batch descriptors', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.multiSig2of3,
+        id: walletId,
+        descriptor: "sh(wsh(sortedmulti(2,[aabbccdd/48'/1'/0'/1']tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*,[eeff0011/48'/1'/0'/1']tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba/0/*)))",
+        devices: [
+          { device: { id: 'device-1', fingerprint: 'aabbccdd', xpub: multisigKeyInfo[0].xpub } },
+          { device: { id: 'device-2', fingerprint: 'eeff0011', xpub: multisigKeyInfo[1].xpub } },
+        ],
+      });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].witnessScript).toBeDefined();
+      expect(psbt.data.inputs[0].redeemScript).toBeDefined();
+    });
+
+    it('should continue when batch multisig descriptor parsing fails', async () => {
+      mockParseDescriptor.mockImplementationOnce(() => {
+        throw new Error('descriptor parse failed');
+      });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.psbtBase64).toBeDefined();
     });
   });
 

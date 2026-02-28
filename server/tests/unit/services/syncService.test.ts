@@ -19,6 +19,8 @@ const {
   mockGetBlockHeight,
   mockSetCachedBlockHeight,
   mockElectrumClient,
+  mockGetNodeClient,
+  mockGetElectrumClientIfActive,
   mockNotificationService,
   mockAcquireLock,
   mockExtendLock,
@@ -61,6 +63,8 @@ const {
     on: vi.fn<any>(),
     removeAllListeners: vi.fn<any>(),
   },
+  mockGetNodeClient: vi.fn<any>(),
+  mockGetElectrumClientIfActive: vi.fn<any>(),
   mockNotificationService: {
     broadcastSyncStatus: vi.fn<any>(),
     broadcastBalanceUpdate: vi.fn<any>(),
@@ -117,8 +121,8 @@ vi.mock('../../../src/services/bitcoin/blockchain', () => ({
 }));
 
 vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  getNodeClient: vi.fn<any>().mockResolvedValue(mockElectrumClient),
-  getElectrumClientIfActive: vi.fn<any>().mockResolvedValue(mockElectrumClient),
+  getNodeClient: mockGetNodeClient,
+  getElectrumClientIfActive: mockGetElectrumClientIfActive,
 }));
 
 vi.mock('../../../src/websocket/notifications', () => ({
@@ -202,6 +206,8 @@ describe('SyncService', () => {
     mockElectrumClient.subscribeHeaders.mockResolvedValue({ height: 100000 });
     mockElectrumClient.subscribeAddressBatch.mockResolvedValue(new Map());
     mockElectrumClient.getServerVersion.mockResolvedValue({ server: 'test', protocol: '1.4' });
+    mockGetNodeClient.mockResolvedValue(mockElectrumClient);
+    mockGetElectrumClientIfActive.mockResolvedValue(mockElectrumClient);
   });
 
   afterEach(async () => {
@@ -588,6 +594,239 @@ describe('SyncService', () => {
 
       expect(syncService['addressToWalletMap'].size).toBe(1);
       expect(mockElectrumClient.unsubscribeAddress).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('queue overflow behavior', () => {
+    it('evicts a low-priority job when queue is full', () => {
+      syncService['isRunning'] = true;
+      syncService['activeSyncs'].add('busy-1');
+      syncService['activeSyncs'].add('busy-2');
+      syncService['activeSyncs'].add('busy-3');
+
+      const now = new Date();
+      syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
+        walletId: `wallet-${i}`,
+        priority: i === 500 ? 'low' : 'normal',
+        requestedAt: now,
+      }));
+
+      syncService.queueSync('wallet-new', 'normal');
+
+      expect(syncService['syncQueue']).toHaveLength(1000);
+      expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-new')).toBe(true);
+      expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-500')).toBe(false);
+    });
+
+    it('rejects low-priority jobs when queue is full of higher priority jobs', () => {
+      syncService['isRunning'] = true;
+      syncService['activeSyncs'].add('busy-1');
+      syncService['activeSyncs'].add('busy-2');
+      syncService['activeSyncs'].add('busy-3');
+
+      const now = new Date();
+      syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
+        walletId: `wallet-${i}`,
+        priority: 'normal',
+        requestedAt: now,
+      }));
+
+      syncService.queueSync('wallet-low', 'low');
+
+      expect(syncService['syncQueue']).toHaveLength(1000);
+      expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-low')).toBe(false);
+    });
+
+    it('evicts a normal-priority job for a high-priority request when full', () => {
+      syncService['isRunning'] = true;
+      syncService['activeSyncs'].add('busy-1');
+      syncService['activeSyncs'].add('busy-2');
+      syncService['activeSyncs'].add('busy-3');
+
+      const now = new Date();
+      syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
+        walletId: `wallet-${i}`,
+        priority: 'normal',
+        requestedAt: now,
+      }));
+
+      syncService.queueSync('wallet-high', 'high');
+
+      expect(syncService['syncQueue']).toHaveLength(1000);
+      expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-high')).toBe(true);
+    });
+  });
+
+  describe('stale sync checks', () => {
+    it('auto-unstucks stale sync flags and queues stale wallets', async () => {
+      syncService['isRunning'] = true;
+      syncService['activeSyncs'].add('wallet-active');
+
+      mockPrismaClient.wallet.findMany
+        .mockResolvedValueOnce([
+          { id: 'wallet-stuck', name: 'Stuck Wallet' },
+          { id: 'wallet-active', name: 'Active Wallet' },
+        ])
+        .mockResolvedValueOnce([
+          { id: 'wallet-stale-1' },
+          { id: 'wallet-stale-2' },
+        ]);
+
+      const queueSpy = vi.spyOn(syncService as any, 'queueSync');
+
+      await syncService['checkAndQueueStaleSyncs']();
+
+      expect(mockPrismaClient.wallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-stuck' },
+        data: { syncInProgress: false },
+      });
+      expect(queueSpy).toHaveBeenCalledWith('wallet-stale-1', 'low');
+      expect(queueSpy).toHaveBeenCalledWith('wallet-stale-2', 'low');
+    });
+
+    it('returns early when service is not running', async () => {
+      syncService['isRunning'] = false;
+
+      await syncService['checkAndQueueStaleSyncs']();
+
+      expect(mockPrismaClient.wallet.findMany).not.toHaveBeenCalled();
+    });
+
+    it('handles stale-check query errors without throwing', async () => {
+      syncService['isRunning'] = true;
+      mockPrismaClient.wallet.findMany.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(syncService['checkAndQueueStaleSyncs']()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('confirmation update flows', () => {
+    it('updates confirmations and broadcasts only changed transactions', async () => {
+      syncService['isRunning'] = true;
+
+      mockPrismaClient.transaction.findMany.mockResolvedValueOnce([{ walletId: 'wallet-1' }]);
+      mockPopulateMissingTransactionFields.mockResolvedValueOnce({
+        updated: 1,
+        confirmationUpdates: [{ txid: 'tx-a', oldConfirmations: 0, newConfirmations: 1 }],
+      });
+      mockUpdateTransactionConfirmations.mockResolvedValueOnce([
+        { txid: 'tx-b', oldConfirmations: 1, newConfirmations: 2 },
+      ]);
+
+      const { eventService } = await import('../../../src/services/eventService');
+
+      await syncService['updateAllConfirmations']();
+
+      expect(mockNotificationService.broadcastConfirmationUpdate).toHaveBeenCalledTimes(2);
+      expect(eventService.emitTransactionConfirmed).toHaveBeenCalledTimes(2);
+    });
+
+    it('continues updating other wallets when one wallet update fails', async () => {
+      syncService['isRunning'] = true;
+
+      mockPrismaClient.transaction.findMany.mockResolvedValueOnce([
+        { walletId: 'wallet-fail' },
+        { walletId: 'wallet-ok' },
+      ]);
+      mockPopulateMissingTransactionFields
+        .mockRejectedValueOnce(new Error('populate failed'))
+        .mockResolvedValueOnce({ updated: 0, confirmationUpdates: [] });
+      mockUpdateTransactionConfirmations.mockResolvedValueOnce([]);
+
+      await syncService['updateAllConfirmations']();
+
+      expect(mockUpdateTransactionConfirmations).toHaveBeenCalledTimes(1);
+      expect(mockUpdateTransactionConfirmations).toHaveBeenCalledWith('wallet-ok');
+    });
+
+    it('returns early when not running', async () => {
+      syncService['isRunning'] = false;
+
+      await syncService['updateAllConfirmations']();
+
+      expect(mockPrismaClient.transaction.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('address activity and subscription helpers', () => {
+    it('ignores address-activity events without a resolved address', async () => {
+      await syncService['handleAddressActivity']({ scriptHash: 'hash-1', status: 'status' });
+      expect(mockPrismaClient.address.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('queues a mapped wallet on address activity', async () => {
+      syncService['addressToWalletMap'].set('tb1mapped', 'wallet-mapped');
+      const queueSpy = vi.spyOn(syncService as any, 'queueSync');
+
+      await syncService['handleAddressActivity']({
+        scriptHash: 'hash-2',
+        address: 'tb1mapped',
+        status: 'status',
+      });
+
+      expect(queueSpy).toHaveBeenCalledWith('wallet-mapped', 'high');
+    });
+
+    it('falls back to DB lookup when address is not in memory map', async () => {
+      mockPrismaClient.address.findFirst.mockResolvedValueOnce({ walletId: 'wallet-db' });
+      const queueSpy = vi.spyOn(syncService as any, 'queueSync');
+
+      await syncService['handleAddressActivity']({
+        scriptHash: 'hash-3',
+        address: 'tb1lookup',
+        status: 'status',
+      });
+
+      expect(syncService['addressToWalletMap'].get('tb1lookup')).toBe('wallet-db');
+      expect(queueSpy).toHaveBeenCalledWith('wallet-db', 'high');
+    });
+
+    it('subscribes wallet addresses using wallet network when present', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({ network: 'testnet' });
+      mockPrismaClient.address.findMany.mockResolvedValueOnce([
+        { address: 'tb1qaddr-a' },
+        { address: 'tb1qaddr-b' },
+      ]);
+
+      await syncService.subscribeWalletAddresses('wallet-1');
+
+      expect(mockGetNodeClient).toHaveBeenCalledWith('testnet');
+      expect(mockElectrumClient.subscribeAddress).toHaveBeenCalledTimes(2);
+    });
+
+    it('defaults to mainnet and continues when one address subscription fails', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValueOnce(null);
+      mockPrismaClient.address.findMany.mockResolvedValueOnce([
+        { address: 'bc1qaddr-a' },
+        { address: 'bc1qaddr-b' },
+      ]);
+      mockElectrumClient.subscribeAddress
+        .mockRejectedValueOnce(new Error('first failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await syncService.subscribeWalletAddresses('wallet-2');
+
+      expect(mockGetNodeClient).toHaveBeenCalledWith('mainnet');
+      expect(mockElectrumClient.subscribeAddress).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('address map reconciliation', () => {
+    it('removes stale address-to-wallet mappings for deleted wallets', async () => {
+      syncService['addressToWalletMap'].set('addr-keep', 'wallet-keep');
+      syncService['addressToWalletMap'].set('addr-remove', 'wallet-remove');
+      mockPrismaClient.wallet.findMany.mockResolvedValueOnce([{ id: 'wallet-keep' }]);
+
+      await syncService['reconcileAddressToWalletMap']();
+
+      expect(syncService['addressToWalletMap'].has('addr-keep')).toBe(true);
+      expect(syncService['addressToWalletMap'].has('addr-remove')).toBe(false);
+    });
+
+    it('skips reconciliation query when map is empty', async () => {
+      syncService['addressToWalletMap'].clear();
+      await syncService['reconcileAddressToWalletMap']();
+      expect(mockPrismaClient.wallet.findMany).not.toHaveBeenCalled();
     });
   });
 

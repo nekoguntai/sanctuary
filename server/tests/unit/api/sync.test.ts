@@ -14,8 +14,11 @@ const {
   mockTransactionRepository,
   mockAddressRepository,
   mockSyncService,
+  mockWalletLogBufferGet,
 } = vi.hoisted(() => ({
   mockWalletRepository: {
+    findByIdWithAccess: vi.fn(),
+    updateSyncState: vi.fn(),
     getIdsByNetwork: vi.fn(),
     findByNetworkWithSyncStatus: vi.fn(),
     resetSyncState: vi.fn(),
@@ -27,9 +30,12 @@ const {
     resetUsedFlags: vi.fn(),
   },
   mockSyncService: {
+    syncNow: vi.fn(),
     queueSync: vi.fn(),
     getSyncStatus: vi.fn(),
+    queueUserWallets: vi.fn(),
   },
+  mockWalletLogBufferGet: vi.fn(() => []),
 }));
 
 vi.mock('../../../src/repositories', () => ({
@@ -68,7 +74,7 @@ vi.mock('../../../src/utils/logger', () => ({
 // Mock wallet log buffer
 vi.mock('../../../src/services/walletLogBuffer', () => ({
   walletLogBuffer: {
-    get: vi.fn(() => []),
+    get: mockWalletLogBufferGet,
   },
 }));
 
@@ -86,6 +92,163 @@ describe('Sync API - Network Endpoints', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSyncService.getSyncStatus.mockResolvedValue({ queuePosition: 1, syncInProgress: false });
+  });
+
+  describe('wallet-level endpoints', () => {
+    it('POST /sync/wallet/:walletId triggers immediate sync', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockSyncService.syncNow.mockResolvedValue({
+        success: true,
+        addresses: 4,
+        transactions: 2,
+        utxos: 6,
+        error: null,
+      });
+
+      const response = await request(app)
+        .post('/sync/wallet/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        syncedAddresses: 4,
+        newTransactions: 2,
+        newUtxos: 6,
+        error: null,
+      });
+      expect(mockWalletRepository.findByIdWithAccess).toHaveBeenCalledWith('wallet-1', 'test-user-id');
+      expect(mockSyncService.syncNow).toHaveBeenCalledWith('wallet-1');
+    });
+
+    it('POST /sync/wallet/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/sync/wallet/wallet-missing')
+        .send({});
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
+    });
+
+    it('POST /sync/wallet/:walletId returns 500 on sync errors', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockSyncService.syncNow.mockRejectedValue(new Error('sync exploded'));
+
+      const response = await request(app)
+        .post('/sync/wallet/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('sync exploded');
+    });
+
+    it('POST /sync/queue/:walletId queues sync and returns status', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockSyncService.getSyncStatus.mockResolvedValue({ queuePosition: 3, syncInProgress: true });
+
+      const response = await request(app)
+        .post('/sync/queue/wallet-1')
+        .send({ priority: 'high' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        queued: true,
+        queuePosition: 3,
+        syncInProgress: true,
+      });
+      expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
+    });
+
+    it('GET /sync/status/:walletId returns wallet sync state', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockSyncService.getSyncStatus.mockResolvedValue({
+        queuePosition: 0,
+        syncInProgress: false,
+        lastSyncAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await request(app)
+        .get('/sync/status/wallet-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body.queuePosition).toBe(0);
+      expect(response.body.syncInProgress).toBe(false);
+    });
+
+    it('GET /sync/logs/:walletId returns buffered logs', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockWalletLogBufferGet.mockReturnValueOnce([
+        { level: 'info', message: 'sync started' },
+      ]);
+
+      const response = await request(app)
+        .get('/sync/logs/wallet-1');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        logs: [{ level: 'info', message: 'sync started' }],
+      });
+      expect(mockWalletLogBufferGet).toHaveBeenCalledWith('wallet-1');
+    });
+
+    it('POST /sync/user queues all wallets', async () => {
+      mockSyncService.queueUserWallets.mockResolvedValue(undefined);
+
+      const response = await request(app)
+        .post('/sync/user')
+        .send({ priority: 'low' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockSyncService.queueUserWallets).toHaveBeenCalledWith('test-user-id', 'low');
+    });
+
+    it('POST /sync/reset/:walletId resets stuck state', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockWalletRepository.updateSyncState.mockResolvedValue({});
+
+      const response = await request(app)
+        .post('/sync/reset/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockWalletRepository.updateSyncState).toHaveBeenCalledWith('wallet-1', { syncInProgress: false });
+    });
+
+    it('POST /sync/resync/:walletId performs full resync and queues high priority', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1', syncInProgress: true });
+      mockTransactionRepository.deleteByWalletId.mockResolvedValue(12);
+      mockAddressRepository.resetUsedFlags.mockResolvedValue({ count: 8 });
+      mockWalletRepository.resetSyncState.mockResolvedValue({});
+
+      const response = await request(app)
+        .post('/sync/resync/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        message: 'Cleared 12 transactions. Full resync queued.',
+        deletedTransactions: 12,
+      });
+      expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
+    });
+
+    it('POST /sync/resync/:walletId returns 500 on deletion errors', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1', syncInProgress: false });
+      mockTransactionRepository.deleteByWalletId.mockRejectedValue(new Error('delete failed'));
+
+      const response = await request(app)
+        .post('/sync/resync/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('delete failed');
+    });
   });
 
   describe('POST /sync/network/:network', () => {

@@ -29,6 +29,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary', 'lcov'],
       include: ['hooks/**/*.ts', 'components/**/*.tsx', 'utils/**/*.ts', 'contexts/**/*.tsx'],
+      exclude: ['**/*.test.{ts,tsx}', '**/tests/**', '**/__tests__/**'],
       reportsDirectory: './coverage',
       thresholds: {
         // Thresholds updated after Batch 1-3 test coverage implementation (2026-01-11)

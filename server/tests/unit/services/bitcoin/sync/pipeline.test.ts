@@ -8,6 +8,11 @@ import { vi } from 'vitest';
 import { mockPrismaClient, resetPrismaMocks } from '../../../../mocks/prisma';
 import { mockElectrumClient, resetElectrumMocks } from '../../../../mocks/electrum';
 
+const { isProxyEnabledMock, getBlockHeightMock } = vi.hoisted(() => ({
+  isProxyEnabledMock: vi.fn().mockReturnValue(false),
+  getBlockHeightMock: vi.fn().mockResolvedValue(800000),
+}));
+
 // Mock Prisma
 vi.mock('../../../../../src/models/prisma', () => ({
   __esModule: true,
@@ -17,6 +22,16 @@ vi.mock('../../../../../src/models/prisma', () => ({
 // Mock node client
 vi.mock('../../../../../src/services/bitcoin/nodeClient', () => ({
   getNodeClient: vi.fn().mockResolvedValue(mockElectrumClient),
+}));
+
+vi.mock('../../../../../src/services/bitcoin/electrumPool', () => ({
+  getElectrumPool: vi.fn(() => ({
+    isProxyEnabled: isProxyEnabledMock,
+  })),
+}));
+
+vi.mock('../../../../../src/services/bitcoin/utils/blockHeight', () => ({
+  getBlockHeight: getBlockHeightMock,
 }));
 
 // Mock notifications
@@ -36,11 +51,17 @@ import {
   type SyncContext,
   type SyncPhase,
 } from '../../../../../src/services/bitcoin/sync';
+import { getNodeClient } from '../../../../../src/services/bitcoin/nodeClient';
+import { walletLog } from '../../../../../src/websocket/notifications';
 
 describe('Sync Pipeline', () => {
   beforeEach(() => {
     resetPrismaMocks();
     resetElectrumMocks();
+    isProxyEnabledMock.mockReset();
+    isProxyEnabledMock.mockReturnValue(false);
+    getBlockHeightMock.mockReset();
+    getBlockHeightMock.mockResolvedValue(800000);
   });
 
   describe('createSyncStats', () => {
@@ -179,6 +200,31 @@ describe('Sync Pipeline', () => {
       await expect(executeSyncPipeline('nonexistent', [])).rejects.toThrow();
     });
 
+    it('should default to mainnet when wallet network is missing', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        network: null,
+        descriptor: "wpkh([12345678/84'/0'/0']xpub...)",
+      });
+
+      await executeSyncPipeline(walletId, []);
+
+      expect(getNodeClient).toHaveBeenCalledWith('mainnet');
+    });
+
+    it('should log Tor-specific start message when proxy is enabled', async () => {
+      isProxyEnabledMock.mockReturnValueOnce(true);
+
+      await executeSyncPipeline(walletId, []);
+
+      expect(walletLog).toHaveBeenCalledWith(
+        walletId,
+        'info',
+        'SYNC',
+        'Starting wallet sync via Tor...'
+      );
+    });
+
     it('should propagate phase errors with context', async () => {
       const phases: SyncPhase[] = [
         createPhase('successPhase', async (ctx) => ctx),
@@ -191,6 +237,22 @@ describe('Sync Pipeline', () => {
         name: 'SyncPipelineError',
         message: expect.stringContaining('Phase failed'),
         failedPhase: 'failingPhase',
+      });
+    });
+
+    it('should wrap non-Error phase failures in an Error cause', async () => {
+      const phases: SyncPhase[] = [
+        createPhase('stringFailure', async () => {
+          throw 'string failure';
+        }),
+      ];
+
+      await expect(executeSyncPipeline(walletId, phases)).rejects.toMatchObject({
+        name: 'SyncPipelineError',
+        failedPhase: 'stringFailure',
+        cause: expect.objectContaining({
+          message: 'string failure',
+        }),
       });
     });
 

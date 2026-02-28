@@ -1,67 +1,40 @@
-import { vi } from 'vitest';
-/**
- * NodeClient Unit Tests
- *
- * Tests for the node client mode switching behavior between
- * pool mode and single connection mode.
- */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockPrismaClient, resetPrismaMocks } from '../../../mocks/prisma';
 
-// Mock the pool and electrum client before imports
-const mockPool = {
-  initialize: vi.fn().mockResolvedValue(undefined),
-  shutdown: vi.fn().mockResolvedValue(undefined),
-  acquire: vi.fn().mockResolvedValue({
-    client: { getBlockHeight: vi.fn().mockResolvedValue(800000) },
-    release: vi.fn(),
-  }),
-  getSubscriptionConnection: vi.fn().mockResolvedValue({
-    isConnected: vi.fn().mockReturnValue(true),
-  }),
-  getPoolStats: vi.fn().mockReturnValue({
-    totalConnections: 2,
-    activeConnections: 0,
-    idleConnections: 2,
-  }),
-  isPoolInitialized: vi.fn().mockReturnValue(true),
-  isHealthy: vi.fn().mockReturnValue(true),
-  setServers: vi.fn(),
-  reloadServers: vi.fn().mockResolvedValue(undefined),
-};
+const mocks = vi.hoisted(() => ({
+  getElectrumPoolForNetwork: vi.fn(),
+  getElectrumPool: vi.fn(),
+  resetElectrumPool: vi.fn(),
+  resetElectrumPoolForNetwork: vi.fn(),
+  initializeElectrumPool: vi.fn(),
+  getElectrumClientForNetwork: vi.fn(),
+  resetElectrumClient: vi.fn(),
+  electrumClientCtor: vi.fn(),
+}));
+
+vi.mock('../../../../src/repositories/db', async () => {
+  const { mockPrismaClient: prisma } = await import('../../../mocks/prisma');
+  return {
+    __esModule: true,
+    db: prisma,
+    default: prisma,
+  };
+});
 
 vi.mock('../../../../src/services/bitcoin/electrumPool', () => ({
-  ElectrumPool: vi.fn().mockImplementation(() => mockPool),
+  initializeElectrumPool: mocks.initializeElectrumPool,
+  resetElectrumPool: mocks.resetElectrumPool,
+  getElectrumPool: mocks.getElectrumPool,
+  getElectrumPoolForNetwork: mocks.getElectrumPoolForNetwork,
+  resetElectrumPoolForNetwork: mocks.resetElectrumPoolForNetwork,
 }));
-
-const mockElectrumClient = {
-  connect: vi.fn().mockResolvedValue(undefined),
-  disconnect: vi.fn(),
-  isConnected: vi.fn().mockReturnValue(true),
-  getBlockHeight: vi.fn().mockResolvedValue(800000),
-};
 
 vi.mock('../../../../src/services/bitcoin/electrum', () => ({
-  ElectrumClient: vi.fn().mockImplementation(() => mockElectrumClient),
-}));
-
-vi.mock('../../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: {
-    nodeConfig: {
-      findFirst: vi.fn().mockResolvedValue({
-        type: 'electrum',
-        host: 'electrum.example.com',
-        port: 50002,
-        useSsl: true,
-        poolEnabled: true,
-        poolMinConnections: 1,
-        poolMaxConnections: 5,
-        poolLoadBalancing: 'round_robin',
-      }),
-    },
-    electrumServer: {
-      findMany: vi.fn().mockResolvedValue([]),
-    },
+  ElectrumClient: function MockElectrumClient(...args: unknown[]) {
+    return mocks.electrumClientCtor(...args);
   },
+  getElectrumClientForNetwork: mocks.getElectrumClientForNetwork,
+  resetElectrumClient: mocks.resetElectrumClient,
 }));
 
 vi.mock('../../../../src/utils/logger', () => ({
@@ -73,90 +46,682 @@ vi.mock('../../../../src/utils/logger', () => ({
   }),
 }));
 
-describe('NodeClient', () => {
-  beforeEach(() => {
+vi.mock('../../../../src/utils/errors', () => ({
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+}));
+
+import {
+  getNodeClient,
+  getActiveNodeConfig,
+  getElectrumClientIfActive,
+  resetNodeClient,
+  saveNodeConfig,
+  testNodeConfig,
+} from '../../../../src/services/bitcoin/nodeClient';
+
+function buildNodeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'default',
+    isDefault: true,
+    host: 'electrum.mainnet.example',
+    port: 50002,
+    useSsl: true,
+    poolEnabled: true,
+    mainnetMode: 'pool',
+    mainnetSingletonHost: 'electrum.mainnet.example',
+    mainnetSingletonPort: 50002,
+    mainnetSingletonSsl: true,
+    mainnetPoolMin: 1,
+    mainnetPoolMax: 5,
+    mainnetPoolLoadBalancing: 'round_robin',
+    testnetEnabled: true,
+    testnetMode: 'singleton',
+    testnetSingletonHost: 'electrum.testnet.example',
+    testnetSingletonPort: 60002,
+    testnetSingletonSsl: true,
+    testnetPoolMin: 1,
+    testnetPoolMax: 3,
+    testnetPoolLoadBalancing: 'round_robin',
+    signetEnabled: true,
+    signetMode: 'singleton',
+    signetSingletonHost: 'electrum.signet.example',
+    signetSingletonPort: 60003,
+    signetSingletonSsl: true,
+    signetPoolMin: 1,
+    signetPoolMax: 3,
+    signetPoolLoadBalancing: 'round_robin',
+    ...overrides,
+  };
+}
+
+describe('nodeClient service', () => {
+  const mainnetSingleton = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    isConnected: vi.fn(),
+    getBlockHeight: vi.fn(),
+  };
+  const testnetSingleton = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    isConnected: vi.fn(),
+    getBlockHeight: vi.fn(),
+  };
+  const poolSubscriptionClient = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    isConnected: vi.fn(),
+    getBlockHeight: vi.fn(),
+  };
+  const poolFacade = {
+    getSubscriptionConnection: vi.fn(),
+    isPoolInitialized: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    resetPrismaMocks();
     vi.clearAllMocks();
+
+    mainnetSingleton.connect.mockResolvedValue(undefined);
+    mainnetSingleton.disconnect.mockImplementation(() => undefined);
+    mainnetSingleton.isConnected.mockReturnValue(true);
+
+    testnetSingleton.connect.mockResolvedValue(undefined);
+    testnetSingleton.disconnect.mockImplementation(() => undefined);
+    testnetSingleton.isConnected.mockReturnValue(true);
+
+    poolSubscriptionClient.isConnected.mockReturnValue(true);
+    poolFacade.getSubscriptionConnection.mockResolvedValue(poolSubscriptionClient);
+    poolFacade.isPoolInitialized.mockReturnValue(true);
+
+    mocks.getElectrumClientForNetwork.mockImplementation((network: string) => {
+      if (network === 'testnet') return testnetSingleton;
+      return mainnetSingleton;
+    });
+    mocks.getElectrumPoolForNetwork.mockResolvedValue(poolFacade);
+    mocks.getElectrumPool.mockReturnValue(poolFacade);
+    mocks.resetElectrumPool.mockResolvedValue(undefined);
+    mocks.resetElectrumPoolForNetwork.mockResolvedValue(undefined);
+    mocks.resetElectrumClient.mockImplementation(() => undefined);
+    mocks.electrumClientCtor.mockImplementation(() => ({
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn(),
+      getBlockHeight: vi.fn().mockResolvedValue(850000),
+      testVerboseSupport: vi.fn().mockResolvedValue(true),
+    }));
+
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig());
+
+    await resetNodeClient();
   });
 
-  describe('Pool Mode Configuration', () => {
-    it('should recognize poolEnabled configuration option', () => {
-      // This tests that the pool configuration structure is recognized
-      const config = {
-        type: 'electrum',
-        host: 'electrum.example.com',
-        port: 50002,
-        useSsl: true,
-        poolEnabled: true,
-        poolMinConnections: 2,
-        poolMaxConnections: 10,
-        poolLoadBalancing: 'round_robin',
-      };
+  it('uses pool mode for mainnet and reuses cached connected client', async () => {
+    const first = await getNodeClient('mainnet');
+    const second = await getNodeClient('mainnet');
 
-      expect(config.poolEnabled).toBe(true);
-      expect(config.poolMinConnections).toBe(2);
-      expect(config.poolMaxConnections).toBe(10);
-      expect(config.poolLoadBalancing).toBe('round_robin');
+    expect(first).toBe(poolSubscriptionClient);
+    expect(second).toBe(first);
+    expect(mocks.getElectrumPoolForNetwork).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to singleton client when pool initialization fails', async () => {
+    mocks.getElectrumPoolForNetwork.mockRejectedValueOnce(new Error('pool unavailable'));
+    mainnetSingleton.isConnected.mockReturnValue(false);
+
+    const client = await getNodeClient('mainnet');
+
+    expect(client).toBe(mainnetSingleton);
+    expect(mainnetSingleton.connect).toHaveBeenCalledTimes(1);
+    expect(mocks.getElectrumClientForNetwork).toHaveBeenCalledWith('mainnet');
+  });
+
+  it('uses singleton mode for testnet when configured', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        testnetMode: 'singleton',
+        testnetEnabled: true,
+      })
+    );
+    testnetSingleton.isConnected.mockReturnValue(false);
+
+    const client = await getNodeClient('testnet');
+
+    expect(client).toBe(testnetSingleton);
+    expect(testnetSingleton.connect).toHaveBeenCalledTimes(1);
+    expect(mocks.getElectrumPoolForNetwork).not.toHaveBeenCalled();
+  });
+
+  it('uses testnet singleton defaults when per-network testnet fields are null', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        testnetEnabled: true,
+        testnetMode: null,
+        testnetSingletonHost: null,
+        testnetSingletonPort: null,
+        testnetSingletonSsl: null,
+        testnetPoolMin: null,
+        testnetPoolMax: null,
+        testnetPoolLoadBalancing: null,
+      })
+    );
+    testnetSingleton.isConnected.mockReturnValue(true);
+
+    const client = await getNodeClient('testnet');
+
+    expect(client).toBe(testnetSingleton);
+    expect(testnetSingleton.connect).not.toHaveBeenCalled();
+    expect(mocks.getElectrumPoolForNetwork).not.toHaveBeenCalled();
+  });
+
+  it('falls back to singleton defaults when signet is disabled in DB config', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        signetEnabled: false,
+        signetMode: 'pool',
+      })
+    );
+    const signetSingleton = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn(),
+      isConnected: vi.fn().mockReturnValue(false),
+      getBlockHeight: vi.fn(),
+    };
+    mocks.getElectrumClientForNetwork.mockImplementation((network: string) => {
+      if (network === 'signet') return signetSingleton;
+      return mainnetSingleton;
     });
 
-    it('should have default values when pool disabled', () => {
-      const config = {
-        type: 'electrum',
-        host: 'electrum.example.com',
-        port: 50002,
-        useSsl: true,
+    const client = await getNodeClient('signet');
+
+    expect(client).toBe(signetSingleton);
+    expect(signetSingleton.connect).toHaveBeenCalledTimes(1);
+    expect(mocks.getElectrumPoolForNetwork).not.toHaveBeenCalled();
+  });
+
+  it('uses singleton mode fallback when testnet is disabled in DB config', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        testnetEnabled: false,
+        testnetMode: 'pool',
+      })
+    );
+    testnetSingleton.isConnected.mockReturnValue(false);
+
+    const client = await getNodeClient('testnet');
+
+    expect(client).toBe(testnetSingleton);
+    expect(testnetSingleton.connect).toHaveBeenCalledTimes(1);
+    expect(mocks.getElectrumPoolForNetwork).not.toHaveBeenCalled();
+  });
+
+  it('uses singleton mode for regtest with legacy host/port config', async () => {
+    const regtestSingleton = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn(),
+      isConnected: vi.fn().mockReturnValue(false),
+      getBlockHeight: vi.fn(),
+    };
+    mocks.getElectrumClientForNetwork.mockImplementation((network: string) => {
+      if (network === 'regtest') return regtestSingleton;
+      return mainnetSingleton;
+    });
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        host: '127.0.0.1',
+        port: 60401,
+        useSsl: false,
+      })
+    );
+
+    const client = await getNodeClient('regtest');
+
+    expect(client).toBe(regtestSingleton);
+    expect(regtestSingleton.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to default mode selection when node config does not exist', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+    testnetSingleton.isConnected.mockReturnValue(false);
+
+    const mainnetClient = await getNodeClient('mainnet');
+    const testnetClient = await getNodeClient('testnet');
+
+    expect(mainnetClient).toBe(poolSubscriptionClient); // default mainnet mode -> pool
+    expect(testnetClient).toBe(testnetSingleton); // default non-mainnet mode -> singleton
+    expect(testnetSingleton.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses default mode branch for unknown network values', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig());
+
+    const unknownClient = await getNodeClient('unknownnet' as any);
+    expect(unknownClient).toBe(poolSubscriptionClient);
+    expect(mocks.getElectrumPoolForNetwork).toHaveBeenCalledWith('unknownnet');
+  });
+
+  it('supports signet pool mode and defaulted null per-network values', async () => {
+    const signetPoolClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      isConnected: vi.fn().mockReturnValue(true),
+      getBlockHeight: vi.fn(),
+    };
+    const signetPool = {
+      getSubscriptionConnection: vi.fn().mockResolvedValue(signetPoolClient),
+      isPoolInitialized: vi.fn().mockReturnValue(true),
+    };
+
+    mocks.getElectrumPoolForNetwork.mockImplementation(async (network: string) => {
+      if (network === 'signet') return signetPool as any;
+      return poolFacade as any;
+    });
+
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        signetEnabled: true,
+        signetMode: 'pool',
+        signetSingletonHost: null,
+        signetSingletonPort: null,
+        signetSingletonSsl: null,
+        signetPoolMin: null,
+        signetPoolMax: null,
+        signetPoolLoadBalancing: null,
+      })
+    );
+
+    const client = await getNodeClient('signet');
+    expect(client).toBe(signetPoolClient);
+    expect((signetPool.getSubscriptionConnection as any).mock.calls.length).toBe(1);
+  });
+
+  it('uses signet singleton defaults when signet mode is null', async () => {
+    const signetSingleton = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn(),
+      isConnected: vi.fn().mockReturnValue(true),
+      getBlockHeight: vi.fn(),
+    };
+    mocks.getElectrumClientForNetwork.mockImplementation((network: string) => {
+      if (network === 'signet') return signetSingleton;
+      if (network === 'testnet') return testnetSingleton;
+      return mainnetSingleton;
+    });
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        signetEnabled: true,
+        signetMode: null,
+      })
+    );
+
+    const client = await getNodeClient('signet');
+    expect(client).toBe(signetSingleton);
+    expect(signetSingleton.connect).not.toHaveBeenCalled();
+  });
+
+  it('uses fallback defaults for null mainnet network-mode fields', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        mainnetMode: null,
+        mainnetSingletonHost: null,
+        mainnetSingletonPort: null,
+        mainnetSingletonSsl: null,
+        mainnetPoolMin: null,
+        mainnetPoolMax: null,
+        mainnetPoolLoadBalancing: null,
+      })
+    );
+
+    const client = await getNodeClient('mainnet');
+    expect(client).toBe(poolSubscriptionClient);
+  });
+
+  it('resets a single network client and reconnects on next request', async () => {
+    const disconnectCallsBefore = poolSubscriptionClient.disconnect.mock.calls.length;
+    await getNodeClient('mainnet');
+    await resetNodeClient('mainnet');
+    await getNodeClient('mainnet');
+
+    expect(poolSubscriptionClient.disconnect.mock.calls.length).toBe(disconnectCallsBefore + 1);
+    expect(mocks.resetElectrumPoolForNetwork).toHaveBeenCalledWith('mainnet');
+    expect(mocks.getElectrumPoolForNetwork).toHaveBeenCalledTimes(2);
+  });
+
+  it('resetNodeClient handles uncached network clients without disconnecting', async () => {
+    const disconnectCallsBefore = poolSubscriptionClient.disconnect.mock.calls.length;
+    await resetNodeClient('signet');
+
+    expect(poolSubscriptionClient.disconnect.mock.calls.length).toBe(disconnectCallsBefore);
+    expect(mocks.resetElectrumPoolForNetwork).toHaveBeenCalledWith('signet');
+  });
+
+  it('returns pool subscription connection for active client when pool is enabled', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({ poolEnabled: true })
+    );
+
+    const client = await getElectrumClientIfActive();
+
+    expect(client).toBe(poolSubscriptionClient);
+    expect(poolFacade.isPoolInitialized).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to active singleton when pool is enabled but not initialized', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({ poolEnabled: true })
+    );
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({
         poolEnabled: false,
-      };
+        mainnetMode: 'singleton',
+      })
+    );
+    mainnetSingleton.isConnected.mockReturnValue(false);
+    await getNodeClient('mainnet');
 
-      expect(config.poolEnabled).toBe(false);
+    poolFacade.isPoolInitialized.mockReturnValue(false);
+    const active = await getElectrumClientIfActive();
+    expect(active).toBe(mainnetSingleton);
+  });
+
+  it('swallows pool errors in getElectrumClientIfActive and returns singleton fallback', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({
+        poolEnabled: false,
+        mainnetMode: 'singleton',
+      })
+    );
+    mainnetSingleton.isConnected.mockReturnValue(false);
+    await getNodeClient('mainnet');
+
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({ poolEnabled: true })
+    );
+    mocks.getElectrumPool.mockImplementationOnce(() => {
+      throw new Error('pool unavailable');
+    });
+
+    const active = await getElectrumClientIfActive();
+    expect(active).toBe(mainnetSingleton);
+  });
+
+  it('falls back to active singleton client when pool mode is disabled', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        poolEnabled: false,
+        mainnetMode: 'singleton',
+      })
+    );
+    mainnetSingleton.isConnected.mockReturnValue(false);
+
+    await getNodeClient('mainnet');
+    const active = await getElectrumClientIfActive();
+
+    expect(active).toBe(mainnetSingleton);
+  });
+
+  it('saves node config and returns it as active config', async () => {
+    const config = {
+      host: 'saved.example.com',
+      port: 50001,
+      protocol: 'tcp' as const,
+    };
+
+    await saveNodeConfig(config);
+    const active = await getActiveNodeConfig();
+
+    expect(mockPrismaClient.nodeConfig.updateMany).toHaveBeenCalledWith({
+      where: { isDefault: true },
+      data: { isDefault: false },
+    });
+    expect(mockPrismaClient.nodeConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'default' },
+        update: expect.objectContaining({
+          host: 'saved.example.com',
+          port: 50001,
+          useSsl: false,
+          isDefault: true,
+        }),
+        create: expect.objectContaining({
+          id: 'default',
+          type: 'electrum',
+          host: 'saved.example.com',
+          port: 50001,
+          useSsl: false,
+          isDefault: true,
+        }),
+      })
+    );
+    expect(active).toEqual(config);
+  });
+
+  it('loads active node config from database when cache is empty', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({
+        host: 'loaded.example.com',
+        port: 51002,
+        useSsl: true,
+      })
+    );
+
+    const active = await getActiveNodeConfig();
+
+    expect(active).toEqual({
+      host: 'loaded.example.com',
+      port: 51002,
+      protocol: 'ssl',
+      poolEnabled: true,
     });
   });
 
-  describe('Pool Stats Structure', () => {
-    it('should return proper pool stats structure', () => {
-      const stats = mockPool.getPoolStats();
+  it('returns default Electrum config when database has no active config', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(null);
 
-      expect(stats).toHaveProperty('totalConnections');
-      expect(stats).toHaveProperty('activeConnections');
-      expect(stats).toHaveProperty('idleConnections');
-    });
+    const active = await getActiveNodeConfig();
 
-    it('should indicate healthy pool', () => {
-      expect(mockPool.isHealthy()).toBe(true);
-      expect(mockPool.isPoolInitialized()).toBe(true);
+    expect(active.host).toBe('electrum.blockstream.info');
+    expect(active.port).toBe(50002);
+    expect(active.protocol).toBe('ssl');
+  });
+
+  it('returns default Electrum config when loading config from DB throws', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValueOnce(new Error('db down'));
+
+    const active = await getActiveNodeConfig();
+    expect(active.host).toBe('electrum.blockstream.info');
+    expect(active.port).toBe(50002);
+    expect(active.protocol).toBe('ssl');
+  });
+
+  it('maps database config with useSsl=false to tcp protocol', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({
+        host: 'tcp-only.example.com',
+        port: 50001,
+        useSsl: false,
+      })
+    );
+
+    const active = await getActiveNodeConfig();
+    expect(active).toEqual({
+      host: 'tcp-only.example.com',
+      port: 50001,
+      protocol: 'tcp',
+      poolEnabled: true,
     });
   });
 
-  describe('Connection Acquisition', () => {
-    it('should acquire connection from pool', async () => {
-      const handle = await mockPool.acquire();
+  it('falls back to mainnet pool mode when loading network config throws', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockRejectedValueOnce(new Error('db down'));
 
-      expect(handle).toBeDefined();
-      expect(handle.client).toBeDefined();
-      expect(typeof handle.release).toBe('function');
+    const client = await getNodeClient('mainnet');
+
+    expect(client).toBe(poolSubscriptionClient);
+    expect(mocks.getElectrumPoolForNetwork).toHaveBeenCalledWith('mainnet');
+  });
+
+  it('does not reconnect singleton fallback when pool fails but singleton is already connected', async () => {
+    mocks.getElectrumPoolForNetwork.mockRejectedValueOnce(new Error('pool unavailable'));
+    mainnetSingleton.isConnected.mockReturnValue(true);
+
+    const client = await getNodeClient('mainnet');
+
+    expect(client).toBe(mainnetSingleton);
+    expect(mainnetSingleton.connect).not.toHaveBeenCalled();
+  });
+
+  it('reuses cached active config in getElectrumClientIfActive without reloading node config', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({ poolEnabled: false })
+    );
+
+    await getElectrumClientIfActive();
+    await getElectrumClientIfActive();
+
+    expect(mockPrismaClient.nodeConfig.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null from getElectrumClientIfActive when no pool or active singleton exists', async () => {
+    await resetNodeClient();
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValueOnce(
+      buildNodeConfig({ poolEnabled: false })
+    );
+
+    const active = await getElectrumClientIfActive();
+
+    expect(active).toBeNull();
+  });
+
+  it('tests node config successfully with verbose capability info', async () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn();
+    const getBlockHeight = vi.fn().mockResolvedValue(901234);
+    const testVerboseSupportFn = vi.fn().mockResolvedValue(true);
+    mocks.electrumClientCtor.mockImplementationOnce(() => ({
+      connect,
+      disconnect,
+      getBlockHeight,
+      testVerboseSupport: testVerboseSupportFn,
+    }));
+
+    const result = await testNodeConfig({
+      host: 'electrum.example.com',
+      port: 50002,
+      protocol: 'ssl',
     });
 
-    it('should get subscription connection', async () => {
-      const subConnection = await mockPool.getSubscriptionConnection();
+    expect(result.success).toBe(true);
+    expect(result.info).toEqual({
+      blockHeight: 901234,
+      supportsVerbose: true,
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
 
-      expect(subConnection).toBeDefined();
-      expect(subConnection.isConnected()).toBe(true);
+  it('handles verbose capability probe failures but still succeeds', async () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn();
+    const getBlockHeight = vi.fn().mockResolvedValue(901234);
+    const testVerboseSupportFn = vi.fn().mockRejectedValue(new Error('capability unavailable'));
+    mocks.electrumClientCtor.mockImplementationOnce(() => ({
+      connect,
+      disconnect,
+      getBlockHeight,
+      testVerboseSupport: testVerboseSupportFn,
+    }));
+
+    const result = await testNodeConfig({
+      host: 'electrum.example.com',
+      port: 50002,
+      protocol: 'ssl',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.info).toEqual({
+      blockHeight: 901234,
+      supportsVerbose: undefined,
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports verbose unsupported when capability probe returns false', async () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn();
+    const getBlockHeight = vi.fn().mockResolvedValue(901234);
+    const testVerboseSupportFn = vi.fn().mockResolvedValue(false);
+    mocks.electrumClientCtor.mockImplementationOnce(() => ({
+      connect,
+      disconnect,
+      getBlockHeight,
+      testVerboseSupport: testVerboseSupportFn,
+    }));
+
+    const result = await testNodeConfig({
+      host: 'electrum.example.com',
+      port: 50002,
+      protocol: 'ssl',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('verbose: no');
+    expect(result.info).toEqual({
+      blockHeight: 901234,
+      supportsVerbose: false,
     });
   });
 
-  describe('Pool Lifecycle', () => {
-    it('should initialize pool', async () => {
-      await mockPool.initialize();
-      expect(mockPool.initialize).toHaveBeenCalled();
+  it('returns connection failure from testNodeConfig', async () => {
+    const connect = vi.fn().mockRejectedValue(new Error('connect failed'));
+    mocks.electrumClientCtor.mockImplementationOnce(() => ({
+      connect,
+      disconnect: vi.fn(),
+      getBlockHeight: vi.fn(),
+      testVerboseSupport: vi.fn(),
+    }));
+
+    const result = await testNodeConfig({
+      host: 'down.example.com',
+      port: 50002,
+      protocol: 'ssl',
     });
 
-    it('should shutdown pool', async () => {
-      await mockPool.shutdown();
-      expect(mockPool.shutdown).toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('connect failed');
+  });
+
+  it('defaults protocol to ssl in testNodeConfig when protocol is omitted', async () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    const disconnect = vi.fn();
+    const getBlockHeight = vi.fn().mockResolvedValue(901234);
+    mocks.electrumClientCtor.mockImplementationOnce(() => ({
+      connect,
+      disconnect,
+      getBlockHeight,
+      testVerboseSupport: vi.fn().mockResolvedValue(true),
+    }));
+
+    const result = await testNodeConfig({
+      host: 'electrum-default.example.com',
+      port: 50002,
     });
 
-    it('should reload servers', async () => {
-      await mockPool.reloadServers();
-      expect(mockPool.reloadServers).toHaveBeenCalled();
-    });
+    expect(result.success).toBe(true);
+    expect(mocks.electrumClientCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: 'electrum-default.example.com',
+        port: 50002,
+        protocol: 'ssl',
+      })
+    );
   });
 });

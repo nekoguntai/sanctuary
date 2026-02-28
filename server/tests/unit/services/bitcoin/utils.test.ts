@@ -12,8 +12,12 @@ import {
   estimateTransactionSize,
   calculateFee,
   getNetwork,
+  formatBTC,
+  parseTransaction,
+  createTransaction as createTransactionFromUtils,
 } from '../../../../src/services/bitcoin/utils';
 import { testnetAddresses, mainnetAddresses } from '../../../fixtures/bitcoin';
+import * as bitcoin from 'bitcoinjs-lib';
 
 describe('Bitcoin Utilities', () => {
   describe('satsToBTC', () => {
@@ -82,6 +86,14 @@ describe('Bitcoin Utilities', () => {
       expect(getAddressType('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2')).toBe('P2PKH');
       expect(getAddressType('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn')).toBe('P2PKH');
     });
+
+    it('should return Unknown for non-Bitcoin prefixes', () => {
+      expect(getAddressType('xyz-not-address')).toBe('Unknown');
+    });
+
+    it('should return Invalid when called with a non-string value', () => {
+      expect(getAddressType(null as unknown as string)).toBe('Invalid');
+    });
   });
 
   describe('estimateTransactionSize', () => {
@@ -126,6 +138,78 @@ describe('Bitcoin Utilities', () => {
 
       const regtest = getNetwork('regtest');
       expect(regtest.bech32).toBe('bcrt');
+    });
+  });
+
+  describe('formatBTC', () => {
+    it('should keep trailing zeros for backward-compatible display', () => {
+      expect(formatBTC(1.2, 4)).toBe('1.2000');
+    });
+  });
+
+  describe('parseTransaction', () => {
+    it('should parse a standard transaction and decode output address', () => {
+      const tx = new bitcoin.Transaction();
+      tx.version = 2;
+      tx.addInput(Buffer.from('11'.repeat(32), 'hex'), 1, 0xfffffffe);
+      tx.addOutput(
+        bitcoin.address.toOutputScript(testnetAddresses.nativeSegwit[0], bitcoin.networks.testnet),
+        12_345
+      );
+
+      const parsed = parseTransaction(tx.toHex(), 'testnet');
+
+      expect(parsed.version).toBe(2);
+      expect(parsed.inputs).toHaveLength(1);
+      expect(parsed.inputs[0].vout).toBe(1);
+      expect(parsed.outputs[0].value).toBe(12_345);
+      expect(parsed.outputs[0].address).toBe(testnetAddresses.nativeSegwit[0]);
+      expect(parsed.outputs[0].scriptPubKey.length).toBeGreaterThan(0);
+    });
+
+    it('should keep address undefined for scripts without address encoding', () => {
+      const tx = new bitcoin.Transaction();
+      tx.addInput(Buffer.from('22'.repeat(32), 'hex'), 0, 0xffffffff);
+      tx.addOutput(
+        bitcoin.script.compile([bitcoin.opcodes.OP_RETURN, Buffer.from('hi')]),
+        0
+      );
+
+      const parsed = parseTransaction(tx.toHex(), 'testnet');
+      expect(parsed.outputs[0].address).toBeUndefined();
+    });
+  });
+
+  describe('createTransaction (utils)', () => {
+    const input = {
+      txid: '33'.repeat(32),
+      vout: 0,
+      value: 80_000,
+      scriptPubKey: '0014' + 'aa'.repeat(20),
+    };
+    const output = {
+      address: testnetAddresses.nativeSegwit[0],
+      value: 50_000,
+    };
+
+    it('should build a PSBT with RBF enabled by default', () => {
+      const result = createTransactionFromUtils([input], [output], 5, { network: 'testnet' });
+
+      expect(result.totalInput).toBe(80_000);
+      expect(result.totalOutput).toBe(50_000);
+      expect(result.fee).toBeGreaterThan(0);
+      expect(result.psbt.txInputs[0].sequence).toBe(0xfffffffd);
+    });
+
+    it('should allow disabling RBF for final-sequence inputs', () => {
+      const result = createTransactionFromUtils(
+        [input],
+        [output],
+        5,
+        { network: 'testnet', enableRBF: false }
+      );
+
+      expect(result.psbt.txInputs[0].sequence).toBe(0xffffffff);
     });
   });
 });

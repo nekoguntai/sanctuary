@@ -117,6 +117,67 @@ function createTestPsbt(options: {
   return psbt;
 }
 
+function createNonWitnessPsbt(options: {
+  inputValue?: number;
+  outputValue?: number;
+  seed?: number;
+} = {}): bitcoin.Psbt {
+  const inputValue = options.inputValue ?? 100000;
+  const outputValue = options.outputValue ?? 90000;
+  const seed = options.seed ?? 1;
+
+  const previousTx = new bitcoin.Transaction();
+  previousTx.addInput(Buffer.alloc(32, seed), 0xffffffff, 0xfffffffd, Buffer.alloc(0));
+  previousTx.addOutput(
+    bitcoin.payments.p2pkh({
+      hash: Buffer.alloc(20, seed),
+      network: TESTNET,
+    }).output!,
+    inputValue
+  );
+
+  const psbt = new bitcoin.Psbt({ network: TESTNET });
+  psbt.addInput({
+    hash: Buffer.from(previousTx.getId(), 'hex').reverse(),
+    index: 0,
+    sequence: 0xfffffffd,
+    nonWitnessUtxo: previousTx.toBuffer(),
+  });
+  psbt.addOutput({
+    script: bitcoin.payments.p2pkh({
+      hash: Buffer.alloc(20, 0x20 + seed),
+      network: TESTNET,
+    }).output!,
+    value: outputValue,
+  });
+
+  return psbt;
+}
+
+function createOpReturnPsbt(seed: number = 1): bitcoin.Psbt {
+  const psbt = new bitcoin.Psbt({ network: TESTNET });
+  psbt.addInput({
+    hash: Buffer.alloc(32, seed),
+    index: 0,
+    sequence: 0xfffffffd,
+  });
+  psbt.updateInput(0, {
+    witnessUtxo: {
+      script: bitcoin.payments.p2wpkh({
+        hash: Buffer.alloc(20, seed),
+        network: TESTNET,
+      }).output!,
+      value: 100000,
+    },
+  });
+  psbt.addOutput({
+    script: Buffer.from([0x6a, 0x01, seed]),
+    value: 0,
+  });
+
+  return psbt;
+}
+
 describe('PSBT Validation Utilities', () => {
   describe('parsePsbt', () => {
     it('should parse a valid base64 PSBT', () => {
@@ -230,6 +291,23 @@ describe('PSBT Validation Utilities', () => {
       expect(
         result.errors.some(e => e.includes('no inputs') || e.includes('Failed to parse'))
       ).toBe(true);
+    });
+
+    it('should report no-input errors when parsed PSBT has zero inputs', () => {
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64').mockReturnValue({
+        inputCount: 0,
+        txOutputs: [{ value: 1000, script: Buffer.alloc(0) }],
+        data: { inputs: [] },
+      } as unknown as bitcoin.Psbt);
+
+      try {
+        const result = validatePsbtStructure('cHNidP8BAA==');
+
+        expect(result.valid).toBe(false);
+        expect(result.errors).toContain('PSBT has no inputs');
+      } finally {
+        fromBase64Spy.mockRestore();
+      }
     });
 
     it('should report error for PSBT with no outputs', () => {
@@ -440,6 +518,20 @@ describe('PSBT Validation Utilities', () => {
         expect(result.valid).toBe(true);
         expect(result.warnings.some(w => w.includes('increased'))).toBe(true);
       });
+
+      it('should skip unknown outputs when comparing sender outputs', () => {
+        const original = createOpReturnPsbt(7);
+        const proposal = createOpReturnPsbt(7);
+
+        const result = validatePayjoinProposal(
+          original.toBase64(),
+          proposal.toBase64(),
+          [0],
+          TESTNET
+        );
+
+        expect(result.valid).toBe(true);
+      });
     });
 
     /**
@@ -645,6 +737,53 @@ describe('PSBT Validation Utilities', () => {
 
         expect(result.valid).toBe(true);
         expect(result.warnings.some(w => w.includes('significantly'))).toBe(true);
+      });
+
+      it('should evaluate fees from nonWitnessUtxo data', () => {
+        const original = createNonWitnessPsbt({
+          inputValue: 120000,
+          outputValue: 100000,
+          seed: 4,
+        });
+        const proposal = createNonWitnessPsbt({
+          inputValue: 120000,
+          outputValue: 100000,
+          seed: 4,
+        });
+
+        const result = validatePayjoinProposal(
+          original.toBase64(),
+          proposal.toBase64(),
+          [0],
+          TESTNET
+        );
+
+        expect(result.valid).toBe(true);
+      });
+
+      it('should handle fee calculation when inputs have no UTXO metadata', () => {
+        const original = createTestPsbt({
+          inputCount: 1,
+          outputCount: 1,
+          addWitnessUtxo: false,
+          outputValues: [50000],
+        });
+        const proposal = createTestPsbt({
+          inputCount: 1,
+          outputCount: 1,
+          addWitnessUtxo: false,
+          outputValues: [50000],
+        });
+
+        const result = validatePayjoinProposal(
+          original.toBase64(),
+          proposal.toBase64(),
+          [0],
+          TESTNET
+        );
+
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('Fee increased by more than 50%'))).toBe(true);
       });
     });
 
@@ -925,6 +1064,15 @@ describe('PSBT Validation Utilities', () => {
       // Default sequence is 0xfffffffe or 0xffffffff depending on implementation
       expect(inputs[0].sequence).toBeGreaterThanOrEqual(0xfffffffd);
     });
+
+    it('should use fallback sequence for inputs with undefined sequence', () => {
+      const fakePsbt = {
+        txInputs: [{ hash: Buffer.alloc(32, 0xaa), index: 1, sequence: undefined }],
+      } as unknown as bitcoin.Psbt;
+
+      const inputs = getPsbtInputs(fakePsbt);
+      expect(inputs[0].sequence).toBe(0xffffffff);
+    });
   });
 
   describe('getPsbtOutputs', () => {
@@ -1039,6 +1187,14 @@ describe('PSBT Validation Utilities', () => {
 
       expect(isRbfEnabled(psbt)).toBe(true);
     });
+
+    it('should treat missing input sequence as final sequence', () => {
+      const fakePsbt = {
+        txInputs: [{ sequence: undefined }],
+      } as unknown as bitcoin.Psbt;
+
+      expect(isRbfEnabled(fakePsbt)).toBe(false);
+    });
   });
 
   describe('calculateFeeRate', () => {
@@ -1080,6 +1236,31 @@ describe('PSBT Validation Utilities', () => {
 
       // Total input: 450000, Total output: 440000, Fee: 10000
       expect(feeRate).toBeGreaterThan(0);
+    });
+
+    it('should calculate fee rate using nonWitnessUtxo values', () => {
+      const psbt = createNonWitnessPsbt({
+        inputValue: 150000,
+        outputValue: 120000,
+        seed: 6,
+      });
+
+      const feeRate = calculateFeeRate(psbt);
+      expect(feeRate).toBeGreaterThan(0);
+    });
+
+    it('should return zero fee rate when virtual size resolves to zero', () => {
+      const fakePsbt = {
+        inputCount: 0,
+        data: { inputs: [] },
+        txOutputs: [],
+        extractTransaction: vi.fn().mockReturnValue({
+          virtualSize: () => 0,
+        }),
+      } as unknown as bitcoin.Psbt;
+
+      const feeRate = calculateFeeRate(fakePsbt);
+      expect(feeRate).toBe(0);
     });
   });
 
@@ -1196,6 +1377,17 @@ describe('PSBT Validation Utilities', () => {
       const merged = mergeSignedInputs(sender, receiver, [1]);
 
       expect(merged.data.inputs[1].finalScriptWitness).toEqual(mockWitness);
+    });
+
+    it('should copy finalScriptSig if present', () => {
+      const sender = createTestPsbt({ inputCount: 2, outputCount: 2 });
+      const receiver = createTestPsbt({ inputCount: 2, outputCount: 2 });
+
+      const mockFinalScriptSig = Buffer.from([0x51]);
+      receiver.data.inputs[0].finalScriptSig = mockFinalScriptSig;
+
+      const merged = mergeSignedInputs(sender, receiver, [0]);
+      expect(merged.data.inputs[0].finalScriptSig).toEqual(mockFinalScriptSig);
     });
   });
 

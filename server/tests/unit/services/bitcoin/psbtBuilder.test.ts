@@ -121,6 +121,15 @@ describe('PSBT Builder', () => {
       expect(result).toHaveLength(1);
       expect(result[0].path).toContain("48'");
     });
+
+    it('should return empty array when multisig key list is invalid', () => {
+      const result = buildMultisigBip32Derivations(
+        "m/48'/1'/0'/2'/0/0",
+        null as unknown as MultisigKeyInfo[],
+        network,
+      );
+      expect(result).toEqual([]);
+    });
   });
 
   // ========================================
@@ -197,6 +206,26 @@ describe('PSBT Builder', () => {
       expect(script0).toBeDefined();
       expect(script1).toBeDefined();
       expect(script0!.equals(script1!)).toBe(false);
+    });
+
+    it('should return undefined when multisig key list is invalid', () => {
+      const script = buildMultisigWitnessScript(
+        "m/48'/1'/0'/2'/0/0",
+        null as unknown as MultisigKeyInfo[],
+        2,
+        network,
+      );
+      expect(script).toBeUndefined();
+    });
+
+    it('should return undefined when p2ms output is missing', () => {
+      const p2msSpy = vi.spyOn(bitcoin.payments, 'p2ms').mockReturnValue({ output: undefined } as any);
+      try {
+        const script = buildMultisigWitnessScript("m/48'/1'/0'/2'/0/0", testMultisigKeys, 2, network);
+        expect(script).toBeUndefined();
+      } finally {
+        p2msSpy.mockRestore();
+      }
     });
   });
 
@@ -281,6 +310,122 @@ describe('PSBT Builder', () => {
         expect(result.pubkeys[i].equals(pubkeys[i])).toBe(true);
       }
     });
+
+    it('should return false when terminal opcode is not CHECKMULTISIG', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        bitcoin.opcodes.OP_2,
+        Buffer.alloc(33, 0x11),
+        Buffer.alloc(33, 0x22),
+        bitcoin.opcodes.OP_2,
+        bitcoin.opcodes.OP_CHECKSIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should parse scripts that encode m and n as raw small integers', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        2,
+        Buffer.alloc(33, 0x11),
+        Buffer.alloc(33, 0x22),
+        2,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(true);
+        expect(result.m).toBe(2);
+        expect(result.n).toBe(2);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should return false when m is numeric but outside supported range', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        0,
+        Buffer.alloc(33, 0x11),
+        1,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should return false when m is not numeric', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        Buffer.alloc(1, 0x01),
+        Buffer.alloc(33, 0x11),
+        1,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should return false when n is numeric but outside supported range', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        1,
+        Buffer.alloc(33, 0x11),
+        17,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should return false when n is not numeric', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        1,
+        Buffer.alloc(33, 0x11),
+        Buffer.alloc(1, 0x02),
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should return false when declared pubkey count does not match n', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        1,
+        Buffer.alloc(33, 0x11),
+        2,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
   });
 
   // ========================================
@@ -323,6 +468,31 @@ describe('PSBT Builder', () => {
       expect(result[0]).toBe(1); // count
       expect(result[1]).toBe(0xfd); // varint prefix for 2-byte length
       expect(result.length).toBe(1 + 3 + 300); // count + varint(300) + data
+    });
+
+    it('should use 4-byte varint prefix for elements larger than 65535 bytes', () => {
+      const veryBig = Buffer.alloc(70_000, 0xab);
+      const result = witnessStackToScriptWitness([veryBig]);
+
+      // count=1, varint prefix for 4-byte length is 0xfe
+      expect(result[0]).toBe(1);
+      expect(result[1]).toBe(0xfe);
+      expect(result.length).toBe(1 + 5 + 70_000);
+    });
+
+    it('should use 8-byte varint prefix when item count exceeds uint32', () => {
+      const hugeCount = 0x1_0000_0000; // 2^32
+      const fakeWitness = {
+        length: hugeCount,
+        [Symbol.iterator]: function* () {
+          // Intentionally empty: test count varint branch only
+        },
+      } as unknown as Buffer[];
+
+      const result = witnessStackToScriptWitness(fakeWitness);
+      expect(result[0]).toBe(0xff);
+      expect(result.subarray(1).readBigUInt64LE(0)).toBe(BigInt(hugeCount));
+      expect(result.length).toBe(9);
     });
   });
 
@@ -390,6 +560,31 @@ describe('PSBT Builder', () => {
         }
       }
       expect(allSame).toBe(false);
+    });
+
+    it('should clamp an oversized decoy split to half of remaining amount', () => {
+      const randomValues = [
+        // 3 weight draws
+        0.8087661718073307,
+        0.6637779357253595,
+        0.028267548351639693,
+        // 2 variation draws
+        0.12559837799690476,
+        0.9847832745898579,
+        // 2 shuffle draws
+        0,
+        0,
+      ];
+      const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => randomValues.shift() ?? 0);
+
+      try {
+        const result = generateDecoyAmounts(1639, 3, dustThreshold);
+        // Branch at line 538 clamps a would-be 561 sat output to floor(1093 / 2) = 546.
+        expect([...result].sort((a, b) => a - b)).toEqual([546, 546, 547]);
+        expect(result.reduce((sum, value) => sum + value, 0)).toBe(1639);
+      } finally {
+        randomSpy.mockRestore();
+      }
     });
   });
 
@@ -490,6 +685,93 @@ describe('PSBT Builder', () => {
       }];
 
       expect(() => finalizeMultisigInput(psbt, 0)).toThrow('has 1 signatures but needs exactly 2');
+    });
+
+    it('should throw when partial signatures do not match witnessScript pubkeys', () => {
+      const psbt = new bitcoin.Psbt({ network });
+      const scriptKey = ECPair.makeRandom({ network });
+      const wrongKey = ECPair.makeRandom({ network });
+      const scriptPubkey = Buffer.from(scriptKey.publicKey);
+      const wrongPubkey = Buffer.from(wrongKey.publicKey);
+
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys: [scriptPubkey], network });
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
+
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xef),
+        index: 0,
+        witnessUtxo: { script: p2wsh.output!, value: 100000 },
+        witnessScript: p2ms.output!,
+      });
+      psbt.addOutput({ address: p2wsh.address!, value: 90000 });
+
+      const derLikeSig = Buffer.concat([
+        Buffer.from('30440220', 'hex'),
+        Buffer.alloc(32, 0x01),
+        Buffer.from('0220', 'hex'),
+        Buffer.alloc(32, 0x02),
+        Buffer.from([0x01]),
+      ]);
+      psbt.data.inputs[0].partialSig = [{ pubkey: wrongPubkey, signature: derLikeSig }];
+
+      expect(() => finalizeMultisigInput(psbt, 0)).toThrow('no matching signatures found');
+    });
+
+    it('continues finalization when witnessUtxo is missing and signature verification errors', () => {
+      const key = ECPair.makeRandom({ network });
+      const pubkey = Buffer.from(key.publicKey);
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys: [pubkey], network });
+
+      const fakePsbt = {
+        data: {
+          inputs: [
+            {
+              witnessScript: p2ms.output!,
+              partialSig: [{ pubkey, signature: Buffer.from([0x01]) }],
+              // witnessUtxo intentionally omitted to hit warning branch
+            },
+          ],
+          globalMap: {
+            unsignedTx: {
+              toBuffer: () => new bitcoin.Transaction().toBuffer(),
+            },
+          },
+        },
+        updateInput: vi.fn(),
+      } as unknown as bitcoin.Psbt;
+
+      expect(() => finalizeMultisigInput(fakePsbt, 0)).not.toThrow();
+      expect((fakePsbt as any).updateInput).toHaveBeenCalledTimes(1);
+    });
+
+    it('should finalize when signature count matches quorum', () => {
+      const psbt = new bitcoin.Psbt({ network });
+      const key = ECPair.makeRandom({ network });
+      const pubkey = Buffer.from(key.publicKey);
+
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys: [pubkey], network });
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
+
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xee),
+        index: 0,
+        witnessUtxo: { script: p2wsh.output!, value: 100000 },
+        witnessScript: p2ms.output!,
+      });
+      psbt.addOutput({ address: p2wsh.address!, value: 90000 });
+
+      const derLikeSig = Buffer.concat([
+        Buffer.from('30440220', 'hex'),
+        Buffer.alloc(32, 0x01),
+        Buffer.from('0220', 'hex'),
+        Buffer.alloc(32, 0x02),
+        Buffer.from([0x01]), // SIGHASH_ALL
+      ]);
+
+      psbt.data.inputs[0].partialSig = [{ pubkey, signature: derLikeSig }];
+
+      expect(() => finalizeMultisigInput(psbt, 0)).not.toThrow();
+      expect(psbt.data.inputs[0].finalScriptWitness).toBeInstanceOf(Buffer);
     });
   });
 });

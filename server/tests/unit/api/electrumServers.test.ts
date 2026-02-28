@@ -1,26 +1,35 @@
-import { vi } from 'vitest';
-/**
- * Electrum Server CRUD API Tests
- *
- * Tests for the admin API endpoints that manage Electrum servers.
- * These are unit tests focused on the handler logic.
- */
-
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import express, { type Express } from 'express';
+import request from 'supertest';
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 
-// Mock Prisma
-vi.mock('../../../src/models/prisma', () => ({
-  __esModule: true,
-  default: mockPrismaClient,
+const mocks = vi.hoisted(() => ({
+  testNodeConfig: vi.fn(),
+  reloadElectrumServers: vi.fn(),
 }));
 
-// Mock the node client
+vi.mock('../../../src/repositories/db', async () => {
+  const { mockPrismaClient: prisma } = await import('../../mocks/prisma');
+  return {
+    __esModule: true,
+    db: prisma,
+    default: prisma,
+  };
+});
+
+vi.mock('../../../src/middleware/auth', () => ({
+  authenticate: (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireAdmin: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 vi.mock('../../../src/services/bitcoin/nodeClient', () => ({
-  resetNodeClient: vi.fn().mockResolvedValue(undefined),
-  getElectrumPool: vi.fn().mockReturnValue(null),
+  testNodeConfig: mocks.testNodeConfig,
 }));
 
-// Mock logger
+vi.mock('../../../src/services/bitcoin/electrumPool', () => ({
+  reloadElectrumServers: mocks.reloadElectrumServers,
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -30,359 +39,338 @@ vi.mock('../../../src/utils/logger', () => ({
   }),
 }));
 
-describe('Electrum Server API Logic', () => {
+import electrumServersRouter from '../../../src/api/admin/electrumServers';
+
+function buildNodeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'default',
+    isDefault: true,
+    host: 'electrum.example.com',
+    port: 50002,
+    useSsl: true,
+    ...overrides,
+  };
+}
+
+function buildServer(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'srv-1',
+    nodeConfigId: 'default',
+    network: 'mainnet',
+    label: 'Primary',
+    host: 'electrum.example.com',
+    port: 50002,
+    useSsl: true,
+    priority: 0,
+    enabled: true,
+    healthCheckFails: 0,
+    supportsVerbose: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
+
+describe('admin electrum servers router', () => {
+  let app: Express;
+
+  beforeAll(() => {
+    app = express();
+    app.use(express.json());
+    app.use('/api/v1/admin/electrum-servers', electrumServersRouter);
+  });
+
   beforeEach(() => {
     resetPrismaMocks();
+    vi.clearAllMocks();
+    mocks.testNodeConfig.mockResolvedValue({
+      success: true,
+      message: 'Connected',
+      info: { blockHeight: 850000, supportsVerbose: true },
+    });
+    mocks.reloadElectrumServers.mockResolvedValue(undefined);
   });
 
-  describe('Server Configuration Structure', () => {
-    it('should validate server config has required fields', () => {
-      const validServer = {
-        id: 'server-1',
-        label: 'Primary Server',
+  it('GET / returns empty list when no default node config exists', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('GET / supports optional network filtering', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig());
+    mockPrismaClient.electrumServer.findMany.mockResolvedValue([buildServer()]);
+
+    const response = await request(app)
+      .get('/api/v1/admin/electrum-servers')
+      .query({ network: 'mainnet' });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.findMany).toHaveBeenCalledWith({
+      where: {
+        nodeConfigId: 'default',
+        network: 'mainnet',
+      },
+      orderBy: { priority: 'asc' },
+    });
+    expect(response.body).toHaveLength(1);
+  });
+
+  it('POST /test-connection validates required params', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers/test-connection')
+      .send({ host: 'electrum.example.com' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Host and port are required');
+  });
+
+  it('POST /test-connection proxies to nodeClient test', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers/test-connection')
+      .send({ host: 'electrum.example.com', port: '50002', useSsl: true });
+
+    expect(response.status).toBe(200);
+    expect(mocks.testNodeConfig).toHaveBeenCalledWith({
+      host: 'electrum.example.com',
+      port: 50002,
+      protocol: 'ssl',
+    });
+    expect(response.body).toMatchObject({
+      success: true,
+      message: 'Connected',
+      blockHeight: 850000,
+    });
+  });
+
+  it('PUT /reorder validates serverIds payload', async () => {
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/reorder')
+      .send({ serverIds: 'not-an-array' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('serverIds must be an array');
+  });
+
+  it('PUT /reorder updates priorities and reloads pool', async () => {
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/reorder')
+      .send({ serverIds: ['srv-3', 'srv-1', 'srv-2'] });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledTimes(3);
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'srv-3' },
+      data: { priority: 0 },
+    });
+    expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET /:network rejects invalid networks', async () => {
+    const response = await request(app).get('/api/v1/admin/electrum-servers/invalid');
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Invalid network');
+  });
+
+  it('GET /:network returns servers for valid network', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig());
+    mockPrismaClient.electrumServer.findMany.mockResolvedValue([
+      buildServer({ id: 'srv-testnet', network: 'testnet' }),
+    ]);
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers/testnet');
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.findMany).toHaveBeenCalledWith({
+      where: {
+        nodeConfigId: 'default',
+        network: 'testnet',
+      },
+      orderBy: { priority: 'asc' },
+    });
+    expect(response.body[0].id).toBe('srv-testnet');
+  });
+
+  it('POST / validates required fields', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({ host: 'electrum.example.com', port: 50002 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('required');
+  });
+
+  it('POST / rejects duplicate servers for same host/port/network', async () => {
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValue(
+      buildServer({ label: 'Existing Mainnet' })
+    );
+
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
+        label: 'Duplicate',
         host: 'electrum.example.com',
         port: 50002,
-        useSsl: true,
-        priority: 0,
-        enabled: true,
-      };
-
-      expect(validServer).toHaveProperty('id');
-      expect(validServer).toHaveProperty('label');
-      expect(validServer).toHaveProperty('host');
-      expect(validServer).toHaveProperty('port');
-      expect(validServer).toHaveProperty('useSsl');
-      expect(validServer).toHaveProperty('priority');
-      expect(validServer).toHaveProperty('enabled');
-    });
-
-    it('should validate port is a number', () => {
-      const server = { port: 50002 };
-      expect(typeof server.port).toBe('number');
-      expect(server.port).toBeGreaterThan(0);
-      expect(server.port).toBeLessThan(65536);
-    });
-
-    describe('port number validation', () => {
-      // Helper function matching the validation in node.ts
-      const isValidPort = (port: string | number): boolean => {
-        const portNum = typeof port === 'number' ? port : parseInt(String(port), 10);
-        return !isNaN(portNum) && portNum > 0 && portNum <= 65535;
-      };
-
-      it('should reject NaN port values', () => {
-        expect(isValidPort('not-a-number')).toBe(false);
-        expect(isValidPort('abc')).toBe(false);
-        expect(isValidPort('')).toBe(false);
-        expect(isValidPort(NaN)).toBe(false);
+        network: 'mainnet',
       });
 
-      it('should reject zero port', () => {
-        expect(isValidPort(0)).toBe(false);
-        expect(isValidPort('0')).toBe(false);
-      });
-
-      it('should reject negative port numbers', () => {
-        expect(isValidPort(-1)).toBe(false);
-        expect(isValidPort(-100)).toBe(false);
-        expect(isValidPort('-50')).toBe(false);
-      });
-
-      it('should reject port numbers greater than 65535', () => {
-        expect(isValidPort(65536)).toBe(false);
-        expect(isValidPort(70000)).toBe(false);
-        expect(isValidPort('65536')).toBe(false);
-      });
-
-      it('should accept valid port numbers', () => {
-        expect(isValidPort(1)).toBe(true);
-        expect(isValidPort(80)).toBe(true);
-        expect(isValidPort(443)).toBe(true);
-        expect(isValidPort(8080)).toBe(true);
-        expect(isValidPort(50001)).toBe(true);
-        expect(isValidPort(50002)).toBe(true);
-        expect(isValidPort(65535)).toBe(true);
-        expect(isValidPort('50002')).toBe(true);
-      });
-    });
-
-    it('should validate useSsl is boolean', () => {
-      const server = { useSsl: true };
-      expect(typeof server.useSsl).toBe('boolean');
-    });
-
-    it('should validate priority is a number >= 0', () => {
-      const server = { priority: 0 };
-      expect(typeof server.priority).toBe('number');
-      expect(server.priority).toBeGreaterThanOrEqual(0);
-    });
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain('already exists');
   });
 
-  describe('Server List Operations', () => {
-    it('should handle empty server list', async () => {
-      mockPrismaClient.electrumServer.findMany.mockResolvedValue([]);
+  it('POST / creates server (and default node config if absent)', async () => {
+    mockPrismaClient.electrumServer.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ priority: 4 });
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+    mockPrismaClient.nodeConfig.create.mockResolvedValue(buildNodeConfig());
+    mockPrismaClient.electrumServer.create.mockResolvedValue(
+      buildServer({ id: 'srv-new', label: 'New Server', priority: 5 })
+    );
 
-      const servers = await mockPrismaClient.electrumServer.findMany({
-        orderBy: { priority: 'asc' },
-      });
-
-      expect(servers).toEqual([]);
-      expect(Array.isArray(servers)).toBe(true);
-    });
-
-    it('should sort servers by priority', async () => {
-      const unsortedServers = [
-        { id: '1', label: 'Low Priority', priority: 10 },
-        { id: '2', label: 'High Priority', priority: 1 },
-        { id: '3', label: 'Medium Priority', priority: 5 },
-      ];
-
-      mockPrismaClient.electrumServer.findMany.mockResolvedValue(
-        [...unsortedServers].sort((a, b) => a.priority - b.priority)
-      );
-
-      const servers = await mockPrismaClient.electrumServer.findMany({
-        orderBy: { priority: 'asc' },
-      });
-
-      expect(servers[0].label).toBe('High Priority');
-      expect(servers[1].label).toBe('Medium Priority');
-      expect(servers[2].label).toBe('Low Priority');
-    });
-
-    it('should filter enabled servers only', async () => {
-      const allServers = [
-        { id: '1', enabled: true },
-        { id: '2', enabled: false },
-        { id: '3', enabled: true },
-      ];
-
-      mockPrismaClient.electrumServer.findMany.mockResolvedValue(
-        allServers.filter((s) => s.enabled)
-      );
-
-      const servers = await mockPrismaClient.electrumServer.findMany({
-        where: { enabled: true },
-      });
-
-      expect(servers).toHaveLength(2);
-      expect(servers.every((s: { enabled: boolean }) => s.enabled)).toBe(true);
-    });
-  });
-
-  describe('Server Create Operations', () => {
-    it('should create server with all fields', async () => {
-      const newServer = {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
         label: 'New Server',
-        host: 'new.example.com',
-        port: 50002,
+        host: 'new.electrum.example',
+        port: '50001',
+        network: 'mainnet',
         useSsl: true,
-        priority: 0,
-        enabled: true,
-        nodeConfigId: 'config-1',
-      };
-
-      mockPrismaClient.electrumServer.create.mockResolvedValue({
-        id: 'new-server-id',
-        ...newServer,
-        createdAt: new Date(),
-        updatedAt: new Date(),
       });
 
-      const created = await mockPrismaClient.electrumServer.create({
-        data: newServer,
-      });
-
-      expect(created).toHaveProperty('id');
-      expect(created.label).toBe('New Server');
-      expect(created.host).toBe('new.example.com');
-    });
-
-    it('should calculate next priority from existing servers', async () => {
-      const existingServers = [
-        { priority: 0 },
-        { priority: 5 },
-        { priority: 2 },
-      ];
-
-      const maxPriority = Math.max(...existingServers.map((s) => s.priority));
-      const nextPriority = maxPriority + 1;
-
-      expect(nextPriority).toBe(6);
-    });
-
-    it('should default priority to 0 when no servers exist', async () => {
-      const existingServers: Array<{ priority: number }> = [];
-
-      const maxPriority = existingServers.length > 0
-        ? Math.max(...existingServers.map((s) => s.priority))
-        : -1;
-      const nextPriority = maxPriority + 1;
-
-      expect(nextPriority).toBe(0);
-    });
+    expect(response.status).toBe(201);
+    expect(mockPrismaClient.nodeConfig.create).toHaveBeenCalledTimes(1);
+    expect(mockPrismaClient.electrumServer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          label: 'New Server',
+          host: 'new.electrum.example',
+          port: 50001,
+          priority: 5,
+          network: 'mainnet',
+        }),
+      })
+    );
+    expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
   });
 
-  describe('Server Update Operations', () => {
-    it('should update server label', async () => {
-      mockPrismaClient.electrumServer.update.mockResolvedValue({
-        id: 'server-1',
-        label: 'Updated Label',
-        host: 'example.com',
+  it('PUT /:id returns 404 for unknown server', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(null);
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-missing')
+      .send({ label: 'Updated' });
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain('not found');
+  });
+
+  it('PUT /:id rejects duplicates on update', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValue(
+      buildServer({ id: 'srv-2', label: 'Duplicate target' })
+    );
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-1')
+      .send({
+        host: 'electrum.example.com',
         port: 50002,
+        network: 'mainnet',
       });
 
-      const updated = await mockPrismaClient.electrumServer.update({
-        where: { id: 'server-1' },
-        data: { label: 'Updated Label' },
-      });
-
-      expect(updated.label).toBe('Updated Label');
-    });
-
-    it('should update server enabled status', async () => {
-      mockPrismaClient.electrumServer.update.mockResolvedValue({
-        id: 'server-1',
-        enabled: false,
-      });
-
-      const updated = await mockPrismaClient.electrumServer.update({
-        where: { id: 'server-1' },
-        data: { enabled: false },
-      });
-
-      expect(updated.enabled).toBe(false);
-    });
-
-    it('should update health check results', async () => {
-      const now = new Date();
-      mockPrismaClient.electrumServer.update.mockResolvedValue({
-        id: 'server-1',
-        isHealthy: true,
-        lastHealthCheck: now,
-        healthCheckFails: 0,
-      });
-
-      const updated = await mockPrismaClient.electrumServer.update({
-        where: { id: 'server-1' },
-        data: {
-          isHealthy: true,
-          lastHealthCheck: now,
-          healthCheckFails: 0,
-        },
-      });
-
-      expect(updated.isHealthy).toBe(true);
-      expect(updated.healthCheckFails).toBe(0);
-    });
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain('already exists');
   });
 
-  describe('Server Delete Operations', () => {
-    it('should delete server by id', async () => {
-      mockPrismaClient.electrumServer.delete.mockResolvedValue({
-        id: 'server-1',
-      });
+  it('PUT /:id updates server and reloads pool', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValue(null);
+    mockPrismaClient.electrumServer.update.mockResolvedValue(
+      buildServer({ id: 'srv-1', label: 'Updated Label', enabled: false })
+    );
 
-      const deleted = await mockPrismaClient.electrumServer.delete({
-        where: { id: 'server-1' },
-      });
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-1')
+      .send({ label: 'Updated Label', enabled: false });
 
-      expect(deleted.id).toBe('server-1');
-      expect(mockPrismaClient.electrumServer.delete).toHaveBeenCalledWith({
-        where: { id: 'server-1' },
-      });
-    });
+    expect(response.status).toBe(200);
+    expect(response.body.label).toBe('Updated Label');
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledTimes(1);
+    expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
   });
 
-  describe('Server Reorder Operations', () => {
-    it('should update priorities based on array order', async () => {
-      const serverIds = ['server-c', 'server-a', 'server-b'];
+  it('DELETE /:id returns 404 for unknown server', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(null);
 
-      mockPrismaClient.electrumServer.update.mockResolvedValue({});
+    const response = await request(app).delete('/api/v1/admin/electrum-servers/srv-missing');
 
-      for (let i = 0; i < serverIds.length; i++) {
-        await mockPrismaClient.electrumServer.update({
-          where: { id: serverIds[i] },
-          data: { priority: i },
-        });
-      }
-
-      expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledTimes(3);
-      expect(mockPrismaClient.electrumServer.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 'server-c' },
-        data: { priority: 0 },
-      });
-      expect(mockPrismaClient.electrumServer.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 'server-a' },
-        data: { priority: 1 },
-      });
-      expect(mockPrismaClient.electrumServer.update).toHaveBeenNthCalledWith(3, {
-        where: { id: 'server-b' },
-        data: { priority: 2 },
-      });
-    });
-
-    it('should validate serverIds is an array', () => {
-      const validInput = ['server-1', 'server-2'];
-      const invalidInput = 'not-an-array';
-
-      expect(Array.isArray(validInput)).toBe(true);
-      expect(Array.isArray(invalidInput)).toBe(false);
-    });
-
-    it('should validate serverIds contains only strings', () => {
-      const validInput = ['server-1', 'server-2', 'server-3'];
-      const invalidInput = ['server-1', 123, 'server-3'];
-
-      const allStrings = (arr: unknown[]) => arr.every((item) => typeof item === 'string');
-
-      expect(allStrings(validInput)).toBe(true);
-      expect(allStrings(invalidInput)).toBe(false);
-    });
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain('not found');
   });
 
-  describe('Server Health Check', () => {
-    it('should track health check failure count', async () => {
-      mockPrismaClient.electrumServer.findUnique.mockResolvedValue({
-        id: 'server-1',
-        healthCheckFails: 2,
-      });
+  it('DELETE /:id deletes server and reloads pool', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(buildServer({ id: 'srv-1' }));
+    mockPrismaClient.electrumServer.delete.mockResolvedValue(buildServer({ id: 'srv-1' }));
 
-      const server = await mockPrismaClient.electrumServer.findUnique({
-        where: { id: 'server-1' },
-      });
+    const response = await request(app).delete('/api/v1/admin/electrum-servers/srv-1');
 
-      expect(server?.healthCheckFails).toBe(2);
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(mockPrismaClient.electrumServer.delete).toHaveBeenCalledWith({
+      where: { id: 'srv-1' },
+    });
+    expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST /:id/test returns 404 for unknown server', async () => {
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(null);
+
+    const response = await request(app).post('/api/v1/admin/electrum-servers/srv-missing/test');
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain('not found');
+  });
+
+  it('POST /:id/test tests connection and updates health fields', async () => {
+    const server = buildServer({
+      id: 'srv-1',
+      host: 'health.electrum.example',
+      port: 51002,
+      useSsl: false,
+      healthCheckFails: 2,
+    });
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(server);
+    mockPrismaClient.electrumServer.update.mockResolvedValue({
+      ...server,
+      isHealthy: true,
     });
 
-    it('should mark server unhealthy after threshold failures', async () => {
-      const MAX_FAILURES = 3;
-      const currentFailures = 3;
+    const response = await request(app).post('/api/v1/admin/electrum-servers/srv-1/test');
 
-      const isHealthy = currentFailures < MAX_FAILURES;
-
-      expect(isHealthy).toBe(false);
+    expect(response.status).toBe(200);
+    expect(mocks.testNodeConfig).toHaveBeenCalledWith({
+      host: 'health.electrum.example',
+      port: 51002,
+      protocol: 'tcp',
     });
-
-    it('should reset failure count on successful health check', async () => {
-      mockPrismaClient.electrumServer.update.mockResolvedValue({
-        id: 'server-1',
-        isHealthy: true,
-        healthCheckFails: 0,
-        lastHealthCheck: new Date(),
-      });
-
-      const updated = await mockPrismaClient.electrumServer.update({
-        where: { id: 'server-1' },
-        data: {
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'srv-1' },
+        data: expect.objectContaining({
           isHealthy: true,
           healthCheckFails: 0,
-          lastHealthCheck: new Date(),
-        },
-      });
-
-      expect(updated.isHealthy).toBe(true);
-      expect(updated.healthCheckFails).toBe(0);
+          supportsVerbose: true,
+        }),
+      })
+    );
+    expect(response.body).toMatchObject({
+      success: true,
+      info: { blockHeight: 850000, supportsVerbose: true },
     });
   });
 });

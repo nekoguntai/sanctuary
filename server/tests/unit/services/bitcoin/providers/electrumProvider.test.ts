@@ -143,6 +143,17 @@ describe('ElectrumProvider', () => {
     expect(client.disconnect).toHaveBeenCalled();
   });
 
+  it('proxies isConnected to the underlying client state', () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+
+    client.isConnected.mockReturnValueOnce(false);
+    expect(provider.isConnected()).toBe(false);
+
+    client.isConnected.mockReturnValueOnce(true);
+    expect(provider.isConnected()).toBe(true);
+  });
+
   it('reports health on success and failure', async () => {
     const provider = new ElectrumProvider(baseConfig as any);
     const client = getClient();
@@ -158,6 +169,17 @@ describe('ElectrumProvider', () => {
     expect(unhealthy.blockHeight).toBe(0);
   });
 
+  it('omits serverInfo when server version payload is not provided', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+
+    client.getServerVersion.mockResolvedValueOnce(null);
+    const health = await provider.getHealth();
+
+    expect(health.connected).toBe(true);
+    expect(health.serverInfo).toBeUndefined();
+  });
+
   it('maps address balance and history', async () => {
     const provider = new ElectrumProvider(baseConfig as any);
     const balance = await provider.getAddressBalance('addr');
@@ -165,6 +187,17 @@ describe('ElectrumProvider', () => {
 
     const history = await provider.getAddressHistory('addr');
     expect(history).toEqual([{ txid: 'tx1', height: 5 }]);
+  });
+
+  it('fetches address balances in batches and maps all entries', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const addresses = Array.from({ length: 51 }, (_, i) => `addr-${i}`);
+
+    const balances = await provider.getAddressBalances(addresses);
+
+    expect(balances.size).toBe(51);
+    expect(balances.get('addr-0')).toEqual({ confirmed: BigInt(1), unconfirmed: BigInt(2) });
+    expect(balances.get('addr-50')).toEqual({ confirmed: BigInt(1), unconfirmed: BigInt(2) });
   });
 
   it('returns batch histories as map', async () => {
@@ -194,11 +227,88 @@ describe('ElectrumProvider', () => {
     expect(hex).toBe('deadbeef');
   });
 
+  it('falls back to default hash/vsize/weight fields when omitted by electrum response', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+
+    client.getTransaction.mockResolvedValueOnce({
+      txid: 'fallback-tx',
+      // hash intentionally omitted
+      version: 2,
+      size: 120,
+      // vsize intentionally omitted
+      // weight intentionally omitted
+      locktime: 0,
+      vin: [{ txid: 'prev', vout: 0, sequence: 1 }],
+      vout: [{ value: 0.0001, scriptPubKey: { hex: '76a9', address: 'addr1' } }],
+      hex: 'deadbeef',
+      blockhash: 'blockhash',
+      confirmations: 1,
+      time: 100,
+      blocktime: 100,
+    });
+
+    const tx = await provider.getTransaction('fallback-tx', true) as any;
+    expect(tx.hash).toBe('fallback-tx');
+    expect(tx.vsize).toBe(120);
+    expect(tx.weight).toBe(480);
+  });
+
   it('maps transaction batch with verbose flag', async () => {
     const provider = new ElectrumProvider(baseConfig as any);
     const results = await provider.getTransactions(['t1', 't2'], false);
     expect(results.get('t1')).toBe('deadbeef');
     expect(results.get('t2')).toBe('deadbeef');
+  });
+
+  it('maps verbose transaction batch results to RawTransaction shape', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const results = await provider.getTransactions(['t1'], true);
+    const tx = results.get('t1') as any;
+
+    expect(tx.txid).toBe('t1');
+    expect(tx.vin[0]).toEqual(expect.objectContaining({ txid: 'prev', vout: 0, sequence: 1 }));
+    expect(tx.vout[0].value).toBe(BigInt(10000));
+    expect(tx.vout[0].scriptPubKey).toBe('76a9');
+    expect(tx.vout[0].address).toBe('addr1');
+  });
+
+  it('uses fallback hash/vsize/weight fields in verbose transaction batch mapping', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+
+    client.getTransactionsBatch.mockResolvedValueOnce(new Map([
+      ['batch-fallback', {
+        txid: 'batch-fallback',
+        version: 2,
+        size: 140,
+        locktime: 0,
+        vin: [{ txid: 'prev', vout: 1, sequence: 1 }],
+        vout: [{ value: 0.0002, scriptPubKey: { hex: '76a9', address: 'addr1' } }],
+        hex: 'bead',
+        blockhash: 'bh',
+        confirmations: 2,
+        time: 200,
+        blocktime: 200,
+      }],
+    ]));
+
+    const results = await provider.getTransactions(['batch-fallback'], true);
+    const tx = results.get('batch-fallback') as any;
+    expect(tx.hash).toBe('batch-fallback');
+    expect(tx.vsize).toBe(140);
+    expect(tx.weight).toBe(560);
+  });
+
+  it('broadcasts transaction and returns current block height', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+
+    await expect(provider.broadcastTransaction('c0ffee')).resolves.toBe('sent-c0ffee');
+    await expect(provider.getBlockHeight()).resolves.toBe(123);
+
+    expect(client.broadcastTransaction).toHaveBeenCalledWith('c0ffee');
+    expect(client.getBlockHeight).toHaveBeenCalled();
   });
 
   it('converts fee estimates and enforces minimum', async () => {
@@ -214,6 +324,29 @@ describe('ElectrumProvider', () => {
     expect(minFee).toBe(1);
   });
 
+  it('fetches standard fee estimate targets', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const estimateSpy = vi.spyOn(provider, 'estimateFee')
+      .mockResolvedValueOnce(25)
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(6)
+      .mockResolvedValueOnce(3);
+
+    const estimates = await provider.getFeeEstimates();
+
+    expect(estimateSpy).toHaveBeenNthCalledWith(1, 1);
+    expect(estimateSpy).toHaveBeenNthCalledWith(2, 3);
+    expect(estimateSpy).toHaveBeenNthCalledWith(3, 6);
+    expect(estimateSpy).toHaveBeenNthCalledWith(4, 12);
+    expect(estimates).toEqual({
+      fastest: 25,
+      fast: 12,
+      medium: 6,
+      slow: 3,
+      minimum: 1,
+    });
+  });
+
   it('returns block header and rejects hash lookup', async () => {
     const provider = new ElectrumProvider(baseConfig as any);
     const header = await provider.getBlockHeader(10);
@@ -221,6 +354,24 @@ describe('ElectrumProvider', () => {
     expect(header.height).toBe(10);
 
     await expect(provider.getBlockHeaderByHash('hash')).rejects.toThrow('not supported');
+  });
+
+  it('falls back to hex/hash and requested height when block header fields are absent', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+    client.getBlockHeader.mockResolvedValueOnce({
+      hex: 'fallback-hex',
+      version: 2,
+      prev_block_hash: 'prev',
+      merkle_root: 'merkle',
+      timestamp: 100,
+      bits: '1d00',
+      nonce: 0,
+    });
+
+    const header = await provider.getBlockHeader(99);
+    expect(header.hash).toBe('fallback-hex');
+    expect(header.height).toBe(99);
   });
 
   it('subscribes to address and returns unsubscribe', async () => {
@@ -233,6 +384,22 @@ describe('ElectrumProvider', () => {
 
     client.emit('address.update', 'addr', 'new-status');
     expect(callback).toHaveBeenCalledWith('addr', 'new-status');
+
+    unsubscribe();
+    expect(client.unsubscribeAddress).toHaveBeenCalledWith('addr');
+  });
+
+  it('does not emit initial callback when subscribeAddress returns null and ignores other addresses', async () => {
+    const provider = new ElectrumProvider(baseConfig as any);
+    const client = getClient();
+    const callback = vi.fn();
+    client.subscribeAddress.mockResolvedValueOnce(null);
+
+    const unsubscribe = await provider.subscribeToAddress('addr', callback);
+    expect(callback).not.toHaveBeenCalled();
+
+    client.emit('address.update', 'other-addr', 'new-status');
+    expect(callback).not.toHaveBeenCalled();
 
     unsubscribe();
     expect(client.unsubscribeAddress).toHaveBeenCalledWith('addr');

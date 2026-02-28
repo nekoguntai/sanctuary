@@ -52,6 +52,8 @@ class SyncService {
   private subscriptionLockRefresh: NodeJS.Timeout | null = null;
   private subscriptionsEnabled = false;
   private subscriptionOwnership: 'self' | 'external' | 'disabled' = 'disabled';
+  // Periodic reconciliation interval for addressToWalletMap cleanup
+  private reconciliationInterval: NodeJS.Timeout | null = null;
   // Track which addresses belong to which wallets for real-time notifications
   private addressToWalletMap: Map<string, string> = new Map();
   // Track pending retry timers for cleanup on shutdown
@@ -102,6 +104,15 @@ class SyncService {
     this.setupRealTimeSubscriptions().catch(err => {
       log.error('[SYNC] Failed to set up real-time subscriptions', { error: getErrorMessage(err) });
     });
+
+    // Periodic reconciliation of addressToWalletMap (every hour)
+    // Rebuilds map from database to clean up entries for deleted wallets
+    this.reconciliationInterval = setInterval(() => {
+      this.reconcileAddressToWalletMap().catch(err => {
+        log.error('[SYNC] Address map reconciliation failed', { error: getErrorMessage(err) });
+      });
+    }, 60 * 60 * 1000); // 1 hour
+    this.reconciliationInterval.unref?.();
 
     log.info('[SYNC] Background sync service started');
   }
@@ -315,6 +326,36 @@ class SyncService {
   }
 
   /**
+   * Reconcile addressToWalletMap against the database.
+   * Removes entries for wallets that no longer exist, preventing memory leaks
+   * from wallets that were deleted without proper cleanup.
+   */
+  private async reconcileAddressToWalletMap(): Promise<void> {
+    if (this.addressToWalletMap.size === 0) return;
+
+    // Get all wallet IDs that still exist in the database
+    const existingWallets = await prisma.wallet.findMany({
+      select: { id: true },
+    });
+    const existingWalletIds = new Set(existingWallets.map(w => w.id));
+
+    // Remove entries for wallets that no longer exist
+    let removed = 0;
+    for (const [address, walletId] of this.addressToWalletMap.entries()) {
+      if (!existingWalletIds.has(walletId)) {
+        this.addressToWalletMap.delete(address);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      log.info(`[SYNC] Reconciliation removed ${removed} stale address mappings (map size: ${this.addressToWalletMap.size})`);
+    } else {
+      log.debug(`[SYNC] Reconciliation complete, no stale entries (map size: ${this.addressToWalletMap.size})`);
+    }
+  }
+
+  /**
    * Get health metrics for monitoring
    */
   getHealthMetrics(): {
@@ -428,6 +469,11 @@ class SyncService {
     if (this.confirmationInterval) {
       clearInterval(this.confirmationInterval);
       this.confirmationInterval = null;
+    }
+
+    if (this.reconciliationInterval) {
+      clearInterval(this.reconciliationInterval);
+      this.reconciliationInterval = null;
     }
 
     await this.teardownRealTimeSubscriptions();

@@ -380,6 +380,7 @@ export async function attemptPayjoinSend(
         'Content-Type': 'text/plain',
       },
       body: originalPsbtBase64,
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {

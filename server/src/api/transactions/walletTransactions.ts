@@ -273,7 +273,9 @@ router.get('/wallets/:walletId/transactions/pending', requireWalletAccess('view'
 
         // Try to fetch vsize and fee from mempool.space
         try {
-          const response = await fetch(`${mempoolBaseUrl}/tx/${tx.txid}`);
+          const response = await fetch(`${mempoolBaseUrl}/tx/${tx.txid}`, {
+            signal: AbortSignal.timeout(10_000),
+          });
           if (response.ok) {
             const txData = await response.json() as { weight?: number; fee?: number };
             vsize = txData.weight ? Math.ceil(txData.weight / 4) : undefined;

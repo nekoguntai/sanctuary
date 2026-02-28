@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { db as prisma } from '../../repositories/db';
 import { createLogger } from '../../utils/logger';
 import { getErrorMessage } from '../../utils/errors';
+import { createCircuitBreaker, CircuitOpenError } from '../circuitBreaker';
 
 /** Shape of a Telegram Bot API error response */
 interface TelegramErrorResponse {
@@ -38,6 +39,13 @@ interface TelegramUpdate {
 const log = createLogger('TELEGRAM');
 
 const TELEGRAM_API = 'https://api.telegram.org/bot';
+
+// Circuit breaker: 5 failures → open for 60s → half-open probe
+const telegramCircuit = createCircuitBreaker<{ success: boolean; chatId?: string; username?: string; error?: string }>({
+  name: 'telegram',
+  failureThreshold: 5,
+  recoveryTimeout: 60_000,
+});
 
 export interface TelegramConfig {
   botToken: string;
@@ -69,30 +77,44 @@ export async function sendTelegramMessage(
   message: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
-      `${TELEGRAM_API}${botToken}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: 'HTML',
-          disable_web_page_preview: false,
-        }),
+    return await telegramCircuit.execute(async () => {
+      const response = await fetch(
+        `${TELEGRAM_API}${botToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+            parse_mode: 'HTML',
+            disable_web_page_preview: false,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+        const errorMsg =
+          'description' in errorData ? errorData.description : `HTTP ${response.status}`;
+
+        // 5xx = service outage, throw to trip circuit breaker
+        if (response.status >= 500) {
+          throw new Error(`Telegram API error: ${errorMsg}`);
+        }
+
+        // 4xx = client error (bad token, blocked, etc.), return without tripping circuit
+        log.error(`Telegram API error: ${errorMsg}`);
+        return { success: false, error: errorMsg };
       }
-    );
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
-      const errorMsg =
-        'description' in errorData ? errorData.description : `HTTP ${response.status}`;
-      log.error(`Telegram API error: ${errorMsg}`);
-      return { success: false, error: errorMsg };
-    }
-
-    return { success: true };
+      return { success: true };
+    });
   } catch (err) {
+    if (err instanceof CircuitOpenError) {
+      log.warn(`Telegram circuit open, skipping send (retry in ${Math.ceil(err.retryAfter / 1000)}s)`);
+      return { success: false, error: 'Telegram service unavailable, will retry shortly' };
+    }
     const errorMsg = getErrorMessage(err, 'Unknown error');
     log.error(`Telegram send failed: ${errorMsg}`);
     return { success: false, error: errorMsg };
@@ -107,42 +129,57 @@ export async function getChatIdFromBot(
   botToken: string
 ): Promise<{ success: boolean; chatId?: string; username?: string; error?: string }> {
   try {
-    const response = await fetch(`${TELEGRAM_API}${botToken}/getUpdates?limit=10`);
+    return await telegramCircuit.execute(async () => {
+      const response = await fetch(`${TELEGRAM_API}${botToken}/getUpdates?limit=10`, {
+        signal: AbortSignal.timeout(10_000),
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
-      const errorMsg =
-        'description' in errorData ? errorData.description : `HTTP ${response.status}`;
-      return { success: false, error: errorMsg };
-    }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({})) as TelegramErrorResponse | Record<string, never>;
+        const errorMsg =
+          'description' in errorData ? errorData.description : `HTTP ${response.status}`;
 
-    const data = await response.json() as TelegramGetUpdatesResponse;
-    const updates = data.result ?? [];
+        // 5xx = service outage, throw to trip circuit breaker
+        if (response.status >= 500) {
+          throw new Error(`Telegram API error: ${errorMsg}`);
+        }
 
-    if (updates.length === 0) {
+        // 4xx = client error, return without tripping circuit
+        return { success: false, error: errorMsg };
+      }
+
+      const data = await response.json() as TelegramGetUpdatesResponse;
+      const updates = data.result ?? [];
+
+      if (updates.length === 0) {
+        return {
+          success: false,
+          error: 'No messages found. Please send /start to your bot first.',
+        };
+      }
+
+      // Get the most recent message's chat ID
+      const latestUpdate = updates[updates.length - 1];
+      const chat = latestUpdate?.message?.chat || latestUpdate?.my_chat_member?.chat;
+
+      if (!chat?.id) {
+        return {
+          success: false,
+          error: 'Could not extract chat ID from messages. Please send /start to your bot.',
+        };
+      }
+
       return {
-        success: false,
-        error: 'No messages found. Please send /start to your bot first.',
+        success: true,
+        chatId: String(chat.id),
+        username: chat.username || chat.first_name || undefined,
       };
-    }
-
-    // Get the most recent message's chat ID
-    const latestUpdate = updates[updates.length - 1];
-    const chat = latestUpdate?.message?.chat || latestUpdate?.my_chat_member?.chat;
-
-    if (!chat?.id) {
-      return {
-        success: false,
-        error: 'Could not extract chat ID from messages. Please send /start to your bot.',
-      };
-    }
-
-    return {
-      success: true,
-      chatId: String(chat.id),
-      username: chat.username || chat.first_name || undefined,
-    };
+    });
   } catch (err) {
+    if (err instanceof CircuitOpenError) {
+      log.warn(`Telegram circuit open, skipping getUpdates (retry in ${Math.ceil(err.retryAfter / 1000)}s)`);
+      return { success: false, error: 'Telegram service unavailable, will retry shortly' };
+    }
     const errorMsg = getErrorMessage(err, 'Unknown error');
     log.error(`Failed to get chat ID: ${errorMsg}`);
     return { success: false, error: errorMsg };

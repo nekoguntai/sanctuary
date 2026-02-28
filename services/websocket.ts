@@ -115,8 +115,25 @@ export class WebSocketClient {
         this.notifyConnectionListeners(false);
 
         // Attempt reconnection
-        if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect();
+        if (this.shouldReconnect) {
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.scheduleReconnect();
+          } else {
+            // Fast reconnects exhausted — notify UI and schedule a slow retry
+            log.warn('Fast reconnect attempts exhausted, scheduling slow retry in 5 minutes');
+            this.dispatchEvent({
+              type: 'event',
+              event: 'disconnected',
+              data: { exhausted: true, message: 'Connection lost. Will retry in 5 minutes.' },
+            });
+
+            this.reconnectTimer = setTimeout(() => {
+              log.debug('Attempting slow reconnect after 5 minute wait');
+              this.reconnectAttempts = 0;
+              this.reconnectDelay = 1000;
+              this.connect(this.token || undefined);
+            }, 5 * 60 * 1000);
+          }
         }
       };
     } catch (err) {

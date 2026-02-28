@@ -6,6 +6,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { statfs } from 'node:fs/promises';
 import prisma from '../models/prisma';
 import { circuitBreakerRegistry } from '../services/circuitBreaker';
 import { getSyncService } from '../services/syncService';
@@ -16,6 +17,7 @@ import { checkRedisHealth } from '../infrastructure/redis';
 import { jobQueue } from '../jobs';
 import { getCacheInvalidationStatus } from '../services/cacheInvalidation';
 import { getStartupStatus } from '../services/startupManager';
+import config from '../config';
 
 const router = Router();
 const log = createLogger('HEALTH');
@@ -45,6 +47,7 @@ export interface HealthResponse {
     startup: ComponentHealth;
     circuitBreakers: ComponentHealth;
     memory: ComponentHealth;
+    disk: ComponentHealth;
   };
 }
 
@@ -371,6 +374,53 @@ function checkCircuitBreakers(): ComponentHealth {
   };
 }
 
+// Disk space thresholds
+const DISK_CRITICAL_THRESHOLD_PERCENT = 95;
+
+/**
+ * Check disk space usage using fs.statfs
+ */
+async function checkDiskSpace(): Promise<ComponentHealth> {
+  try {
+    const stats = await statfs('/');
+    const totalBytes = stats.blocks * stats.bsize;
+    const availableBytes = stats.bavail * stats.bsize;
+    const usedBytes = totalBytes - availableBytes;
+    const usedPercent = Math.round((usedBytes / totalBytes) * 100);
+
+    const warningThreshold = config.maintenance.diskWarningThresholdPercent;
+
+    let status: HealthStatus = 'healthy';
+    let message: string | undefined;
+
+    if (usedPercent >= DISK_CRITICAL_THRESHOLD_PERCENT) {
+      status = 'unhealthy';
+      message = `Disk usage critical: ${usedPercent}% used`;
+    } else if (usedPercent >= warningThreshold) {
+      status = 'degraded';
+      message = `Disk usage elevated: ${usedPercent}% used (warning at ${warningThreshold}%)`;
+    }
+
+    return {
+      status,
+      message,
+      details: {
+        usedPercent: `${usedPercent}%`,
+        totalGB: `${(totalBytes / 1024 / 1024 / 1024).toFixed(1)}GB`,
+        availableGB: `${(availableBytes / 1024 / 1024 / 1024).toFixed(1)}GB`,
+        warningThreshold: `${warningThreshold}%`,
+        criticalThreshold: `${DISK_CRITICAL_THRESHOLD_PERCENT}%`,
+      },
+    };
+  } catch (error) {
+    log.warn('Disk space check failed', { error: getErrorMessage(error) });
+    return {
+      status: 'healthy',
+      message: 'Disk space check unavailable',
+    };
+  }
+}
+
 // Memory threshold for degraded status (500MB heap usage)
 const MEMORY_THRESHOLD_DEGRADED = 500 * 1024 * 1024; // 500MB
 // Memory threshold for unhealthy status (1GB heap usage)
@@ -454,6 +504,7 @@ router.get('/', async (req: Request, res: Response) => {
     startup: checkStartup(),
     circuitBreakers: checkCircuitBreakers(),
     memory: checkMemory(),
+    disk: await checkDiskSpace(),
   };
 
   const status = determineOverallStatus(components);

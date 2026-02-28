@@ -63,31 +63,39 @@ export function getOperationType(action: string): string {
 const LATENCY_WINDOW_SIZE = 100;
 const latencyWindow: number[] = [];
 
-// Add slow query detection, metrics, and pool health tracking middleware
+// Active query counter for connection draining on shutdown
+let activeQueries = 0;
+
+// Add slow query detection, metrics, pool health tracking, and active query counting
 prisma.$use(async (params, next) => {
+  activeQueries++;
   const before = Date.now();
-  const result = await next(params);
-  const duration = Date.now() - before;
+  try {
+    const result = await next(params);
+    const duration = Date.now() - before;
 
-  // Record query duration metric
-  const operation = getOperationType(params.action || 'unknown');
-  dbQueryDuration.observe({ operation }, duration / 1000);
+    // Record query duration metric
+    const operation = getOperationType(params.action || 'unknown');
+    dbQueryDuration.observe({ operation }, duration / 1000);
 
-  // Record for pool health monitoring
-  latencyWindow.push(duration);
-  if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
-    latencyWindow.shift();
+    // Record for pool health monitoring
+    latencyWindow.push(duration);
+    if (latencyWindow.length > LATENCY_WINDOW_SIZE) {
+      latencyWindow.shift();
+    }
+
+    if (duration > SLOW_QUERY_THRESHOLD_MS) {
+      log.warn(`Slow query (${duration}ms): ${params.model}.${params.action}`, {
+        model: params.model,
+        action: params.action,
+        duration,
+      });
+    }
+
+    return result;
+  } finally {
+    activeQueries--;
   }
-
-  if (duration > SLOW_QUERY_THRESHOLD_MS) {
-    log.warn(`Slow query (${duration}ms): ${params.model}.${params.action}`, {
-      model: params.model,
-      action: params.action,
-      duration,
-    });
-  }
-
-  return result;
 });
 
 /**
@@ -168,18 +176,43 @@ export async function getDatabaseInfo(): Promise<{
   }
 }
 
+// Maximum time to wait for active queries to complete during shutdown
+const DRAIN_TIMEOUT_MS = 10_000;
+
 /**
- * Graceful disconnect
+ * Graceful disconnect with connection draining.
+ * Waits up to 10 seconds for in-flight queries to complete before disconnecting.
  */
 export async function disconnect(): Promise<void> {
   log.info('Disconnecting from database...');
+
+  // Wait for active queries to complete
+  if (activeQueries > 0) {
+    log.info(`Draining ${activeQueries} active queries (timeout: ${DRAIN_TIMEOUT_MS / 1000}s)...`);
+    const drainStart = Date.now();
+
+    while (activeQueries > 0 && (Date.now() - drainStart) < DRAIN_TIMEOUT_MS) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    if (activeQueries > 0) {
+      log.warn(`Force disconnecting with ${activeQueries} queries still active`);
+    } else {
+      log.info('All queries drained successfully');
+    }
+  }
+
   await prisma.$disconnect();
   log.info('Database disconnected');
 }
 
 // Database health check and reconnection
-let healthCheckInterval: NodeJS.Timeout | null = null;
-let isReconnecting = false;
+let healthCheckTimeout: NodeJS.Timeout | null = null;
+// Promise-based guard: prevents concurrent reconnection attempts.
+// Concurrent callers see a non-null promise and skip, avoiding duplicate reconnects.
+let reconnectingPromise: Promise<void> | null = null;
+let consecutiveHealthFailures = 0;
+const MAX_HEALTH_CHECK_INTERVAL_MS = 300_000; // 5 min cap
 
 // =============================================================================
 // Pool Health Watchdog
@@ -258,38 +291,66 @@ export function configurePoolHealthThresholds(options: {
 
 /**
  * Start database health check monitoring
- * Periodically checks connection and reconnects if needed
+ * Periodically checks connection and reconnects if needed.
+ * Uses exponential backoff on consecutive failures: base → 2x → 4x → ... → 300s max.
+ * Resets to base interval on successful health check.
  */
 export function startDatabaseHealthCheck(intervalMs: number = 30000): void {
-  if (healthCheckInterval) {
+  if (healthCheckTimeout) {
     return; // Already running
   }
 
-  healthCheckInterval = setInterval(async () => {
-    const isHealthy = await checkDatabaseHealth();
+  function getNextDelay(): number {
+    if (consecutiveHealthFailures === 0) return intervalMs;
+    return Math.min(
+      intervalMs * Math.pow(2, consecutiveHealthFailures),
+      MAX_HEALTH_CHECK_INTERVAL_MS,
+    );
+  }
 
-    if (!isHealthy && !isReconnecting) {
-      isReconnecting = true;
-      log.warn('Database connection lost, attempting to reconnect...');
+  function scheduleNext(): void {
+    const delay = getNextDelay();
+    healthCheckTimeout = setTimeout(async () => {
+      const isHealthy = await checkDatabaseHealth();
 
-      try {
-        // Disconnect and reconnect
-        await prisma.$disconnect();
-        await connectWithRetry();
-        log.info('Database reconnection successful');
-      } catch (error) {
-        log.error('Database reconnection failed', {
-          error: getErrorMessage(error),
+      if (isHealthy) {
+        if (consecutiveHealthFailures > 0) {
+          log.info(`Database health restored after ${consecutiveHealthFailures} consecutive failures`);
+        }
+        consecutiveHealthFailures = 0;
+      } else if (!reconnectingPromise) {
+        consecutiveHealthFailures++;
+        const nextDelay = getNextDelay();
+        log.warn(`Database connection lost, attempting reconnect`, {
+          consecutiveFailures: consecutiveHealthFailures,
+          nextCheckIn: `${Math.round(nextDelay / 1000)}s`,
         });
-      } finally {
-        isReconnecting = false;
+
+        reconnectingPromise = (async () => {
+          try {
+            await prisma.$disconnect();
+            await connectWithRetry();
+            log.info('Database reconnection successful');
+            consecutiveHealthFailures = 0;
+          } catch (error) {
+            log.error('Database reconnection failed', {
+              error: getErrorMessage(error),
+            });
+          } finally {
+            reconnectingPromise = null;
+          }
+        })();
+
+        await reconnectingPromise;
       }
-    }
-  }, intervalMs);
 
-  // Prevent interval from keeping process alive during shutdown
-  healthCheckInterval.unref();
+      scheduleNext();
+    }, delay);
 
+    healthCheckTimeout.unref();
+  }
+
+  scheduleNext();
   log.debug('Database health check monitoring started');
 }
 
@@ -297,9 +358,10 @@ export function startDatabaseHealthCheck(intervalMs: number = 30000): void {
  * Stop database health check monitoring
  */
 export function stopDatabaseHealthCheck(): void {
-  if (healthCheckInterval) {
-    clearInterval(healthCheckInterval);
-    healthCheckInterval = null;
+  if (healthCheckTimeout) {
+    clearTimeout(healthCheckTimeout);
+    healthCheckTimeout = null;
+    consecutiveHealthFailures = 0;
     log.debug('Database health check monitoring stopped');
   }
 }

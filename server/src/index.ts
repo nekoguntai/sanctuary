@@ -75,15 +75,8 @@ process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) =>
   // In production, you might want to exit here too
 });
 
-// Validate required environment variables at startup
-try {
-  validateEncryptionKey();
-} catch (error) {
-  console.error('FATAL: Missing required environment variable');
-  console.error(getErrorMessage(error));
-  console.error('Please set ENCRYPTION_KEY in your .env file (at least 32 characters)');
-  process.exit(1);
-}
+// Encryption key is validated asynchronously during startup (see async IIFE below)
+// to avoid blocking the event loop with scrypt key derivation.
 
 // Initialize Express app
 const app: Express = express();
@@ -239,6 +232,16 @@ log.info('Worker-owned architecture: in-process maintenance fallback disabled');
 (async () => {
   try {
     const startupTimer = Date.now();
+
+    // Derive encryption key using async scrypt (avoids blocking event loop)
+    try {
+      await validateEncryptionKey();
+    } catch (error) {
+      console.error('FATAL: Missing required environment variable');
+      console.error(getErrorMessage(error));
+      console.error('Please set ENCRYPTION_KEY in your .env file (at least 32 characters)');
+      process.exit(1);
+    }
 
     // Wait for OpenTelemetry initialization (if enabled)
     await otelPromise;

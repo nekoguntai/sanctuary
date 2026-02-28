@@ -23,9 +23,17 @@ describe('Encryption Utilities', async () => {
     }
   });
 
-  // Helper to get fresh module for each test group
+  // Helper to get fresh module with key already initialized
   const getEncryptionModule = async () => {
-    // Clear module cache to get fresh module with current env
+    vi.resetModules();
+    const mod = await import('../../../src/utils/encryption');
+    // Initialize the encryption key (async scrypt derivation)
+    await mod.validateEncryptionKey();
+    return mod;
+  };
+
+  // Helper to get fresh module WITHOUT auto-initializing (for validateEncryptionKey tests)
+  const getUninitializedModule = async () => {
     vi.resetModules();
     return await import('../../../src/utils/encryption');
   };
@@ -255,8 +263,8 @@ describe('Encryption Utilities', async () => {
 
   describe('validateEncryptionKey', async () => {
     it('should not throw when encryption key is valid', async () => {
-      const { validateEncryptionKey } = await getEncryptionModule();
-      expect(() => validateEncryptionKey()).not.toThrow();
+      const { validateEncryptionKey } = await getUninitializedModule();
+      await expect(validateEncryptionKey()).resolves.not.toThrow();
     });
 
     it('should throw error when ENCRYPTION_KEY is not set', async () => {
@@ -264,8 +272,8 @@ describe('Encryption Utilities', async () => {
       delete process.env.ENCRYPTION_KEY;
 
       try {
-        const { validateEncryptionKey } = await getEncryptionModule();
-        expect(() => validateEncryptionKey()).toThrow(
+        const { validateEncryptionKey } = await getUninitializedModule();
+        await expect(validateEncryptionKey()).rejects.toThrow(
           'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
         );
       } finally {
@@ -278,8 +286,8 @@ describe('Encryption Utilities', async () => {
       process.env.ENCRYPTION_KEY = 'short-key-only-20-chars';
 
       try {
-        const { validateEncryptionKey } = await getEncryptionModule();
-        expect(() => validateEncryptionKey()).toThrow(
+        const { validateEncryptionKey } = await getUninitializedModule();
+        await expect(validateEncryptionKey()).rejects.toThrow(
           'ENCRYPTION_KEY environment variable must be set and at least 32 characters long'
         );
       } finally {
@@ -380,7 +388,7 @@ describe('Encryption Utilities', async () => {
       }
     });
 
-    it('should invalidate key cache within same module when salt changes', async () => {
+    it('should invalidate key cache within same module when salt changes and key is re-initialized', async () => {
       const originalSalt = process.env.ENCRYPTION_SALT;
 
       try {
@@ -395,14 +403,11 @@ describe('Encryption Utilities', async () => {
         // Verify decryption works with same salt (key is cached)
         expect(encryptionModule.decrypt(encrypted)).toBe(plaintext);
 
-        // Change salt while keeping the same module instance
-        // This triggers line 36: encryptionKeyCache = null
+        // Change salt and re-initialize the key
+        // In the async scrypt design, salt changes require re-initialization
         process.env.ENCRYPTION_SALT = 'second-salt-for-cache-test';
+        await encryptionModule.validateEncryptionKey();
 
-        // Calling encrypt/decrypt again with changed salt should:
-        // 1. Detect salt mismatch (line 35)
-        // 2. Invalidate the cache (line 36)
-        // 3. Re-derive key with new salt (line 51)
         // Decryption should fail because data was encrypted with different derived key
         expect(() => encryptionModule.decrypt(encrypted)).toThrow();
       } finally {

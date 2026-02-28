@@ -35,7 +35,7 @@ vi.mock('jsonwebtoken', () => ({
 const mockFetch = vi.hoisted(() => vi.fn());
 vi.stubGlobal('fetch', mockFetch);
 
-import { FCMPushProvider, isFCMConfigured } from '../../../../../src/services/push/providers/fcm';
+import { FCMPushProvider, isFCMConfigured, _resetFCMConfiguredCache } from '../../../../../src/services/push/providers/fcm';
 import type { PushMessage } from '../../../../../src/services/push/types';
 
 describe('FCMPushProvider', () => {
@@ -84,20 +84,24 @@ describe('FCMPushProvider', () => {
 
   describe('isConfigured', () => {
     it('should return true when service account file exists', () => {
+      // Provider was constructed with valid env/mocks in beforeEach
       expect(provider.isConfigured()).toBe(true);
-      expect(mockAccessSync).toHaveBeenCalledWith('/path/to/service-account.json', 4);
     });
 
     it('should return false when FCM_SERVICE_ACCOUNT is missing', () => {
       delete process.env.FCM_SERVICE_ACCOUNT;
-      expect(provider.isConfigured()).toBe(false);
+      // Must create new provider after changing env, since config is cached at construction
+      const unconfiguredProvider = new FCMPushProvider();
+      expect(unconfiguredProvider.isConfigured()).toBe(false);
     });
 
     it('should return false when service account file does not exist', () => {
-      mockAccessSync.mockImplementation(() => {
+      mockReadFileSync.mockImplementation(() => {
         throw new Error('ENOENT');
       });
-      expect(provider.isConfigured()).toBe(false);
+      // Must create new provider after changing mock, since config is cached at construction
+      const unconfiguredProvider = new FCMPushProvider();
+      expect(unconfiguredProvider.isConfigured()).toBe(false);
     });
   });
 
@@ -130,7 +134,9 @@ describe('FCMPushProvider', () => {
 
     it('should return error when not configured', async () => {
       delete process.env.FCM_SERVICE_ACCOUNT;
-      const result = await provider.send('device-token', testMessage);
+      // Must create new provider after removing env, since config is cached at construction
+      const unconfiguredProvider = new FCMPushProvider();
+      const result = await unconfiguredProvider.send('device-token', testMessage);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not configured');
@@ -308,6 +314,7 @@ describe('isFCMConfigured', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     vi.clearAllMocks();
+    _resetFCMConfiguredCache();
   });
 
   afterEach(() => {

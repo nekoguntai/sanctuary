@@ -5,7 +5,8 @@
  * Sets up environment variables, mocks, and global test utilities.
  */
 
-import { vi, beforeEach, expect } from 'vitest';
+import { vi, beforeAll, beforeEach, expect } from 'vitest';
+import { validateEncryptionKey } from '../src/utils/encryption';
 
 // Set test environment variables before any imports
 process.env.NODE_ENV = 'test';
@@ -13,6 +14,11 @@ process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing-only';
 process.env.JWT_EXPIRES_IN = '1h';
 process.env.ENCRYPTION_KEY = 'test-encryption-key-32-characters';
 process.env.ENCRYPTION_SALT = 'test-encryption-salt';
+
+// Initialize encryption key asynchronously (uses async scrypt)
+beforeAll(async () => {
+  await validateEncryptionKey();
+});
 
 // Mock the logger to prevent console spam during tests
 vi.mock('../src/utils/logger', () => ({

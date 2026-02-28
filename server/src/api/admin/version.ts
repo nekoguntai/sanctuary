@@ -73,6 +73,7 @@ router.get('/', async (req: Request, res: Response) => {
               'Accept': 'application/vnd.github.v3+json',
               'User-Agent': 'Sanctuary-App',
             },
+            signal: AbortSignal.timeout(10_000),
           }
         );
 

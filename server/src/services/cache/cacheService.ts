@@ -65,13 +65,17 @@ export interface ICacheService {
 // In-Memory Cache Implementation
 // =============================================================================
 
+// Default maximum cache entries before FIFO eviction kicks in
+const DEFAULT_MAX_CACHE_SIZE = 10_000;
+
 /**
- * In-memory cache with TTL support
+ * In-memory cache with TTL support and max size eviction
  */
 class MemoryCache implements ICacheService {
   private cache = new Map<string, CacheEntry<unknown>>();
   private prefix: string;
   private defaultTtl: number;
+  private maxSize: number;
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -83,9 +87,10 @@ class MemoryCache implements ICacheService {
   // Cleanup interval reference for proper shutdown
   private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(prefix: string = '', defaultTtl: number = 300) {
+  constructor(prefix: string = '', defaultTtl: number = 300, maxSize: number = DEFAULT_MAX_CACHE_SIZE) {
     this.prefix = prefix;
     this.defaultTtl = defaultTtl;
+    this.maxSize = maxSize;
 
     // Only start cleanup in root cache (not namespaced instances)
     if (!prefix) {
@@ -124,6 +129,19 @@ class MemoryCache implements ICacheService {
     const fullKey = this.getFullKey(key);
     const ttl = ttlSeconds ?? this.defaultTtl;
     const expiresAt = Date.now() + (ttl * 1000);
+
+    // Evict oldest entries if at capacity (FIFO — Map insertion order)
+    // Only evict if this is a new key (updates don't increase size)
+    if (!this.cache.has(fullKey) && this.cache.size >= this.maxSize) {
+      const evictCount = Math.max(1, Math.floor(this.maxSize * 0.05)); // Evict 5% batch
+      let evicted = 0;
+      for (const oldKey of this.cache.keys()) {
+        this.cache.delete(oldKey);
+        evicted++;
+        if (evicted >= evictCount) break;
+      }
+      log.warn(`Cache at max size (${this.maxSize}), evicted ${evicted} oldest entries`);
+    }
 
     this.cache.set(fullKey, { value, expiresAt });
     this.stats.sets++;
@@ -184,7 +202,7 @@ class MemoryCache implements ICacheService {
 
   namespace(prefix: string): ICacheService {
     const newPrefix = this.prefix ? `${this.prefix}:${prefix}` : prefix;
-    const namespaced = new MemoryCache(newPrefix, this.defaultTtl);
+    const namespaced = new MemoryCache(newPrefix, this.defaultTtl, this.maxSize);
     // Share the same underlying cache
     namespaced.cache = this.cache;
     namespaced.stats = this.stats;

@@ -51,12 +51,12 @@ const DEFAULT_CONFIG: Required<JobQueueConfig> = {
       type: 'exponential',
       delay: 1000,
     },
-    removeOnComplete: 100, // Keep last 100 completed jobs
-    removeOnFail: 50, // Keep last 50 failed jobs
+    removeOnComplete: 500, // Keep last 500 completed jobs
+    removeOnFail: 250, // Keep last 250 failed jobs
   },
   concurrency: 3,
-  removeOnComplete: 100,
-  removeOnFail: 50,
+  removeOnComplete: 500,
+  removeOnFail: 250,
 };
 
 function buildRepeatableJobId(name: string, scheduleOptions: ScheduleOptions): string {

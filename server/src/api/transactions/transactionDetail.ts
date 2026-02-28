@@ -46,7 +46,9 @@ router.get('/transactions/:txid/raw', async (req: Request, res: Response) => {
       ? 'https://mempool.space/testnet/api'
       : 'https://mempool.space/api';
 
-    const response = await fetch(`${mempoolBaseUrl}/tx/${txid}/hex`);
+    const response = await fetch(`${mempoolBaseUrl}/tx/${txid}/hex`, {
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!response.ok) {
       log.warn('Failed to fetch raw tx from mempool.space', { txid, status: response.status });
       return res.status(404).json({

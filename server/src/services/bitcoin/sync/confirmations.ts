@@ -14,6 +14,7 @@ import { walletLog } from '../../../websocket/notifications';
 import { recalculateWalletBalances } from '../utils/balanceCalculation';
 import { getConfig } from '../../../config';
 import { safeJsonParse, SystemSettingSchemas } from '../../../utils/safeJson';
+import { mapWithConcurrency } from '../../../utils/async';
 
 const log = createLogger('CONFIRMATIONS');
 
@@ -235,15 +236,17 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
     walletLog(walletId, 'debug', 'POPULATE', `Address history batch ${batchNum}/${totalBatches} (${batch.length} addresses)`);
 
-    const results = await Promise.all(
-      batch.map(async (address) => {
+    const results = await mapWithConcurrency(
+      batch,
+      async (address) => {
         try {
           const history = await client.getAddressHistory(address);
           return history;
         } catch (error) {
           return [];
         }
-      })
+      },
+      3
     );
     for (const history of results) {
       for (const item of history) {
@@ -275,8 +278,9 @@ export async function populateMissingTransactionFields(walletId: string): Promis
 
     walletLog(walletId, 'debug', 'POPULATE', `Transaction batch ${batchNum}/${totalBatches} (${batch.length} txs)`);
 
-    const results = await Promise.all(
-      batch.map(async (txid) => {
+    const results = await mapWithConcurrency(
+      batch,
+      async (txid) => {
         try {
           const details = await client.getTransaction(txid, true);
           return { txid, details };
@@ -284,7 +288,8 @@ export async function populateMissingTransactionFields(walletId: string): Promis
           log.warn(`Failed to fetch tx ${txid}`, { error: String(error) });
           return { txid, details: null };
         }
-      })
+      },
+      3
     );
     for (const result of results) {
       if (result.details) {
@@ -346,8 +351,9 @@ export async function populateMissingTransactionFields(walletId: string): Promis
     for (let i = 0; i < prevTxidsList.length; i += TX_BATCH_SIZE) {
       const batch = prevTxidsList.slice(i, i + TX_BATCH_SIZE);
 
-      const results = await Promise.all(
-        batch.map(async (txid) => {
+      const results = await mapWithConcurrency(
+        batch,
+        async (txid) => {
           try {
             const details = await client.getTransaction(txid, true);
             return { txid, details };
@@ -355,7 +361,8 @@ export async function populateMissingTransactionFields(walletId: string): Promis
             log.warn(`Failed to fetch previous tx ${txid}`, { error: String(error) });
             return { txid, details: null };
           }
-        })
+        },
+        3
       );
 
       for (const result of results) {

@@ -199,12 +199,24 @@ const MIGRATIONS: BackupMigration[] = [
   // Migrations will be added here as schema evolves
 ];
 
+// Tables that can grow large and should use cursor-based pagination for export
+// to avoid loading all rows into a single Prisma response buffer at once
+const LARGE_TABLES = new Set([
+  'transaction', 'uTXO', 'transactionInput', 'transactionOutput',
+  'address', 'auditLog', 'addressLabel', 'transactionLabel',
+]);
+
+// Number of rows to fetch per cursor page during backup export
+const BACKUP_PAGE_SIZE = 1000;
+
 /**
  * BackupService class
  */
 export class BackupService {
   /**
    * Create a complete database backup
+   * Uses cursor-based pagination for large tables to avoid OOM from loading
+   * entire tables into a single Prisma response buffer.
    */
   async createBackup(adminUser: string, options: BackupOptions = {}): Promise<SanctuaryBackup> {
     const { includeCache = false, description } = options;
@@ -221,12 +233,17 @@ export class BackupService {
 
     for (const table of tablesToExport) {
       try {
-        // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
-        const records = await prisma[table].findMany();
-        // Convert BigInt values to strings for JSON serialization
-        data[table] = records.map((record: BackupRecord) => this.serializeRecord(record));
-        recordCounts[table] = records.length;
-        log.debug(`[BACKUP] Exported ${records.length} records from ${table}`);
+        if (LARGE_TABLES.has(table)) {
+          // Cursor-based pagination for large tables to reduce peak memory
+          data[table] = await this.exportTablePaginated(table);
+        } else {
+          // Small tables: single query is fine
+          // @ts-expect-error - Dynamic Prisma table access; table name validated against TABLE_ORDER constant
+          const records = await prisma[table].findMany();
+          data[table] = records.map((record: BackupRecord) => this.serializeRecord(record));
+        }
+        recordCounts[table] = data[table].length;
+        log.debug(`[BACKUP] Exported ${data[table].length} records from ${table}`);
       } catch (error) {
         log.warn(`[BACKUP] Failed to export table ${table}`, { error: String(error) });
         data[table] = [];
@@ -562,6 +579,37 @@ export class BackupService {
         error: String(error),
       };
     }
+  }
+
+  /**
+   * Export a table using cursor-based pagination to reduce peak memory.
+   * Fetches BACKUP_PAGE_SIZE rows at a time instead of loading everything at once.
+   */
+  private async exportTablePaginated(table: string): Promise<BackupRecord[]> {
+    const allRecords: BackupRecord[] = [];
+    let cursor: string | undefined;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // @ts-expect-error - Dynamic Prisma table access; table name validated against LARGE_TABLES set
+      const page: BackupRecord[] = await prisma[table].findMany({
+        take: BACKUP_PAGE_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+      });
+
+      for (const record of page) {
+        allRecords.push(this.serializeRecord(record));
+      }
+
+      if (page.length < BACKUP_PAGE_SIZE) {
+        break; // Last page
+      }
+
+      cursor = page[page.length - 1].id as string;
+    }
+
+    return allRecords;
   }
 
   /**

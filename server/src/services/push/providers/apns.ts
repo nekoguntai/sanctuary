@@ -9,6 +9,7 @@ import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import { BasePushProvider } from './base';
 import { createLogger } from '../../../utils/logger';
+import { createCircuitBreaker, type CircuitBreaker } from '../../circuitBreaker';
 import type { PushMessage, PushResult } from '../types';
 
 const log = createLogger('APNS');
@@ -18,6 +19,9 @@ const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
 
 export class APNsPushProvider extends BasePushProvider {
   private cachedToken: { token: string; expires: number } | null = null;
+  private cachedKeyContent: string | null = null;
+  // Circuit breaker: 5 failures → open for 60s → half-open probe
+  private apnsCircuit: CircuitBreaker<PushResult>;
 
   constructor() {
     super({
@@ -25,6 +29,31 @@ export class APNsPushProvider extends BasePushProvider {
       priority: 100,
       platform: 'ios',
     });
+
+    this.apnsCircuit = createCircuitBreaker<PushResult>({
+      name: 'apns',
+      failureThreshold: 5,
+      recoveryTimeout: 60_000,
+    });
+
+    // Eagerly load and cache the key file at construction time
+    // to avoid blocking the event loop with fs.readFileSync during token generation
+    this.loadKeyFile();
+  }
+
+  /**
+   * Eagerly load APNs key file. Called once at construction.
+   */
+  private loadKeyFile(): void {
+    const keyPath = process.env.APNS_KEY_PATH;
+    if (!keyPath) return;
+
+    try {
+      this.cachedKeyContent = fs.readFileSync(keyPath, 'utf8');
+      log.debug('APNs key file loaded and cached');
+    } catch {
+      log.debug('APNs key file not readable');
+    }
   }
 
   /**
@@ -57,7 +86,7 @@ export class APNsPushProvider extends BasePushProvider {
       return this.cachedToken.token;
     }
 
-    const key = fs.readFileSync(keyPath, 'utf8');
+    const key = this.cachedKeyContent ?? fs.readFileSync(keyPath, 'utf8');
     const token = jwt.sign({}, key, {
       algorithm: 'ES256',
       keyid: keyId,
@@ -75,7 +104,9 @@ export class APNsPushProvider extends BasePushProvider {
   }
 
   /**
-   * Send push notification to iOS device
+   * Send push notification to iOS device.
+   * Wrapped in a circuit breaker — 5xx/network errors trip the circuit,
+   * 4xx errors (invalid token, etc.) return failure without tripping.
    */
   protected async sendNotification(
     deviceToken: string,
@@ -91,52 +122,62 @@ export class APNsPushProvider extends BasePushProvider {
       };
     }
 
-    const host = isProduction ? APNS_HOST_PRODUCTION : APNS_HOST_SANDBOX;
-    const url = `https://${host}/3/device/${deviceToken}`;
+    return this.apnsCircuit.execute(async () => {
+      const host = isProduction ? APNS_HOST_PRODUCTION : APNS_HOST_SANDBOX;
+      const url = `https://${host}/3/device/${deviceToken}`;
 
-    const payload = {
-      aps: {
-        alert: {
-          title: message.title,
-          body: message.body,
+      const payload = {
+        aps: {
+          alert: {
+            title: message.title,
+            body: message.body,
+          },
+          sound: 'default',
+          'mutable-content': 1,
         },
-        sound: 'default',
-        'mutable-content': 1,
-      },
-      // Include custom data at root level (APNs convention)
-      ...message.data,
-    };
+        // Include custom data at root level (APNs convention)
+        ...message.data,
+      };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'authorization': `bearer ${this.getToken()}`,
-        'apns-topic': bundleId,
-        'apns-push-type': 'alert',
-        'apns-priority': '10',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'authorization': `bearer ${this.getToken()}`,
+          'apns-topic': bundleId,
+          'apns-push-type': 'alert',
+          'apns-priority': '10',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000),
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      let errorJson: Record<string, unknown> = {};
-      try {
-        errorJson = JSON.parse(errorBody);
-      } catch {
-        // Not JSON
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let errorJson: Record<string, unknown> = {};
+        try {
+          errorJson = JSON.parse(errorBody);
+        } catch {
+          // Not JSON
+        }
+
+        const reason = (errorJson as { reason?: string }).reason || errorBody || `HTTP ${response.status}`;
+
+        // 5xx = service outage, throw to trip circuit breaker
+        if (response.status >= 500) {
+          throw new Error(`APNs ${response.status}: ${reason}`);
+        }
+
+        // 4xx = client error (invalid token, etc.), return without tripping circuit
+        return { success: false, error: `APNs ${response.status}: ${reason}` };
       }
 
-      const reason = (errorJson as { reason?: string }).reason || errorBody || `HTTP ${response.status}`;
-      throw new Error(`APNs ${response.status}: ${reason}`);
-    }
-
-    log.debug(`APNs notification sent to device ${deviceToken.slice(0, 8)}...`);
-    return {
-      success: true,
-      messageId: response.headers.get('apns-id') || undefined,
-    };
+      log.debug(`APNs notification sent to device ${deviceToken.slice(0, 8)}...`);
+      return {
+        success: true,
+        messageId: response.headers.get('apns-id') || undefined,
+      };
+    });
   }
 }
 

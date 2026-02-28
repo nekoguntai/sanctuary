@@ -21,6 +21,7 @@ import {
   type DistributedLock,
 } from '../infrastructure/distributedLock';
 import { createLogger } from '../utils/logger';
+import { deadLetterQueue, type DeadLetterCategory } from '../services/deadLetterQueue';
 import type { WorkerJobHandler } from './jobs/types';
 
 const log = createLogger('WorkerQueue');
@@ -74,8 +75,8 @@ export class WorkerJobQueue {
       defaultJobOptions: config.defaultJobOptions ?? {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: 100,
-        removeOnFail: 50,
+        removeOnComplete: 500,
+        removeOnFail: 250,
       },
     };
   }
@@ -165,11 +166,32 @@ export class WorkerJobQueue {
     });
 
     worker.on('failed', (job, error) => {
+      const maxAttempts = job?.opts?.attempts ?? 1;
+      const attemptsMade = job?.attemptsMade ?? 0;
+      const isExhausted = attemptsMade >= maxAttempts;
+
       log.error(`Job failed: ${queueName}:${job?.name}`, {
         jobId: job?.id,
         error: error.message,
-        attemptsMade: job?.attemptsMade,
+        attemptsMade,
+        maxAttempts,
+        exhausted: isExhausted,
       });
+
+      // Route exhausted jobs to dead letter queue for visibility and manual retry
+      if (isExhausted && job) {
+        const dlqCategory = this.queueToDlqCategory(queueName);
+        deadLetterQueue.add(
+          dlqCategory,
+          `${queueName}:${job.name}`,
+          { jobId: job.id, jobName: job.name, queue: queueName, data: job.data },
+          error,
+          attemptsMade,
+          { queueName, jobId: job.id },
+        ).catch(dlqError => {
+          log.debug('Failed to record exhausted job in DLQ', { error: String(dlqError) });
+        });
+      }
     });
 
     worker.on('error', (error) => {
@@ -182,7 +204,11 @@ export class WorkerJobQueue {
   }
 
   /**
-   * Process a job with optional distributed locking
+   * Process a job with optional distributed locking.
+   *
+   * When a distributed lock is configured, the lock is refreshed periodically.
+   * If the lock is lost (Redis blip, TTL expiry), the job is aborted and will
+   * be retried by BullMQ, preventing two workers from running the same job.
    */
   private async processJob(queueName: string, job: Job): Promise<unknown> {
     const handlerKey = `${queueName}:${job.name}`;
@@ -194,6 +220,8 @@ export class WorkerJobQueue {
 
     let lock: DistributedLock | null = null;
     let lockRefreshTimer: NodeJS.Timeout | null = null;
+    // When the lock is lost, this callback rejects the handler promise
+    let onLockLost: (() => void) | null = null;
 
     const stopLockRefresh = () => {
       if (lockRefreshTimer) {
@@ -211,6 +239,8 @@ export class WorkerJobQueue {
           return;
         }
 
+        const currentLockKey = lock.key;
+
         try {
           const refreshed = await extendLock(lock, lockTtlMs);
           if (refreshed) {
@@ -218,17 +248,22 @@ export class WorkerJobQueue {
             return;
           }
 
-          log.warn(`Lost distributed lock while job is still running: ${handlerKey}`, {
+          log.warn(`Lost distributed lock, aborting job: ${handlerKey}`, {
             jobId: job.id,
-            lockKey: lock.key,
+            lockKey: currentLockKey,
           });
+          lock = null; // Prevent release in finally block
           stopLockRefresh();
+          onLockLost?.();
         } catch (error) {
-          log.warn(`Failed to refresh distributed lock for job: ${handlerKey}`, {
+          log.warn(`Failed to refresh distributed lock, aborting job: ${handlerKey}`, {
             jobId: job.id,
-            lockKey: lock.key,
+            lockKey: currentLockKey,
             error: error instanceof Error ? error.message : String(error),
           });
+          lock = null;
+          stopLockRefresh();
+          onLockLost?.();
         }
       }, refreshIntervalMs);
 
@@ -253,14 +288,25 @@ export class WorkerJobQueue {
         }
 
         startLockRefresh(lockTtlMs);
+
+        // Race the handler against lock loss
+        const lockLostPromise = new Promise<never>((_, reject) => {
+          onLockLost = () => reject(new Error(`Lock lost for ${handlerKey} (job ${job.id}). Job will be retried.`));
+        });
+
+        return await Promise.race([
+          registered.handler(job),
+          lockLostPromise,
+        ]);
       }
 
-      // Execute the job handler
+      // No lock configured — just run the handler
       return await registered.handler(job);
     } finally {
       stopLockRefresh();
+      onLockLost = null; // Prevent stale rejection after handler completes
 
-      // Always release lock if we acquired one
+      // Always release lock if we still hold one
       if (lock) {
         await releaseLock(lock);
       }
@@ -449,6 +495,19 @@ export class WorkerJobQueue {
    */
   getRegisteredJobs(): string[] {
     return Array.from(this.handlers.keys());
+  }
+
+  /**
+   * Map queue name to DLQ category
+   */
+  private queueToDlqCategory(queueName: string): DeadLetterCategory {
+    switch (queueName) {
+      case 'sync': return 'sync';
+      case 'notifications': return 'notification';
+      case 'maintenance': return 'other';
+      case 'confirmations': return 'sync';
+      default: return 'other';
+    }
   }
 
   /**

@@ -9,6 +9,7 @@ import * as jwt from 'jsonwebtoken';
 import * as fs from 'fs';
 import { BasePushProvider } from './base';
 import { createLogger } from '../../../utils/logger';
+import { createCircuitBreaker, type CircuitBreaker } from '../../circuitBreaker';
 import type { PushMessage, PushResult } from '../types';
 
 const log = createLogger('FCM');
@@ -22,6 +23,9 @@ interface ServiceAccount {
 export class FCMPushProvider extends BasePushProvider {
   private accessToken: { token: string; expires: number } | null = null;
   private serviceAccountCache: ServiceAccount | null = null;
+  private configuredCache: boolean | null = null;
+  // Circuit breaker: 5 failures → open for 60s → half-open probe
+  private fcmCircuit: CircuitBreaker<PushResult>;
 
   constructor() {
     super({
@@ -29,39 +33,53 @@ export class FCMPushProvider extends BasePushProvider {
       priority: 100,
       platform: 'android',
     });
+
+    this.fcmCircuit = createCircuitBreaker<PushResult>({
+      name: 'fcm',
+      failureThreshold: 5,
+      recoveryTimeout: 60_000,
+    });
+
+    // Eagerly load and cache the service account at construction time
+    // to avoid blocking the event loop with fs.readFileSync during notification sends
+    this.loadServiceAccount();
   }
 
   /**
-   * Check if FCM is configured with service account
+   * Eagerly load service account file. Called once at construction.
    */
-  isConfigured(): boolean {
+  private loadServiceAccount(): void {
     const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT;
-    if (!serviceAccountPath) return false;
+    if (!serviceAccountPath) {
+      this.configuredCache = false;
+      return;
+    }
 
     try {
-      fs.accessSync(serviceAccountPath, fs.constants.R_OK);
-      return true;
+      const content = fs.readFileSync(serviceAccountPath, 'utf8');
+      this.serviceAccountCache = JSON.parse(content);
+      this.configuredCache = true;
+      log.debug('FCM service account loaded and cached');
     } catch {
-      return false;
+      this.configuredCache = false;
     }
   }
 
   /**
-   * Load and cache the service account JSON
+   * Check if FCM is configured with service account (uses cached result)
+   */
+  isConfigured(): boolean {
+    return this.configuredCache === true;
+  }
+
+  /**
+   * Get the cached service account JSON
    */
   private getServiceAccount(): ServiceAccount {
     if (this.serviceAccountCache) {
       return this.serviceAccountCache;
     }
-
-    const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT;
-    if (!serviceAccountPath) {
-      throw new Error('FCM not configured: missing FCM_SERVICE_ACCOUNT');
-    }
-
-    const content = fs.readFileSync(serviceAccountPath, 'utf8');
-    this.serviceAccountCache = JSON.parse(content);
-    return this.serviceAccountCache!;
+    throw new Error('FCM not configured: missing or unreadable FCM_SERVICE_ACCOUNT');
   }
 
   /**
@@ -95,6 +113,7 @@ export class FCMPushProvider extends BasePushProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwtToken}`,
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
@@ -114,76 +133,106 @@ export class FCMPushProvider extends BasePushProvider {
   }
 
   /**
-   * Send push notification to Android device
+   * Send push notification to Android device.
+   * Wrapped in a circuit breaker — 5xx/network errors trip the circuit,
+   * 4xx errors (invalid token, etc.) return failure without tripping.
    */
   protected async sendNotification(
     deviceToken: string,
     message: PushMessage
   ): Promise<PushResult> {
-    const serviceAccount = this.getServiceAccount();
-    const projectId = serviceAccount.project_id;
-    const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+    return this.fcmCircuit.execute(async () => {
+      const serviceAccount = this.getServiceAccount();
+      const projectId = serviceAccount.project_id;
+      const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
-    const payload = {
-      message: {
-        token: deviceToken,
-        notification: {
-          title: message.title,
-          body: message.body,
-        },
-        data: message.data || {},
-        android: {
-          priority: 'high' as const,
+      const payload = {
+        message: {
+          token: deviceToken,
           notification: {
-            sound: 'default',
-            channelId: 'transactions',
+            title: message.title,
+            body: message.body,
+          },
+          data: message.data || {},
+          android: {
+            priority: 'high' as const,
+            notification: {
+              sound: 'default',
+              channelId: 'transactions',
+            },
           },
         },
-      },
-    };
+      };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${await this.getAccessToken()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+      // getAccessToken() may throw on OAuth errors → trips circuit (appropriate)
+      const accessToken = await this.getAccessToken();
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      let errorJson: Record<string, unknown> = {};
-      try {
-        errorJson = JSON.parse(errorBody);
-      } catch {
-        // Not JSON
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let errorJson: Record<string, unknown> = {};
+        try {
+          errorJson = JSON.parse(errorBody);
+        } catch {
+          // Not JSON
+        }
+
+        const errorMsg = (errorJson as { error?: { message?: string } }).error?.message ||
+                         errorBody ||
+                         `HTTP ${response.status}`;
+
+        // 5xx = service outage, throw to trip circuit breaker
+        if (response.status >= 500) {
+          throw new Error(`FCM ${response.status}: ${errorMsg}`);
+        }
+
+        // 4xx = client error (invalid token, etc.), return without tripping circuit
+        return { success: false, error: `FCM ${response.status}: ${errorMsg}` };
       }
 
-      const errorMsg = (errorJson as { error?: { message?: string } }).error?.message ||
-                       errorBody ||
-                       `HTTP ${response.status}`;
-      throw new Error(`FCM ${response.status}: ${errorMsg}`);
-    }
-
-    const result = await response.json() as { name: string };
-    log.debug(`FCM notification sent to device ${deviceToken.slice(0, 8)}...`);
-    return {
-      success: true,
-      messageId: result.name,
-    };
+      const result = await response.json() as { name: string };
+      log.debug(`FCM notification sent to device ${deviceToken.slice(0, 8)}...`);
+      return {
+        success: true,
+        messageId: result.name,
+      };
+    });
   }
 }
 
+// Cache for legacy function — checked once per process
+let _fcmConfiguredCache: boolean | null = null;
+
 // Export legacy function for backward compatibility
 export function isFCMConfigured(): boolean {
+  if (_fcmConfiguredCache !== null) return _fcmConfiguredCache;
+
   const serviceAccountPath = process.env.FCM_SERVICE_ACCOUNT;
-  if (!serviceAccountPath) return false;
+  if (!serviceAccountPath) {
+    _fcmConfiguredCache = false;
+    return false;
+  }
 
   try {
     fs.accessSync(serviceAccountPath, fs.constants.R_OK);
+    _fcmConfiguredCache = true;
     return true;
   } catch {
+    _fcmConfiguredCache = false;
     return false;
   }
+}
+
+/** Reset the isFCMConfigured cache (for testing only) */
+export function _resetFCMConfiguredCache(): void {
+  _fcmConfiguredCache = null;
 }

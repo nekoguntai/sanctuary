@@ -2214,6 +2214,23 @@ describe('Transaction Service', () => {
       ).rejects.toThrow('Wallet not found');
     });
 
+    it('should treat non-testnet batch wallets as mainnet during output validation', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        network: 'mainnet',
+        devices: [],
+      });
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 30_000 },
+      ];
+
+      await expect(
+        createBatchTransaction(walletId, outputs, 10)
+      ).rejects.toThrow('Invalid address');
+    });
+
     it('should throw error when no outputs provided', async () => {
       await expect(
         createBatchTransaction(walletId, [], 10)
@@ -2240,6 +2257,19 @@ describe('Transaction Service', () => {
       // Should have change output
       expect(result.changeAmount).toBeGreaterThan(546);
       expect(result.changeAddress).toBeDefined();
+    });
+
+    it('should disable RBF sequence numbers in batch mode when enableRBF is false', async () => {
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+
+      const result = await createBatchTransaction(walletId, outputs, 10, {
+        enableRBF: false,
+      });
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.txInputs.every((input) => input.sequence === 0xffffffff)).toBe(true);
     });
 
     it('should throw when selectedUtxoIds filtering leaves no batch inputs', async () => {
@@ -2364,6 +2394,41 @@ describe('Transaction Service', () => {
       const result = await createBatchTransaction(walletId, outputs, 10);
 
       expect(result.psbtBase64).toBeDefined();
+    });
+
+    it('should continue when batch descriptor parsing does not provide an xpub', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigNativeSegwit,
+        id: walletId,
+        devices: [],
+        fingerprint: null,
+        descriptor: "wpkh([aabbccdd/84'/1'/0']tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*)",
+      });
+      mockParseDescriptor.mockImplementationOnce(() => ({
+        type: 'wpkh',
+        xpub: undefined,
+        fingerprint: 'aabbccdd',
+      } as any));
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation).toBeUndefined();
+    });
+
+    it('should preserve empty input derivation paths when address metadata is missing', async () => {
+      mockPrismaClient.address.findMany.mockResolvedValue([]);
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+
+      expect(result.inputPaths.length).toBeGreaterThan(0);
+      expect(result.inputPaths.every((path) => path === '')).toBe(true);
     });
 
     it('should use nonWitnessUtxo for legacy batch wallet inputs', async () => {
@@ -2621,6 +2686,37 @@ describe('Transaction Service', () => {
       const result = await createBatchTransaction(walletId, outputs, 10);
 
       expect(result.psbtBase64).toBeDefined();
+    });
+
+    it('should build multisig batch PSBT when descriptor type is not a recognized script wrapper', async () => {
+      mockParseDescriptor.mockImplementationOnce(() => ({
+        type: 'sortedmulti',
+        quorum: 2,
+        keys: [
+          {
+            fingerprint: 'aabbccdd',
+            accountPath: "48'/1'/0'/2'",
+            xpub: multisigKeyInfo[0].xpub,
+            derivationPath: '0/*',
+          },
+          {
+            fingerprint: 'eeff0011',
+            accountPath: "48'/1'/0'/2'",
+            xpub: multisigKeyInfo[1].xpub,
+            derivationPath: '0/*',
+          },
+        ],
+      } as any));
+
+      const outputs = [
+        { address: testnetAddresses.nativeSegwit[0], amount: 50_000 },
+      ];
+      const result = await createBatchTransaction(walletId, outputs, 10);
+      const psbt = bitcoin.Psbt.fromBase64(result.psbtBase64);
+
+      expect(psbt.data.inputs[0].bip32Derivation?.length).toBeGreaterThan(0);
+      expect(psbt.data.inputs[0].witnessScript).toBeUndefined();
+      expect(psbt.data.inputs[0].redeemScript).toBeUndefined();
     });
   });
 

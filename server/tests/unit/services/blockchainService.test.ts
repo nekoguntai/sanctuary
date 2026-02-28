@@ -925,6 +925,62 @@ describe('Blockchain Service - Balance Calculation', () => {
       expect(corrected).toBe(0);
       expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
     });
+
+    it('should skip sent transactions that have no outputs payload', async () => {
+      const { correctMisclassifiedConsolidations } = await import(
+        '../../../src/services/bitcoin/utils/balanceCalculation'
+      );
+
+      mockPrisma.address.findMany.mockResolvedValue([{ address: 'bc1qwallet1' }]);
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        {
+          id: 'tx-no-outputs',
+          txid: 'tx-no-outputs',
+          type: 'sent',
+          fee: BigInt(500),
+          outputs: undefined,
+        },
+      ]);
+
+      const corrected = await correctMisclassifiedConsolidations('wallet-1');
+
+      expect(corrected).toBe(0);
+      expect(mockPrisma.transaction.update).not.toHaveBeenCalled();
+      expect(mockPrisma.transactionOutput.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('should handle consolidation correction when fee is null and outputs are already marked ours', async () => {
+      const { correctMisclassifiedConsolidations } = await import(
+        '../../../src/services/bitcoin/utils/balanceCalculation'
+      );
+
+      mockPrisma.address.findMany.mockResolvedValue([{ address: 'bc1qwallet1' }]);
+      mockPrisma.transaction.findMany.mockResolvedValue([
+        {
+          id: 'tx-null-fee',
+          txid: 'tx-null-fee',
+          type: 'sent',
+          fee: null,
+          outputs: [
+            { id: 'out-wallet', address: 'bc1qwallet1', isOurs: true },
+            { id: 'out-unknown', address: null, isOurs: false },
+          ],
+        },
+      ]);
+      mockPrisma.transaction.update.mockResolvedValue({});
+
+      const corrected = await correctMisclassifiedConsolidations('wallet-1');
+
+      expect(corrected).toBe(1);
+      expect(mockPrisma.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'tx-null-fee' },
+        data: {
+          type: 'consolidation',
+          amount: BigInt(0),
+        },
+      });
+      expect(mockPrisma.transactionOutput.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   describe('recalculateWalletBalances', () => {

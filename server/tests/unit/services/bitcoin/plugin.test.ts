@@ -253,6 +253,26 @@ describe('Bitcoin Plugin Registry', () => {
       const result = setActivePlugin('blockchain', 'nonexistent');
       expect(result).toBe(false);
     });
+
+    it('should return null from getPlugin when plugin map lookup is unavailable despite active id', () => {
+      const provider = createMockBlockchainProvider('p1', 'P1');
+      registerPlugin('blockchain', 'p1', provider);
+
+      const originalGet = Map.prototype.get;
+      let getCalls = 0;
+      const getSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function(this: Map<any, any>, key: unknown) {
+        getCalls += 1;
+        if (getCalls === 2 && key === 'blockchain') {
+          return undefined;
+        }
+        return originalGet.call(this, key);
+      });
+
+      const retrieved = getPlugin<BlockchainProvider>('blockchain');
+      getSpy.mockRestore();
+
+      expect(retrieved).toBeNull();
+    });
   });
 
   describe('setPluginEnabled', () => {
@@ -284,6 +304,28 @@ describe('Bitcoin Plugin Registry', () => {
       setPluginEnabled('blockchain', 'missing', false);
 
       expect(getPlugin<BlockchainProvider>('blockchain')).toBe(provider);
+    });
+
+    it('should clear active plugin when priority selection map lookup is unavailable', () => {
+      const active = createMockBlockchainProvider('active', 'Active');
+      const backup = createMockBlockchainProvider('backup', 'Backup');
+      registerPlugin('blockchain', 'active', active, { priority: 0 });
+      registerPlugin('blockchain', 'backup', backup, { priority: 10 });
+
+      const originalGet = Map.prototype.get;
+      let getCalls = 0;
+      const getSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function(this: Map<any, any>, key: unknown) {
+        getCalls += 1;
+        if (getCalls === 3 && key === 'blockchain') {
+          return undefined;
+        }
+        return originalGet.call(this, key);
+      });
+
+      unregisterPlugin('blockchain', 'active');
+      getSpy.mockRestore();
+
+      expect(getPlugin<BlockchainProvider>('blockchain')).toBeNull();
     });
   });
 

@@ -25,19 +25,31 @@ vi.mock('../../../src/config', () => ({
   default: { gatewaySecret: 'test-secret' },
 }));
 
+type BufferedWebSocket = WebSocket & { __testMessageBuffer?: any[] };
+
+const dequeueBufferedMessage = (socket: BufferedWebSocket, predicate?: (msg: any) => boolean) => {
+  const buffer = socket.__testMessageBuffer;
+  if (!buffer || buffer.length === 0) return null;
+
+  const index = buffer.findIndex((msg) => !predicate || predicate(msg));
+  if (index < 0) return null;
+
+  const [matched] = buffer.splice(index, 1);
+  return matched;
+};
+
 const waitForJsonMessage = (socket: WebSocket, predicate?: (msg: any) => boolean) =>
   new Promise<any>((resolve, reject) => {
-    const onMessage = (data: WebSocket.RawData) => {
-      try {
-        const parsed = JSON.parse(data.toString());
-        if (!predicate || predicate(parsed)) {
-          cleanup();
-          resolve(parsed);
-        }
-      } catch (err) {
+    const bufferedSocket = socket as BufferedWebSocket;
+    const tryResolveFromBuffer = () => {
+      const matched = dequeueBufferedMessage(bufferedSocket, predicate);
+      if (matched) {
         cleanup();
-        reject(err);
+        resolve(matched);
       }
+    };
+    const onMessage = () => {
+      tryResolveFromBuffer();
     };
     const onError = (err: Error) => {
       cleanup();
@@ -49,6 +61,7 @@ const waitForJsonMessage = (socket: WebSocket, predicate?: (msg: any) => boolean
     };
     socket.on('message', onMessage);
     socket.on('error', onError);
+    tryResolveFromBuffer();
   });
 
 const waitForClose = (socket: WebSocket) =>

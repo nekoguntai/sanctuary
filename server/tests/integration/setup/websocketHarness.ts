@@ -4,6 +4,8 @@ import { WebSocket } from 'ws';
 import { SanctauryWebSocketServer } from '../../../src/websocket/clientServer';
 import { GatewayWebSocketServer } from '../../../src/websocket/gatewayServer';
 
+type BufferedWebSocket = WebSocket & { __testMessageBuffer?: unknown[] };
+
 interface WebSocketHarnessOptions {
   enableGateway?: boolean;
 }
@@ -24,6 +26,18 @@ const waitForOpen = (socket: WebSocket) =>
     socket.once('open', () => resolve());
     socket.once('error', reject);
   });
+
+const attachMessageBuffer = (socket: WebSocket): void => {
+  const bufferedSocket = socket as BufferedWebSocket;
+  bufferedSocket.__testMessageBuffer = [];
+  socket.on('message', (data) => {
+    try {
+      bufferedSocket.__testMessageBuffer?.push(JSON.parse(data.toString()));
+    } catch {
+      // Ignore non-JSON test messages.
+    }
+  });
+};
 
 export const createWebSocketTestServer = async (
   options: WebSocketHarnessOptions = {}
@@ -65,6 +79,7 @@ export const createWebSocketTestServer = async (
       const socket = new WebSocket(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
+      attachMessageBuffer(socket);
       await waitForOpen(socket);
       return socket;
     },
@@ -73,6 +88,7 @@ export const createWebSocketTestServer = async (
         throw new Error('Gateway WebSocket server not enabled');
       }
       const socket = new WebSocket(gatewayUrl);
+      attachMessageBuffer(socket);
       await waitForOpen(socket);
       return socket;
     },

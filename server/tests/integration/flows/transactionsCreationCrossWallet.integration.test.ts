@@ -50,12 +50,18 @@ vi.mock('../../../src/services/auditService', async () => {
   const actual = await vi.importActual<typeof import('../../../src/services/auditService')>(
     '../../../src/services/auditService'
   );
+
+  const auditService = Object.assign(
+    Object.create(Object.getPrototypeOf(actual.auditService)),
+    actual.auditService,
+    {
+      logFromRequest: (...args: unknown[]) => mockAuditLogFromRequest(...args),
+    }
+  );
+
   return {
     ...actual,
-    auditService: {
-      ...actual.auditService,
-      logFromRequest: (...args: unknown[]) => mockAuditLogFromRequest(...args),
-    },
+    auditService,
   };
 });
 

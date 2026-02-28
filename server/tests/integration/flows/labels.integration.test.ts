@@ -58,6 +58,22 @@ describeWithDb('Labels API Integration', () => {
     });
   }
 
+  async function ensureWalletAddress(walletId: string) {
+    const existingAddress = await prisma.address.findFirst({
+      where: { walletId },
+    });
+    if (existingAddress) return existingAddress;
+
+    return prisma.address.create({
+      data: {
+        walletId,
+        address: `tb1qlabel${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
+        derivationPath: "m/84'/1'/0'/0/0",
+        index: 0,
+      },
+    });
+  }
+
   describe('wallet labels CRUD', () => {
     it('creates, lists, gets, updates, and deletes a label', async () => {
       const { token } = await createAndLoginUser(app, prisma);
@@ -207,9 +223,7 @@ describeWithDb('Labels API Integration', () => {
       ]);
 
       const transaction = await createTransaction(walletId);
-      const address = await prisma.address.findFirstOrThrow({
-        where: { walletId },
-      });
+      const address = await ensureWalletAddress(walletId);
 
       const addTxLabels = await request(app)
         .post(`/api/v1/labels/transactions/${transaction.id}/labels`)

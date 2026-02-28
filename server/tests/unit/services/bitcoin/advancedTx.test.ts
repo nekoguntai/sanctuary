@@ -199,6 +199,14 @@ describe('Advanced Transaction Features', () => {
       ).rejects.toThrow('confirmed');
     });
 
+    it('should use the default non-replaceable reason when reason text is empty', async () => {
+      mockElectrumClient.getTransaction.mockRejectedValueOnce(new Error(''));
+
+      await expect(
+        createRBFTransaction(originalTxid, 50, walletId, 'testnet')
+      ).rejects.toThrow('Transaction cannot be replaced');
+    });
+
     it('should reject RBF for non-RBF signaled transaction', async () => {
       // Mock an unconfirmed transaction without RBF signaling
       const mockTx = createMockTransaction({ txid: originalTxid, confirmations: 0 });
@@ -656,6 +664,71 @@ describe('Advanced Transaction Features', () => {
 
       expect(result.psbt).toBeDefined();
       expect(result.inputPaths[0]).toBe('m/84/1/0/0/0');
+    });
+
+    it('keeps outputs unchanged when calculated fee delta is not positive', async () => {
+      const spendAddress = testnetAddresses.nativeSegwit[0];
+      const changeAddress = testnetAddresses.nativeSegwit[1];
+      const spendScriptHex = bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet).toString('hex');
+      const inputHashes = ['21', '22', '23', '24', '25'].map((hex) => Buffer.from(hex.repeat(32), 'hex'));
+      const inputTxids = inputHashes.map((hash) => Buffer.from(hash).reverse().toString('hex'));
+
+      const tx = new bitcoin.Transaction();
+      tx.version = 2;
+      for (const hash of inputHashes) {
+        tx.addInput(hash, 0, RBF_SEQUENCE);
+      }
+
+      const externalValue = 100_000;
+      tx.addOutput(bitcoin.address.toOutputScript(spendAddress, bitcoin.networks.testnet), externalValue);
+      tx.addOutput(bitcoin.address.toOutputScript(changeAddress, bitcoin.networks.testnet), 1);
+
+      const vsize = tx.virtualSize();
+      let oldFee = 0;
+      for (let fee = 1; fee < 200_000; fee++) {
+        const rate = fee / vsize;
+        if (Number(rate.toFixed(2)) === 10 && rate > 10.002) {
+          oldFee = fee;
+          break;
+        }
+      }
+      expect(oldFee).toBeGreaterThan(0);
+
+      const totalInput = inputHashes.length * 100_000;
+      const originalChangeValue = totalInput - externalValue - oldFee;
+      expect(originalChangeValue).toBeGreaterThan(546);
+      tx.outs[1].value = originalChangeValue;
+      const txHex = tx.toHex();
+
+      mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
+        id: walletId,
+        name: 'RBF Zero Delta Wallet',
+        descriptor: null,
+        fingerprint: 'aabbccdd',
+        devices: [{ device: { id: 'device-1', fingerprint: 'aabbccdd', xpub: testnetTpub } }],
+      });
+      mockPrismaClient.address.findMany
+        .mockResolvedValueOnce([
+          { address: spendAddress, derivationPath: "m/84'/1'/0'/0/0" },
+          { address: changeAddress, derivationPath: "m/84'/1'/0'/1/0" },
+        ])
+        .mockResolvedValueOnce([{ address: changeAddress }]);
+
+      mockElectrumClient.getTransaction.mockImplementation(async (txid: string) => {
+        if (txid === originalTxid) return { txid: originalTxid, confirmations: 0, hex: txHex, vin: [], vout: [] } as any;
+        if (inputTxids.includes(txid)) {
+          return {
+            txid,
+            vout: [{ value: 0.001, scriptPubKey: { hex: spendScriptHex, address: spendAddress } }],
+          } as any;
+        }
+        return { txid, confirmations: 0, hex: txHex, vin: [], vout: [] } as any;
+      });
+
+      const result = await createRBFTransaction(originalTxid, 10.001, walletId, 'testnet');
+
+      expect(result.feeDelta).toBeLessThanOrEqual(0);
+      expect(result.outputs.find((output) => output.address === changeAddress)?.value).toBe(originalChangeValue);
     });
   });
 

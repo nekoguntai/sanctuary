@@ -552,7 +552,7 @@ describe('WebSocketClient', () => {
       expect(mockWsInstances.length).toBe(3);
     });
 
-    it('should stop reconnecting after max attempts without successful open', () => {
+    it('should stop fast reconnecting after max attempts and use slow retry', () => {
       client.connect();
       const ws = getLastWs();
 
@@ -560,18 +560,22 @@ describe('WebSocketClient', () => {
       // Don't call simulateOpen() so reconnectAttempts keep incrementing
       ws.simulateClose(1006, 'Abnormal');
 
-      // Each reconnect attempt increments the counter
-      for (let i = 0; i < 10; i++) {
+      // Exhaust fast retries (maxReconnectAttempts = 5)
+      for (let i = 0; i < 5; i++) {
         vi.advanceTimersByTime(60000);
-        if (mockWsInstances.length > 1) {
-          const lastWs = getLastWs();
-          // Close without opening (so reconnectAttempts keeps counting)
-          lastWs.simulateClose(1006, 'Abnormal');
-        }
+        expect(mockWsInstances.length).toBe(i + 2); // original + fast retries
+        getLastWs().simulateClose(1006, 'Abnormal');
       }
 
-      // maxReconnectAttempts is 5, so total should be 1 (original) + 5 (retries) = 6
-      expect(mockWsInstances.length).toBeLessThanOrEqual(6);
+      const afterFastRetries = mockWsInstances.length;
+
+      // No additional reconnect before 5-minute slow retry window
+      vi.advanceTimersByTime(4 * 60 * 1000);
+      expect(mockWsInstances.length).toBe(afterFastRetries);
+
+      // Slow retry should fire after 5 minutes
+      vi.advanceTimersByTime(60 * 1000);
+      expect(mockWsInstances.length).toBe(afterFastRetries + 1);
     });
 
     it('should reset reconnect attempts on successful connection', () => {

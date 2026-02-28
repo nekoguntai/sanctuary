@@ -454,7 +454,7 @@ export async function updateWalletTelegramSettings(
   await prisma.user.update({
     where: { id: userId },
     data: {
-      preferences: updatedPrefs as Prisma.InputJsonValue,
+      preferences: updatedPrefs as unknown as Prisma.InputJsonValue,
     },
   });
 }

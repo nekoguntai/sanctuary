@@ -87,6 +87,7 @@ import { estimateTransactionSize, calculateFee } from '../../../../src/services/
 import { broadcastTransaction, recalculateWalletBalances } from '../../../../src/services/bitcoin/blockchain';
 import * as nodeClient from '../../../../src/services/bitcoin/nodeClient';
 import * as psbtBuilder from '../../../../src/services/bitcoin/psbtBuilder';
+import * as asyncUtils from '../../../../src/utils/async';
 
 const flushPromises = async () => {
   for (let i = 0; i < 4; i++) {
@@ -1484,6 +1485,50 @@ describe('Transaction Service', () => {
       expect(mockEmitTransactionReceived).toHaveBeenCalled();
     });
 
+    it('should notify receiving wallets from persisted records and tolerate notification failures', async () => {
+      const receivingWalletId = 'receiving-wallet-id';
+      const rawTxHex = createRawTxHex([
+        { address: recipient, value: 30_000 },
+      ]);
+
+      (mockPrismaClient.$transaction as Mock).mockResolvedValueOnce({
+        txType: 'sent',
+        mainTransactionCreated: false,
+        unlockedCount: 0,
+        createdReceivingTransactions: [{
+          walletId: receivingWalletId,
+          amount: 7_000,
+          address: testnetAddresses.legacy[1],
+        }],
+      });
+      mockNotifyNewTransactions.mockRejectedValueOnce(new Error('receiver notification failed'));
+
+      const metadata = {
+        recipient,
+        amount: 30_000,
+        fee: 1_000,
+        utxos: [{ txid: sampleUtxos[0].txid, vout: sampleUtxos[0].vout }],
+        rawTxHex,
+      };
+
+      const result = await broadcastAndSave(walletId, undefined, metadata);
+      await flushPromises();
+
+      expect(result.broadcasted).toBe(true);
+      expect(mockEmitTransactionReceived).toHaveBeenCalledWith(expect.objectContaining({
+        walletId: receivingWalletId,
+        amount: 7_000n,
+      }));
+      expect(mockNotifyNewTransactions).toHaveBeenCalledWith(
+        receivingWalletId,
+        [expect.objectContaining({
+          txid: result.txid,
+          type: 'received',
+          amount: 7_000n,
+        })]
+      );
+    });
+
     it('should skip creating duplicate pending receive transaction records', async () => {
       const internalAddress = testnetAddresses.legacy[1];
       const rawTxHex = createRawTxHex([
@@ -2469,6 +2514,50 @@ describe('Transaction Service', () => {
 
       expect(nodeClient.getNodeClient).toHaveBeenCalled();
       expect(psbt.data.inputs[0].nonWitnessUtxo).toBeDefined();
+    });
+
+    it('should throw when legacy batch raw transactions are unavailable in cache', async () => {
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        ...sampleWallets.singleSigLegacy,
+        id: walletId,
+        devices: [],
+      });
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([
+        {
+          ...sampleUtxos[2],
+          walletId,
+          scriptPubKey: '76a914' + 'a'.repeat(40) + '88ac',
+        },
+      ]);
+      mockPrismaClient.address.findMany.mockResolvedValue([
+        {
+          id: 'legacy-input-addr',
+          address: sampleUtxos[2].address,
+          derivationPath: "m/44'/1'/0'/0/0",
+          walletId,
+        },
+      ]);
+      mockPrismaClient.address.findFirst.mockResolvedValue({
+        id: 'legacy-change-addr',
+        address: testnetAddresses.legacy[1],
+        derivationPath: "m/44'/1'/0'/1/0",
+        walletId,
+        used: false,
+        index: 0,
+      });
+
+      const mapWithConcurrencySpy = vi.spyOn(asyncUtils, 'mapWithConcurrency').mockResolvedValueOnce([] as any);
+      const outputs = [
+        { address: testnetAddresses.legacy[0], amount: 50_000 },
+      ];
+
+      try {
+        await expect(
+          createBatchTransaction(walletId, outputs, 10)
+        ).rejects.toThrow(`Failed to fetch raw transaction for ${sampleUtxos[2].txid}`);
+      } finally {
+        mapWithConcurrencySpy.mockRestore();
+      }
     });
   });
 

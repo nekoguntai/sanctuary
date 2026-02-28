@@ -6,11 +6,13 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
+import { BIP32Factory } from 'bip32';
 import { vi } from 'vitest';
 import {
   parseDescriptor,
   deriveAddress,
   deriveAddressFromDescriptor,
+  deriveAddressFromParsedDescriptor,
   validateXpub,
   deriveAddresses,
   deriveAddressesFromDescriptor,
@@ -21,6 +23,7 @@ import { testXpubs, testnetAddresses, mainnetAddresses } from '../../../fixtures
 
 // Initialize ECC library for Taproot support
 bitcoin.initEccLib(ecc);
+const bip32 = BIP32Factory(ecc);
 
 describe('Address Derivation Service', () => {
   describe('parseDescriptor', () => {
@@ -377,6 +380,69 @@ describe('Address Derivation Service', () => {
 
       expect(receive.address).not.toBe(change.address);
     });
+
+    it('throws when parsed single-sig descriptor is missing xpub', () => {
+      expect(() =>
+        deriveAddressFromParsedDescriptor(
+          { type: 'wpkh', path: '0/*' } as any,
+          0,
+          { network: 'testnet' }
+        )
+      ).toThrow('No xpub found in descriptor');
+    });
+
+    it('throws when parsed multisig descriptor has no keys', () => {
+      expect(() =>
+        deriveAddressFromParsedDescriptor(
+          { type: 'wsh-sortedmulti', quorum: 1, keys: [] } as any,
+          0,
+          { network: 'testnet' }
+        )
+      ).toThrow('No keys found in multisig descriptor');
+    });
+
+    it('throws when parsed multisig descriptor has no quorum', () => {
+      expect(() =>
+        deriveAddressFromParsedDescriptor(
+          {
+            type: 'wsh-sortedmulti',
+            keys: [{
+              fingerprint: 'aabbccdd',
+              accountPath: "84'/1'/0'",
+              xpub: testXpubs.testnet.bip84,
+              derivationPath: '0/*',
+            }],
+          } as any,
+          0,
+          { network: 'testnet' }
+        )
+      ).toThrow('No quorum found in multisig descriptor');
+    });
+
+    it('throws when parsed multisig derivation yields no public key', () => {
+      const fakeNode: any = {
+        publicKey: undefined,
+        derive: vi.fn(() => fakeNode),
+      };
+
+      expect(() =>
+        deriveAddressFromParsedDescriptor(
+          {
+            type: 'wsh-sortedmulti',
+            quorum: 1,
+            keys: [{
+              fingerprint: 'aabbccdd',
+              accountPath: "84'/1'/0'",
+              xpub: testXpubs.testnet.bip84,
+              derivationPath: '0/*',
+            }],
+          } as any,
+          0,
+          { network: 'testnet' },
+          { fromBase58: () => fakeNode }
+        )
+      ).toThrow('Failed to derive public key from xpub');
+    });
   });
 
   describe('validateXpub', () => {
@@ -428,6 +494,24 @@ describe('Address Derivation Service', () => {
 
       expect(result.valid).toBe(true);
       expect(result.scriptType).toBe('nested_segwit');
+    });
+
+    it('should validate lowercase vpub format', () => {
+      const vpub = 'vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc';
+
+      const result = validateXpub(vpub, 'testnet');
+
+      expect(result.valid).toBe(true);
+      expect(result.scriptType).toBe('native_segwit');
+    });
+
+    it('defaults script type when validating a non-public but structurally valid extended key prefix', () => {
+      const xprv = bip32.fromSeed(Buffer.alloc(32, 1), bitcoin.networks.bitcoin).toBase58();
+
+      const result = validateXpub(xprv, 'mainnet');
+
+      expect(result.valid).toBe(true);
+      expect(result.scriptType).toBe('native_segwit');
     });
   });
 
@@ -662,6 +746,25 @@ describe('Address Derivation Service', () => {
       ).toThrow('Failed to generate address');
 
       spy.mockRestore();
+    });
+
+    it('throws when xpub derivation yields no public key', () => {
+      const fakeNode: any = {
+        publicKey: undefined,
+        derive: vi.fn(() => fakeNode),
+      };
+
+      expect(() =>
+        deriveAddress(
+          testXpubs.testnet.bip84,
+          0,
+          {
+            scriptType: 'native_segwit',
+            network: 'testnet',
+          },
+          { fromBase58: () => fakeNode }
+        )
+      ).toThrow('Failed to derive public key');
     });
 
     it('throws when multisig P2WSH address generation returns no address', () => {

@@ -269,7 +269,8 @@ export function deriveAddress(
     scriptType?: 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy';
     network?: 'mainnet' | 'testnet' | 'regtest';
     change?: boolean; // false = external (receive), true = internal (change)
-  } = {}
+  } = {},
+  deps: DescriptorDerivationDeps = {}
 ): {
   address: string;
   derivationPath: string;
@@ -287,7 +288,8 @@ export function deriveAddress(
   const standardXpub = convertToStandardXpub(xpub);
 
   // Parse xpub
-  const node = bip32.fromBase58(standardXpub, networkObj);
+  const fromBase58 = deps.fromBase58 ?? ((extendedKey: string, net: bitcoin.Network) => bip32.fromBase58(extendedKey, net) as unknown as DerivationNode);
+  const node = fromBase58(standardXpub, networkObj);
 
   // Derive address: m/<change>/<index>
   const changeIndex = change ? 1 : 0;
@@ -380,11 +382,40 @@ export function deriveAddressFromDescriptor(
   publicKey: Buffer;
 } {
   const parsed = parseDescriptor(descriptor);
+  return deriveAddressFromParsedDescriptor(parsed, index, options);
+}
+
+type DerivationNode = {
+  publicKey?: Buffer;
+  derive(index: number): DerivationNode;
+};
+
+type DescriptorDerivationDeps = {
+  fromBase58?: (xpub: string, network: bitcoin.Network) => DerivationNode;
+};
+
+/**
+ * Derive address from a pre-parsed descriptor.
+ * Useful for callers that already validated/parsing descriptors and for targeted branch testing.
+ */
+export function deriveAddressFromParsedDescriptor(
+  parsed: ParsedDescriptor,
+  index: number,
+  options: {
+    network?: 'mainnet' | 'testnet' | 'regtest';
+    change?: boolean;
+  } = {},
+  deps: DescriptorDerivationDeps = {}
+): {
+  address: string;
+  derivationPath: string;
+  publicKey: Buffer;
+} {
   const { network = 'mainnet', change = false } = options;
 
   // Handle multisig descriptors
   if (parsed.type === 'wsh-sortedmulti' || parsed.type === 'sh-wsh-sortedmulti') {
-    return deriveMultisigAddress(parsed, index, { network, change });
+    return deriveMultisigAddress(parsed, index, { network, change }, deps);
   }
 
   // Map descriptor type to script type for single-sig
@@ -417,7 +448,8 @@ function deriveMultisigAddress(
   options: {
     network: 'mainnet' | 'testnet' | 'regtest';
     change: boolean;
-  }
+  },
+  deps: DescriptorDerivationDeps = {}
 ): {
   address: string;
   derivationPath: string;
@@ -425,6 +457,7 @@ function deriveMultisigAddress(
 } {
   const { network, change } = options;
   const networkObj = getNetwork(network);
+  const fromBase58 = deps.fromBase58 ?? ((xpub: string, net: bitcoin.Network) => bip32.fromBase58(xpub, net) as unknown as DerivationNode);
 
   if (!parsed.keys || parsed.keys.length === 0) {
     throw new Error('No keys found in multisig descriptor');
@@ -440,7 +473,7 @@ function deriveMultisigAddress(
   for (const keyInfo of parsed.keys) {
     // Convert zpub/ypub/Zpub/Ypub to standard xpub format for parsing
     const standardXpub = convertToStandardXpub(keyInfo.xpub);
-    const node = bip32.fromBase58(standardXpub, networkObj);
+    const node = fromBase58(standardXpub, networkObj);
     // Derivation path after xpub is typically <0;1>/* or 0/* (external/internal)
     // Handle both formats:
     // - "0/*" -> derive at 0/index (receive only)

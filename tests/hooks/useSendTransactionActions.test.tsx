@@ -512,7 +512,7 @@ describe('useSendTransactionActions', () => {
     expect(ok).toBe(true);
     expect(vi.mocked(transactionsApi.broadcastTransaction)).toHaveBeenCalledWith('wallet-1', {
       signedPsbtBase64: 'signed-psbt',
-      rawTxHex: null,
+      rawTxHex: undefined,
       recipient: 'bc1qrecipient',
       amount: 10000,
       fee: 123,

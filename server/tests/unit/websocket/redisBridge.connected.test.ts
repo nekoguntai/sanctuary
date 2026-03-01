@@ -296,6 +296,30 @@ describe('RedisWebSocketBridge (connected mode)', () => {
     expect(publisher.quit).toHaveBeenCalled();
   });
 
+  it('handles publisher/subscriber connect timeout callbacks during initialize', async () => {
+    vi.useFakeTimers();
+    try {
+      const publisher = createMockPubSubClient({ autoConnect: false });
+      const subscriber = createMockPubSubClient({ autoConnect: false });
+      const { initializeRedisBridge, redisBridge, mocks } = await loadBridgeWithMocks({
+        publisher,
+        subscriber,
+      });
+
+      const initPromise = initializeRedisBridge();
+      await vi.advanceTimersByTimeAsync(5000);
+      await initPromise;
+
+      expect(redisBridge.isActive()).toBe(false);
+      expect(mocks.log.error).toHaveBeenCalledWith(
+        'Failed to initialize Redis WebSocket bridge',
+        expect.any(Object)
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stays local-only when Redis is disconnected or client missing', async () => {
     const disconnected = await loadBridgeWithMocks({ redisConnected: false });
     await disconnected.initializeRedisBridge();

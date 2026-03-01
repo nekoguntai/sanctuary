@@ -262,6 +262,36 @@ describe('tracingMiddleware', () => {
     );
   });
 
+  it('falls back to request path when route metadata is unavailable', () => {
+    configureTracing({ enabled: true });
+    const mw = tracingMiddleware();
+    const req = createRequest({
+      path: '/api/raw-path',
+      originalUrl: '/api/raw-path?x=1',
+      route: undefined,
+    });
+    const res = createResponse(200);
+
+    requestContext.run(
+      {
+        requestId: 'req-no-route',
+        startTime: Date.now(),
+      },
+      () => {
+        mw(req, res, vi.fn());
+        res.end();
+      }
+    );
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Span ended: sanctuary.GET /api/raw-path',
+      expect.objectContaining({
+        status: 'ok',
+        'http.target': '/api/raw-path',
+      })
+    );
+  });
+
   it('no-ops addSpan helpers when no span exists', () => {
     const req = createRequest();
 

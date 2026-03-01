@@ -915,7 +915,7 @@ export class ElectrumPool extends EventEmitter {
         // Backoff state
         consecutiveFailures: stats?.consecutiveFailures || 0,
         backoffLevel: stats?.backoffLevel || 0,
-        cooldownUntil: inCooldown ? stats?.cooldownUntil || null : null,
+        cooldownUntil: inCooldown ? stats!.cooldownUntil : null,
         weight: stats?.weight ?? 1.0,
         // Health history (most recent first)
         healthHistory: stats?.healthHistory || [],
@@ -1475,7 +1475,7 @@ export class ElectrumPool extends EventEmitter {
           // Update database (fire and forget)
           this.updateServerHealthInDb(serverId, false, stats.consecutiveFailures);
           log.warn(`Server ${serverId} marked unhealthy after all connections failed health check`);
-        } else if (results.success > 0) {
+        } else {
           // At least one success - mark healthy and record success
           stats.isHealthy = true;
           // Record success for backoff recovery (once per server per cycle, not per connection)

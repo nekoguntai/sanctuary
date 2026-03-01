@@ -224,7 +224,12 @@ export async function stopWorkerHealthMonitor(): Promise<void> {
   state.running = false;
 
   if (activeCheck) {
-    await activeCheck.catch(() => undefined);
+    try {
+      await activeCheck;
+    } catch {
+      // Defensive: runHealthCheck currently resolves false on failure, but
+      // keep stop resilient if that implementation changes.
+    }
   }
 
   log.info('Worker health monitor stopped');

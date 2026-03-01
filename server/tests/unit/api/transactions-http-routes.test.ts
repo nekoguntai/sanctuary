@@ -370,6 +370,29 @@ describe('Transaction HTTP Routes', () => {
     });
   });
 
+  it('ignores unknown transaction types when deriving subtype counters', async () => {
+    mockWalletCacheGet.mockResolvedValue(null);
+    mockPrismaClient.transaction.groupBy.mockResolvedValue([
+      { type: 'self_transfer', _count: { id: 1 }, _sum: { amount: BigInt(123) } },
+    ] as any);
+    mockPrismaClient.transaction.aggregate.mockResolvedValue({ _sum: { fee: BigInt(0) } });
+    mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      totalCount: 1,
+      receivedCount: 0,
+      sentCount: 0,
+      consolidationCount: 0,
+      totalReceived: 0,
+      totalSent: 0,
+      totalFees: 0,
+      walletBalance: 0,
+    });
+  });
+
   it('returns internal server error when transaction stats lookup fails', async () => {
     mockWalletCacheGet.mockRejectedValue(new Error('cache unavailable'));
 

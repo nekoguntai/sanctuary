@@ -497,6 +497,96 @@ describe('Docker Container Management', () => {
       expect(createCall[0]).toContain('myapp-ollama-1');
     });
 
+    it('should detect project name from frontend container when creating ollama', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Pull image
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'Done',
+      });
+
+      // List containers - frontend name path
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'frontend-123',
+            Names: ['/frontproj-frontend-1'],
+            State: 'running',
+          },
+        ],
+      });
+
+      // Create container
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ Id: 'newollama-frontend' }),
+      });
+
+      // Start container
+      mockFetch.mockResolvedValueOnce({
+        status: 204,
+      });
+
+      const result = await createOllamaContainer();
+
+      expect(result.success).toBe(true);
+      const createCall = mockFetch.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('containers/create')
+      );
+      expect(createCall[0]).toContain('frontproj-ollama-1');
+    });
+
+    it('should fall back to default project when backend/frontend name cannot be parsed for ollama', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Pull image
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'Done',
+      });
+
+      // Name matches backend/frontend includes check but fails extraction regex
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'invalid-name',
+            Names: ['/-backend-1'],
+            State: 'running',
+          },
+        ],
+      });
+
+      // Create container
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ Id: 'newollama-fallback' }),
+      });
+
+      // Start container
+      mockFetch.mockResolvedValueOnce({
+        status: 204,
+      });
+
+      const result = await createOllamaContainer();
+
+      expect(result.success).toBe(true);
+      const createCall = mockFetch.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('containers/create')
+      );
+      expect(createCall[0]).toContain('sanctuary-ollama-1');
+    });
+
     it('should handle container creation failure', async () => {
       // Status check
       mockFetch.mockResolvedValueOnce({
@@ -939,11 +1029,11 @@ describe('Docker Container Management', () => {
         expect(result.message).toContain('Failed to pull Tor image');
       });
 
-      it('should use project name from existing frontend container', async () => {
-        // Status check
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => [],
+    it('should use project name from existing frontend container', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
         });
 
         // Pull image
@@ -980,15 +1070,60 @@ describe('Docker Container Management', () => {
         expect(result.success).toBe(true);
         const createCall = mockFetch.mock.calls.find(
           call => typeof call[0] === 'string' && call[0].includes('containers/create')
-        );
-        expect(createCall[0]).toContain('myproj-tor');
+      );
+      expect(createCall[0]).toContain('myproj-tor');
+    });
+
+    it('should fall back to default project when backend/frontend name cannot be parsed for tor', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       });
 
-      it('should handle tor container create failure', async () => {
-        // Status check
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => [],
+      // Pull image
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'Done',
+      });
+
+      // Name matches includes check but fails extraction regex
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'invalid-name',
+            Names: ['/-backend-1'],
+            State: 'running',
+          },
+        ],
+      });
+
+      // Create
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ Id: 'tor-fallback' }),
+      });
+
+      // Start
+      mockFetch.mockResolvedValueOnce({
+        status: 204,
+      });
+
+      const result = await createTorContainer();
+
+      expect(result.success).toBe(true);
+      const createCall = mockFetch.mock.calls.find(
+        call => typeof call[0] === 'string' && call[0].includes('containers/create')
+      );
+      expect(createCall[0]).toContain('sanctuary-tor');
+    });
+
+    it('should handle tor container create failure', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
         });
 
         // Pull image

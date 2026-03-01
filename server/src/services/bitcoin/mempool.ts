@@ -354,14 +354,14 @@ export async function getBlocksAndMempool() {
           // Calculate average fee rate: totalFees (sats) / blockVSize (vbytes)
           const avgFeeRate = block.blockVSize > 0 ? block.totalFees / block.blockVSize : 0;
           return {
-            height: blockLabels[idx] || `+${idx + 1}`,
+            height: blockLabels[idx],
             medianFee: block.medianFee < 1 ? parseFloat(block.medianFee.toFixed(2)) : Math.round(block.medianFee),
             avgFeeRate: avgFeeRate < 1 ? parseFloat(avgFeeRate.toFixed(2)) : Math.round(avgFeeRate),
             feeRange: block.feeRange.length >= 2
               ? `${formatFeeRate(block.feeRange[0])}-${formatFeeRate(block.feeRange[block.feeRange.length - 1])} sat/vB`
               : `${formatFeeRate(block.medianFee)} sat/vB`,
             size: block.blockVSize / 1000000, // Convert to MB
-            time: blockTimes[idx] || `~${(idx + 1) * 10}m`,
+            time: blockTimes[idx],
             status: 'pending' as const,
             txCount: block.nTx,
             totalFees: block.totalFees / 100000000, // Convert satoshis to BTC
@@ -374,9 +374,7 @@ export async function getBlocksAndMempool() {
           const totalTxCount = additionalBlocks.reduce((sum, b) => sum + b.nTx, 0);
           const totalFees = additionalBlocks.reduce((sum, b) => sum + b.totalFees, 0);
           const totalVsize = additionalBlocks.reduce((sum, b) => sum + b.blockVSize, 0);
-          const avgFee = additionalBlocks.length > 0
-            ? additionalBlocks.reduce((sum, b) => sum + b.medianFee, 0) / additionalBlocks.length
-            : fees.economyFee;
+          const avgFee = additionalBlocks.reduce((sum, b) => sum + b.medianFee, 0) / additionalBlocks.length;
 
           // Calculate actual block count based on vsize
           // A typical block is ~1MB (1,000,000 vbytes)

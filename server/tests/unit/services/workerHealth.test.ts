@@ -335,6 +335,40 @@ describe('workerHealth monitor', () => {
     expect(status.running).toBe(false);
   });
 
+  it('catches in-flight check rejection when stop is called before the check settles', async () => {
+    let rejectInFlight: ((error: unknown) => void) | null = null;
+    const inFlight = new Promise((_, reject) => {
+      rejectInFlight = reject;
+    });
+
+    mockGetConfig.mockReturnValue({
+      worker: {
+        healthUrl: 'http://worker:3002/health',
+        healthTimeoutMs: 3000,
+        healthCheckIntervalMs: 10,
+      },
+    });
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ status: 'healthy' }),
+      })
+      .mockReturnValueOnce(inFlight as Promise<any>);
+
+    const mod = await import('../../../src/services/workerHealth');
+    await mod.startWorkerHealthMonitor();
+    await vi.advanceTimersByTimeAsync(12);
+
+    const stopPromise = mod.stopWorkerHealthMonitor();
+    rejectInFlight?.(new Error('late timeout'));
+    await expect(stopPromise).resolves.toBeUndefined();
+
+    const status = mod.getWorkerHealthStatus();
+    expect(status.running).toBe(false);
+  });
+
   it('uses unknown error fallback when error extraction returns undefined', async () => {
     mockGetErrorMessage.mockReturnValue(undefined as unknown as string);
     mockFetch.mockRejectedValue(new Error('opaque failure'));

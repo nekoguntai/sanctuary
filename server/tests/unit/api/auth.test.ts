@@ -1122,6 +1122,17 @@ describe('Auth API Routes', () => {
       expect(response.body.message).toContain('Public registration is disabled');
     });
 
+    it('should default to disabled registration when setting is missing', async () => {
+      mockPrismaClient.systemSetting.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ username: 'newuser', password: 'StrongPassword123!', email: 'new@example.com' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('Public registration is disabled');
+    });
+
     it('should reject when username is missing', async () => {
       mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
         key: 'registrationEnabled',
@@ -2257,6 +2268,34 @@ describe('Auth API Routes', () => {
       expect(response.body.success).toBe(true);
     });
 
+    it('should allow disabling using backup code when 2FA secret is missing', async () => {
+      const correctPassword = 'CorrectPassword123!';
+      const hashedPassword = await hashPassword(correctPassword);
+
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        password: hashedPassword,
+        twoFactorEnabled: true,
+        twoFactorSecret: null,
+        twoFactorBackupCodes: '[{"hash":"h1"}]',
+      });
+      mockPrismaClient.user.update.mockResolvedValue({});
+
+      const { verifyToken, verifyBackupCode } = await import('../../../src/services/twoFactorService');
+      vi.mocked(verifyToken).mockReset().mockReturnValue(true);
+      vi.mocked(verifyBackupCode).mockReset().mockResolvedValue({ valid: true, updatedCodesJson: '[]' });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/disable')
+        .send({ password: correctPassword, token: 'BACKUP-CODE' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(verifyToken).not.toHaveBeenCalled();
+      expect(verifyBackupCode).toHaveBeenCalledWith('[{"hash":"h1"}]', 'BACKUP-CODE');
+    });
+
     it('should successfully disable 2FA', async () => {
       const correctPassword = 'CorrectPassword123!';
       const hashedPassword = await hashPassword(correctPassword);
@@ -2400,6 +2439,31 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.token).toBeDefined();
+    });
+
+    it('should skip backup code persistence when verifyBackupCode does not return updates', async () => {
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        email: 'test@example.com',
+        isAdmin: false,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'some-secret',
+        twoFactorBackupCodes: '[{"hash":"h1"}]',
+        preferences: { darkMode: true },
+      });
+
+      const twoFactorService = await import('../../../src/services/twoFactorService');
+      vi.mocked(twoFactorService.isBackupCode).mockReset().mockReturnValue(true);
+      vi.mocked(twoFactorService.verifyBackupCode).mockReset().mockResolvedValue({ valid: true });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/verify')
+        .send({ tempToken: 'valid-token', code: 'BACKUP-CODE' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.token).toBeDefined();
+      expect(mockPrismaClient.user.update).not.toHaveBeenCalled();
     });
 
     it('should reject invalid backup code', async () => {

@@ -341,6 +341,26 @@ describe('Descriptor Parser Service', () => {
       }).toThrow('No valid key expressions found in descriptor');
     });
 
+    it('should throw when key expression parsing fails after extraction', () => {
+      const descriptor = 'wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)';
+      const keyExpressionPattern = '\\[([a-fA-F0-9]{8})\\/([^\\]]+)\\]([xyztuvYZTUVpub][a-zA-Z0-9]+)';
+      const originalMatch = String.prototype.match;
+      const matchSpy = vi.spyOn(String.prototype, 'match').mockImplementation(function (pattern: RegExp | string) {
+        if (pattern instanceof RegExp && pattern.source === keyExpressionPattern) {
+          return null;
+        }
+        return originalMatch.call(this, pattern);
+      });
+
+      try {
+        expect(() => {
+          parseDescriptorForImport(descriptor);
+        }).toThrow('Invalid descriptor key expression');
+      } finally {
+        matchSpy.mockRestore();
+      }
+    });
+
     it('should handle descriptor with spaces', () => {
       const descriptor = '  wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)  ';
 

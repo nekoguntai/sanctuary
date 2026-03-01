@@ -118,6 +118,30 @@ describe('UTXO Selection', () => {
       expect(result.changeAmount).toBe(500000 - 100000 - result.estimatedFee);
       expect(result.changeAmount).toBeGreaterThan(0);
     });
+
+    it('should map null scriptPubKey to empty string for auto-selected UTXOs', async () => {
+      const utxos = [
+        {
+          id: 'u-auto-null-script',
+          txid: 'eeee'.repeat(16),
+          vout: 0,
+          amount: BigInt(300000),
+          address: 'tb1qautonullscript',
+          scriptPubKey: null,
+          confirmations: 6,
+          spent: false,
+          frozen: false,
+          walletId: 'wallet-1',
+          draftLock: null,
+        },
+      ];
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+      const result = await selectUTXOs('wallet-1', 10000, 1, UTXOSelectionStrategy.LARGEST_FIRST);
+
+      expect(result.utxos).toHaveLength(1);
+      expect(result.utxos[0].scriptPubKey).toBe('');
+    });
   });
 
   // ========================================
@@ -180,6 +204,37 @@ describe('UTXO Selection', () => {
           [`${'aaa1'.repeat(16)}:0`]
         )
       ).rejects.toThrow('Insufficient funds');
+    });
+
+    it('should map null scriptPubKey to empty string for selected UTXOs', async () => {
+      const txid = 'ddd4'.repeat(16);
+      const utxos = [
+        {
+          id: 'u-null-script',
+          txid,
+          vout: 0,
+          amount: BigInt(200000),
+          address: 'tb1qnullscript',
+          scriptPubKey: null,
+          confirmations: 6,
+          spent: false,
+          frozen: false,
+          walletId: 'wallet-1',
+          draftLock: null,
+        },
+      ];
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+      const result = await selectUTXOs(
+        'wallet-1',
+        10000,
+        1,
+        UTXOSelectionStrategy.LARGEST_FIRST,
+        [`${txid}:0`]
+      );
+
+      expect(result.utxos).toHaveLength(1);
+      expect(result.utxos[0].scriptPubKey).toBe('');
     });
   });
 

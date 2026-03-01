@@ -291,6 +291,24 @@ describe('aiService', () => {
     await expect(mod.suggestTransactionLabel('tx-3', 'token-abc')).resolves.toBeNull();
   });
 
+  it('returns null label suggestion when non-ok error body is unreadable', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('invalid json')),
+      } as any);
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.suggestTransactionLabel('tx-3b', 'token-abc')).resolves.toBeNull();
+  });
+
   it('returns null label suggestion when response payload is invalid', async () => {
     mocks.systemSettingFindMany.mockResolvedValue([
       setting('aiEnabled', true),
@@ -367,6 +385,24 @@ describe('aiService', () => {
     mocks.fetch
       .mockResolvedValueOnce(okJson({ success: true }))
       .mockResolvedValueOnce(errJson(422, { error: 'invalid request' }));
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.executeNaturalQuery('show latest', 'wallet-1', 'token-xyz')).resolves.toBeNull();
+  });
+
+  it('returns null for natural query when non-ok error body is unreadable', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: vi.fn().mockRejectedValue(new Error('invalid json')),
+      } as any);
 
     const mod = await import('../../../src/services/aiService');
     await expect(mod.executeNaturalQuery('show latest', 'wallet-1', 'token-xyz')).resolves.toBeNull();
@@ -565,6 +601,27 @@ describe('aiService', () => {
     });
   });
 
+  it('returns pull-model fallback error when non-ok body is unreadable', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('invalid json')),
+      } as any);
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.pullModel('llama3.2')).resolves.toEqual({
+      success: false,
+      error: 'Pull failed',
+    });
+  });
+
   it('returns pull-model endpoint missing error', async () => {
     mocks.systemSettingFindMany.mockResolvedValue([
       setting('aiEnabled', true),
@@ -669,6 +726,27 @@ describe('aiService', () => {
     mocks.fetch
       .mockResolvedValueOnce(okJson({ success: true }))
       .mockResolvedValueOnce(errJson(500, {}));
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.deleteModel('llama3.2')).resolves.toEqual({
+      success: false,
+      error: 'Delete failed',
+    });
+  });
+
+  it('returns delete-model fallback error when non-ok body is unreadable', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('invalid json')),
+      } as any);
 
     const mod = await import('../../../src/services/aiService');
     await expect(mod.deleteModel('llama3.2')).resolves.toEqual({

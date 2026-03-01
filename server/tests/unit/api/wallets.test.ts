@@ -724,6 +724,19 @@ describe('Wallets API', () => {
       expect(response.body.message).toContain('updated');
     });
 
+    it('should keep owner role unchanged when user already has owner access', async () => {
+      mockUserRepository.findById.mockResolvedValue({ id: 'target-user', username: 'targetuser' });
+      mockWalletSharingRepository.findWalletUser.mockResolvedValue({ id: 'wu-owner', role: 'owner' });
+
+      const response = await request(walletRouter)
+        .post('/api/v1/wallets/wallet-123/share/user')
+        .send({ targetUserId: 'target-user', role: 'signer' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('updated');
+      expect(mockWalletSharingRepository.updateUserRole).not.toHaveBeenCalled();
+    });
+
     it('should reject without targetUserId', async () => {
       const response = await request(walletRouter)
         .post('/api/v1/wallets/wallet-123/share/user')

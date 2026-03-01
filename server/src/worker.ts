@@ -324,6 +324,11 @@ async function scheduleRecurringJobs(): Promise<void> {
   setupStaleWalletHandler();
 }
 
+// Test-only hook to exercise recurring job scheduling guard branches.
+export async function __testOnlyScheduleRecurringJobs(): Promise<void> {
+  await scheduleRecurringJobs();
+}
+
 /**
  * Set up handler for stale wallet check results
  */

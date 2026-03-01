@@ -186,6 +186,22 @@ describe('Error Handling Utilities', () => {
           message: 'A record with this name already exists',
         });
       });
+
+      it('should keep generic message when P2002 target is not an array', () => {
+        const error = new Prisma.PrismaClientKnownRequestError('Unique constraint', {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+          meta: { target: 'username' as unknown as string[] },
+        });
+
+        handlePrismaError(error, res, 'test');
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Conflict',
+          message: 'A record with this value already exists',
+        });
+      });
     });
 
     it('should handle P2025 - Record not found', () => {

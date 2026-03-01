@@ -605,8 +605,6 @@ export async function syncWallet(walletId: string): Promise<{
  * @param network - Bitcoin network (defaults to mainnet for backwards compatibility)
  */
 async function getConfirmations(blockHeight: number, network: 'mainnet' | 'testnet' | 'signet' | 'regtest' = 'mainnet'): Promise<number> {
-  if (blockHeight <= 0) return 0;
-
   try {
     const currentHeight = await getBlockHeight(network);
     return Math.max(0, currentHeight - blockHeight + 1);

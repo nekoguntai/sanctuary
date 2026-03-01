@@ -2770,6 +2770,154 @@ describe('Sync Phases', () => {
       expect(walletOutput?.outputType).toBe('unknown');
       expect(mockPrismaClient.transactionLabel.createMany).not.toHaveBeenCalled();
     });
+
+    it('should deduplicate duplicate txid:type entries before insert', async () => {
+      const txid = 'duplicate_txid_type'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet_addr';
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, createMockTransaction({
+        txid,
+        inputs: [{ txid: 'prev'.padEnd(64, 'b'), vout: 0, value: 0.001, address: 'external' }],
+        outputs: [{ value: 0.0009, address: walletAddress }],
+      })]]));
+
+      // Force classification branch guards to treat each history item as unseen so duplicate rows are produced.
+      const nonDedupingMap = new Map<string, boolean>();
+      vi.spyOn(nonDedupingMap, 'has').mockReturnValue(false);
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [
+          { tx_hash: txid, height: 800000 },
+          { tx_hash: txid, height: 800000 },
+        ]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-dedupe', address: walletAddress } as any]]),
+        existingTxMap: nonDedupingMap as any,
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      const createArgs = mockPrismaClient.transaction.createMany.mock.calls.at(-1)?.[0];
+      expect(createArgs).toBeDefined();
+      expect(createArgs.data).toHaveLength(1);
+      expect(createArgs.data[0]).toEqual(expect.objectContaining({ txid, type: 'received' }));
+    });
+
+    it('should avoid per-input fallback fetch when cached prev tx exists without requested vout', async () => {
+      const txid = 'cached_prev_no_vout'.padEnd(64, 'a');
+      const prevTxid = 'cached_prev_txid'.padEnd(64, 'b');
+      const walletAddress = 'tb1q_wallet_addr';
+
+      const tx = {
+        txid,
+        hex: '01000000...',
+        confirmations: 100,
+        time: Date.now() / 1000,
+        vin: [{ txid: prevTxid, vout: 1 }],
+        vout: [{ value: 0.0009, n: 0, scriptPubKey: { hex: '0014...', address: walletAddress } }],
+      };
+
+      let batchCalls = 0;
+      mockElectrumClient.getTransactionsBatch.mockImplementation(async () => {
+        batchCalls += 1;
+        if (batchCalls === 1) {
+          return new Map([[txid, tx as any]]);
+        }
+        return new Map([[prevTxid, { txid: prevTxid, vout: [] }]]);
+      });
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-prev-no-vout', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache: new Map() as any,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      expect(mockElectrumClient.getTransactionsBatch).toHaveBeenCalledTimes(2);
+      expect(mockElectrumClient.getTransaction).not.toHaveBeenCalled();
+      expect(mockPrismaClient.transaction.createMany).toHaveBeenCalled();
+    });
+
+    it('should handle mixed store IO edge paths for missing tx details and absent vin/vout arrays', async () => {
+      const txid = 'store_io_edge_paths'.padEnd(64, 'a');
+      const walletAddress = 'tb1q_wallet_addr';
+      const externalAddress = 'tb1q_external_addr';
+      const missingCacheTxid = 'missing_cache_txid'.padEnd(64, 'b');
+      const noIoTxid = 'no_io_arrays_txid'.padEnd(64, 'c');
+      const prevTxid = 'prev_no_value'.padEnd(64, 'd');
+
+      const tx = {
+        txid,
+        hex: '01000000...',
+        confirmations: 50,
+        time: Date.now() / 1000,
+        vin: [
+          { coinbase: 'coinbase' },
+          {
+            txid: prevTxid,
+            vout: 0,
+            prevout: {
+              scriptPubKey: { hex: '0014...', address: walletAddress },
+              // value intentionally omitted -> input amount remains 0
+            },
+          },
+        ],
+        vout: [{ value: 0.0008, n: 0, scriptPubKey: { hex: '0014...', address: externalAddress } }],
+      };
+
+      mockElectrumClient.getTransactionsBatch.mockResolvedValue(new Map([[txid, tx as any]]));
+      mockPrismaClient.transaction.findMany.mockImplementation(async (args: any) => {
+        if (args?.where?.confirmations === 0 && args?.where?.rbfStatus === 'active') return [];
+        if (args?.select?.txid && !args?.select?.id) return [];
+        if (args?.select?.id && args?.select?.txid && args?.select?.type) {
+          return [
+            { id: 'tx-main-edge', txid, type: 'sent' },
+            { id: 'tx-no-io-edge', txid: noIoTxid, type: 'sent' },
+            { id: 'tx-missing-edge', txid: missingCacheTxid, type: 'sent' },
+          ];
+        }
+        if (args?.select?.id && args?.select?.txid && args?.select?.addressId) return [];
+        return [];
+      });
+
+      const txDetailsCache = new Map<string, any>([
+        [noIoTxid, { txid: noIoTxid }], // no vin/vout -> defaults to []
+      ]) as any;
+
+      const ctx = createTestContext({
+        walletId,
+        client: mockElectrumClient as any,
+        newTxids: [txid],
+        historyResults: new Map([[walletAddress, [{ tx_hash: txid, height: 800000 }]]]),
+        walletAddressSet: new Set([walletAddress]),
+        addressMap: new Map([[walletAddress, { id: 'addr-store-io-edge', address: walletAddress } as any]]),
+        existingTxMap: new Map(),
+        txDetailsCache,
+        currentBlockHeight: 800100,
+      });
+
+      await processTransactionsPhase(ctx);
+
+      const createdInputs = mockPrismaClient.transactionInput.createMany.mock.calls.at(-1)?.[0]?.data || [];
+      expect(createdInputs).toHaveLength(1);
+      expect(createdInputs[0]).toEqual(expect.objectContaining({
+        transactionId: 'tx-main-edge',
+        txid: prevTxid,
+        amount: BigInt(0),
+      }));
+    });
   });
 
   describe('insertUtxosPhase', () => {

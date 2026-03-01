@@ -203,6 +203,21 @@ describe('Payjoin API Routes', () => {
       expect(mockProcessPayjoinRequest).toHaveBeenCalledWith(TEST_ADDRESS_ID, VALID_PSBT_BASE64, 1);
     });
 
+    it('should fall back to body.toString() when request body is not a string', async () => {
+      mockProcessPayjoinRequest.mockResolvedValue({
+        success: true,
+        proposalPsbt: PROPOSAL_PSBT_BASE64,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/payjoin/${TEST_ADDRESS_ID}?v=1`)
+        .set('Content-Type', 'application/json')
+        .send({ psbt: VALID_PSBT_BASE64 });
+
+      expect(res.status).toBe(200);
+      expect(mockProcessPayjoinRequest).toHaveBeenCalledWith(TEST_ADDRESS_ID, '[object Object]', 1);
+    });
+
     it('should return error from service', async () => {
       mockProcessPayjoinRequest.mockResolvedValue({
         success: false,

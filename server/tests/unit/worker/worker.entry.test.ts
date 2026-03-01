@@ -222,6 +222,25 @@ describe('worker entrypoint', () => {
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
+  it('returns early when recurring scheduling is invoked before queue initialization', async () => {
+    vi.spyOn(process, 'on').mockImplementation(((event: string, handler: (...args: any[]) => any) => {
+      void event;
+      void handler;
+      return process;
+    }) as any);
+    vi.spyOn(process, 'exit').mockImplementation((() => undefined) as any);
+
+    // Fail before WorkerJobQueue is created, leaving internal jobQueue as null.
+    mocks.connectWithRetry.mockRejectedValueOnce(new Error('db unavailable'));
+
+    const workerModule = await import('../../../src/worker.ts');
+    await vi.dynamicImportSettled();
+
+    await workerModule.__testOnlyScheduleRecurringJobs();
+
+    expect(mocks.queueInstance.scheduleRecurring).not.toHaveBeenCalled();
+  });
+
   it('covers timer, queue-error handlers, process handlers, and graceful shutdown branches', async () => {
     const handlers: Record<string, Array<(...args: any[]) => any>> = {};
     let intervalCallback: (() => Promise<void> | void) | undefined;
@@ -346,6 +365,7 @@ describe('worker entrypoint', () => {
 
     await handlers.SIGTERM?.[0]();
     await handlers.SIGTERM?.[0]();
+    await handlers.SIGINT?.[0]();
     await intervalCallback?.();
 
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalHandle);

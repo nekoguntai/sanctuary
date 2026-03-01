@@ -901,12 +901,10 @@ export function parseImportInput(input: string): {
   if (isTextFormat) {
     const descriptor = extractDescriptorFromText(trimmed);
     log.debug('Extracted descriptor from text', { descriptor: descriptor?.substring(0, 100) });
-    if (descriptor) {
-      return {
-        format: 'descriptor',
-        parsed: parseDescriptorForImport(descriptor),
-      };
-    }
+    return {
+      format: 'descriptor',
+      parsed: parseDescriptorForImport(descriptor!),
+    };
   }
 
   // Try as plain descriptor

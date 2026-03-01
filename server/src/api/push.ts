@@ -47,7 +47,11 @@ const log = createLogger('PUSH-API');
  * FCM tokens: ~150+ character alphanumeric strings with colons and hyphens
  * APNs tokens: 64 character hex strings (device token) or longer for provider tokens
  */
-function validateDeviceToken(token: string, platform: 'ios' | 'android'): { valid: boolean; error?: string } {
+type DeviceTokenValidationResult =
+  | { valid: true }
+  | { valid: false; error: string };
+
+function validateDeviceToken(token: string, platform: 'ios' | 'android'): DeviceTokenValidationResult {
   if (platform === 'android') {
     // FCM tokens are typically 150+ characters, contain letters, numbers, colons, hyphens, underscores
     // Format: project-id:token or just a long alphanumeric string
@@ -61,19 +65,22 @@ function validateDeviceToken(token: string, platform: 'ios' | 'android'): { vali
     if (!/^[a-zA-Z0-9:_-]+$/.test(token)) {
       return { valid: false, error: 'FCM token contains invalid characters' };
     }
-  } else if (platform === 'ios') {
-    // APNs device tokens are 64 hex characters
-    // Provider authentication tokens are longer JWT-like strings
-    if (token.length < 64) {
-      return { valid: false, error: 'APNs token appears too short' };
-    }
-    if (token.length > 500) {
-      return { valid: false, error: 'APNs token appears too long' };
-    }
-    // APNs tokens are hex or alphanumeric (for provider tokens)
-    if (!/^[a-fA-F0-9]+$/.test(token) && !/^[a-zA-Z0-9._-]+$/.test(token)) {
-      return { valid: false, error: 'APNs token contains invalid characters' };
-    }
+
+    return { valid: true };
+  }
+
+  // The only remaining platform is iOS.
+  // APNs device tokens are 64 hex characters
+  // Provider authentication tokens are longer JWT-like strings
+  if (token.length < 64) {
+    return { valid: false, error: 'APNs token appears too short' };
+  }
+  if (token.length > 500) {
+    return { valid: false, error: 'APNs token appears too long' };
+  }
+  // APNs tokens are hex or alphanumeric (for provider tokens)
+  if (!/^[a-fA-F0-9]+$/.test(token) && !/^[a-zA-Z0-9._-]+$/.test(token)) {
+    return { valid: false, error: 'APNs token contains invalid characters' };
   }
 
   return { valid: true };
@@ -109,7 +116,7 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
       log.warn('Invalid device token format', { platform, error: tokenValidation.error });
       return res.status(400).json({
         error: 'Bad Request',
-        message: tokenValidation.error || 'Invalid device token format',
+        message: tokenValidation.error,
       });
     }
 

@@ -766,5 +766,9 @@ describe('Descriptor Builder Service', () => {
     it('should return false for empty device script types', () => {
       expect(validateDeviceScriptType([], 'native_segwit')).toBe(false);
     });
+
+    it('should return false for unknown requested script type values', () => {
+      expect(validateDeviceScriptType(['native_segwit'], 'unknown_type' as any)).toBe(false);
+    });
   });
 });

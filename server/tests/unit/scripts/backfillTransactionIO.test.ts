@@ -455,6 +455,47 @@ describe('backfillTransactionIO script', () => {
     exitSpy.mockRestore();
   });
 
+  it('skips malformed inputs without prevout/txid-vout and keeps unknown type for unclassified transactions', async () => {
+    (mockPrisma.transaction.findMany as Mock).mockResolvedValue([
+      {
+        id: 'tx-row-unclassified',
+        txid: 'txid-unclassified',
+        type: 'self_transfer',
+        wallet: { addresses: [] },
+      },
+    ]);
+
+    mockClient.getTransaction.mockResolvedValue({
+      vin: [
+        { sequence: 1 }, // no prevout and no txid/vout
+      ],
+      vout: [
+        {
+          value: 0.0003,
+          scriptPubKey: { address: 'external-address', hex: '0014beef' },
+        },
+      ],
+    });
+    (mockPrisma.transactionOutput.createMany as Mock).mockResolvedValue({ count: 1 });
+
+    const { exitSpy } = await runScript();
+
+    expect(mockPrisma.transactionInput.createMany).not.toHaveBeenCalled();
+    expect(mockPrisma.transactionOutput.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          transactionId: 'tx-row-unclassified',
+          address: 'external-address',
+          outputType: 'unknown',
+          isOurs: false,
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
+  });
+
   it('exits with failure code when script initialization throws', async () => {
     (mockPrisma.transaction.findMany as Mock).mockRejectedValue(new Error('database unavailable'));
 

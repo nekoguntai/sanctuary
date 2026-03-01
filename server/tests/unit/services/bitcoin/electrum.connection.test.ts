@@ -410,6 +410,33 @@ describe('ElectrumClient connection and transport internals', () => {
     expect(tlsSocket.setKeepAlive).toHaveBeenCalledWith(true, 30000);
   });
 
+  it('ignores duplicate TLS secureConnect callbacks after connection settles', async () => {
+    const baseSocket = new FakeSocket();
+    const tlsSocket = new FakeSocket();
+
+    netConnectMock.mockImplementationOnce(() => {
+      queueMicrotask(() => baseSocket.emit('connect'));
+      return baseSocket;
+    });
+    tlsConnectMock.mockImplementationOnce((options: any, onSecureConnect: () => void) => {
+      queueMicrotask(() => {
+        onSecureConnect();
+        onSecureConnect();
+      });
+      return tlsSocket;
+    });
+
+    const client = new ElectrumClient({
+      host: 'tls-duplicate-secureconnect-host',
+      port: 50002,
+      protocol: 'ssl',
+      connectionTimeoutMs: 25,
+    });
+
+    await expect(client.connect()).resolves.toBeUndefined();
+    expect(client.isConnected()).toBe(true);
+  });
+
   it('connects via TLS with certificate verification enabled by default', async () => {
     const baseSocket = new FakeSocket();
     const tlsSocket = new FakeSocket();
@@ -460,6 +487,30 @@ describe('ElectrumClient connection and transport internals', () => {
     });
 
     await expect(client.connect()).rejects.toThrow('tls exploded');
+  });
+
+  it('ignores late TLS errors after connection has already succeeded', async () => {
+    const baseSocket = new FakeSocket();
+    const tlsSocket = new FakeSocket();
+
+    netConnectMock.mockImplementationOnce(() => {
+      queueMicrotask(() => baseSocket.emit('connect'));
+      return baseSocket;
+    });
+    tlsConnectMock.mockImplementationOnce((options: any, onSecureConnect: () => void) => {
+      queueMicrotask(() => onSecureConnect());
+      return tlsSocket;
+    });
+
+    const client = new ElectrumClient({
+      host: 'tls-late-error-host',
+      port: 50002,
+      protocol: 'ssl',
+      connectionTimeoutMs: 25,
+    });
+
+    await client.connect();
+    expect(() => tlsSocket.emit('error', new Error('late tls error'))).not.toThrow();
   });
 
   it('connects through SOCKS5 proxy when proxy is enabled', async () => {
@@ -527,6 +578,32 @@ describe('ElectrumClient connection and transport internals', () => {
     expect((client as any).pendingRequests.size).toBe(0);
   });
 
+  it('no-ops request timeout callback when request was already removed', async () => {
+    const client = new ElectrumClient({
+      host: 'localhost',
+      port: 50001,
+      protocol: 'tcp',
+      requestTimeoutMs: 15,
+      batchRequestTimeoutMs: 60,
+    });
+
+    const socket = new FakeSocket();
+    (client as any).socket = socket;
+    (client as any).connected = true;
+
+    const promise = (client as any).request('server.ping');
+    const id = (client as any).requestId;
+    const pending = (client as any).pendingRequests.get(id);
+
+    expect(pending).toBeDefined();
+    (client as any).pendingRequests.delete(id);
+    (pending as any).resolve('ok');
+
+    await expect(promise).resolves.toBe('ok');
+    await vi.advanceTimersByTimeAsync(20);
+    expect((client as any).pendingRequests.has(id)).toBe(false);
+  });
+
   it('propagates batch request timeouts', async () => {
     const client = new ElectrumClient({
       host: 'localhost',
@@ -551,6 +628,32 @@ describe('ElectrumClient connection and transport internals', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('Batch request timeout after 15ms');
     expect((client as any).pendingRequests.size).toBeLessThanOrEqual(1);
+  });
+
+  it('no-ops batch timeout callback when request was already removed', async () => {
+    const client = new ElectrumClient({
+      host: 'localhost',
+      port: 50001,
+      protocol: 'tcp',
+      requestTimeoutMs: 40,
+      batchRequestTimeoutMs: 15,
+    });
+
+    const socket = new FakeSocket();
+    (client as any).socket = socket;
+    (client as any).connected = true;
+
+    const promise = (client as any).batchRequest([{ method: 'm1', params: [] }]);
+    const [entry] = Array.from((client as any).pendingRequests.entries()) as Array<[number, any]>;
+
+    expect(entry).toBeDefined();
+    const [id, pending] = entry;
+    (client as any).pendingRequests.delete(id);
+    pending.resolve('manual-result');
+
+    await expect(promise).resolves.toEqual(['manual-result']);
+    await vi.advanceTimersByTimeAsync(20);
+    expect((client as any).pendingRequests.has(id)).toBe(false);
   });
 
   it('auto-connects when issuing requests while disconnected', async () => {
@@ -728,6 +831,38 @@ describe('ElectrumClient connection and transport internals', () => {
       expect.objectContaining({
         socket: proxiedSocket,
         rejectUnauthorized: true,
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('supports self-signed TLS over proxied sockets', async () => {
+    const proxiedSocket = new FakeSocket();
+    const tlsSocket = new FakeSocket();
+    socksCreateConnectionMock.mockResolvedValueOnce({ socket: proxiedSocket });
+    tlsConnectMock.mockImplementationOnce((options: any, onSecureConnect: () => void) => {
+      queueMicrotask(() => onSecureConnect());
+      return tlsSocket;
+    });
+
+    const client = new ElectrumClient({
+      host: 'proxy-self-signed-host',
+      port: 50002,
+      protocol: 'ssl',
+      allowSelfSignedCert: true,
+      proxy: {
+        enabled: true,
+        host: '127.0.0.1',
+        port: 9050,
+      },
+      connectionTimeoutMs: 25,
+    });
+
+    await client.connect();
+    expect(tlsConnectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        socket: proxiedSocket,
+        rejectUnauthorized: false,
       }),
       expect.any(Function),
     );

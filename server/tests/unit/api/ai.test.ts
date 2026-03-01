@@ -914,6 +914,22 @@ describe('AI API Routes', () => {
       expect(response.body.disk.available).toBe(0);
     });
 
+    it('should fall back to zero disk values when df output has too few columns', async () => {
+      (execSync as Mock)
+        .mockImplementationOnce(
+          () => 'Filesystem 1M-blocks Used Available Use% Mounted on\n/dev/sda1 100000 50000'
+        )
+        .mockImplementationOnce(() => '');
+
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.disk.total).toBe(0);
+      expect(response.body.disk.available).toBe(0);
+    });
+
     it('should include low RAM warning when available memory is below recommendation', async () => {
       (os.freemem as Mock).mockReturnValueOnce(2 * 1024 * 1024 * 1024); // 2GB
 

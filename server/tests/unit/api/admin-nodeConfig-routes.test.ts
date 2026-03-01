@@ -83,6 +83,13 @@ vi.mock('socks-proxy-agent', () => ({
       mockSocksProxyAgentConstruct(proxyUrl);
     }
   },
+  default: {
+    SocksProxyAgent: class MockDefaultSocksProxyAgent {
+      constructor(proxyUrl: string) {
+        mockSocksProxyAgentConstruct(proxyUrl);
+      }
+    },
+  },
 }));
 
 vi.mock('node-fetch', () => {
@@ -789,6 +796,32 @@ describe('Admin Node Config Routes', () => {
     expect(response.body.isTorExit).toBe(true);
   });
 
+  it('handles tor exit-check timeout callback path', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const immediateTimer = ((cb: () => void) => {
+      cb();
+      return 1 as any;
+    }) as any;
+    setTimeoutSpy.mockImplementationOnce(immediateTimer);
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockNodeFetch).toHaveBeenCalledWith(
+        'https://check.torproject.org/api/ip',
+        expect.objectContaining({
+          signal: expect.any(Object),
+        })
+      );
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it('uses proxy credentials and reports verified tor exit status', async () => {
     mockNodeFetch.mockResolvedValueOnce({
       ok: true,
@@ -819,6 +852,131 @@ describe('Admin Node Config Routes', () => {
     expect(mockSocksProxyAgentConstruct).toHaveBeenCalledWith(
       'socks5://tor-user:tor-pass@127.0.0.1:9050'
     );
+  });
+
+  it('returns inconclusive result when torproject exit check responds non-ok', async () => {
+    mockNodeFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ IsTor: true, IP: '8.8.8.8' }),
+    });
+
+    const response = await request(app)
+      .post('/api/v1/admin/proxy/test')
+      .send({ host: '127.0.0.1', port: 9050 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      isTorExit: false,
+      exitIp: 'unknown',
+    });
+    expect(response.body.message).toContain('inconclusive');
+  });
+
+  it('supports socks-proxy-agent default namespace fallback shape', async () => {
+    const socksProxyAgentModule: any = await import('socks-proxy-agent');
+    const originalSocksProxyAgent = socksProxyAgentModule.SocksProxyAgent;
+    const originalDefault = socksProxyAgentModule.default;
+
+    try {
+      socksProxyAgentModule.SocksProxyAgent = undefined;
+      socksProxyAgentModule.default = {
+        SocksProxyAgent: class MockFallbackNamespaceProxyAgent {
+          constructor(proxyUrl: string) {
+            mockSocksProxyAgentConstruct(proxyUrl);
+          }
+        },
+      };
+
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockSocksProxyAgentConstruct).toHaveBeenCalledWith('socks5://127.0.0.1:9050');
+    } finally {
+      socksProxyAgentModule.SocksProxyAgent = originalSocksProxyAgent;
+      socksProxyAgentModule.default = originalDefault;
+    }
+  });
+
+  it('supports socks-proxy-agent default constructor fallback shape', async () => {
+    const socksProxyAgentModule: any = await import('socks-proxy-agent');
+    const originalSocksProxyAgent = socksProxyAgentModule.SocksProxyAgent;
+    const originalDefault = socksProxyAgentModule.default;
+
+    try {
+      socksProxyAgentModule.SocksProxyAgent = undefined;
+      socksProxyAgentModule.default = class MockFallbackDefaultProxyAgent {
+        constructor(proxyUrl: string) {
+          mockSocksProxyAgentConstruct(proxyUrl);
+        }
+      };
+
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockSocksProxyAgentConstruct).toHaveBeenCalledWith('socks5://127.0.0.1:9050');
+    } finally {
+      socksProxyAgentModule.SocksProxyAgent = originalSocksProxyAgent;
+      socksProxyAgentModule.default = originalDefault;
+    }
+  });
+
+  it('supports node-fetch nested default object callable fallback', async () => {
+    const nodeFetchModule: any = await import('node-fetch');
+    const originalFetch = nodeFetchModule.default.default;
+    nodeFetchModule.default.default = {
+      default: (...args: any[]) => mockNodeFetch(...args),
+    };
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockNodeFetch).toHaveBeenCalledWith(
+        'https://check.torproject.org/api/ip',
+        expect.objectContaining({
+          agent: expect.any(Object),
+        })
+      );
+    } finally {
+      nodeFetchModule.default.default = originalFetch;
+    }
+  });
+
+  it('continues with inconclusive result when node-fetch default export is null', async () => {
+    const nodeFetchModule: any = await import('node-fetch');
+    const originalDefault = nodeFetchModule.default;
+    nodeFetchModule.default = null;
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        success: true,
+        isTorExit: false,
+        exitIp: 'unknown',
+      });
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'Could not fetch exit IP from torproject.org',
+        expect.objectContaining({
+          error: expect.stringContaining('node-fetch did not expose a callable function'),
+        })
+      );
+    } finally {
+      nodeFetchModule.default = originalDefault;
+    }
   });
 
   it('continues with inconclusive result when node-fetch import is non-callable', async () => {

@@ -199,6 +199,25 @@ describe('BackupService', () => {
       expect(result.issues.some((i) => i.includes('references non-existent user'))).toBe(true);
     });
 
+    it('should accept devices that reference existing users', async () => {
+      const backup = createValidBackup();
+      backup.data.device = [
+        {
+          id: 'device-1',
+          userId: 'user-1',
+          type: 'ledger',
+          label: 'Valid Device',
+          fingerprint: 'ddccbbaa',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      const result = await backupService.validateBackup(backup);
+
+      expect(result.valid).toBe(true);
+      expect(result.issues.some((i) => i.includes('references non-existent user'))).toBe(false);
+    });
+
     it('should detect referential integrity issues for walletUser', async () => {
       const backup = createValidBackup();
       backup.data.wallet = [
@@ -1851,6 +1870,147 @@ describe('Node Config Password Handling', () => {
     encryption.isEncrypted.mockReturnValue(false);
     encryption.decrypt.mockImplementation((v: any) => v);
   });
+
+  it('should preserve plaintext node config passwords without decryption checks', async () => {
+    vi.mocked(encryption.isEncrypted).mockReturnValue(false);
+
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: { nodeConfig: 1 },
+      },
+      data: {
+        user: [{ id: 'user-1', username: 'admin', isAdmin: true }],
+        wallet: [],
+        walletUser: [],
+        device: [],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [{
+          id: 'node-plain',
+          type: 'electrum',
+          host: 'electrum.example.com',
+          port: 50002,
+          password: 'plain-text-password',
+        }],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    let capturedData: any = null;
+    mockPrismaClient.nodeConfig.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrismaClient.nodeConfig.createMany.mockImplementation(async ({ data }) => {
+      capturedData = data;
+      return { count: 1 };
+    });
+
+    Object.keys(mockPrismaClient).forEach((key) => {
+      const client = mockPrismaClient as any;
+      if (key !== 'nodeConfig' && client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (key !== 'nodeConfig' && client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(capturedData[0].password).toBe('plain-text-password');
+  });
+
+  it('should use generic node label in warning when node type is missing', async () => {
+    vi.mocked(encryption.isEncrypted).mockReturnValue(true);
+    vi.mocked(encryption.decrypt).mockImplementation(() => {
+      throw new Error('Decryption failed: wrong key');
+    });
+
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: { nodeConfig: 1 },
+      },
+      data: {
+        user: [{ id: 'user-1', username: 'admin', isAdmin: true }],
+        wallet: [],
+        walletUser: [],
+        device: [],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [{
+          id: 'node-unknown-type',
+          host: 'electrum.example.com',
+          port: 50002,
+          password: 'enc:v1:someencryptedpassword',
+        }],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    let capturedData: any = null;
+    mockPrismaClient.nodeConfig.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrismaClient.nodeConfig.createMany.mockImplementation(async ({ data }) => {
+      capturedData = data;
+      return { count: 1 };
+    });
+
+    Object.keys(mockPrismaClient).forEach((key) => {
+      const client = mockPrismaClient as any;
+      if (key !== 'nodeConfig' && client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (key !== 'nodeConfig' && client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings.some((w) => w.includes('update your node password'))).toBe(true);
+    expect(capturedData[0].password).toBeNull();
+
+    encryption.isEncrypted.mockReturnValue(false);
+    encryption.decrypt.mockImplementation((v: any) => v);
+  });
 });
 
 describe('User 2FA Secret Handling', () => {
@@ -2126,6 +2286,45 @@ describe('BackupService internal helpers', () => {
   it('should pluralize snake_case words ending in y', () => {
     const service = new BackupService();
     expect((service as any).camelToSnakeCase('category')).toBe('categories');
+  });
+
+  it('should skip migrations when backup start version is already at/above migration targets', () => {
+    const service = new BackupService();
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 5,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: {},
+      },
+      data: {
+        user: [],
+        wallet: [],
+        walletUser: [],
+        device: [],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    const migrated = (service as any).migrateBackup(backup, 6) as SanctuaryBackup;
+    expect(migrated.meta.schemaVersion).toBe(6);
   });
 
   it('should proxy getSchemaVersion through migration service', async () => {

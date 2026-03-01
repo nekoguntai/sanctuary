@@ -195,6 +195,31 @@ describe('Admin Monitoring Routes', () => {
     });
   });
 
+  it('handles health-check timeout callback path', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const immediateTimer = ((cb: () => void) => {
+      cb();
+      return 1 as any;
+    }) as any;
+    setTimeoutSpy
+      .mockImplementationOnce(immediateTimer)
+      .mockImplementationOnce(immediateTimer)
+      .mockImplementationOnce(immediateTimer);
+
+    try {
+      mockFetch.mockResolvedValue({ ok: true });
+
+      const response = await request(app)
+        .get('/api/v1/admin/monitoring/services')
+        .query({ checkHealth: 'true' });
+
+      expect(response.status).toBe(200);
+      expect((response.body.services as Array<{ status?: string }>).every(s => s.status === 'healthy')).toBe(true);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it('returns 500 when loading monitoring services fails', async () => {
     mockGetValue.mockRejectedValue(new Error('settings unavailable'));
 

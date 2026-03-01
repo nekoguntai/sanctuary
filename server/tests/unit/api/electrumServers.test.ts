@@ -352,6 +352,34 @@ describe('admin electrum servers router', () => {
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
   });
 
+  it('POST / defaults node config useSsl to true when omitted during bootstrap', async () => {
+    mockPrismaClient.electrumServer.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+    mockPrismaClient.nodeConfig.create.mockResolvedValue(buildNodeConfig({ useSsl: true }));
+    mockPrismaClient.electrumServer.create.mockResolvedValue(
+      buildServer({ id: 'srv-bootstrap-default-ssl', useSsl: true, priority: 0 })
+    );
+
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
+        label: 'Bootstrap Default SSL',
+        host: 'bootstrap-default-ssl.electrum.example',
+        port: 50001,
+      });
+
+    expect(response.status).toBe(201);
+    expect(mockPrismaClient.nodeConfig.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          useSsl: true,
+        }),
+      })
+    );
+  });
+
   it('POST / creates server with existing node config and default optional values', async () => {
     mockPrismaClient.electrumServer.findFirst
       .mockResolvedValueOnce(null)

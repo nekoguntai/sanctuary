@@ -54,6 +54,19 @@ describe('DistributedLock', () => {
       expect(lock2).toBeNull();
     });
 
+    it('should treat undefined waitTimeMs as immediate timeout', async () => {
+      const lock1 = await acquireLock('test:key:undefined-wait', 5000);
+      expect(lock1).not.toBeNull();
+
+      const lock2 = await acquireLock('test:key:undefined-wait', {
+        ttlMs: 5000,
+        waitTimeMs: undefined as unknown as number,
+        retryIntervalMs: 20,
+      });
+
+      expect(lock2).toBeNull();
+    });
+
     it('should allow acquiring different keys', async () => {
       const lock1 = await acquireLock('test:key:a', 5000);
       const lock2 = await acquireLock('test:key:b', 5000);

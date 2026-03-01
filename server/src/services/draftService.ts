@@ -379,6 +379,9 @@ export async function updateDraft(
       });
     }
   }
+
+  // Defensive fallback for type narrowing; normal flow returns or throws inside the loop.
+  throw new ConflictError('Draft update failed after retry attempts.');
 }
 
 /**

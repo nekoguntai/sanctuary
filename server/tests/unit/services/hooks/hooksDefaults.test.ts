@@ -9,13 +9,15 @@ import { HookRegistry } from '../../../../src/services/hooks/registry';
 import { Operations } from '../../../../src/services/hooks/types';
 
 // Mock the logger
+const auditLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('../../../../src/utils/logger', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => auditLogger,
 }));
 
 // Import after mocks are set up
@@ -97,6 +99,121 @@ describe('Hooks Defaults', () => {
 
       const hooks = hookRegistry.getHooks(Operations.WALLET_CREATE, 'after');
       expect(hooks[0].description).toContain('Audit log');
+    });
+
+    it('should execute audit hooks and write expected log entries', async () => {
+      registerAuditHooks();
+
+      await hookRegistry.getHooks(Operations.WALLET_CREATE, 'after')[0].handler({
+        operation: Operations.WALLET_CREATE,
+        phase: 'after',
+        payload: { name: 'Wallet A', type: 'single' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.WALLET_DELETE, 'after')[0].handler({
+        operation: Operations.WALLET_DELETE,
+        phase: 'after',
+        payload: { walletId: 'w1' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.WALLET_SHARE, 'after')[0].handler({
+        operation: Operations.WALLET_SHARE,
+        phase: 'after',
+        payload: { walletId: 'w1', targetUserId: 'u2', role: 'viewer' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.DEVICE_REGISTER, 'after')[0].handler({
+        operation: Operations.DEVICE_REGISTER,
+        phase: 'after',
+        payload: { name: 'Phone', type: 'ios' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.DEVICE_DELETE, 'after')[0].handler({
+        operation: Operations.DEVICE_DELETE,
+        phase: 'after',
+        payload: { deviceId: 'd1' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.TRANSACTION_BROADCAST, 'after')[0].handler({
+        operation: Operations.TRANSACTION_BROADCAST,
+        phase: 'after',
+        payload: { walletId: 'w1' },
+        userId: 'u1',
+        success: true,
+        result: 'txid-1',
+      } as any);
+
+      await hookRegistry.getHooks(Operations.TRANSACTION_SIGN, 'after')[0].handler({
+        operation: Operations.TRANSACTION_SIGN,
+        phase: 'after',
+        payload: { walletId: 'w1' },
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.AUTH_LOGIN, 'after')[0].handler({
+        operation: Operations.AUTH_LOGIN,
+        phase: 'after',
+        payload: { username: 'alice' },
+        result: { userId: 'u1' },
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.AUTH_LOGOUT, 'after')[0].handler({
+        operation: Operations.AUTH_LOGOUT,
+        phase: 'after',
+        payload: {},
+        userId: 'u1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.USER_CREATE, 'after')[0].handler({
+        operation: Operations.USER_CREATE,
+        phase: 'after',
+        payload: { username: 'bob', isAdmin: false },
+        userId: 'admin-1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.USER_DELETE, 'after')[0].handler({
+        operation: Operations.USER_DELETE,
+        phase: 'after',
+        payload: { userId: 'u2' },
+        userId: 'admin-1',
+        success: true,
+      } as any);
+
+      await hookRegistry.getHooks(Operations.ADDRESS_GENERATE, 'after')[0].handler({
+        operation: Operations.ADDRESS_GENERATE,
+        phase: 'after',
+        payload: { walletId: 'w1' },
+        userId: 'u1',
+        success: true,
+        result: 'bc1qexample',
+      } as any);
+
+      expect(auditLogger.info).toHaveBeenCalledWith('Wallet created', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Wallet deleted', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Wallet shared', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Device registered', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Device deleted', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Transaction broadcasted', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('Transaction signed', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('User login', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('User logout', expect.any(Object));
+      expect(auditLogger.info).toHaveBeenCalledWith('User created', expect.any(Object));
+      expect(auditLogger.warn).toHaveBeenCalledWith('User deleted', expect.any(Object));
+      expect(auditLogger.debug).toHaveBeenCalledWith('Address generated', expect.any(Object));
     });
   });
 

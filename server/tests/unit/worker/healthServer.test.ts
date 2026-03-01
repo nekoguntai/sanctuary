@@ -1,15 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let capturedHandler: ((req: any, res: any) => Promise<void> | void) | null = null;
+const serverInstances: any[] = [];
+let closeError: Error | null = null;
+const { mockLogInfo, mockLogError } = vi.hoisted(() => ({
+  mockLogInfo: vi.fn(),
+  mockLogError: vi.fn(),
+}));
 
 vi.mock('http', () => {
   const createServer = (handler: any) => {
     capturedHandler = handler;
-    return {
-      on: vi.fn(),
+    const handlers: Record<string, (err: Error) => void> = {};
+    const server = {
+      on: vi.fn((event: string, cb: (err: Error) => void) => {
+        handlers[event] = cb;
+      }),
       listen: vi.fn((_port: number, cb?: () => void) => cb && cb()),
-      close: vi.fn((cb?: (err?: Error | null) => void) => cb && cb(null)),
+      close: vi.fn((cb?: (err?: Error | null) => void) => cb && cb(closeError)),
+      handlers,
     };
+    serverInstances.push(server);
+    return server;
   };
   return {
     __esModule: true,
@@ -20,8 +32,8 @@ vi.mock('http', () => {
 
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
+    info: mockLogInfo,
+    error: mockLogError,
   }),
 }));
 
@@ -46,6 +58,8 @@ const makeRes = () => {
 describe('Worker Health Server', () => {
   beforeEach(() => {
     capturedHandler = null;
+    serverInstances.length = 0;
+    closeError = null;
     vi.clearAllMocks();
   });
 
@@ -67,6 +81,27 @@ describe('Worker Health Server', () => {
     expect(payload.status).toBe('healthy');
   });
 
+  it('handles root path as health endpoint', async () => {
+    startHealthServer({
+      port: 3004,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true, database: true }),
+      },
+    });
+
+    const req = { url: '/' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual(
+      expect.objectContaining({
+        status: 'healthy',
+        components: expect.objectContaining({ database: true }),
+      })
+    );
+  });
+
   it('responds with readiness failure', async () => {
     startHealthServer({
       port: 3006,
@@ -82,6 +117,38 @@ describe('Worker Health Server', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body).toBe('not ready');
+  });
+
+  it('responds with readiness success', async () => {
+    startHealthServer({
+      port: 3008,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: false, jobQueue: true }),
+      },
+    });
+
+    const req = { url: '/ready' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('ready');
+  });
+
+  it('responds with liveness', async () => {
+    startHealthServer({
+      port: 3009,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true }),
+      },
+    });
+
+    const req = { url: '/live' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('alive');
   });
 
   it('responds with metrics when provider supplies metrics', async () => {
@@ -104,5 +171,109 @@ describe('Worker Health Server', () => {
     expect(res.statusCode).toBe(200);
     const payload = JSON.parse(res.body);
     expect(payload.queues.sync.completed).toBe(2);
+  });
+
+  it('falls back to health payload for metrics when provider has no metrics method', async () => {
+    startHealthServer({
+      port: 3010,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: false }),
+      },
+    });
+
+    const req = { url: '/metrics' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual(
+      expect.objectContaining({
+        health: { redis: true, electrum: true, jobQueue: false },
+      })
+    );
+  });
+
+  it('returns 404 for unknown routes', async () => {
+    startHealthServer({
+      port: 3011,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true }),
+      },
+    });
+
+    const req = { url: '/unknown' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toBe('Not Found');
+  });
+
+  it('returns 500 response when health provider throws', async () => {
+    startHealthServer({
+      port: 3012,
+      healthProvider: {
+        getHealth: async () => {
+          throw new Error('health exploded');
+        },
+      },
+    });
+
+    const req = { url: '/health' };
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(500);
+    expect(JSON.parse(res.body)).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        error: 'health exploded',
+      })
+    );
+  });
+
+  it('exposes close handle and resolves on successful close', async () => {
+    const handle = startHealthServer({
+      port: 3013,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true }),
+      },
+    });
+
+    expect(handle.port).toBe(3013);
+    await expect(handle.close()).resolves.toBeUndefined();
+    expect(mockLogInfo).toHaveBeenCalledWith('Health server closed');
+  });
+
+  it('rejects close handle when server close fails', async () => {
+    closeError = new Error('close failed');
+    const handle = startHealthServer({
+      port: 3014,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true }),
+      },
+    });
+
+    await expect(handle.close()).rejects.toThrow('close failed');
+    expect(mockLogError).toHaveBeenCalledWith(
+      'Health server close error',
+      expect.objectContaining({ error: 'close failed' })
+    );
+  });
+
+  it('logs server error events', () => {
+    startHealthServer({
+      port: 3015,
+      healthProvider: {
+        getHealth: async () => ({ redis: true, electrum: true, jobQueue: true }),
+      },
+    });
+
+    const server = serverInstances[0];
+    server.handlers.error(new Error('server boom'));
+    expect(mockLogError).toHaveBeenCalledWith(
+      'Health server error',
+      expect.objectContaining({ error: 'server boom' })
+    );
   });
 });

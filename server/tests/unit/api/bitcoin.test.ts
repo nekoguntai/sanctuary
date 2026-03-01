@@ -307,6 +307,22 @@ describe('Bitcoin API', () => {
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('connected', false);
       });
+
+      it('should fall back to singleton status check when pool status fails', async () => {
+        mockElectrumPool.isPoolInitialized.mockImplementationOnce(() => {
+          throw new Error('Pool health failed');
+        });
+        mockElectrumClient.isConnected.mockReturnValue(true);
+        mockElectrumClient.connect.mockResolvedValue(undefined);
+        mockElectrumClient.getServerVersion.mockResolvedValue({ server: 'ElectrumX', protocol: '1.4' });
+        mockBlockchain.getBlockHeight.mockResolvedValue(850000);
+
+        const response = await request(app).get('/bitcoin/status');
+
+        expect(response.status).toBe(200);
+        expect(response.body.connected).toBe(true);
+        expect(response.body.server).toBe('ElectrumX');
+      });
     });
 
     describe('GET /bitcoin/mempool', () => {
@@ -345,6 +361,60 @@ describe('Bitcoin API', () => {
 
         // Either 200 (stale cache) or 500 (no cache)
         expect([200, 500]).toContain(response.status);
+      });
+
+      it('should return stale cache data when refresh fails within stale TTL', async () => {
+        vi.useFakeTimers();
+        try {
+          vi.setSystemTime(new Date('2100-01-01T00:00:00.000Z'));
+          mockMempool.getBlocksAndMempool
+            .mockResolvedValueOnce({
+              mempoolSize: 12345,
+              blocks: [{ height: 1 }],
+            })
+            .mockRejectedValueOnce(new Error('API unavailable'));
+
+          const first = await request(app).get('/bitcoin/mempool');
+          expect(first.status).toBe(200);
+
+          vi.setSystemTime(new Date('2100-01-01T00:00:20.000Z'));
+          const second = await request(app).get('/bitcoin/mempool');
+
+          expect(second.status).toBe(200);
+          expect(second.body).toMatchObject({
+            mempoolSize: 12345,
+            stale: true,
+          });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('should return 500 when refresh fails and stale cache is expired', async () => {
+        vi.useFakeTimers();
+        try {
+          vi.setSystemTime(new Date('2100-01-02T00:00:00.000Z'));
+          mockMempool.getBlocksAndMempool
+            .mockResolvedValueOnce({
+              mempoolSize: 9999,
+              blocks: [{ height: 2 }],
+            })
+            .mockRejectedValueOnce(new Error('API unavailable'));
+
+          const first = await request(app).get('/bitcoin/mempool');
+          expect(first.status).toBe(200);
+
+          vi.setSystemTime(new Date('2100-01-02T00:06:00.000Z'));
+          const second = await request(app).get('/bitcoin/mempool');
+
+          expect(second.status).toBe(500);
+          expect(second.body).toMatchObject({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch mempool data',
+          });
+        } finally {
+          vi.useRealTimers();
+        }
       });
     });
 
@@ -402,11 +472,32 @@ describe('Bitcoin API', () => {
       });
 
       it('should return 404 when block not found', async () => {
+        mockElectrumClient.isConnected.mockReturnValue(true);
+        mockElectrumClient.connect.mockResolvedValue(undefined);
         mockElectrumClient.getBlockHeader.mockRejectedValueOnce(new Error('Not found'));
 
         const response = await request(app).get('/bitcoin/block/999999999');
 
         expect(response.status).toBe(404);
+        expect(mockElectrumClient.getBlockHeader).toHaveBeenCalled();
+      });
+
+      it('should return block header for valid height', async () => {
+        mockElectrumClient.isConnected.mockReturnValue(true);
+        mockElectrumClient.connect.mockResolvedValue(undefined);
+        mockElectrumClient.getBlockHeader.mockResolvedValue({
+          hash: '00000000000000000001',
+          height: 850000,
+          timestamp: 1700000000,
+        });
+
+        const response = await request(app).get('/bitcoin/block/850000');
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          hash: '00000000000000000001',
+          height: 850000,
+        });
       });
     });
   });
@@ -474,6 +565,24 @@ describe('Bitcoin API', () => {
 
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('source', 'electrum');
+      });
+
+      it('should default minimum fee to 1 when electrum economy fee is missing', async () => {
+        mockPrismaClient.nodeConfig.findFirst.mockResolvedValue({
+          feeEstimatorUrl: '',
+        });
+        mockBlockchain.getFeeEstimates.mockResolvedValue({
+          fastest: 40,
+          halfHour: 25,
+          hour: 15,
+          economy: 0,
+        });
+
+        const response = await request(app).get('/bitcoin/fees');
+
+        expect(response.status).toBe(200);
+        expect(response.body.minimum).toBe(1);
+        expect(response.body.source).toBe('electrum');
       });
 
       it('should return 500 on complete failure', async () => {
@@ -562,6 +671,22 @@ describe('Bitcoin API', () => {
 
         expect(response.status).toBe(400);
       });
+
+      it('should return 500 when transaction size estimation throws', async () => {
+        mockUtils.estimateTransactionSize.mockImplementation(() => {
+          throw new Error('size calc failed');
+        });
+
+        const response = await request(app)
+          .post('/bitcoin/utils/estimate-fee')
+          .send({ inputCount: 2, outputCount: 2, feeRate: 20 });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({
+          error: 'Internal Server Error',
+          message: 'Failed to estimate fee',
+        });
+      });
     });
 
     describe('POST /bitcoin/utils/estimate-optimal-fee', () => {
@@ -593,6 +718,20 @@ describe('Bitcoin API', () => {
           .send({ outputCount: 2 });
 
         expect(response.status).toBe(400);
+      });
+
+      it('should return 500 when optimal fee estimation fails', async () => {
+        mockAdvancedTx.estimateOptimalFee.mockRejectedValue(new Error('estimate failed'));
+
+        const response = await request(app)
+          .post('/bitcoin/utils/estimate-optimal-fee')
+          .send({ inputCount: 2, outputCount: 2 });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({
+          error: 'Internal Server Error',
+          message: 'Failed to estimate optimal fee',
+        });
       });
     });
   });
@@ -676,6 +815,15 @@ describe('Bitcoin API', () => {
         expect(mockBlockchain.checkAddress).toHaveBeenCalledWith('tb1qtest', 'testnet');
       });
 
+      it('should support regtest network query parameter', async () => {
+        mockBlockchain.checkAddress.mockResolvedValue({ valid: true, balance: 0, transactionCount: 0 });
+        mockUtils.getAddressType.mockReturnValue('p2wpkh');
+
+        await request(app).get('/bitcoin/address/bcrt1qtest?network=regtest');
+
+        expect(mockBlockchain.checkAddress).toHaveBeenCalledWith('bcrt1qtest', 'regtest');
+      });
+
       it('should return 400 for invalid address', async () => {
         mockBlockchain.checkAddress.mockResolvedValue({
           valid: false,
@@ -686,6 +834,29 @@ describe('Bitcoin API', () => {
 
         expect(response.status).toBe(400);
         expect(response.body).toHaveProperty('message', 'Invalid address format');
+      });
+
+      it('should use default invalid address message when validation error detail is absent', async () => {
+        mockBlockchain.checkAddress.mockResolvedValue({
+          valid: false,
+        });
+
+        const response = await request(app).get('/bitcoin/address/invalid123');
+
+        expect(response.status).toBe(400);
+        expect(response.body).toHaveProperty('message', 'Invalid address');
+      });
+
+      it('should return 500 when address lookup throws', async () => {
+        mockBlockchain.checkAddress.mockRejectedValue(new Error('node unavailable'));
+
+        const response = await request(app).get('/bitcoin/address/bc1qtest123');
+
+        expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({
+          error: 'Internal Server Error',
+          message: 'Failed to fetch address info',
+        });
       });
     });
 
@@ -771,6 +942,20 @@ describe('Bitcoin API', () => {
 
         expect(response.status).toBe(400);
         expect(response.body).toHaveProperty('message', 'Maximum 100 addresses per request');
+      });
+
+      it('should return 500 when address lookup query fails', async () => {
+        mockPrismaClient.address.findMany.mockRejectedValue(new Error('lookup failed'));
+
+        const response = await request(app)
+          .post('/bitcoin/address-lookup')
+          .send({ addresses: ['bc1qtest1'] });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({
+          error: 'Internal Server Error',
+          message: 'Failed to look up addresses',
+        });
       });
     });
   });
@@ -911,6 +1096,24 @@ describe('Bitcoin API', () => {
 
         expect(response.status).toBe(403);
       });
+
+      it('should return 400 when RBF creation fails', async () => {
+        mockPrismaClient.wallet.findFirst.mockResolvedValue({
+          id: 'wallet-1',
+          name: 'Test Wallet',
+        });
+        mockAdvancedTx.createRBFTransaction.mockRejectedValue(new Error('rbf failed'));
+
+        const response = await request(app)
+          .post('/bitcoin/transaction/abc123/rbf')
+          .send({ newFeeRate: 24, walletId: 'wallet-1' });
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+          error: 'Bad Request',
+          message: 'rbf failed',
+        });
+      });
     });
 
     describe('POST /bitcoin/transaction/cpfp', () => {
@@ -961,6 +1164,27 @@ describe('Bitcoin API', () => {
           });
 
         expect(response.status).toBe(403);
+      });
+
+      it('should return 400 when CPFP creation fails', async () => {
+        mockPrismaClient.wallet.findFirst.mockResolvedValue({ id: 'wallet-1' });
+        mockAdvancedTx.createCPFPTransaction.mockRejectedValue(new Error('cpfp failed'));
+
+        const response = await request(app)
+          .post('/bitcoin/transaction/cpfp')
+          .send({
+            parentTxid: 'parent123',
+            parentVout: 0,
+            targetFeeRate: 30,
+            recipientAddress: 'bc1qtest',
+            walletId: 'wallet-1',
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+          error: 'Bad Request',
+          message: 'cpfp failed',
+        });
       });
     });
 
@@ -1044,6 +1268,25 @@ describe('Bitcoin API', () => {
           });
 
         expect(response.status).toBe(403);
+      });
+
+      it('should return 400 when batch creation fails', async () => {
+        mockPrismaClient.wallet.findFirst.mockResolvedValue({ id: 'wallet-1' });
+        mockAdvancedTx.createBatchTransaction.mockRejectedValue(new Error('batch failed'));
+
+        const response = await request(app)
+          .post('/bitcoin/transaction/batch')
+          .send({
+            recipients: [{ address: 'bc1qtest', amount: 250000 }],
+            feeRate: 20,
+            walletId: 'wallet-1',
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+          error: 'Bad Request',
+          message: 'batch failed',
+        });
       });
     });
   });

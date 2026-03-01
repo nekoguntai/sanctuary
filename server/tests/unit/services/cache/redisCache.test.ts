@@ -57,6 +57,18 @@ describe('RedisCache', () => {
     expect(cache.getStats().hits).toBe(1);
   });
 
+  it('get returns null and tracks miss on parse or redis errors', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    redis.get.mockResolvedValueOnce('{bad-json');
+    expect(await cache.get('broken')).toBeNull();
+
+    redis.get.mockRejectedValueOnce(new Error('redis down'));
+    expect(await cache.get('broken2')).toBeNull();
+    expect(cache.getStats().misses).toBe(2);
+  });
+
   it('set uses default ttl and increments stats', async () => {
     const redis = makeRedis();
     const cache = new RedisCache(redis as any, 'test', 42);
@@ -66,6 +78,15 @@ describe('RedisCache', () => {
     expect(cache.getStats().sets).toBe(1);
   });
 
+  it('set swallows redis errors', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test', 42);
+
+    redis.setex.mockRejectedValueOnce(new Error('write failed'));
+    await expect(cache.set('a', { value: 1 })).resolves.toBeUndefined();
+    expect(cache.getStats().sets).toBe(0);
+  });
+
   it('delete returns true when key removed', async () => {
     const redis = makeRedis();
     const cache = new RedisCache(redis as any, 'test');
@@ -73,6 +94,17 @@ describe('RedisCache', () => {
     redis.del.mockResolvedValueOnce(1);
     expect(await cache.delete('a')).toBe(true);
     expect(cache.getStats().deletes).toBe(1);
+  });
+
+  it('delete returns false when key missing or redis errors', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    redis.del.mockResolvedValueOnce(0);
+    expect(await cache.delete('a')).toBe(false);
+
+    redis.del.mockRejectedValueOnce(new Error('delete failed'));
+    expect(await cache.delete('b')).toBe(false);
   });
 
   it('deletePattern scans and deletes matching keys', async () => {
@@ -91,12 +123,41 @@ describe('RedisCache', () => {
     expect(cache.getStats().deletes).toBe(3);
   });
 
+  it('deletePattern returns 0 on redis errors', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    redis.scan.mockRejectedValueOnce(new Error('scan failed'));
+    await expect(cache.deletePattern('user:*')).resolves.toBe(0);
+  });
+
   it('has returns false on redis error', async () => {
     const redis = makeRedis();
     const cache = new RedisCache(redis as any, 'test');
 
     redis.exists.mockRejectedValueOnce(new Error('boom'));
     expect(await cache.has('a')).toBe(false);
+  });
+
+  it('has returns true when key exists', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    redis.exists.mockResolvedValueOnce(1);
+    expect(await cache.has('a')).toBe(true);
+  });
+
+  it('clear delegates to deletePattern and handles errors', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    const deletePatternSpy = vi.spyOn(cache, 'deletePattern');
+    deletePatternSpy.mockResolvedValueOnce(2);
+    await expect(cache.clear()).resolves.toBeUndefined();
+    expect(deletePatternSpy).toHaveBeenCalledWith('*');
+
+    deletePatternSpy.mockRejectedValueOnce(new Error('clear failed'));
+    await expect(cache.clear()).resolves.toBeUndefined();
   });
 
   it('namespace shares stats and prefixes keys', async () => {
@@ -111,6 +172,12 @@ describe('RedisCache', () => {
     expect(cache.getStats().hits).toBe(1);
     expect(child.getStats().hits).toBe(1);
   });
+
+  it('getClient returns underlying redis instance', () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'base');
+    expect(cache.getClient()).toBe(redis);
+  });
 });
 
 describe('createRedisCache', () => {
@@ -123,6 +190,12 @@ describe('createRedisCache', () => {
     hoisted.redisCtorImpl.mockImplementation(() => redis);
 
     const promise = createRedisCache('redis://localhost:6379');
+    const options = hoisted.redisCtorImpl.mock.calls[0][1] as any;
+    expect(options.retryStrategy(2)).toBe(200);
+    expect(options.retryStrategy(100)).toBe(3000);
+    expect(options.reconnectOnError(new Error('READONLY You can only write against primary'))).toBe(true);
+    expect(options.reconnectOnError(new Error('ECONNREFUSED'))).toBe(false);
+
     redis.emit('connect');
     const cache = await promise;
 
@@ -147,5 +220,10 @@ describe('createRedisPubSub', () => {
     expect(publisher).toBeDefined();
     expect(subscriber).toBeDefined();
     expect(hoisted.redisCtorImpl).toHaveBeenCalledTimes(2);
+
+    const publisherOptions = hoisted.redisCtorImpl.mock.calls[0][1] as any;
+    const subscriberOptions = hoisted.redisCtorImpl.mock.calls[1][1] as any;
+    expect(publisherOptions.retryStrategy(2)).toBe(200);
+    expect(subscriberOptions.retryStrategy(30)).toBe(3000);
   });
 });

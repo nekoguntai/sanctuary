@@ -28,19 +28,20 @@ const mockProvider = {
   send: vi.fn(),
   isHealthy: vi.fn().mockResolvedValue(true),
 };
+const mockRegistry = {
+  getAll: vi.fn(() => [mockProvider]),
+  getHealth: vi.fn().mockResolvedValue({ healthyProviders: 1, providers: [{ name: 'mock', healthy: true }] }),
+  shutdown: vi.fn(),
+};
 
 const mockHasConfiguredProviders = vi.fn();
 const mockGetProviderForPlatform = vi.fn();
 
 vi.mock('../../../../src/services/push/providers', () => ({
-  createPushProviderRegistry: vi.fn(() => ({
-    getAll: () => [mockProvider],
-    getHealth: vi.fn().mockResolvedValue({ healthyProviders: 1, providers: [{ name: 'mock', healthy: true }] }),
-    shutdown: vi.fn(),
-  })),
+  createPushProviderRegistry: vi.fn(() => mockRegistry),
   initializePushProviders: vi.fn(),
   getProviderForPlatform: (...args: unknown[]) => mockGetProviderForPlatform(...args),
-  hasConfiguredProviders: () => mockHasConfiguredProviders(),
+  hasConfiguredProviders: (...args: unknown[]) => mockHasConfiguredProviders(...args),
 }));
 
 // Mock logger
@@ -264,6 +265,29 @@ describe('Push Service', () => {
       await sendPushNotification(userId, message);
 
       expect(mockProvider.send).not.toHaveBeenCalled();
+    });
+
+    it('should remove invalid token when provider returns unsuccessful invalid-token response', async () => {
+      const device = {
+        id: 'device-1',
+        userId,
+        platform: 'ios',
+        token: 'expired-token',
+        lastUsedAt: new Date(),
+      };
+
+      mockPrismaClient.pushDevice.findMany.mockResolvedValue([device]);
+      mockGetProviderForPlatform.mockReturnValue(mockProvider);
+      mockProvider.send.mockResolvedValue({
+        success: false,
+        error: 'BadDeviceToken',
+      });
+
+      await sendPushNotification(userId, message);
+
+      expect(mockPrismaClient.pushDevice.delete).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+      });
     });
   });
 
@@ -564,6 +588,69 @@ describe('Push Service', () => {
       } else {
         expect(mockPrismaClient.pushDevice.delete).not.toHaveBeenCalled();
       }
+    });
+  });
+
+  describe('service helpers', () => {
+    it('getProviders returns empty before initialization and provider names after initialization', async () => {
+      const service = getPushService();
+      await service.shutdown();
+
+      expect(service.getProviders()).toEqual([]);
+
+      await service.initialize();
+      expect(service.getProviders()).toEqual(['mock-provider']);
+    });
+
+    it('healthCheck returns provider health map', async () => {
+      mockRegistry.getHealth.mockResolvedValueOnce({
+        healthyProviders: 1,
+        providers: [
+          { name: 'apns', healthy: true },
+          { name: 'fcm', healthy: false },
+        ],
+      });
+
+      const service = getPushService();
+      const health = await service.healthCheck();
+
+      expect(health).toEqual({
+        healthy: true,
+        providers: {
+          apns: true,
+          fcm: false,
+        },
+      });
+    });
+
+    it('shutdown calls registry shutdown and resets initialization state', async () => {
+      const service = getPushService();
+      await service.initialize();
+
+      await service.shutdown();
+
+      expect(mockRegistry.shutdown).toHaveBeenCalled();
+      expect(service.getProviders()).toEqual([]);
+    });
+  });
+
+  describe('isPushConfigured fcm file path', () => {
+    it('returns true when readable FCM service account path is configured', () => {
+      const fs = require('fs');
+      const accessSpy = vi.spyOn(fs, 'accessSync').mockImplementation(() => undefined);
+
+      const original = process.env;
+      process.env = { ...original };
+      delete process.env.APNS_KEY_ID;
+      delete process.env.APNS_TEAM_ID;
+      delete process.env.APNS_KEY_PATH;
+      delete process.env.APNS_BUNDLE_ID;
+      process.env.FCM_SERVICE_ACCOUNT = '/tmp/fcm-service-account.json';
+
+      expect(isPushConfigured()).toBe(true);
+
+      accessSpy.mockRestore();
+      process.env = original;
     });
   });
 });

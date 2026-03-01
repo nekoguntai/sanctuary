@@ -68,6 +68,7 @@ import { draftRepository } from '../../../src/repositories';
 import { lockUtxosForDraft, resolveUtxoIds } from '../../../src/services/draftLockService';
 import { notifyNewDraft } from '../../../src/services/notifications/notificationService';
 import * as walletService from '../../../src/services/wallet';
+import * as bitcoin from 'bitcoinjs-lib';
 import { NotFoundError, ForbiddenError, InvalidInputError, ConflictError, WalletNotFoundError } from '../../../src/errors';
 import {
   getDraftsForWallet,
@@ -193,6 +194,11 @@ describe('DraftService', () => {
       await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(ForbiddenError);
     });
 
+    it('throws WalletNotFoundError when wallet does not exist', async () => {
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
+      await expect(createDraft(walletId, userId, validInput)).rejects.toThrow(WalletNotFoundError);
+    });
+
     it('should throw InvalidInputError for missing required fields', async () => {
       await expect(createDraft(walletId, userId, { ...validInput, recipient: '' })).rejects.toThrow(InvalidInputError);
       await expect(createDraft(walletId, userId, { ...validInput, psbtBase64: '' })).rejects.toThrow(InvalidInputError);
@@ -205,6 +211,16 @@ describe('DraftService', () => {
       expect(draftRepository.remove).toHaveBeenCalledWith(mockDraft.id);
     });
 
+    it('continues when some selected UTXOs are not found', async () => {
+      (resolveUtxoIds as Mock).mockResolvedValue({
+        found: ['utxo-id-1'],
+        notFound: ['missing-utxo'],
+      });
+
+      await expect(createDraft(walletId, userId, validInput)).resolves.toEqual(mockDraft);
+      expect(lockUtxosForDraft).toHaveBeenCalledWith(mockDraft.id, ['utxo-id-1'], { isRBF: false });
+    });
+
     it('should send notification after creating draft', async () => {
       await createDraft(walletId, userId, validInput);
 
@@ -213,6 +229,16 @@ describe('DraftService', () => {
         expect.objectContaining({ id: mockDraft.id }),
         userId
       );
+    });
+
+    it('swallows notification errors and still returns draft', async () => {
+      (notifyNewDraft as Mock).mockRejectedValueOnce(new Error('notify failed'));
+
+      const result = await createDraft(walletId, userId, validInput);
+      await Promise.resolve();
+
+      expect(result).toEqual(mockDraft);
+      expect(notifyNewDraft).toHaveBeenCalled();
     });
 
     it('should use custom expiration days from settings', async () => {
@@ -293,6 +319,143 @@ describe('DraftService', () => {
         label: 'Test',
         memo: 'Note',
       }));
+    });
+
+    it('throws WalletNotFoundError when wallet is missing', async () => {
+      (walletService.getWalletById as Mock).mockResolvedValue(null);
+      await expect(updateDraft(walletId, draftId, userId, {})).rejects.toThrow(WalletNotFoundError);
+    });
+
+    it('combines existing and new PSBT signatures when signedPsbtBase64 is provided', async () => {
+      const existingPsbtObj = {
+        data: {
+          inputs: [
+            {
+              partialSig: [
+                { pubkey: Buffer.from('aa'.repeat(16), 'hex') },
+              ],
+            },
+          ],
+        },
+        combine: vi.fn(),
+        toBase64: vi.fn().mockReturnValue('combined-psbt'),
+      };
+      const newPsbtObj = {
+        data: {
+          inputs: [
+            {
+              partialSig: [
+                { pubkey: Buffer.from('bb'.repeat(16), 'hex') },
+              ],
+            },
+          ],
+        },
+      };
+
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64');
+      fromBase64Spy
+        .mockReturnValueOnce(existingPsbtObj as any)
+        .mockReturnValueOnce(newPsbtObj as any);
+
+      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'new-psbt' });
+
+      expect(existingPsbtObj.combine).toHaveBeenCalledWith(newPsbtObj);
+      expect(draftRepository.update).toHaveBeenCalledWith(
+        draftId,
+        expect.objectContaining({
+          signedPsbtBase64: 'combined-psbt',
+          expectedUpdatedAt: mockDraft.updatedAt,
+        })
+      );
+      fromBase64Spy.mockRestore();
+    });
+
+    it('falls back to new PSBT when combine fails', async () => {
+      const existingPsbtObj = {
+        data: { inputs: [] },
+        combine: vi.fn(() => {
+          throw new Error('combine failed');
+        }),
+      };
+      const newPsbtObj = {
+        data: { inputs: [] },
+      };
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64');
+      fromBase64Spy
+        .mockReturnValueOnce(existingPsbtObj as any)
+        .mockReturnValueOnce(newPsbtObj as any);
+
+      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'fallback-psbt' });
+
+      expect(draftRepository.update).toHaveBeenCalledWith(
+        draftId,
+        expect.objectContaining({
+          signedPsbtBase64: 'fallback-psbt',
+        })
+      );
+      fromBase64Spy.mockRestore();
+    });
+
+    it('retries on optimistic conflict and succeeds with refreshed draft', async () => {
+      const refreshedDraft = {
+        ...mockDraft,
+        updatedAt: new Date(mockDraft.updatedAt.getTime() + 1000),
+      };
+      (draftRepository.update as Mock)
+        .mockRejectedValueOnce(new Error('DRAFT_UPDATE_CONFLICT'))
+        .mockResolvedValueOnce({ ...mockDraft, status: 'partial' });
+      (draftRepository.findByIdInWallet as Mock)
+        .mockResolvedValueOnce(mockDraft)
+        .mockResolvedValueOnce(refreshedDraft);
+
+      const result = await updateDraft(walletId, draftId, userId, {
+        signedDeviceId: 'device-retry',
+      });
+
+      expect(result.status).toBe('partial');
+      expect(draftRepository.update).toHaveBeenNthCalledWith(
+        1,
+        draftId,
+        expect.objectContaining({
+          signedDeviceIds: ['device-retry'],
+          expectedUpdatedAt: mockDraft.updatedAt,
+        })
+      );
+      expect(draftRepository.update).toHaveBeenNthCalledWith(
+        2,
+        draftId,
+        expect.objectContaining({
+          signedDeviceIds: ['device-retry'],
+          expectedUpdatedAt: refreshedDraft.updatedAt,
+        })
+      );
+    });
+
+    it('throws ConflictError after exhausting optimistic retries', async () => {
+      (draftRepository.update as Mock).mockRejectedValue(new Error('DRAFT_UPDATE_CONFLICT'));
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue(mockDraft);
+
+      await expect(
+        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-fail' })
+      ).rejects.toThrow(ConflictError);
+    });
+
+    it('throws NotFoundError if draft disappears during conflict retry', async () => {
+      (draftRepository.update as Mock).mockRejectedValueOnce(new Error('DRAFT_UPDATE_CONFLICT'));
+      (draftRepository.findByIdInWallet as Mock)
+        .mockResolvedValueOnce(mockDraft)
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-missing' })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('rethrows non-conflict update errors without retry', async () => {
+      (draftRepository.update as Mock).mockRejectedValueOnce(new Error('db down'));
+      await expect(
+        updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-err' })
+      ).rejects.toThrow('db down');
     });
   });
 

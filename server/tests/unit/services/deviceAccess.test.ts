@@ -27,8 +27,11 @@ vi.mock('../../../src/utils/logger', () => ({
 import {
   checkDeviceAccess,
   checkDeviceOwnerAccess,
+  checkDeviceAccessWithRole,
   getUserDeviceRole,
+  getUserAccessibleDevices,
   getDeviceShareInfo,
+  getDevicesToShareForWallet,
   shareDeviceWithUser,
   removeUserFromDevice,
   shareDeviceWithGroup,
@@ -141,6 +144,36 @@ describe('Device Access Service', () => {
     });
   });
 
+  describe('checkDeviceAccessWithRole', () => {
+    it('returns access metadata when owner', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValue({
+        id: 'du-1',
+        deviceId,
+        userId,
+        role: 'owner',
+      });
+
+      const result = await checkDeviceAccessWithRole(deviceId, userId);
+      expect(result).toEqual({
+        hasAccess: true,
+        isOwner: true,
+        role: 'owner',
+      });
+    });
+
+    it('returns no access metadata when user has no role', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValue(null);
+      mockPrismaClient.device.findFirst.mockResolvedValue(null);
+
+      const result = await checkDeviceAccessWithRole(deviceId, userId);
+      expect(result).toEqual({
+        hasAccess: false,
+        isOwner: false,
+        role: null,
+      });
+    });
+  });
+
   describe('getUserDeviceRole', () => {
     it('should return owner when user is owner', async () => {
       mockPrismaClient.deviceUser.findFirst.mockResolvedValue({
@@ -227,6 +260,97 @@ describe('Device Access Service', () => {
       expect(result.group).toBeNull();
       expect(result.users).toHaveLength(1);
     });
+
+    it('returns empty share info when device does not exist', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+
+      const result = await getDeviceShareInfo(deviceId);
+      expect(result).toEqual({ group: null, users: [] });
+    });
+  });
+
+  describe('getUserAccessibleDevices', () => {
+    it('formats direct and group access devices correctly', async () => {
+      const now = new Date();
+      mockPrismaClient.device.findMany.mockResolvedValue([
+        {
+          id: 'device-owner',
+          userId,
+          modelId: 'model-1',
+          type: 'hardware',
+          label: 'Owner Device',
+          fingerprint: 'fp-1',
+          derivationPath: "m/84'/0'/0'",
+          xpub: 'xpub-owner',
+          groupId: null,
+          groupRole: 'viewer',
+          createdAt: now,
+          updatedAt: now,
+          model: { id: 'model-1', slug: 'ledger-nano', name: 'Ledger Nano' },
+          wallets: [{ wallet: { id: 'w1', name: 'Wallet One', type: 'multisig', scriptType: 'p2wsh' } }],
+          accounts: [
+            {
+              id: 'acc-1',
+              purpose: '84',
+              scriptType: 'p2wpkh',
+              derivationPath: "m/84'/0'/0'",
+              xpub: 'xpub-acc-1',
+            },
+          ],
+          users: [{ role: 'owner' }],
+          user: { username: 'owner-user' },
+        },
+        {
+          id: 'device-group',
+          userId: 'other-owner',
+          modelId: null,
+          type: 'hardware',
+          label: 'Group Device',
+          fingerprint: 'fp-2',
+          derivationPath: null,
+          xpub: 'xpub-group',
+          groupId: 'group-1',
+          groupRole: 'viewer',
+          createdAt: now,
+          updatedAt: now,
+          model: null,
+          wallets: [],
+          accounts: [],
+          users: [],
+          user: { username: 'shared-by-owner' },
+        },
+      ]);
+
+      const result = await getUserAccessibleDevices(userId);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          id: 'device-owner',
+          isOwner: true,
+          userRole: 'owner',
+          sharedBy: undefined,
+          walletCount: 1,
+        })
+      );
+      expect(result[1]).toEqual(
+        expect.objectContaining({
+          id: 'device-group',
+          isOwner: false,
+          userRole: 'viewer',
+          sharedBy: 'shared-by-owner',
+          walletCount: 0,
+        })
+      );
+      expect(mockPrismaClient.device.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.any(Array),
+          }),
+          orderBy: { createdAt: 'desc' },
+        })
+      );
+    });
   });
 
   describe('shareDeviceWithUser', () => {
@@ -280,6 +404,23 @@ describe('Device Access Service', () => {
       expect(result.success).toBe(true);
       expect(result.message).toContain('already shared');
     });
+
+    it('returns not found when target user does not exist', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValueOnce({
+        id: 'du-owner',
+        deviceId,
+        userId,
+        role: 'owner',
+      });
+      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+
+      const result = await shareDeviceWithUser(deviceId, targetUserId, userId);
+
+      expect(result).toEqual({
+        success: false,
+        message: 'User not found',
+      });
+    });
   });
 
   describe('removeUserFromDevice', () => {
@@ -317,6 +458,18 @@ describe('Device Access Service', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('Cannot remove device owner');
+    });
+
+    it('returns error when target user has no access record', async () => {
+      mockPrismaClient.deviceUser.findFirst
+        .mockResolvedValueOnce({ id: 'du-owner', deviceId, userId, role: 'owner' })
+        .mockResolvedValueOnce(null);
+
+      const result = await removeUserFromDevice(deviceId, targetUserId, userId);
+      expect(result).toEqual({
+        success: false,
+        message: 'User does not have access to this device',
+      });
     });
   });
 
@@ -377,6 +530,80 @@ describe('Device Access Service', () => {
 
       expect(result.success).toBe(true);
       expect(result.groupName).toBeNull();
+    });
+
+    it('returns not found when group does not exist', async () => {
+      mockPrismaClient.deviceUser.findFirst.mockResolvedValue({
+        id: 'du-1',
+        deviceId,
+        userId,
+        role: 'owner',
+      });
+      mockPrismaClient.group.findUnique.mockResolvedValue(null);
+
+      const result = await shareDeviceWithGroup(deviceId, groupId, userId);
+
+      expect(result).toEqual({
+        success: false,
+        message: 'Group not found',
+        groupName: null,
+      });
+    });
+  });
+
+  describe('getDevicesToShareForWallet', () => {
+    it('returns only devices target user cannot access directly or via group', async () => {
+      mockPrismaClient.groupMember.findMany.mockResolvedValue([
+        { groupId: 'group-a' },
+      ]);
+      mockPrismaClient.walletDevice.findMany.mockResolvedValue([
+        {
+          device: {
+            id: 'device-direct',
+            label: 'Direct Device',
+            fingerprint: 'fp-direct',
+            groupId: null,
+            users: [{ userId: targetUserId }],
+          },
+        },
+        {
+          device: {
+            id: 'device-group',
+            label: 'Group Device',
+            fingerprint: 'fp-group',
+            groupId: 'group-a',
+            users: [],
+          },
+        },
+        {
+          device: {
+            id: 'device-share',
+            label: 'Needs Share',
+            fingerprint: 'fp-share',
+            groupId: 'group-b',
+            users: [],
+          },
+        },
+      ]);
+
+      const result = await getDevicesToShareForWallet('wallet-1', targetUserId);
+
+      expect(result).toEqual([
+        {
+          id: 'device-share',
+          label: 'Needs Share',
+          fingerprint: 'fp-share',
+        },
+      ]);
+      expect(mockPrismaClient.groupMember.findMany).toHaveBeenCalledWith({
+        where: { userId: targetUserId },
+        select: { groupId: true },
+      });
+      expect(mockPrismaClient.walletDevice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { walletId: 'wallet-1' },
+        })
+      );
     });
   });
 });

@@ -476,6 +476,27 @@ describe('Node API Routes', () => {
         expect(response.body.message).toContain('Connection refused');
       });
 
+      it('should resolve with timeout message when connection never responds', async () => {
+        vi.useFakeTimers();
+        try {
+          const responsePromise = startAuthedRequest(app, {
+            host: 'electrum.example.com',
+            port: 50002,
+            protocol: 'ssl',
+          });
+
+          await getLastSocket(mockTlsConnect);
+          await vi.advanceTimersByTimeAsync(10000);
+
+          const response = await responsePromise;
+          expect(response.status).toBe(200);
+          expect(response.body.success).toBe(false);
+          expect(response.body.message).toContain('Connection timeout (10 seconds)');
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
       it('should handle socket timeout', async () => {
         const responsePromise = startAuthedRequest(app, {
           host: 'electrum.example.com',
@@ -542,6 +563,43 @@ describe('Node API Routes', () => {
         expect(response.body.success).toBe(true);
         expect(response.body.serverInfo.server).toBe('Unknown');
         expect(response.body.serverInfo.protocol).toBe('Unknown');
+      });
+
+      it('should handle synchronous socket setup errors', async () => {
+        mockTlsConnect.mockImplementationOnce(() => {
+          throw new Error('socket setup failed');
+        });
+
+        const response = await startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(false);
+        expect(response.body.message).toContain('Connection error: socket setup failed');
+      });
+
+      it('should return 500 for unexpected route handler errors', async () => {
+        const explodingBody = {};
+        Object.defineProperty(explodingBody, 'host', {
+          enumerable: true,
+          get() {
+            throw new Error('exploding body');
+          },
+        });
+
+        const response = await request(app)
+          .post('/api/v1/node/test')
+          .set('Authorization', 'Bearer valid-token')
+          .send(explodingBody);
+
+        expect(response.status).toBe(500);
+        expect(response.body).toMatchObject({
+          error: 'Internal Server Error',
+          message: 'Failed to test node connection',
+        });
       });
     });
 

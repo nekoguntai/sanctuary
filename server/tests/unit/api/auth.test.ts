@@ -93,7 +93,13 @@ vi.mock('../../../src/services/email', () => ({
 // Mock rate limiting middleware to allow requests through in tests
 vi.mock('../../../src/middleware/rateLimit', () => ({
   rateLimit: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  rateLimitByIpAndKey: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  rateLimitByIpAndKey: (_key?: string, extractKey?: (req: any) => string | undefined) =>
+    (req: unknown, _res: unknown, next: () => void) => {
+      if (extractKey) {
+        extractKey(req as any);
+      }
+      next();
+    },
   rateLimitByUser: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
@@ -632,6 +638,9 @@ describe('Auth API Routes', () => {
   beforeEach(() => {
     resetPrismaMocks();
     vi.clearAllMocks();
+    mockIsVerificationRequired.mockResolvedValue(true);
+    mockIsSmtpConfigured.mockResolvedValue(false);
+    mockCreateVerificationToken.mockResolvedValue({ success: false });
   });
 
   // ========================================
@@ -1231,6 +1240,89 @@ describe('Auth API Routes', () => {
       expect(response.status).toBe(201);
       expect(response.body.user.emailVerified).toBe(false);
     });
+
+    it('should send verification email when SMTP is configured', async () => {
+      mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
+        key: 'registrationEnabled',
+        value: 'true',
+      });
+      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      mockPrismaClient.user.create.mockResolvedValue({
+        id: 'new-user-id',
+        username: 'newuser',
+        email: 'new@example.com',
+        emailVerified: false,
+        isAdmin: false,
+        preferences: { darkMode: true },
+      });
+      mockIsSmtpConfigured.mockResolvedValue(true);
+      mockCreateVerificationToken.mockResolvedValue({ success: true });
+
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ username: 'newuser', password: 'StrongPassword123!', email: 'new@example.com' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.emailVerificationRequired).toBe(true);
+      expect(response.body.verificationEmailSent).toBe(true);
+      expect(mockCreateVerificationToken).toHaveBeenCalledWith(
+        'new-user-id',
+        'new@example.com',
+        'newuser'
+      );
+    });
+
+    it('should still register when verification email delivery fails', async () => {
+      mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
+        key: 'registrationEnabled',
+        value: 'true',
+      });
+      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      mockPrismaClient.user.create.mockResolvedValue({
+        id: 'new-user-id',
+        username: 'newuser',
+        email: 'new@example.com',
+        emailVerified: false,
+        isAdmin: false,
+        preferences: { darkMode: true },
+      });
+      mockIsSmtpConfigured.mockResolvedValue(true);
+      mockCreateVerificationToken.mockResolvedValue({ success: false, error: 'SMTP failure' });
+
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ username: 'newuser', password: 'StrongPassword123!', email: 'new@example.com' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.emailVerificationRequired).toBe(true);
+      expect(response.body.verificationEmailSent).toBe(false);
+    });
+
+    it('should return a generic success message when verification is not required', async () => {
+      mockPrismaClient.systemSetting.findUnique.mockResolvedValue({
+        key: 'registrationEnabled',
+        value: 'true',
+      });
+      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      mockPrismaClient.user.create.mockResolvedValue({
+        id: 'new-user-id',
+        username: 'newuser',
+        email: 'new@example.com',
+        emailVerified: false,
+        isAdmin: false,
+        preferences: { darkMode: true },
+      });
+      mockIsVerificationRequired.mockResolvedValue(false);
+      mockIsSmtpConfigured.mockResolvedValue(false);
+
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({ username: 'newuser', password: 'StrongPassword123!', email: 'new@example.com' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.emailVerificationRequired).toBe(false);
+      expect(response.body.message).toBe('Registration successful.');
+    });
   });
 
   describe('POST /auth/login - User Login', () => {
@@ -1423,6 +1515,20 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
+    });
+
+    it('should return 500 when login query fails unexpectedly', async () => {
+      mockPrismaClient.user.findUnique.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ username: 'testuser', password: 'password123' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to login',
+      });
     });
   });
 

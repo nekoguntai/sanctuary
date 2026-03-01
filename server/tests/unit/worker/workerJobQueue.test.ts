@@ -10,6 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let mockQueueInstance: ReturnType<typeof createMockQueue>;
 let mockWorkerInstance: ReturnType<typeof createMockWorker>;
 let mockQueueEventsInstance: ReturnType<typeof createMockQueueEvents>;
+const { mockDlqAdd } = vi.hoisted(() => ({
+  mockDlqAdd: vi.fn().mockResolvedValue(undefined),
+}));
 
 function createMockQueue() {
   return {
@@ -93,8 +96,15 @@ vi.mock('../../../src/infrastructure/distributedLock', () => ({
   releaseLock: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../../src/services/deadLetterQueue', () => ({
+  deadLetterQueue: {
+    add: mockDlqAdd,
+  },
+}));
+
 import { WorkerJobQueue } from '../../../src/worker/workerJobQueue';
 import type { WorkerJobHandler } from '../../../src/worker/jobs/types';
+import { acquireLock, extendLock, releaseLock } from '../../../src/infrastructure/distributedLock';
 
 describe('WorkerJobQueue', () => {
   let queue: WorkerJobQueue;
@@ -333,6 +343,239 @@ describe('WorkerJobQueue', () => {
       const jobs = queue.getRegisteredJobs();
       expect(jobs).toContain('sync:job1');
       expect(jobs).toContain('notifications:job2');
+    });
+  });
+
+  describe('internal behavior and error paths', () => {
+    it('throws when creating queue without a connection', async () => {
+      await expect((queue as any).createQueue('sync')).rejects.toThrow('Connection not established');
+    });
+
+    it('routes exhausted failed jobs to DLQ via worker event handlers', async () => {
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      const fakeWorker = {
+        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          handlers[event] = handler;
+        }),
+      };
+
+      (queue as any).setupEventHandlers('sync', fakeWorker as any);
+
+      handlers.completed?.({
+        id: 'job-1',
+        name: 'sync-wallet',
+        processedOn: 10,
+        finishedOn: 25,
+      });
+
+      handlers.failed?.(
+        {
+          id: 'job-2',
+          name: 'sync-wallet',
+          data: { walletId: 'w1' },
+          attemptsMade: 3,
+          opts: { attempts: 3 },
+        },
+        new Error('boom')
+      );
+
+      handlers.failed?.(
+        {
+          id: 'job-3',
+          name: 'sync-wallet',
+          data: { walletId: 'w1' },
+          attemptsMade: 1,
+          opts: { attempts: 3 },
+        },
+        new Error('retrying')
+      );
+
+      handlers.error?.(new Error('worker-error'));
+      handlers.stalled?.('job-4');
+
+      expect(mockDlqAdd).toHaveBeenCalledTimes(1);
+      expect(mockDlqAdd).toHaveBeenCalledWith(
+        'sync',
+        'sync:sync-wallet',
+        expect.objectContaining({ queue: 'sync', jobId: 'job-2' }),
+        expect.any(Error),
+        3,
+        expect.objectContaining({ queueName: 'sync', jobId: 'job-2' })
+      );
+    });
+
+    it('processJob throws for missing handlers', async () => {
+      await expect(
+        (queue as any).processJob('sync', { id: 'j-1', name: 'missing', data: {} })
+      ).rejects.toThrow('No handler registered for sync:missing');
+    });
+
+    it('processes unlocked handlers directly', async () => {
+      queue.registerHandler('sync', {
+        name: 'simple',
+        queue: 'sync',
+        handler: vi.fn(async () => ({ ok: true })),
+      });
+
+      const result = await (queue as any).processJob('sync', {
+        id: 'j-2',
+        name: 'simple',
+        data: { id: '123' },
+      });
+
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('skips locked handlers when lock is already held', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce(null);
+
+      queue.registerHandler('sync', {
+        name: 'locked',
+        queue: 'sync',
+        handler: vi.fn(async () => ({ ok: true })),
+        lockOptions: {
+          lockKey: (data) => `lock:${(data as any).walletId}`,
+          lockTtlMs: 1500,
+        },
+      });
+
+      const result = await (queue as any).processJob('sync', {
+        id: 'j-3',
+        name: 'locked',
+        data: { walletId: 'wallet-1' },
+      });
+
+      expect(result).toEqual({ skipped: true, reason: 'lock_held' });
+    });
+
+    it('releases distributed lock after successful locked processing', async () => {
+      const handler = vi.fn(async () => ({ processed: true }));
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:wallet-1',
+        token: 'token-1',
+        expiresAt: Date.now() + 2000,
+        isLocal: false,
+      } as any);
+
+      queue.registerHandler('sync', {
+        name: 'locked-success',
+        queue: 'sync',
+        handler,
+        lockOptions: {
+          lockKey: () => 'lock:wallet-1',
+          lockTtlMs: 2000,
+        },
+      });
+
+      const result = await (queue as any).processJob('sync', {
+        id: 'j-4',
+        name: 'locked-success',
+        data: { walletId: 'wallet-1' },
+      });
+
+      expect(handler).toHaveBeenCalled();
+      expect(result).toEqual({ processed: true });
+      expect(vi.mocked(releaseLock)).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'lock:wallet-1' })
+      );
+    });
+
+    it('aborts locked processing when lock refresh is lost', async () => {
+      vi.useFakeTimers();
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:wallet-lost',
+        token: 'token-lost',
+        expiresAt: Date.now() + 1200,
+        isLocal: false,
+      } as any);
+      vi.mocked(extendLock).mockResolvedValueOnce(null);
+
+      queue.registerHandler('sync', {
+        name: 'locked-lost',
+        queue: 'sync',
+        handler: vi.fn(() => new Promise(() => undefined)),
+        lockOptions: {
+          lockKey: () => 'lock:wallet-lost',
+          lockTtlMs: 1200,
+        },
+      });
+
+      const runPromise = (queue as any).processJob('sync', {
+        id: 'j-5',
+        name: 'locked-lost',
+        data: { walletId: 'wallet-lost' },
+      });
+      const rejection = expect(runPromise).rejects.toThrow('Lock lost for sync:locked-lost');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await rejection;
+      expect(vi.mocked(releaseLock)).not.toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'lock:wallet-lost' })
+      );
+
+      vi.useRealTimers();
+    });
+
+    it('covers add/addBulk/schedule error and duplicate branches', async () => {
+      await queue.initialize();
+      const syncQueue = (queue as any).queues.get('sync').queue;
+
+      syncQueue.add.mockRejectedValueOnce(new Error('add failed'));
+      await expect(queue.addJob('sync', 'broken', {})).resolves.toBeNull();
+
+      syncQueue.addBulk.mockRejectedValueOnce(new Error('bulk failed'));
+      await expect(queue.addBulkJobs('sync', [{ name: 'bulk', data: {} }])).resolves.toEqual([]);
+
+      syncQueue.getRepeatableJobs.mockResolvedValueOnce([
+        { name: 'repeat-job', id: 'repeat:sync:repeat-job:*/5 * * * *' },
+      ]);
+      await expect(
+        queue.scheduleRecurring('sync', 'repeat-job', {}, '*/5 * * * *')
+      ).resolves.toBeNull();
+
+      syncQueue.getRepeatableJobs.mockRejectedValueOnce(new Error('repeat failed'));
+      await expect(
+        queue.scheduleRecurring('sync', 'repeat-job', {}, '*/5 * * * *')
+      ).resolves.toBeNull();
+    });
+
+    it('reports unhealthy queue metrics when queue stats fail', async () => {
+      await queue.initialize();
+      const syncQueue = (queue as any).queues.get('sync').queue;
+      syncQueue.getWaitingCount.mockRejectedValueOnce(new Error('health failed'));
+
+      const health = await queue.getHealth();
+      expect(health.healthy).toBe(false);
+      expect(health.queues.sync).toEqual({
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        paused: false,
+      });
+    });
+
+    it('returns false from isHealthy when a worker is not running', async () => {
+      await queue.initialize();
+      const syncWorker = (queue as any).queues.get('sync').worker;
+      syncWorker.isRunning.mockReturnValueOnce(false);
+
+      expect(queue.isHealthy()).toBe(false);
+    });
+
+    it('covers queue-to-DLQ category mapping and concurrent shutdown promise reuse', async () => {
+      expect((queue as any).queueToDlqCategory('sync')).toBe('sync');
+      expect((queue as any).queueToDlqCategory('notifications')).toBe('notification');
+      expect((queue as any).queueToDlqCategory('maintenance')).toBe('other');
+      expect((queue as any).queueToDlqCategory('confirmations')).toBe('sync');
+      expect((queue as any).queueToDlqCategory('other-queue')).toBe('other');
+
+      await queue.initialize();
+      const first = queue.shutdown();
+      const second = queue.shutdown();
+      await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+      expect(queue.isHealthy()).toBe(false);
     });
   });
 });

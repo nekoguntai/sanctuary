@@ -441,8 +441,25 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
     let isTorExit = false;
 
     try {
-      const { SocksProxyAgent } = await import('socks-proxy-agent');
-      const nodeFetch = (await import('node-fetch')).default;
+      const socksModule: any = await import('socks-proxy-agent');
+      const SocksProxyAgent =
+        socksModule.SocksProxyAgent ??
+        socksModule.default?.SocksProxyAgent ??
+        socksModule.default;
+      const nodeFetchModule: any = await import('node-fetch');
+      const nodeFetchCandidate =
+        nodeFetchModule.default?.default ??
+        nodeFetchModule.default ??
+        nodeFetchModule;
+      const nodeFetch =
+        typeof nodeFetchCandidate === 'function'
+          ? nodeFetchCandidate
+          : (typeof nodeFetchCandidate?.default === 'function'
+            ? nodeFetchCandidate.default
+            : undefined);
+      if (!nodeFetch) {
+        throw new Error('node-fetch did not expose a callable function');
+      }
 
       const proxyUrl = username && password
         ? `socks5://${username}:${password}@${host}:${proxyPort}`

@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi, type Mock } from 'vitest';
 /**
  * Feature Gate Middleware Tests
  *
@@ -11,9 +11,11 @@ import {
   requireAllFeatures,
   requireAnyFeature,
   isFeatureEnabled,
+  isFeatureEnabledAsync,
   getEnabledFeatures,
   getFeatureFlagsSummary,
 } from '../../../src/middleware/featureGate';
+import { featureFlagService } from '../../../src/services/featureFlagService';
 
 // Mock the logger
 vi.mock('../../../src/utils/logger', () => ({
@@ -70,6 +72,7 @@ describe('Feature Gate Middleware', () => {
   let nextFunction: NextFunction;
   let jsonMock: Mock;
   let statusMock: Mock;
+  let isEnabledMock: Mock;
 
   beforeEach(() => {
     jsonMock = vi.fn();
@@ -84,6 +87,7 @@ describe('Feature Gate Middleware', () => {
       json: jsonMock,
     };
     nextFunction = vi.fn();
+    isEnabledMock = featureFlagService.isEnabled as unknown as Mock;
 
     // Reset feature flags to default state
     mockFeatures.hardwareWalletSigning = true;
@@ -100,6 +104,18 @@ describe('Feature Gate Middleware', () => {
     mockFeatures.experimental.taprootAddresses = false;
     mockFeatures.experimental.silentPayments = false;
     mockFeatures.experimental.coinJoin = false;
+
+    // Restore default feature service behavior
+    isEnabledMock.mockReset();
+    isEnabledMock.mockImplementation((flag: string) => {
+      if (flag.startsWith('experimental.')) {
+        const key = flag.replace('experimental.', '');
+        return Promise.resolve(
+          mockFeatures.experimental[key as keyof typeof mockFeatures.experimental] ?? false
+        );
+      }
+      return Promise.resolve(mockFeatures[flag as keyof typeof mockFeatures] ?? false);
+    });
   });
 
   describe('requireFeature', () => {
@@ -137,6 +153,26 @@ describe('Feature Gate Middleware', () => {
 
     it('should block disabled experimental features', async () => {
       const middleware = requireFeature('experimental.silentPayments');
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+    });
+
+    it('should use config fallback when feature service fails and allow enabled flag', async () => {
+      isEnabledMock.mockRejectedValueOnce(new Error('service unavailable'));
+      const middleware = requireFeature('hardwareWalletSigning');
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
+    it('should use config fallback when feature service fails and block disabled flag', async () => {
+      isEnabledMock.mockRejectedValueOnce(new Error('service unavailable'));
+      const middleware = requireFeature('payjoinSupport');
 
       await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
 
@@ -187,6 +223,26 @@ describe('Feature Gate Middleware', () => {
         disabledFeatures: expect.arrayContaining(['payjoinSupport', 'priceAlerts']),
       }));
     });
+
+    it('should use config fallback when feature service fails', async () => {
+      isEnabledMock.mockRejectedValue(new Error('service unavailable'));
+      const middleware = requireAllFeatures(['hardwareWalletSigning', 'payjoinSupport']);
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+    });
+
+    it('should allow request when fallback config has all required features enabled', async () => {
+      isEnabledMock.mockRejectedValue(new Error('service unavailable'));
+      const middleware = requireAllFeatures(['hardwareWalletSigning', 'batchTransactions']);
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('requireAnyFeature', () => {
@@ -218,6 +274,26 @@ describe('Feature Gate Middleware', () => {
         requiredAnyOf: ['payjoinSupport', 'priceAlerts', 'aiAssistant'],
       }));
     });
+
+    it('should use fallback and block when service fails with no enabled fallback features', async () => {
+      isEnabledMock.mockRejectedValue(new Error('service unavailable'));
+      const middleware = requireAnyFeature(['payjoinSupport', 'priceAlerts']);
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(403);
+    });
+
+    it('should use fallback and allow when service fails but one fallback feature is enabled', async () => {
+      isEnabledMock.mockRejectedValue(new Error('service unavailable'));
+      const middleware = requireAnyFeature(['payjoinSupport', 'hardwareWalletSigning']);
+
+      await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+      expect(nextFunction).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('isFeatureEnabled', () => {
@@ -236,6 +312,18 @@ describe('Feature Gate Middleware', () => {
       expect(isFeatureEnabled('experimental.taprootAddresses')).toBe(true);
 
       expect(isFeatureEnabled('experimental.silentPayments')).toBe(false);
+    });
+  });
+
+  describe('isFeatureEnabledAsync', () => {
+    it('returns service value when feature service succeeds', async () => {
+      await expect(isFeatureEnabledAsync('hardwareWalletSigning')).resolves.toBe(true);
+    });
+
+    it('falls back to config when feature service throws', async () => {
+      isEnabledMock.mockRejectedValueOnce(new Error('service unavailable'));
+
+      await expect(isFeatureEnabledAsync('payjoinSupport')).resolves.toBe(false);
     });
   });
 
@@ -288,6 +376,15 @@ describe('Feature Gate Middleware', () => {
       expect(summary.flags).toHaveProperty('hardwareWalletSigning');
       // Key is a literal string "experimental.taprootAddresses"
       expect('experimental.taprootAddresses' in summary.flags).toBe(true);
+    });
+
+    it('should count enabled experimental flags in totals', () => {
+      mockFeatures.experimental.coinJoin = true;
+
+      const summary = getFeatureFlagsSummary();
+
+      expect(summary.experimental.enabled).toBe(1);
+      expect(summary.flags['experimental.coinJoin']).toBe(true);
     });
   });
 });

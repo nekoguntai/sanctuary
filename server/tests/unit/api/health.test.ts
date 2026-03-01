@@ -51,6 +51,10 @@ vi.mock('../../../src/services/startupManager', () => ({
   getStartupStatus: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', () => ({
+  statfs: vi.fn(),
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -69,6 +73,7 @@ import { checkRedisHealth } from '../../../src/infrastructure/redis';
 import { jobQueue } from '../../../src/jobs';
 import { getCacheInvalidationStatus } from '../../../src/services/cacheInvalidation';
 import { getStartupStatus } from '../../../src/services/startupManager';
+import { statfs } from 'node:fs/promises';
 
 // Import the router after mocks
 import healthRouter from '../../../src/api/health';
@@ -120,6 +125,7 @@ describe('Health API', () => {
       status: 'healthy',
       latencyMs: 1,
     });
+    (jobQueue.isAvailable as Mock).mockReturnValue(true);
     (jobQueue.getHealth as Mock).mockResolvedValue({
       healthy: true,
       queueName: 'test-queue',
@@ -138,6 +144,11 @@ describe('Health API', () => {
       started: true,
       overallSuccess: true,
       services: [],
+    });
+    (statfs as Mock).mockResolvedValue({
+      blocks: 1000,
+      bavail: 400,
+      bsize: 1024 * 1024,
     });
   });
 
@@ -260,6 +271,192 @@ describe('Health API', () => {
 
       expect(response.body.components.database.latency).toBeDefined();
       expect(typeof response.body.components.database.latency).toBe('number');
+    });
+
+    it('should map degraded Redis status from infrastructure check', async () => {
+      (checkRedisHealth as Mock).mockResolvedValue({
+        status: 'degraded',
+        error: 'Redis latency high',
+        latencyMs: 50,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.redis.status).toBe('degraded');
+      expect(response.body.components.redis.message).toBe('Redis latency high');
+    });
+
+    it('should return unhealthy overall status when Redis is unhealthy', async () => {
+      (checkRedisHealth as Mock).mockResolvedValue({
+        status: 'unhealthy',
+        error: 'Redis unavailable',
+        latencyMs: 0,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(503);
+      expect(response.body.status).toBe('unhealthy');
+      expect(response.body.components.redis.status).toBe('unhealthy');
+    });
+
+    it('should report worker-owned job queue when local queue is unavailable', async () => {
+      (jobQueue.isAvailable as Mock).mockReturnValue(false);
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.jobQueue.status).toBe('healthy');
+      expect(response.body.components.jobQueue.message).toContain('worker process');
+    });
+
+    it('should report degraded when local queue health method is unavailable', async () => {
+      const originalGetHealth = (jobQueue as any).getHealth;
+      (jobQueue as any).getHealth = undefined;
+
+      const response = await request(app).get('/api/v1/health');
+
+      (jobQueue as any).getHealth = originalGetHealth;
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.jobQueue.status).toBe('degraded');
+      expect(response.body.components.jobQueue.message).toBe('Job queue health unavailable');
+    });
+
+    it('should degrade gracefully when job queue health throws', async () => {
+      (jobQueue.getHealth as Mock).mockRejectedValue(new Error('Queue health unavailable'));
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.jobQueue.status).toBe('degraded');
+      expect(response.body.components.jobQueue.message).toBe('Job queue health check unavailable');
+    });
+
+    it('should degrade when cache invalidation is not initialized', async () => {
+      (getCacheInvalidationStatus as Mock).mockReturnValue({
+        initialized: false,
+        listenerCount: 0,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.cacheInvalidation.status).toBe('degraded');
+      expect(response.body.components.cacheInvalidation.message).toBe('Cache invalidation not initialized');
+    });
+
+    it('should report startup as degraded when not started', async () => {
+      (getStartupStatus as Mock).mockReturnValue({
+        started: false,
+        overallSuccess: false,
+        services: [],
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.startup.status).toBe('degraded');
+      expect(response.body.components.startup.message).toBe('Startup not initiated');
+    });
+
+    it('should report startup as unhealthy when startup failed', async () => {
+      (getStartupStatus as Mock).mockReturnValue({
+        started: true,
+        overallSuccess: false,
+        services: [{ name: 'sync', degraded: false, success: false }],
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.startup.status).toBe('unhealthy');
+      expect(response.body.components.startup.message).toContain('Startup failed');
+    });
+
+    it('should report startup as degraded when services are degraded', async () => {
+      (getStartupStatus as Mock).mockReturnValue({
+        started: true,
+        overallSuccess: true,
+        services: [{ name: 'electrum', degraded: true, success: true }],
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.startup.status).toBe('degraded');
+      expect(response.body.components.startup.message).toContain('degraded mode');
+    });
+
+    it('should mark disk as unhealthy when critical threshold is reached', async () => {
+      (statfs as Mock).mockResolvedValue({
+        blocks: 100,
+        bavail: 2, // 98% used
+        bsize: 1024,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.disk.status).toBe('unhealthy');
+      expect(response.body.components.disk.message).toContain('critical');
+    });
+
+    it('should mark disk as degraded when warning threshold is reached', async () => {
+      (statfs as Mock).mockResolvedValue({
+        blocks: 100,
+        bavail: 10, // 90% used
+        bsize: 1024,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.disk.status).toBe('degraded');
+      expect(response.body.components.disk.message).toContain('elevated');
+    });
+
+    it('should handle disk check failures gracefully', async () => {
+      (statfs as Mock).mockRejectedValue(new Error('statfs not available'));
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.disk.status).toBe('healthy');
+      expect(response.body.components.disk.message).toBe('Disk space check unavailable');
+    });
+
+    it('should mark memory as unhealthy when usage is very high', async () => {
+      process.memoryUsage = vi.fn().mockReturnValue({
+        heapUsed: 1100 * 1024 * 1024,
+        heapTotal: 1200 * 1024 * 1024,
+        rss: 1300 * 1024 * 1024,
+        external: 20 * 1024 * 1024,
+        arrayBuffers: 5 * 1024 * 1024,
+      }) as unknown as typeof process.memoryUsage;
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.memory.status).toBe('unhealthy');
+      expect(response.body.components.memory.message).toContain('High memory usage');
+    });
+
+    it('should mark memory as degraded when usage is elevated', async () => {
+      process.memoryUsage = vi.fn().mockReturnValue({
+        heapUsed: 600 * 1024 * 1024,
+        heapTotal: 900 * 1024 * 1024,
+        rss: 1000 * 1024 * 1024,
+        external: 20 * 1024 * 1024,
+        arrayBuffers: 5 * 1024 * 1024,
+      }) as unknown as typeof process.memoryUsage;
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.memory.status).toBe('degraded');
+      expect(response.body.components.memory.message).toContain('Elevated memory usage');
     });
   });
 

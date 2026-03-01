@@ -218,8 +218,6 @@ export async function estimateReplicationLag(): Promise<number> {
     return 0;
   }
 
-  const prisma = require('../models/prisma').default;
-
   try {
     // Get current timestamp from both
     const [primaryResult, replicaResult] = await Promise.all([

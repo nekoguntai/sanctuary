@@ -162,6 +162,28 @@ describe('Sync API - Network Endpoints', () => {
       expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
     });
 
+    it('POST /sync/queue/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/sync/queue/wallet-missing')
+        .send({});
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
+    });
+
+    it('POST /sync/queue/:walletId returns 500 on queue failures', async () => {
+      mockWalletRepository.findByIdWithAccess.mockRejectedValue(new Error('queue exploded'));
+
+      const response = await request(app)
+        .post('/sync/queue/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('queue exploded');
+    });
+
     it('GET /sync/status/:walletId returns wallet sync state', async () => {
       mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
       mockSyncService.getSyncStatus.mockResolvedValue({
@@ -176,6 +198,26 @@ describe('Sync API - Network Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.queuePosition).toBe(0);
       expect(response.body.syncInProgress).toBe(false);
+    });
+
+    it('GET /sync/status/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/sync/status/wallet-missing');
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
+    });
+
+    it('GET /sync/status/:walletId returns 500 on status errors', async () => {
+      mockWalletRepository.findByIdWithAccess.mockRejectedValue(new Error('status failed'));
+
+      const response = await request(app)
+        .get('/sync/status/wallet-1');
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('status failed');
     });
 
     it('GET /sync/logs/:walletId returns buffered logs', async () => {
@@ -194,6 +236,26 @@ describe('Sync API - Network Endpoints', () => {
       expect(mockWalletLogBufferGet).toHaveBeenCalledWith('wallet-1');
     });
 
+    it('GET /sync/logs/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .get('/sync/logs/wallet-missing');
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
+    });
+
+    it('GET /sync/logs/:walletId returns 500 on log retrieval errors', async () => {
+      mockWalletRepository.findByIdWithAccess.mockRejectedValue(new Error('logs failed'));
+
+      const response = await request(app)
+        .get('/sync/logs/wallet-1');
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('logs failed');
+    });
+
     it('POST /sync/user queues all wallets', async () => {
       mockSyncService.queueUserWallets.mockResolvedValue(undefined);
 
@@ -204,6 +266,17 @@ describe('Sync API - Network Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(mockSyncService.queueUserWallets).toHaveBeenCalledWith('test-user-id', 'low');
+    });
+
+    it('POST /sync/user returns 500 when batch queue fails', async () => {
+      mockSyncService.queueUserWallets.mockRejectedValue(new Error('batch failed'));
+
+      const response = await request(app)
+        .post('/sync/user')
+        .send({ priority: 'normal' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('batch failed');
     });
 
     it('POST /sync/reset/:walletId resets stuck state', async () => {
@@ -217,6 +290,29 @@ describe('Sync API - Network Endpoints', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(mockWalletRepository.updateSyncState).toHaveBeenCalledWith('wallet-1', { syncInProgress: false });
+    });
+
+    it('POST /sync/reset/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/sync/reset/wallet-missing')
+        .send({});
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
+    });
+
+    it('POST /sync/reset/:walletId returns 500 on reset errors', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue({ id: 'wallet-1' });
+      mockWalletRepository.updateSyncState.mockRejectedValue(new Error('reset failed'));
+
+      const response = await request(app)
+        .post('/sync/reset/wallet-1')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('reset failed');
     });
 
     it('POST /sync/resync/:walletId performs full resync and queues high priority', async () => {
@@ -236,6 +332,17 @@ describe('Sync API - Network Endpoints', () => {
         deletedTransactions: 12,
       });
       expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
+    });
+
+    it('POST /sync/resync/:walletId returns 404 when wallet missing', async () => {
+      mockWalletRepository.findByIdWithAccess.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/sync/resync/wallet-missing')
+        .send({});
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe('Wallet not found');
     });
 
     it('POST /sync/resync/:walletId returns 500 on deletion errors', async () => {
@@ -328,6 +435,17 @@ describe('Sync API - Network Endpoints', () => {
 
       expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'normal');
     });
+
+    it('should return 500 when network queue lookup fails', async () => {
+      mockWalletRepository.getIdsByNetwork.mockRejectedValue(new Error('network lookup failed'));
+
+      const response = await request(app)
+        .post('/sync/network/mainnet')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('network lookup failed');
+    });
   });
 
   describe('POST /sync/network/:network/resync', () => {
@@ -394,6 +512,23 @@ describe('Sync API - Network Endpoints', () => {
       expect(response.body.message).toContain('Invalid network');
     });
 
+    it('should return empty result when no wallets found for resync', async () => {
+      mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([]);
+
+      const response = await request(app)
+        .post('/sync/network/signet/resync')
+        .set('X-Confirm-Resync', 'true')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        queued: 0,
+        walletIds: [],
+        message: 'No signet wallets found',
+      });
+    });
+
     it('should delete transactions and reset wallet state', async () => {
       mockWalletRepository.findByNetworkWithSyncStatus.mockResolvedValue([
         { id: 'wallet-1', syncInProgress: false },
@@ -418,6 +553,18 @@ describe('Sync API - Network Endpoints', () => {
 
       // Verify queued for high priority sync
       expect(mockSyncService.queueSync).toHaveBeenCalledWith('wallet-1', 'high');
+    });
+
+    it('should return 500 when network resync fails', async () => {
+      mockWalletRepository.findByNetworkWithSyncStatus.mockRejectedValue(new Error('resync failed'));
+
+      const response = await request(app)
+        .post('/sync/network/mainnet/resync')
+        .set('X-Confirm-Resync', 'true')
+        .send({});
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('resync failed');
     });
   });
 
@@ -460,6 +607,16 @@ describe('Sync API - Network Endpoints', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('Invalid network');
+    });
+
+    it('should return 500 when aggregate status lookup fails', async () => {
+      mockWalletRepository.findByNetworkWithSyncStatus.mockRejectedValue(new Error('status lookup failed'));
+
+      const response = await request(app)
+        .get('/sync/network/mainnet/status');
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toContain('status lookup failed');
     });
   });
 });

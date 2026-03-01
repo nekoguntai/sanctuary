@@ -49,6 +49,8 @@ import {
   getUserTransfers,
   getTransfer,
   hasActiveTransfer,
+  getPendingIncomingCount,
+  getAwaitingConfirmationCount,
   expireOldTransfers,
 } from '../../../src/services/transferService';
 
@@ -181,6 +183,38 @@ describe('Transfer Service', () => {
       ).rejects.toThrow(/pending transfer/i);
     });
 
+    it('should reject when target user does not exist', async () => {
+      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        initiateTransfer(ownerId, {
+          resourceType: 'wallet',
+          resourceId: walletId,
+          toUserId: recipientId,
+        })
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('should reject when target user already owns the resource', async () => {
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: recipientId,
+        username: 'recipient',
+      });
+      mockPrismaClient.ownershipTransfer.count.mockResolvedValue(0);
+      mockCheckWalletOwnerAccess.mockReset();
+      mockCheckWalletOwnerAccess
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
+
+      await expect(
+        initiateTransfer(ownerId, {
+          resourceType: 'wallet',
+          resourceId: walletId,
+          toUserId: recipientId,
+        })
+      ).rejects.toThrow(/already an owner/i);
+    });
+
     it('should create a device transfer when user is owner', async () => {
       // Owner check: first call (owner) returns true, second call (recipient) returns false
       mockCheckDeviceOwnerAccess
@@ -228,6 +262,14 @@ describe('Transfer Service', () => {
   });
 
   describe('acceptTransfer', () => {
+    it('should reject when transfer does not exist', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        acceptTransfer(recipientId, transferId)
+      ).rejects.toThrow(/not found/i);
+    });
+
     it('should accept pending transfer as recipient', async () => {
       const mockTransfer = {
         id: transferId,
@@ -319,9 +361,48 @@ describe('Transfer Service', () => {
         acceptTransfer(recipientId, transferId)
       ).rejects.toThrow(/expired/i);
     });
+
+    it('should reject when updated transfer cannot be fetched after accept', async () => {
+      const mockTransfer = {
+        id: transferId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(mockTransfer)
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        acceptTransfer(recipientId, transferId)
+      ).rejects.toThrow(/not found/i);
+    });
   });
 
   describe('declineTransfer', () => {
+    it('should reject decline when transfer does not exist', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        declineTransfer(recipientId, transferId, 'nope')
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('should reject decline from non-recipient', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      });
+
+      await expect(
+        declineTransfer('wrong-user', transferId, 'nope')
+      ).rejects.toThrow(/only the recipient/i);
+    });
+
     it('should decline pending transfer as recipient', async () => {
       // Mock atomic updateMany to succeed
       mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
@@ -342,9 +423,33 @@ describe('Transfer Service', () => {
 
       expect(result.status).toBe('declined');
     });
+
+    it('should reject decline when updated transfer cannot be fetched', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce({
+          id: transferId,
+          toUserId: recipientId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        })
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        declineTransfer(recipientId, transferId, 'no')
+      ).rejects.toThrow(/not found/i);
+    });
   });
 
   describe('cancelTransfer', () => {
+    it('should reject cancel when transfer does not exist', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        cancelTransfer(ownerId, transferId)
+      ).rejects.toThrow(/not found/i);
+    });
+
     it('should cancel pending transfer as owner', async () => {
       const mockTransfer = {
         id: transferId,
@@ -414,6 +519,22 @@ describe('Transfer Service', () => {
       await expect(
         cancelTransfer('wrong-user', transferId)
       ).rejects.toThrow(/initiator/i);
+    });
+
+    it('should reject cancel when updated transfer cannot be fetched', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce({
+          id: transferId,
+          fromUserId: ownerId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        })
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        cancelTransfer(ownerId, transferId)
+      ).rejects.toThrow(/not found/i);
     });
   });
 
@@ -501,6 +622,340 @@ describe('Transfer Service', () => {
         confirmTransfer('wrong-user', transferId)
       ).rejects.toThrow(/initiator/i);
     });
+
+    it('should reject confirm when transfer does not exist', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(null);
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('should reject confirm when transfer was already confirmed in transaction', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      });
+
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue({
+              id: transferId,
+              status: 'confirmed',
+            }),
+            update: vi.fn(),
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/already been completed/i);
+    });
+
+    it('should expire transfer during confirm when it is stale in transaction', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      });
+
+      const updateSpy = vi.fn().mockResolvedValue({});
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue({
+              id: transferId,
+              status: 'accepted',
+              resourceType: 'wallet',
+              resourceId: walletId,
+              fromUserId: ownerId,
+              toUserId: recipientId,
+              keepExistingUsers: true,
+              expiresAt: new Date(Date.now() - 1000),
+            }),
+            update: updateSpy,
+          },
+          walletUser: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/expired/i);
+      expect(updateSpy).toHaveBeenCalledWith({
+        where: { id: transferId },
+        data: { status: 'expired' },
+      });
+    });
+
+    it('should reject wallet confirm when current owner record is missing in transaction', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      });
+
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue({
+              id: transferId,
+              resourceType: 'wallet',
+              resourceId: walletId,
+              fromUserId: ownerId,
+              toUserId: recipientId,
+              status: 'accepted',
+              keepExistingUsers: true,
+              expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+            }),
+            update: vi.fn(),
+          },
+          walletUser: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            create: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/owner no longer owns this wallet/i);
+    });
+
+    it('should confirm wallet transfer by upgrading existing recipient and removing old owner', async () => {
+      const baseTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: false,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(baseTransfer)
+        .mockResolvedValueOnce({
+          ...baseTransfer,
+          status: 'confirmed',
+          fromUser: { id: ownerId, username: 'owner' },
+          toUser: { id: recipientId, username: 'recipient' },
+        });
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, name: 'Wallet X' });
+
+      const walletUpdateSpy = vi.fn().mockResolvedValue({});
+      const walletDeleteSpy = vi.fn().mockResolvedValue({});
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(baseTransfer),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          walletUser: {
+            findFirst: vi.fn()
+              .mockResolvedValueOnce({ id: 'wu-owner', userId: ownerId, role: 'owner' })
+              .mockResolvedValueOnce({ id: 'wu-recipient', userId: recipientId, role: 'viewer' }),
+            create: vi.fn(),
+            update: walletUpdateSpy,
+            delete: walletDeleteSpy,
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      const result = await confirmTransfer(ownerId, transferId);
+      expect(result.status).toBe('confirmed');
+      expect(walletUpdateSpy).toHaveBeenCalledWith({
+        where: { id: 'wu-recipient' },
+        data: { role: 'owner' },
+      });
+      expect(walletDeleteSpy).toHaveBeenCalledWith({
+        where: { id: 'wu-owner' },
+      });
+    });
+
+    it('should confirm device transfer by updating legacy owner field and downgrading old owner', async () => {
+      const baseTransfer = {
+        id: transferId,
+        resourceType: 'device',
+        resourceId: deviceId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(baseTransfer)
+        .mockResolvedValueOnce({
+          ...baseTransfer,
+          status: 'confirmed',
+          fromUser: { id: ownerId, username: 'owner' },
+          toUser: { id: recipientId, username: 'recipient' },
+        });
+      mockPrismaClient.device.findUnique.mockResolvedValue({ id: deviceId, label: 'Ledger' });
+
+      const deviceUpdateSpy = vi.fn().mockResolvedValue({});
+      const deviceUserUpdateSpy = vi.fn().mockResolvedValue({});
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(baseTransfer),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          device: {
+            update: deviceUpdateSpy,
+          },
+          deviceUser: {
+            findFirst: vi.fn()
+              .mockResolvedValueOnce({ id: 'du-owner', userId: ownerId, role: 'owner' })
+              .mockResolvedValueOnce({ id: 'du-recipient', userId: recipientId, role: 'viewer' }),
+            create: vi.fn(),
+            update: deviceUserUpdateSpy,
+            delete: vi.fn(),
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      const result = await confirmTransfer(ownerId, transferId);
+      expect(result.resourceType).toBe('device');
+      expect(deviceUpdateSpy).toHaveBeenCalledWith({
+        where: { id: deviceId },
+        data: { userId: recipientId },
+      });
+      expect(deviceUserUpdateSpy).toHaveBeenCalledWith({
+        where: { id: 'du-recipient' },
+        data: { role: 'owner' },
+      });
+      expect(deviceUserUpdateSpy).toHaveBeenCalledWith({
+        where: { id: 'du-owner' },
+        data: { role: 'viewer' },
+      });
+    });
+
+    it('should confirm device transfer by creating recipient access and removing old owner', async () => {
+      const baseTransfer = {
+        id: transferId,
+        resourceType: 'device',
+        resourceId: deviceId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: false,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(baseTransfer)
+        .mockResolvedValueOnce({
+          ...baseTransfer,
+          status: 'confirmed',
+          fromUser: { id: ownerId, username: 'owner' },
+          toUser: { id: recipientId, username: 'recipient' },
+        });
+      mockPrismaClient.device.findUnique.mockResolvedValue({ id: deviceId, label: 'Coldcard' });
+
+      const deviceUserCreateSpy = vi.fn().mockResolvedValue({});
+      const deviceUserDeleteSpy = vi.fn().mockResolvedValue({});
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(baseTransfer),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          device: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          deviceUser: {
+            findFirst: vi.fn()
+              .mockResolvedValueOnce({ id: 'du-owner', userId: ownerId, role: 'owner' })
+              .mockResolvedValueOnce(null),
+            create: deviceUserCreateSpy,
+            update: vi.fn(),
+            delete: deviceUserDeleteSpy,
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      const result = await confirmTransfer(ownerId, transferId);
+      expect(result.status).toBe('confirmed');
+      expect(deviceUserCreateSpy).toHaveBeenCalledWith({
+        data: {
+          deviceId,
+          userId: recipientId,
+          role: 'owner',
+        },
+      });
+      expect(deviceUserDeleteSpy).toHaveBeenCalledWith({
+        where: { id: 'du-owner' },
+      });
+    });
+
+    it('should reject confirm when final transfer fetch is missing', async () => {
+      const baseTransfer = {
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce(baseTransfer)
+        .mockResolvedValueOnce(null);
+
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(baseTransfer),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          walletUser: {
+            findFirst: vi.fn()
+              .mockResolvedValueOnce({ id: 'wu-owner', userId: ownerId, role: 'owner' })
+              .mockResolvedValueOnce(null),
+            create: vi.fn().mockResolvedValue({}),
+            update: vi.fn().mockResolvedValue({}),
+            delete: vi.fn().mockResolvedValue({}),
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/not found/i);
+    });
   });
 
   describe('getUserTransfers', () => {
@@ -555,6 +1010,65 @@ describe('Transfer Service', () => {
           }),
         })
       );
+    });
+
+    it('should filter by recipient role, active status, and resource type', async () => {
+      mockPrismaClient.ownershipTransfer.findMany.mockResolvedValue([]);
+      mockPrismaClient.ownershipTransfer.count.mockResolvedValue(0);
+
+      await getUserTransfers(ownerId, {
+        role: 'recipient',
+        status: 'active',
+        resourceType: 'device',
+      });
+
+      expect(mockPrismaClient.ownershipTransfer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            toUserId: ownerId,
+            status: { in: ['pending', 'accepted'] },
+            resourceType: 'device',
+          }),
+        })
+      );
+    });
+  });
+
+  describe('getTransfer and counters', () => {
+    it('should return null when transfer is missing', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue(null);
+
+      await expect(getTransfer('missing-transfer')).resolves.toBeNull();
+    });
+
+    it('should return formatted transfer when transfer exists', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        fromUser: { id: ownerId, username: 'owner' },
+        toUser: { id: recipientId, username: 'recipient' },
+      });
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Ops Wallet',
+      });
+
+      const transfer = await getTransfer(transferId);
+      expect(transfer?.resourceName).toBe('Ops Wallet');
+    });
+
+    it('should return pending incoming and awaiting confirmation counts', async () => {
+      mockPrismaClient.ownershipTransfer.count
+        .mockResolvedValueOnce(7)
+        .mockResolvedValueOnce(3);
+
+      await expect(getPendingIncomingCount(recipientId)).resolves.toBe(7);
+      await expect(getAwaitingConfirmationCount(ownerId)).resolves.toBe(3);
     });
   });
 

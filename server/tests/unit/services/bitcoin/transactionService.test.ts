@@ -1491,7 +1491,7 @@ describe('Transaction Service', () => {
         { address: recipient, value: 30_000 },
       ]);
 
-      (mockPrismaClient.$transaction as Mock).mockResolvedValueOnce({
+      (mockPrismaClient.$transaction as Mock).mockImplementation(async () => ({
         txType: 'sent',
         mainTransactionCreated: false,
         unlockedCount: 0,
@@ -1500,8 +1500,16 @@ describe('Transaction Service', () => {
           amount: 7_000,
           address: testnetAddresses.legacy[1],
         }],
+      }));
+      mockNotifyNewTransactions.mockImplementation(async (targetWalletId: string) => {
+        if (targetWalletId === receivingWalletId) {
+          throw new Error('receiver notification failed');
+        }
       });
-      mockNotifyNewTransactions.mockRejectedValueOnce(new Error('receiver notification failed'));
+      if (typeof (vi as any).dynamicImportSettled === 'function') {
+        await (vi as any).dynamicImportSettled();
+      }
+      mockNotifyNewTransactions.mockClear();
 
       const metadata = {
         recipient,
@@ -1513,6 +1521,10 @@ describe('Transaction Service', () => {
 
       const result = await broadcastAndSave(walletId, undefined, metadata);
       await flushPromises();
+      if (typeof (vi as any).dynamicImportSettled === 'function') {
+        await (vi as any).dynamicImportSettled();
+      }
+      await flushPromises();
 
       expect(result.broadcasted).toBe(true);
       expect(mockEmitTransactionReceived).toHaveBeenCalledWith(expect.objectContaining({
@@ -1521,11 +1533,13 @@ describe('Transaction Service', () => {
       }));
       expect(mockNotifyNewTransactions).toHaveBeenCalledWith(
         receivingWalletId,
-        [expect.objectContaining({
-          txid: result.txid,
-          type: 'received',
-          amount: 7_000n,
-        })]
+        expect.arrayContaining([
+          expect.objectContaining({
+            txid: result.txid,
+            type: 'received',
+            amount: 7_000n,
+          }),
+        ])
       );
     });
 

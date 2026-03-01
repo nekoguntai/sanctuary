@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const queueInstances: any[] = [];
 const workerInstances: any[] = [];
 const queueEventsInstances: any[] = [];
+let queueCtorError: Error | null = null;
 
 class MockQueue {
   name: string;
@@ -35,6 +36,9 @@ class MockQueue {
   close = vi.fn(async () => undefined);
 
   constructor(name: string, opts: any) {
+    if (queueCtorError) {
+      throw queueCtorError;
+    }
     this.name = name;
     this.opts = opts;
     queueInstances.push(this);
@@ -123,6 +127,7 @@ describe('JobQueueService', () => {
     queueInstances.length = 0;
     workerInstances.length = 0;
     queueEventsInstances.length = 0;
+    queueCtorError = null;
     vi.clearAllMocks();
   });
 
@@ -148,6 +153,52 @@ describe('JobQueueService', () => {
     expect(queueInstances[0].opts.prefix).toBe('test:jobs');
     expect(workerInstances[0].opts.prefix).toBe('test:jobs');
     expect(workerInstances[0].opts.concurrency).toBe(7);
+  });
+
+  it('is idempotent on repeated initialize calls and wires worker event handlers', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+
+    await queue.initialize();
+    await queue.initialize();
+
+    expect(queueInstances).toHaveLength(1);
+    expect(workerInstances).toHaveLength(1);
+    expect(queueEventsInstances).toHaveLength(1);
+    expect(Object.keys(workerInstances[0].handlers).sort()).toEqual([
+      'completed',
+      'error',
+      'failed',
+      'stalled',
+    ]);
+
+    workerInstances[0].handlers.completed({
+      name: 'done',
+      id: 'j-1',
+      processedOn: 10,
+      finishedOn: 20,
+    });
+    workerInstances[0].handlers.completed({
+      name: 'done-2',
+      id: 'j-2',
+    });
+    workerInstances[0].handlers.failed(
+      { name: 'bad', id: 'j-3', attemptsMade: 2 },
+      new Error('boom')
+    );
+    workerInstances[0].handlers.failed(undefined, new Error('boom-2'));
+    workerInstances[0].handlers.error(new Error('worker-failed'));
+    workerInstances[0].handlers.stalled('stalled-1');
+  });
+
+  it('propagates initialize errors from BullMQ setup', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    queueCtorError = new Error('queue-ctor-failed');
+    const queue = await loadJobQueueService();
+
+    await expect(queue.initialize()).rejects.toThrow('queue-ctor-failed');
   });
 
   it('tracks processing count during handler execution', async () => {
@@ -178,6 +229,31 @@ describe('JobQueueService', () => {
     expect(queue.getProcessingCount()).toBe(0);
   });
 
+  it('rejects unknown handlers and resets processing count when a handler throws', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    const processor = workerInstances[0].processor;
+    await expect(
+      processor({ id: 'missing', name: 'missing-handler', attemptsMade: 0 })
+    ).rejects.toThrow('No handler registered for job: missing-handler');
+
+    queue.register({
+      name: 'throwing-job',
+      handler: vi.fn(async () => {
+        throw new Error('handler-failed');
+      }),
+    });
+
+    expect(queue.getProcessingCount()).toBe(0);
+    await expect(
+      processor({ id: 'boom', name: 'throwing-job', attemptsMade: 1 })
+    ).rejects.toThrow('handler-failed');
+    expect(queue.getProcessingCount()).toBe(0);
+  });
+
   it('returns null when adding a job without an initialized queue', async () => {
     const queue = await loadJobQueueService();
     const result = await queue.add('test', { ok: true });
@@ -188,6 +264,34 @@ describe('JobQueueService', () => {
     const queue = await loadJobQueueService();
     const result = await queue.addBulk([{ name: 'test', data: { ok: true } }]);
     expect(result).toEqual([]);
+  });
+
+  it('adds jobs and handles add/addBulk errors', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    const added = await queue.add('send-email', { to: 'user@example.com' }, { attempts: 2 });
+    expect(added?.id).toBe('send-email-job');
+
+    queueInstances[0].add.mockRejectedValueOnce(new Error('add failed'));
+    await expect(queue.add('send-email', { to: 'user@example.com' })).resolves.toBeNull();
+
+    const bulkAdded = await queue.addBulk([
+      { name: 'a', data: { v: 1 } },
+      { name: 'b', data: { v: 2 }, options: { delay: 100 } },
+    ]);
+    expect(bulkAdded).toHaveLength(2);
+
+    queueInstances[0].addBulk.mockRejectedValueOnce(new Error('addBulk failed'));
+    await expect(queue.addBulk([{ name: 'a', data: {} }])).resolves.toEqual([]);
+  });
+
+  it('returns null when scheduling without an initialized queue', async () => {
+    const queue = await loadJobQueueService();
+    const result = await queue.schedule('cleanup', {}, { cron: '0 0 * * *' });
+    expect(result).toBeNull();
   });
 
   it('skips scheduling when repeatable job already exists', async () => {
@@ -228,6 +332,28 @@ describe('JobQueueService', () => {
     );
   });
 
+  it('schedules one-off jobs with delay/explicit jobId and handles schedule errors', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    await queue.schedule('once', { id: 1 }, { delay: 5000, jobId: 'custom-id' });
+    expect(queueInstances[0].add).toHaveBeenCalledWith(
+      'once',
+      { id: 1 },
+      expect.objectContaining({
+        delay: 5000,
+        jobId: 'custom-id',
+      })
+    );
+
+    queueInstances[0].add.mockRejectedValueOnce(new Error('schedule failed'));
+    await expect(
+      queue.schedule('broken', {}, { cron: '*/5 * * * *', timezone: 'UTC' })
+    ).resolves.toBeNull();
+  });
+
   it('returns job status details', async () => {
     mockGetRedisClient.mockReturnValue(createRedisClient());
     mockIsRedisConnected.mockReturnValue(true);
@@ -262,6 +388,42 @@ describe('JobQueueService', () => {
       processedOn: 10,
       finishedOn: 20,
     });
+  });
+
+  it('returns null when getJob/getJobStatus fail or job is missing', async () => {
+    const uninitialized = await loadJobQueueService();
+    await expect(uninitialized.getJob('id-1')).resolves.toBeNull();
+    await expect(uninitialized.getJobStatus('id-1')).resolves.toBeNull();
+
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    queueInstances[0].getJob.mockRejectedValueOnce(new Error('lookup failed'));
+    await expect(queue.getJob('id-2')).resolves.toBeNull();
+    await expect(queue.getJobStatus('id-2')).resolves.toBeNull();
+  });
+
+  it('removes a job successfully and returns false when removal errors', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    const removable = {
+      remove: vi.fn(async () => undefined),
+    };
+    queueInstances[0].getJob.mockResolvedValueOnce(removable);
+    await expect(queue.removeJob('ok')).resolves.toBe(true);
+
+    const failing = {
+      remove: vi.fn(async () => {
+        throw new Error('remove failed');
+      }),
+    };
+    queueInstances[0].getJob.mockResolvedValueOnce(failing);
+    await expect(queue.removeJob('bad')).resolves.toBe(false);
   });
 
   it('returns false when removing a missing job', async () => {
@@ -299,6 +461,65 @@ describe('JobQueueService', () => {
       delayed: 5,
       paused: true,
     });
+  });
+
+  it('returns unhealthy defaults when queue is unavailable or health calls fail', async () => {
+    const uninitialized = await loadJobQueueService();
+    await expect(uninitialized.getHealth()).resolves.toEqual({
+      healthy: false,
+      queueName: 'main',
+      waiting: 0,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0,
+      paused: false,
+    });
+
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    queueInstances[0].getWaitingCount.mockRejectedValueOnce(new Error('health failed'));
+    await expect(queue.getHealth()).resolves.toEqual({
+      healthy: false,
+      queueName: 'main',
+      waiting: 0,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0,
+      paused: false,
+    });
+  });
+
+  it('pauses/resumes/cleans queue and handles clean failures', async () => {
+    const uninitialized = await loadJobQueueService();
+    await uninitialized.pause();
+    await uninitialized.resume();
+    await expect(uninitialized.clean()).resolves.toEqual([]);
+
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    queueInstances[0].clean.mockResolvedValueOnce(['job-1', 'job-2']);
+    await queue.pause();
+    await queue.resume();
+    await expect(queue.clean(60000, 10, 'failed')).resolves.toEqual(['job-1', 'job-2']);
+
+    queueInstances[0].clean.mockRejectedValueOnce(new Error('clean failed'));
+    await expect(queue.clean()).resolves.toEqual([]);
+  });
+
+  it('tracks registered job names and overwrites duplicate handlers', async () => {
+    const queue = await loadJobQueueService();
+    queue.register({ name: 'alpha', handler: vi.fn() });
+    queue.register({ name: 'beta', handler: vi.fn() });
+    queue.register({ name: 'alpha', handler: vi.fn() });
+    expect(queue.getRegisteredJobs().sort()).toEqual(['alpha', 'beta']);
   });
 
   it('shuts down worker, events, and queue', async () => {

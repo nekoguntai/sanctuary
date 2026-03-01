@@ -253,6 +253,20 @@ describe('Mobile Permissions API', () => {
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Forbidden');
     });
+
+    it('should return 500 on unexpected service errors', async () => {
+      vi.mocked(mobilePermissionService.getEffectivePermissions).mockRejectedValue(
+        new Error('Unexpected failure')
+      );
+
+      const response = await request(app).get('/api/v1/wallets/wallet-123/mobile-permissions');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to get mobile permissions',
+      });
+    });
   });
 
   describe('PATCH /api/v1/wallets/:id/mobile-permissions', () => {
@@ -316,6 +330,35 @@ describe('Mobile Permissions API', () => {
       expect(response.status).toBe(403);
       expect(response.body.message).toContain('owner has restricted');
     });
+
+    it('should return 403 when user has no wallet access', async () => {
+      vi.mocked(mobilePermissionService.updateOwnPermissions).mockRejectedValue(
+        new Error('User does not have access to this wallet')
+      );
+
+      const response = await request(app)
+        .patch('/api/v1/wallets/wallet-123/mobile-permissions')
+        .send({ broadcast: false });
+
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('do not have access');
+    });
+
+    it('should return 500 on unexpected update errors', async () => {
+      vi.mocked(mobilePermissionService.updateOwnPermissions).mockRejectedValue(
+        new Error('Unexpected update failure')
+      );
+
+      const response = await request(app)
+        .patch('/api/v1/wallets/wallet-123/mobile-permissions')
+        .send({ broadcast: false });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to update mobile permissions',
+      });
+    });
   });
 
   describe('PATCH /api/v1/wallets/:id/mobile-permissions/:userId', () => {
@@ -364,6 +407,35 @@ describe('Mobile Permissions API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('Cannot set permission restrictions on wallet owners');
+    });
+
+    it('should return 403 when target user has no wallet access', async () => {
+      vi.mocked(mobilePermissionService.setMaxPermissions).mockRejectedValue(
+        new Error('Target user does not have access to this wallet')
+      );
+
+      const response = await request(app)
+        .patch('/api/v1/wallets/wallet-123/mobile-permissions/target-user-id')
+        .send({ broadcast: false });
+
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('does not have access');
+    });
+
+    it('should return 500 on unexpected cap update errors', async () => {
+      vi.mocked(mobilePermissionService.setMaxPermissions).mockRejectedValue(
+        new Error('Unexpected cap update failure')
+      );
+
+      const response = await request(app)
+        .patch('/api/v1/wallets/wallet-123/mobile-permissions/target-user-id')
+        .send({ broadcast: false });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to set mobile permission caps',
+      });
     });
 
     it('should reject invalid permission input', async () => {
@@ -421,6 +493,22 @@ describe('Mobile Permissions API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not Found');
+    });
+
+    it('should return 500 on unexpected clear-cap errors', async () => {
+      vi.mocked(mobilePermissionService.clearMaxPermissions).mockRejectedValue(
+        new Error('Unexpected clear failure')
+      );
+
+      const response = await request(app).delete(
+        '/api/v1/wallets/wallet-123/mobile-permissions/target-user-id/caps'
+      );
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to clear mobile permission caps',
+      });
     });
   });
 

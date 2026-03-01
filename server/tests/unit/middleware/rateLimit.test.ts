@@ -10,7 +10,14 @@ import { vi, Mock } from 'vitest';
 vi.unmock('../../../src/middleware/rateLimit');
 
 import { Request, Response, NextFunction } from 'express';
-import { rateLimit, rateLimitByUser, rateLimitByIpAndKey, rateLimitByKey } from '../../../src/middleware/rateLimit';
+import {
+  rateLimit,
+  rateLimitByUser,
+  rateLimitByIpAndKey,
+  rateLimitByKey,
+  skipRateLimitIf,
+  combineRateLimits,
+} from '../../../src/middleware/rateLimit';
 import { rateLimitService } from '../../../src/services/rateLimiting';
 
 // Mock the rate limit service
@@ -38,11 +45,21 @@ describe('Rate Limit Middleware', () => {
   let jsonMock: Mock;
   let setHeaderMock: Mock;
   let statusMock: Mock;
+  let sendMock: Mock;
+  let typeMock: Mock;
 
   beforeEach(() => {
     jsonMock = vi.fn();
+    sendMock = vi.fn();
+    typeMock = vi.fn();
+    const statusReturn = {
+      json: jsonMock,
+      type: typeMock,
+      send: sendMock,
+    };
+    typeMock.mockReturnValue(statusReturn);
     setHeaderMock = vi.fn();
-    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+    statusMock = vi.fn().mockReturnValue(statusReturn);
 
     mockReq = {
       headers: {},
@@ -55,6 +72,7 @@ describe('Rate Limit Middleware', () => {
       setHeader: setHeaderMock,
       status: statusMock,
       json: jsonMock,
+      headersSent: false,
     };
 
     mockNext = vi.fn();
@@ -106,6 +124,21 @@ describe('Rate Limit Middleware', () => {
         error: 'Service Unavailable',
         message: 'Rate limiting service temporarily unavailable. Please try again.',
       });
+    });
+
+    it('should use x-forwarded-for first IP when present', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: true,
+        limit: 100,
+        remaining: 99,
+        resetAt: Date.now() + 60000,
+      });
+      mockReq.headers = { 'x-forwarded-for': '203.0.113.1, 198.51.100.2' };
+
+      const middleware = rateLimit('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', 'ip:203.0.113.1');
     });
   });
 
@@ -166,6 +199,39 @@ describe('Rate Limit Middleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(503);
     });
+
+    it('should block IP fallback request when rate limit is exceeded without user', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 10,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+        retryAfter: 60,
+      });
+
+      const middleware = rateLimitByUser('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(429);
+    });
+
+    it('should block user request when user rate limit is exceeded', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 10,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+        retryAfter: 60,
+      });
+      (mockReq as any).user = { userId: 'user-123' };
+
+      const middleware = rateLimitByUser('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(429);
+    });
   });
 
   describe('rateLimitByIpAndKey', () => {
@@ -194,6 +260,22 @@ describe('Rate Limit Middleware', () => {
 
       expect(mockNext).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(503);
+    });
+
+    it('should use unknown key when extractor returns undefined and block when exceeded', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 5,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+        retryAfter: 60,
+      });
+
+      const middleware = rateLimitByIpAndKey('test-policy', () => undefined);
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', '127.0.0.1:unknown');
+      expect(statusMock).toHaveBeenCalledWith(429);
     });
   });
 
@@ -225,6 +307,31 @@ describe('Rate Limit Middleware', () => {
         error: 'Service Unavailable',
         message: 'Rate limiting service temporarily unavailable. Please try again.',
       });
+    });
+
+    it('should return text response when configured and blocked', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 2,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+        retryAfter: 60,
+      });
+
+      const middleware = rateLimitByKey(
+        'test-policy',
+        () => 'custom-key',
+        {
+          responseType: 'text',
+          contentType: 'text/html',
+          message: 'Too many custom requests',
+        }
+      );
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(429);
+      expect(typeMock).toHaveBeenCalledWith('text/html');
+      expect(sendMock).toHaveBeenCalledWith('Too many custom requests');
     });
   });
 
@@ -259,6 +366,68 @@ describe('Rate Limit Middleware', () => {
       await middleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(setHeaderMock).toHaveBeenCalledWith('Retry-After', 60);
+    });
+  });
+
+  describe('skipRateLimitIf', () => {
+    it('skips wrapped middleware when condition matches', async () => {
+      const wrapped = vi.fn();
+      const middleware = skipRateLimitIf(() => true, wrapped as any);
+
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(wrapped).not.toHaveBeenCalled();
+    });
+
+    it('invokes wrapped middleware when condition does not match', async () => {
+      const wrapped = vi.fn((_req, _res, next) => next());
+      const middleware = skipRateLimitIf(() => false, wrapped as any);
+
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(wrapped).toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalled();
+    });
+  });
+
+  describe('combineRateLimits', () => {
+    it('runs all middlewares and calls next when none block', async () => {
+      const first = vi.fn((_req, _res, next) => next());
+      const second = vi.fn((_req, _res, next) => next());
+      const middleware = combineRateLimits(first as any, second as any);
+
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(first).toHaveBeenCalled();
+      expect(second).toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops processing when a middleware sends a response', async () => {
+      const first = vi.fn((_req, res, next) => {
+        (res as any).headersSent = true;
+        next();
+      });
+      const second = vi.fn((_req, _res, next) => next());
+      const middleware = combineRateLimits(first as any, second as any);
+
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(first).toHaveBeenCalled();
+      expect(second).not.toHaveBeenCalled();
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('passes middleware errors to next', async () => {
+      const first = vi.fn((_req, _res, next) => next(new Error('rate limit failure')));
+      const second = vi.fn((_req, _res, next) => next());
+      const middleware = combineRateLimits(first as any, second as any);
+
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(second).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 });

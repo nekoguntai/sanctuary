@@ -269,6 +269,56 @@ describe('Email Verification API', () => {
         })
       );
     });
+
+    it('should use unknown error fallback when verification fails without a code', async () => {
+      mockEmailVerificationService.verifyEmail.mockResolvedValue({
+        success: false,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/verify')
+        .send({ token: 'unknown-error-token' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('An error occurred during verification');
+      expect(response.body.code).toBeUndefined();
+    });
+
+    it('should audit success with username=unknown when user lookup fails', async () => {
+      mockEmailVerificationService.verifyEmail.mockResolvedValue({
+        success: true,
+        userId: testUserId,
+        email: testEmail,
+      });
+      mockUserRepository.findById.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/verify')
+        .send({ token: 'valid-token' });
+
+      expect(response.status).toBe(200);
+      expect(mockAuditService.auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: testUserId,
+          username: 'unknown',
+          action: mockAuditService.AuditAction.AUTH_EMAIL_VERIFIED,
+        })
+      );
+    });
+
+    it('should return 500 when verifyEmail throws unexpectedly', async () => {
+      mockEmailVerificationService.verifyEmail.mockRejectedValue(new Error('Service failure'));
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/verify')
+        .send({ token: 'throws' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'An error occurred during email verification',
+      });
+    });
   });
 
   describe('POST /api/v1/auth/email/resend', () => {
@@ -348,6 +398,57 @@ describe('Email Verification API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.expiresAt).toBeDefined();
+    });
+
+    it('should return 404 when authenticated user cannot be loaded', async () => {
+      mockUserRepository.findById.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/resend')
+        .send();
+
+      expect(response.status).toBe(404);
+      expect(response.body).toMatchObject({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+    });
+
+    it('should use default resend failure message when service omits an error', async () => {
+      mockUserRepository.findById.mockResolvedValue({
+        id: testUserId,
+        username: testUsername,
+        email: testEmail,
+      });
+      mockEmailVerificationService.resendVerification.mockResolvedValue({
+        success: false,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/resend')
+        .send();
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Failed to resend verification email');
+    });
+
+    it('should return 500 when resend verification throws unexpectedly', async () => {
+      mockUserRepository.findById.mockResolvedValue({
+        id: testUserId,
+        username: testUsername,
+        email: testEmail,
+      });
+      mockEmailVerificationService.resendVerification.mockRejectedValue(new Error('SMTP down'));
+
+      const response = await request(app)
+        .post('/api/v1/auth/email/resend')
+        .send();
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'An error occurred while sending verification email',
+      });
     });
   });
 
@@ -488,6 +589,42 @@ describe('Email Verification API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not Found');
+    });
+
+    it('should skip duplicate check when new email only changes case', async () => {
+      (verifyPassword as any).mockResolvedValue(true);
+      mockUserRepository.updateEmail.mockResolvedValue({
+        id: testUserId,
+        email: testEmail,
+        emailVerified: false,
+      });
+      mockEmailVerificationService.createVerificationToken.mockResolvedValue({
+        success: true,
+      });
+
+      const response = await request(app)
+        .put('/api/v1/auth/me/email')
+        .send({ email: testEmail.toUpperCase(), password: currentPassword });
+
+      expect(response.status).toBe(200);
+      expect(mockUserRepository.emailExists).not.toHaveBeenCalled();
+      expect(mockUserRepository.updateEmail).toHaveBeenCalledWith(testUserId, testEmail);
+    });
+
+    it('should return 500 when updating email throws unexpectedly', async () => {
+      (verifyPassword as any).mockResolvedValue(true);
+      mockUserRepository.emailExists.mockResolvedValue(false);
+      mockUserRepository.updateEmail.mockRejectedValue(new Error('Database failure'));
+
+      const response = await request(app)
+        .put('/api/v1/auth/me/email')
+        .send({ email: newEmail, password: currentPassword });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'An error occurred while updating email',
+      });
     });
   });
 });

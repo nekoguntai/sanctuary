@@ -587,6 +587,93 @@ describe('Transaction HTTP Routes', () => {
     expect(response.body.message).toContain('outputs array is required');
   });
 
+  it('enforces minimum fee rate for batch transactions', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 0.01,
+        outputs: [{ address: 'tb1qone', amount: 10000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('feeRate must be at least');
+  });
+
+  it('returns 404 when creating a batch transaction for missing wallet', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [{ address: 'tb1qone', amount: 10000 }],
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toContain('Wallet not found');
+  });
+
+  it('validates that each batch output has an address', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [{ amount: 10000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Output 1: address is required');
+  });
+
+  it('validates that each non-sendMax batch output has an amount', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [{ address: 'tb1qone' }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Output 1: amount is required');
+  });
+
+  it('rejects batch outputs with invalid recipient addresses', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+    mockValidateAddress.mockReturnValueOnce({
+      valid: false,
+      error: 'invalid checksum',
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [{ address: 'bad-address', amount: 10000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Invalid Bitcoin address');
+  });
+
+  it('returns bad request when batch transaction creation throws', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
+    mockCreateBatchTransaction.mockRejectedValueOnce(new Error('batch create failed'));
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/transactions/batch`)
+      .send({
+        feeRate: 1,
+        outputs: [{ address: 'tb1qone', amount: 10000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('batch create failed');
+  });
+
   it('rejects batch transaction when more than one output uses sendMax', async () => {
     mockPrismaClient.wallet.findUnique.mockResolvedValue({ id: walletId, network: 'mainnet' });
 
@@ -729,6 +816,18 @@ describe('Transaction HTTP Routes', () => {
     expect(response.body.message).toContain('recipients array is required');
   });
 
+  it('enforces minimum fee rate for PSBT creation', async () => {
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/create`)
+      .send({
+        feeRate: 0.01,
+        recipients: [{ address: 'tb1qrecipient', amount: 15000 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('feeRate must be at least');
+  });
+
   it('validates each PSBT recipient fields', async () => {
     const response = await request(app)
       .post(`/api/v1/wallets/${walletId}/psbt/create`)
@@ -822,6 +921,38 @@ describe('Transaction HTTP Routes', () => {
       'TRANSACTION_BROADCAST',
       'WALLET',
       expect.objectContaining({ success: true })
+    );
+  });
+
+  it('broadcasts PSBT with default recipient and amount when no outputs are present', async () => {
+    mockGetPSBTInfo.mockReturnValue({
+      fee: 450,
+      outputs: [],
+      inputs: [{ txid: 'f'.repeat(64), vout: 1 }],
+    });
+    mockBroadcastAndSave.mockResolvedValue({
+      txid: '8'.repeat(64),
+      broadcasted: true,
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/wallets/${walletId}/psbt/broadcast`)
+      .send({
+        signedPsbt: 'cHNi',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      txid: '8'.repeat(64),
+      broadcasted: true,
+    });
+    expect(mockBroadcastAndSave).toHaveBeenCalledWith(
+      walletId,
+      'cHNi',
+      expect.objectContaining({
+        recipient: '',
+        amount: 0,
+      })
     );
   });
 

@@ -10,6 +10,10 @@ const {
   mockAuditLogFromRequest,
   mockSocksCreateConnection,
   mockNodeFetch,
+  mockSocksProxyAgentConstruct,
+  mockLogInfo,
+  mockLogWarn,
+  mockLogError,
 } = vi.hoisted(() => ({
   mockTestNodeConfig: vi.fn(),
   mockResetNodeClient: vi.fn(),
@@ -17,6 +21,10 @@ const {
   mockAuditLogFromRequest: vi.fn(),
   mockSocksCreateConnection: vi.fn(),
   mockNodeFetch: vi.fn(),
+  mockSocksProxyAgentConstruct: vi.fn(),
+  mockLogInfo: vi.fn(),
+  mockLogWarn: vi.fn(),
+  mockLogError: vi.fn(),
 }));
 
 vi.mock('../../../src/repositories/db', async () => {
@@ -54,6 +62,15 @@ vi.mock('../../../src/services/auditService', () => ({
   },
 }));
 
+vi.mock('../../../src/utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: mockLogInfo,
+    warn: mockLogWarn,
+    error: mockLogError,
+  }),
+}));
+
 vi.mock('socks', () => ({
   SocksClient: {
     createConnection: mockSocksCreateConnection,
@@ -61,13 +78,21 @@ vi.mock('socks', () => ({
 }));
 
 vi.mock('socks-proxy-agent', () => ({
-  SocksProxyAgent: vi.fn().mockImplementation(() => ({})),
+  SocksProxyAgent: class MockSocksProxyAgent {
+    constructor(proxyUrl: string) {
+      mockSocksProxyAgentConstruct(proxyUrl);
+    }
+  },
 }));
 
-vi.mock('node-fetch', () => ({
-  __esModule: true,
-  default: mockNodeFetch,
-}));
+vi.mock('node-fetch', () => {
+  const fetchImpl = (...args: any[]) => mockNodeFetch(...args);
+  return {
+    default: {
+      default: fetchImpl,
+    },
+  };
+});
 
 import nodeConfigRouter from '../../../src/api/admin/nodeConfig';
 
@@ -471,10 +496,76 @@ describe('Admin Node Config Routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(typeof response.body.message).toBe('string');
-    expect(response.body.exitIp).toBeDefined();
-    expect(typeof response.body.isTorExit).toBe('boolean');
     expect(mockSocksCreateConnection).toHaveBeenCalled();
+    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockNodeFetch).toHaveBeenCalledWith(
+      'https://check.torproject.org/api/ip',
+      expect.objectContaining({
+        agent: expect.any(Object),
+      })
+    );
+    expect(response.body.message).toContain('Tor verified!');
+    expect(response.body.exitIp).toBe('1.2.3.4');
+    expect(response.body.isTorExit).toBe(true);
+  });
+
+  it('uses proxy credentials and reports verified tor exit status', async () => {
+    mockNodeFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ IsTor: true, IP: '9.9.9.9' }),
+    });
+
+    const response = await request(app)
+      .post('/api/v1/admin/proxy/test')
+      .send({
+        host: '127.0.0.1',
+        port: 9050,
+        username: 'tor-user',
+        password: 'tor-pass',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(typeof response.body.isTorExit).toBe('boolean');
+    expect(typeof response.body.exitIp).toBe('string');
+    expect(mockSocksCreateConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: expect.objectContaining({
+          userId: 'tor-user',
+          password: 'tor-pass',
+        }),
+      })
+    );
+    expect(mockSocksProxyAgentConstruct).toHaveBeenCalledWith(
+      'socks5://tor-user:tor-pass@127.0.0.1:9050'
+    );
+  });
+
+  it('continues with inconclusive result when node-fetch import is non-callable', async () => {
+    const nodeFetchModule: any = await import('node-fetch');
+    const originalFetch = nodeFetchModule.default.default;
+    nodeFetchModule.default.default = undefined;
+
+    try {
+      const response = await request(app)
+        .post('/api/v1/admin/proxy/test')
+        .send({ host: '127.0.0.1', port: 9050 });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        success: true,
+        isTorExit: false,
+        exitIp: 'unknown',
+      });
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'Could not fetch exit IP from torproject.org',
+        expect.objectContaining({
+          error: expect.stringContaining('node-fetch did not expose a callable function'),
+        })
+      );
+    } finally {
+      nodeFetchModule.default.default = originalFetch;
+    }
   });
 
   it('handles proxy verification setup errors', async () => {

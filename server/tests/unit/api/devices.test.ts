@@ -199,6 +199,34 @@ describe('Devices API', () => {
       expect(response.body.message).toContain('xpub or accounts');
     });
 
+    it('should reject registration when required top-level fields are missing', async () => {
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send({ type: 'trezor', label: 'Missing Fingerprint', xpub: 'xpub...' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('type, label, and fingerprint are required');
+    });
+
+    it('should reject registration when account entries are missing required fields', async () => {
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send({
+          type: 'trezor',
+          label: 'Invalid Account',
+          fingerprint: 'abc12345',
+          accounts: [
+            {
+              purpose: 'single_sig',
+              // Missing scriptType, derivationPath, xpub
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('Each account must have purpose, scriptType, derivationPath, and xpub');
+    });
+
     it('should reject registration with invalid purpose in accounts', async () => {
       const invalidDevice = {
         type: 'trezor',
@@ -488,6 +516,35 @@ describe('Devices API', () => {
       });
     });
 
+    it('should detect legacy script type from BIP-44 path in legacy mode', async () => {
+      const legacyDevice = {
+        type: 'ledger',
+        label: 'Legacy Ledger',
+        fingerprint: 'LEGACY123',
+        xpub: 'xpub_legacy...',
+        derivationPath: "m/44'/0'/0'",
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-legacy',
+        ...legacyDevice,
+        userId: 'test-user-id',
+      });
+
+      await request(app)
+        .post('/api/v1/devices')
+        .send(legacyDevice);
+
+      expect(mockPrismaClient.deviceAccount.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          purpose: 'single_sig',
+          scriptType: 'legacy',
+          derivationPath: "m/44'/0'/0'",
+        }),
+      });
+    });
+
     it('should detect multisig purpose from BIP-48 path in legacy mode', async () => {
       const multisigDevice = {
         type: 'coldcard',
@@ -514,6 +571,57 @@ describe('Devices API', () => {
           scriptType: 'native_segwit',
           derivationPath: "m/48'/0'/0'/2'",
         }),
+      });
+    });
+
+    it('should assign modelId when modelSlug is provided for registration', async () => {
+      const deviceWithModel = {
+        type: 'trezor',
+        label: 'Model Device',
+        fingerprint: 'abcde123',
+        xpub: 'xpub_model...',
+        derivationPath: "m/84'/0'/0'",
+        modelSlug: 'trezor-model-t',
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue({
+        id: 'model-1',
+        slug: 'trezor-model-t',
+      });
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-model',
+        ...deviceWithModel,
+        modelId: 'model-1',
+        userId: 'test-user-id',
+      });
+
+      await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithModel);
+
+      expect(mockPrismaClient.device.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          modelId: 'model-1',
+        }),
+        include: {
+          model: true,
+        },
+      });
+    });
+
+    it('should return 500 when registration transaction fails', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockRejectedValue(new Error('insert failed'));
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(validDevice);
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to register device',
       });
     });
   });
@@ -548,6 +656,19 @@ describe('Devices API', () => {
       expect(response.body).toHaveLength(2);
       expect(response.body[0].purpose).toBe('single_sig');
       expect(response.body[1].purpose).toBe('multisig');
+    });
+
+    it('should handle database errors while fetching accounts', async () => {
+      mockPrismaClient.deviceAccount.findMany.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1/accounts');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to fetch device accounts',
+      });
     });
   });
 
@@ -624,6 +745,35 @@ describe('Devices API', () => {
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('purpose');
     });
+
+    it('should reject invalid scriptType', async () => {
+      const invalidAccount = {
+        ...newAccount,
+        scriptType: 'invalid_script_type',
+      };
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/accounts')
+        .send(invalidAccount);
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('scriptType');
+    });
+
+    it('should handle database errors while adding an account', async () => {
+      mockPrismaClient.deviceAccount.findFirst.mockResolvedValue(null);
+      mockPrismaClient.deviceAccount.create.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .post('/api/v1/devices/device-1/accounts')
+        .send(newAccount);
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to add device account',
+      });
+    });
   });
 
   describe('DELETE /devices/:id/accounts/:accountId', () => {
@@ -667,6 +817,26 @@ describe('Devices API', () => {
         .delete('/api/v1/devices/device-1/accounts/non-existent');
 
       expect(response.status).toBe(404);
+    });
+
+    it('should handle database errors while deleting an account', async () => {
+      mockPrismaClient.deviceAccount.findFirst.mockResolvedValue({
+        id: 'account-1',
+        deviceId: 'device-1',
+        purpose: 'multisig',
+        scriptType: 'native_segwit',
+      });
+      mockPrismaClient.deviceAccount.count.mockResolvedValue(2);
+      mockPrismaClient.deviceAccount.delete.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .delete('/api/v1/devices/device-1/accounts/account-1');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toMatchObject({
+        error: 'Internal Server Error',
+        message: 'Failed to delete device account',
+      });
     });
   });
 

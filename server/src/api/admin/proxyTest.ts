@@ -107,8 +107,9 @@ router.post('/proxy/test', authenticate, requireAdmin, async (req: Request, res:
 
       clearTimeout(timeout);
 
-      if ((response as Response).ok) {
-        const data = await (response as Response).json() as { IsTor: boolean; IP: string };
+      const fetchResponse = response as unknown as { ok: boolean; json: () => Promise<unknown> };
+      if (fetchResponse.ok) {
+        const data = await fetchResponse.json() as { IsTor: boolean; IP: string };
         isTorExit = data.IsTor;
         exitIp = data.IP;
       }

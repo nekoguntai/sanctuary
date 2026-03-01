@@ -196,7 +196,12 @@ interface BackupMigration {
  * }
  */
 const MIGRATIONS: BackupMigration[] = [
-  // Migrations will be added here as schema evolves
+  // Baseline migration marker for legacy backups created before schema versioning stabilized.
+  {
+    fromVersion: 0,
+    toVersion: 1,
+    migrate: (backup) => backup,
+  },
 ];
 
 // Tables that can grow large and should use cursor-based pagination for export

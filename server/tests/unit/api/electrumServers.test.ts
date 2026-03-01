@@ -119,6 +119,21 @@ describe('admin electrum servers router', () => {
     expect(response.body).toHaveLength(1);
   });
 
+  it('GET / without network filter queries by nodeConfigId only', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig());
+    mockPrismaClient.electrumServer.findMany.mockResolvedValue([buildServer()]);
+
+    const response = await request(app).get('/api/v1/admin/electrum-servers');
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.findMany).toHaveBeenCalledWith({
+      where: {
+        nodeConfigId: 'default',
+      },
+      orderBy: { priority: 'asc' },
+    });
+  });
+
   it('GET / returns 500 when lookup fails', async () => {
     mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('db failure'));
 
@@ -152,6 +167,19 @@ describe('admin electrum servers router', () => {
       success: true,
       message: 'Connected',
       blockHeight: 850000,
+    });
+  });
+
+  it('POST /test-connection uses tcp protocol when useSsl is false', async () => {
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers/test-connection')
+      .send({ host: 'electrum.example.com', port: '50002', useSsl: false });
+
+    expect(response.status).toBe(200);
+    expect(mocks.testNodeConfig).toHaveBeenCalledWith({
+      host: 'electrum.example.com',
+      port: 50002,
+      protocol: 'tcp',
     });
   });
 
@@ -324,6 +352,38 @@ describe('admin electrum servers router', () => {
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
   });
 
+  it('POST / creates server with existing node config and default optional values', async () => {
+    mockPrismaClient.electrumServer.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(buildNodeConfig({ id: 'default-existing' }));
+    mockPrismaClient.electrumServer.create.mockResolvedValue(
+      buildServer({ id: 'srv-defaults', nodeConfigId: 'default-existing', useSsl: true, priority: 0, enabled: true })
+    );
+
+    const response = await request(app)
+      .post('/api/v1/admin/electrum-servers')
+      .send({
+        label: 'Defaults Server',
+        host: 'defaults.electrum.example',
+        port: 50003,
+      });
+
+    expect(response.status).toBe(201);
+    expect(mockPrismaClient.nodeConfig.create).not.toHaveBeenCalled();
+    expect(mockPrismaClient.electrumServer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          nodeConfigId: 'default-existing',
+          useSsl: true,
+          priority: 0,
+          enabled: true,
+          network: 'mainnet',
+        }),
+      })
+    );
+  });
+
   it('POST / returns 500 when create flow throws', async () => {
     mockPrismaClient.electrumServer.findFirst.mockResolvedValueOnce(null);
     mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('node config read failed'));
@@ -384,6 +444,34 @@ describe('admin electrum servers router', () => {
     expect(response.body.label).toBe('Updated Label');
     expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledTimes(1);
     expect(mocks.reloadElectrumServers).toHaveBeenCalledTimes(1);
+  });
+
+  it('PUT /:id keeps existing values for omitted fields and parses provided port', async () => {
+    const existing = buildServer({ id: 'srv-1', label: 'Existing', host: 'old.host', port: 50002, priority: 3 });
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(existing);
+    mockPrismaClient.electrumServer.findFirst.mockResolvedValue(null);
+    mockPrismaClient.electrumServer.update.mockResolvedValue(
+      buildServer({ ...existing, port: 51002 })
+    );
+
+    const response = await request(app)
+      .put('/api/v1/admin/electrum-servers/srv-1')
+      .send({ port: '51002' });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'srv-1' },
+        data: expect.objectContaining({
+          label: 'Existing',
+          host: 'old.host',
+          port: 51002,
+          useSsl: existing.useSsl,
+          priority: 3,
+          enabled: existing.enabled,
+        }),
+      })
+    );
   });
 
   it('PUT /:id rejects invalid network values', async () => {
@@ -487,6 +575,45 @@ describe('admin electrum servers router', () => {
     expect(response.body).toMatchObject({
       success: true,
       info: { blockHeight: 850000, supportsVerbose: true },
+    });
+  });
+
+  it('POST /:id/test tracks failed health checks and returns error payload', async () => {
+    const server = buildServer({
+      id: 'srv-2',
+      healthCheckFails: 3,
+      useSsl: true,
+    });
+    mockPrismaClient.electrumServer.findUnique.mockResolvedValue(server);
+    mocks.testNodeConfig.mockResolvedValue({
+      success: false,
+      message: 'Connection refused',
+      info: undefined,
+    });
+    mockPrismaClient.electrumServer.update.mockResolvedValue({
+      ...server,
+      isHealthy: false,
+      healthCheckFails: 4,
+      lastHealthCheckError: 'Connection refused',
+    });
+
+    const response = await request(app).post('/api/v1/admin/electrum-servers/srv-2/test');
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.electrumServer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'srv-2' },
+        data: expect.objectContaining({
+          isHealthy: false,
+          healthCheckFails: 4,
+          lastHealthCheckError: 'Connection refused',
+        }),
+      })
+    );
+    expect(response.body).toMatchObject({
+      success: false,
+      message: 'Connection refused',
+      error: 'Connection refused',
     });
   });
 

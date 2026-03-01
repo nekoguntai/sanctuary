@@ -215,6 +215,28 @@ describe('Hooks Defaults', () => {
       expect(auditLogger.warn).toHaveBeenCalledWith('User deleted', expect.any(Object));
       expect(auditLogger.debug).toHaveBeenCalledWith('Address generated', expect.any(Object));
     });
+
+    it('should mark failed login attempts in audit logs', async () => {
+      registerAuditHooks();
+
+      await hookRegistry.getHooks(Operations.AUTH_LOGIN, 'after')[0].handler({
+        operation: Operations.AUTH_LOGIN,
+        phase: 'after',
+        payload: { username: 'alice' },
+        result: undefined,
+        success: false,
+        error: new Error('invalid credentials'),
+      } as any);
+
+      expect(auditLogger.info).toHaveBeenCalledWith(
+        'User login',
+        expect.objectContaining({
+          username: 'alice',
+          success: false,
+          error: 'Authentication failed',
+        })
+      );
+    });
   });
 
   describe('getHooksSummary', () => {

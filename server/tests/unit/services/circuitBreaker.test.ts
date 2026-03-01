@@ -42,6 +42,10 @@ describe('CircuitBreaker', () => {
       expect(circuit.getHealth().state).toBe('closed');
     });
 
+    it('should report allowing requests while closed', () => {
+      expect(circuit.isAllowingRequests()).toBe(true);
+    });
+
     it('should allow successful calls through', async () => {
       const result = await circuit.execute(async () => 'success');
       expect(result).toBe('success');
@@ -168,6 +172,11 @@ describe('CircuitBreaker', () => {
       expect(circuit.getHealth().state).toBe('closed');
     });
 
+    it('should report allowing requests while half-open', () => {
+      expect(circuit.getHealth().state).toBe('half-open');
+      expect(circuit.isAllowingRequests()).toBe(true);
+    });
+
     it('should transition back to open on any failure', async () => {
       // Create a new circuit with higher success threshold
       const testCircuit = new CircuitBreaker<string>({
@@ -253,6 +262,22 @@ describe('CircuitBreaker', () => {
       const result = await circuit.execute(async () => 'success');
       expect(result).toBe('success');
     });
+
+    it('should no-op reset when already closed', () => {
+      expect(circuit.getHealth().state).toBe('closed');
+      circuit.reset();
+      expect(circuit.getHealth().state).toBe('closed');
+    });
+
+    it('does not run closed-state success reset when internal state is open', () => {
+      const internal = circuit as any;
+      internal.state = 'open';
+      internal.failures = 2;
+
+      internal.onSuccess();
+
+      expect(circuit.getHealth().failures).toBe(2);
+    });
   });
 
   describe('state change callback', () => {
@@ -281,6 +306,24 @@ describe('CircuitBreaker', () => {
         from: 'closed',
         to: 'open',
       });
+    });
+
+    it('should swallow onStateChange callback errors', async () => {
+      const circuitWithThrowingCallback = new CircuitBreaker<string>({
+        name: 'callback-throw-circuit',
+        failureThreshold: 1,
+        recoveryTimeout: 100,
+        onStateChange: () => {
+          throw new Error('callback failed');
+        },
+      });
+
+      await expect(
+        circuitWithThrowingCallback.execute(async () => {
+          throw new Error('primary failure');
+        })
+      ).rejects.toThrow('primary failure');
+      expect(circuitWithThrowingCallback.getHealth().state).toBe('open');
     });
   });
 
@@ -320,12 +363,29 @@ describe('CircuitBreaker', () => {
         )
       ).rejects.toThrow('not a circuit error');
     });
+
+    it('handles defensive open state without openedAt timestamp', async () => {
+      const internal = circuit as any;
+      internal.state = 'open';
+      internal.openedAt = null;
+
+      await expect(
+        circuit.execute(async () => 'primary')
+      ).rejects.toEqual(expect.objectContaining({
+        serviceName: 'test-circuit',
+        retryAfter: 0,
+      }));
+    });
   });
 });
 
 describe('CircuitBreakerRegistry', () => {
   beforeEach(() => {
     circuitBreakerRegistry.clear();
+  });
+
+  it('should report healthy when registry is empty', () => {
+    expect(circuitBreakerRegistry.getOverallStatus()).toBe('healthy');
   });
 
   it('should create and retrieve circuit breakers', () => {

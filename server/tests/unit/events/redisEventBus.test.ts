@@ -153,6 +153,29 @@ describe('RedisEventBus', () => {
     expect(mockLogError).toHaveBeenCalled();
   });
 
+  it('increments existing error counters in once() handler catch path', async () => {
+    (bus as any).metrics.errors.set('wallet:archived', 3);
+    bus.once('wallet:archived' as any, async () => {
+      throw new Error('once failed again');
+    });
+
+    bus.emit('wallet:archived' as any, { walletId: 'w4' } as any);
+    await Promise.resolve();
+
+    expect(bus.getMetrics().errors['wallet:archived']).toBe(4);
+  });
+
+  it('initializes error counters in once() handler catch path when metric is absent', async () => {
+    bus.once('wallet:restored' as any, async () => {
+      throw new Error('once failed new metric');
+    });
+
+    bus.emit('wallet:restored' as any, { walletId: 'w5' } as any);
+    await Promise.resolve();
+
+    expect(bus.getMetrics().errors['wallet:restored']).toBe(1);
+  });
+
   it('handles invalid incoming payloads and subscriber errors', () => {
     subscriber.emit('pmessage', '*', 'sanctuary:events:test', '{bad json');
     subscriber.emit('error', new Error('subscriber down'));
@@ -236,6 +259,20 @@ describe('createRedisEventBus', () => {
     expect(redisInstances).toHaveLength(2);
     expect(redisInstances[0].url).toBe('redis://localhost:6379');
     expect(redisInstances[1].url).toBe('redis://localhost:6379');
+  });
+
+  it('configures retry strategies for publisher and subscriber clients', async () => {
+    redisState.autoConnect = true;
+
+    const bus = await createRedisEventBus('redis://localhost:6379');
+
+    const publisherRetry = (redisInstances[0].options as any).retryStrategy as (times: number) => number;
+    const subscriberRetry = (redisInstances[1].options as any).retryStrategy as (times: number) => number;
+
+    expect(publisherRetry(2)).toBe(200);
+    expect(subscriberRetry(40)).toBe(3000);
+
+    await bus.shutdown();
   });
 
   it('rejects when redis connection emits error', async () => {

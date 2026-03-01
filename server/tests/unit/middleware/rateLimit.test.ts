@@ -140,6 +140,75 @@ describe('Rate Limit Middleware', () => {
 
       expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', 'ip:203.0.113.1');
     });
+
+    it('should use first forwarded IP when x-forwarded-for is an array', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: true,
+        limit: 100,
+        remaining: 99,
+        resetAt: Date.now() + 60000,
+      });
+      mockReq.headers = { 'x-forwarded-for': [' 198.51.100.10 ', '203.0.113.9'] as any };
+
+      const middleware = rateLimit('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', 'ip:198.51.100.10');
+    });
+
+    it('falls back to socket remoteAddress when req.ip is unavailable', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: true,
+        limit: 100,
+        remaining: 99,
+        resetAt: Date.now() + 60000,
+      });
+      mockReq.ip = undefined;
+      mockReq.socket = { remoteAddress: '10.0.0.15' } as any;
+
+      const middleware = rateLimit('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', 'ip:10.0.0.15');
+    });
+
+    it('falls back to unknown when no client IP can be determined', async () => {
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: true,
+        limit: 100,
+        remaining: 99,
+        resetAt: Date.now() + 60000,
+      });
+      mockReq.ip = undefined;
+      mockReq.socket = {} as any;
+
+      const middleware = rateLimit('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(rateLimitService.consume).toHaveBeenCalledWith('test-policy', 'ip:unknown');
+    });
+
+    it('uses default JSON message when no policy or option message is configured', async () => {
+      (rateLimitService.getPolicy as Mock).mockReturnValueOnce(undefined);
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 10,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+      });
+
+      const middleware = rateLimit('test-policy');
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(429);
+      expect(jsonMock).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'Too many requests. Please try again later.',
+        }),
+      });
+    });
   });
 
   describe('rateLimitByUser', () => {
@@ -332,6 +401,29 @@ describe('Rate Limit Middleware', () => {
       expect(statusMock).toHaveBeenCalledWith(429);
       expect(typeMock).toHaveBeenCalledWith('text/html');
       expect(sendMock).toHaveBeenCalledWith('Too many custom requests');
+    });
+
+    it('should return default text response when no message/content type provided', async () => {
+      (rateLimitService.getPolicy as Mock).mockReturnValueOnce(undefined);
+      (rateLimitService.consume as Mock).mockResolvedValue({
+        allowed: false,
+        limit: 2,
+        remaining: 0,
+        resetAt: Date.now() + 60000,
+      });
+
+      const middleware = rateLimitByKey(
+        'test-policy',
+        () => 'custom-key',
+        {
+          responseType: 'text',
+        }
+      );
+      await middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(429);
+      expect(typeMock).toHaveBeenCalledWith('text/plain');
+      expect(sendMock).toHaveBeenCalledWith('Too many requests. Please try again later.');
     });
   });
 

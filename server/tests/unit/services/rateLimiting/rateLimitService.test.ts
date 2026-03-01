@@ -133,6 +133,21 @@ describe('rateLimitService', () => {
     expect(result.retryAfter).toBe(5);
   });
 
+  it('returns limiter consume result when request is allowed', async () => {
+    const service = await loadService();
+    service.initialize();
+
+    const result = await service.consume('api:default', 'user-allow');
+
+    expect(mockLimiterInstance.consume).toHaveBeenCalledWith('api:default:user-allow', 10, 60, 1);
+    expect(result).toEqual({
+      allowed: true,
+      remaining: 9,
+      limit: 10,
+      resetAt: 12345,
+    });
+  });
+
   it('fails open when limiter consume throws', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-11T00:00:00.000Z'));
@@ -171,6 +186,25 @@ describe('rateLimitService', () => {
     expect(mockLimiterInstance.check).toHaveBeenCalledWith('api:default:user-1', 10, 60);
     expect(mockLimiterInstance.reset).toHaveBeenCalledWith('api:default:user-1');
     expect(remaining).toBe(7);
+  });
+
+  it('fails open when limiter check throws', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-11T00:00:00.000Z'));
+    const now = Date.now();
+    const service = await loadService();
+    service.initialize();
+    mockLimiterInstance.check.mockRejectedValueOnce(new Error('redis check down'));
+
+    const result = await service.check('api:default', 'user-1');
+
+    expect(result).toEqual({
+      allowed: true,
+      remaining: 10,
+      limit: 10,
+      resetAt: now + 60000,
+    });
+    vi.useRealTimers();
   });
 
   it('returns permissive defaults for unknown policy checks', async () => {

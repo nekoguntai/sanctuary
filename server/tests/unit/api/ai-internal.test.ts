@@ -279,6 +279,54 @@ describe('AI Internal API Routes', () => {
 
         expect(res.status).not.toBe(403);
       });
+
+      it('should use socket remoteAddress when X-Forwarded-For is missing', async () => {
+        mockNotificationService.broadcastModelDownloadProgress.mockReturnValue(undefined);
+
+        const res = await request(app)
+          .post('/internal/ai/pull-progress')
+          .send({ model: 'llama2', status: 'downloading' });
+
+        expect(res.status).not.toBe(403);
+      });
+
+      it('should use first IP when X-Forwarded-For is an array', async () => {
+        mockNotificationService.broadcastModelDownloadProgress.mockReturnValue(undefined);
+
+        const appWithArrayHeader = express();
+        appWithArrayHeader.use(express.json());
+        appWithArrayHeader.use((req, _res, next) => {
+          (req.headers as Record<string, unknown>)['x-forwarded-for'] = ['192.168.1.1', '8.8.8.8'];
+          next();
+        });
+        appWithArrayHeader.use('/internal/ai', aiInternalRouter);
+
+        const res = await request(appWithArrayHeader)
+          .post('/internal/ai/pull-progress')
+          .send({ model: 'llama2', status: 'downloading' });
+
+        expect(res.status).not.toBe(403);
+      });
+
+      it('should reject when socket remoteAddress is empty and no forwarded header exists', async () => {
+        const appWithEmptyRemoteAddress = express();
+        appWithEmptyRemoteAddress.use(express.json());
+        appWithEmptyRemoteAddress.use((req, _res, next) => {
+          (req.headers as Record<string, unknown>)['x-forwarded-for'] = undefined;
+          Object.defineProperty(req, 'socket', {
+            value: { remoteAddress: '' },
+            configurable: true,
+          });
+          next();
+        });
+        appWithEmptyRemoteAddress.use('/internal/ai', aiInternalRouter);
+
+        const res = await request(appWithEmptyRemoteAddress)
+          .post('/internal/ai/pull-progress')
+          .send({ model: 'llama2', status: 'downloading' });
+
+        expect(res.status).toBe(403);
+      });
     });
   });
 

@@ -142,6 +142,51 @@ describe('maintenanceService', () => {
     expect(clearIntervalSpy).toHaveBeenCalled();
   });
 
+  it('stop handles running state when timers are already null', () => {
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+
+    (maintenanceService as any).running = true;
+    (maintenanceService as any).initialTimer = null;
+    (maintenanceService as any).dailyTimer = null;
+    (maintenanceService as any).hourlyTimer = null;
+    (maintenanceService as any).weeklyTimer = null;
+    (maintenanceService as any).monthlyTimer = null;
+
+    maintenanceService.stop();
+
+    expect(clearTimeoutSpy).not.toHaveBeenCalled();
+    expect(clearIntervalSpy).not.toHaveBeenCalled();
+  });
+
+  it('logs failures from initial, daily, hourly, weekly, and monthly scheduled callbacks', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(maintenanceService, 'runAllCleanups').mockRejectedValueOnce(new Error('initial failed'));
+    vi.spyOn(maintenanceService, 'runDailyCleanups').mockRejectedValueOnce(new Error('daily failed'));
+    vi.spyOn(maintenanceService, 'runHourlyCleanups').mockRejectedValueOnce(new Error('hourly failed'));
+    vi.spyOn(maintenanceService, 'checkAndRunWeeklyMaintenance').mockRejectedValueOnce(new Error('weekly failed'));
+    vi.spyOn(maintenanceService, 'checkAndRunMonthlyMaintenance').mockRejectedValueOnce(new Error('monthly failed'));
+
+    maintenanceService.start();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(mockLog.error).toHaveBeenCalledWith('Initial cleanup failed', expect.any(Object));
+    expect(mockLog.error).toHaveBeenCalledWith('Daily cleanup failed', expect.any(Object));
+    expect(mockLog.error).toHaveBeenCalledWith('Hourly cleanup failed', expect.any(Object));
+    expect(mockLog.error).toHaveBeenCalledWith('Weekly maintenance check failed', expect.any(Object));
+    expect(mockLog.error).toHaveBeenCalledWith('Monthly maintenance check failed', expect.any(Object));
+  });
+
+  it('runAllCleanups executes daily then hourly cleanup flows', async () => {
+    const dailySpy = vi.spyOn(maintenanceService, 'runDailyCleanups').mockResolvedValueOnce(undefined);
+    const hourlySpy = vi.spyOn(maintenanceService, 'runHourlyCleanups').mockResolvedValueOnce(undefined);
+
+    await expect(maintenanceService.runAllCleanups()).resolves.toBeUndefined();
+    expect(dailySpy).toHaveBeenCalledTimes(1);
+    expect(hourlySpy).toHaveBeenCalledTimes(1);
+    expect(mockLog.info).toHaveBeenCalledWith('Running all maintenance cleanups');
+  });
+
   it('runDailyCleanups logs and continues when tasks reject', async () => {
     vi.spyOn(maintenanceService, 'cleanupAuditLogs').mockRejectedValueOnce(new Error('audit failed'));
     vi.spyOn(maintenanceService, 'cleanupPriceData').mockResolvedValueOnce(1);
@@ -221,6 +266,20 @@ describe('maintenanceService', () => {
     await expect(maintenanceService.cleanupOrphanedDrafts()).rejects.toThrow('orphan fail');
   });
 
+  it('cleanup methods return zero without completion logs when nothing is deleted', async () => {
+    mockAuditService.cleanup.mockResolvedValueOnce(0);
+    mockDb.priceData.deleteMany.mockResolvedValueOnce({ count: 0 });
+    mockDb.feeEstimate.deleteMany.mockResolvedValueOnce({ count: 0 });
+    mockDb.refreshToken.deleteMany.mockResolvedValueOnce({ count: 0 });
+    mockDb.$executeRaw.mockResolvedValueOnce(0);
+
+    await expect(maintenanceService.cleanupAuditLogs()).resolves.toBe(0);
+    await expect(maintenanceService.cleanupPriceData()).resolves.toBe(0);
+    await expect(maintenanceService.cleanupFeeEstimates()).resolves.toBe(0);
+    await expect(maintenanceService.cleanupExpiredRefreshTokens()).resolves.toBe(0);
+    await expect(maintenanceService.cleanupOrphanedDrafts()).resolves.toBe(0);
+  });
+
   it('checkDiskUsage exits early when docker is unavailable', async () => {
     mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
     await expect(maintenanceService.checkDiskUsage()).resolves.toBeUndefined();
@@ -251,6 +310,25 @@ describe('maintenanceService', () => {
 
     mockExecAsync.mockRejectedValueOnce(new Error('docker command failed'));
     await expect(maintenanceService.checkDiskUsage()).resolves.toBeUndefined();
+  });
+
+  it('checkDiskUsage handles empty inspect output and short df output safely', async () => {
+    mockExecAsync
+      .mockResolvedValueOnce({ stdout: 'Docker version 24.0.0', stderr: '' }) // docker --version
+      .mockResolvedValueOnce({ stdout: '[]', stderr: '' }) // inspect vol1
+      .mockResolvedValueOnce({ stdout: '[{"Mountpoint":"/var/lib/docker/volumes/v2"}]', stderr: '' }) // inspect vol2
+      .mockResolvedValueOnce({ stdout: '/dev/sda1 100G 95G\n', stderr: '' }); // df vol2 (insufficient fields)
+
+    await expect(maintenanceService.checkDiskUsage()).resolves.toBeUndefined();
+    expect(mockAuditService.log).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: 'maintenance.disk_warning',
+    }));
+  });
+
+  it('checkDiskUsage handles unexpected outer exceptions', async () => {
+    mockExecAsync.mockResolvedValueOnce(undefined as any);
+    await expect(maintenanceService.checkDiskUsage()).resolves.toBeUndefined();
+    expect(mockLog.warn).toHaveBeenCalledWith('Disk usage check failed', expect.any(Object));
   });
 
   it('weekly maintenance check runs only when interval elapsed', async () => {
@@ -329,6 +407,17 @@ describe('maintenanceService', () => {
     expect(mockAuditService.log).toHaveBeenCalledWith(expect.objectContaining({
       action: 'maintenance.monthly_stale_cleanup',
       success: false,
+    }));
+  });
+
+  it('runMonthlyMaintenance succeeds when stale push device cleanup finds nothing', async () => {
+    mockDb.pushDevice.deleteMany.mockResolvedValueOnce({ count: 0 });
+    vi.spyOn(maintenanceService, 'cleanupOrphanedDrafts').mockResolvedValueOnce(0);
+
+    await expect(maintenanceService.runMonthlyMaintenance()).resolves.toBeUndefined();
+    expect(mockAuditService.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'maintenance.monthly_stale_cleanup',
+      success: true,
     }));
   });
 

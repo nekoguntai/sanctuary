@@ -68,9 +68,8 @@ export const initializeWebSocketServer = (): SanctauryWebSocketServer => {
   // Set up Redis bridge handler for cross-instance broadcasts
   // When events arrive from other instances via Redis, broadcast locally
   redisBridge.setBroadcastHandler((event) => {
-    if (wsServer) {
-      wsServer.localBroadcast(event);
-    }
+    // wsServer is assigned immediately before this handler is registered.
+    wsServer!.localBroadcast(event);
   });
 
   log.info('Client WebSocket server initialized');

@@ -557,6 +557,35 @@ describe('Admin Routes', () => {
       );
     });
 
+    it('should not set email fields when clearing email for user without email', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: null,
+        emailVerified: false,
+        isAdmin: false,
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: null,
+        emailVerified: false,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ email: '' });
+
+      expect(response.status).toBe(200);
+      const updatePayload = mockPrisma.user.update.mock.calls.at(-1)?.[0];
+      expect(updatePayload.data.email).toBeUndefined();
+      expect(updatePayload.data.emailVerified).toBeUndefined();
+      expect(updatePayload.data.emailVerifiedAt).toBeUndefined();
+    });
+
     it('should reject weak password on update', async () => {
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: 'user-1',
@@ -571,6 +600,41 @@ describe('Admin Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('security requirements');
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should hash and update strong password', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        isAdmin: false,
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        emailVerified: true,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ password: 'Str0ngPassw0rd!' });
+
+      expect(response.status).toBe(200);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'user-1' },
+          data: expect.objectContaining({
+            password: expect.any(String),
+          }),
+        })
+      );
+
+      const updatePayload = mockPrisma.user.update.mock.calls.at(-1)?.[0];
+      expect(updatePayload.data.password).not.toBe('Str0ngPassw0rd!');
     });
 
     it('should log admin grant action when isAdmin is set to true', async () => {
@@ -598,6 +662,38 @@ describe('Admin Routes', () => {
       expect(mockAuditService.logFromRequest).toHaveBeenCalledWith(
         expect.any(Object),
         'user.admin_grant',
+        'user',
+        expect.objectContaining({
+          details: expect.objectContaining({ userId: 'user-1' }),
+        })
+      );
+    });
+
+    it('should log admin revoke action when isAdmin is set to false', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        isAdmin: true,
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        email: 'test@test.com',
+        emailVerified: true,
+        isAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .put('/api/v1/admin/users/user-1')
+        .send({ isAdmin: false });
+
+      expect(response.status).toBe(200);
+      expect(mockAuditService.logFromRequest).toHaveBeenCalledWith(
+        expect.any(Object),
+        'user.admin_revoke',
         'user',
         expect.objectContaining({
           details: expect.objectContaining({ userId: 'user-1' }),
@@ -749,6 +845,19 @@ describe('Admin Routes', () => {
 
       expect(response.status).toBe(500);
     });
+
+    it('should mark SMTP as not configured when host or fromAddress is missing', async () => {
+      mockPrisma.systemSetting.findMany.mockResolvedValue([
+        { key: 'smtp.host', value: '"smtp.example.com"' },
+        { key: 'smtp.password', value: '"enc:secret"' },
+      ]);
+
+      const response = await request(app).get('/api/v1/admin/settings');
+
+      expect(response.status).toBe(200);
+      expect(response.body['smtp.configured']).toBe(false);
+      expect(response.body['smtp.password']).toBeUndefined();
+    });
   });
 
   describe('PUT /api/v1/admin/settings', () => {
@@ -821,6 +930,78 @@ describe('Admin Routes', () => {
       expect(response.body['smtp.configured']).toBe(true);
       expect(response.body['smtp.password']).toBeUndefined();
     });
+
+    it('should use current confirmation threshold when only deep threshold is updated', async () => {
+      mockPrisma.systemSetting.findMany
+        .mockResolvedValueOnce([
+          { key: 'confirmationThreshold', value: '3' },
+          { key: 'deepConfirmationThreshold', value: '6' },
+        ])
+        .mockResolvedValueOnce([
+          { key: 'confirmationThreshold', value: '3' },
+          { key: 'deepConfirmationThreshold', value: '7' },
+        ]);
+      mockPrisma.systemSetting.upsert.mockResolvedValue({ key: 'deepConfirmationThreshold', value: '7' });
+
+      const response = await request(app)
+        .put('/api/v1/admin/settings')
+        .send({ deepConfirmationThreshold: 7 });
+
+      expect(response.status).toBe(200);
+      expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'deepConfirmationThreshold' },
+        })
+      );
+    });
+
+    it('should use current deep confirmation threshold when only confirmation threshold is updated', async () => {
+      mockPrisma.systemSetting.findMany
+        .mockResolvedValueOnce([
+          { key: 'confirmationThreshold', value: '2' },
+          { key: 'deepConfirmationThreshold', value: '6' },
+        ])
+        .mockResolvedValueOnce([
+          { key: 'confirmationThreshold', value: '4' },
+          { key: 'deepConfirmationThreshold', value: '6' },
+        ]);
+      mockPrisma.systemSetting.upsert.mockResolvedValue({ key: 'confirmationThreshold', value: '4' });
+
+      const response = await request(app)
+        .put('/api/v1/admin/settings')
+        .send({ confirmationThreshold: 4 });
+
+      expect(response.status).toBe(200);
+      expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'confirmationThreshold' },
+        })
+      );
+    });
+
+    it('should keep already encrypted SMTP password without re-encrypting', async () => {
+      mockPrisma.systemSetting.upsert.mockResolvedValue({ key: 'smtp.password', value: '"enc:already-secret"' });
+      mockPrisma.systemSetting.findMany.mockResolvedValue([
+        { key: 'smtp.host', value: '"smtp.example.com"' },
+        { key: 'smtp.fromAddress', value: '"noreply@example.com"' },
+        { key: 'smtp.password', value: '"enc:already-secret"' },
+      ]);
+
+      const response = await request(app)
+        .put('/api/v1/admin/settings')
+        .send({ 'smtp.password': 'enc:already-secret' });
+
+      expect(response.status).toBe(200);
+      expect(mockIsEncrypted).toHaveBeenCalledWith('enc:already-secret');
+      expect(mockEncrypt).not.toHaveBeenCalled();
+      expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'smtp.password' },
+          update: { value: JSON.stringify('enc:already-secret') },
+          create: { key: 'smtp.password', value: JSON.stringify('enc:already-secret') },
+        })
+      );
+    });
   });
 
   // ========================================
@@ -877,6 +1058,19 @@ describe('Admin Routes', () => {
       expect(response.status).toBe(200);
       expect(mockAuditService.query).toHaveBeenCalledWith(
         expect.objectContaining({ category: 'auth' })
+      );
+    });
+
+    it('should filter by success flag when provided', async () => {
+      mockAuditService.query.mockResolvedValue({ logs: [], total: 0 });
+
+      const response = await request(app)
+        .get('/api/v1/admin/audit-logs')
+        .query({ success: 'false' });
+
+      expect(response.status).toBe(200);
+      expect(mockAuditService.query).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false })
       );
     });
 

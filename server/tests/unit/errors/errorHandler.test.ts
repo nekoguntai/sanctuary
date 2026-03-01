@@ -88,6 +88,40 @@ describe('errorHandler', () => {
     }
   });
 
+  it('keeps default duplicate message when P2002 target is not an array', () => {
+    const res = makeRes();
+    const err = new Prisma.PrismaClientKnownRequestError('duplicate', {
+      code: 'P2002',
+      clientVersion: 'test',
+      meta: { target: 'username' },
+    });
+
+    errorHandler(err, {} as Request, res, vi.fn() as NextFunction);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'A record with this value already exists',
+      code: ErrorCodes.DUPLICATE_ENTRY,
+    }));
+  });
+
+  it('keeps default duplicate message when P2002 target array is unrecognized', () => {
+    const res = makeRes();
+    const err = new Prisma.PrismaClientKnownRequestError('duplicate', {
+      code: 'P2002',
+      clientVersion: 'test',
+      meta: { target: ['externalId'] },
+    });
+
+    errorHandler(err, {} as Request, res, vi.fn() as NextFunction);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'A record with this value already exists',
+      code: ErrorCodes.DUPLICATE_ENTRY,
+    }));
+  });
+
   it('maps other known Prisma errors', () => {
     const tests: Array<{ code: string; expectedStatus: number; expectedCode: string }> = [
       { code: 'P2025', expectedStatus: 404, expectedCode: ErrorCodes.NOT_FOUND },

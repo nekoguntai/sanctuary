@@ -70,6 +70,19 @@ describe('ScriptTypeRegistry', () => {
       expect(registry.get('p2wpkh')).toBe(handler);
       expect(registry.get('bech32')).toBe(handler);
     });
+
+    it('should register handlers without aliases and execute debug path', () => {
+      const registry = new ScriptTypeRegistry({ debug: true });
+      const handler = createMockHandler({
+        id: 'no_alias_handler',
+        aliases: undefined,
+      });
+
+      registry.register(handler);
+
+      expect(registry.get('no_alias_handler')).toBe(handler);
+      expect(registry.resolveAlias('no_alias_handler')).toBe('no_alias_handler');
+    });
   });
 
   describe('unregister', () => {
@@ -95,6 +108,19 @@ describe('ScriptTypeRegistry', () => {
       const result = registry.unregister('nonexistent');
 
       expect(result).toBe(false);
+    });
+
+    it('should remove handler without aliases', () => {
+      const registry = new ScriptTypeRegistry();
+      const handler = createMockHandler({
+        id: 'bare_handler',
+        aliases: undefined,
+      });
+
+      registry.register(handler);
+
+      expect(registry.unregister('bare_handler')).toBe(true);
+      expect(registry.get('bare_handler')).toBeUndefined();
     });
   });
 
@@ -243,6 +269,14 @@ describe('ScriptTypeRegistry', () => {
         "Script type 'taproot' does not support multisig"
       );
     });
+
+    it('should throw for unknown script type', () => {
+      const registry = new ScriptTypeRegistry();
+
+      expect(() => registry.getMultisigDerivationPath('unknown', 'mainnet')).toThrow(
+        'Unknown script type: unknown'
+      );
+    });
   });
 
   describe('buildSingleSigDescriptor', () => {
@@ -306,6 +340,15 @@ describe('ScriptTypeRegistry', () => {
         network: 'mainnet',
         quorum: 2,
       })).toThrow("Script type 'taproot' does not support multisig");
+    });
+
+    it('should throw for unknown script type', () => {
+      const registry = new ScriptTypeRegistry();
+
+      expect(() => registry.buildMultiSigDescriptor('unknown', [], {
+        network: 'mainnet',
+        quorum: 2,
+      })).toThrow('Unknown script type: unknown');
     });
   });
 

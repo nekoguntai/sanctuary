@@ -77,6 +77,15 @@ describe('ImportFormatRegistry', () => {
       expect(all[1].id).toBe('med');
       expect(all[2].id).toBe('low');
     });
+
+    it('should execute debug registration path when debug is enabled', () => {
+      const registry = new ImportFormatRegistry({ debug: true });
+      const handler = createMockHandler({ id: 'debug_handler' });
+
+      registry.register(handler);
+
+      expect(registry.get('debug_handler')).toBe(handler);
+    });
   });
 
   describe('unregister', () => {
@@ -227,6 +236,18 @@ describe('ImportFormatRegistry', () => {
 
       expect(result).toBe(workingHandler);
     });
+
+    it('should execute debug detection path when debug is enabled', () => {
+      const registry = new ImportFormatRegistry({ debug: true });
+      const handler = createMockHandler({
+        id: 'debug_detecting',
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 90 }),
+      });
+
+      registry.register(handler);
+
+      expect(registry.detect('debug input')).toBe(handler);
+    });
   });
 
   describe('detectAll', () => {
@@ -273,6 +294,22 @@ describe('ImportFormatRegistry', () => {
 
       expect(results[0].handler.id).toBe('high');
       expect(results[1].handler.id).toBe('low');
+    });
+
+    it('should include fallback result when canHandle throws', () => {
+      const registry = new ImportFormatRegistry();
+      const throwing = createMockHandler({
+        id: 'throwing_all',
+        canHandle: vi.fn().mockImplementation(() => {
+          throw new Error('bad detector');
+        }),
+      });
+
+      registry.register(throwing);
+
+      const results = registry.detectAll('test');
+      expect(results).toHaveLength(1);
+      expect(results[0].result).toEqual({ detected: false, confidence: 0 });
     });
   });
 
@@ -378,6 +415,19 @@ describe('ImportFormatRegistry', () => {
 
       expect(result.parsed).toEqual(mockParsed);
     });
+
+    it('should use unknown error text when validation errors list is missing', () => {
+      const registry = new ImportFormatRegistry();
+      const handler = createMockHandler({
+        id: 'validation_unknown',
+        canHandle: vi.fn().mockReturnValue({ detected: true, confidence: 80 }),
+        validate: vi.fn().mockReturnValue({ valid: false }),
+      });
+
+      registry.register(handler);
+
+      expect(() => registry.parse('test')).toThrow('Validation failed: Unknown error');
+    });
   });
 
   describe('getFileExtensions', () => {
@@ -401,6 +451,17 @@ describe('ImportFormatRegistry', () => {
       expect(extensions).toContain('.txt');
       expect(extensions).toContain('.cfg');
       expect(extensions).toHaveLength(3);
+    });
+
+    it('should ignore handlers without file extension hints', () => {
+      const registry = new ImportFormatRegistry();
+      const withExt = createMockHandler({ id: 'with_ext', fileExtensions: ['.json'] });
+      const withoutExt = createMockHandler({ id: 'without_ext', fileExtensions: undefined });
+
+      registry.register(withExt);
+      registry.register(withoutExt);
+
+      expect(registry.getFileExtensions()).toEqual(['.json']);
     });
   });
 

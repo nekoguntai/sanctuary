@@ -62,6 +62,17 @@ describe('Wallets XPUB Validation Routes', () => {
     expect(response.body.message).toBe('Invalid checksum');
   });
 
+  it('falls back to default invalid-xpub message when validator error is missing', async () => {
+    mockValidateXpub.mockReturnValue({ valid: false });
+
+    const response = await request(app)
+      .post('/api/v1/wallets/validate-xpub')
+      .send({ xpub: 'xpubbad', network: 'mainnet' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid xpub');
+  });
+
   it('uses detected script type when scriptType is not provided', async () => {
     mockValidateXpub.mockReturnValue({ valid: true, scriptType: 'nested_segwit' });
     mockDeriveAddress.mockReturnValue({ address: '3exampleaddress' });

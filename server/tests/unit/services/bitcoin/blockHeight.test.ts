@@ -106,6 +106,16 @@ describe('blockHeight utils', () => {
       cache.clear();
       expect(cache.size).toBe(0);
     });
+
+    it('handles zero-capacity eviction edge without deleting undefined keys', async () => {
+      const { LRUCache } = await loadModule();
+      const cache = new LRUCache<string, number>(0);
+
+      cache.set('a', 1);
+
+      expect(cache.get('a')).toBe(1);
+      expect(cache.size).toBe(1);
+    });
   });
 
   describe('getBlockTimestamp', () => {

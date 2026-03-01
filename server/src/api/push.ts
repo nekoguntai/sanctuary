@@ -48,10 +48,6 @@ const log = createLogger('PUSH-API');
  * APNs tokens: 64 character hex strings (device token) or longer for provider tokens
  */
 function validateDeviceToken(token: string, platform: 'ios' | 'android'): { valid: boolean; error?: string } {
-  if (!token || typeof token !== 'string') {
-    return { valid: false, error: 'Token must be a non-empty string' };
-  }
-
   if (platform === 'android') {
     // FCM tokens are typically 150+ characters, contain letters, numbers, colons, hyphens, underscores
     // Format: project-id:token or just a long alphanumeric string

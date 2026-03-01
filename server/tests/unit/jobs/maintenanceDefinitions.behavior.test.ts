@@ -180,6 +180,18 @@ describe('Maintenance job definitions behavior', () => {
     );
   });
 
+  it('returns zero when cleanup jobs find no records to delete', async () => {
+    const auditDeleted = await cleanupAuditLogsJob.handler({ data: {} } as any);
+    const priceDeleted = await cleanupPriceDataJob.handler({ data: {} } as any);
+    const feeDeleted = await cleanupFeeEstimatesJob.handler({ data: {} } as any);
+    const tokenDeleted = await cleanupExpiredTokensJob.handler();
+
+    expect(auditDeleted).toBe(0);
+    expect(priceDeleted).toBe(0);
+    expect(feeDeleted).toBe(0);
+    expect(tokenDeleted).toBe(0);
+  });
+
   it('runs weekly vacuum + reindex job and resets statement timeout', async () => {
     const updateProgress = vi.fn().mockResolvedValue(undefined);
 
@@ -229,6 +241,34 @@ describe('Maintenance job definitions behavior', () => {
     expect(sqlCalls.some(sql => sql.includes("SET statement_timeout = '0'"))).toBe(true);
   });
 
+  it('skips unknown reindex tables during weekly maintenance', async () => {
+    const updateProgress = vi.fn().mockResolvedValue(undefined);
+
+    await weeklyVacuumJob.handler({
+      data: { tables: ['UnknownTable'] },
+      updateProgress,
+    } as any);
+
+    const sqlCalls = mockExecuteRaw.mock.calls.map(sqlFromCall);
+    expect(sqlCalls.some(sql => sql.includes('VACUUM ANALYZE'))).toBe(true);
+    expect(sqlCalls.some(sql => sql.includes('REINDEX TABLE'))).toBe(false);
+    expect(updateProgress).toHaveBeenCalledWith(90);
+  });
+
+  it('uses default weekly reindex table list when tables are not provided', async () => {
+    const updateProgress = vi.fn().mockResolvedValue(undefined);
+
+    await weeklyVacuumJob.handler({
+      data: {},
+      updateProgress,
+    } as any);
+
+    const sqlCalls = mockExecuteRaw.mock.calls.map(sqlFromCall);
+    expect(sqlCalls.some(sql => sql.includes('REINDEX TABLE "audit_logs"'))).toBe(true);
+    expect(sqlCalls.some(sql => sql.includes('REINDEX TABLE "Transaction"'))).toBe(true);
+    expect(sqlCalls.some(sql => sql.includes('REINDEX TABLE "UTXO"'))).toBe(true);
+  });
+
   it('runs monthly cleanup job, reports progress, and returns summary', async () => {
     const updateProgress = vi.fn().mockResolvedValue(undefined);
     mockDeletePushDevices.mockResolvedValueOnce({ count: 6 });
@@ -260,6 +300,23 @@ describe('Maintenance job definitions behavior', () => {
         success: true,
       })
     );
+  });
+
+  it('returns zero monthly cleanup counts when no stale records exist', async () => {
+    const updateProgress = vi.fn().mockResolvedValue(undefined);
+    mockDeletePushDevices.mockResolvedValueOnce({ count: 0 });
+    mockExecuteRaw.mockResolvedValueOnce(0);
+
+    const result = await monthlyCleanupJob.handler({
+      data: {},
+      updateProgress,
+    } as any);
+
+    expect(result).toEqual({
+      stalePushDevices: 0,
+      orphanedDrafts: 0,
+    });
+    expect(updateProgress).toHaveBeenCalledWith(100);
   });
 
   it('exports the complete maintenance job list', () => {

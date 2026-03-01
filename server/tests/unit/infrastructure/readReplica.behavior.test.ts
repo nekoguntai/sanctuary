@@ -188,6 +188,29 @@ describe('ReadReplica behavior', () => {
     expect(health).toEqual({ enabled: false, healthy: false });
   });
 
+  it('logs unknown error when replica initialization fails with non-Error rejection', async () => {
+    const {
+      initializeReadReplica,
+      isReadReplicaEnabled,
+      getReadClient,
+      mocks,
+    } = await loadReadReplicaModule({
+      replicaUrl: 'postgresql://replica:5432/sanctuary',
+      connectError: 'connect failed' as any,
+    });
+
+    await initializeReadReplica();
+
+    expect(isReadReplicaEnabled()).toBe(false);
+    expect(getReadClient()).toBe(mocks.primaryDb as any);
+    expect(mocks.log.error).toHaveBeenCalledWith(
+      'Failed to initialize read replica, falling back to primary',
+      expect.objectContaining({
+        error: 'Unknown error',
+      })
+    );
+  });
+
   it('reports unhealthy replica when health query fails after init', async () => {
     const {
       initializeReadReplica,
@@ -206,6 +229,29 @@ describe('ReadReplica behavior', () => {
       enabled: true,
       healthy: false,
       error: 'read failed',
+    });
+
+    await shutdownReadReplica();
+  });
+
+  it('reports unknown error when health query rejects with non-Error value', async () => {
+    const {
+      initializeReadReplica,
+      checkReadReplicaHealth,
+      shutdownReadReplica,
+      mocks,
+    } = await loadReadReplicaModule({
+      replicaUrl: 'postgresql://replica:5432/sanctuary',
+    });
+
+    await initializeReadReplica();
+    mocks.replicaClient.$queryRaw.mockRejectedValueOnce('read failed');
+
+    const health = await checkReadReplicaHealth();
+    expect(health).toEqual({
+      enabled: true,
+      healthy: false,
+      error: 'Unknown error',
     });
 
     await shutdownReadReplica();
@@ -251,6 +297,28 @@ describe('ReadReplica behavior', () => {
     await shutdownReadReplica();
   });
 
+  it('does not warn when replication lag is within threshold', async () => {
+    const {
+      initializeReadReplica,
+      estimateReplicationLag,
+      shutdownReadReplica,
+      mocks,
+    } = await loadReadReplicaModule({
+      replicaUrl: 'postgresql://replica:5432/sanctuary',
+      primaryNow: new Date('2026-01-01T00:00:05.000Z'),
+      replicaNow: new Date('2026-01-01T00:00:03.000Z'),
+    });
+
+    await initializeReadReplica();
+    await expect(estimateReplicationLag()).resolves.toBe(2000);
+    expect(mocks.log.warn).not.toHaveBeenCalledWith(
+      'High replication lag detected',
+      expect.anything()
+    );
+
+    await shutdownReadReplica();
+  });
+
   it('returns -1 when lag estimation query fails', async () => {
     const {
       initializeReadReplica,
@@ -273,6 +341,38 @@ describe('ReadReplica behavior', () => {
     );
 
     await shutdownReadReplica();
+  });
+
+  it('returns -1 with unknown error label when lag estimation throws non-Error', async () => {
+    const {
+      initializeReadReplica,
+      estimateReplicationLag,
+      shutdownReadReplica,
+      mocks,
+    } = await loadReadReplicaModule({
+      replicaUrl: 'postgresql://replica:5432/sanctuary',
+    });
+
+    await initializeReadReplica();
+    mocks.primaryDb.$queryRaw.mockRejectedValueOnce('primary failed');
+
+    await expect(estimateReplicationLag()).resolves.toBe(-1);
+    expect(mocks.log.error).toHaveBeenCalledWith(
+      'Failed to estimate replication lag',
+      expect.objectContaining({
+        error: 'Unknown error',
+      })
+    );
+
+    await shutdownReadReplica();
+  });
+
+  it('handles shutdown when replica was never initialized', async () => {
+    const { shutdownReadReplica } = await loadReadReplicaModule({
+      replicaUrl: undefined,
+    });
+
+    await expect(shutdownReadReplica()).resolves.toBeUndefined();
   });
 
   it('returns zero lag and non-acceptable replica when replica is disabled', async () => {

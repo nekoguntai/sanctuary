@@ -81,6 +81,15 @@ describe('ExportFormatRegistry', () => {
         "Export format handler 'duplicate' is already registered"
       );
     });
+
+    it('emits debug registration logging when debug mode is enabled', () => {
+      const registry = new ExportFormatRegistry({ debug: true });
+      const handler = createMockHandler({ id: 'debug_format' });
+
+      registry.register(handler);
+
+      expect(registry.has('debug_format')).toBe(true);
+    });
   });
 
   describe('unregister', () => {
@@ -258,6 +267,21 @@ describe('ExportFormatRegistry', () => {
 
       expect(() => registry.export('single_only', multiSigWallet)).toThrow(
         "Export format 'single_only' cannot export this wallet type"
+      );
+    });
+
+    it('emits debug export logging when debug mode is enabled', () => {
+      const registry = new ExportFormatRegistry({ debug: true });
+      const handler = createMockHandler({ id: 'debug_export' });
+      registry.register(handler);
+
+      const wallet = createMockWallet();
+      const result = registry.export('debug_export', wallet);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          filename: 'test.mock',
+        })
       );
     });
   });

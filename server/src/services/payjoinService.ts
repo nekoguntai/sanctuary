@@ -48,23 +48,20 @@ function isPrivateIP(ip: string): boolean {
     return !ip.includes('.'); // Block non-IPv4 except public IPv6
   }
 
-  return (
-    // Localhost
-    parts[0] === 127 ||
-    // Private Class A (10.0.0.0/8)
-    parts[0] === 10 ||
-    // Private Class B (172.16.0.0/12)
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    // Private Class C (192.168.0.0/16)
-    (parts[0] === 192 && parts[1] === 168) ||
-    // Link-local (169.254.0.0/16)
-    (parts[0] === 169 && parts[1] === 254) ||
-    // Cloud metadata endpoints
-    (parts[0] === 169 && parts[1] === 254 && parts[2] === 169 && parts[3] === 254) ||
-    // Broadcast
-    parts[0] === 0 ||
-    parts[0] === 255
-  );
+  // Localhost
+  if (parts[0] === 127) return true;
+  // Private Class A (10.0.0.0/8)
+  if (parts[0] === 10) return true;
+  // Private Class B (172.16.0.0/12)
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  // Private Class C (192.168.0.0/16)
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  // Link-local includes cloud metadata endpoints (169.254.169.254)
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  // Broadcast / invalid edge ranges
+  if (parts[0] === 0 || parts[0] === 255) return true;
+
+  return false;
 }
 
 /**
@@ -369,7 +366,7 @@ export async function attemptPayjoinSend(
       return {
         success: false,
         isPayjoin: false,
-        error: urlValidation.error || 'Invalid Payjoin URL',
+        error: urlValidation.error!,
       };
     }
 

@@ -71,6 +71,18 @@ describe('aiService', () => {
     await expect(mod.isEnabled()).resolves.toBe(true);
   });
 
+  it('ignores unknown AI settings keys while parsing config', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+      setting('aiUnknownKey', 'ignored'),
+    ] as any);
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.isEnabled()).resolves.toBe(true);
+  });
+
   it('returns disabled when settings lookup fails', async () => {
     mocks.systemSettingFindMany.mockRejectedValue(new Error('db down'));
 
@@ -291,6 +303,20 @@ describe('aiService', () => {
 
     const mod = await import('../../../src/services/aiService');
     await expect(mod.suggestTransactionLabel('tx-4', 'token-abc')).resolves.toBeNull();
+  });
+
+  it('returns null when label suggestion is an empty string', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce(okJson({ suggestion: '' }));
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.suggestTransactionLabel('tx-empty', 'token-abc')).resolves.toBeNull();
   });
 
   it('returns null label suggestion when fetch throws', async () => {
@@ -522,6 +548,23 @@ describe('aiService', () => {
     expect(del).toEqual({ success: false, error: 'delete failed' });
   });
 
+  it('returns pull-model fallback error when error payload omits message', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce(errJson(500, {}));
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.pullModel('llama3.2')).resolves.toEqual({
+      success: false,
+      error: 'Pull failed',
+    });
+  });
+
   it('returns pull-model endpoint missing error', async () => {
     mocks.systemSettingFindMany.mockResolvedValue([
       setting('aiEnabled', true),
@@ -617,6 +660,23 @@ describe('aiService', () => {
     });
   });
 
+  it('returns delete-model fallback error when error payload omits message', async () => {
+    mocks.systemSettingFindMany.mockResolvedValue([
+      setting('aiEnabled', true),
+      setting('aiEndpoint', 'http://ollama:11434'),
+      setting('aiModel', 'llama3.2'),
+    ] as any);
+    mocks.fetch
+      .mockResolvedValueOnce(okJson({ success: true }))
+      .mockResolvedValueOnce(errJson(500, {}));
+
+    const mod = await import('../../../src/services/aiService');
+    await expect(mod.deleteModel('llama3.2')).resolves.toEqual({
+      success: false,
+      error: 'Delete failed',
+    });
+  });
+
   it('returns delete-model operation failure when request throws', async () => {
     mocks.systemSettingFindMany.mockResolvedValue([
       setting('aiEnabled', true),
@@ -646,6 +706,36 @@ describe('aiService', () => {
     const synced = await mod.forceSyncConfig();
 
     expect(synced).toBe(false);
+  });
+
+  it('forceSyncConfig sends configured AI config secret header when present', async () => {
+    const previousSecret = process.env.AI_CONFIG_SECRET;
+    process.env.AI_CONFIG_SECRET = 'test-secret';
+    try {
+      mocks.systemSettingFindMany.mockResolvedValue([
+        setting('aiEnabled', true),
+        setting('aiEndpoint', 'http://ollama:11434'),
+        setting('aiModel', 'llama3.2'),
+      ] as any);
+      mocks.fetch.mockResolvedValueOnce(okJson({ synced: true }));
+
+      const mod = await import('../../../src/services/aiService');
+      await expect(mod.forceSyncConfig()).resolves.toBe(true);
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        'http://ai:3100/config',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-AI-Config-Secret': 'test-secret',
+          }),
+        })
+      );
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.AI_CONFIG_SECRET;
+      } else {
+        process.env.AI_CONFIG_SECRET = previousSecret;
+      }
+    }
   });
 
   it('forceSyncConfig returns false when config sync returns non-ok response', async () => {

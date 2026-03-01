@@ -8,13 +8,15 @@
 import { vi, Mock } from 'vitest';
 
 // Mock dependencies before imports
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('../../../src/utils/logger', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => mockLogger,
 }));
 
 const mockBroadcast = vi.fn();
@@ -80,6 +82,10 @@ describe('NotificationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLogger.debug.mockImplementation(() => undefined);
+    mockLogger.info.mockImplementation(() => undefined);
+    mockLogger.warn.mockImplementation(() => undefined);
+    mockLogger.error.mockImplementation(() => undefined);
     service = new NotificationService();
   });
 
@@ -123,6 +129,24 @@ describe('NotificationService', () => {
       // Should complete without error
     });
 
+    it('should remove tracked subscriptions and log count', async () => {
+      (prisma.address.findMany as Mock).mockResolvedValue([
+        { address: 'bc1q123' },
+        { address: 'bc1q456' },
+        { address: 'bc1q999' },
+      ]);
+      (service as any).subscribedAddresses.add('bc1q123');
+      (service as any).subscribedAddresses.add('bc1q456');
+
+      await service.unsubscribeWalletAddresses('wallet-123');
+
+      expect((service as any).subscribedAddresses.has('bc1q123')).toBe(false);
+      expect((service as any).subscribedAddresses.has('bc1q456')).toBe(false);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        '[NOTIFY] Unsubscribed 2 addresses for wallet wallet-123'
+      );
+    });
+
     it('should handle database error', async () => {
       (prisma.address.findMany as Mock).mockRejectedValue(new Error('DB error'));
 
@@ -151,6 +175,35 @@ describe('NotificationService', () => {
 
       await service.subscribeToAddress('bc1q123', 'wallet-456');
       // Should not throw, just log error
+    });
+  });
+
+  describe('subscribeToBlocks retry behavior', () => {
+    it('retries once when initial subscribe attempt fails', async () => {
+      mockLogger.debug.mockImplementationOnce(() => {
+        throw new Error('temporary subscribe failure');
+      });
+
+      await (service as any).subscribeToBlocks(2, 0);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to subscribe to blocks (attempt 1/2)',
+        expect.objectContaining({ error: expect.any(String) })
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith('Subscribed to blockchain headers');
+    });
+
+    it('logs an error when all subscribe retries fail', async () => {
+      mockLogger.debug.mockImplementation(() => {
+        throw new Error('persistent subscribe failure');
+      });
+
+      await (service as any).subscribeToBlocks(1, 0);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to subscribe to blocks after all retries',
+        expect.objectContaining({ error: expect.any(String) })
+      );
     });
   });
 

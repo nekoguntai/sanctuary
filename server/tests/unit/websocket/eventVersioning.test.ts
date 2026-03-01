@@ -433,6 +433,18 @@ describe('EventVersioning', () => {
       expect(response.supportedVersions).toEqual(SUPPORTED_VERSIONS);
     });
 
+    it('should keep current version when preferred is unsupported and no mutual versions exist', () => {
+      const response = negotiateVersion('client-no-mutual', {
+        type: 'version:negotiate',
+        // @ts-expect-error - testing invalid version
+        preferredVersion: 'v99',
+        // @ts-expect-error - testing unsupported client list
+        supportedVersions: ['v99'],
+      });
+
+      expect(response.version).toBe(CURRENT_VERSION);
+    });
+
     it('should register negotiated version for client', () => {
       const testManager = new EventVersionManager();
 

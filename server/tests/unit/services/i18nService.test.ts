@@ -108,6 +108,13 @@ describe('I18n Service', () => {
   });
 
   describe('translate', () => {
+    it('should return key values when service is not initialized', () => {
+      (i18nService as any).initialized = false;
+
+      expect(i18nService.translate('common:loading')).toBe('common:loading');
+      expect(i18nService.translate('errors', 'notFound')).toBe('notFound');
+    });
+
     beforeEach(async () => {
       await i18nService.initialize();
     });
@@ -140,6 +147,14 @@ describe('I18n Service', () => {
           field: 'email',
         })
       );
+    });
+
+    it('should fall back to full key when translation result is empty', () => {
+      mockT.mockReturnValueOnce('');
+
+      const result = i18nService.translate('errors', 'notFound', { locale: 'en' });
+
+      expect(result).toBe('errors:notFound');
     });
   });
 

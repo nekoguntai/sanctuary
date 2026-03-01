@@ -188,6 +188,16 @@ describe('StartupManager', () => {
       );
     });
 
+    it('should throw when dependency references a missing service', async () => {
+      const services: ServiceDefinition[] = [
+        createService('service-a', { dependsOn: ['missing-service'] }),
+      ];
+
+      await expect(startAllServices(services)).rejects.toThrow(
+        'Service service-a depends on missing service missing-service'
+      );
+    });
+
     it('should skip service when dependency fails', async () => {
       const services: ServiceDefinition[] = [
         createService('service-a', {
@@ -210,6 +220,18 @@ describe('StartupManager', () => {
   });
 
   describe('getStartupStatus', () => {
+    it('should return null timestamps before startup begins', async () => {
+      vi.resetModules();
+      const mod = await import('../../../src/services/startupManager');
+
+      const status = mod.getStartupStatus();
+      expect(status.started).toBe(false);
+      expect(status.startedAt).toBeNull();
+      expect(status.completedAt).toBeNull();
+      expect(status.duration).toBeNull();
+      expect(status.services).toEqual([]);
+    });
+
     it('should return startup status after services started', async () => {
       const services: ServiceDefinition[] = [
         createService('service-a'),

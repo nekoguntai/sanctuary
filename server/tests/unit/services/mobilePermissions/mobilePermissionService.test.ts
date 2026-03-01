@@ -245,6 +245,38 @@ describe('MobilePermissionService', () => {
         mobilePermissionService.updateOwnPermissions(walletId, userId, { broadcast: true })
       ).rejects.toThrow(ForbiddenError);
     });
+
+    it('should allow disabling a permission under owner max and default lastModifiedBy to userId', async () => {
+      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue({
+        ...mockPermission,
+        ownerMaxPermissions: { broadcast: false },
+      });
+      (mobilePermissionRepository.upsert as Mock).mockResolvedValue(mockPermission);
+
+      await mobilePermissionService.updateOwnPermissions(walletId, userId, { broadcast: false });
+
+      expect(mobilePermissionRepository.upsert).toHaveBeenCalledWith(walletId, userId, {
+        canBroadcast: false,
+        lastModifiedBy: userId,
+      });
+    });
+
+    it('should ignore undefined permission fields in input', async () => {
+      (prisma.walletUser.findUnique as Mock).mockResolvedValue({ role: 'signer' });
+      (mobilePermissionRepository.findByWalletAndUser as Mock).mockResolvedValue(null);
+      (mobilePermissionRepository.upsert as Mock).mockResolvedValue(mockPermission);
+
+      await mobilePermissionService.updateOwnPermissions(
+        walletId,
+        userId,
+        { broadcast: undefined } as any
+      );
+
+      expect(mobilePermissionRepository.upsert).toHaveBeenCalledWith(walletId, userId, {
+        lastModifiedBy: userId,
+      });
+    });
   });
 
   describe('setMaxPermissions', () => {

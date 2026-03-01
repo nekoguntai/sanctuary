@@ -124,6 +124,26 @@ describe('RedisWebSocketBridge (connected mode)', () => {
     await shutdownRedisBridge();
   });
 
+  it('ignores messages from channels other than the broadcast channel', async () => {
+    const { initializeRedisBridge, redisBridge, shutdownRedisBridge, mocks } = await loadBridgeWithMocks();
+    const handler = vi.fn();
+    redisBridge.setBroadcastHandler(handler);
+
+    await initializeRedisBridge();
+
+    const envelope = {
+      event: { type: 'sync', data: { source: 'remote' } },
+      instanceId: 'remote-instance',
+      timestamp: Date.now(),
+    };
+    mocks.subscriber.emit('message', 'sanctuary:ws:other', JSON.stringify(envelope));
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(redisBridge.getMetrics().received).toBe(0);
+
+    await shutdownRedisBridge();
+  });
+
   it('skips self-published messages and tracks skippedSelf metric', async () => {
     const { initializeRedisBridge, redisBridge, shutdownRedisBridge, mocks } = await loadBridgeWithMocks();
     const handler = vi.fn();
@@ -187,6 +207,23 @@ describe('RedisWebSocketBridge (connected mode)', () => {
     await shutdownRedisBridge();
   });
 
+  it('ignores valid inbound messages when no broadcast handler is set', async () => {
+    const { initializeRedisBridge, redisBridge, shutdownRedisBridge, mocks } = await loadBridgeWithMocks();
+    await initializeRedisBridge();
+
+    const envelope = {
+      event: { type: 'sync', data: { source: 'remote' } },
+      instanceId: 'remote-instance',
+      timestamp: Date.now(),
+    };
+    mocks.subscriber.emit('message', 'sanctuary:ws:broadcast', JSON.stringify(envelope));
+
+    expect(redisBridge.getMetrics().received).toBe(0);
+    expect(redisBridge.getMetrics().errors).toBe(0);
+
+    await shutdownRedisBridge();
+  });
+
   it('increments error metrics on publisher/subscriber error events', async () => {
     const { initializeRedisBridge, redisBridge, shutdownRedisBridge, mocks } = await loadBridgeWithMocks();
     await initializeRedisBridge();
@@ -211,6 +248,17 @@ describe('RedisWebSocketBridge (connected mode)', () => {
     expect(mocks.publisher.quit).toHaveBeenCalled();
     expect(redisBridge.isActive()).toBe(false);
     expect((redisBridge as any).broadcastHandler).toBeNull();
+  });
+
+  it('handles shutdown cleanup when publisher/subscriber are already null', async () => {
+    const { redisBridge, shutdownRedisBridge } = await loadBridgeWithMocks();
+
+    (redisBridge as any).isInitialized = true;
+    (redisBridge as any).subscriber = null;
+    (redisBridge as any).publisher = null;
+
+    await expect(shutdownRedisBridge()).resolves.not.toThrow();
+    expect(redisBridge.isActive()).toBe(false);
   });
 
   it('ignores cleanup errors from unsubscribe/quit', async () => {

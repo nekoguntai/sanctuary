@@ -266,6 +266,18 @@ describe('Health API', () => {
       expect(response.body.components.memory.details.rss).toBeDefined();
     });
 
+    it('should fall back to default version when package version is unset', async () => {
+      const originalVersion = process.env.npm_package_version;
+      process.env.npm_package_version = '';
+
+      const response = await request(app).get('/api/v1/health');
+
+      process.env.npm_package_version = originalVersion;
+
+      expect(response.status).toBe(200);
+      expect(response.body.version).toBe('0.0.0');
+    });
+
     it('should include database latency in response', async () => {
       const response = await request(app).get('/api/v1/health');
 
@@ -311,6 +323,19 @@ describe('Health API', () => {
       expect(response.body.components.jobQueue.message).toContain('worker process');
     });
 
+    it('should treat missing job queue availability probe as worker-owned queue', async () => {
+      const originalIsAvailable = (jobQueue as any).isAvailable;
+      (jobQueue as any).isAvailable = undefined;
+
+      const response = await request(app).get('/api/v1/health');
+
+      (jobQueue as any).isAvailable = originalIsAvailable;
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.jobQueue.status).toBe('healthy');
+      expect(response.body.components.jobQueue.message).toContain('worker process');
+    });
+
     it('should report degraded when local queue health method is unavailable', async () => {
       const originalGetHealth = (jobQueue as any).getHealth;
       (jobQueue as any).getHealth = undefined;
@@ -322,6 +347,24 @@ describe('Health API', () => {
       expect(response.status).toBe(200);
       expect(response.body.components.jobQueue.status).toBe('degraded');
       expect(response.body.components.jobQueue.message).toBe('Job queue health unavailable');
+    });
+
+    it('should report unhealthy when local queue health reports unhealthy', async () => {
+      (jobQueue.getHealth as Mock).mockResolvedValue({
+        healthy: false,
+        queueName: 'test-queue',
+        waiting: 5,
+        active: 2,
+        completed: 100,
+        failed: 3,
+        delayed: 1,
+        paused: false,
+      });
+
+      const response = await request(app).get('/api/v1/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.components.jobQueue.status).toBe('unhealthy');
     });
 
     it('should degrade gracefully when job queue health throws', async () => {

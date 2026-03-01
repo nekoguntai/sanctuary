@@ -19,6 +19,7 @@ import {
   hasWalletSubscribers,
   getBroadcastStats,
 } from '../../../src/websocket/broadcast';
+import { getWebSocketServer, getGatewayWebSocketServer } from '../../../src/websocket/server';
 
 // Mock the logger
 vi.mock('../../../src/utils/logger', () => ({
@@ -157,6 +158,24 @@ describe('Broadcast Helpers', () => {
         })
       );
     });
+
+    it('should serialize Date timestamp for balance events', () => {
+      const ts = new Date('2024-01-02T03:04:05.000Z');
+      broadcastBalance('wallet-123', {
+        balance: 100000,
+        unconfirmed: 0,
+        change: 0,
+        timestamp: ts,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            timestamp: '2024-01-02T03:04:05.000Z',
+          }),
+        })
+      );
+    });
   });
 
   describe('broadcastConfirmation', () => {
@@ -189,6 +208,23 @@ describe('Broadcast Helpers', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             previousConfirmations: 5,
+          }),
+        })
+      );
+    });
+
+    it('should serialize Date timestamp for confirmation events', () => {
+      const ts = new Date('2024-01-02T03:04:05.000Z');
+      broadcastConfirmation('wallet-123', {
+        txid: 'tx-abc',
+        confirmations: 6,
+        timestamp: ts,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            timestamp: '2024-01-02T03:04:05.000Z',
           }),
         })
       );
@@ -246,6 +282,23 @@ describe('Broadcast Helpers', () => {
             retryCount: 2,
             maxRetries: 5,
             retryingIn: 30000,
+          }),
+        })
+      );
+    });
+
+    it('should serialize Date timestamp for sync events', () => {
+      const ts = new Date('2024-01-02T03:04:05.000Z');
+      broadcastSync('wallet-123', {
+        inProgress: true,
+        status: 'started',
+        timestamp: ts,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            timestamp: '2024-01-02T03:04:05.000Z',
           }),
         })
       );
@@ -315,6 +368,23 @@ describe('Broadcast Helpers', () => {
         })
       );
     });
+
+    it('should serialize Date timestamp for block events', () => {
+      const ts = new Date('2024-01-02T03:04:05.000Z');
+      broadcastBlock({
+        height: 800010,
+        hash: 'blockhash-with-date',
+        timestamp: ts,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            timestamp: '2024-01-02T03:04:05.000Z',
+          }),
+        })
+      );
+    });
   });
 
   describe('broadcastNewBlock', () => {
@@ -328,6 +398,22 @@ describe('Broadcast Helpers', () => {
           type: 'newBlock',
           data: expect.objectContaining({
             height: 800001,
+          }),
+        })
+      );
+    });
+
+    it('should serialize Date timestamp for new block events', () => {
+      const ts = new Date('2024-01-02T03:04:05.000Z');
+      broadcastNewBlock({
+        height: 800002,
+        timestamp: ts,
+      });
+
+      expect(mockBroadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            timestamp: '2024-01-02T03:04:05.000Z',
           }),
         })
       );
@@ -436,6 +522,24 @@ describe('Broadcast Helpers', () => {
 
       expect(mockBroadcast).toHaveBeenCalled();
     });
+
+    it('should skip broadcast when websocket server is unavailable', () => {
+      vi.mocked(getWebSocketServer).mockImplementationOnce(() => {
+        throw new Error('server not initialized');
+      });
+
+      expect(() =>
+        broadcast({
+          type: 'mempool',
+          data: {
+            txid: 'tx-unavailable',
+            fee: 1,
+            size: 100,
+            feeRate: 1,
+          },
+        })
+      ).not.toThrow();
+    });
   });
 
   describe('hasWalletSubscribers', () => {
@@ -449,6 +553,14 @@ describe('Broadcast Helpers', () => {
       const result = hasWalletSubscribers('999');
 
       expect(result).toBe(false);
+    });
+
+    it('should return false when stats lookup throws', () => {
+      vi.mocked(getWebSocketServer).mockImplementationOnce(() => {
+        throw new Error('stats unavailable');
+      });
+
+      expect(hasWalletSubscribers('123')).toBe(false);
     });
   });
 
@@ -470,6 +582,32 @@ describe('Broadcast Helpers', () => {
       const stats = getBroadcastStats();
 
       expect(stats.gatewayConnected).toBe(true);
+    });
+
+    it('should return disconnected defaults when websocket server is unavailable', () => {
+      vi.mocked(getWebSocketServer).mockImplementationOnce(() => {
+        throw new Error('server unavailable');
+      });
+
+      expect(getBroadcastStats()).toEqual({
+        connected: false,
+        clients: 0,
+        channels: [],
+        gatewayConnected: false,
+      });
+    });
+
+    it('should default gatewayConnected to false when gateway server is unavailable', () => {
+      vi.mocked(getGatewayWebSocketServer).mockImplementationOnce(() => undefined as any);
+
+      const stats = getBroadcastStats();
+
+      expect(stats).toEqual({
+        connected: true,
+        clients: 5,
+        channels: ['wallet:123', 'wallet:456', 'blocks'],
+        gatewayConnected: false,
+      });
     });
   });
 

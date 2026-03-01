@@ -141,6 +141,14 @@ describe('Descriptor Builder Service', () => {
         expect(path2).toBe("m/48'/0'/2'/2'");
       });
     });
+
+    describe('Error handling', () => {
+      it('should throw for unknown script type', () => {
+        expect(() => {
+          getMultisigDerivationPath('unknown' as any);
+        }).toThrow('Unknown script type');
+      });
+    });
   });
 
   describe('buildSingleSigDescriptor', () => {

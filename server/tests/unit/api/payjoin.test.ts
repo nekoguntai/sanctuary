@@ -17,7 +17,15 @@ vi.mock('../../../src/config', () => ({
 
 // Mock rate limiter to avoid rate limiting in tests
 vi.mock('../../../src/middleware/rateLimit', () => ({
-  rateLimitByIpAndKey: () => (req: Request, res: Response, next: NextFunction) => next(),
+  rateLimitByIpAndKey: (
+    _policy?: string,
+    extractKey?: (req: Request) => string | undefined
+  ) => (req: Request, _res: Response, next: NextFunction) => {
+    if (extractKey) {
+      extractKey(req);
+    }
+    next();
+  },
 }));
 
 // Mock Prisma
@@ -361,6 +369,27 @@ describe('Payjoin API Routes', () => {
       expect(res.body.eligible).toBe(false);
       expect(res.body.status).toBe('all-locked');
       expect(res.body.reason).toContain('locked');
+    });
+
+    it('should return unavailable status when no eligibility reason applies', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: TEST_WALLET_ID,
+        name: 'Test Wallet',
+      });
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // eligible
+      mockPrisma.uTXO.count.mockResolvedValueOnce(3); // total
+      mockPrisma.uTXO.count.mockResolvedValueOnce(1); // frozen
+      mockPrisma.uTXO.count.mockResolvedValueOnce(0); // unconfirmed
+      mockPrisma.uTXO.count.mockResolvedValueOnce(1); // locked
+
+      const res = await request(app)
+        .get(`/api/v1/payjoin/eligibility/${TEST_WALLET_ID}`)
+        .set('Authorization', 'Bearer test-token');
+
+      expect(res.status).toBe(200);
+      expect(res.body.eligible).toBe(false);
+      expect(res.body.status).toBe('unavailable');
+      expect(res.body.reason).toContain('No eligible coins available');
     });
 
     it('should return 404 when wallet not found', async () => {

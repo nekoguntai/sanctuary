@@ -129,6 +129,29 @@ describe('Admin Version Routes', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('falls back release fields when GitHub payload is incomplete and marks downgrade as no update', async () => {
+    const { app } = await setupVersionRoute({
+      fetchImpl: () =>
+        Promise.resolve({
+          ok: true,
+          json: vi.fn().mockResolvedValue({}),
+        }),
+    });
+
+    const response = await request(app).get('/api/v1/admin/version');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      currentVersion: '1.2.3',
+      latestVersion: '0.0.0',
+      updateAvailable: false,
+      releaseUrl: 'https://github.com/nekoguntai/sanctuary/releases',
+      releaseName: '',
+      publishedAt: '',
+      releaseNotes: '',
+    });
+  });
+
   it('logs warning and falls back when GitHub release fetch fails', async () => {
     const { app, warn } = await setupVersionRoute({
       fetchImpl: () => Promise.reject(new Error('network down')),

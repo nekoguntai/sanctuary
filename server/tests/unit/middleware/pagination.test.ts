@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
+import { parsePaginationParams } from '../../../src/utils/apiResponse';
 
 // Mock apiResponse utils
 vi.mock('../../../src/utils/apiResponse', () => ({
@@ -179,6 +180,17 @@ describe('Pagination Middleware', () => {
       middleware(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
+    });
+
+    it('should forward parsing errors to next', () => {
+      vi.mocked(parsePaginationParams).mockImplementationOnce(() => {
+        throw new Error('parse failed');
+      });
+      const middleware = requirePagination();
+
+      middleware(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
     });
   });
 

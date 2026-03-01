@@ -595,6 +595,18 @@ describe('parseGatewayMessage', () => {
     expect(result.success).toBe(true);
   });
 
+  it('should return validation details when gateway payload is missing type', () => {
+    const raw = JSON.stringify({
+      response: 'a'.repeat(64),
+    });
+
+    const result = parseGatewayMessage(raw);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain('Validation failed');
+    }
+  });
+
   it('should use GatewayAuthResponseSchema for strict auth validation', () => {
     // For strict auth validation, use the specific schema directly
     const invalid = { type: 'auth_response', response: 'invalid' };

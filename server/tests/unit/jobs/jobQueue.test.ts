@@ -229,6 +229,23 @@ describe('JobQueueService', () => {
     expect(queue.getProcessingCount()).toBe(0);
   });
 
+  it('processes jobs with missing id using unknown span attribute fallback', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    queue.register({
+      name: 'id-optional-job',
+      handler: vi.fn(async () => ({ ok: true })),
+    });
+
+    const processor = workerInstances[0].processor;
+    await expect(
+      processor({ name: 'id-optional-job', attemptsMade: 0 })
+    ).resolves.toEqual({ ok: true });
+  });
+
   it('rejects unknown handlers and resets processing count when a handler throws', async () => {
     mockGetRedisClient.mockReturnValue(createRedisClient());
     mockIsRedisConnected.mockReturnValue(true);
@@ -327,6 +344,28 @@ describe('JobQueueService', () => {
           pattern: '0 0 * * *',
           tz: 'UTC',
           limit: 5,
+        },
+      })
+    );
+  });
+
+  it('schedules cron jobs without timezone or limit using base repeat job id', async () => {
+    mockGetRedisClient.mockReturnValue(createRedisClient());
+    mockIsRedisConnected.mockReturnValue(true);
+    const queue = await loadJobQueueService();
+    await queue.initialize();
+
+    await queue.schedule('hourly', {}, { cron: '0 * * * *' });
+
+    expect(queueInstances[0].add).toHaveBeenCalledWith(
+      'hourly',
+      {},
+      expect.objectContaining({
+        jobId: 'repeat:hourly:0 * * * *',
+        repeat: {
+          pattern: '0 * * * *',
+          tz: undefined,
+          limit: undefined,
         },
       })
     );
@@ -522,6 +561,11 @@ describe('JobQueueService', () => {
     expect(queue.getRegisteredJobs().sort()).toEqual(['alpha', 'beta']);
   });
 
+  it('no-ops setupEventHandlers when worker is not initialized', async () => {
+    const queue = await loadJobQueueService();
+    expect(() => (queue as any).setupEventHandlers()).not.toThrow();
+  });
+
   it('shuts down worker, events, and queue', async () => {
     mockGetRedisClient.mockReturnValue(createRedisClient());
     mockIsRedisConnected.mockReturnValue(true);
@@ -534,6 +578,12 @@ describe('JobQueueService', () => {
     expect(workerInstances[0].close).toHaveBeenCalled();
     expect(queueEventsInstances[0].close).toHaveBeenCalled();
     expect(queueInstances[0].close).toHaveBeenCalled();
+    expect(queue.isAvailable()).toBe(false);
+  });
+
+  it('shuts down safely when queue components were never initialized', async () => {
+    const queue = await loadJobQueueService();
+    await expect(queue.shutdown()).resolves.toBeUndefined();
     expect(queue.isAvailable()).toBe(false);
   });
 });

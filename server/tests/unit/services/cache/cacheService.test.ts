@@ -204,6 +204,78 @@ describe('Cache Service', () => {
       });
     });
 
+    describe('eviction and cleanup lifecycle', () => {
+      it('should evict oldest entries when max size is reached', async () => {
+        const scoped = cache.namespace('evict') as any;
+        const originalMaxSize = scoped.maxSize;
+        scoped.maxSize = 2;
+
+        await scoped.set('a', 'value-a');
+        await scoped.set('b', 'value-b');
+        await scoped.set('c', 'value-c');
+
+        expect(await scoped.get('a')).toBeNull();
+        expect(await scoped.get('b')).toBe('value-b');
+        expect(await scoped.get('c')).toBe('value-c');
+
+        scoped.maxSize = originalMaxSize;
+      });
+
+      it('should evict in batches when cache size requires multiple removals', async () => {
+        const scoped = cache.namespace('batch-evict') as any;
+        const originalMaxSize = scoped.maxSize;
+        scoped.maxSize = 40;
+
+        for (let i = 0; i < 40; i++) {
+          await scoped.set(`k-${i}`, `v-${i}`);
+        }
+        await scoped.set('k-overflow', 'v-overflow');
+
+        expect(await scoped.get('k-0')).toBeNull();
+        expect(await scoped.get('k-overflow')).toBe('v-overflow');
+        scoped.maxSize = originalMaxSize;
+      });
+
+      it('should remove expired entries during periodic cleanup and allow stop()', async () => {
+        vi.useFakeTimers();
+
+        const internalCache = cache as any;
+        internalCache.stop();
+        internalCache.startCleanup();
+
+        await cache.set('cleanup-expired', 'expired', 1);
+        await cache.set('cleanup-fresh', 'fresh', 120);
+
+        await vi.advanceTimersByTimeAsync(1500);
+        await vi.advanceTimersByTimeAsync(60000);
+
+        expect(await cache.get('cleanup-expired')).toBeNull();
+        expect(await cache.get('cleanup-fresh')).toBe('fresh');
+
+        internalCache.stop();
+        expect(internalCache.cleanupInterval).toBeNull();
+
+        vi.useRealTimers();
+      });
+
+      it('should no-op cleanup bookkeeping when no entries are expired', async () => {
+        vi.useFakeTimers();
+
+        const internalCache = cache as any;
+        internalCache.stop();
+        internalCache.startCleanup();
+
+        await cache.set('cleanup-not-expired', 'value', 300);
+        await vi.advanceTimersByTimeAsync(60000);
+
+        expect(await cache.get('cleanup-not-expired')).toBe('value');
+
+        internalCache.stop();
+        internalCache.stop();
+        vi.useRealTimers();
+      });
+    });
+
     describe('getStats', () => {
       it('should track cache statistics', async () => {
         await cache.set('stat-key', 'value');

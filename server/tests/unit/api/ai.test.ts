@@ -9,6 +9,8 @@ import { vi, Mock } from 'vitest';
  */
 
 import express, { Express, Request, Response, NextFunction } from 'express';
+import { execSync } from 'child_process';
+import * as os from 'os';
 
 // Mock Prisma
 vi.mock('../../../src/models/prisma', () => ({
@@ -330,6 +332,19 @@ describe('AI API Routes', () => {
       expect(response.body.error).toBe('Internal Server Error');
       expect(response.body.message).toBe('Failed to generate label suggestion');
     });
+
+    it('should forward empty auth token when bearer prefix has no token', async () => {
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.suggestTransactionLabel as Mock).mockResolvedValue('General');
+
+      const response = await request(app)
+        .post('/api/v1/ai/suggest-label')
+        .set('Authorization', 'Bearer ')
+        .send({ transactionId: 'tx-empty-token' });
+
+      expect(response.status).toBe(200);
+      expect(aiService.suggestTransactionLabel).toHaveBeenCalledWith('tx-empty-token', '');
+    });
   });
 
   describe('POST /api/v1/ai/query', () => {
@@ -416,6 +431,19 @@ describe('AI API Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
+    });
+
+    it('should forward empty auth token when bearer prefix has no token', async () => {
+      (aiService.isEnabled as Mock).mockResolvedValue(true);
+      (aiService.executeNaturalQuery as Mock).mockResolvedValue({ type: 'summary' });
+
+      const response = await request(app)
+        .post('/api/v1/ai/query')
+        .set('Authorization', 'Bearer ')
+        .send({ query: 'summarize', walletId: 'wallet-123' });
+
+      expect(response.status).toBe(200);
+      expect(aiService.executeNaturalQuery).toHaveBeenCalledWith('summarize', 'wallet-123', '');
     });
   });
 
@@ -582,6 +610,21 @@ describe('AI API Routes', () => {
       expect(response.body.error).toBe('Internal Server Error');
       expect(response.body.message).toBe('Failed to pull model');
     });
+
+    it('should use default pull failure message when service omits error', async () => {
+      (aiService.pullModel as Mock).mockResolvedValue({
+        success: false,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/ai/pull-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(502);
+      expect(response.body.message).toBe('Pull failed');
+    });
   });
 
   describe('DELETE /api/v1/ai/delete-model', () => {
@@ -650,6 +693,21 @@ describe('AI API Routes', () => {
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
       expect(response.body.message).toBe('Failed to delete model');
+    });
+
+    it('should use default delete failure message when service omits error', async () => {
+      (aiService.deleteModel as Mock).mockResolvedValue({
+        success: false,
+      });
+
+      const response = await request(app)
+        .delete('/api/v1/ai/delete-model')
+        .set('Authorization', 'Bearer test-token')
+        .set('x-test-admin', 'true')
+        .send({ model: 'llama2' });
+
+      expect(response.status).toBe(502);
+      expect(response.body.message).toBe('Delete failed');
     });
   });
 
@@ -806,6 +864,66 @@ describe('AI API Routes', () => {
       expect(response.status).toBe(200);
       // With 8GB free RAM (mocked above), should be sufficient (>4GB required)
       expect(response.body.ram.sufficient).toBe(true);
+    });
+
+    it('should fall back when disk and gpu probes fail', async () => {
+      (execSync as Mock)
+        .mockImplementationOnce(() => {
+          throw new Error('df failed');
+        })
+        .mockImplementationOnce(() => {
+          throw new Error('nvidia-smi missing');
+        });
+
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.disk.total).toBe(0);
+      expect(response.body.disk.available).toBe(0);
+      expect(response.body.gpu).toEqual({ available: false, name: null });
+    });
+
+    it('should return 500 when system resource check throws unexpectedly', async () => {
+      (os.freemem as Mock).mockImplementationOnce(() => {
+        throw new Error('freemem failed');
+      });
+
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
+
+    it('should fall back to zero disk values when df numeric fields are invalid', async () => {
+      (execSync as Mock)
+        .mockImplementationOnce(
+          () => 'Filesystem 1M-blocks Used Available Use% Mounted on\n/dev/sda1 xx yy zz 56% /'
+        )
+        .mockImplementationOnce(() => '');
+
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.disk.total).toBe(0);
+      expect(response.body.disk.available).toBe(0);
+    });
+
+    it('should include low RAM warning when available memory is below recommendation', async () => {
+      (os.freemem as Mock).mockReturnValueOnce(2 * 1024 * 1024 * 1024); // 2GB
+
+      const response = await request(app)
+        .get('/api/v1/ai/system-resources')
+        .set('Authorization', 'Bearer test-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.ram.sufficient).toBe(false);
+      expect(response.body.overall.warnings.some((w: string) => w.startsWith('Low RAM:'))).toBe(true);
     });
   });
 

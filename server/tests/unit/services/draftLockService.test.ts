@@ -7,6 +7,7 @@ import { vi } from 'vitest';
  */
 
 import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
+import { Prisma } from '@prisma/client';
 
 // Mock the Prisma client before importing the service
 vi.mock('../../../src/models/prisma', () => ({
@@ -111,6 +112,65 @@ describe('Draft UTXO Lock Service', () => {
       expect(result.failedUtxoIds).toEqual(utxoIds);
     });
 
+    it('should return detailed conflicts when partial createMany succeeds', async () => {
+      mockPrismaClient.draftUtxoLock.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'lock-3',
+            draftId: 'other-draft-789',
+            utxoId: 'utxo-3',
+            createdAt: new Date(),
+          },
+        ]);
+      mockPrismaClient.draftUtxoLock.createMany.mockResolvedValue({ count: 2 });
+
+      const result = await lockUtxosForDraft(draftId, utxoIds);
+
+      expect(result.success).toBe(false);
+      expect(result.lockedCount).toBe(2);
+      expect(result.failedUtxoIds).toEqual(['utxo-3']);
+      expect(result.lockedByDraftIds).toEqual(['other-draft-789']);
+    });
+
+    it('should handle Prisma P2002 unique constraint errors', async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`utxoId`)',
+        {
+          code: 'P2002',
+          clientVersion: 'test',
+        }
+      );
+      mockPrismaClient.$transaction.mockRejectedValue(prismaError);
+      mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([
+        {
+          utxoId: 'utxo-2',
+          draftId: 'other-draft-456',
+        },
+      ]);
+
+      const result = await lockUtxosForDraft(draftId, utxoIds);
+
+      expect(result.success).toBe(false);
+      expect(result.failedUtxoIds).toEqual(['utxo-2']);
+      expect(result.lockedByDraftIds).toEqual(['other-draft-456']);
+    });
+
+    it('should fall back to original UTXOs when conflict lookup fails after unique error', async () => {
+      mockPrismaClient.$transaction.mockRejectedValue(
+        new Error('Unique constraint failed on the fields: (`utxoId`)')
+      );
+      mockPrismaClient.draftUtxoLock.findMany.mockRejectedValue(
+        new Error('lookup failed')
+      );
+
+      const result = await lockUtxosForDraft(draftId, utxoIds);
+
+      expect(result.success).toBe(false);
+      expect(result.failedUtxoIds).toEqual(utxoIds);
+      expect(result.lockedByDraftIds).toEqual([]);
+    });
+
     it('should allow re-locking by the same draft', async () => {
       // Locks exist but belong to the same draft (excluded by query)
       mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([]);
@@ -206,6 +266,22 @@ describe('Draft UTXO Lock Service', () => {
       });
     });
 
+    it('should map null draft labels to undefined', async () => {
+      mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([
+        {
+          id: 'lock-null-label',
+          draftId: 'draft-456',
+          utxoId: 'utxo-2',
+          createdAt: new Date('2024-01-15'),
+          draft: { id: 'draft-456', label: null },
+          utxo: { id: 'utxo-2', txid: 'txid-abc', vout: 1 },
+        },
+      ]);
+
+      const result = await getAvailableUtxoIds(utxoIds);
+      expect(result.locked[0].draftLabel).toBeUndefined();
+    });
+
     it('should exclude specified draft from lock check', async () => {
       // First call without excludeDraftId returns locks
       mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([]);
@@ -272,6 +348,22 @@ describe('Draft UTXO Lock Service', () => {
       const result = await getLocksForDraft(draftId);
 
       expect(result).toEqual([]);
+    });
+
+    it('should map empty draft label to undefined in lock details', async () => {
+      mockPrismaClient.draftUtxoLock.findMany.mockResolvedValue([
+        {
+          id: 'lock-empty-label',
+          draftId,
+          utxoId: 'utxo-1',
+          createdAt: new Date('2024-01-15'),
+          draft: { id: draftId, label: '' },
+          utxo: { id: 'utxo-1', txid: 'txid-abc', vout: 0 },
+        },
+      ]);
+
+      const result = await getLocksForDraft(draftId);
+      expect(result[0].draftLabel).toBeUndefined();
     });
   });
 

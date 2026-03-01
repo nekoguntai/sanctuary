@@ -163,6 +163,23 @@ describe('UTXO Selection Service', () => {
 
         expect(result.changeAmount).toBeGreaterThanOrEqual(BigInt(0));
       });
+
+      it('maps null blockHeight to undefined in selected results', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'utxo-null-height', blockHeight: null, amount: BigInt(100000) }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(50000),
+          feeRate: 10,
+          strategy: 'efficiency',
+        });
+
+        expect(result.selected[0].id).toBe('utxo-null-height');
+        expect(result.selected[0].blockHeight).toBeUndefined();
+      });
     });
 
     describe('Filter Options', () => {
@@ -389,6 +406,58 @@ describe('UTXO Selection Service', () => {
         expect(result.privacyImpact!.score).toBeGreaterThanOrEqual(0);
         expect(result.privacyImpact!.score).toBeLessThanOrEqual(100);
       });
+
+      it('should warn when privacy strategy has insufficient funds', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'tiny-1', amount: BigInt(1000) }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(100000),
+          feeRate: 10,
+          strategy: 'privacy',
+        });
+
+        expect(result.warnings).toContain('Insufficient funds for this amount');
+      });
+
+      it('stops adding remaining privacy UTXOs once target plus fee is met', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'u-40k', txid: 'aaaa'.repeat(16), amount: BigInt(40000), address: ADDRESS_1 }),
+          createTestUtxo({ id: 'u-20k', txid: 'bbbb'.repeat(16), amount: BigInt(20000), address: ADDRESS_2 }),
+          createTestUtxo({ id: 'u-15k', txid: 'cccc'.repeat(16), amount: BigInt(15000), address: ADDRESS_3 }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(50000),
+          feeRate: 10,
+          strategy: 'privacy',
+        });
+
+        expect(result.selected.map(u => u.id)).toEqual(['u-40k', 'u-20k']);
+      });
+
+      it('handles equal-amount privacy sorting ties', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'tie-1', txid: 'aaaa'.repeat(16), amount: BigInt(30000), address: ADDRESS_1 }),
+          createTestUtxo({ id: 'tie-2', txid: 'bbbb'.repeat(16), amount: BigInt(30000), address: ADDRESS_2 }),
+          createTestUtxo({ id: 'tie-3', txid: 'cccc'.repeat(16), amount: BigInt(30000), address: ADDRESS_3 }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(50000),
+          feeRate: 10,
+          strategy: 'privacy',
+        });
+
+        expect(result.selected.length).toBeGreaterThan(0);
+      });
     });
 
     describe('Oldest First Strategy', () => {
@@ -409,6 +478,22 @@ describe('UTXO Selection Service', () => {
 
         expect(result.selected[0].confirmations).toBe(1000);
         expect(result.strategy).toBe('oldest_first');
+      });
+
+      it('should warn when oldest-first strategy has insufficient funds', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'old-tiny', confirmations: 999, amount: BigInt(1000) }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(100000),
+          feeRate: 10,
+          strategy: 'oldest_first',
+        });
+
+        expect(result.warnings).toContain('Insufficient funds for this amount');
       });
     });
 
@@ -475,6 +560,22 @@ describe('UTXO Selection Service', () => {
           expect(result.warnings.some(w => w.includes('small UTXOs'))).toBe(true);
         }
       });
+
+      it('should warn when smallest-first strategy has insufficient funds', async () => {
+        const utxos = [
+          createTestUtxo({ id: 'small-insufficient', amount: BigInt(1000) }),
+        ];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const result = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(100000),
+          feeRate: 10,
+          strategy: 'smallest_first',
+        });
+
+        expect(result.warnings).toContain('Insufficient funds for this amount');
+      });
     });
 
     describe('Fee Calculation', () => {
@@ -518,6 +619,31 @@ describe('UTXO Selection Service', () => {
 
         // Should use native_segwit fee calculation
         expect(result.estimatedFee).toBeGreaterThan(BigInt(0));
+      });
+
+      it('should fall back to default input size for unknown script type', async () => {
+        const utxos = [createTestUtxo({ amount: BigInt(100000) })];
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const resultUnknown = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(50000),
+          feeRate: 10,
+          strategy: 'efficiency',
+          scriptType: 'unknown_script_type',
+        });
+
+        mockPrismaClient.uTXO.findMany.mockResolvedValue(utxos);
+
+        const resultDefault = await selectUtxos({
+          walletId: WALLET_ID,
+          targetAmount: BigInt(50000),
+          feeRate: 10,
+          strategy: 'efficiency',
+          scriptType: 'native_segwit',
+        });
+
+        expect(resultUnknown.estimatedFee).toBe(resultDefault.estimatedFee);
       });
 
       it('should scale fee with input count', async () => {

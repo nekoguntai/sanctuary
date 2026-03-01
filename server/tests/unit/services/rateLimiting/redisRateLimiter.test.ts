@@ -86,6 +86,16 @@ describe('RedisRateLimiter', () => {
     });
   });
 
+  it('check returns retryAfter when request would be blocked', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(2000);
+    redis.eval.mockResolvedValueOnce([0, 0, 8500]);
+
+    const result = await limiter.check('user-1', 5, 7);
+
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfter).toBe(7);
+  });
+
   it('check fails open when redis eval throws', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(3000);
     redis.eval.mockRejectedValueOnce(new Error('redis down'));

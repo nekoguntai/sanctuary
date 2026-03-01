@@ -67,6 +67,7 @@ import {
   verifySmtpConnection,
   clearTransporterCache,
 } from '../../../../src/services/email/emailService';
+import { decrypt } from '../../../../src/utils/encryption';
 
 describe('Email Service', () => {
   beforeEach(() => {
@@ -132,6 +133,28 @@ describe('Email Service', () => {
       const config = await getSmtpConfig();
 
       expect(config?.password).toBe('secret123');
+    });
+
+    it('falls back to empty password when decryption fails', async () => {
+      mockSystemSettingRepository.getValue.mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          'smtp.host': 'smtp.example.com',
+          'smtp.user': 'user@example.com',
+          'smtp.password': 'encrypted:broken',
+          'smtp.fromAddress': 'noreply@example.com',
+          'smtp.fromName': 'Test App',
+        };
+        return Promise.resolve(values[key] || null);
+      });
+      mockSystemSettingRepository.getNumber.mockResolvedValue(587);
+      mockSystemSettingRepository.getBoolean.mockResolvedValue(false);
+      (decrypt as any).mockImplementationOnce(() => {
+        throw new Error('decrypt failed');
+      });
+
+      const config = await getSmtpConfig();
+
+      expect(config?.password).toBe('');
     });
 
     it('should use default fromName when not configured', async () => {
@@ -266,6 +289,55 @@ describe('Email Service', () => {
       expect(result).toEqual({
         success: false,
         error: 'SMTP connection refused',
+      });
+    });
+
+    it('returns SMTP not configured when transporter creation throws', async () => {
+      mockSystemSettingRepository.getValue.mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          'smtp.host': 'smtp.example.com',
+          'smtp.fromAddress': 'noreply@example.com',
+          'smtp.fromName': 'Test App',
+        };
+        return Promise.resolve(values[key] || '');
+      });
+      mockSystemSettingRepository.getNumber.mockResolvedValue(587);
+      mockSystemSettingRepository.getBoolean.mockResolvedValue(false);
+      mockNodemailer.createTransport.mockImplementationOnce(() => {
+        throw new Error('bad transport config');
+      });
+
+      const result = await sendEmail(testMessage);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'SMTP not configured',
+      });
+    });
+
+    it('returns configuration-not-available when config disappears after transporter creation', async () => {
+      let hostReads = 0;
+      mockSystemSettingRepository.getValue.mockImplementation((key: string) => {
+        if (key === 'smtp.host') {
+          hostReads += 1;
+          return Promise.resolve(hostReads === 1 ? 'smtp.example.com' : null);
+        }
+        const values: Record<string, string> = {
+          'smtp.user': 'user@example.com',
+          'smtp.password': 'password',
+          'smtp.fromAddress': 'noreply@example.com',
+          'smtp.fromName': 'Test App',
+        };
+        return Promise.resolve(values[key] || '');
+      });
+      mockSystemSettingRepository.getNumber.mockResolvedValue(587);
+      mockSystemSettingRepository.getBoolean.mockResolvedValue(false);
+
+      const result = await sendEmail(testMessage);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'SMTP configuration not available',
       });
     });
 

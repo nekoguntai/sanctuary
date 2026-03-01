@@ -97,6 +97,17 @@ describe('MemoryRateLimiter', () => {
       expect(result.remaining).toBe(7); // 10 - 3 = 7
     });
 
+    it('should allow zero-cost consumption and fall back resetAt to now when empty', async () => {
+      const before = Date.now();
+      const result = await limiter.consume('user:zero-cost', 5, 60, 0);
+      const after = Date.now();
+
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(5);
+      expect(result.resetAt).toBeGreaterThanOrEqual(before + 60000);
+      expect(result.resetAt).toBeLessThanOrEqual(after + 60000);
+    });
+
     it('should block when cost exceeds remaining', async () => {
       await limiter.consume('user:123', 5, 60, 4);
       // 1 remaining
@@ -173,6 +184,21 @@ describe('MemoryRateLimiter', () => {
       expect(result.allowed).toBe(false);
       expect(result.remaining).toBe(0);
       expect(result.retryAfter).toBeDefined();
+    });
+
+    it('falls back resetAt to now when all timestamps are outside the window', async () => {
+      await limiter.consume('user:stale-check', 5, 60);
+      vi.advanceTimersByTime(61_000);
+      const before = Date.now();
+
+      const result = await limiter.check('user:stale-check', 5, 60);
+      const after = Date.now();
+
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(5);
+      expect(result.resetAt).toBeGreaterThanOrEqual(before + 60000);
+      expect(result.resetAt).toBeLessThanOrEqual(after + 60000);
+      expect(result.retryAfter).toBeUndefined();
     });
 
     it('should not modify remaining count', async () => {
@@ -280,9 +306,56 @@ describe('MemoryRateLimiter', () => {
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(4);
     });
+
+    it('removes stale entries with empty timestamp buffers', () => {
+      const windows = (limiter as any).windows as Map<string, { timestamps: number[]; lastCleanup: number }>;
+      const now = Date.now();
+
+      windows.set('stale-empty', {
+        timestamps: [],
+        lastCleanup: now - (6 * 60 * 1000),
+      });
+      windows.set('fresh-empty', {
+        timestamps: [],
+        lastCleanup: now,
+      });
+
+      (limiter as any).cleanup();
+
+      expect(windows.has('stale-empty')).toBe(false);
+      expect(windows.has('fresh-empty')).toBe(true);
+    });
   });
 
   describe('eviction', () => {
+    it('evicts the oldest entry when consume hits max window capacity', async () => {
+      class ForcedSizeMap<K, V> extends Map<K, V> {
+        override get size() {
+          return 100000 + super.size;
+        }
+      }
+
+      const forcedWindows = new ForcedSizeMap<string, { timestamps: number[]; lastCleanup: number }>();
+      const now = Date.now();
+
+      forcedWindows.set('oldest', {
+        timestamps: [],
+        lastCleanup: now - 10_000,
+      });
+      forcedWindows.set('newer', {
+        timestamps: [],
+        lastCleanup: now - 1_000,
+      });
+
+      (limiter as any).windows = forcedWindows;
+
+      const result = await limiter.consume('incoming', 5, 60);
+
+      expect(result.allowed).toBe(true);
+      expect(((limiter as any).windows as Map<string, unknown>).has('oldest')).toBe(false);
+      expect(((limiter as any).windows as Map<string, unknown>).has('incoming')).toBe(true);
+    });
+
     it('should evict oldest entries when MAX_WINDOWS exceeded', async () => {
       // This test verifies the eviction logic works
       // We can't easily test 100,000 keys, but we can verify the logic path
@@ -302,6 +375,14 @@ describe('MemoryRateLimiter', () => {
 
       expect(first.remaining).toBe(4);
       expect(second.remaining).toBe(4);
+    });
+
+    it('does nothing when eviction runs with no entries', () => {
+      const windows = (limiter as any).windows as Map<string, { timestamps: number[]; lastCleanup: number }>;
+      windows.clear();
+
+      expect(() => (limiter as any).evictOldestEntry()).not.toThrow();
+      expect(windows.size).toBe(0);
     });
   });
 

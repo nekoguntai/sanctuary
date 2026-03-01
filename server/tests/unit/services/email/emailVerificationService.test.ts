@@ -213,6 +213,32 @@ describe('Email Verification Service', () => {
       expect(result.tokenId).toBe(testTokenId); // Token was created even if email failed
     });
 
+    it('should fall back to localhost verification URL when client URL is not configured', async () => {
+      const originalClientUrl = mockConfig.server.clientUrl;
+      mockConfig.server.clientUrl = '';
+      mockEmailService.isSmtpConfigured.mockResolvedValue(true);
+      mockEmailVerificationRepository.deleteUnusedByUserId.mockResolvedValue(undefined);
+      mockEmailVerificationRepository.create.mockResolvedValue({
+        id: testTokenId,
+        userId: testUserId,
+        email: testEmail,
+        tokenHash: 'hashed-token',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        createdAt: new Date(),
+        usedAt: null,
+      });
+      mockEmailService.sendEmail.mockResolvedValue({ success: true });
+
+      await createVerificationToken(testUserId, testEmail, testUsername);
+
+      expect(mockEmailService.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining('http://localhost:3000/verify-email?token='),
+        })
+      );
+      mockConfig.server.clientUrl = originalClientUrl;
+    });
+
     it('should hash the token before storing', async () => {
       mockEmailService.isSmtpConfigured.mockResolvedValue(true);
       mockEmailVerificationRepository.deleteUnusedByUserId.mockResolvedValue(undefined);
@@ -232,6 +258,18 @@ describe('Email Verification Service', () => {
       const createCall = mockEmailVerificationRepository.create.mock.calls[0][0];
       // Token hash should be a 64-character hex string (SHA256)
       expect(createCall.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('should return service error when token creation flow throws', async () => {
+      mockEmailService.isSmtpConfigured.mockResolvedValue(true);
+      mockEmailVerificationRepository.deleteUnusedByUserId.mockRejectedValue(new Error('delete failed'));
+
+      const result = await createVerificationToken(testUserId, testEmail, testUsername);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'delete failed',
+      });
     });
   });
 
@@ -344,6 +382,17 @@ describe('Email Verification Service', () => {
       expect(result.email).toBe('old@example.com'); // Returns the verified email
       expect(mockUserRepository.updateEmail).toHaveBeenCalledWith(testUserId, 'old@example.com');
     });
+
+    it('should return UNKNOWN_ERROR when verification throws unexpectedly', async () => {
+      mockEmailVerificationRepository.findByTokenHash.mockRejectedValue(new Error('db timeout'));
+
+      const result = await verifyEmail('broken-token');
+
+      expect(result).toEqual({
+        success: false,
+        error: 'UNKNOWN_ERROR',
+      });
+    });
   });
 
   describe('resendVerification', () => {
@@ -419,6 +468,17 @@ describe('Email Verification Service', () => {
 
       expect(result.success).toBe(true);
       expect(result.expiresAt).toBeDefined();
+    });
+
+    it('should return service error message when resend flow throws', async () => {
+      mockUserRepository.findById.mockRejectedValue(new Error('lookup failed'));
+
+      const result = await resendVerification(testUserId);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'lookup failed',
+      });
     });
   });
 

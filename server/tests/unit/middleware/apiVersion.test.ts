@@ -64,6 +64,16 @@ describe('API Version Middleware', () => {
         expect(mockNext).toHaveBeenCalled();
       });
 
+      it('should fall back to configured default on non-versioned routes', () => {
+        mockReq.path = '/health';
+        const middleware = apiVersionMiddleware({ defaultVersion: 3, currentVersion: 3 });
+
+        middleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect((mockReq as Request).apiVersion).toEqual({ major: 3, minor: 0 });
+        expect(mockNext).toHaveBeenCalled();
+      });
+
       it('should parse version from Accept header', () => {
         mockReq.headers = { accept: 'application/vnd.sanctuary.v2+json' };
         const middleware = apiVersionMiddleware({ currentVersion: 2 });
@@ -100,8 +110,49 @@ describe('API Version Middleware', () => {
         expect((mockReq as Request).apiVersion).toEqual({ major: 2, minor: 3 });
       });
 
+      it('should ignore invalid Accept header and fall back to X-API-Version', () => {
+        mockReq.headers = {
+          accept: 'application/json',
+          'x-api-version': '2',
+        };
+        const middleware = apiVersionMiddleware({ currentVersion: 2 });
+
+        middleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect((mockReq as Request).apiVersion).toEqual({ major: 2, minor: 0 });
+      });
+
+      it('should ignore invalid X-API-Version header and fall back to query version', () => {
+        mockReq.headers = { 'x-api-version': 'abc' };
+        mockReq.query = { api_version: '2' };
+        const middleware = apiVersionMiddleware({ currentVersion: 2 });
+
+        middleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect((mockReq as Request).apiVersion).toEqual({ major: 2, minor: 0 });
+      });
+
       it('should parse version from query parameter', () => {
         mockReq.query = { api_version: '2' };
+        const middleware = apiVersionMiddleware({ currentVersion: 2 });
+
+        middleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect((mockReq as Request).apiVersion).toEqual({ major: 2, minor: 0 });
+      });
+
+      it('should parse version with minor from query parameter', () => {
+        mockReq.query = { api_version: '2.4' };
+        const middleware = apiVersionMiddleware({ currentVersion: 3 });
+
+        middleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect((mockReq as Request).apiVersion).toEqual({ major: 2, minor: 4 });
+      });
+
+      it('should ignore invalid query version and fall back to URL path', () => {
+        mockReq.query = { api_version: 'abc' };
+        mockReq.path = '/api/v2/wallets';
         const middleware = apiVersionMiddleware({ currentVersion: 2 });
 
         middleware(mockReq as Request, mockRes as Response, mockNext);

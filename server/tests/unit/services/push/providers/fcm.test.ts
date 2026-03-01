@@ -103,6 +103,13 @@ describe('FCMPushProvider', () => {
       const unconfiguredProvider = new FCMPushProvider();
       expect(unconfiguredProvider.isConfigured()).toBe(false);
     });
+
+    it('should throw when cached service account is missing', () => {
+      (provider as any).serviceAccountCache = null;
+      expect(() => (provider as any).getServiceAccount()).toThrow(
+        'FCM not configured: missing or unreadable FCM_SERVICE_ACCOUNT'
+      );
+    });
   });
 
   describe('send', () => {
@@ -263,6 +270,27 @@ describe('FCMPushProvider', () => {
       expect(result.error).toContain('500');
     });
 
+    it('should fall back to HTTP status message when FCM error body is empty', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('oauth2.googleapis.com/token')) {
+          return {
+            ok: true,
+            json: async () => ({ access_token: 'token', expires_in: 3600 }),
+          };
+        }
+        return {
+          ok: false,
+          status: 404,
+          text: async () => '',
+        };
+      });
+
+      const result = await provider.send('device-token', testMessage);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('HTTP 404');
+    });
+
     it('should handle network errors', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network timeout'));
 
@@ -326,6 +354,15 @@ describe('isFCMConfigured', () => {
     mockAccessSync.mockReturnValue(undefined);
 
     expect(isFCMConfigured()).toBe(true);
+  });
+
+  it('returns cached result on repeated calls without re-checking file access', () => {
+    process.env.FCM_SERVICE_ACCOUNT = '/path/to/file.json';
+    mockAccessSync.mockReturnValue(undefined);
+
+    expect(isFCMConfigured()).toBe(true);
+    expect(isFCMConfigured()).toBe(true);
+    expect(mockAccessSync).toHaveBeenCalledTimes(1);
   });
 
   it('should return false when FCM_SERVICE_ACCOUNT is missing', () => {

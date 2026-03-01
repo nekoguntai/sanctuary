@@ -76,6 +76,13 @@ describe('HookRegistry', () => {
       const enabledHooks = registry.getEnabledHooks('test', 'before');
       expect(enabledHooks).toHaveLength(0);
     });
+
+    it('logs registration and unregister events when debug mode is enabled', () => {
+      const registry = new HookRegistry({ debug: true });
+      const hookId = registry.before('test', () => {});
+
+      expect(registry.unregister(hookId)).toBe(true);
+    });
   });
 
   describe('unregister', () => {
@@ -97,6 +104,26 @@ describe('HookRegistry', () => {
       const result = registry.unregister('unknown_hook_id');
 
       expect(result).toBe(false);
+    });
+
+    it('should scan multiple keys and remove hook from a later operation', () => {
+      const registry = new HookRegistry();
+      registry.before('op:first', () => {});
+      const targetId = registry.before('op:second', () => {});
+
+      expect(registry.unregister(targetId)).toBe(true);
+      expect(registry.getHooks('op:first', 'before')).toHaveLength(1);
+      expect(registry.getHooks('op:second', 'before')).toHaveLength(0);
+    });
+
+    it('should keep operation entry when unregistering one hook among many', () => {
+      const registry = new HookRegistry();
+      const firstId = registry.before('op:multi', () => {});
+      const secondId = registry.before('op:multi', () => {});
+
+      expect(registry.unregister(secondId)).toBe(true);
+      expect(registry.getHooks('op:multi', 'before')).toHaveLength(1);
+      expect(registry.getHooks('op:multi', 'before')[0].id).toBe(firstId);
     });
   });
 
@@ -122,6 +149,15 @@ describe('HookRegistry', () => {
       const result = registry.setEnabled('unknown', true);
 
       expect(result).toBe(false);
+    });
+
+    it('should scan through multiple hook lists before finding the target hook', () => {
+      const registry = new HookRegistry();
+      registry.before('op:one', () => {});
+      const hookId = registry.before('op:two', () => {});
+
+      expect(registry.setEnabled(hookId, false)).toBe(true);
+      expect(registry.getEnabledHooks('op:two', 'before')).toHaveLength(0);
     });
   });
 
@@ -217,6 +253,30 @@ describe('HookRegistry', () => {
       expect(result.success).toBe(true);
       expect(result.hooksExecuted).toBe(2);
       expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('logs execution details when logExecutions is enabled', async () => {
+      const registry = new HookRegistry({ logExecutions: true });
+      registry.before('test', () => {});
+
+      const result = await registry.executeBefore('test', {});
+
+      expect(result.success).toBe(true);
+      expect(result.hooksExecuted).toBe(1);
+    });
+
+    it('normalizes non-Error hook throws into Error objects', async () => {
+      const registry = new HookRegistry({ stopOnBeforeError: false });
+      registry.before('test', () => {
+        throw 'string failure';
+      });
+
+      const result = await registry.executeBefore('test', {});
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors?.[0].error).toBeInstanceOf(Error);
+      expect(result.errors?.[0].error.message).toBe('string failure');
     });
   });
 
@@ -346,6 +406,46 @@ describe('HookRegistry', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
       expect(afterHandler).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 'user123' })
+      );
+    });
+
+    it('logs when after hooks fail in error path', async () => {
+      const registry = new HookRegistry();
+      vi.spyOn(registry, 'executeAfter').mockRejectedValueOnce(new Error('after hooks failed'));
+      const operation = vi.fn().mockRejectedValue(new Error('operation failed'));
+
+      await expect(registry.wrap('test', {}, operation)).rejects.toThrow('operation failed');
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    it('logs when after hooks fail in success path', async () => {
+      const registry = new HookRegistry();
+      vi.spyOn(registry, 'executeAfter').mockRejectedValueOnce(new Error('after hooks failed'));
+      const operation = vi.fn().mockResolvedValue('ok');
+
+      await expect(registry.wrap('test', {}, operation)).resolves.toBe('ok');
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    it('converts non-Error operation throws for after-hook error context', async () => {
+      const registry = new HookRegistry();
+      const afterHandler = vi.fn();
+      registry.after('test', afterHandler);
+
+      await expect(
+        registry.wrap('test', {}, async () => {
+          throw 'wrapped-string-error';
+        })
+      ).rejects.toBe('wrapped-string-error');
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(afterHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            message: 'wrapped-string-error',
+          }),
+          success: false,
+        })
       );
     });
   });

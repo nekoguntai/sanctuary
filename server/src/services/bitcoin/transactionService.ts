@@ -552,23 +552,21 @@ export async function createTransaction(
           pubkeyNode = pubkeyNode.derive(idx);
         }
 
-        if (pubkeyNode.publicKey) {
-          // Normalize path to apostrophe notation for PSBT compatibility
-          const normalizedPath = normalizeDerivationPath(derivationPath);
-          psbt.updateInput(inputIndex, {
-            bip32Derivation: [{
-              masterFingerprint,
-              path: normalizedPath,
-              pubkey: pubkeyNode.publicKey,
-            }],
-          });
-          log.info('Single-sig BIP32 derivation added to input', {
-            inputIndex,
-            fingerprint: masterFingerprint.toString('hex'),
+        // Normalize path to apostrophe notation for PSBT compatibility
+        const normalizedPath = normalizeDerivationPath(derivationPath);
+        psbt.updateInput(inputIndex, {
+          bip32Derivation: [{
+            masterFingerprint,
             path: normalizedPath,
-            pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
-          });
-        }
+            pubkey: pubkeyNode.publicKey,
+          }],
+        });
+        log.info('Single-sig BIP32 derivation added to input', {
+          inputIndex,
+          fingerprint: masterFingerprint.toString('hex'),
+          path: normalizedPath,
+          pubkeyHex: pubkeyNode.publicKey.toString('hex').substring(0, 20) + '...',
+        });
       } catch (e) {
         log.warn('Single-sig BIP32 derivation failed for input', {
           inputIndex,
@@ -1742,7 +1740,7 @@ export async function createBatchTransaction(
     } else {
       // SegWit: use witnessUtxo
       inputOptions.witnessUtxo = {
-        script: Buffer.from(utxo.scriptPubKey || '', 'hex'),
+        script: Buffer.from(utxo.scriptPubKey, 'hex'),
         value: Number(utxo.amount),
       };
     }
@@ -1825,17 +1823,15 @@ export async function createBatchTransaction(
           pubkeyNode = pubkeyNode.derive(idx);
         }
 
-        if (pubkeyNode.publicKey) {
-          // Normalize path to apostrophe notation for PSBT compatibility
-          const normalizedPath = normalizeDerivationPath(derivationPath);
-          psbt.updateInput(inputIndex, {
-            bip32Derivation: [{
-              masterFingerprint,
-              path: normalizedPath,
-              pubkey: pubkeyNode.publicKey,
-            }],
-          });
-        }
+        // Normalize path to apostrophe notation for PSBT compatibility
+        const normalizedPath = normalizeDerivationPath(derivationPath);
+        psbt.updateInput(inputIndex, {
+          bip32Derivation: [{
+            masterFingerprint,
+            path: normalizedPath,
+            pubkey: pubkeyNode.publicKey,
+          }],
+        });
       } catch (e) {
         // Skip BIP32 derivation if we can't derive the key
       }

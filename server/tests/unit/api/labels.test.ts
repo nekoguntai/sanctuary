@@ -441,6 +441,17 @@ describe('Labels API Routes', () => {
       expect(response.status).toBe(401);
     });
 
+    it('should return 404 when transaction is not found', async () => {
+      mockReplaceTransactionLabels.mockRejectedValue(new NotFoundError('Transaction not found'));
+
+      const response = await request(app)
+        .put('/api/v1/transactions/nonexistent/labels')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ labelIds: [] });
+
+      expect(response.status).toBe(404);
+    });
+
     it('should return 500 on internal error', async () => {
       mockReplaceTransactionLabels.mockRejectedValue(new Error('Database error'));
 
@@ -601,6 +612,17 @@ describe('Labels API Routes', () => {
         .send({ labelIds: [] });
 
       expect(response.status).toBe(401);
+    });
+
+    it('should return 404 when address is not found', async () => {
+      mockReplaceAddressLabels.mockRejectedValue(new NotFoundError('Address not found'));
+
+      const response = await request(app)
+        .put('/api/v1/addresses/nonexistent/labels')
+        .set('Authorization', 'Bearer valid-token')
+        .send({ labelIds: [] });
+
+      expect(response.status).toBe(404);
     });
 
     it('should return 500 on internal error', async () => {

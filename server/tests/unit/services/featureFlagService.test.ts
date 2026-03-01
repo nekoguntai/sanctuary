@@ -160,6 +160,36 @@ describe('Feature Flag Service', () => {
       // Service should still be marked as initialized (fallback mode)
       expect((featureFlagService as any).initialized).toBe(true);
     });
+
+    it('should handle distributed cache write failures during refresh', async () => {
+      mockPrisma.featureFlag.findMany.mockResolvedValue([
+        { key: 'aiAssistant', enabled: true },
+      ]);
+      mockCache.set.mockRejectedValue(new Error('cache unavailable'));
+
+      await expect((featureFlagService as any).refreshCache()).resolves.toBeUndefined();
+      expect((featureFlagService as any).localCache.get('aiAssistant')).toBe(true);
+    });
+
+    it('uses generic metadata when initializing unknown flag keys', async () => {
+      const getEnvironmentFlagsSpy = vi
+        .spyOn(featureFlagService as any, 'getEnvironmentFlags')
+        .mockReturnValueOnce({ 'custom.experimentalFlag': true });
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockPrisma.featureFlag.create.mockResolvedValue({});
+      mockPrisma.featureFlag.findMany.mockResolvedValue([]);
+
+      await featureFlagService.initialize();
+
+      expect(mockPrisma.featureFlag.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          key: 'custom.experimentalFlag',
+          description: null,
+          category: 'general',
+        }),
+      });
+      getEnvironmentFlagsSpy.mockRestore();
+    });
   });
 
   describe('isEnabled', () => {
@@ -222,6 +252,24 @@ describe('Feature Flag Service', () => {
       const result = await featureFlagService.isEnabled('experimental.taprootAddresses');
 
       expect(result).toBe(false); // From mockConfig
+    });
+
+    it('returns false for unknown experimental key during environment fallback', async () => {
+      mockCache.get.mockResolvedValue(null);
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+
+      const result = await featureFlagService.isEnabled('experimental.unknownFlag' as any);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false for unknown top-level key during environment fallback', async () => {
+      mockCache.get.mockResolvedValue(null);
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+
+      const result = await featureFlagService.isEnabled('unknownTopLevelFlag' as any);
+
+      expect(result).toBe(false);
     });
   });
 
@@ -470,6 +518,56 @@ describe('Feature Flag Service', () => {
       });
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('uses false default for unknown experimental keys', async () => {
+      const mockFlag = {
+        id: 'flag-unknown-exp',
+        key: 'experimental.unknownFlag',
+        enabled: true,
+        description: null,
+        category: 'experimental',
+        modifiedBy: 'admin',
+        updatedAt: new Date(),
+      };
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(mockFlag);
+      mockPrisma.featureFlag.update.mockResolvedValue({ ...mockFlag, enabled: false });
+      mockPrisma.featureFlagAudit.create.mockResolvedValue({});
+
+      await featureFlagService.resetToDefault('experimental.unknownFlag' as any, {
+        userId: 'admin-123',
+      });
+
+      expect(mockPrisma.featureFlag.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ enabled: false }),
+        })
+      );
+    });
+
+    it('uses false default for unknown top-level keys', async () => {
+      const mockFlag = {
+        id: 'flag-unknown-top',
+        key: 'unknownTopLevelFlag',
+        enabled: true,
+        description: null,
+        category: 'general',
+        modifiedBy: 'admin',
+        updatedAt: new Date(),
+      };
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(mockFlag);
+      mockPrisma.featureFlag.update.mockResolvedValue({ ...mockFlag, enabled: false });
+      mockPrisma.featureFlagAudit.create.mockResolvedValue({});
+
+      await featureFlagService.resetToDefault('unknownTopLevelFlag' as any, {
+        userId: 'admin-123',
+      });
+
+      expect(mockPrisma.featureFlag.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ enabled: false }),
+        })
+      );
     });
   });
 

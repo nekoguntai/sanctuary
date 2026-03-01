@@ -65,6 +65,20 @@ describe('ProviderRegistry', () => {
     expect(registry.get('primary')).toBeUndefined();
   });
 
+  it('registers and unregisters provider without lifecycle hooks', async () => {
+    const bareProvider: TestProvider = {
+      name: 'bare',
+      priority: 1,
+      healthCheck: vi.fn().mockResolvedValue(true),
+    };
+
+    await registry.register(bareProvider);
+    expect(registry.get('bare')).toBeDefined();
+
+    await expect(registry.unregister('bare')).resolves.toBeUndefined();
+    expect(registry.get('bare')).toBeUndefined();
+  });
+
   it('replaces duplicate registration and handles unregister miss', async () => {
     const first = makeProvider('dup', 1, true);
     const second = makeProvider('dup', 2, true);
@@ -76,6 +90,16 @@ describe('ProviderRegistry', () => {
     expect(registry.get('dup')).toBe(second);
 
     await expect(registry.unregister('missing')).resolves.toBeUndefined();
+  });
+
+  it('continues unregister when onUnregister throws', async () => {
+    const provider = makeProvider('flaky-unregister', 1, true);
+    provider.onUnregister.mockRejectedValueOnce(new Error('cleanup failed'));
+
+    await registry.register(provider);
+    await expect(registry.unregister('flaky-unregister')).resolves.toBeUndefined();
+
+    expect(registry.get('flaky-unregister')).toBeUndefined();
   });
 
   it('fails registration when onRegister throws', async () => {
@@ -154,6 +178,27 @@ describe('ProviderRegistry', () => {
     ).rejects.toThrow('All providers failed in test: boom');
   });
 
+  it('stops trying providers at retry limit and returns undefined when configured', async () => {
+    const attempted: string[] = [];
+    const a = makeProvider('a', 100, true);
+    const b = makeProvider('b', 90, true);
+    const c = makeProvider('c', 80, true);
+    await registry.register(a);
+    await registry.register(b);
+    await registry.register(c);
+
+    const value = await registry.invoke(async (provider) => {
+      attempted.push(provider.name);
+      throw new Error('always fails');
+    }, {
+      maxRetries: 1,
+      throwOnFailure: false,
+    });
+
+    expect(value).toBeUndefined();
+    expect(attempted).toEqual(['a', 'b']);
+  });
+
   it('invokes all healthy providers and skips individual failures', async () => {
     const a = makeProvider('a', 1, true);
     const b = makeProvider('b', 2, true);
@@ -208,6 +253,45 @@ describe('ProviderRegistry', () => {
     expect(provider.healthCheck).toHaveBeenCalledTimes(1);
   });
 
+  it('triggers onHealthChange when refreshed health status changes', async () => {
+    registry = new ProviderRegistry<TestProvider>({
+      name: 'health-change',
+      healthCacheTtlMs: 0,
+    });
+    const provider = makeProvider('flappy', 1, true);
+    await registry.register(provider);
+    provider.onHealthChange.mockClear();
+    provider.healthCheck.mockResolvedValueOnce(false);
+
+    await registry.getHealthy();
+
+    expect(provider.onHealthChange).toHaveBeenCalledWith(false);
+  });
+
+  it('handles health transitions and invoke failures when onHealthChange hook is absent', async () => {
+    registry = new ProviderRegistry<TestProvider>({
+      name: 'no-hook',
+      healthCacheTtlMs: 0,
+    });
+
+    const bareProvider: TestProvider & { healthCheck: ReturnType<typeof vi.fn> } = {
+      name: 'bare-no-hook',
+      priority: 1,
+      healthCheck: vi.fn().mockResolvedValue(true),
+    };
+
+    await registry.register(bareProvider);
+
+    bareProvider.healthCheck.mockResolvedValueOnce(false);
+    await registry.getHealthy();
+
+    await expect(
+      registry.invoke(async () => {
+        throw new Error('invoke failed');
+      }, { maxRetries: 0 })
+    ).rejects.toThrow('All providers failed in no-hook: invoke failed');
+  });
+
   it('starts and stops periodic health checks exactly once', () => {
     const unref = vi.fn();
     const fakeTimer = { unref } as any;
@@ -221,6 +305,24 @@ describe('ProviderRegistry', () => {
 
     registry.stopHealthChecks();
     expect(clearIntervalSpy).toHaveBeenCalledWith(fakeTimer);
+  });
+
+  it('executes periodic health check callback', async () => {
+    const provider = makeProvider('periodic', 1, true);
+    await registry.register(provider);
+    provider.healthCheck.mockClear();
+
+    let callback: (() => Promise<void>) | undefined;
+    const fakeTimer = { unref: vi.fn() } as any;
+    vi.spyOn(global, 'setInterval').mockImplementation((cb: any) => {
+      callback = cb as () => Promise<void>;
+      return fakeTimer;
+    });
+
+    registry.startHealthChecks();
+    await callback?.();
+
+    expect(provider.healthCheck).toHaveBeenCalledTimes(1);
   });
 
   it('enforces timeout during invocation', async () => {

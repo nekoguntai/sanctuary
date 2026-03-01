@@ -13,13 +13,17 @@ import { mockPrismaClient, resetPrismaMocks } from '../../mocks/prisma';
 const {
   mockBuildDescriptorFromDevices,
   mockLogWarn,
+  mockLogError,
   mockSyncUnsubscribeWalletAddresses,
   mockNotificationUnsubscribeWalletAddresses,
+  mockHookExecuteAfter,
 } = vi.hoisted(() => ({
   mockBuildDescriptorFromDevices: vi.fn(),
   mockLogWarn: vi.fn(),
+  mockLogError: vi.fn(),
   mockSyncUnsubscribeWalletAddresses: vi.fn(),
   mockNotificationUnsubscribeWalletAddresses: vi.fn(),
+  mockHookExecuteAfter: vi.fn(),
 }));
 
 // Mock Prisma
@@ -46,9 +50,20 @@ vi.mock('../../../src/utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
     warn: mockLogWarn,
-    error: vi.fn(),
+    error: mockLogError,
     debug: vi.fn(),
   }),
+}));
+
+vi.mock('../../../src/services/hooks', () => ({
+  hookRegistry: {
+    executeAfter: (...args: any[]) => mockHookExecuteAfter(...args),
+  },
+  Operations: {
+    WALLET_CREATE: 'wallet.create',
+    WALLET_DELETE: 'wallet.delete',
+    ADDRESS_GENERATE: 'address.generate',
+  },
 }));
 
 vi.mock('../../../src/services/syncService', () => ({
@@ -89,6 +104,7 @@ describe('Wallet Service', () => {
       descriptor: 'wpkh([abc12345/84h/0h/0h]xpub...)',
       fingerprint: 'abc12345',
     });
+    mockHookExecuteAfter.mockResolvedValue(undefined);
     mockSyncUnsubscribeWalletAddresses.mockResolvedValue(undefined);
     mockNotificationUnsubscribeWalletAddresses.mockResolvedValue(undefined);
   });
@@ -475,9 +491,86 @@ describe('Wallet Service', () => {
           expect.any(Object)
         );
       });
+
+      it('normalizes empty account derivationPath to undefined for descriptor generation', async () => {
+        const device = {
+          id: 'device-1',
+          userId,
+          fingerprint: 'abc12345',
+          type: 'trezor',
+          label: 'No Path Device',
+          xpub: 'xpub_fallback_no_path',
+          derivationPath: '',
+          accounts: [
+            {
+              purpose: 'single_sig',
+              scriptType: 'native_segwit',
+              derivationPath: '',
+              xpub: 'xpub_single_sig_no_path',
+            },
+          ],
+        };
+
+        mockPrismaClient.device.findMany.mockResolvedValue([device]);
+        mockPrismaClient.wallet.create.mockResolvedValue({
+          id: 'wallet-1',
+          name: 'No Path Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+        });
+        mockPrismaClient.wallet.findUnique.mockResolvedValue({
+          id: 'wallet-1',
+          name: 'No Path Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+
+        await createWallet(userId, {
+          name: 'No Path Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          deviceIds: ['device-1'],
+        });
+
+        expect(mockBuildDescriptorFromDevices).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({
+              xpub: 'xpub_single_sig_no_path',
+              derivationPath: undefined,
+            }),
+          ]),
+          expect.any(Object)
+        );
+      });
     });
 
     describe('Validation', () => {
+      it('requires quorum and totalSigners for multi-sig wallets', async () => {
+        await expect(
+          createWallet(userId, {
+            name: 'Invalid MultiSig Wallet',
+            type: 'multi_sig',
+            scriptType: 'native_segwit',
+          })
+        ).rejects.toThrow('Quorum and totalSigners required for multi-sig wallets');
+      });
+
+      it('rejects multi-sig wallets where quorum exceeds total signers', async () => {
+        await expect(
+          createWallet(userId, {
+            name: 'Invalid MultiSig Wallet',
+            type: 'multi_sig',
+            scriptType: 'native_segwit',
+            quorum: 3,
+            totalSigners: 2,
+          })
+        ).rejects.toThrow('Quorum cannot exceed total signers');
+      });
+
       it('should reject single-sig wallet with multiple devices', async () => {
         const device1 = createMockDevice('device-1', 'abc12345', [
           { purpose: 'single_sig', scriptType: 'native_segwit', derivationPath: "m/84'/0'/0'", xpub: 'xpub1' },
@@ -528,6 +621,109 @@ describe('Wallet Service', () => {
             deviceIds: ['non-existent-device'],
           })
         ).rejects.toThrow('Device not found');
+      });
+
+      it('throws if wallet transaction result is unexpectedly null', async () => {
+        mockPrismaClient.$transaction.mockResolvedValueOnce(null);
+
+        await expect(
+          createWallet(userId, {
+            name: 'Broken Wallet',
+            type: 'single_sig',
+            scriptType: 'native_segwit',
+          })
+        ).rejects.toThrow('Failed to create wallet');
+      });
+
+      it('creates wallet without device links when deviceIds are omitted', async () => {
+        mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
+          id: 'wallet-no-devices',
+          name: 'No Devices',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+
+        const created = await createWallet(userId, {
+          name: 'No Devices',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+        });
+
+        expect(created.id).toBe('wallet-no-devices');
+        expect(mockPrismaClient.walletDevice.createMany).not.toHaveBeenCalled();
+      });
+
+      it('logs and continues when initial address generation fails after create', async () => {
+        mockPrismaClient.$transaction.mockResolvedValueOnce({
+          id: 'wallet-1',
+          name: 'Descriptor Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+        mockPrismaClient.address.createMany.mockRejectedValueOnce(new Error('address generation failed'));
+        mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
+          id: 'wallet-1',
+          name: 'Descriptor Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+
+        const created = await createWallet(userId, {
+          name: 'Descriptor Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          descriptor: 'wpkh([abcd1234/84h/0h/0h]xpub...)',
+        });
+
+        expect(created.id).toBe('wallet-1');
+        expect(mockLogError).toHaveBeenCalledWith(
+          'Failed to generate initial addresses',
+          expect.objectContaining({ error: expect.any(Error) })
+        );
+      });
+
+      it('swallows hook failures after successful wallet creation', async () => {
+        mockPrismaClient.$transaction.mockResolvedValueOnce({
+          id: 'wallet-1',
+          name: 'Hook Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+        mockPrismaClient.wallet.findUnique.mockResolvedValueOnce({
+          id: 'wallet-1',
+          name: 'Hook Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          devices: [],
+          addresses: [],
+        });
+        mockHookExecuteAfter.mockReturnValueOnce(Promise.reject(new Error('hook create failed')));
+
+        const created = await createWallet(userId, {
+          name: 'Hook Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+        });
+
+        expect(created.id).toBe('wallet-1');
+        await Promise.resolve();
+        expect(mockLogWarn).toHaveBeenCalledWith(
+          'After hook failed',
+          expect.objectContaining({ error: expect.any(Error) })
+        );
       });
     });
   });
@@ -642,6 +838,108 @@ describe('Wallet Service', () => {
       }));
     });
 
+    it('falls back to zero balances and group-role defaults in wallet summaries', async () => {
+      const now = new Date('2025-02-01T00:00:00.000Z');
+      mockPrismaClient.wallet.findMany.mockResolvedValueOnce([
+        {
+          id: 'wallet-null-balance',
+          name: 'Null Balance',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          quorum: null,
+          totalSigners: null,
+          descriptor: 'desc-null',
+          fingerprint: 'f1',
+          createdAt: now,
+          devices: [],
+          addresses: [],
+          group: null,
+          users: [{ userId: 'user-1', role: 'owner' }],
+          groupRole: null,
+          lastSyncedAt: null,
+          lastSyncStatus: null,
+          syncInProgress: false,
+        },
+        {
+          id: 'wallet-group-fallback',
+          name: 'Group Fallback',
+          type: 'multi_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          quorum: 2,
+          totalSigners: 3,
+          descriptor: 'desc-group',
+          fingerprint: 'f2',
+          createdAt: now,
+          devices: [],
+          addresses: [],
+          group: {} as any,
+          users: [{ userId: 'other-1', role: 'owner' }, { userId: 'other-2', role: 'owner' }],
+          groupRole: null,
+          lastSyncedAt: null,
+          lastSyncStatus: null,
+          syncInProgress: false,
+        },
+      ]);
+      mockPrismaClient.uTXO.groupBy.mockResolvedValueOnce([
+        { walletId: 'wallet-null-balance', _sum: { amount: null } },
+      ]);
+
+      const results = await getUserWallets('user-1');
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toEqual(expect.objectContaining({
+        id: 'wallet-null-balance',
+        balance: 0,
+      }));
+      expect(results[1]).toEqual(expect.objectContaining({
+        id: 'wallet-group-fallback',
+        balance: 0,
+        userRole: 'viewer',
+        sharedWith: {
+          groupName: null,
+          userCount: 2,
+        },
+      }));
+    });
+
+    it('returns null role when summary wallet has neither direct nor group role data', async () => {
+      const now = new Date('2025-02-02T00:00:00.000Z');
+      mockPrismaClient.wallet.findMany.mockResolvedValueOnce([
+        {
+          id: 'wallet-no-role',
+          name: 'No Role Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          quorum: null,
+          totalSigners: null,
+          descriptor: null,
+          fingerprint: null,
+          createdAt: now,
+          devices: [],
+          addresses: [],
+          group: null,
+          users: [{ userId: 'different-user', role: 'owner' }],
+          groupRole: null,
+          lastSyncedAt: null,
+          lastSyncStatus: null,
+          syncInProgress: false,
+        },
+      ]);
+      mockPrismaClient.uTXO.groupBy.mockResolvedValueOnce([]);
+
+      const results = await getUserWallets('user-1');
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual(expect.objectContaining({
+        id: 'wallet-no-role',
+        userRole: null,
+        canEdit: false,
+      }));
+    });
+
     it('returns null for inaccessible wallet and maps wallet detail when found', async () => {
       mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(null);
       await expect(getWalletById('wallet-missing', 'user-1')).resolves.toBeNull();
@@ -679,6 +977,143 @@ describe('Wallet Service', () => {
         isShared: true,
       }));
     });
+
+    it('uses group role when wallet access is only via group membership', async () => {
+      const now = new Date('2025-01-01T00:00:00.000Z');
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-group-only',
+        name: 'Group Wallet',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: 3,
+        descriptor: 'desc',
+        fingerprint: 'abcd',
+        createdAt: now,
+        devices: [{ id: 'wd1', device: { id: 'd1' } }],
+        addresses: [{ id: 'a1', index: 0 }],
+        users: [{ userId: 'owner-1', role: 'owner', user: { id: 'owner-1', username: 'owner' } }],
+        group: { name: 'Treasury', members: [{ role: 'viewer' }] },
+        groupRole: 'viewer',
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+        syncInProgress: false,
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(101) } });
+
+      const wallet = await getWalletById('wallet-group-only', 'user-via-group');
+
+      expect(wallet).toEqual(expect.objectContaining({
+        id: 'wallet-group-only',
+        userRole: 'viewer',
+        canEdit: false,
+      }));
+    });
+
+    it('maps private wallet detail with null aggregate balance fallback', async () => {
+      const now = new Date('2025-03-01T00:00:00.000Z');
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-private',
+        name: 'Private Wallet',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: 'desc',
+        fingerprint: 'f0',
+        createdAt: now,
+        devices: [{ id: 'wd1', device: { id: 'd1' } }],
+        addresses: [{ id: 'a1', index: 0 }],
+        users: [{ userId: 'user-1', role: 'owner', user: { id: 'user-1', username: 'alice' } }],
+        group: null,
+        groupRole: null,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+        syncInProgress: false,
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null } });
+
+      const wallet = await getWalletById('wallet-private', 'user-1');
+
+      expect(wallet).toEqual(expect.objectContaining({
+        id: 'wallet-private',
+        balance: 0,
+        isShared: false,
+        sharedWith: undefined,
+        userRole: 'owner',
+      }));
+    });
+
+    it('falls back shared groupName to null for group-only access without group name', async () => {
+      const now = new Date('2025-03-02T00:00:00.000Z');
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-group-null-name',
+        name: 'Group Null Name',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: 2,
+        descriptor: 'desc',
+        fingerprint: 'f3',
+        createdAt: now,
+        devices: [{ id: 'wd1', device: { id: 'd1' } }],
+        addresses: [{ id: 'a1', index: 0 }],
+        users: [{ userId: 'other-user', role: 'owner', user: { id: 'other-user', username: 'owner' } }],
+        group: {} as any,
+        groupRole: 'viewer',
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+        syncInProgress: false,
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(10) } });
+
+      const wallet = await getWalletById('wallet-group-null-name', 'group-user');
+
+      expect(wallet).toEqual(expect.objectContaining({
+        id: 'wallet-group-null-name',
+        userRole: 'viewer',
+        sharedWith: {
+          groupName: null,
+          userCount: 1,
+        },
+      }));
+    });
+
+    it('returns null userRole for wallet detail without direct or group role data', async () => {
+      const now = new Date('2025-03-03T00:00:00.000Z');
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-detail-no-role',
+        name: 'No Role Detail',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: 'desc',
+        fingerprint: 'ff00',
+        createdAt: now,
+        devices: [],
+        addresses: [],
+        users: [{ userId: 'other-user', role: 'owner', user: { id: 'other-user', username: 'owner' } }],
+        group: null,
+        groupRole: null,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
+        syncInProgress: false,
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(1) } });
+
+      const wallet = await getWalletById('wallet-detail-no-role', 'user-1');
+
+      expect(wallet).toEqual(expect.objectContaining({
+        id: 'wallet-detail-no-role',
+        userRole: null,
+        canEdit: false,
+      }));
+    });
   });
 
   describe('wallet mutation and maintenance operations', () => {
@@ -710,6 +1145,62 @@ describe('Wallet Service', () => {
       expect(updated.isShared).toBe(true);
     });
 
+    it('falls back to zero balance and private sharing metadata for owner updates', async () => {
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockPrismaClient.wallet.update.mockResolvedValueOnce({
+        id: 'wallet-private',
+        name: 'Private Wallet',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: 'desc',
+        fingerprint: 'f0',
+        createdAt: new Date('2025-01-02T00:00:00.000Z'),
+        devices: [],
+        addresses: [],
+        group: null,
+        users: [{ userId: 'owner-1' }],
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null } });
+
+      const updated = await updateWallet('wallet-private', 'owner-1', { name: 'Private Wallet' });
+
+      expect(updated.balance).toBe(0);
+      expect(updated.isShared).toBe(false);
+      expect(updated.sharedWith).toBeUndefined();
+    });
+
+    it('uses null groupName for shared wallets without a group object', async () => {
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockPrismaClient.wallet.update.mockResolvedValueOnce({
+        id: 'wallet-shared-no-group',
+        name: 'Shared No Group',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: 'desc',
+        fingerprint: 'f9',
+        createdAt: new Date('2025-01-03T00:00:00.000Z'),
+        devices: [],
+        addresses: [],
+        group: null,
+        users: [{ userId: 'owner-1' }, { userId: 'owner-2' }],
+      });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: BigInt(5) } });
+
+      const updated = await updateWallet('wallet-shared-no-group', 'owner-1', { name: 'Shared No Group' });
+
+      expect(updated.isShared).toBe(true);
+      expect(updated.sharedWith).toEqual({
+        groupName: null,
+        userCount: 2,
+      });
+    });
+
     it('rejects update for non-owner users', async () => {
       mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce(null);
       await expect(updateWallet('wallet-1', 'viewer-1', { name: 'Nope' })).rejects.toThrow('Only wallet owners can update wallet');
@@ -723,6 +1214,19 @@ describe('Wallet Service', () => {
       expect(mockSyncUnsubscribeWalletAddresses).toHaveBeenCalledWith('wallet-1');
       expect(mockNotificationUnsubscribeWalletAddresses).toHaveBeenCalledWith('wallet-1');
       expect(mockPrismaClient.wallet.delete).toHaveBeenCalledWith({ where: { id: 'wallet-1' } });
+    });
+
+    it('swallows hook failures after delete', async () => {
+      mockPrismaClient.walletUser.findFirst.mockResolvedValueOnce({ role: 'owner' });
+      mockHookExecuteAfter.mockReturnValueOnce(Promise.reject(new Error('hook delete failed')));
+
+      await deleteWallet('wallet-1', 'owner-1');
+
+      await Promise.resolve();
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'After hook failed',
+        expect.objectContaining({ error: expect.any(Error) })
+      );
     });
 
     it('rejects delete for non-owner users', async () => {
@@ -792,9 +1296,152 @@ describe('Wallet Service', () => {
       await expect(addDeviceToWallet('wallet-1', 'device-1', 'user-1')).resolves.toBeUndefined();
       expect(mockPrismaClient.walletDevice.create).toHaveBeenCalled();
     });
+
+    it('defers multisig descriptor generation until required signer threshold is met', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-multi',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: 3,
+        descriptor: null,
+        devices: [
+          {
+            deviceId: 'device-existing',
+            device: {
+              id: 'device-existing',
+              userId: 'user-1',
+              fingerprint: 'eeeeffff',
+              xpub: 'xpub-existing',
+              derivationPath: "m/48'/0'/0'/2'",
+            },
+          },
+        ],
+      });
+      mockPrismaClient.device.findFirst.mockResolvedValueOnce({
+        id: 'device-new',
+        userId: 'user-1',
+        fingerprint: 'aaaabbbb',
+        xpub: 'xpub-new',
+        derivationPath: "m/48'/0'/0'/2'",
+      });
+
+      await addDeviceToWallet('wallet-multi', 'device-new', 'user-1', 1);
+
+      expect(mockPrismaClient.walletDevice.create).toHaveBeenCalled();
+      expect(mockBuildDescriptorFromDevices).not.toHaveBeenCalled();
+      expect(mockPrismaClient.wallet.update).not.toHaveBeenCalled();
+    });
+
+    it('generates multisig descriptor when signer threshold is met and normalizes missing derivation paths', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-multi-ready',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: 2,
+        descriptor: null,
+        devices: [
+          {
+            deviceId: 'device-existing',
+            device: {
+              id: 'device-existing',
+              userId: 'user-1',
+              fingerprint: '11112222',
+              xpub: 'xpub-existing',
+              derivationPath: "m/48'/0'/0'/2'",
+            },
+          },
+        ],
+      });
+      mockPrismaClient.device.findFirst.mockResolvedValueOnce({
+        id: 'device-new',
+        userId: 'user-1',
+        fingerprint: '33334444',
+        xpub: 'xpub-new',
+        derivationPath: '',
+      });
+
+      await addDeviceToWallet('wallet-multi-ready', 'device-new', 'user-1', 1);
+
+      expect(mockBuildDescriptorFromDevices).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            fingerprint: '33334444',
+            derivationPath: undefined,
+          }),
+        ]),
+        expect.any(Object)
+      );
+      expect(mockPrismaClient.wallet.update).toHaveBeenCalled();
+    });
+
+    it('rejects addDeviceToWallet when wallet is missing', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(null);
+
+      await expect(addDeviceToWallet('wallet-missing', 'device-1', 'user-1')).rejects.toThrow('Wallet not found');
+    });
+
+    it('rejects addDeviceToWallet when device is missing', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: null,
+        devices: [],
+      });
+      mockPrismaClient.device.findFirst.mockResolvedValueOnce(null);
+
+      await expect(addDeviceToWallet('wallet-1', 'device-missing', 'user-1')).rejects.toThrow('Device not found');
+    });
+
+    it('rejects addDeviceToWallet when device is already linked', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: null,
+        devices: [
+          {
+            deviceId: 'device-1',
+            device: {
+              id: 'device-1',
+              userId: 'user-1',
+              fingerprint: 'aabbccdd',
+              xpub: 'xpub-device-1',
+              derivationPath: "m/84'/0'/0'",
+            },
+          },
+        ],
+      });
+      mockPrismaClient.device.findFirst.mockResolvedValueOnce({
+        id: 'device-1',
+        userId: 'user-1',
+        fingerprint: 'aabbccdd',
+        xpub: 'xpub-device-1',
+        derivationPath: "m/84'/0'/0'",
+      });
+
+      await expect(addDeviceToWallet('wallet-1', 'device-1', 'user-1')).rejects.toThrow(
+        'Device is already linked to this wallet'
+      );
+    });
   });
 
   describe('address generation and descriptor repair', () => {
+    it('throws when generating address for inaccessible wallet', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(null);
+      await expect(generateAddress('wallet-missing', 'user-1')).rejects.toThrow('Wallet not found');
+    });
+
     it('generates the next receive address from descriptor', async () => {
       mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
         id: 'wallet-1',
@@ -815,6 +1462,24 @@ describe('Wallet Service', () => {
           used: false,
         },
       });
+    });
+
+    it('swallows hook failures after address generation', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        network: 'mainnet',
+        descriptor: 'wpkh(mock)',
+        addresses: [{ index: 0 }],
+      });
+      mockHookExecuteAfter.mockReturnValueOnce(Promise.reject(new Error('hook address failed')));
+
+      await expect(generateAddress('wallet-1', 'user-1')).resolves.toBe('bc1qmockaddress');
+
+      await Promise.resolve();
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'After hook failed',
+        expect.objectContaining({ error: expect.any(Error) })
+      );
     });
 
     it('rejects address generation when descriptor is missing', async () => {
@@ -846,6 +1511,31 @@ describe('Wallet Service', () => {
       });
     });
 
+    it('throws when repair is requested for inaccessible wallet', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce(null);
+      await expect(repairWalletDescriptor('wallet-missing', 'owner-1')).rejects.toThrow('Wallet not found');
+    });
+
+    it('returns validation failure for single-sig wallets with invalid device count', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: null,
+        devices: [
+          { device: { fingerprint: 'a', xpub: 'xpub-a', derivationPath: "m/84'/0'/0'" } },
+          { device: { fingerprint: 'b', xpub: 'xpub-b', derivationPath: "m/84'/0'/0'" } },
+        ],
+      });
+
+      const result = await repairWalletDescriptor('wallet-1', 'owner-1');
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('exactly 1 device');
+    });
+
     it('returns validation failure when multisig lacks required devices', async () => {
       mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
         id: 'wallet-1',
@@ -861,6 +1551,23 @@ describe('Wallet Service', () => {
       const result = await repairWalletDescriptor('wallet-1', 'owner-1');
       expect(result.success).toBe(false);
       expect(result.message).toContain('needs 3 devices');
+    });
+
+    it('uses default required device count for multisig repair when totalSigners is missing', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: null,
+        descriptor: null,
+        devices: [{ device: { fingerprint: 'a', xpub: 'xpub-a', derivationPath: "m/48'/0'/0'/2'" } }],
+      });
+
+      const result = await repairWalletDescriptor('wallet-1', 'owner-1');
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('needs 2 devices');
     });
 
     it('repairs descriptor and bulk-creates initial addresses', async () => {
@@ -887,6 +1594,79 @@ describe('Wallet Service', () => {
         })
       );
     });
+
+    it('wraps descriptor build failures during repair', async () => {
+      mockBuildDescriptorFromDevices.mockImplementationOnce(() => {
+        throw new Error('repair descriptor failed');
+      });
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-1',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: null,
+        devices: [{ device: { fingerprint: 'aabbccdd', xpub: 'xpub-a', derivationPath: "m/84'/0'/0'" } }],
+      });
+
+      await expect(repairWalletDescriptor('wallet-1', 'owner-1')).rejects.toThrow(
+        'Failed to generate descriptor: repair descriptor failed'
+      );
+      expect(mockLogError).toHaveBeenCalledWith(
+        'Failed to repair wallet descriptor',
+        expect.objectContaining({
+          walletId: 'wallet-1',
+          error: 'repair descriptor failed',
+        })
+      );
+    });
+
+    it('normalizes missing derivationPath when repairing descriptor', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-2',
+        type: 'single_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: null,
+        totalSigners: null,
+        descriptor: null,
+        devices: [{ device: { fingerprint: '11223344', xpub: 'xpub-no-path', derivationPath: '' } }],
+      });
+
+      await repairWalletDescriptor('wallet-2', 'owner-1');
+
+      expect(mockBuildDescriptorFromDevices).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            fingerprint: '11223344',
+            derivationPath: undefined,
+          }),
+        ]),
+        expect.any(Object)
+      );
+    });
+
+    it('repairs multisig descriptor when default required signer count is satisfied', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({
+        id: 'wallet-multi-default-ready',
+        type: 'multi_sig',
+        scriptType: 'native_segwit',
+        network: 'mainnet',
+        quorum: 2,
+        totalSigners: null,
+        descriptor: null,
+        devices: [
+          { device: { fingerprint: 'a1', xpub: 'xpub-a1', derivationPath: "m/48'/0'/0'/2'" } },
+          { device: { fingerprint: 'b2', xpub: 'xpub-b2', derivationPath: "m/48'/0'/0'/2'" } },
+        ],
+      });
+
+      const result = await repairWalletDescriptor('wallet-multi-default-ready', 'owner-1');
+
+      expect(result.success).toBe(true);
+      expect(mockPrismaClient.wallet.update).toHaveBeenCalled();
+    });
   });
 
   describe('wallet stats aggregation', () => {
@@ -909,6 +1689,28 @@ describe('Wallet Service', () => {
         transactionCount: 12,
         utxoCount: 4,
         addressCount: 8,
+      });
+    });
+
+    it('falls back aggregate amount fields to zero when sums are null', async () => {
+      mockPrismaClient.wallet.findFirst.mockResolvedValueOnce({ id: 'wallet-2' });
+      mockPrismaClient.uTXO.aggregate.mockResolvedValueOnce({ _sum: { amount: null } });
+      mockPrismaClient.transaction.aggregate
+        .mockResolvedValueOnce({ _sum: { amount: null } })
+        .mockResolvedValueOnce({ _sum: { amount: null } });
+      mockPrismaClient.transaction.count.mockResolvedValueOnce(0);
+      mockPrismaClient.uTXO.count.mockResolvedValueOnce(0);
+      mockPrismaClient.address.count.mockResolvedValueOnce(0);
+
+      const stats = await getWalletStats('wallet-2', 'user-1');
+
+      expect(stats).toEqual({
+        balance: 0,
+        received: 0,
+        sent: 0,
+        transactionCount: 0,
+        utxoCount: 0,
+        addressCount: 0,
       });
     });
 

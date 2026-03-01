@@ -89,32 +89,36 @@ export function paginationMiddleware(options: PaginationOptions = {}): RequestHa
   } = options;
 
   return (req: Request, _res: Response, next: NextFunction): void => {
-    const query = req.query as {
-      page?: string;
-      pageSize?: string;
-      limit?: string;
-      offset?: string;
-    };
+    try {
+      const query = req.query as {
+        page?: string;
+        pageSize?: string;
+        limit?: string;
+        offset?: string;
+      };
 
-    // Parse with defaults
-    let { page, pageSize, skip, take } = parsePaginationParams(query);
+      // Parse with defaults
+      let { page, pageSize, skip, take } = parsePaginationParams(query);
 
-    // Apply custom limits
-    pageSize = Math.min(maxPageSize, Math.max(minPageSize, pageSize));
-    take = pageSize;
+      // Apply custom limits
+      pageSize = Math.min(maxPageSize, Math.max(minPageSize, pageSize));
+      take = pageSize;
 
-    // Recalculate skip if pageSize was clamped
-    skip = (page - 1) * pageSize;
+      // Recalculate skip if pageSize was clamped
+      skip = (page - 1) * pageSize;
 
-    // Attach to request
-    req.pagination = {
-      page,
-      pageSize,
-      skip,
-      take,
-    };
+      // Attach to request
+      req.pagination = {
+        page,
+        pageSize,
+        skip,
+        take,
+      };
 
-    next();
+      next();
+    } catch (error) {
+      next(error as Error);
+    }
   };
 }
 

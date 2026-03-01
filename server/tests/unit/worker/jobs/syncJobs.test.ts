@@ -55,6 +55,7 @@ import {
   syncWalletJob,
   checkStaleWalletsJob,
   updateConfirmationsJob,
+  updateAllConfirmationsJob,
 } from '../../../../src/worker/jobs/syncJobs';
 
 describe('Sync Jobs', () => {
@@ -112,6 +113,26 @@ describe('Sync Jobs', () => {
       expect(result.success).toBe(true);
       expect(result.transactionsFound).toBe(5);
       expect(result.utxosUpdated).toBe(10);
+    });
+
+    it('should return early when wallet does not exist', async () => {
+      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce(null as any);
+
+      const mockJob = {
+        id: 'job-missing-wallet',
+        data: { walletId: 'missing-wallet', reason: 'scheduled' },
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      } as unknown as Job;
+
+      const result = await syncWalletJob.handler(mockJob);
+
+      expect(result).toEqual({
+        success: false,
+        duration: 0,
+        error: 'Wallet not found',
+      });
+      expect(prisma.wallet.update).not.toHaveBeenCalled();
     });
 
     it('should handle sync failure and record error', async () => {
@@ -300,6 +321,72 @@ describe('Sync Jobs', () => {
       expect(result.updated).toBe(3);
       // 3 milestone confirmations (1, 3, 6)
       expect(result.notified).toBe(3);
+    });
+
+    it('should not increment notified count for non-milestone confirmations', async () => {
+      vi.mocked(prisma.transaction.findMany).mockResolvedValueOnce([{ walletId: 'w1' }]);
+      vi.mocked(updateTransactionConfirmations).mockResolvedValueOnce([
+        { txid: 'tx1', oldConfirmations: 1, newConfirmations: 2 },
+      ]);
+
+      const result = await updateConfirmationsJob.handler({
+        id: 'job-non-milestone',
+        data: {},
+        attemptsMade: 0,
+        opts: { attempts: 2 },
+      } as unknown as Job);
+
+      expect(result).toEqual({ updated: 1, notified: 0 });
+    });
+
+    it('should skip update summary log path when pending wallets produce no updates', async () => {
+      vi.mocked(prisma.transaction.findMany).mockResolvedValueOnce([{ walletId: 'w1' }]);
+      vi.mocked(updateTransactionConfirmations).mockResolvedValueOnce([]);
+
+      const result = await updateConfirmationsJob.handler({
+        id: 'job-empty-updates',
+        data: {},
+        attemptsMade: 0,
+        opts: { attempts: 2 },
+      } as unknown as Job);
+
+      expect(result).toEqual({ updated: 0, notified: 0 });
+    });
+
+    it('should continue when one wallet confirmation update fails', async () => {
+      vi.mocked(prisma.transaction.findMany).mockResolvedValueOnce([
+        { walletId: 'w-fail' },
+        { walletId: 'w-ok' },
+      ]);
+      vi.mocked(updateTransactionConfirmations)
+        .mockRejectedValueOnce(new Error('wallet update failed'))
+        .mockResolvedValueOnce([
+          { txid: 'tx-ok', oldConfirmations: 0, newConfirmations: 1 },
+        ]);
+
+      const result = await updateConfirmationsJob.handler({
+        id: 'job-partial-failure',
+        data: {},
+        attemptsMade: 0,
+        opts: { attempts: 2 },
+      } as unknown as Job);
+
+      expect(result).toEqual({ updated: 1, notified: 1 });
+      expect(updateTransactionConfirmations).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('updateAllConfirmationsJob', () => {
+    it('delegates to updateConfirmationsJob without block data', async () => {
+      const handlerSpy = vi.spyOn(updateConfirmationsJob, 'handler').mockResolvedValueOnce({
+        updated: 2,
+        notified: 1,
+      });
+
+      const result = await updateAllConfirmationsJob.handler();
+
+      expect(handlerSpy).toHaveBeenCalledWith(expect.objectContaining({ data: {} }));
+      expect(result).toEqual({ updated: 2, notified: 1 });
     });
   });
 });

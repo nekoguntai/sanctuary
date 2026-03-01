@@ -330,6 +330,34 @@ describe('Transactions Addresses Routes (Extended)', () => {
     });
   });
 
+  it('ignores malformed and unsupported derivation paths when computing max indexes', async () => {
+    mockPrismaClient.address.findMany.mockResolvedValue([
+      { derivationPath: 'malformed', index: 10 },
+      { derivationPath: "m/84'/1'/0'/2/9", index: 9 },
+    ] as any);
+
+    const response = await request(app)
+      .post('/api/v1/wallets/wallet-1/addresses/generate')
+      .send({ count: 2 });
+
+    expect(response.status).toBe(200);
+    expect(mockDeriveAddressFromDescriptor).toHaveBeenCalledTimes(4);
+    expect(mockPrismaClient.address.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ derivationPath: "m/84'/1'/0'/0/0", index: 0 }),
+        expect.objectContaining({ derivationPath: "m/84'/1'/0'/0/1", index: 1 }),
+        expect.objectContaining({ derivationPath: "m/84'/1'/0'/1/0", index: 0 }),
+        expect.objectContaining({ derivationPath: "m/84'/1'/0'/1/1", index: 1 }),
+      ]),
+      skipDuplicates: true,
+    });
+    expect(response.body).toEqual({
+      generated: 4,
+      receiveAddresses: 2,
+      changeAddresses: 2,
+    });
+  });
+
   it('returns generated zero when derivation fails for all addresses', async () => {
     mockPrismaClient.address.findMany.mockResolvedValue([]);
     mockDeriveAddressFromDescriptor.mockImplementation(() => {

@@ -299,6 +299,46 @@ describe('Admin Groups Routes', () => {
     });
   });
 
+  it('updates explicit description/purpose and skips member mutations when memberIds unchanged', async () => {
+    mockPrismaClient.group.findUnique
+      .mockResolvedValueOnce({
+        id: 'group-1',
+        name: 'Existing Name',
+        description: 'old description',
+        purpose: 'old purpose',
+        members: [{ userId: 'u1' }],
+      } as any)
+      .mockResolvedValueOnce({
+        id: 'group-1',
+        name: 'Existing Name',
+        description: 'new description',
+        purpose: null,
+        createdAt: new Date('2025-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2025-01-04T00:00:00.000Z'),
+        members: [{ userId: 'u1', role: 'member', user: { id: 'u1', username: 'alice' } }],
+      } as any);
+
+    const response = await request(app)
+      .put('/api/v1/admin/groups/group-1')
+      .send({
+        description: 'new description',
+        purpose: null,
+        memberIds: ['u1'],
+      });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.group.update).toHaveBeenCalledWith({
+      where: { id: 'group-1' },
+      data: {
+        name: 'Existing Name',
+        description: 'new description',
+        purpose: null,
+      },
+    });
+    expect(mockPrismaClient.groupMember.deleteMany).not.toHaveBeenCalled();
+    expect(mockPrismaClient.groupMember.createMany).not.toHaveBeenCalled();
+  });
+
   it('returns 500 when group update fails', async () => {
     mockPrismaClient.group.findUnique.mockRejectedValue(new Error('read failed'));
 

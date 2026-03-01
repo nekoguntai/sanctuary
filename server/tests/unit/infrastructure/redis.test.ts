@@ -126,6 +126,7 @@ describe('infrastructure/redis', () => {
     redisInstances.length = 0;
     redisState.autoReady = true;
     redisState.failMainWithError = null;
+    (mockRedisEventBusInstance as any).shutdown = vi.fn().mockResolvedValue(undefined);
 
     mockGetConfig.mockReturnValue({
       redis: {
@@ -160,6 +161,16 @@ describe('infrastructure/redis', () => {
     expect(redisInfra.isRedisConnected()).toBe(false);
   });
 
+  it('fails before client construction when redis url is malformed', async () => {
+    mockGetConfig.mockReturnValue({
+      redis: { enabled: true, url: undefined as unknown as string },
+    });
+    const redisInfra = await loadRedisInfra();
+
+    await expect(redisInfra.initializeRedis()).rejects.toBeInstanceOf(Error);
+    expect(redisInfra.getRedisClient()).toBeNull();
+  });
+
   it('initializes redis infrastructure and exposes distributed instances', async () => {
     const redisInfra = await loadRedisInfra();
 
@@ -179,6 +190,11 @@ describe('infrastructure/redis', () => {
     expect(opts.retryStrategy(12)).toBeNull();
     expect(opts.reconnectOnError(new Error('READONLY You can\'t write'))).toBe(true);
     expect(opts.reconnectOnError(new Error('network error'))).toBe(false);
+
+    const publisherOpts = redisInstances[1].options;
+    const subscriberOpts = redisInstances[2].options;
+    expect(publisherOpts.retryStrategy(5)).toBe(500);
+    expect(subscriberOpts.retryStrategy(7)).toBe(700);
   });
 
   it('does nothing when initialized twice', async () => {
@@ -201,6 +217,22 @@ describe('infrastructure/redis', () => {
     expect(redisInfra.getRedisClient()).toBeNull();
   });
 
+  it('times out when redis never becomes ready and ignores quit cleanup errors', async () => {
+    redisState.autoReady = false;
+    const redisInfra = await loadRedisInfra();
+    vi.useFakeTimers();
+
+    const initPromise = redisInfra.initializeRedis();
+    const initExpectation = expect(initPromise).rejects.toThrow('Redis connection timeout');
+    expect(redisInstances).toHaveLength(1);
+    redisInstances[0].quit.mockRejectedValueOnce(new Error('quit failed'));
+
+    await vi.advanceTimersByTimeAsync(10001);
+    await initExpectation;
+
+    vi.useRealTimers();
+  });
+
   it('shuts down initialized infrastructure cleanly', async () => {
     const redisInfra = await loadRedisInfra();
     await redisInfra.initializeRedis();
@@ -212,6 +244,55 @@ describe('infrastructure/redis', () => {
     expect(redisInfra.isRedisConnected()).toBe(false);
     expect(redisInfra.getDistributedCache()).toBe(memoryCache as any);
     expect(redisInfra.getDistributedEventBus()).toBe(localEventBus as any);
+  });
+
+  it('swallows shutdown errors and logs them', async () => {
+    const redisInfra = await loadRedisInfra();
+    await redisInfra.initializeRedis();
+    mockRedisEventBusInstance.shutdown.mockRejectedValueOnce(new Error('event bus shutdown failed'));
+
+    await expect(redisInfra.shutdownRedis()).resolves.toBeUndefined();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Error during Redis shutdown',
+      expect.objectContaining({ error: expect.any(Error) })
+    );
+  });
+
+  it('skips event bus shutdown when distributed bus has no shutdown method', async () => {
+    delete (mockRedisEventBusInstance as any).shutdown;
+    const redisInfra = await loadRedisInfra();
+    await redisInfra.initializeRedis();
+
+    await redisInfra.shutdownRedis();
+
+    expect(redisInstances[0].quit).toHaveBeenCalledTimes(1);
+    expect(redisInfra.isRedisConnected()).toBe(false);
+  });
+
+  it('handles concurrent shutdown calls when first call reaches redis quit after second', async () => {
+    const redisInfra = await loadRedisInfra();
+    await redisInfra.initializeRedis();
+
+    let resolveFirstShutdown: (() => void) | null = null;
+    mockRedisEventBusInstance.shutdown
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirstShutdown = resolve;
+          })
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const first = redisInfra.shutdownRedis();
+    const second = redisInfra.shutdownRedis();
+
+    await Promise.resolve();
+    await second;
+    resolveFirstShutdown?.();
+    await first;
+
+    expect(redisInstances[0].quit).toHaveBeenCalledTimes(1);
+    expect(redisInfra.isRedisConnected()).toBe(false);
   });
 
   it('checkRedisHealth returns unhealthy when not initialized', async () => {

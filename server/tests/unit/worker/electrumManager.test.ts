@@ -129,6 +129,24 @@ describe('ElectrumSubscriptionManager', () => {
       expect(addressToWallet.has('addr2')).toBe(true);
     });
 
+    it('should default to mainnet when reconciling addresses with missing wallet network', async () => {
+      const addressToWallet = (manager as unknown as { addressToWallet: Map<string, { walletId: string; network: string }> })
+        .addressToWallet;
+
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([
+        { id: '1', address: 'addr-fallback', walletId: 'wallet-fallback', wallet: {} },
+      ] as any);
+
+      const result = await manager.reconcileSubscriptions();
+
+      expect(result.added).toBe(1);
+      expect(result.removed).toBe(0);
+      expect(addressToWallet.get('addr-fallback')).toEqual({
+        walletId: 'wallet-fallback',
+        network: 'mainnet',
+      });
+    });
+
     it('should handle mixed add and remove operations', async () => {
       // Setup: Manager has some addresses
       const addressToWallet = (manager as unknown as { addressToWallet: Map<string, unknown> }).addressToWallet;
@@ -311,6 +329,31 @@ describe('ElectrumSubscriptionManager', () => {
       expect(mockClient.subscribeAddressBatch).not.toHaveBeenCalled();
     });
 
+    it('defaults to mainnet when wallet network is missing', async () => {
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+
+      (manager as unknown as { networks: Map<string, unknown> }).networks.set('mainnet', state);
+
+      vi.mocked(prisma.wallet.findUnique).mockResolvedValueOnce({ network: undefined } as any);
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([{ address: 'addr-default' }] as any);
+
+      await manager.subscribeWalletAddresses('wallet-default');
+
+      expect(mockClient.subscribeAddressBatch).toHaveBeenCalledWith(['addr-default']);
+      const tracked = (manager as unknown as { addressToWallet: Map<string, { walletId: string; network: string }> })
+        .addressToWallet;
+      expect(tracked.get('addr-default')).toEqual({ walletId: 'wallet-default', network: 'mainnet' });
+    });
+
     it('returns when network is not connected', async () => {
       (manager as unknown as { networks: Map<string, unknown> }).networks.set('testnet', {
         network: 'testnet',
@@ -357,6 +400,25 @@ describe('ElectrumSubscriptionManager', () => {
       expect(reconnectState.reconnectAttempts).toBe(1);
     });
 
+    it('reconnects when network state exists but is marked disconnected', async () => {
+      (manager as any).networks.set('mainnet', {
+        network: 'mainnet',
+        client: mockClient,
+        connected: false,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      });
+
+      await (manager as any).connectNetwork('mainnet');
+
+      expect(mockClient.connect).toHaveBeenCalled();
+      const state = (manager as any).networks.get('mainnet');
+      expect(state.connected).toBe(true);
+    });
+
     it('continues when server version lookup fails and when header subscription fails', async () => {
       mockClient.getServerVersion.mockRejectedValueOnce(new Error('version failed'));
       mockClient.subscribeHeaders.mockRejectedValueOnce(new Error('headers failed'));
@@ -387,6 +449,28 @@ describe('ElectrumSubscriptionManager', () => {
       expect(state.subscribedToHeaders).toBe(false);
       expect(state.subscribedAddresses.size).toBe(0);
       expect(state.reconnectTimer).not.toBeNull();
+    });
+
+    it('does not schedule reconnect on close when manager is not running', () => {
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+      const reconnectSpy = vi.spyOn(manager as any, 'scheduleReconnect').mockImplementation(() => undefined);
+      (manager as any).isRunning = false;
+
+      (manager as any).setupEventHandlers(state);
+      mockClient.emit('close');
+
+      expect(reconnectSpy).not.toHaveBeenCalled();
+      expect(state.connected).toBe(false);
+      expect(state.subscribedToHeaders).toBe(false);
     });
 
     it('covers subscribeAddressBatch no-op and fallback individual subscription mode', async () => {
@@ -516,6 +600,14 @@ describe('ElectrumSubscriptionManager', () => {
       expect(state.subscribedAddresses.has('addr2')).toBe(true);
     });
 
+    it('removes wallet addresses even when network state no longer exists', () => {
+      (manager as any).addressToWallet.set('orphan-addr', { walletId: 'wallet-orphan', network: 'signet' });
+
+      manager.unsubscribeWalletAddresses('wallet-orphan');
+
+      expect((manager as any).addressToWallet.has('orphan-addr')).toBe(false);
+    });
+
     it('reconciles with connected network subscriptions and subscribed-address cleanup', async () => {
       const state = {
         network: 'mainnet',
@@ -606,6 +698,244 @@ describe('ElectrumSubscriptionManager', () => {
 
       vi.useRealTimers();
     });
+
+    it('covers lock refresh guard branches and no-lock refresh callback', async () => {
+      const existingTimer = setInterval(() => undefined, 60_000);
+      const setIntervalSpy = vi.spyOn(global, 'setInterval');
+      (manager as any).subscriptionLockRefresh = existingTimer;
+
+      (manager as any).startSubscriptionLockRefresh();
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+
+      clearInterval(existingTimer);
+      (manager as any).subscriptionLockRefresh = null;
+      (manager as any).subscriptionLock = null;
+
+      let refreshCallback: (() => Promise<void>) | undefined;
+      const fakeTimer = { unref: vi.fn() } as any;
+      setIntervalSpy.mockImplementation((cb: any) => {
+        refreshCallback = cb;
+        return fakeTimer;
+      });
+
+      (manager as any).startSubscriptionLockRefresh();
+      await refreshCallback?.();
+      expect(vi.mocked(extendLock)).not.toHaveBeenCalled();
+
+      setIntervalSpy.mockRestore();
+      (manager as any).stopSubscriptionLockRefresh();
+    });
+
+    it('skips subscribeHeaders when already subscribed', async () => {
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+
+      await (manager as any).subscribeHeaders(state);
+      expect(mockClient.subscribeHeaders).not.toHaveBeenCalled();
+    });
+
+    it('clears existing reconnect timer and logs when attempts exceed max', () => {
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+      const reconnectTimer = setTimeout(() => undefined, 10_000);
+      (manager as any).networks.set('mainnet', {
+        network: 'mainnet',
+        client: mockClient,
+        connected: false,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer,
+        reconnectAttempts: 10,
+      });
+
+      (manager as any).scheduleReconnect('mainnet');
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(reconnectTimer);
+
+      clearTimeoutSpy.mockRestore();
+    });
+
+    it('returns early from reconnect timer callback when manager is not running', async () => {
+      vi.useFakeTimers();
+      const connectSpy = vi.spyOn(manager as any, 'connectNetwork').mockResolvedValue(undefined);
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: false,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+      (manager as any).isRunning = false;
+      (manager as any).networks.set('mainnet', state);
+
+      (manager as any).scheduleReconnect('mainnet');
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(connectSpy).not.toHaveBeenCalled();
+      expect(state.reconnectAttempts).toBe(0);
+
+      vi.useRealTimers();
+    });
+
+    it('handles reconnect timer callback when original state is missing and skips resubscribe', async () => {
+      vi.useFakeTimers();
+      const connectSpy = vi.spyOn(manager as any, 'connectNetwork').mockResolvedValue(undefined);
+      const resubscribeSpy = vi
+        .spyOn(manager as any, 'subscribeNetworkAddresses')
+        .mockResolvedValue(undefined);
+
+      (manager as any).isRunning = true;
+      (manager as any).networks.clear();
+
+      (manager as any).scheduleReconnect('mainnet');
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(connectSpy).toHaveBeenCalledWith('mainnet');
+      expect(resubscribeSpy).not.toHaveBeenCalled();
+
+      const state = (manager as any).networks.get('mainnet');
+      expect(state).toBeDefined();
+      expect(state.connected).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it('updates reconnect state and resubscribes network addresses on reconnect success', async () => {
+      vi.useFakeTimers();
+      const connectSpy = vi.spyOn(manager as any, 'connectNetwork').mockResolvedValue(undefined);
+      const resubscribeSpy = vi
+        .spyOn(manager as any, 'subscribeNetworkAddresses')
+        .mockResolvedValue(undefined);
+      const state = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+      (manager as any).isRunning = true;
+      (manager as any).networks.set('mainnet', state);
+
+      (manager as any).scheduleReconnect('mainnet');
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(connectSpy).toHaveBeenCalledWith('mainnet');
+      expect(resubscribeSpy).toHaveBeenCalledWith('mainnet');
+      expect(state.reconnectTimer).toBeNull();
+      expect(state.reconnectAttempts).toBe(0);
+
+      vi.useRealTimers();
+    });
+
+    it('subscribes connected network batches during subscribeAllAddresses pagination', async () => {
+      const connectedState = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+      (manager as any).networks.set('mainnet', connectedState);
+      const batchSpy = vi
+        .spyOn(manager as any, 'subscribeAddressBatch')
+        .mockResolvedValue(undefined);
+
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([
+        { id: '1', address: 'addr-connected', walletId: 'wallet1', wallet: { network: 'mainnet' } },
+      ] as any);
+
+      await (manager as any).subscribeAllAddresses();
+
+      expect(batchSpy).toHaveBeenCalledWith(
+        connectedState,
+        [{ address: 'addr-connected', walletId: 'wallet1' }]
+      );
+    });
+
+    it('defaults to mainnet in subscribeAllAddresses when wallet network is missing', async () => {
+      const connectedState = {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      };
+      (manager as any).networks.set('mainnet', connectedState);
+      const batchSpy = vi
+        .spyOn(manager as any, 'subscribeAddressBatch')
+        .mockResolvedValue(undefined);
+
+      vi.mocked(prisma.address.findMany).mockResolvedValueOnce([
+        { id: '1', address: 'addr-fallback-sub', walletId: 'wallet1', wallet: {} },
+      ] as any);
+
+      await (manager as any).subscribeAllAddresses();
+
+      expect(batchSpy).toHaveBeenCalledWith(
+        connectedState,
+        [{ address: 'addr-fallback-sub', walletId: 'wallet1' }]
+      );
+    });
+
+    it('returns early in subscribeNetworkAddresses when state is disconnected', async () => {
+      (manager as any).networks.set('mainnet', {
+        network: 'mainnet',
+        client: mockClient,
+        connected: false,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      });
+
+      const batchSpy = vi
+        .spyOn(manager as any, 'subscribeAddressBatch')
+        .mockResolvedValue(undefined);
+
+      await (manager as any).subscribeNetworkAddresses('mainnet');
+      expect(batchSpy).not.toHaveBeenCalled();
+    });
+
+    it('skips subscribeNetworkAddresses when tracked addresses are for other networks', async () => {
+      (manager as any).networks.set('mainnet', {
+        network: 'mainnet',
+        client: mockClient,
+        connected: true,
+        subscribedToHeaders: true,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      });
+      (manager as any).addressToWallet.set('addr-test-only', { walletId: 'w-test', network: 'testnet' });
+
+      const batchSpy = vi
+        .spyOn(manager as any, 'subscribeAddressBatch')
+        .mockResolvedValue(undefined);
+
+      await (manager as any).subscribeNetworkAddresses('mainnet');
+      expect(batchSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('getHealthMetrics', () => {
@@ -621,6 +951,21 @@ describe('ElectrumSubscriptionManager', () => {
 
   describe('isConnected', () => {
     it('should return false when no networks are connected', () => {
+      expect(manager.isConnected()).toBe(false);
+    });
+
+    it('should return false when all tracked networks are disconnected', () => {
+      (manager as any).networks.set('mainnet', {
+        network: 'mainnet',
+        client: mockClient,
+        connected: false,
+        subscribedToHeaders: false,
+        subscribedAddresses: new Set<string>(),
+        lastBlockHeight: 0,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+      });
+
       expect(manager.isConnected()).toBe(false);
     });
   });

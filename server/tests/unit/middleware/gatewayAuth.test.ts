@@ -26,6 +26,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 import { verifyGatewayRequest, generateGatewaySignature } from '../../../src/middleware/gatewayAuth';
+import config from '../../../src/config';
 
 describe('Gateway Auth Middleware', () => {
   let mockReq: Partial<Request>;
@@ -61,7 +62,7 @@ describe('Gateway Auth Middleware', () => {
   function createValidHeaders(
     method: string,
     path: string,
-    body: object = {}
+    body: unknown = {}
   ): { 'x-gateway-signature': string; 'x-gateway-timestamp': string } {
     const { signature, timestamp } = generateGatewaySignature(method, path, body, secret);
     return {
@@ -71,6 +72,24 @@ describe('Gateway Auth Middleware', () => {
   }
 
   describe('verifyGatewayRequest', () => {
+    it('should return 503 when gateway secret is not configured', () => {
+      const originalSecret = config.gatewaySecret;
+      (config as { gatewaySecret?: string }).gatewaySecret = undefined;
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(503);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Service Unavailable',
+          message: 'Gateway authentication not configured',
+        })
+      );
+      expect(mockNext).not.toHaveBeenCalled();
+
+      (config as { gatewaySecret?: string }).gatewaySecret = originalSecret;
+    });
+
     it('should reject requests without signature header', () => {
       mockReq.headers = { 'x-gateway-timestamp': Date.now().toString() };
 
@@ -168,6 +187,19 @@ describe('Gateway Auth Middleware', () => {
       expect(statusMock).not.toHaveBeenCalled();
     });
 
+    it('should accept requests with valid signature for POST with string body', () => {
+      const body = 'raw-request-body';
+      mockReq.method = 'POST';
+      mockReq.path = '/api/v1/raw';
+      mockReq.body = body;
+      mockReq.headers = createValidHeaders('POST', '/api/v1/raw', body);
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+    });
+
     it('should reject requests with tampered body', () => {
       const originalBody = { amount: 100 };
       const tamperedBody = { amount: 1000000 };
@@ -218,6 +250,33 @@ describe('Gateway Auth Middleware', () => {
 
       expect(statusMock).toHaveBeenCalledWith(403);
       expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should treat signature parsing errors as invalid signatures', () => {
+      const originalFrom = Buffer.from.bind(Buffer);
+      mockReq.headers = {
+        'x-gateway-signature': 'trigger-hex-error',
+        'x-gateway-timestamp': Date.now().toString(),
+      };
+
+      const bufferFromSpy = vi.spyOn(Buffer, 'from').mockImplementation(((value: any, arg2?: any, arg3?: any) => {
+        if (value === 'trigger-hex-error' && arg2 === 'hex') {
+          throw new Error('buffer parse failed');
+        }
+        return originalFrom(value, arg2, arg3);
+      }) as typeof Buffer.from);
+
+      verifyGatewayRequest(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(statusMock).toHaveBeenCalledWith(403);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Invalid gateway signature',
+        })
+      );
+      expect(mockNext).not.toHaveBeenCalled();
+
+      bufferFromSpy.mockRestore();
     });
 
     it('should handle invalid timestamp format', () => {

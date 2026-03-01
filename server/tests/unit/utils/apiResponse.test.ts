@@ -101,6 +101,19 @@ describe('API Response Utilities', () => {
         }),
       });
     });
+
+    it('should return undefined meta when context and apiVersion are both missing', () => {
+      mockRequestContext.get.mockReturnValueOnce(null);
+      res.req = {};
+
+      success(res, { test: true });
+
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: { test: true },
+        meta: undefined,
+      });
+    });
   });
 
   describe('created', () => {
@@ -339,6 +352,17 @@ describe('API Response Utilities', () => {
         const result = parsePaginationParams({ limit: '500' });
 
         expect(result.pageSize).toBe(PAGINATION_DEFAULTS.maxPageSize);
+      });
+
+      it('should fall back to default pageSize when legacy limit is invalid', () => {
+        const result = parsePaginationParams({ limit: 'invalid', offset: '20' });
+
+        expect(result).toEqual({
+          page: 2, // floor(20/20) + 1
+          pageSize: PAGINATION_DEFAULTS.pageSize,
+          skip: 20,
+          take: PAGINATION_DEFAULTS.pageSize,
+        });
       });
 
       it('should handle zero offset', () => {

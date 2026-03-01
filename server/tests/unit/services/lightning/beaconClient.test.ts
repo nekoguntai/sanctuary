@@ -85,6 +85,45 @@ describe('BeaconClient', () => {
     it('should register response interceptor', () => {
       expect(mockAxiosInstance.interceptors.response.use).toHaveBeenCalled();
     });
+
+    it('should pass through successful responses in interceptor', () => {
+      const onSuccess = mockAxiosInstance.interceptors.response.use.mock.calls[0][0];
+      const response = { data: { success: true } };
+      expect(onSuccess(response)).toBe(response);
+    });
+
+    it('should translate structured API errors in interceptor to BeaconApiError', async () => {
+      const interceptor = mockAxiosInstance.interceptors.response.use.mock.calls[0][1];
+      const axiosError: any = {
+        response: {
+          data: {
+            error: {
+              code: 'SWAP_FAILED',
+              message: 'Swap creation failed',
+            },
+          },
+        },
+        config: {
+          url: '/api/swaps',
+          method: 'post',
+        },
+      };
+
+      try {
+        interceptor(axiosError);
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(BeaconApiError);
+        expect(error.code).toBe('SWAP_FAILED');
+        expect(error.message).toBe('Swap creation failed');
+      }
+    });
+
+    it('should rethrow raw axios errors in interceptor when API shape is missing', async () => {
+      const interceptor = mockAxiosInstance.interceptors.response.use.mock.calls[0][1];
+      const original = new Error('network down');
+
+      expect(() => interceptor(original)).toThrow(original);
+    });
   });
 
   describe('isHealthy', () => {
@@ -249,6 +288,20 @@ describe('BeaconClient', () => {
 
       expect(result).toEqual(mockSwaps);
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/swaps');
+    });
+  });
+
+  describe('refreshSwap', () => {
+    it('should refresh swap status from backend', async () => {
+      const refreshed = { id: 'swap-1', status: 'confirmed' };
+      mockAxiosInstance.post.mockResolvedValue({
+        data: { success: true, data: refreshed },
+      });
+
+      const result = await client.refreshSwap('swap-1');
+
+      expect(result).toEqual(refreshed);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/swaps/swap-1/refresh');
     });
   });
 

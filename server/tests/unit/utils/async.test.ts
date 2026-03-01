@@ -427,6 +427,12 @@ describe('Async Utilities', () => {
       expect((error as Error).message).toBe('Always fails');
       expect(attempts).toBe(4); // 1 initial + 3 default retries
     });
+
+    it('throws default last error when maxRetries is negative', async () => {
+      await expect(
+        withRetry(async () => 'never', { maxRetries: -1 })
+      ).rejects.toThrow('No attempts made');
+    });
   });
 
   describe('sleep', () => {

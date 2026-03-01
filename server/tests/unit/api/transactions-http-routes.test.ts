@@ -206,6 +206,61 @@ describe('Transaction HTTP Routes', () => {
     });
   });
 
+  it('falls back to mainnet network and stored confirmations when cached height is unavailable', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+    mockGetCachedBlockHeight.mockReturnValueOnce(0);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-mainnet-default',
+        txid: '0'.repeat(64),
+        walletId,
+        type: 'received',
+        amount: BigInt(25000),
+        fee: BigInt(0),
+        balanceAfter: BigInt(25000),
+        blockHeight: BigInt(850100),
+        confirmations: 7,
+        blockTime: new Date('2025-01-03T00:00:00.000Z'),
+        createdAt: new Date('2025-01-03T00:00:00.000Z'),
+        address: { address: 'bc1qreceive', derivationPath: "m/84'/0'/0'/0/0" },
+        transactionLabels: [],
+      },
+    ]);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions`);
+
+    expect(response.status).toBe(200);
+    expect(mockGetCachedBlockHeight).toHaveBeenCalledWith('mainnet');
+    expect(response.body[0].confirmations).toBe(7);
+  });
+
+  it('returns zero dynamic confirmations for transactions with non-positive block height', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({ network: 'testnet' });
+    mockGetCachedBlockHeight.mockReturnValueOnce(850000);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-zero-height',
+        txid: '9'.repeat(64),
+        walletId,
+        type: 'sent',
+        amount: BigInt(-1500),
+        fee: BigInt(50),
+        balanceAfter: BigInt(98500),
+        blockHeight: BigInt(0),
+        confirmations: 99,
+        blockTime: null,
+        createdAt: new Date('2025-01-04T00:00:00.000Z'),
+        address: { address: 'tb1qdestzero', derivationPath: "m/84'/1'/0'/0/2" },
+        transactionLabels: [],
+      },
+    ]);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions`);
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].confirmations).toBe(0);
+  });
+
   it('builds and caches transaction stats on cache miss', async () => {
     mockWalletCacheGet.mockResolvedValue(null);
     mockPrismaClient.transaction.groupBy.mockResolvedValue([
@@ -258,6 +313,61 @@ describe('Transaction HTTP Routes', () => {
     expect(response.body.totalCount).toBe(3);
     expect(response.body.totalSent).toBe(300);
     expect(mockPrismaClient.transaction.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('returns zeroed transaction stats when aggregate queries are empty', async () => {
+    mockWalletCacheGet.mockResolvedValue(null);
+    mockPrismaClient.transaction.groupBy.mockResolvedValue([]);
+    mockPrismaClient.transaction.aggregate.mockResolvedValue({ _sum: { fee: null } });
+    mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      totalCount: 0,
+      receivedCount: 0,
+      sentCount: 0,
+      consolidationCount: 0,
+      totalReceived: 0,
+      totalSent: 0,
+      totalFees: 0,
+      walletBalance: 0,
+    });
+    expect(mockWalletCacheSet).toHaveBeenCalledWith(
+      `tx-stats:${walletId}`,
+      expect.objectContaining({
+        avgFee: '0',
+        totalFees: '0',
+        currentBalance: '0',
+      }),
+      30
+    );
+  });
+
+  it('normalizes signed aggregate amounts when building stats', async () => {
+    mockWalletCacheGet.mockResolvedValue(null);
+    mockPrismaClient.transaction.groupBy.mockResolvedValue([
+      { type: 'received', _count: { id: 1 }, _sum: { amount: BigInt(-50) } },
+      { type: 'sent', _count: { id: 1 }, _sum: { amount: BigInt(75) } },
+      { type: 'consolidation', _count: { id: 2 }, _sum: { amount: null } },
+    ]);
+    mockPrismaClient.transaction.aggregate.mockResolvedValue({ _sum: { fee: BigInt(30) } });
+    mockPrismaClient.transaction.findFirst.mockResolvedValue({ balanceAfter: BigInt(1000) });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/stats`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      totalCount: 4,
+      receivedCount: 1,
+      sentCount: 1,
+      consolidationCount: 2,
+      totalReceived: 50,
+      totalSent: 75,
+      totalFees: 30,
+      walletBalance: 1000,
+    });
   });
 
   it('returns internal server error when transaction stats lookup fails', async () => {
@@ -352,6 +462,75 @@ describe('Transaction HTTP Routes', () => {
     });
   });
 
+  it('maps legacy receive type to received when mempool response is not ok', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Legacy Wallet',
+      network: 'mainnet',
+    });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: '2'.repeat(64),
+        walletId,
+        type: 'receive',
+        amount: BigInt(9000),
+        fee: BigInt(0),
+        createdAt: new Date(Date.now() - 1500),
+        counterpartyAddress: null,
+        rawTx: null,
+        blockHeight: null,
+      },
+    ]);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ weight: 500, fee: 400 }),
+    });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      txid: '2'.repeat(64),
+      type: 'received',
+      amount: 9000,
+      feeRate: 0,
+    });
+    expect(response.body[0]).not.toHaveProperty('recipient');
+  });
+
+  it('keeps pending fee rate at zero when mempool payload has no weight and rawTx size is non-positive', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue({
+      name: 'Edge Wallet',
+      network: 'mainnet',
+    });
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: '3'.repeat(64),
+        walletId,
+        type: 'sent',
+        amount: BigInt(-1200),
+        fee: BigInt(250),
+        createdAt: new Date(Date.now() - 1500),
+        counterpartyAddress: '',
+        rawTx: { length: -1 } as any,
+        blockHeight: null,
+      },
+    ]);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ fee: 1200 }),
+    });
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/pending`);
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      txid: '3'.repeat(64),
+      fee: 250,
+      feeRate: 0,
+    });
+    expect(response.body[0]).not.toHaveProperty('recipient');
+  });
+
   it('returns 500 when pending transaction query fails', async () => {
     mockPrismaClient.wallet.findUnique.mockResolvedValue({
       name: 'Test Wallet',
@@ -430,6 +609,35 @@ describe('Transaction HTTP Routes', () => {
     expect(response.text).toContain('"note,with,comma"');
   });
 
+  it('exports CSV using default wallet filename and createdAt fallback for null fields', async () => {
+    mockPrismaClient.wallet.findUnique.mockResolvedValue(null);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: '4'.repeat(64),
+        type: 'received',
+        amount: BigInt(0),
+        balanceAfter: null,
+        fee: null,
+        confirmations: 0,
+        label: null,
+        memo: null,
+        counterpartyAddress: null,
+        blockHeight: null,
+        blockTime: null,
+        createdAt: new Date('2025-01-05T00:00:00.000Z'),
+        transactionLabels: [],
+      },
+    ]);
+
+    const response = await request(app).get(`/api/v1/wallets/${walletId}/transactions/export`);
+
+    expect(response.status).toBe(200);
+    expect(response.header['content-disposition']).toContain('wallet_transactions_');
+    const dataRow = response.text.split('\n')[1];
+    expect(dataRow).toContain('2025-01-05T00:00:00.000Z');
+    expect(dataRow).toContain(',,');
+  });
+
   it('returns error when transaction export fails', async () => {
     mockPrismaClient.wallet.findUnique.mockResolvedValue({ name: 'Err Wallet' });
     mockPrismaClient.transaction.findMany.mockRejectedValue(new Error('export failed'));
@@ -455,6 +663,20 @@ describe('Transaction HTTP Routes', () => {
       finalBalanceBtc: 0.00123456,
     });
     expect(mockRecalculateWalletBalances).toHaveBeenCalledWith(walletId);
+  });
+
+  it('returns zero balances when recalculation finds no final transaction', async () => {
+    mockPrismaClient.transaction.findFirst.mockResolvedValue(null);
+
+    const response = await request(app).post(`/api/v1/wallets/${walletId}/transactions/recalculate`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Balances recalculated',
+      finalBalance: 0,
+      finalBalanceBtc: 0,
+    });
   });
 
   it('returns error when balance recalculation fails', async () => {

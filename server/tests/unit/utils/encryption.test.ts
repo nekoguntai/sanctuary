@@ -261,6 +261,13 @@ describe('Encryption Utilities', async () => {
     });
   });
 
+  describe('initialization guards', async () => {
+    it('throws when encrypt is used before validateEncryptionKey', async () => {
+      const { encrypt } = await getUninitializedModule();
+      expect(() => encrypt('secret')).toThrow('Encryption key not initialized');
+    });
+  });
+
   describe('validateEncryptionKey', async () => {
     it('should not throw when encryption key is valid', async () => {
       const { validateEncryptionKey } = await getUninitializedModule();
@@ -293,6 +300,17 @@ describe('Encryption Utilities', async () => {
       } finally {
         process.env.ENCRYPTION_KEY = originalKey;
       }
+    });
+
+    it('reuses cached key on repeated validation with same salt', async () => {
+      const originalKey = process.env.ENCRYPTION_KEY;
+      const { validateEncryptionKey } = await getUninitializedModule();
+
+      await expect(validateEncryptionKey()).resolves.not.toThrow();
+      process.env.ENCRYPTION_KEY = 'short';
+      await expect(validateEncryptionKey()).resolves.not.toThrow();
+
+      process.env.ENCRYPTION_KEY = originalKey;
     });
   });
 

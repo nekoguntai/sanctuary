@@ -73,6 +73,20 @@ describe('migrationService', () => {
     }));
   });
 
+  it('returns null latest migration fields when no migrations are applied', async () => {
+    vi.spyOn(migrationService, 'getAppliedMigrations').mockResolvedValueOnce([]);
+
+    const info = await migrationService.getSchemaVersionInfo();
+
+    expect(info).toEqual({
+      version: 0,
+      latestMigration: null,
+      appliedAt: null,
+      totalMigrations: getExpectedSchemaVersion(),
+      pendingMigrations: getExpectedSchemaVersion(),
+    });
+  });
+
   it('verifies migration manifest and checks individual migration presence', async () => {
     vi.spyOn(migrationService, 'getAppliedMigrations').mockResolvedValueOnce([
       { migration_name: '20251211212018_init' } as any,
@@ -93,6 +107,27 @@ describe('migrationService', () => {
       { migration_name: 'migration_a' } as any,
     ]);
     await expect(migrationService.isMigrationApplied('migration_b')).resolves.toBe(false);
+  });
+
+  it('verifies successfully when all expected migrations are applied', async () => {
+    vi.spyOn(migrationService, 'getAppliedMigrations').mockResolvedValueOnce([]);
+    const baseline = await migrationService.verifyMigrations();
+
+    vi.spyOn(migrationService, 'getAppliedMigrations').mockResolvedValueOnce(
+      baseline.missing.map((migration_name) => ({ migration_name })) as any
+    );
+    const verified = await migrationService.verifyMigrations();
+
+    expect(verified.valid).toBe(true);
+    expect(verified.missing).toEqual([]);
+    expect(verified.applied).toBe(getExpectedSchemaVersion());
+    expect(mockLog.debug).toHaveBeenCalledWith(
+      'Database migrations verified',
+      expect.objectContaining({
+        applied: getExpectedSchemaVersion(),
+        expected: getExpectedSchemaVersion(),
+      })
+    );
   });
 
   it('runMigrations returns success when no pending migrations', async () => {

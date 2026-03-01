@@ -40,6 +40,7 @@ vi.mock('../../../src/utils/logger', () => ({
 import {
   initializeCacheInvalidation,
   shutdownCacheInvalidation,
+  getCacheInvalidationStatus,
 } from '../../../src/services/cacheInvalidation';
 import { eventBus } from '../../../src/events/eventBus';
 
@@ -311,6 +312,25 @@ describe('CacheInvalidation', () => {
 
       initializeCacheInvalidation();
       expect(eventBus.listenerCount('wallet:synced')).toBe(firstCount);
+    });
+
+    it('should report status across init and shutdown transitions', () => {
+      expect(getCacheInvalidationStatus()).toEqual({
+        initialized: false,
+        listeners: 0,
+      });
+
+      initializeCacheInvalidation();
+      expect(getCacheInvalidationStatus()).toEqual({
+        initialized: true,
+        listeners: 8,
+      });
+
+      shutdownCacheInvalidation();
+      expect(getCacheInvalidationStatus()).toEqual({
+        initialized: false,
+        listeners: 0,
+      });
     });
   });
 });

@@ -253,6 +253,29 @@ describe('Admin Node Config Routes', () => {
     expect(response.body.proxyPassword).toBe('********');
   });
 
+  it('applies response fallbacks for nullable persisted fields', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(
+      buildNodeConfig({
+        allowSelfSignedCert: null as any,
+        feeEstimatorUrl: null,
+        mempoolEstimator: null as any,
+        poolLoadBalancing: null as any,
+        proxyEnabled: undefined as any,
+        proxyPassword: null,
+      })
+    );
+
+    const response = await request(app).get('/api/v1/admin/node-config');
+
+    expect(response.status).toBe(200);
+    expect(response.body.allowSelfSignedCert).toBe(false);
+    expect(response.body.feeEstimatorUrl).toBe('https://mempool.space');
+    expect(response.body.mempoolEstimator).toBe('simple');
+    expect(response.body.poolLoadBalancing).toBe('round_robin');
+    expect(response.body.proxyEnabled).toBe(false);
+    expect(response.body).not.toHaveProperty('proxyPassword');
+  });
+
   it('returns 500 when loading node config fails', async () => {
     mockPrismaClient.nodeConfig.findFirst.mockRejectedValue(new Error('read failed'));
 
@@ -329,6 +352,149 @@ describe('Admin Node Config Routes', () => {
     expect(mockResetNodeClient).toHaveBeenCalled();
   });
 
+  it('accepts explicit optional update values and parses numeric fields', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue({ id: 'default-existing' });
+    mockPrismaClient.nodeConfig.update.mockResolvedValue(
+      buildNodeConfig({
+        id: 'default-existing',
+        host: 'full-update.example.com',
+        port: 52002,
+        useSsl: false,
+        allowSelfSignedCert: true,
+        explorerUrl: 'https://explorer.example.com',
+        feeEstimatorUrl: 'https://fees.example.com',
+        mempoolEstimator: 'mempool_space',
+        poolEnabled: false,
+        poolMinConnections: 2,
+        poolMaxConnections: 8,
+        poolLoadBalancing: 'least_connections',
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: 9050,
+        proxyUsername: 'proxy-user',
+        proxyPassword: 'enc:proxy-pass',
+        mainnetMode: 'singleton',
+        mainnetSingletonHost: 'mainnet.example.com',
+        mainnetSingletonPort: 51002,
+        mainnetSingletonSsl: false,
+        mainnetPoolMin: 2,
+        mainnetPoolMax: 9,
+        mainnetPoolLoadBalancing: 'failover_only',
+        testnetEnabled: true,
+        testnetMode: 'pool',
+        testnetSingletonHost: 'testnet.example.com',
+        testnetSingletonPort: 61002,
+        testnetSingletonSsl: false,
+        testnetPoolMin: 2,
+        testnetPoolMax: 6,
+        testnetPoolLoadBalancing: 'least_connections',
+        signetEnabled: true,
+        signetMode: 'pool',
+        signetSingletonHost: 'signet.example.com',
+        signetSingletonPort: 52003,
+        signetSingletonSsl: false,
+        signetPoolMin: 2,
+        signetPoolMax: 6,
+        signetPoolLoadBalancing: 'failover_only',
+      })
+    );
+
+    const response = await request(app)
+      .put('/api/v1/admin/node-config')
+      .send({
+        type: 'electrum',
+        host: 'full-update.example.com',
+        port: '52002',
+        useSsl: false,
+        allowSelfSignedCert: true,
+        explorerUrl: 'https://explorer.example.com',
+        feeEstimatorUrl: 'https://fees.example.com',
+        mempoolEstimator: 'mempool_space',
+        poolEnabled: false,
+        poolMinConnections: 2,
+        poolMaxConnections: 8,
+        poolLoadBalancing: 'least_connections',
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9050',
+        proxyUsername: 'proxy-user',
+        proxyPassword: 'proxy-pass',
+        mainnetMode: 'singleton',
+        mainnetSingletonHost: 'mainnet.example.com',
+        mainnetSingletonPort: '51002',
+        mainnetSingletonSsl: false,
+        mainnetPoolMin: '2',
+        mainnetPoolMax: '9',
+        mainnetPoolLoadBalancing: 'failover_only',
+        testnetEnabled: true,
+        testnetMode: 'pool',
+        testnetSingletonHost: 'testnet.example.com',
+        testnetSingletonPort: '61002',
+        testnetSingletonSsl: false,
+        testnetPoolMin: '2',
+        testnetPoolMax: '6',
+        testnetPoolLoadBalancing: 'least_connections',
+        signetEnabled: true,
+        signetMode: 'pool',
+        signetSingletonHost: 'signet.example.com',
+        signetSingletonPort: '52003',
+        signetSingletonSsl: false,
+        signetPoolMin: '2',
+        signetPoolMax: '6',
+        signetPoolLoadBalancing: 'failover_only',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.host).toBe('full-update.example.com');
+    expect(response.body.port).toBe('52002');
+    expect(mockPrismaClient.nodeConfig.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mempoolEstimator: 'mempool_space',
+          poolLoadBalancing: 'least_connections',
+          proxyPort: 9050,
+          mainnetSingletonPort: 51002,
+          mainnetPoolMin: 2,
+          mainnetPoolMax: 9,
+          testnetSingletonPort: 61002,
+          testnetPoolMin: 2,
+          testnetPoolMax: 6,
+          signetSingletonPort: 52003,
+          signetPoolMin: 2,
+          signetPoolMax: 6,
+          proxyPassword: 'enc:proxy-pass',
+        }),
+      })
+    );
+  });
+
+  it('applies fallback values in update response when persisted values are nullish', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue({ id: 'default-existing' });
+    mockPrismaClient.nodeConfig.update.mockResolvedValue(
+      buildNodeConfig({
+        id: 'default-existing',
+        allowSelfSignedCert: null as any,
+        feeEstimatorUrl: null,
+        mempoolEstimator: null as any,
+        poolLoadBalancing: null as any,
+      })
+    );
+
+    const response = await request(app)
+      .put('/api/v1/admin/node-config')
+      .send({
+        type: 'electrum',
+        host: 'updated.example.com',
+        port: 50002,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.allowSelfSignedCert).toBe(false);
+    expect(response.body.feeEstimatorUrl).toBe('https://mempool.space');
+    expect(response.body.mempoolEstimator).toBe('simple');
+    expect(response.body.poolLoadBalancing).toBe('round_robin');
+  });
+
   it('creates a default config when none exists', async () => {
     mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
     mockPrismaClient.nodeConfig.create.mockResolvedValue(
@@ -355,6 +521,120 @@ describe('Admin Node Config Routes', () => {
           isDefault: true,
           host: 'new.example.com',
           port: 50001,
+        }),
+      })
+    );
+  });
+
+  it('creates config with explicit optional values and parsed numeric fields', async () => {
+    mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+    mockPrismaClient.nodeConfig.create.mockResolvedValue(
+      buildNodeConfig({
+        id: 'default',
+        host: 'created-full.example.com',
+        port: 53002,
+        useSsl: false,
+        allowSelfSignedCert: true,
+        explorerUrl: 'https://explorer.create.example.com',
+        feeEstimatorUrl: 'https://fees.create.example.com',
+        mempoolEstimator: 'mempool_space',
+        poolEnabled: false,
+        poolMinConnections: 3,
+        poolMaxConnections: 10,
+        poolLoadBalancing: 'failover_only',
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: 9150,
+        proxyUsername: 'create-user',
+        proxyPassword: 'enc:create-pass',
+        mainnetMode: 'singleton',
+        mainnetSingletonHost: 'created-mainnet.example.com',
+        mainnetSingletonPort: 54002,
+        mainnetSingletonSsl: false,
+        mainnetPoolMin: 3,
+        mainnetPoolMax: 10,
+        mainnetPoolLoadBalancing: 'least_connections',
+        testnetEnabled: true,
+        testnetMode: 'pool',
+        testnetSingletonHost: 'created-testnet.example.com',
+        testnetSingletonPort: 64002,
+        testnetSingletonSsl: false,
+        testnetPoolMin: 3,
+        testnetPoolMax: 7,
+        testnetPoolLoadBalancing: 'failover_only',
+        signetEnabled: true,
+        signetMode: 'pool',
+        signetSingletonHost: 'created-signet.example.com',
+        signetSingletonPort: 55002,
+        signetSingletonSsl: false,
+        signetPoolMin: 3,
+        signetPoolMax: 7,
+        signetPoolLoadBalancing: 'least_connections',
+      })
+    );
+
+    const response = await request(app)
+      .put('/api/v1/admin/node-config')
+      .send({
+        type: 'electrum',
+        host: 'created-full.example.com',
+        port: '53002',
+        useSsl: false,
+        allowSelfSignedCert: true,
+        explorerUrl: 'https://explorer.create.example.com',
+        feeEstimatorUrl: 'https://fees.create.example.com',
+        mempoolEstimator: 'mempool_space',
+        poolEnabled: false,
+        poolMinConnections: 3,
+        poolMaxConnections: 10,
+        poolLoadBalancing: 'failover_only',
+        proxyEnabled: true,
+        proxyHost: '127.0.0.1',
+        proxyPort: '9150',
+        proxyUsername: 'create-user',
+        proxyPassword: 'create-pass',
+        mainnetMode: 'singleton',
+        mainnetSingletonHost: 'created-mainnet.example.com',
+        mainnetSingletonPort: '54002',
+        mainnetSingletonSsl: false,
+        mainnetPoolMin: '3',
+        mainnetPoolMax: '10',
+        mainnetPoolLoadBalancing: 'least_connections',
+        testnetEnabled: true,
+        testnetMode: 'pool',
+        testnetSingletonHost: 'created-testnet.example.com',
+        testnetSingletonPort: '64002',
+        testnetSingletonSsl: false,
+        testnetPoolMin: '3',
+        testnetPoolMax: '7',
+        testnetPoolLoadBalancing: 'failover_only',
+        signetEnabled: true,
+        signetMode: 'pool',
+        signetSingletonHost: 'created-signet.example.com',
+        signetSingletonPort: '55002',
+        signetSingletonSsl: false,
+        signetPoolMin: '3',
+        signetPoolMax: '7',
+        signetPoolLoadBalancing: 'least_connections',
+      });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.nodeConfig.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mempoolEstimator: 'mempool_space',
+          poolLoadBalancing: 'failover_only',
+          proxyPort: 9150,
+          mainnetSingletonPort: 54002,
+          mainnetPoolMin: 3,
+          mainnetPoolMax: 10,
+          testnetSingletonPort: 64002,
+          testnetPoolMin: 3,
+          testnetPoolMax: 7,
+          signetSingletonPort: 55002,
+          signetPoolMin: 3,
+          signetPoolMax: 7,
+          proxyPassword: 'enc:create-pass',
         }),
       })
     );

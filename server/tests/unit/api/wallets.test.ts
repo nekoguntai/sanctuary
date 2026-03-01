@@ -565,6 +565,45 @@ describe('Wallets API', () => {
       expect(mockTransactionRepository.findForBalanceHistory).not.toHaveBeenCalled();
     });
 
+    it('should default unknown timeframe, include final sampled point, and normalize missing tx fields', async () => {
+      const transactions = Array.from({ length: 202 }, (_, i) => ({
+        txid: `tx-${i}`,
+        blockTime: i === 201 ? undefined : new Date(`2024-01-${String((i % 28) + 1).padStart(2, '0')}`),
+        balanceAfter: i === 201 ? undefined : BigInt(i + 1),
+      }));
+      mockTransactionRepository.findForBalanceHistory.mockResolvedValueOnce(transactions);
+      mockUtxoRepository.getUnspentBalance.mockResolvedValueOnce(BigInt(999999));
+
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history?timeframe=INVALID');
+
+      expect(response.status).toBe(200);
+      expect(response.body.timeframe).toBe('INVALID');
+      expect(response.body.currentBalance).toBe(999999);
+      expect(response.body.dataPoints.length).toBe(103);
+      expect(response.body.dataPoints.some((point: any) => point.timestamp === '')).toBe(true);
+      expect(response.body.dataPoints.some((point: any) => point.balance === 0)).toBe(true);
+      expect(response.body.dataPoints.at(-1).balance).toBe(999999);
+
+      const [, startDateArg] = mockTransactionRepository.findForBalanceHistory.mock.calls.at(-1);
+      const startDateMs = new Date(startDateArg).getTime();
+      const ageMs = Date.now() - startDateMs;
+      const twentyEightDays = 28 * 86400000;
+      const thirtyTwoDays = 32 * 86400000;
+      expect(ageMs).toBeGreaterThan(twentyEightDays);
+      expect(ageMs).toBeLessThan(thirtyTwoDays);
+    });
+
+    it('should return empty data points when there is no history', async () => {
+      mockTransactionRepository.findForBalanceHistory.mockResolvedValueOnce([]);
+      mockUtxoRepository.getUnspentBalance.mockResolvedValueOnce(BigInt(123456));
+
+      const response = await request(walletRouter).get('/api/v1/wallets/wallet-123/balance-history?timeframe=1D');
+
+      expect(response.status).toBe(200);
+      expect(response.body.currentBalance).toBe(123456);
+      expect(response.body.dataPoints).toEqual([]);
+    });
+
     it('should handle balance history error', async () => {
       mockTransactionRepository.findForBalanceHistory.mockRejectedValue(new Error('DB error'));
 

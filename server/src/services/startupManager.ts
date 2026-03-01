@@ -159,24 +159,17 @@ export async function startAllServices(
       const missingDeps = service.dependsOn.filter(dep => !started.has(dep));
       if (missingDeps.length > 0) {
         log.warn(`Service ${service.name} has unmet dependencies`, { missing: missingDeps });
-        // Skip if dependencies failed
-        const failedDeps = missingDeps.filter(dep => {
-          const depResult = state.services.get(dep);
-          return depResult && !depResult.started;
-        });
-        if (failedDeps.length > 0) {
-          const result: ServiceStartupResult = {
-            name: service.name,
-            started: false,
-            attempts: 0,
-            duration: 0,
-            error: `Dependencies failed: ${failedDeps.join(', ')}`,
-            degraded: !service.critical,
-          };
-          results.push(result);
-          state.services.set(service.name, result);
-          continue;
-        }
+        const result: ServiceStartupResult = {
+          name: service.name,
+          started: false,
+          attempts: 0,
+          duration: 0,
+          error: `Dependencies failed: ${missingDeps.join(', ')}`,
+          degraded: !service.critical,
+        };
+        results.push(result);
+        state.services.set(service.name, result);
+        continue;
       }
     }
 
@@ -228,8 +221,7 @@ function topologicalSort(services: ServiceDefinition[]): ServiceDefinition[] {
       throw new Error(`Circular dependency detected: ${name}`);
     }
 
-    const service = serviceMap.get(name);
-    if (!service) return;
+    const service = serviceMap.get(name)!;
 
     visiting.add(name);
 

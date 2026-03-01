@@ -261,6 +261,19 @@ describe('JWT Utilities', () => {
 
       await expect(verify2FAToken(token)).rejects.toThrow('Invalid token');
     });
+
+    it('should reject token missing pending2FA flag even with 2FA audience', async () => {
+      const token = jwt.sign(
+        {
+          ...mockPayload,
+          aud: TokenAudience.TWO_FACTOR,
+        },
+        mockConfig.jwtSecret,
+        { expiresIn: '5m' }
+      );
+
+      await expect(verify2FAToken(token)).rejects.toThrow('Invalid 2FA token');
+    });
   });
 
   describe('verifyRefreshToken', () => {
@@ -288,6 +301,36 @@ describe('JWT Utilities', () => {
 
     it('should throw for invalid token', async () => {
       await expect(verifyRefreshToken('invalid')).rejects.toThrow('Invalid refresh token');
+    });
+
+    it('should throw for refresh audience token with wrong type', async () => {
+      const token = jwt.sign(
+        {
+          userId: 'user-123',
+          jti: 'jti-wrong-type',
+          aud: TokenAudience.REFRESH,
+          type: 'access',
+        },
+        mockConfig.jwtSecret,
+        { expiresIn: '7d' }
+      );
+
+      await expect(verifyRefreshToken(token)).rejects.toThrow('Invalid refresh token');
+    });
+
+    it('should throw specific message for expired refresh token', async () => {
+      const token = jwt.sign(
+        {
+          userId: 'user-123',
+          jti: 'jti-expired-refresh',
+          aud: TokenAudience.REFRESH,
+          type: 'refresh',
+        },
+        mockConfig.jwtSecret,
+        { expiresIn: '-1s' }
+      );
+
+      await expect(verifyRefreshToken(token)).rejects.toThrow('Refresh token expired');
     });
   });
 
@@ -320,6 +363,16 @@ describe('JWT Utilities', () => {
       const decoded = decodeToken(token);
 
       expect(decoded?.exp).toBeDefined();
+    });
+
+    it('should return null when jwt.decode throws', () => {
+      const decodeSpy = vi.spyOn(jwt, 'decode').mockImplementation(() => {
+        throw new Error('decode failed');
+      });
+
+      expect(decodeToken('forced-error-token')).toBeNull();
+
+      decodeSpy.mockRestore();
     });
   });
 

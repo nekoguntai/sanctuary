@@ -131,6 +131,18 @@ describe('RedisCache', () => {
     await expect(cache.deletePattern('user:*')).resolves.toBe(0);
   });
 
+  it('deletePattern returns 0 when scan finds no keys', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'test');
+
+    redis.scan.mockResolvedValueOnce(['0', []]);
+    const deleted = await cache.deletePattern('user:*');
+
+    expect(deleted).toBe(0);
+    expect(redis.del).not.toHaveBeenCalled();
+    expect(cache.getStats().deletes).toBe(0);
+  });
+
   it('has returns false on redis error', async () => {
     const redis = makeRedis();
     const cache = new RedisCache(redis as any, 'test');
@@ -171,6 +183,18 @@ describe('RedisCache', () => {
     expect(redis.get).toHaveBeenCalledWith('sanctuary:base:child:a');
     expect(cache.getStats().hits).toBe(1);
     expect(child.getStats().hits).toBe(1);
+  });
+
+  it('namespace uses provided prefix directly when parent prefix is empty', async () => {
+    const redis = makeRedis();
+    const cache = new RedisCache(redis as any, 'base');
+    (cache as any).prefix = '';
+    const child = cache.namespace('child') as RedisCache;
+
+    redis.get.mockResolvedValueOnce(JSON.stringify({ ok: true }));
+    await child.get('a');
+
+    expect(redis.get).toHaveBeenCalledWith('child:a');
   });
 
   it('getClient returns underlying redis instance', () => {

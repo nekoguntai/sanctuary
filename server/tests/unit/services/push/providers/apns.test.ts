@@ -77,6 +77,24 @@ MHQCAQEEIDYHOxgLfR...mock...key
     it('should have iOS platform', () => {
       expect(provider.platform).toBe('ios');
     });
+
+    it('should tolerate unreadable key files at construction', () => {
+      mockReadFileSync.mockImplementationOnce(() => {
+        throw new Error('permission denied');
+      });
+
+      const instance = new APNsPushProvider();
+      expect(instance.name).toBe('apns');
+    });
+
+    it('should skip key file loading when APNS_KEY_PATH is not set', () => {
+      vi.clearAllMocks();
+      delete process.env.APNS_KEY_PATH;
+
+      const instance = new APNsPushProvider();
+      expect(instance.name).toBe('apns');
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+    });
   });
 
   describe('isConfigured', () => {
@@ -126,6 +144,25 @@ MHQCAQEEIDYHOxgLfR...mock...key
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not configured');
+    });
+
+    it('getToken throws when required env vars are missing', () => {
+      delete process.env.APNS_KEY_ID;
+
+      expect(() => (provider as any).getToken()).toThrow(
+        'APNs not configured: missing APNS_KEY_ID, APNS_TEAM_ID, or APNS_KEY_PATH'
+      );
+    });
+
+    it('sendNotification returns explicit config error when bundle ID is missing', async () => {
+      delete process.env.APNS_BUNDLE_ID;
+
+      const result = await (provider as any).sendNotification('device-token', testMessage);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'APNs not configured (missing APNS_BUNDLE_ID)',
+      });
     });
 
     it('should send notification successfully', async () => {
@@ -297,6 +334,49 @@ MHQCAQEEIDYHOxgLfR...mock...key
           expiresIn: '55m',
         })
       );
+    });
+
+    it('should read key file during token generation when constructor cache is unavailable', async () => {
+      vi.clearAllMocks();
+      mockReadFileSync.mockImplementationOnce(() => {
+        throw new Error('read denied at startup');
+      });
+      const uncachedProvider = new APNsPushProvider();
+
+      mockReadFileSync.mockImplementation(() => mockPrivateKey);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map([['apns-id', 'msg-id']]),
+      });
+
+      const result = await uncachedProvider.send('device-token-uncached', testMessage);
+      expect(result.success).toBe(true);
+      expect(mockReadFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to HTTP status text when APNs error body is empty', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => '',
+      });
+
+      const result = await provider.send('device-token', testMessage);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('HTTP 429');
+    });
+
+    it('returns success with undefined messageId when APNs response omits apns-id', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map(),
+      });
+
+      const result = await provider.send('device-token', testMessage);
+      expect(result).toEqual({
+        success: true,
+        messageId: undefined,
+      });
     });
   });
 });

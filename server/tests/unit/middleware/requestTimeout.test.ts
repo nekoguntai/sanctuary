@@ -189,6 +189,20 @@ describe('Request Timeout Middleware', () => {
         vi.advanceTimersByTime(35000);
         expect(res.status).not.toHaveBeenCalled();
       });
+
+      it('should not call next when timeout callback fires before wrapped next executes', () => {
+        req.path = '/api/v1/wallets';
+        const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation(((cb: (...args: any[]) => void) => {
+          cb();
+          return 1 as any;
+        }) as any);
+
+        requestTimeout(req, res, next);
+
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(408);
+        setTimeoutSpy.mockRestore();
+      });
     });
 
     describe('extended timeout routes', () => {
@@ -357,6 +371,20 @@ describe('Request Timeout Middleware', () => {
 
       expect(res.status).not.toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should not call next when custom timeout callback has already fired', () => {
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation(((cb: (...args: any[]) => void) => {
+        cb();
+        return 1 as any;
+      }) as any);
+
+      const customTimeoutMiddleware = withTimeout(10);
+      customTimeoutMiddleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(408);
+      setTimeoutSpy.mockRestore();
     });
   });
 });

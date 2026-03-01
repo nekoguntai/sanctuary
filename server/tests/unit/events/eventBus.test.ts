@@ -184,6 +184,18 @@ describe('EventBus', () => {
       const metrics = testBus.getMetrics();
       expect(metrics.errors['user:login']).toBe(1);
     });
+
+    it('should track errors thrown by once handlers', async () => {
+      testBus.once('system:shutdown', () => {
+        throw new Error('once error');
+      });
+
+      testBus.emit('system:shutdown', { reason: 'test' });
+      await vi.runAllTimersAsync();
+
+      const metrics = testBus.getMetrics();
+      expect(metrics.errors['system:shutdown']).toBe(1);
+    });
   });
 
   describe('concurrency limiting', () => {
@@ -226,16 +238,37 @@ describe('EventBus', () => {
     });
 
     it('should queue handlers when concurrency limit reached', async () => {
-      // We can't easily test the actual queueing with the default config
-      // but we can verify the concurrency status is tracked
       const bus = createTestEventBus();
+      let releaseHandlers: (() => void) | null = null;
+      const blockHandlers = new Promise<void>((resolve) => {
+        releaseHandlers = resolve;
+      });
 
-      const status = bus.getConcurrencyStatus();
+      for (let i = 0; i < 11; i++) {
+        bus.on('wallet:synced', async () => {
+          await blockHandlers;
+        });
+      }
 
-      expect(status.maxConcurrent).toBe(10); // Default
-      expect(status.available).toBe(10); // All available
-      expect(status.queueLength).toBe(0); // No queue
-      expect(status.utilizationPercent).toBe(0);
+      bus.emit('wallet:synced', {
+        walletId: 'queued',
+        balance: 0n,
+        unconfirmedBalance: 0n,
+        transactionCount: 0,
+        duration: 0,
+      });
+
+      await Promise.resolve();
+      const queued = bus.getConcurrencyStatus();
+      expect(queued.available).toBe(0);
+      expect(queued.queueLength).toBe(1);
+
+      releaseHandlers?.();
+      await vi.runAllTimersAsync();
+
+      const drained = bus.getConcurrencyStatus();
+      expect(drained.available).toBe(10);
+      expect(drained.queueLength).toBe(0);
     });
   });
 

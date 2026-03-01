@@ -9,6 +9,7 @@ import {
   FingerprintSchema,
   PaginationSchema,
   FeeRateSchema,
+  OptionalStringSchema,
 } from '../../../../src/api/schemas/common';
 
 describe('Common Schemas', () => {
@@ -20,6 +21,12 @@ describe('Common Schemas', () => {
   it('validates username rules', () => {
     expect(UsernameSchema.safeParse('abc_123').success).toBe(true);
     expect(UsernameSchema.safeParse('ab').success).toBe(false);
+  });
+
+  it('normalizes optional strings', () => {
+    expect(OptionalStringSchema.parse('hello')).toBe('hello');
+    expect(OptionalStringSchema.parse('')).toBeUndefined();
+    expect(OptionalStringSchema.parse(undefined)).toBeUndefined();
   });
 
   it('validates bitcoin address formats', () => {

@@ -122,6 +122,23 @@ describe('Refresh Token Service', () => {
 
       await expect(createRefreshToken(testUserId)).rejects.toThrow('DB error');
     });
+
+    it('should use default expiration when decoded token has no exp claim', async () => {
+      const jwt = await import('../../../src/utils/jwt');
+      (jwt.decodeToken as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+      mockSessionRepository.createRefreshToken.mockResolvedValue({ id: testSessionId, userId: testUserId });
+
+      const token = await createRefreshToken(testUserId);
+
+      expect(token).toBe(testToken);
+      const call = mockSessionRepository.createRefreshToken.mock.calls.at(-1)?.[0];
+      expect(call.expiresAt).toBeInstanceOf(Date);
+      const msUntilExpiry = (call.expiresAt as Date).getTime() - Date.now();
+      const sixDays = 6 * 24 * 60 * 60 * 1000;
+      const eightDays = 8 * 24 * 60 * 60 * 1000;
+      expect(msUntilExpiry).toBeGreaterThan(sixDays);
+      expect(msUntilExpiry).toBeLessThan(eightDays);
+    });
   });
 
   describe('verifyRefreshTokenExists', () => {
@@ -205,6 +222,50 @@ describe('Refresh Token Service', () => {
       const result = await rotateRefreshToken(testToken);
 
       expect(result).toBeNull();
+    });
+
+    it('should reuse stored device metadata when no new device info is provided', async () => {
+      const oldToken = 'old-refresh-token-no-device-override';
+      mockSessionRepository.findRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        deviceId: 'stored-device-id',
+        deviceName: 'Stored Device',
+      });
+      mockSessionRepository.revokeRefreshToken.mockResolvedValue(undefined);
+      mockSessionRepository.createRefreshToken.mockResolvedValue({
+        id: faker.string.uuid(),
+        userId: testUserId,
+      });
+
+      const newToken = await rotateRefreshToken(oldToken);
+
+      expect(newToken).toBe(testToken);
+      const call = mockSessionRepository.createRefreshToken.mock.calls.at(-1)?.[0];
+      expect(call.deviceId).toBe('stored-device-id');
+      expect(call.deviceName).toBe('Stored Device');
+    });
+
+    it('should set device metadata to undefined when no source has values', async () => {
+      const oldToken = 'old-refresh-token-empty-device';
+      mockSessionRepository.findRefreshToken.mockResolvedValue({
+        id: testSessionId,
+        userId: testUserId,
+        deviceId: null,
+        deviceName: null,
+      });
+      mockSessionRepository.revokeRefreshToken.mockResolvedValue(undefined);
+      mockSessionRepository.createRefreshToken.mockResolvedValue({
+        id: faker.string.uuid(),
+        userId: testUserId,
+      });
+
+      const newToken = await rotateRefreshToken(oldToken);
+
+      expect(newToken).toBe(testToken);
+      const call = mockSessionRepository.createRefreshToken.mock.calls.at(-1)?.[0];
+      expect(call.deviceId).toBeUndefined();
+      expect(call.deviceName).toBeUndefined();
     });
   });
 
@@ -339,6 +400,20 @@ describe('Refresh Token Service', () => {
 
       await expect(getUserSessions(testUserId)).rejects.toThrow('DB error');
     });
+
+    it('should ignore current token hash when token belongs to another user', async () => {
+      const tokenHash = 'other-user-token-hash';
+      mockSessionRepository.findRefreshTokenByHash.mockResolvedValue({
+        id: faker.string.uuid(),
+        userId: faker.string.uuid(),
+      });
+      mockSessionRepository.getSessionsForUser.mockResolvedValue([]);
+
+      const sessions = await getUserSessions(testUserId, tokenHash);
+
+      expect(sessions).toEqual([]);
+      expect(mockSessionRepository.getSessionsForUser).toHaveBeenCalledWith(testUserId, undefined);
+    });
   });
 
   describe('cleanupExpiredRefreshTokens', () => {
@@ -352,6 +427,14 @@ describe('Refresh Token Service', () => {
 
     it('should return 0 on error', async () => {
       mockSessionRepository.deleteExpiredRefreshTokens.mockRejectedValue(new Error('DB error'));
+
+      const count = await cleanupExpiredRefreshTokens();
+
+      expect(count).toBe(0);
+    });
+
+    it('should return 0 when no tokens were deleted', async () => {
+      mockSessionRepository.deleteExpiredRefreshTokens.mockResolvedValue(0);
 
       const count = await cleanupExpiredRefreshTokens();
 

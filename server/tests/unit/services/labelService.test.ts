@@ -286,6 +286,14 @@ describe('LabelService', () => {
       it('should throw InvalidInputError if not an array', async () => {
         await expect(replaceTransactionLabels(transactionId, userId, null as any)).rejects.toThrow(InvalidInputError);
       });
+
+      it('should throw InvalidInputError if replacement labels are missing from wallet', async () => {
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
+
+        await expect(
+          replaceTransactionLabels(transactionId, userId, ['label-1', 'label-2'])
+        ).rejects.toThrow(InvalidInputError);
+      });
     });
 
     describe('removeTransactionLabel', () => {
@@ -362,6 +370,18 @@ describe('LabelService', () => {
 
         expect(labelRepository.replaceAddressLabels).toHaveBeenCalledWith(addressId, []);
         expect(result).toEqual([]);
+      });
+
+      it('should throw InvalidInputError when labelIds is not an array', async () => {
+        await expect(replaceAddressLabels(addressId, userId, null as any)).rejects.toThrow(InvalidInputError);
+      });
+
+      it('should throw InvalidInputError if replacement labels are missing from wallet', async () => {
+        (labelRepository.findManyByIdsInWallet as Mock).mockResolvedValue([{ id: 'label-1' }]);
+
+        await expect(
+          replaceAddressLabels(addressId, userId, ['label-1', 'label-2'])
+        ).rejects.toThrow(InvalidInputError);
       });
     });
 

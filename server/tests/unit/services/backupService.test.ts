@@ -225,6 +225,32 @@ describe('BackupService', () => {
       expect(result.issues.some((i) => i.includes('references non-existent wallet'))).toBe(true);
     });
 
+    it('should detect walletUser entries that reference non-existent users', async () => {
+      const backup = createValidBackup();
+      backup.data.wallet = [
+        {
+          id: 'wallet-1',
+          name: 'Test Wallet',
+          type: 'single_sig',
+          scriptType: 'native_segwit',
+          network: 'mainnet',
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      backup.data.walletUser = [
+        {
+          walletId: 'wallet-1',
+          userId: 'non-existent-user',
+          role: 'owner',
+        },
+      ];
+
+      const result = await backupService.validateBackup(backup);
+
+      expect(result.valid).toBe(false);
+      expect(result.issues.some((i) => i.includes('references non-existent user'))).toBe(true);
+    });
+
     it('should warn about missing tables', async () => {
       const backup = createValidBackup();
       delete (backup.data as any).label;
@@ -276,6 +302,28 @@ describe('BackupService', () => {
       const result = await backupService.validateBackup(backup);
 
       expect(result.warnings).toContain('Missing app version');
+    });
+
+    it('should handle missing user table and missing createdAt metadata gracefully', async () => {
+      const backup = createValidBackup() as any;
+      delete backup.data.user;
+      delete backup.data.device;
+      delete backup.meta.createdAt;
+
+      const result = await backupService.validateBackup(backup);
+
+      expect(result.valid).toBe(true);
+      expect(result.warnings.some((w) => w.includes('Missing table: user'))).toBe(true);
+      expect(result.info.createdAt).toBe('');
+    });
+
+    it('should ignore non-array extra tables when calculating total records', async () => {
+      const backup = createValidBackup() as any;
+      backup.data.extraTable = 'not-an-array';
+
+      const result = await backupService.validateBackup(backup);
+      expect(result.valid).toBe(true);
+      expect(result.info.totalRecords).toBeGreaterThan(0);
     });
   });
 
@@ -378,6 +426,61 @@ describe('BackupService', () => {
 
       expect(backup.data.wallet).toEqual([]);
       expect(backup.meta.recordCounts.wallet).toBe(0);
+    });
+
+    it('should include cache tables when requested', async () => {
+      const backup = await backupService.createBackup('admin', { includeCache: true });
+
+      expect(backup.meta.includesCache).toBe(true);
+      expect(backup.data).toHaveProperty('priceData');
+      expect(backup.data).toHaveProperty('feeEstimate');
+    });
+
+    it('should paginate large tables using cursor when exporting', async () => {
+      const firstPage = Array.from({ length: 1000 }, (_, i) => ({
+        id: `tx-${i}`,
+        txid: `hash-${i}`,
+      }));
+      const secondPage = [
+        { id: 'tx-1000', txid: 'hash-1000' },
+      ];
+
+      mockPrismaClient.transaction.findMany
+        .mockResolvedValueOnce(firstPage)
+        .mockResolvedValueOnce(secondPage);
+
+      const backup = await backupService.createBackup('admin');
+
+      expect(mockPrismaClient.transaction.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          take: 1000,
+          orderBy: { id: 'asc' },
+        })
+      );
+      expect(mockPrismaClient.transaction.findMany).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          take: 1000,
+          skip: 1,
+          cursor: { id: 'tx-999' },
+          orderBy: { id: 'asc' },
+        })
+      );
+      expect(backup.data.transaction).toHaveLength(1001);
+    });
+
+    it('should serialize array fields recursively', async () => {
+      mockPrismaClient.user.findMany.mockResolvedValue([
+        {
+          ...sampleUsers.admin,
+          id: 'admin-1',
+          tags: [BigInt(1), { nested: BigInt(2) }],
+        },
+      ]);
+
+      const backup = await backupService.createBackup('admin');
+      expect(backup.data.user[0].tags).toEqual(['__bigint__1', { nested: '__bigint__2' }]);
     });
   });
 
@@ -605,6 +708,42 @@ describe('restoreFromBackup', () => {
       expect(userIdx).toBeLessThan(walletIdx);
       expect(walletIdx).toBeLessThan(walletUserIdx);
     });
+
+    it('should restore cache tables when backup includes cache data', async () => {
+      const backup = createValidBackup();
+      backup.meta.includesCache = true;
+      backup.data.priceData = [
+        { symbol: 'BTC', currency: 'USD', price: 50000, timestamp: new Date().toISOString() },
+      ];
+      backup.data.feeEstimate = [
+        { network: 'mainnet', priority: 'normal', satsPerVbyte: 12, timestamp: new Date().toISOString() },
+      ];
+
+      mockPrismaClient.$queryRaw.mockResolvedValue([
+        { tablename: 'users' },
+        { tablename: 'wallets' },
+        { tablename: 'wallet_users' },
+        { tablename: 'price_data' },
+        { tablename: 'fee_estimates' },
+      ]);
+      mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+      const client = mockPrismaClient as any;
+      Object.keys(client).forEach((key) => {
+        if (client[key]?.deleteMany) {
+          client[key].deleteMany.mockResolvedValue({ count: 0 });
+        }
+        if (client[key]?.createMany) {
+          client[key].createMany.mockResolvedValue({ count: 0 });
+        }
+      });
+
+      const result = await backupService.restoreFromBackup(backup);
+
+      expect(result.success).toBe(true);
+      expect(mockPrismaClient.priceData.createMany).toHaveBeenCalled();
+      expect(mockPrismaClient.feeEstimate.createMany).toHaveBeenCalled();
+    });
   });
 
   describe('BigInt deserialization', () => {
@@ -807,6 +946,56 @@ describe('Restore Error Handling', () => {
 
     // Should succeed but skip the unknown table
     expect(result.success).toBe(true);
+  });
+
+  it('should continue restore when deleting an existing table fails', async () => {
+    const backup = createValidBackup();
+
+    mockPrismaClient.$queryRaw.mockResolvedValue([
+      { tablename: 'users' },
+      { tablename: 'wallets' },
+      { tablename: 'wallet_users' },
+    ]);
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    const client = mockPrismaClient as any;
+    Object.keys(client).forEach((key) => {
+      if (client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+    client.wallet.deleteMany.mockRejectedValueOnce(new Error('delete failed'));
+
+    const result = await backupService.restoreFromBackup(backup);
+    expect(result.success).toBe(true);
+  });
+
+  it('should return wrapped table restore errors from createMany failures', async () => {
+    const backup = createValidBackup();
+
+    mockPrismaClient.$queryRaw.mockResolvedValue([
+      { tablename: 'users' },
+    ]);
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    const client = mockPrismaClient as any;
+    Object.keys(client).forEach((key) => {
+      if (client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+    client.user.createMany.mockRejectedValueOnce(new Error('insert exploded'));
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Failed to restore table user');
   });
 });
 
@@ -1258,6 +1447,10 @@ describe('Backup Edge Cases', () => {
       },
     };
 
+    mockPrismaClient.$queryRaw.mockResolvedValue([
+      { tablename: 'users' },
+      { tablename: 'devices' },
+    ]);
     mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
 
     let capturedData: any = null;
@@ -1280,7 +1473,155 @@ describe('Backup Edge Cases', () => {
     const result = await backupService.restoreFromBackup(backup);
 
     expect(result.success).toBe(true);
-    // Verify restore completed successfully with array-as-object legacy format
+    expect(capturedData[0].connectionTypes).toEqual(['usb', 'bluetooth']);
+  });
+
+  it('should preserve real array fields during restore processing', async () => {
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: { device: 1 },
+      },
+      data: {
+        user: [{ id: 'user-1', username: 'admin', isAdmin: true }],
+        wallet: [],
+        walletUser: [],
+        device: [{
+          id: 'device-1',
+          userId: 'user-1',
+          label: 'Array Device',
+          fingerprint: 'ffeeddcc',
+          type: 'ledger',
+          connectionTypes: ['usb', 'bluetooth'],
+        }],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    mockPrismaClient.$queryRaw.mockResolvedValue([
+      { tablename: 'users' },
+      { tablename: 'devices' },
+    ]);
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    let capturedData: any = null;
+    mockPrismaClient.device.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrismaClient.device.createMany.mockImplementation(async ({ data }) => {
+      capturedData = data;
+      return { count: 1 };
+    });
+
+    Object.keys(mockPrismaClient).forEach((key) => {
+      const client = mockPrismaClient as any;
+      if (key !== 'device' && client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (key !== 'device' && client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(true);
+    expect(capturedData[0].connectionTypes).toEqual(['usb', 'bluetooth']);
+  });
+
+  it('should recursively process non-numeric nested objects during restore', async () => {
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: { device: 1 },
+      },
+      data: {
+        user: [{ id: 'user-1', username: 'admin', isAdmin: true }],
+        wallet: [],
+        walletUser: [],
+        device: [{
+          id: 'device-1',
+          userId: 'user-1',
+          label: 'Nested Device',
+          fingerprint: 'abcdef12',
+          type: 'ledger',
+          metadata: {
+            transport: 'usb',
+            capabilities: {
+              taproot: true,
+            },
+          },
+        }],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    mockPrismaClient.$queryRaw.mockResolvedValue([
+      { tablename: 'users' },
+      { tablename: 'devices' },
+    ]);
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    let capturedData: any = null;
+    mockPrismaClient.device.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrismaClient.device.createMany.mockImplementation(async ({ data }) => {
+      capturedData = data;
+      return { count: 1 };
+    });
+
+    Object.keys(mockPrismaClient).forEach((key) => {
+      const client = mockPrismaClient as any;
+      if (key !== 'device' && client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (key !== 'device' && client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(true);
+    expect(capturedData[0].metadata).toEqual({
+      transport: 'usb',
+      capabilities: { taproot: true },
+    });
   });
 
   it('should handle very long string values', async () => {
@@ -1435,6 +1776,78 @@ describe('Node Config Password Handling', () => {
     expect(capturedData[0].password).toBeNull();
 
     // Reset mocks
+    encryption.isEncrypted.mockReturnValue(false);
+    encryption.decrypt.mockImplementation((v: any) => v);
+  });
+
+  it('should preserve node config password when decryption succeeds', async () => {
+    vi.mocked(encryption.isEncrypted).mockReturnValue(true);
+    vi.mocked(encryption.decrypt).mockReturnValue('decrypted-password');
+
+    const backup: SanctuaryBackup = {
+      meta: {
+        version: '1.0.0',
+        appVersion: '0.4.0',
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'admin',
+        includesCache: false,
+        recordCounts: { nodeConfig: 1 },
+      },
+      data: {
+        user: [{ id: 'user-1', username: 'admin', isAdmin: true }],
+        wallet: [],
+        walletUser: [],
+        device: [],
+        walletDevice: [],
+        address: [],
+        transaction: [],
+        uTXO: [],
+        label: [],
+        transactionLabel: [],
+        addressLabel: [],
+        group: [],
+        groupMember: [],
+        nodeConfig: [{
+          id: 'node-1',
+          type: 'electrum',
+          host: 'electrum.example.com',
+          port: 50002,
+          password: 'enc:v1:validencryptedpassword',
+        }],
+        systemSetting: [],
+        auditLog: [],
+        hardwareDeviceModel: [],
+        pushDevice: [],
+        draftTransaction: [],
+      },
+    };
+
+    mockPrismaClient.$transaction.mockImplementation(async (fn: any) => fn(mockPrismaClient));
+
+    let capturedData: any = null;
+    mockPrismaClient.nodeConfig.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrismaClient.nodeConfig.createMany.mockImplementation(async ({ data }) => {
+      capturedData = data;
+      return { count: 1 };
+    });
+
+    Object.keys(mockPrismaClient).forEach((key) => {
+      const client = mockPrismaClient as any;
+      if (key !== 'nodeConfig' && client[key]?.deleteMany) {
+        client[key].deleteMany.mockResolvedValue({ count: 0 });
+      }
+      if (key !== 'nodeConfig' && client[key]?.createMany) {
+        client[key].createMany.mockResolvedValue({ count: 0 });
+      }
+    });
+
+    const result = await backupService.restoreFromBackup(backup);
+
+    expect(result.success).toBe(true);
+    expect(result.warnings).toEqual([]);
+    expect(capturedData[0].password).toBe('enc:v1:validencryptedpassword');
+
     encryption.isEncrypted.mockReturnValue(false);
     encryption.decrypt.mockImplementation((v: any) => v);
   });
@@ -1706,5 +2119,18 @@ describe('Backup Validation Edge Cases', () => {
     const result = await backupService.validateBackup(backup);
 
     expect(result.info.totalRecords).toBe(6); // 2 users + 3 wallets + 1 walletUser
+  });
+});
+
+describe('BackupService internal helpers', () => {
+  it('should pluralize snake_case words ending in y', () => {
+    const service = new BackupService();
+    expect((service as any).camelToSnakeCase('category')).toBe('categories');
+  });
+
+  it('should proxy getSchemaVersion through migration service', async () => {
+    const service = new BackupService();
+    const schemaVersion = await service.getSchemaVersion();
+    expect(schemaVersion).toBe(1);
   });
 });

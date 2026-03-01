@@ -88,6 +88,11 @@ describe('requestContext', () => {
         expect(requestContext.getUserId()).toBe('user-456');
       });
     });
+
+    it('should no-op when setting user outside context', () => {
+      expect(() => requestContext.setUser('user-789')).not.toThrow();
+      expect(requestContext.getUserId()).toBeUndefined();
+    });
   });
 
   describe('getDuration', () => {

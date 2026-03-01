@@ -114,6 +114,30 @@ describe('Wallets Import Routes', () => {
     ]);
   });
 
+  it('defaults format extensions to an empty array when handler has no fileExtensions', async () => {
+    mockGetAllFormats.mockReturnValueOnce([
+      {
+        id: 'legacy',
+        name: 'Legacy',
+        description: 'No extensions metadata',
+        priority: 1,
+      },
+    ]);
+
+    const response = await request(app).get('/api/v1/wallets/import/formats');
+
+    expect(response.status).toBe(200);
+    expect(response.body.formats).toEqual([
+      {
+        id: 'legacy',
+        name: 'Legacy',
+        description: 'No extensions metadata',
+        extensions: [],
+        priority: 1,
+      },
+    ]);
+  });
+
   it('handles import formats lookup failures', async () => {
     mockGetAllFormats.mockImplementation(() => {
       throw new Error('registry failed');
@@ -236,6 +260,26 @@ describe('Wallets Import Routes', () => {
     expect(response.body).toMatchObject({
       error: 'Bad Request',
       message: 'unsupported format',
+    });
+  });
+
+  it('returns generic bad request when prisma duplicate target is not fingerprint', async () => {
+    const prismaLikeError = {
+      code: 'P2002',
+      meta: { target: ['name'] },
+      message: 'Unique constraint failed',
+    };
+    mockImportWallet.mockRejectedValue(prismaLikeError);
+    mockIsPrismaError.mockReturnValue(true);
+
+    const response = await request(app)
+      .post('/api/v1/wallets/import')
+      .send({ data: 'wpkh(xpub...)', name: 'Wallet' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: 'Bad Request',
+      message: 'Unique constraint failed',
     });
   });
 });

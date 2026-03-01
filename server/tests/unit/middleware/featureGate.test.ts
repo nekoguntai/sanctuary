@@ -313,6 +313,14 @@ describe('Feature Gate Middleware', () => {
 
       expect(isFeatureEnabled('experimental.silentPayments')).toBe(false);
     });
+
+    it('should default unknown experimental feature keys to false', () => {
+      expect(isFeatureEnabled('experimental.nonexistentFeature' as any)).toBe(false);
+    });
+
+    it('should default unknown top-level feature keys to false', () => {
+      expect(isFeatureEnabled('nonexistentFeature' as any)).toBe(false);
+    });
   });
 
   describe('isFeatureEnabledAsync', () => {

@@ -298,6 +298,42 @@ describe('Bitcoin API', () => {
         expect(response.status).toBe(200);
       });
 
+      it('should fall back to singleton when pool has no active or idle connections', async () => {
+        mockElectrumPool.isPoolInitialized.mockReturnValue(true);
+        mockElectrumPool.getPoolStats.mockReturnValue({
+          totalConnections: 2,
+          activeConnections: 0,
+          idleConnections: 0,
+          waitingRequests: 0,
+          totalAcquisitions: 0,
+          averageAcquisitionTimeMs: 0,
+          healthCheckFailures: 0,
+          serverCount: 1,
+          servers: [],
+        });
+        mockElectrumClient.isConnected.mockReturnValue(true);
+        mockElectrumClient.getServerVersion.mockResolvedValue({ server: 'ElectrumX', protocol: '1.4' });
+        mockBlockchain.getBlockHeight.mockResolvedValue(850000);
+
+        const response = await request(app).get('/bitcoin/status');
+
+        expect(response.status).toBe(200);
+        expect(mockElectrumPool.acquire).not.toHaveBeenCalled();
+        expect(response.body.connected).toBe(true);
+      });
+
+      it('should omit host when node config is not available', async () => {
+        mockPrismaClient.nodeConfig.findFirst.mockResolvedValue(null);
+        mockElectrumClient.isConnected.mockReturnValue(true);
+        mockElectrumClient.getServerVersion.mockResolvedValue({ server: 'ElectrumX', protocol: '1.4' });
+        mockBlockchain.getBlockHeight.mockResolvedValue(850000);
+
+        const response = await request(app).get('/bitcoin/status');
+
+        expect(response.status).toBe(200);
+        expect(response.body.host).toBeUndefined();
+      });
+
       it('should return disconnected status on error', async () => {
         mockElectrumClient.isConnected.mockReturnValue(false);
         mockElectrumClient.connect.mockRejectedValue(new Error('Connection failed'));
@@ -469,6 +505,22 @@ describe('Bitcoin API', () => {
         const response = await request(app).get('/bitcoin/block/-1');
 
         expect(response.status).toBe(400);
+      });
+
+      it('should connect electrum client when not already connected', async () => {
+        mockElectrumClient.isConnected.mockReturnValue(false);
+        mockElectrumClient.connect.mockResolvedValue(undefined);
+        mockElectrumClient.getBlockHeader.mockResolvedValue({
+          hash: '00000000000000000002',
+          height: 850001,
+          timestamp: 1700000100,
+        });
+
+        const response = await request(app).get('/bitcoin/block/850001');
+
+        expect(response.status).toBe(200);
+        expect(mockElectrumClient.connect).toHaveBeenCalledTimes(1);
+        expect(mockElectrumClient.getBlockHeader).toHaveBeenCalledWith(850001);
       });
 
       it('should return 404 when block not found', async () => {

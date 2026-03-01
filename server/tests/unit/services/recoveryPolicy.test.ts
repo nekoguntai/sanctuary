@@ -275,6 +275,21 @@ describe('RecoveryPolicy', () => {
       expect(onRetry).toHaveBeenCalled();
       expect(onExhausted).toHaveBeenCalled();
     });
+
+    it('should throw synthesized error when recovery result has no finalError', async () => {
+      const invalidPolicy = createRecoveryPolicy('test:invalid-policy', {
+        maxRetries: -1,
+        backoffMs: [],
+        onExhausted: 'continue',
+        jitter: false,
+      });
+
+      const fn = vi.fn().mockResolvedValue('unused');
+      const wrappedFn = withRecovery(fn, invalidPolicy);
+
+      await expect(wrappedFn()).rejects.toThrow('test:invalid-policy failed after 0 attempts');
+      expect(fn).not.toHaveBeenCalled();
+    });
   });
 
   describe('pre-defined policies', () => {

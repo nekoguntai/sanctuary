@@ -244,6 +244,22 @@ describe('Import Schemas', () => {
       expect(result.success).toBe(true);
     });
 
+    it.each([
+      ['bip44'],
+      ['bip49'],
+      ['bip48_1'],
+      ['bip48_2'],
+      ['p2sh'],
+      ['p2sh_p2wsh'],
+      ['p2wsh'],
+    ])('ColdcardDetectionSchema should detect valid coldcard when only %s is present', (pathKey) => {
+      const result = ColdcardDetectionSchema.safeParse({
+        xfp: 'aabbccdd',
+        [pathKey]: { any: 'value' },
+      });
+      expect(result.success).toBe(true);
+    });
+
     it('ColdcardDetectionSchema should reject invalid xfp', () => {
       const result = ColdcardDetectionSchema.safeParse({
         xfp: 'short',

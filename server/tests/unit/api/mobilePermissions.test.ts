@@ -196,6 +196,37 @@ describe('Mobile Permissions API', () => {
       expect(response.body.permissions).toHaveLength(0);
     });
 
+    it('marks hasCustomRestrictions false when all capabilities are fully enabled', async () => {
+      vi.mocked(mobilePermissionService.getUserMobilePermissions).mockResolvedValue([
+        {
+          ...mockPermission,
+          role: 'owner',
+          canBroadcast: true,
+          canManageDevices: true,
+          canShareWallet: true,
+          canDeleteWallet: true,
+          effectivePermissions: {
+            viewBalance: true,
+            viewTransactions: true,
+            viewUtxos: true,
+            createTransaction: true,
+            broadcast: true,
+            signPsbt: true,
+            generateAddress: true,
+            manageLabels: true,
+            manageDevices: true,
+            shareWallet: true,
+            deleteWallet: true,
+          },
+        },
+      ] as any);
+
+      const response = await request(app).get('/api/v1/mobile-permissions');
+
+      expect(response.status).toBe(200);
+      expect(response.body.permissions[0].hasCustomRestrictions).toBe(false);
+    });
+
     it('should return 500 on service error', async () => {
       vi.mocked(mobilePermissionService.getUserMobilePermissions).mockRejectedValue(
         new Error('Database error')

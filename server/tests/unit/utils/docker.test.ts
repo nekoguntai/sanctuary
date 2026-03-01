@@ -170,6 +170,27 @@ describe('Docker Container Management', () => {
       expect(status.exists).toBe(false);
       expect(status.status).toBe('not_created');
     });
+
+    it('should return error status when state access throws unexpectedly', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'bad123',
+            Names: ['/sanctuary-ollama-1'],
+            get State() {
+              throw new Error('State getter failed');
+            },
+          },
+        ],
+      });
+
+      const status = await getOllamaStatus();
+
+      expect(status.exists).toBe(false);
+      expect(status.running).toBe(false);
+      expect(status.status).toBe('error');
+    });
   });
 
   describe('startOllama', () => {
@@ -606,6 +627,27 @@ describe('Docker Container Management', () => {
         expect(status.exists).toBe(false);
         expect(status.status).toBe('not_created');
       });
+
+      it('should return error status when tor state access throws unexpectedly', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor-error',
+              Names: ['/sanctuary-tor-1'],
+              get State() {
+                throw new Error('Tor state getter failed');
+              },
+            },
+          ],
+        });
+
+        const status = await getTorStatus();
+
+        expect(status.exists).toBe(false);
+        expect(status.running).toBe(false);
+        expect(status.status).toBe('error');
+      });
     });
 
     describe('startTor', () => {
@@ -805,6 +847,40 @@ describe('Docker Container Management', () => {
 
         expect(result.success).toBe(true);
         expect(result.message).toContain('already running');
+      });
+
+      it('should start existing tor container when it exists but is stopped', async () => {
+        // Initial status check (exists but not running)
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor-existing',
+              Names: ['/sanctuary-tor'],
+              State: 'exited',
+            },
+          ],
+        });
+        // startTor() internal status check (exists but not running)
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor-existing',
+              Names: ['/sanctuary-tor'],
+              State: 'exited',
+            },
+          ],
+        });
+        // start call
+        mockFetch.mockResolvedValueOnce({
+          status: 204,
+        });
+
+        const result = await createTorContainer();
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('started successfully');
       });
 
       it('should create new container', async () => {

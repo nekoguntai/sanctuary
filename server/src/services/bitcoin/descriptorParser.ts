@@ -60,7 +60,7 @@ function detectNetwork(xpub: string, derivationPath: string): Network {
  * Parse a key expression like [fingerprint/path]xpub/chain/*
  * Returns device info with fingerprint, xpub, and derivation path
  */
-function parseKeyExpression(keyExpr: string): ParsedDevice | null {
+function parseKeyExpression(keyExpr: string): ParsedDevice {
   // Match [fingerprint/path]xpub pattern
   // Fingerprint is 8 hex chars, path can use ' or h for hardened
   const keyMatch = keyExpr.match(
@@ -68,16 +68,7 @@ function parseKeyExpression(keyExpr: string): ParsedDevice | null {
   );
 
   if (!keyMatch) {
-    // Try matching just xpub without key origin info
-    const simpleMatch = keyExpr.match(/([xyztuvYZTUVpub][a-zA-Z0-9]+)/);
-    if (simpleMatch) {
-      return {
-        fingerprint: '00000000',
-        xpub: simpleMatch[1],
-        derivationPath: 'm/unknown',
-      };
-    }
-    return null;
+    throw new Error('Invalid descriptor key expression');
   }
 
   const [, fingerprint, pathPart, xpub] = keyMatch;
@@ -293,14 +284,7 @@ export function parseDescriptorForImport(descriptor: string): ParsedDescriptor {
   // Parse each key expression into device info
   const devices: ParsedDevice[] = [];
   for (const expr of keyExpressions) {
-    const device = parseKeyExpression(expr);
-    if (device) {
-      devices.push(device);
-    }
-  }
-
-  if (devices.length === 0) {
-    throw new Error('Failed to parse any devices from descriptor');
+    devices.push(parseKeyExpression(expr));
   }
 
   // Detect network from first device

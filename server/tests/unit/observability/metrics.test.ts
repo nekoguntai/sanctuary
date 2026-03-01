@@ -17,6 +17,7 @@ import {
   recordCircuitBreakerState,
   recordCacheOperation,
   updateJobQueueMetrics,
+  updateElectrumPoolMetrics,
 } from '../../../src/observability/metrics';
 
 describe('observability/metrics', () => {
@@ -70,5 +71,92 @@ describe('observability/metrics', () => {
     expect(metricsText).toContain('sanctuary_job_queue_depth{queue="sync",state="active"} 2');
     expect(metricsText).toContain('sanctuary_job_queue_depth{queue="sync",state="delayed"} 1');
     expect(metricsText).toContain('sanctuary_job_queue_depth{queue="sync",state="failed"} 4');
+  });
+
+  it('records all circuit breaker states and electrum pool server health branches', async () => {
+    recordCircuitBreakerState('service-closed', 'closed');
+    recordCircuitBreakerState('service-half', 'half-open');
+    recordCircuitBreakerState('service-open', 'open');
+
+    updateElectrumPoolMetrics(
+      'testnet',
+      {
+        totalConnections: 4,
+        activeConnections: 2,
+        idleConnections: 2,
+        waitingRequests: 3,
+        totalAcquisitions: 10,
+        averageAcquisitionTimeMs: 12,
+        healthCheckFailures: 1,
+        servers: [
+          { label: 's1', isHealthy: true, connectionCount: 2, backoffLevel: 0, weight: 1 },
+          { label: 's2', isHealthy: false, connectionCount: 0, backoffLevel: 2, weight: 1 },
+        ],
+      },
+      'half-open'
+    );
+
+    updateElectrumPoolMetrics(
+      'mainnet',
+      {
+        totalConnections: 1,
+        activeConnections: 1,
+        idleConnections: 0,
+        waitingRequests: 0,
+        totalAcquisitions: 1,
+        averageAcquisitionTimeMs: 5,
+        healthCheckFailures: 0,
+        servers: [
+          { label: 'm1', isHealthy: true, connectionCount: 1, backoffLevel: 0, weight: 1 },
+        ],
+      }
+    );
+
+    updateElectrumPoolMetrics(
+      'signet',
+      {
+        totalConnections: 1,
+        activeConnections: 1,
+        idleConnections: 0,
+        waitingRequests: 0,
+        totalAcquisitions: 1,
+        averageAcquisitionTimeMs: 5,
+        healthCheckFailures: 0,
+        servers: [
+          { label: 'sg1', isHealthy: true, connectionCount: 1, backoffLevel: 0, weight: 1 },
+        ],
+      },
+      'closed'
+    );
+
+    updateElectrumPoolMetrics(
+      'regtest',
+      {
+        totalConnections: 1,
+        activeConnections: 1,
+        idleConnections: 0,
+        waitingRequests: 0,
+        totalAcquisitions: 1,
+        averageAcquisitionTimeMs: 5,
+        healthCheckFailures: 0,
+        servers: [
+          { label: 'rg1', isHealthy: true, connectionCount: 1, backoffLevel: 0, weight: 1 },
+        ],
+      },
+      'open'
+    );
+
+    const metricsText = await metricsService.getMetrics();
+
+    expect(metricsText).toContain('sanctuary_circuit_breaker_state{service="service-closed"} 0');
+    expect(metricsText).toContain('sanctuary_circuit_breaker_state{service="service-half"} 1');
+    expect(metricsText).toContain('sanctuary_circuit_breaker_state{service="service-open"} 2');
+
+    expect(metricsText).toContain('sanctuary_electrum_circuit_breaker_state{network="testnet"} 1');
+    expect(metricsText).toContain('sanctuary_electrum_circuit_breaker_state{network="signet"} 0');
+    expect(metricsText).toContain('sanctuary_electrum_circuit_breaker_state{network="regtest"} 2');
+    expect(metricsText).not.toContain('sanctuary_electrum_circuit_breaker_state{network="mainnet"}');
+    expect(metricsText).toContain('sanctuary_electrum_server_healthy{server="s1",network="testnet"} 1');
+    expect(metricsText).toContain('sanctuary_electrum_server_healthy{server="s2",network="testnet"} 0');
   });
 });

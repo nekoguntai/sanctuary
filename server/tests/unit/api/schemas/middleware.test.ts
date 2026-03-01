@@ -43,6 +43,19 @@ describe('Validation middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it('formats root-level validation errors without field prefixes', () => {
+    const schema = z.string().min(5);
+    const req: any = { body: 42 };
+    const res = makeRes();
+    const next = vi.fn();
+
+    const middleware = validate(schema as any, 'body');
+    middleware(req, res, next);
+
+    const payload = res.json.mock.calls[0]?.[0];
+    expect(payload.details[0]?.field).toBe('');
+  });
+
   it('attaches validated query data without mutating req.query', () => {
     const schema = z.object({ page: z.coerce.number().int().min(1) });
     const req: any = { query: { page: '2' } };
@@ -100,6 +113,20 @@ describe('Validation middleware', () => {
 
     expect(next).toHaveBeenCalled();
     expect(req.body).toEqual({ enabled: true });
+  });
+
+  it('continues when validate is used with an unknown target key at runtime', () => {
+    const schema = z.object({ marker: z.string() });
+    const req: any = { headers: { marker: 'ok' } };
+    const res = makeRes();
+    const next = vi.fn();
+
+    const middleware = validate(schema as any, 'headers' as any);
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.validatedQuery).toBeUndefined();
+    expect(req.validatedParams).toBeUndefined();
   });
 
   it('validates multiple targets with validateAll', () => {
@@ -171,6 +198,36 @@ describe('Validation middleware', () => {
     middleware(req, res, next);
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('validateAll skips undefined schema entries', () => {
+    const middleware = validateAll({
+      body: undefined,
+      query: z.object({ page: z.coerce.number().int().min(1) }),
+    });
+    const req: any = { body: { ignored: true }, query: { page: '2' } };
+    const res = makeRes();
+    const next = vi.fn();
+
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.validatedQuery).toEqual({ page: 2 });
+  });
+
+  it('validateAll tolerates unknown schema targets at runtime', () => {
+    const middleware = validateAll({
+      headers: z.object({ tenant: z.string().min(1) }),
+    } as any);
+    const req: any = { headers: { tenant: 'alpha' } };
+    const res = makeRes();
+    const next = vi.fn();
+
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.validatedQuery).toBeUndefined();
+    expect(req.validatedParams).toBeUndefined();
   });
 
   it('validateBody validates and transforms request body', () => {

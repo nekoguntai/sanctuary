@@ -37,7 +37,7 @@ vi.mock('../../../src/utils/logger', () => ({
 }));
 
 // Import after mocks
-import { requireDeviceAccess } from '../../../src/middleware/deviceAccess';
+import { requireDeviceAccess, getDeviceAccessRole } from '../../../src/middleware/deviceAccess';
 import {
   checkDeviceAccess,
   checkDeviceOwnerAccess,
@@ -286,6 +286,17 @@ describe('Device Access Middleware', () => {
       next = createMockNext();
       await middleware(req as any, response.res as any, next);
       expect(response.getResponse().statusCode).toBe(403);
+    });
+  });
+
+  describe('getDeviceAccessRole', () => {
+    it('should delegate to getUserDeviceRole', async () => {
+      (getUserDeviceRole as Mock).mockResolvedValue('viewer');
+
+      const role = await getDeviceAccessRole(deviceId, userId);
+
+      expect(getUserDeviceRole).toHaveBeenCalledWith(deviceId, userId);
+      expect(role).toBe('viewer');
     });
   });
 });

@@ -11,6 +11,7 @@ vi.unmock('../../../src/utils/requestContext');
 vi.unmock('../../../src/utils/redact');
 
 import { createLogger, setLogLevel, getConfiguredLogLevel, LogLevel, extractError, createTimer } from '../../../src/utils/logger';
+import { requestContext } from '../../../src/utils/requestContext';
 
 // Capture console.log output for testing
 const originalConsoleLog = console.log;
@@ -115,6 +116,33 @@ describe('Logger', () => {
 
       expect(capturedLogs[0]).toContain('nested=');
       expect(capturedLogs[0]).toContain('"inner":"value"');
+    });
+
+    it('should stringify nested Error objects inside arrays', () => {
+      const log = createLogger('TEST');
+
+      log.info('Nested error', { payload: [new Error('nested boom')] });
+
+      expect(capturedLogs[0]).toContain('nested boom');
+      expect(capturedLogs[0]).toContain('name');
+    });
+
+    it('should handle circular objects nested inside arrays', () => {
+      const log = createLogger('TEST');
+      const circular: any = { id: 'loop' };
+      circular.self = circular;
+
+      log.info('Circular array payload', { payload: [circular] });
+
+      expect(capturedLogs[0]).toContain('[Circular]');
+    });
+
+    it('falls back to [Object] when context serialization throws', () => {
+      const log = createLogger('TEST');
+
+      log.info('BigInt payload', { payload: { amount: 1n } as any });
+
+      expect(capturedLogs[0]).toContain('payload=[Object]');
     });
   });
 
@@ -255,6 +283,67 @@ describe('Logger', () => {
 
       setLogLevel('error');
       expect(getConfiguredLogLevel()).toBe('error');
+    });
+
+    it('ignores unknown string log levels', () => {
+      setLogLevel('warn');
+      expect(getConfiguredLogLevel()).toBe('warn');
+
+      setLogLevel('not-a-level');
+      expect(getConfiguredLogLevel()).toBe('warn');
+    });
+
+    it('falls back to info when current level is outside known map', () => {
+      setLogLevel(999 as any);
+      expect(getConfiguredLogLevel()).toBe('info');
+    });
+  });
+
+  describe('request context enrichment', () => {
+    it('adds request and trace correlation fields from request context', () => {
+      const log = createLogger('CTX');
+
+      requestContext.run(
+        {
+          requestId: 'req-1234',
+          traceId: '12345678abcdef00',
+          userId: 'ctx-user',
+          startTime: Date.now(),
+        },
+        () => {
+          log.info('contextual log', { event: 'demo' });
+        }
+      );
+
+      const line = capturedLogs[capturedLogs.length - 1];
+      expect(line).toContain('[req-1234]');
+      expect(line).toContain('[trace:12345678]');
+      expect(line).toContain('userId=ctx-user');
+      expect(line).toContain('traceId=12345678abcdef00');
+    });
+
+    it('does not override explicitly provided userId or traceId', () => {
+      const log = createLogger('CTX');
+
+      requestContext.run(
+        {
+          requestId: 'req-5678',
+          traceId: 'aaaaaaaaaaaaaaaa',
+          userId: 'ctx-user',
+          startTime: Date.now(),
+        },
+        () => {
+          log.info('explicit context', {
+            userId: 'explicit-user',
+            traceId: 'explicit-trace',
+          });
+        }
+      );
+
+      const line = capturedLogs[capturedLogs.length - 1];
+      expect(line).toContain('userId=explicit-user');
+      expect(line).toContain('traceId=explicit-trace');
+      expect(line).not.toContain('userId=ctx-user');
     });
   });
 
@@ -458,5 +547,29 @@ describe('createTimer', () => {
 
     expect(first).toBe(100);
     expect(second).toBe(200);
+  });
+});
+
+describe('logger module initialization', () => {
+  it('uses LOG_LEVEL from environment when valid', async () => {
+    const old = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'warn';
+    vi.resetModules();
+
+    const mod = await import('../../../src/utils/logger');
+
+    expect(mod.getConfiguredLogLevel()).toBe('warn');
+    process.env.LOG_LEVEL = old;
+  });
+
+  it('falls back to info when LOG_LEVEL is invalid', async () => {
+    const old = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'invalid-level';
+    vi.resetModules();
+
+    const mod = await import('../../../src/utils/logger');
+
+    expect(mod.getConfiguredLogLevel()).toBe('info');
+    process.env.LOG_LEVEL = old;
   });
 });

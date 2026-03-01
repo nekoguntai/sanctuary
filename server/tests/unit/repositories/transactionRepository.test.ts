@@ -221,6 +221,20 @@ describe('Transaction Repository', () => {
       expect(result.hasMore).toBe(false);
       expect(result.nextCursor).toBeNull();
     });
+
+    it('should keep nextCursor null when last paged item has null blockTime', async () => {
+      (prisma.transaction.findMany as Mock).mockResolvedValue([
+        { ...mockTransaction, id: 'tx-null-time', blockTime: null },
+        { ...mockTransaction, id: 'tx-extra', blockTime: new Date('2025-01-02') },
+      ]);
+
+      const result = await transactionRepository.findByWalletIdPaginated('wallet-456', {
+        limit: 1,
+      });
+
+      expect(result.hasMore).toBe(true);
+      expect(result.nextCursor).toBeNull();
+    });
   });
 
   describe('findByTxid', () => {

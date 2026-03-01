@@ -117,6 +117,18 @@ describe('GatewayWebSocketServer', () => {
     expect(client.close).toHaveBeenCalledWith(4003, 'Gateway authentication not configured');
   });
 
+  it('forwards upgrade requests into websocket connection events', () => {
+    const server = new GatewayWebSocketServer();
+    const wsServer = mocks.createdServers[mocks.createdServers.length - 1];
+    const emitSpy = vi.spyOn(wsServer, 'emit');
+    const request = { headers: {} } as any;
+    const socket = createClient();
+
+    server.handleUpgrade(request, socket as any, Buffer.alloc(0));
+
+    expect(emitSpy).toHaveBeenCalledWith('connection', socket, request);
+  });
+
   it('sends auth challenge and authenticates valid response', () => {
     const server = new GatewayWebSocketServer();
     const client = createClient();
@@ -143,6 +155,35 @@ describe('GatewayWebSocketServer', () => {
     expect(mocks.websocketConnectionsInc).toHaveBeenCalledWith({ type: 'gateway' });
   });
 
+  it('decrements gateway metric and clears state when authenticated client disconnects', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    const challenge = JSON.parse(client.send.mock.calls[0][0]).challenge;
+    client.emit('message', Buffer.from(JSON.stringify({
+      type: 'auth_response',
+      response: createHmac('sha256', 'gateway-secret').update(challenge).digest('hex'),
+    })));
+
+    client.emit('close');
+
+    expect(mocks.websocketConnectionsDec).toHaveBeenCalledWith({ type: 'gateway' });
+    expect(server.isGatewayConnected()).toBe(false);
+  });
+
+  it('clears auth timeout when unauthenticated client disconnects', () => {
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    client.emit('close');
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    clearTimeoutSpy.mockRestore();
+  });
+
   it('rejects invalid authentication response', () => {
     const server = new GatewayWebSocketServer();
     const client = createClient();
@@ -167,6 +208,56 @@ describe('GatewayWebSocketServer', () => {
     expect(client.close).toHaveBeenCalledWith(4002, 'Authentication required');
   });
 
+  it('logs websocket client errors', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    client.emit('error', new Error('socket blew up'));
+
+    expect(client.close).not.toHaveBeenCalledWith(4003, 'Authentication failed');
+  });
+
+  it('accepts non-auth messages after successful authentication', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    const challenge = JSON.parse(client.send.mock.calls[0][0]).challenge;
+    client.emit('message', Buffer.from(JSON.stringify({
+      type: 'auth_response',
+      response: createHmac('sha256', 'gateway-secret').update(challenge).digest('hex'),
+    })));
+
+    client.emit('message', Buffer.from(JSON.stringify({ type: 'status' })));
+
+    expect(client.close).not.toHaveBeenCalledWith(4002, 'Authentication required');
+  });
+
+  it('rejects auth responses when challenge state is missing', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    client.challenge = undefined;
+    client.emit('message', Buffer.from(JSON.stringify({
+      type: 'auth_response',
+      response: '00'.repeat(32),
+    })));
+
+    expect(client.close).toHaveBeenCalledWith(4002, 'Invalid authentication state');
+  });
+
+  it('treats malformed auth response payloads as failed authentication', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    (server as any).handleAuthResponse(client, null as any);
+
+    expect(client.close).toHaveBeenCalledWith(4003, 'Authentication failed');
+  });
+
   it('closes unauthenticated clients after auth timeout', async () => {
     vi.useFakeTimers();
     const server = new GatewayWebSocketServer();
@@ -176,6 +267,18 @@ describe('GatewayWebSocketServer', () => {
     await vi.advanceTimersByTimeAsync(GATEWAY_AUTH_TIMEOUT_MS + 1);
 
     expect(client.close).toHaveBeenCalledWith(4001, 'Authentication timeout');
+  });
+
+  it('does not close client on auth timeout after authentication already succeeded', async () => {
+    vi.useFakeTimers();
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    client.isAuthenticated = true;
+    await vi.advanceTimersByTimeAsync(GATEWAY_AUTH_TIMEOUT_MS + 1);
+
+    expect(client.close).not.toHaveBeenCalledWith(4001, 'Authentication timeout');
   });
 
   it('ignores invalid gateway message payloads', () => {
@@ -212,6 +315,37 @@ describe('GatewayWebSocketServer', () => {
     expect(server.isGatewayConnected()).toBe(true);
   });
 
+  it('replaces unauthenticated tracked gateway without decrementing metric', () => {
+    const server = new GatewayWebSocketServer();
+    const existing = createClient();
+    existing.isAuthenticated = false;
+    (server as any).gateway = existing;
+
+    const next = createClient();
+    (server as any).handleConnection(next, {} as any);
+    const challenge = JSON.parse(next.send.mock.calls[0][0]).challenge;
+    next.emit('message', Buffer.from(JSON.stringify({
+      type: 'auth_response',
+      response: createHmac('sha256', 'gateway-secret').update(challenge).digest('hex'),
+    })));
+
+    expect(existing.close).toHaveBeenCalledWith(1000, 'Replaced by new connection');
+    expect(mocks.websocketConnectionsDec).not.toHaveBeenCalled();
+  });
+
+  it('clears tracked unauthenticated gateway on close without decrementing metric', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    (server as any).gateway = client;
+    client.isAuthenticated = false;
+    client.emit('close');
+
+    expect(mocks.websocketConnectionsDec).not.toHaveBeenCalled();
+    expect((server as any).gateway).toBeNull();
+  });
+
   it('sends events only when an authenticated gateway is available', () => {
     const server = new GatewayWebSocketServer();
     const client = createClient();
@@ -235,6 +369,34 @@ describe('GatewayWebSocketServer', () => {
     });
   });
 
+  it('skips sending when client socket is not open', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+    client.readyState = 0;
+
+    (server as any).sendToClient(client, { type: 'auth_challenge', challenge: 'x' });
+
+    expect(client.send).not.toHaveBeenCalled();
+    expect(mocks.websocketMessagesInc).not.toHaveBeenCalledWith({ type: 'gateway', direction: 'out' });
+  });
+
+  it('handles auth success when auth timeout is already undefined', () => {
+    const server = new GatewayWebSocketServer();
+    const client = createClient();
+
+    (server as any).handleConnection(client, {} as any);
+    const challenge = JSON.parse(client.send.mock.calls[0][0]).challenge;
+    client.authTimeout = undefined;
+
+    (server as any).handleAuthResponse(
+      client,
+      createHmac('sha256', 'gateway-secret').update(challenge).digest('hex')
+    );
+
+    expect(client.isAuthenticated).toBe(true);
+    expect(client.challenge).toBeUndefined();
+  });
+
   it('closes active gateway and websocket server on shutdown', () => {
     const server = new GatewayWebSocketServer();
     const client = createClient();
@@ -250,6 +412,15 @@ describe('GatewayWebSocketServer', () => {
 
     const wsServer = mocks.createdServers[mocks.createdServers.length - 1];
     expect(client.close).toHaveBeenCalledWith(1000, 'Server closing');
+    expect(wsServer.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes websocket server on shutdown even when no gateway is connected', () => {
+    const server = new GatewayWebSocketServer();
+    const wsServer = mocks.createdServers[mocks.createdServers.length - 1];
+
+    server.close();
+
     expect(wsServer.close).toHaveBeenCalledTimes(1);
   });
 });

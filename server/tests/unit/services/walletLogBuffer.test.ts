@@ -88,6 +88,22 @@ describe('walletLogBuffer', () => {
     expect(walletLogBuffer.get('stale')).toEqual([]);
   });
 
+  it('runs cleanup when interval callback fires', () => {
+    walletLogBuffer.stop();
+    const timer = { unref: vi.fn() } as any;
+    let intervalCallback: (() => void) | null = null;
+    vi.spyOn(global, 'setInterval').mockImplementation(((cb: () => void) => {
+      intervalCallback = cb;
+      return timer;
+    }) as any);
+    const cleanupSpy = vi.spyOn(walletLogBuffer as any, 'cleanup');
+
+    (walletLogBuffer as any).startCleanupInterval();
+    intervalCallback?.();
+
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('stops cleanup interval safely even when called multiple times', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     (walletLogBuffer as any).cleanupInterval = { id: 'timer' } as any;

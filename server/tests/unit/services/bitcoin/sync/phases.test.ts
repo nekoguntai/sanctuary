@@ -414,6 +414,22 @@ describe('Sync Phases', () => {
       expect(result.utxoResults.length).toBe(1);
       expect(mockElectrumClient.getAddressUTXOs).toHaveBeenCalled();
     });
+
+    it('should continue when individual UTXO fallback fails for an address', async () => {
+      mockElectrumClient.getAddressUTXOsBatch.mockRejectedValue(new Error('Batch failed'));
+      mockElectrumClient.getAddressUTXOs.mockRejectedValue(new Error('Address lookup failed'));
+
+      const ctx = createTestContext({
+        addresses: [{ id: '1', address: 'addr1' } as any],
+        client: mockElectrumClient as any,
+      });
+
+      const result = await fetchUtxosPhase(ctx);
+
+      expect(result.utxoResults).toEqual([]);
+      expect(result.successfullyFetchedAddresses.size).toBe(0);
+      expect(mockElectrumClient.getAddressUTXOs).toHaveBeenCalledWith('addr1');
+    });
   });
 
   describe('reconcileUtxosPhase', () => {

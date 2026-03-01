@@ -164,6 +164,30 @@ describe('Notification Jobs', () => {
       expect(result.errors).toContain('Network failure');
     });
 
+    it('should handle final-attempt exception path', async () => {
+      mockNotificationChannelRegistry.notifyTransactions.mockRejectedValueOnce(
+        new Error('Network failure')
+      );
+
+      const jobData: TransactionNotifyJobData = {
+        walletId: 'wallet-final-err',
+        txid: 'txid-final-err',
+        type: 'received',
+        amount: '10000',
+      };
+
+      const job = createMockJob(jobData, {
+        attemptsMade: 4,
+        opts: { attempts: 5 },
+      });
+
+      const result = await transactionNotifyJob.handler(job);
+
+      expect(result.success).toBe(false);
+      expect(result.channelsNotified).toBe(0);
+      expect(result.errors).toContain('Network failure');
+    });
+
     it('should log permanent failure on last attempt', async () => {
       mockNotificationChannelRegistry.notifyTransactions.mockResolvedValueOnce([
         { success: false, usersNotified: 0, errors: ['Persistent error'] },
@@ -183,6 +207,70 @@ describe('Notification Jobs', () => {
 
       await transactionNotifyJob.handler(job);
       // Logs permanent failure - tested by log spy
+    });
+
+    it('treats failed channel results without error details as non-fatal', async () => {
+      mockNotificationChannelRegistry.notifyTransactions.mockResolvedValueOnce([
+        { success: false, usersNotified: 0 },
+      ]);
+
+      const jobData: TransactionNotifyJobData = {
+        walletId: 'wallet-no-errors',
+        txid: 'txid-no-errors',
+        type: 'received',
+        amount: '5000',
+      };
+
+      const result = await transactionNotifyJob.handler(createMockJob(jobData));
+
+      expect(result).toEqual({
+        success: true,
+        channelsNotified: 0,
+        errors: undefined,
+      });
+    });
+
+    it('uses default attempt threshold when opts.attempts is missing', async () => {
+      mockNotificationChannelRegistry.notifyTransactions.mockRejectedValueOnce(
+        new Error('default-attempt-threshold')
+      );
+
+      const jobData: TransactionNotifyJobData = {
+        walletId: 'wallet-default-attempts',
+        txid: 'txid-default-attempts',
+        type: 'received',
+        amount: '10000',
+      };
+
+      const result = await transactionNotifyJob.handler(createMockJob(jobData, {
+        attemptsMade: 4,
+        opts: {} as any,
+      }));
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toEqual(['default-attempt-threshold']);
+    });
+
+    it('uses default attempt threshold in partial-failure path when opts.attempts is missing', async () => {
+      mockNotificationChannelRegistry.notifyTransactions.mockResolvedValueOnce([
+        { success: false, usersNotified: 0, errors: ['still failing'] },
+      ]);
+
+      const jobData: TransactionNotifyJobData = {
+        walletId: 'wallet-default-attempts-partial',
+        txid: 'txid-default-attempts-partial',
+        type: 'sent',
+        amount: '1234',
+      };
+
+      const result = await transactionNotifyJob.handler(createMockJob(jobData, {
+        attemptsMade: 4,
+        opts: {} as any,
+      }));
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toEqual(['still failing']);
+      expect(result.channelsNotified).toBe(0);
     });
   });
 
@@ -271,6 +359,34 @@ describe('Notification Jobs', () => {
 
       expect(result.success).toBe(false);
       expect(result.errors).toContain('Push notification failed');
+    });
+
+    it('should tolerate failed draft channel result without errors list', async () => {
+      mockPrisma.draftTransaction.findUnique.mockResolvedValueOnce({
+        id: 'draft-789',
+        amount: BigInt(100000),
+        feeRate: 9.5,
+        recipient: 'bc1qdraft',
+        label: 'No error list',
+      });
+
+      mockNotificationChannelRegistry.notifyDraft.mockResolvedValueOnce([
+        { success: false, usersNotified: 0 },
+      ]);
+
+      const jobData: DraftNotifyJobData = {
+        walletId: 'wallet-no-draft-errors',
+        draftId: 'draft-789',
+        creatorUserId: 'user-a',
+        creatorUsername: 'alice',
+      };
+
+      const result = await draftNotifyJob.handler(createMockJob(jobData));
+      expect(result).toEqual({
+        success: true,
+        channelsNotified: 0,
+        errors: undefined,
+      });
     });
 
     it('should handle exceptions', async () => {
@@ -481,6 +597,55 @@ describe('Notification Jobs', () => {
 
       expect(result.success).toBe(false);
       expect(result.errors).toContain('Query timeout');
+    });
+
+    it('should collect channel errors from failed confirmation sends', async () => {
+      mockPrisma.transaction.findFirst.mockResolvedValueOnce({
+        type: 'received',
+        amount: BigInt(2000),
+        wallet: { name: 'Err Wallet' },
+      });
+      mockNotificationChannelRegistry.notifyTransactions.mockResolvedValueOnce([
+        { success: false, usersNotified: 0, errors: ['Push failed'] },
+      ]);
+
+      const jobData: ConfirmationNotifyJobData = {
+        walletId: 'wallet-errors',
+        txid: 'txid-errors',
+        confirmations: 1,
+        previousConfirmations: 0,
+      };
+
+      const result = await confirmationNotifyJob.handler(createMockJob(jobData));
+
+      expect(result.success).toBe(false);
+      expect(result.channelsNotified).toBe(0);
+      expect(result.errors).toEqual(['Push failed']);
+    });
+
+    it('treats confirmation channel failure without errors array as non-fatal', async () => {
+      mockPrisma.transaction.findFirst.mockResolvedValueOnce({
+        type: 'received',
+        amount: BigInt(1000),
+        wallet: { name: 'No Error Wallet' },
+      });
+      mockNotificationChannelRegistry.notifyTransactions.mockResolvedValueOnce([
+        { success: false, usersNotified: 0 },
+      ]);
+
+      const jobData: ConfirmationNotifyJobData = {
+        walletId: 'wallet-confirm-no-errors',
+        txid: 'txid-confirm-no-errors',
+        confirmations: 1,
+        previousConfirmations: 0,
+      };
+
+      const result = await confirmationNotifyJob.handler(createMockJob(jobData));
+      expect(result).toEqual({
+        success: true,
+        channelsNotified: 0,
+        errors: undefined,
+      });
     });
   });
 

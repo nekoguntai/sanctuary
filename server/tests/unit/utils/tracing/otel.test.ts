@@ -26,6 +26,7 @@ describe('initializeOpenTelemetry', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
     delete process.env.OTEL_SERVICE_NAME;
     delete process.env.NODE_ENV;
+    delete process.env.npm_package_version;
   });
 
   it('returns early when tracing is disabled', async () => {
@@ -68,6 +69,7 @@ describe('initializeOpenTelemetry', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://otel:4318';
     process.env.OTEL_SERVICE_NAME = 'svc-test';
     process.env.NODE_ENV = 'test';
+    delete process.env.npm_package_version;
 
     const originalRequire = Module.prototype.require;
     const handlers: Record<string, () => Promise<void>> = {};
@@ -126,6 +128,7 @@ describe('initializeOpenTelemetry', () => {
       expect(ignoreIncomingRequestHook?.({ url: '/health' })).toBe(true);
       expect(ignoreIncomingRequestHook?.({ url: '/metrics' })).toBe(true);
       expect(ignoreIncomingRequestHook?.({ url: '/api/wallets' })).toBe(false);
+      expect(ignoreIncomingRequestHook?.({})).toBe(false);
 
       await handlers.SIGTERM?.();
 

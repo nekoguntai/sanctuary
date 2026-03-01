@@ -205,6 +205,16 @@ describe('Wallet Repository', () => {
         })
       );
     });
+
+    it('should return null nextCursor when hasMore is true but sliced items are empty', async () => {
+      (prisma.wallet.findMany as Mock).mockResolvedValue([{ ...mockWallet, id: 'wallet-1' }]);
+
+      const result = await walletRepository.findByUserIdPaginated(mockUserId, { limit: 0 });
+
+      expect(result.items).toEqual([]);
+      expect(result.hasMore).toBe(true);
+      expect(result.nextCursor).toBeNull();
+    });
   });
 
   describe('findByNetwork', () => {

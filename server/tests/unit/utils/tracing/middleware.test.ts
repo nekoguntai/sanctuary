@@ -186,6 +186,56 @@ describe('tracingMiddleware', () => {
     );
   });
 
+  it('marks span as error for 5xx responses', () => {
+    configureTracing({ enabled: true });
+    const mw = tracingMiddleware();
+    const req = createRequest();
+    const res = createResponse(503);
+
+    requestContext.run(
+      {
+        requestId: 'req-503',
+        startTime: Date.now(),
+      },
+      () => {
+        mw(req, res, vi.fn());
+        res.end();
+      }
+    );
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Span ended: sanctuary.GET /api/wallets/:id',
+      expect.objectContaining({
+        status: 'error',
+        statusMessage: 'HTTP 503',
+      })
+    );
+  });
+
+  it('excludes caller-specified headers when includeHeaders is enabled', () => {
+    configureTracing({ enabled: true });
+    const mw = tracingMiddleware({
+      includeHeaders: true,
+      excludeHeaders: ['X-Custom-Header'],
+    });
+    const req = createRequest();
+    const res = createResponse(200);
+
+    requestContext.run(
+      {
+        requestId: 'req-exclude',
+        startTime: Date.now(),
+      },
+      () => {
+        mw(req, res, vi.fn());
+        res.end();
+      }
+    );
+
+    const loggedPayload = mockLogger.debug.mock.calls.at(-1)?.[1] || {};
+    expect(loggedPayload['http.request.header.x-custom-header']).toBeUndefined();
+  });
+
   it('records response stream errors on span', () => {
     configureTracing({ enabled: true });
     const mw = tracingMiddleware();

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { faker } from '@faker-js/faker';
 
 // Hoist mocks to avoid reference before initialization
-const { mockPrisma, mockCache } = vi.hoisted(() => {
+const { mockPrisma, mockCache, mockLogger } = vi.hoisted(() => {
   const mockPrisma = {
     revokedToken: {
       upsert: vi.fn(),
@@ -28,7 +28,14 @@ const { mockPrisma, mockCache } = vi.hoisted(() => {
     delete: vi.fn().mockResolvedValue(undefined),
   };
 
-  return { mockPrisma, mockCache };
+  const mockLogger = {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  };
+
+  return { mockPrisma, mockCache, mockLogger };
 });
 
 vi.mock('../../../src/models/prisma', () => ({
@@ -41,12 +48,7 @@ vi.mock('../../../src/infrastructure/redis', () => ({
 
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  }),
+  createLogger: () => mockLogger,
 }));
 
 import {
@@ -70,6 +72,7 @@ describe('Token Revocation Service', () => {
 
   afterEach(() => {
     shutdownRevocationService();
+    vi.useRealTimers();
   });
 
   describe('revokeToken', () => {
@@ -261,6 +264,66 @@ describe('Token Revocation Service', () => {
 
       // Should not throw
       expect(true).toBe(true);
+    });
+
+    it('should execute periodic cleanup and delete expired records', async () => {
+      vi.useFakeTimers();
+      mockPrisma.revokedToken.deleteMany.mockResolvedValue({ count: 2 });
+
+      initializeRevocationService();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+      expect(mockPrisma.revokedToken.deleteMany).toHaveBeenCalledWith({
+        where: {
+          expiresAt: {
+            lt: expect.any(Date),
+          },
+        },
+      });
+    });
+
+    it('should handle cleanup run with zero expired records', async () => {
+      vi.useFakeTimers();
+      mockPrisma.revokedToken.deleteMany.mockResolvedValue({ count: 0 });
+
+      initializeRevocationService();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+      expect(mockPrisma.revokedToken.deleteMany).toHaveBeenCalled();
+      expect(mockLogger.debug).not.toHaveBeenCalledWith(
+        'Cleaned up expired revocation entries',
+        expect.anything()
+      );
+    });
+
+    it('should continue interval loop when cleanup query fails', async () => {
+      vi.useFakeTimers();
+      mockPrisma.revokedToken.deleteMany.mockRejectedValue(new Error('cleanup failed'));
+
+      initializeRevocationService();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+      expect(mockPrisma.revokedToken.deleteMany).toHaveBeenCalled();
+    });
+
+    it('should handle unexpected cleanup promise rejections at interval boundary', async () => {
+      vi.useFakeTimers();
+      mockPrisma.revokedToken.deleteMany.mockRejectedValue(new Error('cleanup failed'));
+
+      let errorCalls = 0;
+      mockLogger.error.mockImplementation(() => {
+        errorCalls += 1;
+        if (errorCalls === 1) {
+          throw new Error('logger write failed');
+        }
+      });
+
+      initializeRevocationService();
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+      expect(mockLogger.error).toHaveBeenCalledWith('Cleanup interval error', {
+        error: expect.any(Error),
+      });
     });
   });
 

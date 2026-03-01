@@ -123,6 +123,34 @@ describe('eventService', () => {
     expect(mockBroadcastConfirmation).toHaveBeenCalled();
   });
 
+  it('handles optional transaction and balance fields when omitted', () => {
+    eventService.emitTransactionSent({
+      walletId: 'wallet-2',
+      txid: 'f'.repeat(64),
+      amount: 2000n,
+      fee: 50n,
+      recipients: [{ address: 'tb1qxyz', amount: 2000n }],
+    });
+
+    eventService.emitBalanceChanged({
+      walletId: 'wallet-2',
+      previousBalance: 1000n,
+      newBalance: 1500n,
+    });
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith('transaction:sent', expect.objectContaining({
+      txid: 'f'.repeat(64),
+    }));
+    expect(mockEventBus.emit).not.toHaveBeenCalledWith(
+      'transaction:broadcast',
+      expect.objectContaining({ txid: 'f'.repeat(64) })
+    );
+    expect(mockBroadcastBalance).toHaveBeenCalledWith('wallet-2', expect.objectContaining({
+      unconfirmed: 0,
+      change: 500,
+    }));
+  });
+
   it('emits user, device, and system events', () => {
     eventService.emitUserLogin({ userId: 'u1', username: 'alice', ipAddress: '127.0.0.1' });
     eventService.emitUserLogout('u1');

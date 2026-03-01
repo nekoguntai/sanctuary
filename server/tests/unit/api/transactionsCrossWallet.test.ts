@@ -99,6 +99,92 @@ describe('transactions cross-wallet routes', () => {
     expect(response.body[0].labels).toEqual([{ id: 'l1', name: 'Rent', color: '#f00' }]);
   });
 
+  it('GET /transactions/recent filters by requested wallet IDs and falls back to stored confirmations', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([
+      { id: 'wallet-1', name: 'Main Wallet', network: 'mainnet' },
+    ]);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-2',
+        txid: 'd'.repeat(64),
+        walletId: 'wallet-1',
+        type: 'sent',
+        amount: BigInt(-5000),
+        fee: BigInt(120),
+        balanceAfter: BigInt(95000),
+        blockHeight: BigInt(849995),
+        confirmations: 6,
+        blockTime: new Date('2026-01-02T00:00:00.000Z'),
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        address: null,
+        transactionLabels: [],
+        rbfStatus: null,
+      },
+      {
+        id: 'tx-3',
+        txid: 'e'.repeat(64),
+        walletId: 'wallet-missing-network-map',
+        type: 'received',
+        amount: BigInt(2500),
+        fee: BigInt(0),
+        balanceAfter: BigInt(97500),
+        blockHeight: BigInt(849996),
+        confirmations: 9,
+        blockTime: new Date('2026-01-03T00:00:00.000Z'),
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        address: null,
+        transactionLabels: [],
+        rbfStatus: null,
+      },
+    ]);
+    mocks.getCachedBlockHeight.mockReturnValue(0);
+
+    const response = await request(app)
+      .get('/api/v1/transactions/recent')
+      .query({ walletIds: 'wallet-1,wallet-2,,', limit: '3' });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.wallet.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ['wallet-1', 'wallet-2'] },
+        }),
+      })
+    );
+    expect(response.body[0].confirmations).toBe(6);
+    expect(response.body[1].confirmations).toBe(9);
+  });
+
+  it('GET /transactions/recent returns zero confirmations for transactions without valid block height', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([
+      { id: 'wallet-1', name: 'Main Wallet', network: 'mainnet' },
+    ]);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-4',
+        txid: 'f'.repeat(64),
+        walletId: 'wallet-1',
+        type: 'received',
+        amount: BigInt(4000),
+        fee: BigInt(0),
+        balanceAfter: BigInt(104000),
+        blockHeight: BigInt(0),
+        confirmations: 11,
+        blockTime: null,
+        createdAt: new Date('2026-01-04T00:00:00.000Z'),
+        address: null,
+        transactionLabels: [],
+        rbfStatus: null,
+      },
+    ]);
+    mocks.getCachedBlockHeight.mockReturnValue(850000);
+
+    const response = await request(app).get('/api/v1/transactions/recent');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].confirmations).toBe(0);
+  });
+
   it('GET /transactions/pending returns mempool entries sorted by fee rate', async () => {
     mockPrismaClient.wallet.findMany.mockResolvedValue([
       { id: 'wallet-1', name: 'Main Wallet' },
@@ -130,6 +216,49 @@ describe('transactions cross-wallet routes', () => {
     expect(response.body).toHaveLength(2);
     expect(response.body[0].txid).toBe('b'.repeat(64));
     expect(response.body[0].feeRate).toBeGreaterThan(response.body[1].feeRate);
+  });
+
+  it('GET /transactions/pending uses fee and size fallbacks for edge-case pending transactions', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([
+      { id: 'wallet-1', name: 'Main Wallet' },
+    ]);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        txid: '7'.repeat(64),
+        walletId: 'wallet-1',
+        type: 'received',
+        amount: BigInt(2000),
+        fee: null,
+        rawTx: null,
+        createdAt: new Date('2026-01-05T00:00:00.000Z'),
+      },
+      {
+        txid: '8'.repeat(64),
+        walletId: 'wallet-1',
+        type: 'sent',
+        amount: BigInt(-2000),
+        fee: BigInt(500),
+        rawTx: { length: -1 } as any,
+        createdAt: new Date('2026-01-05T00:00:01.000Z'),
+      },
+    ]);
+
+    const response = await request(app).get('/api/v1/transactions/pending');
+
+    expect(response.status).toBe(200);
+    const nullRawTx = response.body.find((tx: any) => tx.txid === '7'.repeat(64));
+    const nonPositiveSize = response.body.find((tx: any) => tx.txid === '8'.repeat(64));
+
+    expect(nullRawTx).toMatchObject({
+      fee: 0,
+      size: 200,
+      feeRate: 0,
+    });
+    expect(nonPositiveSize).toMatchObject({
+      fee: 500,
+      size: 0,
+      feeRate: 0,
+    });
   });
 
   it('GET /transactions/pending returns empty array when no wallets are accessible', async () => {
@@ -183,6 +312,40 @@ describe('transactions cross-wallet routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.map((p: any) => p.value)).toEqual([950, 1050, 1000]);
+  });
+
+  it('GET /transactions/balance-history defaults timeframe and totalBalance when omitted or invalid', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([]);
+
+    const response = await request(app).get('/api/v1/transactions/balance-history').query({ totalBalance: 'NaN' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { name: 'Start', value: 0 },
+      { name: 'Now', value: 0 },
+    ]);
+  });
+
+  it('GET /transactions/balance-history filters to requested wallet IDs', async () => {
+    mockPrismaClient.wallet.findMany.mockResolvedValue([{ id: 'wallet-2' }]);
+    (mockPrismaClient as any).$queryRawUnsafe.mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/transactions/balance-history')
+      .query({ walletIds: 'wallet-2,wallet-3', totalBalance: '2500' });
+
+    expect(response.status).toBe(200);
+    expect(mockPrismaClient.wallet.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ['wallet-2', 'wallet-3'] },
+        }),
+      })
+    );
+    expect(response.body).toEqual([
+      { name: 'Start', value: 2500 },
+      { name: 'Now', value: 2500 },
+    ]);
   });
 
   it('GET /transactions/balance-history returns flat line when there are no bucketed deltas', async () => {

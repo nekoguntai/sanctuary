@@ -102,6 +102,21 @@ describe('Read Replica', () => {
 
       expect(result).toEqual({ result: 'fast' });
     });
+
+    it('should tolerate missing timeout handle without throwing', async () => {
+      const fastQuery = vi.fn().mockResolvedValue({ result: 'fast' });
+      const setTimeoutSpy = vi
+        .spyOn(global, 'setTimeout')
+        .mockImplementation((() => undefined) as any);
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+
+      const result = await executeAnalyticsQuery(fastQuery, { timeout: 10 });
+
+      expect(result).toEqual({ result: 'fast' });
+      expect(clearTimeoutSpy).not.toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    });
   });
 
   describe('replication lag', () => {

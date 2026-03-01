@@ -121,6 +121,16 @@ describe('Service Initialization', () => {
       expect(sync).toBeDefined();
     });
 
+    it('should expose all registered service accessors', async () => {
+      await initializeServices();
+
+      expect(services.sync).toBeDefined();
+      expect(services.maintenance).toBeDefined();
+      expect(services.notification).toBeDefined();
+      expect(services.price).toBeDefined();
+      expect(services.tokenRevocation).toBeDefined();
+    });
+
     it('should throw if accessing unregistered service', () => {
       // Don't initialize - services should not be registered
       expect(() => services.sync).toThrow();

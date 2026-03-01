@@ -347,6 +347,40 @@ describe('PSBT Builder', () => {
       }
     });
 
+    it('should accept 65-byte uncompressed pubkeys when parsing multisig scripts', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        bitcoin.opcodes.OP_1,
+        Buffer.alloc(65, 0x11),
+        bitcoin.opcodes.OP_1,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(true);
+        expect(result.pubkeys).toHaveLength(1);
+        expect(result.pubkeys[0].length).toBe(65);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
+    it('should ignore buffer items that are not valid pubkey lengths', () => {
+      const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
+        bitcoin.opcodes.OP_1,
+        Buffer.alloc(20, 0x11),
+        bitcoin.opcodes.OP_1,
+        bitcoin.opcodes.OP_CHECKMULTISIG,
+      ] as any);
+
+      try {
+        const result = parseMultisigScript(Buffer.from([0x00]));
+        expect(result.isMultisig).toBe(false);
+      } finally {
+        decompileSpy.mockRestore();
+      }
+    });
+
     it('should return false when m is numeric but outside supported range', () => {
       const decompileSpy = vi.spyOn(bitcoin.script, 'decompile').mockReturnValue([
         0,
@@ -729,6 +763,41 @@ describe('PSBT Builder', () => {
               witnessScript: p2ms.output!,
               partialSig: [{ pubkey, signature: Buffer.from([0x01]) }],
               // witnessUtxo intentionally omitted to hit warning branch
+            },
+          ],
+          globalMap: {
+            unsignedTx: {
+              toBuffer: () => new bitcoin.Transaction().toBuffer(),
+            },
+          },
+        },
+        updateInput: vi.fn(),
+      } as unknown as bitcoin.Psbt;
+
+      expect(() => finalizeMultisigInput(fakePsbt, 0)).not.toThrow();
+      expect((fakePsbt as any).updateInput).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles DER signatures with s values longer than 32 bytes during verification', () => {
+      const key = ECPair.makeRandom({ network });
+      const pubkey = Buffer.from(key.publicKey);
+      const p2ms = bitcoin.payments.p2ms({ m: 1, pubkeys: [pubkey], network });
+      const p2wsh = bitcoin.payments.p2wsh({ redeem: p2ms, network });
+
+      // Build DER-like signature where s has 33 bytes (leading zero + 32-byte value)
+      const derSig = Buffer.concat([
+        Buffer.from([0x30, 0x26, 0x02, 0x01, 0x01, 0x02, 0x21, 0x00]),
+        Buffer.alloc(32, 0x02),
+      ]);
+      const signatureWithHashType = Buffer.concat([derSig, Buffer.from([0x01])]);
+
+      const fakePsbt = {
+        data: {
+          inputs: [
+            {
+              witnessScript: p2ms.output!,
+              witnessUtxo: { script: p2wsh.output!, value: 100000 },
+              partialSig: [{ pubkey, signature: signatureWithHashType }],
             },
           ],
           globalMap: {

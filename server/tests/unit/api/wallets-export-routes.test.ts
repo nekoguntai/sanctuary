@@ -227,6 +227,49 @@ describe('Wallets Export Routes', () => {
     expect(response.body.message).toBe('Failed to export labels');
   });
 
+  it('skips empty label names and omits origin when derivation path is missing', async () => {
+    mockTxFindWithLabels.mockResolvedValue([
+      {
+        txid: 'tx-blank',
+        label: null,
+        memo: null,
+        transactionLabels: [
+          { label: { name: '' } },
+          { label: { name: 'Tagged' } },
+        ],
+      },
+    ]);
+
+    mockAddressFindWithLabels.mockResolvedValue([
+      {
+        address: 'bc1qblank',
+        derivationPath: null,
+        addressLabels: [
+          { label: { name: '' } },
+          { label: { name: 'AddressTag' } },
+        ],
+      },
+    ]);
+
+    const response = await request(app).get('/api/v1/wallets/wallet-1/export/labels');
+    expect(response.status).toBe(200);
+
+    const lines = response.text.trim().split('\n').map((line) => JSON.parse(line));
+    expect(lines).toEqual([
+      {
+        type: 'tx',
+        ref: 'tx-blank',
+        label: 'Tagged',
+      },
+      {
+        type: 'addr',
+        ref: 'bc1qblank',
+        label: 'AddressTag',
+      },
+    ]);
+    expect(lines[1]).not.toHaveProperty('origin');
+  });
+
   it('returns available export formats and uses account selection priority', async () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/export/formats');
 
@@ -248,6 +291,72 @@ describe('Wallets Export Routes', () => {
       expect.objectContaining({ xpub: 'account-xpub-b', derivationPath: "m/48'/0'/1'/2'" }),
       expect.objectContaining({ xpub: 'legacy-xpub-c', derivationPath: "m/48'/0'/2'/2'" }),
     ]);
+  });
+
+  it('builds single-sig export data with account/purpose and legacy fallbacks', async () => {
+    mockWalletFindByIdWithDevices.mockResolvedValue(buildWallet({
+      type: 'single_sig',
+      scriptType: 'taproot',
+      devices: [
+        {
+          device: {
+            label: 'No Accounts',
+            type: 'jade',
+            fingerprint: 'FP1',
+            xpub: 'legacy-single-xpub',
+            // accounts intentionally missing to cover [] fallback
+          },
+        },
+        {
+          device: {
+            label: 'Purpose Match',
+            type: 'ledger',
+            fingerprint: 'FP2',
+            xpub: 'legacy-single-xpub-2',
+            derivationPath: "m/86'/0'/0'",
+            accounts: [
+              {
+                purpose: 'single_sig',
+                scriptType: 'nested_segwit',
+                xpub: 'purpose-only-xpub',
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const response = await request(app).get('/api/v1/wallets/wallet-1/export/formats');
+    expect(response.status).toBe(200);
+
+    const walletDataArg = mockGetAvailableFormats.mock.calls[0][0];
+    expect(walletDataArg.type).toBe('single_sig');
+    expect(walletDataArg.devices).toEqual([
+      expect.objectContaining({
+        xpub: 'legacy-single-xpub',
+        derivationPath: undefined,
+      }),
+      expect.objectContaining({
+        xpub: 'purpose-only-xpub',
+        derivationPath: "m/86'/0'/0'",
+      }),
+    ]);
+  });
+
+  it('normalizes empty descriptor/quorum signer fields in export data', async () => {
+    mockWalletFindByIdWithDevices.mockResolvedValue(buildWallet({
+      descriptor: null,
+      quorum: 0,
+      totalSigners: 0,
+    }));
+
+    const response = await request(app).get('/api/v1/wallets/wallet-1/export/formats');
+    expect(response.status).toBe(200);
+
+    const walletDataArg = mockGetAvailableFormats.mock.calls[0][0];
+    expect(walletDataArg.descriptor).toBe('');
+    expect(walletDataArg.quorum).toBeUndefined();
+    expect(walletDataArg.totalSigners).toBeUndefined();
   });
 
   it('returns 404 when wallet is missing for export format listing', async () => {
@@ -325,6 +434,22 @@ describe('Wallets Export Routes', () => {
     expect(response.body).toEqual({
       error: 'Bad Request',
       message: 'Format not supported for this wallet',
+    });
+  });
+
+  it('returns default export error message when thrown error has no message', async () => {
+    mockExportFormat.mockImplementation(() => {
+      throw { code: 'FORMAT_FAIL' };
+    });
+
+    const response = await request(app)
+      .get('/api/v1/wallets/wallet-1/export')
+      .query({ format: 'sparrow' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Bad Request',
+      message: 'Failed to export wallet in the specified format',
     });
   });
 

@@ -673,6 +673,35 @@ describe('Node API Routes', () => {
         expect(response.body.success).toBe(true);
         expect(response.body.message).toBe('Connected successfully');
       });
+
+      it('should ignore late success/error responses after initial resolution', async () => {
+        const responsePromise = startAuthedRequest(app, {
+          host: 'electrum.example.com',
+          port: 50002,
+          protocol: 'ssl',
+        });
+
+        const tlsSocket = await getLastSocket(mockTlsConnect);
+        await waitForListener(() => tlsSocket, 'connect');
+        tlsSocket.emit('connect');
+        tlsSocket.emit(
+          'data',
+          [
+            JSON.stringify({ jsonrpc: '2.0', id: 1, result: ['ElectrumX', '1.4'] }),
+            JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -1, message: 'late error' } }),
+            JSON.stringify({ jsonrpc: '2.0', id: 1, result: ['LateServer', '2.0'] }),
+          ].join('\n') + '\n'
+        );
+
+        const response = await responsePromise;
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.serverInfo).toEqual({
+          server: 'ElectrumX',
+          protocol: '1.4',
+        });
+        expect((tlsSocket as any).destroy).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

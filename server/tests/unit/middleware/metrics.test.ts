@@ -241,6 +241,15 @@ describe('Metrics Middleware', () => {
           buffer.length
         );
       });
+
+      it('should ignore non-string non-buffer response chunks for size metrics', () => {
+        const middleware = metricsMiddleware({ includeSizes: true });
+
+        middleware(req, res, next);
+        res.end({ unexpected: true } as any);
+
+        expect(mockObserve).toHaveBeenCalledTimes(1);
+      });
     });
 
     describe('custom path normalizer', () => {

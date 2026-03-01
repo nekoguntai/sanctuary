@@ -38,7 +38,7 @@ vi.mock('../../../src/middleware/auth', () => ({
 // Mock device access middleware
 vi.mock('../../../src/middleware/deviceAccess', () => ({
   requireDeviceAccess: () => (req: any, res: any, next: any) => {
-    req.deviceRole = 'owner';
+    req.deviceRole = req.headers['x-test-device-role'] || 'owner';
     req.deviceId = req.params.id;
     next();
   },
@@ -574,6 +574,62 @@ describe('Devices API', () => {
       });
     });
 
+    it('should detect taproot script type from BIP-86 path in legacy mode', async () => {
+      const taprootDevice = {
+        type: 'ledger',
+        label: 'Taproot Ledger',
+        fingerprint: 'taproot123',
+        xpub: 'xpub_taproot...',
+        derivationPath: "m/86'/0'/0'",
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-taproot',
+        ...taprootDevice,
+        userId: 'test-user-id',
+      });
+
+      await request(app)
+        .post('/api/v1/devices')
+        .send(taprootDevice);
+
+      expect(mockPrismaClient.deviceAccount.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          scriptType: 'taproot',
+          derivationPath: "m/86'/0'/0'",
+        }),
+      });
+    });
+
+    it('should detect nested segwit script type from BIP-49 path in legacy mode', async () => {
+      const nestedDevice = {
+        type: 'ledger',
+        label: 'Nested Ledger',
+        fingerprint: 'nested123',
+        xpub: 'xpub_nested...',
+        derivationPath: "m/49'/0'/0'",
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-nested',
+        ...nestedDevice,
+        userId: 'test-user-id',
+      });
+
+      await request(app)
+        .post('/api/v1/devices')
+        .send(nestedDevice);
+
+      expect(mockPrismaClient.deviceAccount.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          scriptType: 'nested_segwit',
+          derivationPath: "m/49'/0'/0'",
+        }),
+      });
+    });
+
     it('should assign modelId when modelSlug is provided for registration', async () => {
       const deviceWithModel = {
         type: 'trezor',
@@ -607,6 +663,67 @@ describe('Devices API', () => {
         include: {
           model: true,
         },
+      });
+    });
+
+    it('should continue registration without modelId when modelSlug is unknown', async () => {
+      const deviceWithUnknownModel = {
+        type: 'trezor',
+        label: 'Unknown Model Device',
+        fingerprint: 'unknownmodel1',
+        xpub: 'xpub_unknown_model...',
+        derivationPath: "m/84'/0'/0'",
+        modelSlug: 'does-not-exist',
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.hardwareDeviceModel.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-unknown-model',
+        ...deviceWithUnknownModel,
+        userId: 'test-user-id',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(deviceWithUnknownModel);
+
+      expect(response.status).toBe(201);
+      expect(mockPrismaClient.device.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          modelId: undefined,
+        }),
+        include: { model: true },
+      });
+    });
+
+    it('handles legacy xpub payload without derivationPath by creating device with no derived accounts', async () => {
+      const xpubOnlyDevice = {
+        type: 'trezor',
+        label: 'Xpub Only',
+        fingerprint: 'xpubonly12',
+        xpub: 'xpub_only...',
+      };
+
+      mockPrismaClient.device.findUnique.mockResolvedValue(null);
+      mockPrismaClient.device.create.mockResolvedValue({
+        id: 'device-xpub-only',
+        ...xpubOnlyDevice,
+        userId: 'test-user-id',
+      });
+
+      const response = await request(app)
+        .post('/api/v1/devices')
+        .send(xpubOnlyDevice);
+
+      expect(response.status).toBe(201);
+      expect(mockPrismaClient.deviceAccount.create).not.toHaveBeenCalled();
+      expect(mockPrismaClient.device.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          derivationPath: undefined,
+          xpub: undefined,
+        }),
+        include: { model: true },
       });
     });
 
@@ -914,6 +1031,28 @@ describe('Devices API', () => {
       expect(response.body.userRole).toBe('owner');
     });
 
+    it('should include sharedBy for non-owner access', async () => {
+      mockPrismaClient.device.findUnique.mockResolvedValue({
+        id: 'device-1',
+        type: 'trezor',
+        label: 'Shared Device',
+        fingerprint: 'abc12345',
+        model: { name: 'Model T' },
+        accounts: [],
+        wallets: [],
+        user: { username: 'owneruser' },
+      });
+
+      const response = await request(app)
+        .get('/api/v1/devices/device-1')
+        .set('X-Test-Device-Role', 'viewer');
+
+      expect(response.status).toBe(200);
+      expect(response.body.isOwner).toBe(false);
+      expect(response.body.userRole).toBe('viewer');
+      expect(response.body.sharedBy).toBe('owneruser');
+    });
+
     it('should return 404 when device not found', async () => {
       mockPrismaClient.device.findUnique.mockResolvedValue(null);
 
@@ -952,6 +1091,29 @@ describe('Devices API', () => {
       expect(mockPrismaClient.device.update).toHaveBeenCalledWith({
         where: { id: 'device-1' },
         data: { label: 'Updated Label' },
+        include: { model: true },
+      });
+    });
+
+    it('should update device derivationPath and type when provided', async () => {
+      mockPrismaClient.device.update.mockResolvedValue({
+        id: 'device-1',
+        type: 'ledger',
+        label: 'My Trezor',
+        derivationPath: "m/84'/0'/1'",
+      });
+
+      const response = await request(app)
+        .patch('/api/v1/devices/device-1')
+        .send({ derivationPath: "m/84'/0'/1'", type: 'ledger' });
+
+      expect(response.status).toBe(200);
+      expect(mockPrismaClient.device.update).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+        data: {
+          derivationPath: "m/84'/0'/1'",
+          type: 'ledger',
+        },
         include: { model: true },
       });
     });

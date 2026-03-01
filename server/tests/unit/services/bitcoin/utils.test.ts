@@ -114,6 +114,13 @@ describe('Bitcoin Utilities', () => {
       const size2 = estimateTransactionSize(2, 2, 'native_segwit');
       expect(size2).toBeGreaterThan(size1);
     });
+
+    it('should fall back to native segwit size for unknown script types', () => {
+      const fallbackSize = estimateTransactionSize(1, 2, 'unknown_type' as any);
+      const nativeSize = estimateTransactionSize(1, 2, 'native_segwit');
+
+      expect(fallbackSize).toBe(nativeSize);
+    });
   });
 
   describe('calculateFee', () => {
@@ -210,6 +217,17 @@ describe('Bitcoin Utilities', () => {
       );
 
       expect(result.psbt.txInputs[0].sequence).toBe(0xffffffff);
+    });
+
+    it('should default to mainnet when network option is omitted', () => {
+      const mainnetOutput = {
+        address: mainnetAddresses.nativeSegwit[0],
+        value: 50_000,
+      };
+
+      const result = createTransactionFromUtils([input], [mainnetOutput], 5);
+
+      expect(result.psbt.txOutputs[0].address).toBe(mainnetOutput.address);
     });
   });
 });

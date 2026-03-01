@@ -498,4 +498,75 @@ describe('Memory Monitor', () => {
       expect(pressure).toBeDefined();
     });
   });
+
+  describe('deterministic branch coverage', () => {
+    const mockCriticalMemory = () => {
+      vi.spyOn(v8, 'getHeapStatistics').mockReturnValue({
+        used_heap_size: 95,
+        heap_size_limit: 100,
+      } as any);
+      vi.spyOn(process, 'memoryUsage').mockReturnValue({
+        rss: 1000,
+        heapTotal: 1000,
+        heapUsed: 950,
+        external: 10,
+        arrayBuffers: 0,
+      });
+    };
+
+    it('should reject non-critical path when pressure is critical', () => {
+      mockCriticalMemory();
+
+      expect(shouldAllowRequest('/api/wallets')).toBe(false);
+      expect(shouldAllowRequest('/metrics')).toBe(true);
+    });
+
+    it('should request GC when critical pressure is detected and gc is available', async () => {
+      vi.useFakeTimers();
+      mockCriticalMemory();
+
+      const originalGc = global.gc;
+      const gcMock = vi.fn();
+      (global as any).gc = gcMock;
+
+      startMemoryMonitoring({
+        elevatedThreshold: 75,
+        criticalThreshold: 90,
+        checkIntervalMs: 50,
+        enableGcHints: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(60);
+      expect(gcMock).toHaveBeenCalled();
+
+      stopMemoryMonitoring();
+      if (originalGc) {
+        (global as any).gc = originalGc;
+      } else {
+        delete (global as any).gc;
+      }
+      vi.useRealTimers();
+    });
+
+    it('should return 503 from middleware for non-critical paths under pressure', () => {
+      mockCriticalMemory();
+
+      const req = { path: '/api/wallets' };
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      const next = vi.fn();
+
+      memoryPressureMiddleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'memory_pressure',
+        })
+      );
+    });
+  });
 });

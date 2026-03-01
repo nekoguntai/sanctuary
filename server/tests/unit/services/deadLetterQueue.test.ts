@@ -38,6 +38,7 @@ async function clearDlq() {
   for (const entry of deadLetterQueue.getAll()) {
     await deadLetterQueue.remove(entry.id);
   }
+  (deadLetterQueue as any).entries = new Map();
 }
 
 describe('deadLetterQueue', () => {
@@ -67,6 +68,22 @@ describe('deadLetterQueue', () => {
     expect(clearIntervalSpy).toHaveBeenCalledWith(timer);
   });
 
+  it('runs cleanup when interval callback fires', () => {
+    const timer = { unref: vi.fn() } as any;
+    let intervalCallback: (() => void) | null = null;
+    vi.spyOn(global, 'setInterval').mockImplementation(((cb: () => void) => {
+      intervalCallback = cb;
+      return timer;
+    }) as any);
+    const cleanupSpy = vi.spyOn(deadLetterQueue as any, 'cleanup');
+
+    deadLetterQueue.start();
+    expect(intervalCallback).not.toBeNull();
+    intervalCallback?.();
+
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('adds and updates entries with Redis persistence', async () => {
     const id = await deadLetterQueue.add(
       'sync',
@@ -90,6 +107,68 @@ describe('deadLetterQueue', () => {
       attempts: 4,
       error: 'retry failed',
     }));
+  });
+
+  it('captures error stack when update receives an Error instance', async () => {
+    const id = await deadLetterQueue.add('sync', 'wallet_sync', { walletId: 'w1' }, 'initial', 1);
+    const err = new Error('update failed');
+
+    await deadLetterQueue.update(id, err, 2);
+
+    expect(deadLetterQueue.get(id)).toEqual(expect.objectContaining({
+      attempts: 2,
+      error: 'update failed',
+      errorStack: expect.stringContaining('update failed'),
+    }));
+  });
+
+  it('evicts oldest entry when size limit is reached', async () => {
+    const entries = new Map(
+      Array.from({ length: 1000 }, (_, index) => [
+        `old-${index}`,
+        {
+          id: `old-${index}`,
+          category: 'other',
+          operation: `op-${index}`,
+          payload: {},
+          error: 'old',
+          attempts: 1,
+          firstFailedAt: new Date('2025-01-01T00:00:00.000Z'),
+          lastFailedAt: new Date('2025-01-01T00:00:00.000Z'),
+        },
+      ])
+    );
+    (deadLetterQueue as any).entries = entries;
+
+    const id = await deadLetterQueue.add('sync', 'new-op', { walletId: 'w1' }, 'new', 1);
+
+    expect(deadLetterQueue.get('old-0')).toBeUndefined();
+    expect(deadLetterQueue.get(id)).toBeDefined();
+    expect(deadLetterQueue.getAll().length).toBe(1000);
+  });
+
+  it('handles LRU eviction edge case when oldest map key is falsy', async () => {
+    const baseEntry = {
+      category: 'other',
+      operation: 'op',
+      payload: {},
+      error: 'old',
+      attempts: 1,
+      firstFailedAt: new Date('2025-01-01T00:00:00.000Z'),
+      lastFailedAt: new Date('2025-01-01T00:00:00.000Z'),
+    };
+    const entries = new Map<any, any>([
+      [undefined, { id: 'undefined-key', ...baseEntry }],
+    ]);
+    for (let index = 0; index < 999; index++) {
+      entries.set(`old-${index}`, { id: `old-${index}`, ...baseEntry });
+    }
+    (deadLetterQueue as any).entries = entries;
+
+    await deadLetterQueue.add('sync', 'new-op', { walletId: 'w1' }, 'new', 1);
+
+    expect((deadLetterQueue as any).entries.has(undefined)).toBe(true);
+    expect(deadLetterQueue.getAll().length).toBe(1001);
   });
 
   it('ignores updates for missing entries', async () => {
@@ -119,6 +198,22 @@ describe('deadLetterQueue', () => {
     }));
   });
 
+  it('retains newest timestamp when later entries are older', async () => {
+    const id1 = await deadLetterQueue.add('sync', 'op1', { a: 1 }, 'err1', 1);
+    const id2 = await deadLetterQueue.add('push', 'op2', { b: 2 }, 'err2', 2);
+
+    const e1 = deadLetterQueue.get(id1)!;
+    const e2 = deadLetterQueue.get(id2)!;
+    e1.firstFailedAt = new Date('2025-01-01T00:00:00.000Z');
+    e1.lastFailedAt = new Date('2025-01-03T00:00:00.000Z');
+    e2.firstFailedAt = new Date('2025-01-02T00:00:00.000Z');
+    e2.lastFailedAt = new Date('2025-01-01T12:00:00.000Z');
+
+    const stats = deadLetterQueue.getStats();
+    expect(stats.oldest).toEqual(new Date('2025-01-01T00:00:00.000Z'));
+    expect(stats.newest).toEqual(new Date('2025-01-03T00:00:00.000Z'));
+  });
+
   it('removes entries and clears categories', async () => {
     const id1 = await deadLetterQueue.add('electrum', 'connect', { host: 'h' }, 'err', 1);
     const id2 = await deadLetterQueue.add('electrum', 'connect2', { host: 'h2' }, 'err', 2);
@@ -143,6 +238,20 @@ describe('deadLetterQueue', () => {
     expect(deadLetterQueue.get(id)).toBeUndefined();
   });
 
+  it('cleanup removes only expired entries and keeps recent ones', async () => {
+    const expiredId = await deadLetterQueue.add('other', 'expired-op', {}, 'old', 1);
+    const recentId = await deadLetterQueue.add('other', 'recent-op', {}, 'new', 1);
+    const expiredEntry = deadLetterQueue.get(expiredId)!;
+    const recentEntry = deadLetterQueue.get(recentId)!;
+
+    expiredEntry.lastFailedAt = new Date(Date.now() - (8 * 24 * 60 * 60 * 1000));
+    recentEntry.lastFailedAt = new Date();
+
+    (deadLetterQueue as any).cleanup();
+    expect(deadLetterQueue.get(expiredId)).toBeUndefined();
+    expect(deadLetterQueue.get(recentId)).toBeDefined();
+  });
+
   it('handles redis persistence/delete/load failures gracefully', async () => {
     mockCache.set.mockRejectedValueOnce(new Error('set failed'));
     const id = await deadLetterQueue.add('sync', 'op', {}, 'err', 1);
@@ -158,6 +267,24 @@ describe('deadLetterQueue', () => {
       throw new Error('cache unavailable');
     });
     await expect(deadLetterQueue.loadFromRedis()).resolves.toBeUndefined();
+  });
+
+  it('skips Redis persistence/removal when distributed cache is unavailable', async () => {
+    mockGetDistributedCache.mockReturnValue(null);
+
+    const id = await deadLetterQueue.add('sync', 'op', {}, 'err', 1);
+    expect(deadLetterQueue.get(id)).toBeDefined();
+    await expect(deadLetterQueue.remove(id)).resolves.toBe(true);
+  });
+
+  it('logs restoration-skipped debug message when redis cache exists', async () => {
+    mockGetDistributedCache.mockReturnValue(mockCache);
+
+    await expect(deadLetterQueue.loadFromRedis()).resolves.toBeUndefined();
+
+    expect(mockLog.debug).toHaveBeenCalledWith(
+      'Redis DLQ restoration skipped - using in-memory primary'
+    );
   });
 
   it('records convenience failure categories', async () => {

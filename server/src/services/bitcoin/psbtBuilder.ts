@@ -146,15 +146,7 @@ export function buildMultisigWitnessScript(
         const standardXpub = convertToStandardXpub(keyInfo.xpub);
         const keyNode = bip32.fromBase58(standardXpub, network);
         const derivedNode = keyNode.derive(changeIdx).derive(addressIdx);
-
-        if (derivedNode.publicKey) {
-          pubkeys.push(derivedNode.publicKey);
-        } else {
-          log.warn('No publicKey on derived node for witnessScript', {
-            inputIndex,
-            fingerprint: keyInfo.fingerprint,
-          });
-        }
+        pubkeys.push(derivedNode.publicKey!);
       } catch (keyError) {
         log.warn('Failed to derive key for witnessScript', {
           inputIndex,

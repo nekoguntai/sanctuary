@@ -117,7 +117,6 @@ router.get('/wallets/:walletId/addresses', requireWalletAccess('view'), async (r
         addresses = await prisma.address.findMany({
           where: {
             walletId,
-            ...(used !== undefined && { used: used === 'true' }),
           },
           include: {
             addressLabels: {

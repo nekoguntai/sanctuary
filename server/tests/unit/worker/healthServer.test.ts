@@ -102,6 +102,26 @@ describe('Worker Health Server', () => {
     );
   });
 
+  it('treats missing request url as root and returns degraded status when components fail', async () => {
+    startHealthServer({
+      port: 3016,
+      healthProvider: {
+        getHealth: async () => ({ redis: false, electrum: true, jobQueue: true }),
+      },
+    });
+
+    const req = {};
+    const res = makeRes();
+    await capturedHandler?.(req, res);
+
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual(
+      expect.objectContaining({
+        status: 'degraded',
+      })
+    );
+  });
+
   it('responds with readiness failure', async () => {
     startHealthServer({
       port: 3006,

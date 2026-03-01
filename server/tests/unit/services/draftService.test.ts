@@ -182,6 +182,23 @@ describe('DraftService', () => {
       expect(lockUtxosForDraft).toHaveBeenCalled();
     });
 
+    it('uses empty selectedUtxoIds default when none are provided', async () => {
+      await createDraft(walletId, userId, {
+        recipient: validInput.recipient,
+        amount: validInput.amount,
+        feeRate: validInput.feeRate,
+        psbtBase64: validInput.psbtBase64,
+      });
+
+      expect(draftRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedUtxoIds: [],
+        })
+      );
+      expect(resolveUtxoIds).not.toHaveBeenCalled();
+      expect(lockUtxosForDraft).not.toHaveBeenCalled();
+    });
+
     it('should not lock UTXOs for RBF transactions', async () => {
       await createDraft(walletId, userId, { ...validInput, isRBF: true });
 
@@ -219,6 +236,16 @@ describe('DraftService', () => {
 
       await expect(createDraft(walletId, userId, validInput)).resolves.toEqual(mockDraft);
       expect(lockUtxosForDraft).toHaveBeenCalledWith(mockDraft.id, ['utxo-id-1'], { isRBF: false });
+    });
+
+    it('skips lock call when selected UTXOs resolve to an empty set', async () => {
+      (resolveUtxoIds as Mock).mockResolvedValue({
+        found: [],
+        notFound: ['missing-utxo'],
+      });
+
+      await expect(createDraft(walletId, userId, validInput)).resolves.toEqual(mockDraft);
+      expect(lockUtxosForDraft).not.toHaveBeenCalled();
     });
 
     it('should send notification after creating draft', async () => {
@@ -281,6 +308,22 @@ describe('DraftService', () => {
       expect(draftRepository.update).toHaveBeenCalledWith(draftId, expect.objectContaining({
         signedDeviceIds: ['device-1'],
       }));
+    });
+
+    it('uses empty signed-device list when draft has no signedDeviceIds yet', async () => {
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue({
+        ...mockDraft,
+        signedDeviceIds: undefined,
+      });
+
+      await updateDraft(walletId, draftId, userId, { signedDeviceId: 'device-first' });
+
+      expect(draftRepository.update).toHaveBeenCalledWith(
+        draftId,
+        expect.objectContaining({
+          signedDeviceIds: ['device-first'],
+        })
+      );
     });
 
     it('should not duplicate signed device IDs', async () => {
@@ -365,6 +408,40 @@ describe('DraftService', () => {
         expect.objectContaining({
           signedPsbtBase64: 'combined-psbt',
           expectedUpdatedAt: mockDraft.updatedAt,
+        })
+      );
+      fromBase64Spy.mockRestore();
+    });
+
+    it('handles signed PSBT sources and inputs without partial signatures', async () => {
+      (draftRepository.findByIdInWallet as Mock).mockResolvedValue({
+        ...mockDraft,
+        signedPsbtBase64: 'existing-signed-psbt',
+      });
+      const existingPsbtObj = {
+        data: {
+          inputs: [{}],
+        },
+        combine: vi.fn(),
+        toBase64: vi.fn().mockReturnValue('combined-no-partials'),
+      };
+      const newPsbtObj = {
+        data: {
+          inputs: [{}],
+        },
+      };
+
+      const fromBase64Spy = vi.spyOn(bitcoin.Psbt, 'fromBase64');
+      fromBase64Spy
+        .mockReturnValueOnce(existingPsbtObj as any)
+        .mockReturnValueOnce(newPsbtObj as any);
+
+      await updateDraft(walletId, draftId, userId, { signedPsbtBase64: 'new-psbt-no-partials' });
+
+      expect(draftRepository.update).toHaveBeenCalledWith(
+        draftId,
+        expect.objectContaining({
+          signedPsbtBase64: 'combined-no-partials',
         })
       );
       fromBase64Spy.mockRestore();

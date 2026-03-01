@@ -7,6 +7,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { faker } from '@faker-js/faker';
 
+const { mockGetNamespacedCache, mockCache, mockLog } = vi.hoisted(() => ({
+  mockGetNamespacedCache: vi.fn(),
+  mockCache: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    deletePattern: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+  },
+  mockLog: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 // Mock Prisma
 vi.mock('../../../src/models/prisma', () => ({
   default: {
@@ -27,23 +44,12 @@ vi.mock('../../../src/models/prisma', () => ({
 
 // Mock Redis/cache
 vi.mock('../../../src/infrastructure/redis', () => ({
-  getNamespacedCache: vi.fn(() => ({
-    get: vi.fn().mockResolvedValue(null),
-    set: vi.fn().mockResolvedValue(undefined),
-    delete: vi.fn().mockResolvedValue(undefined),
-    deletePattern: vi.fn().mockResolvedValue(undefined),
-    clear: vi.fn().mockResolvedValue(undefined),
-  })),
+  getNamespacedCache: mockGetNamespacedCache,
 }));
 
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({
-  createLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  }),
+  createLogger: () => mockLog,
 }));
 
 import prisma from '../../../src/models/prisma';
@@ -53,6 +59,9 @@ import {
   requireWalletAccess,
   requireWalletEditAccess,
   requireWalletOwnerAccess,
+  invalidateWalletAccessCache,
+  invalidateUserAccessCache,
+  clearAccessCache,
   checkTransactionAccess,
   requireTransactionAccess,
   buildWalletAccessWhere,
@@ -65,6 +74,11 @@ describe('Access Control Service', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetNamespacedCache.mockReturnValue(mockCache);
+    mockCache.get.mockResolvedValue(null);
+    mockCache.set.mockResolvedValue(undefined);
+    mockCache.deletePattern.mockResolvedValue(undefined);
+    mockCache.clear.mockResolvedValue(undefined);
   });
 
   describe('buildWalletAccessWhere', () => {
@@ -146,6 +160,16 @@ describe('Access Control Service', () => {
       const role = await getUserWalletRole(walletId, userId);
 
       expect(role).toBeNull();
+    });
+
+    it('should return cached role without querying database', async () => {
+      mockCache.get.mockResolvedValueOnce({ role: 'owner' });
+
+      const role = await getUserWalletRole(walletId, userId);
+
+      expect(role).toBe('owner');
+      expect(prisma.walletUser.findFirst).not.toHaveBeenCalled();
+      expect(prisma.wallet.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -543,25 +567,40 @@ describe('Access Control Service', () => {
   describe('Cache Management', () => {
     describe('invalidateWalletAccessCache', () => {
       it('should delete cache pattern for wallet', async () => {
-        const { invalidateWalletAccessCache } = await import('../../../src/services/accessControl');
         await invalidateWalletAccessCache(walletId);
         // Should complete without throwing
+      });
+
+      it('should swallow cache errors when invalidating wallet cache', async () => {
+        mockCache.deletePattern.mockRejectedValueOnce(new Error('cache down'));
+
+        await expect(invalidateWalletAccessCache(walletId)).resolves.toBeUndefined();
       });
     });
 
     describe('invalidateUserAccessCache', () => {
       it('should delete cache pattern for user', async () => {
-        const { invalidateUserAccessCache } = await import('../../../src/services/accessControl');
         await invalidateUserAccessCache(userId);
         // Should complete without throwing
+      });
+
+      it('should swallow cache errors when invalidating user cache', async () => {
+        mockCache.deletePattern.mockRejectedValueOnce(new Error('cache down'));
+
+        await expect(invalidateUserAccessCache(userId)).resolves.toBeUndefined();
       });
     });
 
     describe('clearAccessCache', () => {
       it('should clear entire cache', async () => {
-        const { clearAccessCache } = await import('../../../src/services/accessControl');
         await clearAccessCache();
         // Should complete without throwing
+      });
+
+      it('should swallow cache errors when clearing cache', async () => {
+        mockCache.clear.mockRejectedValueOnce(new Error('cache down'));
+
+        await expect(clearAccessCache()).resolves.toBeUndefined();
       });
     });
   });

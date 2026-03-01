@@ -166,7 +166,55 @@ describe('tracer', () => {
     expect(parsedSimple?.spanId).toMatch(/^[a-f0-9]{16}$/);
     expect(parsedSimple?.traceFlags).toBe(1);
 
+    const parsedMalformedTraceparent = tracer.parseTraceContext({
+      traceparent: 'bad-format',
+    });
+    expect(parsedMalformedTraceparent?.traceId).toBe('bad-format');
+    expect(parsedMalformedTraceparent?.spanId).toMatch(/^[a-f0-9]{16}$/);
+
     expect(tracer.parseTraceContext({})).toBeUndefined();
+  });
+
+  it('reuses tracer instances for the same component name', async () => {
+    const tracer = await loadTracer();
+    const first = tracer.getTracer('component-cache');
+    const second = tracer.getTracer('component-cache');
+    const third = tracer.getTracer('component-other');
+
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+  });
+
+  it('uses default serviceVersion/environment when env vars are missing at import time', async () => {
+    const previousPackageVersion = process.env.npm_package_version;
+    const previousNodeEnv = process.env.NODE_ENV;
+    delete process.env.npm_package_version;
+    delete process.env.NODE_ENV;
+
+    try {
+      const tracer = await loadTracer();
+      tracer.configureTracing({
+        enabled: true,
+        serviceName: 'fallback-test',
+      });
+
+      expect(mockLogger.info).toHaveBeenCalledWith('Tracing configured', {
+        enabled: true,
+        serviceName: 'fallback-test',
+        environment: 'development',
+      });
+    } finally {
+      if (previousPackageVersion === undefined) {
+        delete process.env.npm_package_version;
+      } else {
+        process.env.npm_package_version = previousPackageVersion;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
   });
 
   it('accepts custom tracer providers', async () => {
@@ -220,5 +268,25 @@ describe('tracer', () => {
 
     await expect(tracer.getTracerProvider().shutdown()).resolves.toBeUndefined();
     expect(mockLogger.info).toHaveBeenCalledWith('Tracing shutdown complete');
+  });
+
+  it('ends spans for async startActiveSpan callbacks', async () => {
+    const tracer = await loadTracer();
+    tracer.configureTracing({ enabled: true });
+
+    const componentTracer = tracer.getTracer('component');
+    const result = await componentTracer.startActiveSpan('async-work', async (span) => {
+      span.setAttribute('mode', 'async');
+      await Promise.resolve();
+      return 'done';
+    });
+
+    expect(result).toBe('done');
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Span ended: component.async-work',
+      expect.objectContaining({
+        mode: 'async',
+      })
+    );
   });
 });

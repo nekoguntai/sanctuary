@@ -206,6 +206,43 @@ describe('SanctauryWebSocketServer limits', () => {
     expect(payload.data.errors).toEqual([{ channel: 'wallet:deadbeef', reason: 'Access denied' }]);
   });
 
+  it('batch subscribe preserves existing channel set and omits errors when all succeed', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existingClient = createClient();
+    const client = createClient();
+    (server as any).subscriptions.set('system', new Set([existingClient]));
+
+    await (server as any).handleSubscribeBatch(client, {
+      channels: ['system'],
+    });
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('subscribed_batch');
+    expect(payload.data.subscribed).toEqual(['system']);
+    expect(payload.data.errors).toBeUndefined();
+    expect((server as any).subscriptions.get('system')?.has(existingClient)).toBe(true);
+    expect((server as any).subscriptions.get('system')?.has(client)).toBe(true);
+  });
+
+  it('batch subscribe accepts wallet channel when wallet id regex does not match', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({ userId: 'user-1' });
+
+    await (server as any).handleSubscribeBatch(client, {
+      channels: ['wallet:INVALID_ID'],
+    });
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('subscribed_batch');
+    expect(payload.data.subscribed).toEqual(['wallet:INVALID_ID']);
+    expect(payload.data.errors).toBeUndefined();
+    expect(mockCheckWalletAccess).not.toHaveBeenCalled();
+  });
+
   it('drops oldest message when queue is full and policy is drop_oldest', async () => {
     process.env.WS_MAX_QUEUE_SIZE = '1';
     process.env.WS_QUEUE_OVERFLOW_POLICY = 'drop_oldest';
@@ -289,6 +326,30 @@ describe('SanctauryWebSocketServer limits', () => {
     expect((server as any).subscriptions.has('system')).toBe(false);
   });
 
+  it('batch unsubscribe tolerates missing channel set and keeps shared channels with other subscribers', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    const other = createClient();
+
+    client.subscriptions.add('ghost');
+    client.subscriptions.add('shared');
+    other.subscriptions.add('shared');
+    (server as any).subscriptions.set('shared', new Set([client, other]));
+
+    (server as any).handleUnsubscribeBatch(client, {
+      channels: ['ghost', 'shared'],
+    });
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('unsubscribed_batch');
+    expect(payload.data.unsubscribed).toEqual(['ghost', 'shared']);
+    expect((server as any).subscriptions.has('ghost')).toBe(false);
+    expect((server as any).subscriptions.has('shared')).toBe(true);
+    expect((server as any).subscriptions.get('shared')?.has(other)).toBe(true);
+  });
+
   it('enforces grace period message limit', async () => {
     process.env.WS_GRACE_PERIOD_LIMIT = '1';
     const mod = await loadModule();
@@ -308,6 +369,23 @@ describe('SanctauryWebSocketServer limits', () => {
     expect(mod.getRateLimitEvents()[0]?.reason).toBe('grace_period_exceeded');
   });
 
+  it('allows messages during grace period while under the limit', async () => {
+    process.env.WS_GRACE_PERIOD_LIMIT = '5';
+    const mod = await loadModule();
+    const server = new mod.SanctauryWebSocketServer();
+    activeServers.push(server);
+    const client = createClient({
+      connectionTime: Date.now(),
+      totalMessageCount: 0,
+    });
+
+    await (server as any).handleMessage(client, Buffer.from(JSON.stringify({ type: 'ping' })));
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('pong');
+    expect(client.close).not.toHaveBeenCalled();
+  });
+
   it('extracts auth token from header first, then query parameter', async () => {
     const Server = await loadServer();
     const server = new Server();
@@ -319,10 +397,14 @@ describe('SanctauryWebSocketServer limits', () => {
     const fromQuery = (server as any).extractToken(
       createRequest({ url: '/ws?token=query-token' })
     );
+    const missingUrl = (server as any).extractToken(
+      createRequest({ url: undefined })
+    );
     const none = (server as any).extractToken(createRequest());
 
     expect(fromHeader).toBe('header-token');
     expect(fromQuery).toBe('query-token');
+    expect(missingUrl).toBeNull();
     expect(none).toBeNull();
   });
 
@@ -343,6 +425,26 @@ describe('SanctauryWebSocketServer limits', () => {
     const payload = parseLastSend(client);
     expect(payload.type).toBe('connected');
     expect(payload.data.authenticated).toBe(true);
+  });
+
+  it('reuses existing per-user connection set for token-auth upgrades', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existingClient = createClient({ userId: 'user-1' });
+    const client = createClient();
+    (server as any).connectionsPerUser.set('user-1', new Set([existingClient]));
+
+    (server as any).handleConnection(
+      client,
+      createRequest({ headers: { host: 'localhost', authorization: 'Bearer test-token' } })
+    );
+    await flushMicrotasks();
+
+    const userConnections: Set<unknown> = (server as any).connectionsPerUser.get('user-1');
+    expect(userConnections.has(existingClient)).toBe(true);
+    expect(userConnections.has(client)).toBe(true);
+    expect(userConnections.size).toBe(2);
   });
 
   it('rejects new connection when total connection limit is reached', async () => {
@@ -371,6 +473,20 @@ describe('SanctauryWebSocketServer limits', () => {
     expect(client.close).toHaveBeenCalledWith(4001, 'Authentication timeout');
   });
 
+  it('does not close connection on auth-timeout timer once client is authenticated', async () => {
+    vi.useFakeTimers();
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+
+    (server as any).handleConnection(client, createRequest());
+    client.userId = 'late-auth-user';
+    vi.advanceTimersByTime(30000);
+
+    expect(client.close).not.toHaveBeenCalled();
+  });
+
   it('returns already-authenticated response when auth is retried', async () => {
     const Server = await loadServer();
     const server = new Server();
@@ -396,6 +512,22 @@ describe('SanctauryWebSocketServer limits', () => {
     const payload = parseLastSend(client);
     expect(payload.type).toBe('error');
     expect(payload.data.message).toBe('Authentication failed');
+  });
+
+  it('auth via message reuses existing user set without requiring auth timeout handle', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existing = createClient({ userId: 'user-1' });
+    const client = createClient();
+    (server as any).connectionsPerUser.set('user-1', new Set([existing]));
+
+    await (server as any).handleAuth(client, { token: 'ok-token' });
+
+    const userConnections: Set<unknown> = (server as any).connectionsPerUser.get('user-1');
+    expect(userConnections.has(existing)).toBe(true);
+    expect(userConnections.has(client)).toBe(true);
+    expect(client.authTimeout).toBeUndefined();
   });
 
   it('enforces single subscribe limit and rejects extra subscriptions', async () => {
@@ -442,6 +574,77 @@ describe('SanctauryWebSocketServer limits', () => {
     expect(payload.type).toBe('unsubscribed');
     expect(client.subscriptions.has('system')).toBe(false);
     expect((server as any).subscriptions.has('system')).toBe(false);
+  });
+
+  it('subscribes wallet channel when regex does not match and skips access check', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existingClient = createClient();
+    const client = createClient({ userId: 'user-1' });
+    (server as any).subscriptions.set('wallet:INVALID_ID', new Set([existingClient]));
+
+    await (server as any).handleSubscribe(client, { channel: 'wallet:INVALID_ID' });
+
+    expect(mockCheckWalletAccess).not.toHaveBeenCalled();
+    expect((server as any).subscriptions.get('wallet:INVALID_ID')?.has(existingClient)).toBe(true);
+    expect((server as any).subscriptions.get('wallet:INVALID_ID')?.has(client)).toBe(true);
+  });
+
+  it('subscribes wallet channel when access check passes', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({ userId: 'user-1' });
+
+    await (server as any).handleSubscribe(client, { channel: 'wallet:deadbeef' });
+
+    expect(mockCheckWalletAccess).toHaveBeenCalledWith('deadbeef', 'user-1');
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('subscribed');
+    expect(payload.data.channel).toBe('wallet:deadbeef');
+  });
+
+  it('returns early when unsubscribing a channel client is not subscribed to', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+
+    (server as any).handleUnsubscribe(client, { channel: 'missing' });
+
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('unsubscribes even when server channel set is missing', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    client.subscriptions.add('ghost');
+
+    (server as any).handleUnsubscribe(client, { channel: 'ghost' });
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('unsubscribed');
+    expect(payload.data.channel).toBe('ghost');
+    expect((server as any).subscriptions.has('ghost')).toBe(false);
+  });
+
+  it('keeps channel subscription set when other subscribers remain on unsubscribe', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    const other = createClient();
+    client.subscriptions.add('system');
+    other.subscriptions.add('system');
+    (server as any).subscriptions.set('system', new Set([client, other]));
+
+    (server as any).handleUnsubscribe(client, { channel: 'system' });
+
+    expect((server as any).subscriptions.has('system')).toBe(true);
+    expect((server as any).subscriptions.get('system')?.has(other)).toBe(true);
   });
 
   it('re-queues when socket buffer is full and resumes on drain', async () => {
@@ -556,6 +759,48 @@ describe('SanctauryWebSocketServer limits', () => {
     );
   });
 
+  it('handles disconnect when user mapping is absent', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({
+      userId: 'missing-user',
+      connectionTime: Date.now() - 3000,
+    });
+    (server as any).clients.add(client);
+
+    (server as any).handleDisconnect(client);
+
+    expect((server as any).clients.has(client)).toBe(false);
+  });
+
+  it('keeps per-user and channel sets when other entries remain during disconnect', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({
+      userId: 'user-1',
+      connectionTime: Date.now() - 3000,
+    });
+    const otherUserClient = createClient({ userId: 'user-1' });
+    const otherChannelClient = createClient();
+
+    client.subscriptions.add('shared');
+    client.subscriptions.add('foreign');
+    (server as any).clients.add(client);
+    (server as any).connectionsPerUser.set('user-1', new Set([client, otherUserClient]));
+    (server as any).subscriptions.set('shared', new Set([client, otherChannelClient]));
+    (server as any).subscriptions.set('foreign', new Set([otherChannelClient]));
+
+    (server as any).handleDisconnect(client);
+
+    expect((server as any).connectionsPerUser.has('user-1')).toBe(true);
+    expect((server as any).connectionsPerUser.get('user-1')?.has(otherUserClient)).toBe(true);
+    expect((server as any).subscriptions.has('shared')).toBe(true);
+    expect((server as any).subscriptions.get('shared')?.has(otherChannelClient)).toBe(true);
+    expect((server as any).subscriptions.has('foreign')).toBe(true);
+  });
+
   it('closes all client sockets and the server instance', async () => {
     const Server = await loadServer();
     const server = new Server();
@@ -571,5 +816,321 @@ describe('SanctauryWebSocketServer limits', () => {
     expect(clientA.close).toHaveBeenCalledWith(1000, 'Server closing');
     expect(clientB.close).toHaveBeenCalledWith(1000, 'Server closing');
     expect(wssCloseSpy).toHaveBeenCalled();
+  });
+
+  it('caps in-memory rate limit event history at MAX_RATE_LIMIT_EVENTS', async () => {
+    process.env.MAX_WS_MESSAGES_PER_SECOND = '0';
+    const mod = await loadModule();
+    const server = new mod.SanctauryWebSocketServer();
+    activeServers.push(server);
+    const client = createClient({
+      connectionTime: Date.now() - 6000,
+      lastMessageReset: Date.now(),
+      messageCount: 0,
+    });
+
+    for (let i = 0; i < 55; i++) {
+      await (server as any).handleMessage(client, Buffer.from(JSON.stringify({ type: 'ping' })));
+    }
+
+    const events = mod.getRateLimitEvents();
+    expect(events).toHaveLength(50);
+    expect(events.every((event: { reason: string }) => event.reason === 'per_second_exceeded')).toBe(true);
+  });
+
+  it('routes websocket upgrade requests through the internal websocket server', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const request = createRequest();
+    const socket = createClient();
+    const wss = (server as any).wss;
+
+    wss.handleUpgrade = vi.fn((_req: unknown, _socket: unknown, _head: Buffer, cb: (ws: unknown) => void) => {
+      cb(socket);
+    });
+    wss.emit = vi.fn();
+
+    server.handleUpgrade(request as any, {} as any, Buffer.alloc(0));
+
+    expect(wss.handleUpgrade).toHaveBeenCalled();
+    expect(wss.emit).toHaveBeenCalledWith('connection', socket, request);
+  });
+
+  it('rejects token-auth connection when per-user limit has already been reached', async () => {
+    process.env.MAX_WEBSOCKET_PER_USER = '1';
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existingClient = createClient({ userId: 'user-1' });
+    const client = createClient();
+
+    (server as any).connectionsPerUser.set('user-1', new Set([existingClient]));
+    (server as any).handleConnection(
+      client,
+      createRequest({ headers: { host: 'localhost', authorization: 'Bearer test-token' } })
+    );
+    await flushMicrotasks();
+
+    expect(client.close).toHaveBeenCalledWith(1008, 'User connection limit of 1 reached');
+  });
+
+  it('closes token-auth connection when JWT verification fails during upgrade', async () => {
+    mockVerifyToken.mockRejectedValueOnce(new Error('invalid token'));
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+
+    (server as any).handleConnection(
+      client,
+      createRequest({ headers: { host: 'localhost', authorization: 'Bearer bad-token' } })
+    );
+    await flushMicrotasks();
+
+    expect(client.close).toHaveBeenCalledWith(1008, 'Authentication failed');
+  });
+
+  it('tracks authenticated users when registration is called directly', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({ userId: 'direct-user' });
+
+    (server as any).completeClientRegistration(client);
+    (server as any).completeClientRegistration(client);
+
+    expect((server as any).connectionsPerUser.get('direct-user')?.size).toBe(1);
+  });
+
+  it('routes registered client message and close events to handlers', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    const handleMessageSpy = vi.spyOn(server as any, 'handleMessage').mockImplementation(() => {});
+    const disconnectSpy = vi.spyOn(server as any, 'handleDisconnect').mockImplementation(() => {});
+    const payload = Buffer.from(JSON.stringify({ type: 'pong' }));
+
+    (server as any).completeClientRegistration(client);
+    client.emit('message', payload);
+    client.emit('close');
+
+    expect(handleMessageSpy).toHaveBeenCalledWith(client, payload);
+    expect(disconnectSpy).toHaveBeenCalledWith(client);
+  });
+
+  it('marks connection alive on pong and handles websocket error callback', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    const disconnectSpy = vi.spyOn(server as any, 'handleDisconnect');
+
+    (server as any).completeClientRegistration(client);
+    client.isAlive = false;
+    client.emit('pong');
+    expect(client.isAlive).toBe(true);
+
+    client.emit('error', new Error('socket failed'));
+    expect(client.closeReason).toBe('error');
+    expect(disconnectSpy).toHaveBeenCalledWith(client);
+  });
+
+  it('dispatches auth/subscribe/unsubscribe/ping message types from handleMessage', async () => {
+    process.env.MAX_WS_MESSAGES_PER_SECOND = '100';
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({
+      connectionTime: Date.now() - 6000,
+      lastMessageReset: Date.now() - 2000,
+    });
+    const authSpy = vi.spyOn(server as any, 'handleAuth').mockImplementation(async () => {});
+    const subscribeSpy = vi.spyOn(server as any, 'handleSubscribe').mockImplementation(async () => {});
+    const unsubscribeSpy = vi.spyOn(server as any, 'handleUnsubscribe').mockImplementation(() => {});
+
+    (server as any).handleMessage(client, Buffer.from(JSON.stringify({ type: 'auth', data: { token: 't' } })));
+    (server as any).handleMessage(
+      client,
+      Buffer.from(JSON.stringify({ type: 'subscribe', data: { channel: 'system' } }))
+    );
+    (server as any).handleMessage(
+      client,
+      Buffer.from(JSON.stringify({ type: 'unsubscribe', data: { channel: 'system' } }))
+    );
+    (server as any).handleMessage(client, Buffer.from(JSON.stringify({ type: 'ping' })));
+
+    expect(authSpy).toHaveBeenCalled();
+    expect(subscribeSpy).toHaveBeenCalled();
+    expect(unsubscribeSpy).toHaveBeenCalled();
+    expect(client.send).toHaveBeenCalledWith(JSON.stringify({ type: 'pong' }));
+  });
+
+  it('ignores invalid JSON and explicit pong messages', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+
+    await (server as any).handleMessage(client, Buffer.from('not-json'));
+    expect(client.close).not.toHaveBeenCalled();
+
+    client.send.mockClear();
+    await (server as any).handleMessage(client, Buffer.from(JSON.stringify({ type: 'pong' })));
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('enforces per-user limit during auth message flow', async () => {
+    process.env.MAX_WEBSOCKET_PER_USER = '1';
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const existing = createClient({ userId: 'user-1' });
+    const client = createClient();
+    (server as any).connectionsPerUser.set('user-1', new Set([existing]));
+
+    await (server as any).handleAuth(client, { token: 'limit-token' });
+
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('error');
+    expect(payload.data.message).toBe('User connection limit of 1 reached');
+    expect(client.close).toHaveBeenCalledWith(1008, 'User connection limit of 1 reached');
+  });
+
+  it('authenticates via message, stores user mapping, and clears auth timeout', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    client.authTimeout = setTimeout(() => {}, 10_000);
+
+    await (server as any).handleAuth(client, { token: 'ok-token' });
+
+    expect(client.userId).toBe('user-1');
+    expect(client.authTimeout).toBeUndefined();
+    expect((server as any).connectionsPerUser.get('user-1')?.has(client)).toBe(true);
+    const payload = parseLastSend(client);
+    expect(payload.type).toBe('authenticated');
+    expect(payload.data.success).toBe(true);
+  });
+
+  it('rejects wallet subscribe when unauthenticated and reports batch limit reached', async () => {
+    process.env.MAX_WS_SUBSCRIPTIONS = '1';
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+
+    await (server as any).handleSubscribe(client, { channel: 'wallet:abc123' });
+    const singlePayload = parseLastSend(client);
+    expect(singlePayload.type).toBe('error');
+    expect(singlePayload.data.message).toBe('Authentication required for wallet subscriptions');
+
+    client.subscriptions.add('system');
+    await (server as any).handleSubscribeBatch(client, {
+      channels: ['mempool'],
+    });
+    const batchPayload = parseLastSend(client);
+    expect(batchPayload.type).toBe('subscribed_batch');
+    expect(batchPayload.data.errors).toEqual([
+      { channel: 'mempool', reason: 'Subscription limit reached' },
+    ]);
+  });
+
+  it('clears auth timeout during disconnect cleanup', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient();
+    client.authTimeout = setTimeout(() => {}, 10_000);
+
+    (server as any).handleDisconnect(client);
+
+    expect(client.authTimeout).toBeUndefined();
+  });
+
+  it('returns false when sending to a non-open websocket', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({ readyState: WebSocket.CLOSED });
+
+    const accepted = (server as any).sendToClient(client, { type: 'event' });
+    expect(accepted).toBe(false);
+  });
+
+  it('queues message without starting processor when queue is already processing', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({
+      isProcessingQueue: true,
+    });
+    const processSpy = vi.spyOn(server as any, 'processClientQueue');
+
+    const accepted = (server as any).sendToClient(client, { type: 'event' });
+
+    expect(accepted).toBe(true);
+    expect(client.messageQueue).toHaveLength(1);
+    expect(processSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops queue processing when client is closed or queue is empty', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const client = createClient({
+      readyState: WebSocket.CLOSED,
+      messageQueue: [JSON.stringify({ type: 'queued' })],
+      isProcessingQueue: true,
+    });
+
+    (server as any).processClientQueue(client);
+
+    expect(client.isProcessingQueue).toBe(false);
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('maps global and address channels for event fanout', async () => {
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+
+    expect((server as any).getChannelsForEvent({ type: 'block', data: {} })).toContain('blocks');
+    expect((server as any).getChannelsForEvent({ type: 'mempool', data: {} })).toContain('mempool');
+    expect((server as any).getChannelsForEvent({ type: 'modelDownload', data: {} })).toContain('system');
+    expect((server as any).getChannelsForEvent({ type: 'sync', data: {} })).toContain('sync:all');
+    expect((server as any).getChannelsForEvent({ type: 'log', data: {} })).toContain('logs:all');
+    expect(
+      (server as any).getChannelsForEvent({
+        type: 'transaction',
+        data: {},
+        walletId: 'w1',
+        addressId: 'a1',
+      })
+    ).toEqual(expect.arrayContaining(['transactions:all', 'wallet:w1', 'wallet:w1:transaction', 'address:a1']));
+  });
+
+  it('terminates dead clients during heartbeat and tolerates heartbeat exceptions', async () => {
+    vi.useFakeTimers();
+    const Server = await loadServer();
+    const server = new Server();
+    activeServers.push(server);
+    const deadClient = createClient({ isAlive: false, connectionTime: Date.now() - 1000 });
+    const throwingClient = createClient({
+      isAlive: false,
+      connectionTime: Date.now() - 1000,
+      terminate: vi.fn(() => {
+        throw new Error('terminate failed');
+      }),
+    });
+    (server as any).clients.add(deadClient);
+
+    vi.advanceTimersByTime(30_000);
+    expect(deadClient.terminate).toHaveBeenCalled();
+
+    (server as any).clients.add(throwingClient);
+    expect(() => vi.advanceTimersByTime(30_000)).not.toThrow();
   });
 });

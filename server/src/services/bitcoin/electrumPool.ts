@@ -1968,11 +1968,6 @@ export async function getElectrumPoolAsync(): Promise<ElectrumPool> {
 
   // We're the first caller - create and store the init promise
   poolInitPromise = (async () => {
-    // Double-check in case of race (defensive)
-    if (poolInstance) {
-      return poolInstance;
-    }
-
     // Load config and servers from database
     const { config: dbConfig, servers, proxy } = await loadPoolConfigFromDatabase();
 

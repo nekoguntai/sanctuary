@@ -60,7 +60,8 @@ const DEFAULT_CONFIG: Required<JobQueueConfig> = {
 };
 
 function buildRepeatableJobId(name: string, scheduleOptions: ScheduleOptions): string {
-  const parts = [name, scheduleOptions.cron || ''];
+  // Called only for cron schedules, so cron is always defined here.
+  const parts = [name, scheduleOptions.cron!];
   if (scheduleOptions.timezone) parts.push(scheduleOptions.timezone);
   if (scheduleOptions.limit !== undefined) parts.push(`limit=${scheduleOptions.limit}`);
   return `repeat:${parts.join(':')}`;

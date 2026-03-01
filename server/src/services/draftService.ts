@@ -379,8 +379,6 @@ export async function updateDraft(
       });
     }
   }
-
-  throw new ConflictError('Draft update could not be completed due to concurrent modifications');
 }
 
 /**

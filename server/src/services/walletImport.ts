@@ -278,13 +278,12 @@ export async function importFromDescriptor(
         // Create new device
         const label =
           input.deviceLabels?.[resolution.fingerprint] ||
-          resolution.suggestedLabel ||
-          `Imported Device`;
+          resolution.suggestedLabel!;
 
         const newDevice = await tx.device.create({
           data: {
             userId,
-            type: resolution.originalType || 'unknown',
+            type: resolution.originalType!,
             label,
             fingerprint: resolution.fingerprint,
             derivationPath: resolution.derivationPath,
@@ -509,7 +508,7 @@ export async function importFromJson(
           data: {
             userId,
             type: originalDevice?.type || 'unknown',
-            label: resolution.suggestedLabel || `Imported Device ${i + 1}`,
+            label: resolution.suggestedLabel!,
             fingerprint: resolution.fingerprint,
             derivationPath: resolution.derivationPath,
             xpub: resolution.xpub,
@@ -752,13 +751,12 @@ export async function importFromParsedData(
         // Create new device
         const label =
           input.deviceLabels?.[resolution.fingerprint] ||
-          resolution.suggestedLabel ||
-          `Imported Device`;
+          resolution.suggestedLabel!;
 
         const newDevice = await tx.device.create({
           data: {
             userId,
-            type: resolution.originalType || 'unknown',
+            type: resolution.originalType!,
             label,
             fingerprint: resolution.fingerprint,
             derivationPath: resolution.derivationPath,

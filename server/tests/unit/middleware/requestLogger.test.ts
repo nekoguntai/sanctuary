@@ -43,8 +43,9 @@ vi.mock('../../../src/utils/requestContext', () => ({
 }));
 
 // Mock redact utility
+const mockRedactObject = vi.hoisted(() => vi.fn((obj) => ({ ...obj, password: '[REDACTED]' })));
 vi.mock('../../../src/utils/redact', () => ({
-  redactObject: vi.fn((obj) => ({ ...obj, password: '[REDACTED]' })),
+  redactObject: mockRedactObject,
 }));
 
 import { requestLogger, getRequestId } from '../../../src/middleware/requestLogger';
@@ -265,6 +266,36 @@ describe('Request Logger Middleware', () => {
 
       expect(requestId).toBe('generated-request-id');
       expect(mockRequestContext.getRequestId).toHaveBeenCalled();
+    });
+  });
+
+  describe('request body logging', () => {
+    it('logs redacted body when LOG_REQUEST_BODY is enabled', async () => {
+      const original = process.env.LOG_REQUEST_BODY;
+      process.env.LOG_REQUEST_BODY = 'true';
+      vi.resetModules();
+
+      const { requestLogger: requestLoggerWithBody } = await import('../../../src/middleware/requestLogger');
+
+      req.body = { password: 'secret', note: 'hello' };
+      requestLoggerWithBody(req, res, next);
+
+      expect(mockRedactObject).toHaveBeenCalledWith(req.body);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'GET /api/v1/wallets',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            password: '[REDACTED]',
+            note: 'hello',
+          }),
+        })
+      );
+
+      if (original === undefined) {
+        delete process.env.LOG_REQUEST_BODY;
+      } else {
+        process.env.LOG_REQUEST_BODY = original;
+      }
     });
   });
 });

@@ -5,6 +5,8 @@
  */
 
 import * as bcrypt from 'bcryptjs';
+import { vi } from 'vitest';
+import * as encryption from '../../../src/utils/encryption';
 
 // Import the service
 import {
@@ -82,6 +84,21 @@ describe('Two-Factor Authentication Service', () => {
     it('should reject token with invalid secret', () => {
       expect(verifyToken('', '123456')).toBe(false);
       expect(verifyToken('invalid-secret', '123456')).toBe(false);
+    });
+
+    it('should return false when encrypted-secret parsing throws', () => {
+      expect(verifyToken('not-base64:not-base64:not-base64', '123456')).toBe(false);
+    });
+
+    it('should return false when secret decryption throws', () => {
+      const decryptSpy = vi
+        .spyOn(encryption, 'decryptIfEncrypted')
+        .mockImplementation(() => {
+          throw new Error('decrypt failed');
+        });
+
+      expect(verifyToken('encrypted-secret', '123456')).toBe(false);
+      decryptSpy.mockRestore();
     });
 
     it('should handle 6-digit token format', () => {

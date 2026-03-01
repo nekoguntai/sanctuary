@@ -379,6 +379,22 @@ describe('Transfer Service', () => {
         acceptTransfer(recipientId, transferId)
       ).rejects.toThrow(/not found/i);
     });
+
+    it('should report unknown status when atomic accept update loses race and transfer disappears', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce({
+          id: transferId,
+          toUserId: recipientId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        })
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        acceptTransfer(recipientId, transferId)
+      ).rejects.toThrow(/current status: unknown/i);
+    });
   });
 
   describe('declineTransfer', () => {
@@ -438,6 +454,22 @@ describe('Transfer Service', () => {
       await expect(
         declineTransfer(recipientId, transferId, 'no')
       ).rejects.toThrow(/not found/i);
+    });
+
+    it('should report unknown status when atomic decline update loses race and transfer disappears', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce({
+          id: transferId,
+          toUserId: recipientId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        })
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        declineTransfer(recipientId, transferId, 'no')
+      ).rejects.toThrow(/current status: unknown/i);
     });
   });
 
@@ -535,6 +567,22 @@ describe('Transfer Service', () => {
       await expect(
         cancelTransfer(ownerId, transferId)
       ).rejects.toThrow(/not found/i);
+    });
+
+    it('should report unknown status when atomic cancel update loses race and transfer disappears', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique
+        .mockResolvedValueOnce({
+          id: transferId,
+          fromUserId: ownerId,
+          status: 'pending',
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        })
+        .mockResolvedValueOnce(null);
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        cancelTransfer(ownerId, transferId)
+      ).rejects.toThrow(/current status: unknown/i);
     });
   });
 
@@ -918,6 +966,43 @@ describe('Transfer Service', () => {
       });
     });
 
+    it('should reject device confirm when owner no longer has device access', async () => {
+      const baseTransfer = {
+        id: transferId,
+        resourceType: 'device',
+        resourceId: deviceId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      };
+
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValueOnce(baseTransfer);
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(baseTransfer),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          device: {
+            update: vi.fn().mockResolvedValue({}),
+          },
+          deviceUser: {
+            findFirst: vi.fn().mockResolvedValueOnce(null),
+            create: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+          },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/owner no longer owns this device/i);
+    });
+
     it('should reject confirm when final transfer fetch is missing', async () => {
       const baseTransfer = {
         id: transferId,
@@ -955,6 +1040,34 @@ describe('Transfer Service', () => {
       await expect(
         confirmTransfer(ownerId, transferId)
       ).rejects.toThrow(/not found/i);
+    });
+
+    it('should report unknown status when transfer vanishes inside confirm transaction', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValueOnce({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'accepted',
+        keepExistingUsers: true,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      });
+
+      mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+        const txMock = {
+          ownershipTransfer: {
+            findUnique: vi.fn().mockResolvedValue(null),
+            update: vi.fn(),
+          },
+          walletUser: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+        };
+        return callback(txMock as any);
+      });
+
+      await expect(
+        confirmTransfer(ownerId, transferId)
+      ).rejects.toThrow(/current status: unknown/i);
     });
   });
 
@@ -1062,6 +1175,28 @@ describe('Transfer Service', () => {
       expect(transfer?.resourceName).toBe('Ops Wallet');
     });
 
+    it('should format transfer with undefined user fields when related users are missing', async () => {
+      mockPrismaClient.ownershipTransfer.findUnique.mockResolvedValue({
+        id: transferId,
+        resourceType: 'wallet',
+        resourceId: walletId,
+        fromUserId: ownerId,
+        toUserId: recipientId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        fromUser: null,
+        toUser: null,
+      });
+      mockPrismaClient.wallet.findUnique.mockResolvedValue({
+        id: walletId,
+        name: 'Ops Wallet',
+      });
+
+      const transfer = await getTransfer(transferId);
+      expect(transfer?.fromUser).toBeUndefined();
+      expect(transfer?.toUser).toBeUndefined();
+    });
+
     it('should return pending incoming and awaiting confirmation counts', async () => {
       mockPrismaClient.ownershipTransfer.count
         .mockResolvedValueOnce(7)
@@ -1106,6 +1241,12 @@ describe('Transfer Service', () => {
           data: { status: 'expired' },
         })
       );
+    });
+
+    it('should return zero when no transfers are expired', async () => {
+      mockPrismaClient.ownershipTransfer.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(expireOldTransfers()).resolves.toBe(0);
     });
   });
 

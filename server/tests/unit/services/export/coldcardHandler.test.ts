@@ -118,6 +118,13 @@ describe('Coldcard Export Handler', () => {
       expect(coldcardHandler.export(nestedSegwit).content).toContain('Format: P2SH-P2WSH');
       expect(coldcardHandler.export(legacy).content).toContain('Format: P2SH');
     });
+
+    it('should default to P2WSH for unknown script types', () => {
+      const unknownScript = createMockMultisigWallet({ scriptType: 'unknown_script' as any });
+      const result = coldcardHandler.export(unknownScript);
+
+      expect(result.content).toContain('Format: P2WSH');
+    });
   });
 
   describe('derivation path normalization', () => {

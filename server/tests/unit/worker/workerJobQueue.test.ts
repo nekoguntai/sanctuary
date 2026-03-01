@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let mockQueueInstance: ReturnType<typeof createMockQueue>;
 let mockWorkerInstance: ReturnType<typeof createMockWorker>;
 let mockQueueEventsInstance: ReturnType<typeof createMockQueueEvents>;
+const createdWorkers: Array<{ processFn?: (job: any) => Promise<any> }> = [];
 const { mockDlqAdd } = vi.hoisted(() => ({
   mockDlqAdd: vi.fn().mockResolvedValue(undefined),
 }));
@@ -62,6 +63,11 @@ vi.mock('bullmq', () => {
   }
 
   class MockWorker {
+    processFn?: (job: any) => Promise<any>;
+    constructor(_queueName?: string, processor?: (job: any) => Promise<any>) {
+      this.processFn = processor;
+      createdWorkers.push(this);
+    }
     on = vi.fn();
     isRunning = vi.fn().mockReturnValue(true);
     close = vi.fn().mockResolvedValue(undefined);
@@ -111,6 +117,7 @@ describe('WorkerJobQueue', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createdWorkers.length = 0;
     queue = new WorkerJobQueue({
       concurrency: 3,
       queues: ['sync', 'notifications'],
@@ -263,6 +270,14 @@ describe('WorkerJobQueue', () => {
 
       expect(job).toBeDefined();
     });
+
+    it('returns null when scheduling on missing queue', async () => {
+      await queue.initialize();
+
+      const job = await queue.scheduleRecurring('missing', 'check-stale', {}, '*/5 * * * *');
+
+      expect(job).toBeNull();
+    });
   });
 
   describe('getHealth', () => {
@@ -347,6 +362,26 @@ describe('WorkerJobQueue', () => {
   });
 
   describe('internal behavior and error paths', () => {
+    it('worker process callback delegates to processJob', async () => {
+      await queue.initialize();
+
+      const handler = vi.fn(async () => ({ delegated: true }));
+      queue.registerHandler('sync', {
+        name: 'from-worker',
+        queue: 'sync',
+        handler,
+      });
+
+      const result = await createdWorkers[0].processFn?.({
+        id: 'j-worker-1',
+        name: 'from-worker',
+        data: { id: 'w1' },
+      });
+
+      expect(result).toEqual({ delegated: true });
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
     it('throws when creating queue without a connection', async () => {
       await expect((queue as any).createQueue('sync')).rejects.toThrow('Connection not established');
     });
@@ -402,6 +437,52 @@ describe('WorkerJobQueue', () => {
         3,
         expect.objectContaining({ queueName: 'sync', jobId: 'job-2' })
       );
+    });
+
+    it('handles worker events with missing timing and missing job metadata', () => {
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      const fakeWorker = {
+        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          handlers[event] = handler;
+        }),
+      };
+
+      (queue as any).setupEventHandlers('sync', fakeWorker as any);
+
+      handlers.completed?.({
+        id: 'job-no-timing',
+        name: 'sync-wallet',
+      });
+
+      handlers.failed?.(undefined, new Error('failed-without-job'));
+
+      expect(mockDlqAdd).not.toHaveBeenCalled();
+    });
+
+    it('logs DLQ recording failures for exhausted jobs', async () => {
+      mockDlqAdd.mockRejectedValueOnce(new Error('dlq write failed'));
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      const fakeWorker = {
+        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          handlers[event] = handler;
+        }),
+      };
+
+      (queue as any).setupEventHandlers('sync', fakeWorker as any);
+
+      handlers.failed?.(
+        {
+          id: 'job-dlq-fail',
+          name: 'sync-wallet',
+          data: { walletId: 'w1' },
+          attemptsMade: 3,
+          opts: { attempts: 3 },
+        },
+        new Error('boom')
+      );
+      await Promise.resolve();
+
+      expect(mockDlqAdd).toHaveBeenCalledTimes(1);
     });
 
     it('processJob throws for missing handlers', async () => {
@@ -480,6 +561,34 @@ describe('WorkerJobQueue', () => {
       );
     });
 
+    it('uses default lock TTL when lockTtlMs is not provided', async () => {
+      const handler = vi.fn(async () => ({ processed: true }));
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:default-ttl',
+        token: 'token-default-ttl',
+        expiresAt: Date.now() + 300000,
+        isLocal: false,
+      } as any);
+
+      queue.registerHandler('sync', {
+        name: 'locked-default-ttl',
+        queue: 'sync',
+        handler,
+        lockOptions: {
+          lockKey: () => 'lock:default-ttl',
+        } as any,
+      });
+
+      const result = await (queue as any).processJob('sync', {
+        id: 'j-default-ttl',
+        name: 'locked-default-ttl',
+        data: {},
+      });
+
+      expect(result).toEqual({ processed: true });
+      expect(vi.mocked(acquireLock)).toHaveBeenCalledWith('lock:default-ttl', { ttlMs: 5 * 60 * 1000 });
+    });
+
     it('aborts locked processing when lock refresh is lost', async () => {
       vi.useFakeTimers();
       vi.mocked(acquireLock).mockResolvedValueOnce({
@@ -514,6 +623,142 @@ describe('WorkerJobQueue', () => {
       );
 
       vi.useRealTimers();
+    });
+
+    it('updates lock reference when refresh succeeds', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:refresh-success',
+        token: 'token-initial',
+        expiresAt: Date.now() + 1800,
+        isLocal: false,
+      } as any);
+      vi.mocked(extendLock).mockResolvedValueOnce({
+        key: 'lock:refresh-success',
+        token: 'token-refreshed',
+        expiresAt: Date.now() + 3600,
+        isLocal: false,
+      } as any);
+
+      let refreshCallback: (() => Promise<void>) | undefined;
+      const fakeTimer = { unref: vi.fn() } as any;
+      const setIntervalSpy = vi.spyOn(global, 'setInterval').mockImplementation((cb: any) => {
+        refreshCallback = cb;
+        return fakeTimer;
+      });
+
+      let resolveHandler: ((value: unknown) => void) | undefined;
+      queue.registerHandler('sync', {
+        name: 'locked-refresh-success',
+        queue: 'sync',
+        handler: vi.fn(() => new Promise((resolve) => {
+          resolveHandler = resolve;
+        })),
+        lockOptions: {
+          lockKey: () => 'lock:refresh-success',
+          lockTtlMs: 1800,
+        },
+      });
+
+      const runPromise = (queue as any).processJob('sync', {
+        id: 'j-refresh-success',
+        name: 'locked-refresh-success',
+        data: {},
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await refreshCallback?.();
+      resolveHandler?.({ ok: true });
+
+      await expect(runPromise).resolves.toEqual({ ok: true });
+      expect(vi.mocked(extendLock)).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'lock:refresh-success' }),
+        1800
+      );
+
+      setIntervalSpy.mockRestore();
+    });
+
+    it('aborts when lock refresh throws and ignores later refresh ticks', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:refresh-error',
+        token: 'token-error',
+        expiresAt: Date.now() + 1800,
+        isLocal: false,
+      } as any);
+      vi.mocked(extendLock).mockRejectedValueOnce(new Error('refresh failed'));
+
+      let refreshCallback: (() => Promise<void>) | undefined;
+      const fakeTimer = { unref: vi.fn() } as any;
+      const setIntervalSpy = vi.spyOn(global, 'setInterval').mockImplementation((cb: any) => {
+        refreshCallback = cb;
+        return fakeTimer;
+      });
+
+      queue.registerHandler('sync', {
+        name: 'locked-refresh-error',
+        queue: 'sync',
+        handler: vi.fn(() => new Promise(() => undefined)),
+        lockOptions: {
+          lockKey: () => 'lock:refresh-error',
+          lockTtlMs: 1800,
+        },
+      });
+
+      const runPromise = (queue as any).processJob('sync', {
+        id: 'j-refresh-error',
+        name: 'locked-refresh-error',
+        data: {},
+      });
+      const rejection = expect(runPromise).rejects.toThrow('Lock lost for sync:locked-refresh-error');
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await refreshCallback?.();
+      await rejection;
+      await refreshCallback?.();
+
+      setIntervalSpy.mockRestore();
+    });
+
+    it('aborts when lock refresh throws a non-Error value', async () => {
+      vi.mocked(acquireLock).mockResolvedValueOnce({
+        key: 'lock:refresh-non-error',
+        token: 'token-non-error',
+        expiresAt: Date.now() + 1800,
+        isLocal: false,
+      } as any);
+      vi.mocked(extendLock).mockRejectedValueOnce('refresh failed as string');
+
+      let refreshCallback: (() => Promise<void>) | undefined;
+      const fakeTimer = { unref: vi.fn() } as any;
+      const setIntervalSpy = vi.spyOn(global, 'setInterval').mockImplementation((cb: any) => {
+        refreshCallback = cb;
+        return fakeTimer;
+      });
+
+      queue.registerHandler('sync', {
+        name: 'locked-refresh-non-error',
+        queue: 'sync',
+        handler: vi.fn(() => new Promise(() => undefined)),
+        lockOptions: {
+          lockKey: () => 'lock:refresh-non-error',
+          lockTtlMs: 1800,
+        },
+      });
+
+      const runPromise = (queue as any).processJob('sync', {
+        id: 'j-refresh-non-error',
+        name: 'locked-refresh-non-error',
+        data: {},
+      });
+      const rejection = expect(runPromise).rejects.toThrow('Lock lost for sync:locked-refresh-non-error');
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await refreshCallback?.();
+      await rejection;
+
+      setIntervalSpy.mockRestore();
     });
 
     it('covers add/addBulk/schedule error and duplicate branches', async () => {

@@ -532,7 +532,10 @@ describe('Authentication', () => {
 // Mock auth middleware for route tests
 vi.mock('../../../src/middleware/auth', () => ({
   authenticate: (req: any, _res: any, next: any) => {
-    req.user = { userId: 'test-user-id', username: 'testuser', isAdmin: false };
+    const omitUsername = req.headers['x-test-no-username'] === '1';
+    req.user = omitUsername
+      ? { userId: 'test-user-id', isAdmin: false }
+      : { userId: 'test-user-id', username: 'testuser', isAdmin: false };
     next();
   },
   requireAdmin: (req: any, res: any, next: any) => {
@@ -1016,6 +1019,26 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Not Found');
+    });
+
+    it('should audit revoke session with unknown username fallback', async () => {
+      const { revokeSession } = await import('../../../src/services/refreshTokenService');
+      const mockRevokeSession = vi.mocked(revokeSession);
+      const { auditService } = await import('../../../src/services/auditService');
+
+      mockRevokeSession.mockResolvedValue(true);
+
+      const response = await request(app)
+        .delete('/api/v1/auth/sessions/session-unknown-user')
+        .set('X-Test-No-Username', '1');
+
+      expect(response.status).toBe(200);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: 'unknown',
+          details: expect.objectContaining({ sessionId: 'session-unknown-user' }),
+        })
+      );
     });
 
     it('should handle service errors gracefully', async () => {
@@ -1885,6 +1908,24 @@ describe('Auth API Routes', () => {
       expect(mockRevokeRefreshToken).toHaveBeenCalledWith('some-refresh-token');
     });
 
+    it('should audit logout with unknown username fallback', async () => {
+      const { auditService } = await import('../../../src/services/auditService');
+
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', 'Bearer valid-token')
+        .set('X-Test-No-Username', '1')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: 'unknown',
+        })
+      );
+    });
+
     it('should handle errors gracefully', async () => {
       const { revokeToken } = await import('../../../src/services/tokenRevocation');
       const mockRevokeToken = vi.mocked(revokeToken);
@@ -1925,6 +1966,25 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal Server Error');
+    });
+
+    it('should audit logout-all with unknown username fallback', async () => {
+      const { auditService } = await import('../../../src/services/auditService');
+
+      const response = await request(app)
+        .post('/api/v1/auth/logout-all')
+        .set('Authorization', 'Bearer valid-token')
+        .set('X-Test-No-Username', '1')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: 'unknown',
+          details: expect.objectContaining({ action: 'logout_all' }),
+        })
+      );
     });
   });
 
@@ -2171,6 +2231,32 @@ describe('Auth API Routes', () => {
       expect(response.body.message).toContain('Invalid 2FA code');
     });
 
+    it('should allow disabling via backup code when TOTP token fails', async () => {
+      const correctPassword = 'CorrectPassword123!';
+      const hashedPassword = await hashPassword(correctPassword);
+
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        password: hashedPassword,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'some-secret',
+        twoFactorBackupCodes: '[{"hash":"h1"}]',
+      });
+      mockPrismaClient.user.update.mockResolvedValue({});
+
+      const { verifyToken, verifyBackupCode } = await import('../../../src/services/twoFactorService');
+      vi.mocked(verifyToken).mockReturnValueOnce(false);
+      vi.mocked(verifyBackupCode).mockReset().mockResolvedValue({ valid: true, updatedCodesJson: '[]' });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/disable')
+        .send({ password: correctPassword, token: 'ABCD-EFGH' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
     it('should successfully disable 2FA', async () => {
       const correctPassword = 'CorrectPassword123!';
       const hashedPassword = await hashPassword(correctPassword);
@@ -2190,6 +2276,27 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
+    });
+
+    it('should handle disable errors gracefully', async () => {
+      const correctPassword = 'CorrectPassword123!';
+      const hashedPassword = await hashPassword(correctPassword);
+
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        password: hashedPassword,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'some-secret',
+      });
+      mockPrismaClient.user.update.mockRejectedValueOnce(new Error('Write failed'));
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/disable')
+        .send({ password: correctPassword, token: '123456' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
     });
   });
 
@@ -2407,6 +2514,31 @@ describe('Auth API Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.remaining).toBe(8);
     });
+
+    it('should handle backup-code count errors gracefully', async () => {
+      const correctPassword = 'CorrectPassword123!';
+      const hashedPassword = await hashPassword(correctPassword);
+
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        password: hashedPassword,
+        twoFactorEnabled: true,
+        twoFactorBackupCodes: '[{"hash":"h1"}]',
+      });
+
+      const { getRemainingBackupCodeCount } = await import('../../../src/services/twoFactorService');
+      vi.mocked(getRemainingBackupCodeCount).mockImplementationOnce(() => {
+        throw new Error('Parse failed');
+      });
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/backup-codes')
+        .send({ password: correctPassword });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
+    });
   });
 
   describe('POST /auth/2fa/backup-codes/regenerate - Regenerate Backup Codes', () => {
@@ -2511,6 +2643,30 @@ describe('Auth API Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.backupCodes).toHaveLength(8);
+    });
+
+    it('should handle regenerate backup code errors gracefully', async () => {
+      const correctPassword = 'CorrectPassword123!';
+      const hashedPassword = await hashPassword(correctPassword);
+
+      mockPrismaClient.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        username: 'testuser',
+        password: hashedPassword,
+        twoFactorEnabled: true,
+        twoFactorSecret: 'some-secret',
+      });
+
+      const twoFactorService = await import('../../../src/services/twoFactorService');
+      vi.mocked(twoFactorService.verifyToken).mockReturnValueOnce(true);
+      vi.mocked(twoFactorService.hashBackupCodes).mockRejectedValueOnce(new Error('Hash failed'));
+
+      const response = await request(app)
+        .post('/api/v1/auth/2fa/backup-codes/regenerate')
+        .send({ password: correctPassword, token: '123456' });
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Internal Server Error');
     });
   });
 });

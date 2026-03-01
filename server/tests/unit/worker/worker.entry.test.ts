@@ -190,6 +190,12 @@ describe('worker entrypoint', () => {
     expect(handlers.SIGTERM).toHaveLength(1);
     expect(handlers.SIGINT).toHaveLength(1);
     expect(processOnSpy).toHaveBeenCalled();
+
+    await handlers.SIGTERM?.[0]();
+    expect(mocks.healthServerHandle.close).not.toHaveBeenCalled();
+    expect(mocks.electrumInstance.stop).not.toHaveBeenCalled();
+    expect(mocks.queueInstance.shutdown).not.toHaveBeenCalled();
+    expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
   it('fails startup when Redis connection check reports disconnected', async () => {
@@ -261,11 +267,27 @@ describe('worker entrypoint', () => {
       electrum: true,
       jobQueue: true,
     });
+    mocks.electrumInstance.isConnected.mockReturnValueOnce(undefined as any);
+    mocks.queueInstance.isHealthy.mockReturnValueOnce(undefined as any);
+    await expect(healthProvider?.getHealth()).resolves.toEqual({
+      redis: true,
+      electrum: false,
+      jobQueue: false,
+    });
     await expect(healthProvider?.getMetrics()).resolves.toEqual({
       queues: { sync: { size: 0 } },
       electrum: {
         subscribedAddresses: 2,
         networks: { testnet: { connected: true } },
+      },
+    });
+    mocks.queueInstance.getHealth.mockResolvedValueOnce(undefined);
+    mocks.electrumInstance.getHealthMetrics.mockReturnValueOnce(undefined);
+    await expect(healthProvider?.getMetrics()).resolves.toEqual({
+      queues: {},
+      electrum: {
+        subscribedAddresses: 0,
+        networks: {},
       },
     });
 
@@ -303,6 +325,11 @@ describe('worker entrypoint', () => {
       'Unhandled promise rejection in worker',
       expect.objectContaining({ reason: 'promise boom' })
     );
+    handlers.unhandledRejection?.[0]('plain boom');
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      'Unhandled promise rejection in worker',
+      expect.objectContaining({ reason: 'plain boom', stack: undefined })
+    );
 
     handlers.uncaughtException?.[0](new Error('uncaught boom'));
     expect(mocks.logger.error).toHaveBeenCalledWith(
@@ -318,8 +345,11 @@ describe('worker entrypoint', () => {
     mocks.disconnect.mockRejectedValueOnce(new Error('db disconnect failed'));
 
     await handlers.SIGTERM?.[0]();
+    await handlers.SIGTERM?.[0]();
+    await intervalCallback?.();
 
     expect(clearIntervalSpy).toHaveBeenCalledWith(intervalHandle);
+    expect(mocks.electrumInstance.reconcileSubscriptions).toHaveBeenCalledTimes(2);
     expect(mocks.shutdownDistributedLock).toHaveBeenCalledTimes(1);
     expect(mocks.logger.error).toHaveBeenCalledWith(
       'Error closing health server',

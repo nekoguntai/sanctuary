@@ -65,6 +65,7 @@ import {
   calculateFeeRate,
   clonePsbt,
 } from '../../../src/services/bitcoin/psbtValidation';
+import { getNetwork } from '../../../src/services/bitcoin/utils';
 
 // Test constants
 const TEST_ADDRESS_TESTNET = 'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx';
@@ -387,6 +388,33 @@ describe('Payjoin Service', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe(PayjoinErrors.UNAVAILABLE);
       expect(result.errorMessage).toContain('Address not found');
+    });
+
+    it('falls back to mainnet when address wallet network is missing', async () => {
+      mockPrismaClient.address.findUnique.mockResolvedValue({
+        ...mockAddress,
+        wallet: {
+          ...mockAddress.wallet,
+          network: undefined,
+        },
+      });
+
+      const mockPsbt = createMockPsbt();
+      (parsePsbt as Mock).mockReturnValue(mockPsbt);
+      (getPsbtOutputs as Mock).mockReturnValue([
+        { address: TEST_ADDRESS_TESTNET, value: 80000 },
+      ]);
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([]);
+
+      const result = await processPayjoinRequest(
+        addressId,
+        mockPsbt.toBase64(),
+        1
+      );
+
+      expect(getNetwork).toHaveBeenCalledWith('mainnet');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(PayjoinErrors.NOT_ENOUGH_MONEY);
     });
 
     it('should reject invalid PSBT structure', async () => {
@@ -968,6 +996,120 @@ describe('Payjoin Service', () => {
           }),
         })
       );
+    });
+
+    it('should choose the closest candidate when multiple in-range UTXOs exist', async () => {
+      const paymentAmount = 100000;
+      const fartherCandidate = {
+        id: 'utxo-farther',
+        txid: 'cccc'.repeat(16),
+        vout: 0,
+        amount: BigInt(120000),
+        scriptPubKey: '0014' + 'c'.repeat(40),
+      };
+      const closestCandidate = {
+        id: 'utxo-closest',
+        txid: 'dddd'.repeat(16),
+        vout: 1,
+        amount: BigInt(102000),
+        scriptPubKey: '0014' + 'd'.repeat(40),
+      };
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([fartherCandidate, closestCandidate]);
+      (parsePsbt as Mock).mockReturnValue({} as bitcoin.Psbt);
+      (getPsbtOutputs as Mock).mockReturnValue([{ address: TEST_ADDRESS_TESTNET, value: paymentAmount }]);
+
+      const addInput = vi.fn();
+      (clonePsbt as Mock).mockReturnValue({
+        addInput,
+        txOutputs: [{ value: paymentAmount }],
+        toBase64: () => 'proposal-closest',
+      });
+
+      const result = await processPayjoinRequest(addressId, 'cHNidP8=', 1);
+
+      expect(result.success).toBe(true);
+      expect(addInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hash: closestCandidate.txid,
+          index: closestCandidate.vout,
+        })
+      );
+    });
+
+    it('should fall back to the largest non-dust UTXO when no in-range candidate exists', async () => {
+      const paymentAmount = 100000;
+      const smallNonDust = {
+        id: 'utxo-small',
+        txid: 'eeee'.repeat(16),
+        vout: 0,
+        amount: BigInt(30000),
+        scriptPubKey: '0014' + 'e'.repeat(40),
+      };
+      const largestNonDust = {
+        id: 'utxo-large',
+        txid: 'ffff'.repeat(16),
+        vout: 1,
+        amount: BigInt(400000),
+        scriptPubKey: '0014' + 'f'.repeat(40),
+      };
+      const dust = {
+        id: 'utxo-dust',
+        txid: '9999'.repeat(16),
+        vout: 2,
+        amount: BigInt(900),
+        scriptPubKey: '0014' + '9'.repeat(40),
+      };
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue([smallNonDust, largestNonDust, dust]);
+      (parsePsbt as Mock).mockReturnValue({} as bitcoin.Psbt);
+      (getPsbtOutputs as Mock).mockReturnValue([{ address: TEST_ADDRESS_TESTNET, value: paymentAmount }]);
+
+      const addInput = vi.fn();
+      (clonePsbt as Mock).mockReturnValue({
+        addInput,
+        txOutputs: [{ value: paymentAmount }],
+        toBase64: () => 'proposal-fallback',
+      });
+
+      const result = await processPayjoinRequest(addressId, 'cHNidP8=', 1);
+
+      expect(result.success).toBe(true);
+      expect(addInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hash: largestNonDust.txid,
+          index: largestNonDust.vout,
+        })
+      );
+    });
+
+    it('should return NOT_ENOUGH_MONEY when only dust UTXOs are available', async () => {
+      const paymentAmount = 100000;
+      const dustOnly = [
+        {
+          id: 'dust-1',
+          txid: '1212'.repeat(16),
+          vout: 0,
+          amount: BigInt(500),
+          scriptPubKey: '0014' + '1'.repeat(40),
+        },
+        {
+          id: 'dust-2',
+          txid: '3434'.repeat(16),
+          vout: 1,
+          amount: BigInt(1000),
+          scriptPubKey: '0014' + '2'.repeat(40),
+        },
+      ];
+
+      mockPrismaClient.uTXO.findMany.mockResolvedValue(dustOnly);
+      (parsePsbt as Mock).mockReturnValue({} as bitcoin.Psbt);
+      (getPsbtOutputs as Mock).mockReturnValue([{ address: TEST_ADDRESS_TESTNET, value: paymentAmount }]);
+
+      const result = await processPayjoinRequest(addressId, 'cHNidP8=', 1);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(PayjoinErrors.NOT_ENOUGH_MONEY);
     });
   });
 });

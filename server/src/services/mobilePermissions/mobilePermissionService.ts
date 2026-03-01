@@ -58,11 +58,9 @@ const log = createLogger('MobilePermission');
  * Get the field value from a mobile permission record
  */
 function getPermissionField(
-  permission: MobilePermission | null,
+  permission: MobilePermission,
   action: MobileAction
 ): boolean {
-  if (!permission) return true; // No record = all enabled (role determines max)
-
   const field = ACTION_TO_FIELD[action] as keyof MobilePermission;
   return permission[field] as boolean;
 }

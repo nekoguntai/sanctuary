@@ -328,6 +328,17 @@ describe('Label Repository', () => {
         data: { name: 'Trimmed' },
       });
     });
+
+    it('should update description when explicitly provided', async () => {
+      (prisma.label.update as Mock).mockResolvedValue({ ...mockLabel, description: null });
+
+      await labelRepository.update('label-123', { description: null });
+
+      expect(prisma.label.update).toHaveBeenCalledWith({
+        where: { id: 'label-123' },
+        data: { description: null },
+      });
+    });
   });
 
   describe('remove', () => {

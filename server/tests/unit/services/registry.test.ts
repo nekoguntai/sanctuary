@@ -300,6 +300,76 @@ describe('ServiceRegistry', () => {
       expect(summary.frozen).toBe(true);
     });
   });
+
+  describe('factories and mocks', () => {
+    it('lazily instantiates factory services once and reuses singleton instance', () => {
+      const registry = createTestRegistry();
+      let created = 0;
+
+      registry.registerFactory('lazy', () => {
+        created += 1;
+        return { id: created };
+      });
+
+      expect(registry.has('lazy')).toBe(true);
+      expect(registry.getNames()).toContain('lazy');
+
+      const first = registry.get<{ id: number }>('lazy');
+      const second = registry.get<{ id: number }>('lazy');
+      expect(first).toBe(second);
+      expect(created).toBe(1);
+    });
+
+    it('enforces factory duplicate and frozen guards', () => {
+      const registry = createTestRegistry();
+
+      registry.registerFactory('factoryService', () => ({ ok: true }));
+      expect(() => registry.registerFactory('factoryService', () => ({ ok: false }))).toThrow(
+        "Service 'factoryService' is already registered"
+      );
+
+      registry.freeze();
+      expect(() => registry.registerFactory('blockedFactory', () => ({ ok: true }))).toThrow(
+        "Cannot register factory 'blockedFactory': registry is frozen"
+      );
+    });
+
+    it('prioritizes mocks over services and allows unmock/clearMocks', () => {
+      const registry = createTestRegistry();
+      const real = { source: 'real' };
+      const mocked = { source: 'mock' };
+
+      registry.register('service', real);
+      registry.mock('service', mocked);
+      expect(registry.get<{ source: string }>('service')).toBe(mocked);
+
+      registry.unmock('service');
+      expect(registry.get<{ source: string }>('service')).toBe(real);
+
+      registry.mock('tempA', { value: 1 });
+      registry.mock('tempB', { value: 2 });
+      registry.clearMocks();
+      expect(registry.has('tempA')).toBe(false);
+      expect(registry.has('tempB')).toBe(false);
+    });
+
+    it('reset clears services, factories, mocks, and frozen state', () => {
+      const registry = createTestRegistry();
+      registry.register('service', { ok: true });
+      registry.registerFactory('lazy', () => ({ id: 1 }));
+      registry.mock('mockOnly', { id: 'm' });
+      registry.freeze();
+
+      registry.reset();
+
+      expect(registry.getNames()).toEqual([]);
+      expect(registry.isFrozen()).toBe(false);
+      expect(registry.has('service')).toBe(false);
+      expect(registry.has('lazy')).toBe(false);
+      expect(registry.has('mockOnly')).toBe(false);
+      expect(registry.tryGet('service')).toBeUndefined();
+    });
+  });
 });
 
 describe('createTestRegistry', () => {

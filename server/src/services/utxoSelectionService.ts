@@ -161,29 +161,22 @@ function selectForPrivacy(
 
   // First, try to satisfy with UTXOs from a single transaction (already linked)
   for (const group of groups) {
-    if (selected.length === 0) {
-      const groupTotal = group.reduce((sum, u) => sum + u.amount, BigInt(0));
-      const fee = calculateFee(group.length, 2, feeRate, scriptType);
+    const groupTotal = group.reduce((sum, u) => sum + u.amount, BigInt(0));
+    const fee = calculateFee(group.length, 2, feeRate, scriptType);
 
-      if (groupTotal >= targetAmount + fee) {
-        selected.push(...group);
-        totalSelected = groupTotal;
-        group.forEach(u => addressesSeen.add(u.address));
-        break;
-      }
+    if (groupTotal >= targetAmount + fee) {
+      selected.push(...group);
+      totalSelected = groupTotal;
+      group.forEach(u => addressesSeen.add(u.address));
+      break;
     }
   }
 
   // If not satisfied, add more UTXOs preferring same addresses
   if (totalSelected < targetAmount + calculateFee(selected.length || 1, 2, feeRate, scriptType)) {
-    // Sort remaining by whether address is already used
+    // Sort remaining by amount descending
     const remaining = utxos.filter(u => !selected.includes(u));
-    remaining.sort((a, b) => {
-      const aInSet = addressesSeen.has(a.address) ? 0 : 1;
-      const bInSet = addressesSeen.has(b.address) ? 0 : 1;
-      if (aInSet !== bInSet) return aInSet - bInSet;
-      return b.amount > a.amount ? 1 : -1;
-    });
+    remaining.sort((a, b) => (b.amount > a.amount ? 1 : -1));
 
     for (const utxo of remaining) {
       const currentFee = calculateFee(selected.length + 1, 2, feeRate, scriptType);

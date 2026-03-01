@@ -257,6 +257,31 @@ describe('SyncService', () => {
         data: { syncInProgress: false },
       });
     });
+
+    it('invokes periodic maintenance callbacks after start', async () => {
+      const staleSpy = vi.spyOn(syncService as any, 'checkAndQueueStaleSyncs').mockResolvedValue(undefined);
+      const confirmationsSpy = vi.spyOn(syncService as any, 'updateAllConfirmations').mockResolvedValue(undefined);
+      const reconcileSpy = vi.spyOn(syncService as any, 'reconcileAddressToWalletMap').mockResolvedValue(undefined);
+      vi.spyOn(syncService as any, 'setupRealTimeSubscriptions').mockResolvedValue(undefined);
+
+      await syncService.start();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+      expect(staleSpy).toHaveBeenCalled();
+      expect(confirmationsSpy).toHaveBeenCalled();
+      expect(reconcileSpy).toHaveBeenCalled();
+    });
+
+    it('handles async setupRealTimeSubscriptions rejection during start', async () => {
+      vi.spyOn(syncService as any, 'setupRealTimeSubscriptions').mockRejectedValue(new Error('setup failed'));
+
+      await syncService.start();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(syncService['isRunning']).toBe(true);
+    });
   });
 
   describe('queueSync', () => {
@@ -494,6 +519,14 @@ describe('SyncService', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Already syncing');
     });
+
+    it('returns false when trying to acquire a local lock already held in-memory', async () => {
+      syncService['activeSyncs'].add('wallet-local');
+
+      const acquired = await syncService['acquireSyncLock']('wallet-local');
+
+      expect(acquired).toBe(false);
+    });
   });
 
   describe('retry logic', () => {
@@ -529,6 +562,66 @@ describe('SyncService', () => {
         })
       );
     });
+
+    it('runs timeout branch and emits balance updates on changed balance', async () => {
+      syncService['isRunning'] = true;
+      mockPrismaClient.wallet.update.mockResolvedValue({});
+      mockPrismaClient.uTXO.aggregate
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(1000) } })
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(0) } })
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(1500) } })
+        .mockResolvedValueOnce({ _sum: { amount: BigInt(0) } });
+      mockPopulateMissingTransactionFields.mockResolvedValueOnce({
+        updated: 2,
+        confirmationUpdates: [],
+      });
+
+      let resolveSync: ((value: { addresses: number; transactions: number; utxos: number }) => void) | undefined;
+      mockSyncWallet.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSync = resolve;
+          })
+      );
+
+      const syncPromise = syncService.syncNow('wallet-timeout');
+      await vi.advanceTimersByTimeAsync(120_000);
+      resolveSync?.({ addresses: 1, transactions: 2, utxos: 3 });
+
+      const result = await syncPromise;
+
+      expect(result.success).toBe(true);
+      expect(mockNotificationService.broadcastBalanceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ walletId: 'wallet-timeout' })
+      );
+    });
+
+    it('executes retry timer callback and handles retry errors', async () => {
+      syncService['isRunning'] = true;
+      mockPrismaClient.wallet.update.mockResolvedValue({});
+      mockPrismaClient.uTXO.aggregate.mockResolvedValue({ _sum: { amount: BigInt(0) } });
+      mockSyncWallet.mockRejectedValueOnce(new Error('first failure'));
+
+      const originalExecute = syncService['executeSyncJob'].bind(syncService) as (
+        walletId: string,
+        retryCount?: number
+      ) => Promise<any>;
+      const executeSpy = vi.spyOn(syncService as any, 'executeSyncJob');
+      executeSpy
+        .mockImplementationOnce((walletId: string, retryCount: number = 0) =>
+          originalExecute(walletId, retryCount)
+        )
+        .mockImplementationOnce(async () => {
+          throw new Error('retry callback failed');
+        });
+
+      const result = await syncService.syncNow('wallet-retry');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('retrying');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(syncService['pendingRetries'].size).toBe(0);
+    });
   });
 
   describe('concurrent sync limiting', () => {
@@ -552,6 +645,18 @@ describe('SyncService', () => {
 
       // Still should have wallets in queue (not started)
       // Note: processQueue doesn't actually start them if at limit
+    });
+
+    it('handles executeSyncJob rejection from queued processing', async () => {
+      syncService['isRunning'] = true;
+      syncService['syncQueue'] = [{ walletId: 'wallet-fail', priority: 'normal', requestedAt: new Date() }];
+      vi.spyOn(syncService as any, 'executeSyncJob').mockRejectedValueOnce(new Error('queue worker failed'));
+
+      await syncService['processQueue']();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(syncService['syncQueue']).toHaveLength(0);
     });
   });
 
@@ -655,6 +760,34 @@ describe('SyncService', () => {
       expect(syncService['syncQueue']).toHaveLength(1000);
       expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-high')).toBe(true);
     });
+
+    it('rejects non-high request when queue is full of high-priority jobs', () => {
+      syncService['isRunning'] = true;
+      syncService['activeSyncs'].add('busy-1');
+      syncService['activeSyncs'].add('busy-2');
+      syncService['activeSyncs'].add('busy-3');
+
+      const now = new Date();
+      syncService['syncQueue'] = Array.from({ length: 1000 }, (_, i) => ({
+        walletId: `high-${i}`,
+        priority: 'high',
+        requestedAt: now,
+      }));
+
+      syncService.queueSync('wallet-normal-blocked', 'normal');
+
+      expect(syncService['syncQueue']).toHaveLength(1000);
+      expect(syncService['syncQueue'].some((j: any) => j.walletId === 'wallet-normal-blocked')).toBe(false);
+    });
+
+    it('upgrades queued wallet priority when duplicate is re-queued as high', () => {
+      syncService['isRunning'] = false;
+      syncService['syncQueue'] = [{ walletId: 'wallet-dup', priority: 'low', requestedAt: new Date() }];
+
+      syncService.queueSync('wallet-dup', 'high');
+
+      expect(syncService['syncQueue'][0].priority).toBe('high');
+    });
   });
 
   describe('stale sync checks', () => {
@@ -745,6 +878,13 @@ describe('SyncService', () => {
       await syncService['updateAllConfirmations']();
 
       expect(mockPrismaClient.transaction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('handles top-level confirmation update query failures', async () => {
+      syncService['isRunning'] = true;
+      mockPrismaClient.transaction.findMany.mockRejectedValueOnce(new Error('confirmations query failed'));
+
+      await expect(syncService['updateAllConfirmations']()).resolves.toBeUndefined();
     });
   });
 
@@ -864,6 +1004,184 @@ describe('SyncService', () => {
       await syncService.stop();
 
       expect(syncService['syncQueue'].length).toBe(0);
+    });
+
+    it('continues stopping when active lock release fails', async () => {
+      syncService['isRunning'] = true;
+      syncService['activeLocks'].set('wallet-1', { id: 'lock-1', resource: 'test' } as any);
+      mockReleaseLock.mockRejectedValueOnce(new Error('release failed'));
+
+      await expect(syncService.stop()).resolves.toBeUndefined();
+      expect(syncService['activeLocks'].size).toBe(0);
+    });
+  });
+
+  describe('real-time subscriptions and block handling', () => {
+    it('sets ownership to external when subscription lock is unavailable', async () => {
+      mockAcquireLock.mockResolvedValueOnce(null);
+
+      await syncService['setupRealTimeSubscriptions']();
+
+      expect(syncService['subscriptionOwnership']).toBe('external');
+    });
+
+    it('disables subscriptions when electrum client is unavailable', async () => {
+      mockAcquireLock.mockResolvedValueOnce({
+        key: 'electrum:subscriptions',
+        token: 'token-1',
+        expiresAt: Date.now() + 60000,
+        isLocal: true,
+      });
+      mockGetElectrumClientIfActive.mockResolvedValueOnce(null);
+
+      await syncService['setupRealTimeSubscriptions']();
+
+      expect(syncService['subscriptionOwnership']).toBe('disabled');
+      expect(mockReleaseLock).toHaveBeenCalled();
+    });
+
+    it('continues setup when getServerVersion fails', async () => {
+      mockElectrumClient.getServerVersion.mockRejectedValueOnce(new Error('version unavailable'));
+      mockPrismaClient.address.findMany.mockResolvedValueOnce([]);
+
+      await syncService['setupRealTimeSubscriptions']();
+
+      expect(mockElectrumClient.subscribeHeaders).toHaveBeenCalled();
+      expect(syncService['subscriptionOwnership']).toBe('self');
+    });
+
+    it('handles setup errors after acquiring lock', async () => {
+      mockGetNodeClient.mockRejectedValueOnce(new Error('node offline'));
+
+      await syncService['setupRealTimeSubscriptions']();
+
+      expect(syncService['subscriptionOwnership']).toBe('external');
+      expect(mockReleaseLock).toHaveBeenCalled();
+    });
+
+    it('refreshes subscription lock and handles lost ownership', async () => {
+      syncService['subscriptionLock'] = {
+        key: 'electrum:subscriptions',
+        token: 'token-1',
+        expiresAt: Date.now() + 60000,
+        isLocal: true,
+      } as any;
+      syncService['subscriptionOwnership'] = 'self';
+
+      const teardownSpy = vi.spyOn(syncService as any, 'teardownRealTimeSubscriptions').mockResolvedValue(undefined);
+      mockExtendLock.mockResolvedValueOnce(null);
+
+      syncService['startSubscriptionLockRefresh']();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(syncService['subscriptionOwnership']).toBe('external');
+      expect(syncService['subscriptionLock']).toBeNull();
+      expect(teardownSpy).toHaveBeenCalled();
+    });
+
+    it('updates subscription lock when refresh succeeds', async () => {
+      const initialLock = {
+        key: 'electrum:subscriptions',
+        token: 'token-1',
+        expiresAt: Date.now() + 60000,
+        isLocal: true,
+      } as any;
+      const refreshedLock = {
+        ...initialLock,
+        token: 'token-2',
+      };
+      syncService['subscriptionLock'] = initialLock;
+      syncService['subscriptionOwnership'] = 'self';
+      mockExtendLock.mockResolvedValueOnce(refreshedLock);
+
+      syncService['startSubscriptionLockRefresh']();
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(syncService['subscriptionLock']).toEqual(refreshedLock);
+      syncService['stopSubscriptionLockRefresh']();
+    });
+
+    it('batch-subscribes addresses and falls back to individual subscriptions on batch failure', async () => {
+      syncService['subscriptionOwnership'] = 'self';
+      mockPrismaClient.address.findMany.mockResolvedValueOnce([
+        { address: 'addr-1', walletId: 'wallet-1' },
+        { address: 'addr-2', walletId: 'wallet-2' },
+      ]);
+      mockElectrumClient.subscribeAddressBatch.mockRejectedValueOnce(new Error('batch unsupported'));
+      mockElectrumClient.subscribeAddress
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('addr-2 failed'));
+
+      await syncService['subscribeAllWalletAddresses']();
+
+      expect(mockElectrumClient.subscribeAddressBatch).toHaveBeenCalledWith(['addr-1', 'addr-2']);
+      expect(mockElectrumClient.subscribeAddress).toHaveBeenCalledTimes(2);
+      expect(syncService['addressToWalletMap'].get('addr-1')).toBe('wallet-1');
+    });
+
+    it('returns early when unsubscribeWalletAddresses is called without ownership', async () => {
+      syncService['subscriptionOwnership'] = 'external';
+      syncService['addressToWalletMap'].set('addr-1', 'wallet-1');
+
+      await syncService.unsubscribeWalletAddresses('wallet-1');
+
+      expect(syncService['addressToWalletMap'].size).toBe(1);
+      expect(mockElectrumClient.unsubscribeAddress).not.toHaveBeenCalled();
+    });
+
+    it('logs no-op reconciliation path when all wallets still exist', async () => {
+      syncService['addressToWalletMap'].set('addr-keep', 'wallet-keep');
+      mockPrismaClient.wallet.findMany.mockResolvedValueOnce([{ id: 'wallet-keep' }]);
+
+      await syncService['reconcileAddressToWalletMap']();
+
+      expect(syncService['addressToWalletMap'].has('addr-keep')).toBe(true);
+    });
+
+    it('handles new block success and confirmation-update failure paths', async () => {
+      const { eventService } = await import('../../../src/services/eventService');
+      const updateSpy = vi.spyOn(syncService as any, 'updateAllConfirmations')
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('confirmations failed'));
+
+      await syncService['handleNewBlock']({ height: 200, hex: 'a'.repeat(80) });
+      await syncService['handleNewBlock']({ height: 201, hex: 'b'.repeat(80) });
+
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(eventService.emitNewBlock).toHaveBeenCalledWith('testnet', 200, 'a'.repeat(64));
+      expect(mockNotificationService.broadcastNewBlock).toHaveBeenCalledWith({ height: 200 });
+    });
+
+    it('tears down subscriptions even when unsubscribe throws', async () => {
+      syncService['addressToWalletMap'].set('addr-1', 'wallet-1');
+      mockElectrumClient.unsubscribeAddress.mockRejectedValueOnce(new Error('unsubscribe failed'));
+
+      await syncService['teardownRealTimeSubscriptions']();
+
+      expect(syncService['addressToWalletMap'].size).toBe(0);
+    });
+
+    it('returns early for subscribeNewWalletAddresses when ownership is not self', async () => {
+      syncService['subscriptionOwnership'] = 'external';
+
+      await syncService.subscribeNewWalletAddresses('wallet-x');
+
+      expect(mockPrismaClient.address.findMany).not.toHaveBeenCalled();
+    });
+
+    it('continues subscribeNewWalletAddresses when one address subscription fails', async () => {
+      syncService['subscriptionOwnership'] = 'self';
+      mockPrismaClient.address.findMany.mockResolvedValueOnce([
+        { address: 'tb1-new-1' },
+        { address: 'tb1-new-2' },
+      ]);
+      mockElectrumClient.subscribeAddress
+        .mockRejectedValueOnce(new Error('first failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await syncService.subscribeNewWalletAddresses('wallet-y');
+
+      expect(mockElectrumClient.subscribeAddress).toHaveBeenCalledTimes(2);
     });
   });
 });

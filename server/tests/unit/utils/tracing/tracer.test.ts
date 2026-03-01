@@ -65,6 +65,27 @@ describe('tracer', () => {
     );
   });
 
+  it('merges attributes and logs exception metadata on span end', async () => {
+    const tracer = await loadTracer();
+    tracer.configureTracing({ enabled: true });
+
+    const span = tracer.startSpan('error-operation');
+    span.setAttributes({ feature: 'tracing', count: 2 });
+    span.recordException(new Error('span-failed'));
+    span.end();
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Span ended: sanctuary.error-operation',
+      expect.objectContaining({
+        status: 'error',
+        error: 'span-failed',
+        statusMessage: 'span-failed',
+        feature: 'tracing',
+        count: 2,
+      })
+    );
+  });
+
   it('withSpan handles sync success and async errors', async () => {
     const tracer = await loadTracer();
 
@@ -83,6 +104,24 @@ describe('tracer', () => {
     const debugCalls = mockLogger.debug.mock.calls.map(c => c[0]);
     expect(debugCalls).toContain('Span ended: sanctuary.sync-work');
     expect(debugCalls).toContain('Span ended: sanctuary.async-fail');
+  });
+
+  it('withSpan handles synchronous throws', async () => {
+    const tracer = await loadTracer();
+
+    expect(() =>
+      tracer.withSpan('sync-throw', () => {
+        throw new Error('sync-boom');
+      })
+    ).toThrow('sync-boom');
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Span ended: sanctuary.sync-throw',
+      expect.objectContaining({
+        status: 'error',
+        error: 'sync-boom',
+      })
+    );
   });
 
   it('traced wraps async functions and preserves args/results', async () => {
@@ -160,5 +199,26 @@ describe('tracer', () => {
     expect(tracer.getTracerProvider()).toBe(fakeProvider);
     expect(tracer.getTracer('component')).toBe(fakeTracer);
     await expect(tracer.getTracerProvider().shutdown()).resolves.toBeUndefined();
+  });
+
+  it('supports startActiveSpan overloads and shutdown on default provider', async () => {
+    const tracer = await loadTracer();
+    tracer.configureTracing({ enabled: true });
+
+    const componentTracer = tracer.getTracer('component');
+    const value = componentTracer.startActiveSpan('work', { attributes: { test: true } }, (span) => {
+      span.setStatus('ok');
+      return 42;
+    });
+    expect(value).toBe(42);
+
+    expect(() =>
+      componentTracer.startActiveSpan('boom', () => {
+        throw new Error('active-span-fail');
+      })
+    ).toThrow('active-span-fail');
+
+    await expect(tracer.getTracerProvider().shutdown()).resolves.toBeUndefined();
+    expect(mockLogger.info).toHaveBeenCalledWith('Tracing shutdown complete');
   });
 });

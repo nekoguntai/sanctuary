@@ -172,6 +172,113 @@ describe('EventVersioning', () => {
         expect((transformed.data as any).blockHeight).toBeUndefined();
       });
 
+      it('should transform address:used from v2 to v1', () => {
+        const event: VersionedEvent<EventDataV2.AddressUsed> = {
+          type: 'address:used',
+          version: 'v2',
+          data: {
+            address: 'bc1qaddr',
+            walletId: 'wallet-1',
+            txid: 'tx-1',
+            isReceive: true,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v1');
+
+        expect(transformed.version).toBe('v1');
+        expect((transformed.data as EventDataV1.AddressUsed).address).toBe('bc1qaddr');
+        expect((transformed.data as any).txid).toBeUndefined();
+      });
+
+      it('should transform system:notification from v2 to v1', () => {
+        const event: VersionedEvent<EventDataV2.SystemNotification> = {
+          type: 'system:notification',
+          version: 'v2',
+          data: {
+            message: 'Heads up',
+            level: 'warn',
+            code: 'warn-1',
+            action: 'refresh',
+            dismissable: true,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v1');
+
+        expect(transformed.version).toBe('v1');
+        expect((transformed.data as EventDataV1.SystemNotification).message).toBe('Heads up');
+        expect((transformed.data as any).code).toBeUndefined();
+      });
+
+      it('should transform wallet:sync_started from v2 to v1', () => {
+        const event: VersionedEvent<EventDataV2.SyncStarted> = {
+          type: 'wallet:sync_started',
+          version: 'v2',
+          data: {
+            walletId: 'wallet-1',
+            isFullResync: true,
+            estimatedDuration: 2000,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v1');
+
+        expect(transformed.version).toBe('v1');
+        expect((transformed.data as EventDataV1.SyncStarted).walletId).toBe('wallet-1');
+        expect((transformed.data as any).isFullResync).toBeUndefined();
+      });
+
+      it('should transform wallet:sync_failed from v2 to v1', () => {
+        const event: VersionedEvent<EventDataV2.SyncFailed> = {
+          type: 'wallet:sync_failed',
+          version: 'v2',
+          data: {
+            walletId: 'wallet-1',
+            error: 'boom',
+            errorCode: 'E_FAIL',
+            retriable: false,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v1');
+
+        expect(transformed.version).toBe('v1');
+        expect((transformed.data as EventDataV1.SyncFailed).error).toBe('boom');
+        expect((transformed.data as any).errorCode).toBeUndefined();
+      });
+
+      it('should return tagged event when no transformer exists for v2->v1', () => {
+        const event: VersionedEvent<{ foo: string }> = {
+          type: 'unknown:event',
+          version: 'v2',
+          data: { foo: 'bar' },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v1');
+
+        expect(transformed.version).toBe('v1');
+        expect(transformed.data).toEqual({ foo: 'bar' });
+      });
+
+      it('should return original event for unsupported transformation path', () => {
+        const event: VersionedEvent<{ foo: string }> = {
+          type: 'test:event',
+          version: 'v1',
+          data: { foo: 'bar' },
+          timestamp: new Date().toISOString(),
+        };
+
+        const transformed = manager.transformEvent(event, 'v2');
+
+        expect(transformed).toBe(event);
+      });
+
       it('should preserve correlationId during transformation', () => {
         const event: VersionedEvent<EventDataV2.WalletSynced> = {
           type: 'wallet:synced',

@@ -475,6 +475,75 @@ describe('Docker Container Management', () => {
       );
       expect(createCall[0]).toContain('myapp-ollama-1');
     });
+
+    it('should handle container creation failure', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Pull image
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'Done',
+      });
+
+      // List containers
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Create container fails
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'create failed',
+      });
+
+      const result = await createOllamaContainer();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to create Ollama container');
+    });
+
+    it('should handle container start failure after creation', async () => {
+      // Status check
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Pull image
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'Done',
+      });
+
+      // List containers
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      // Create container
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ Id: 'ollama-new' }),
+      });
+
+      // Start fails
+      mockFetch.mockResolvedValueOnce({
+        status: 500,
+        text: async () => 'start failed',
+      });
+
+      const result = await createOllamaContainer();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('failed to start');
+    });
   });
 
   describe('Tor Container Management', () => {
@@ -525,6 +594,18 @@ describe('Docker Container Management', () => {
         expect(status.exists).toBe(false);
         expect(status.status).toBe('not_created');
       });
+
+      it('should return not_created when list API fails', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+        });
+
+        const status = await getTorStatus();
+
+        expect(status.exists).toBe(false);
+        expect(status.status).toBe('not_created');
+      });
     });
 
     describe('startTor', () => {
@@ -566,6 +647,49 @@ describe('Docker Container Management', () => {
 
         expect(result.success).toBe(true);
       });
+
+      it('should handle start endpoint failure', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor123',
+              Names: ['/sanctuary-tor'],
+              State: 'exited',
+            },
+          ],
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          status: 500,
+          text: async () => 'cannot start',
+        });
+
+        const result = await startTor();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Failed to start Tor');
+      });
+
+      it('should handle start network errors', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor123',
+              Names: ['/sanctuary-tor'],
+              State: 'exited',
+            },
+          ],
+        });
+
+        mockFetch.mockRejectedValueOnce(new Error('start timeout'));
+
+        const result = await startTor();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('start timeout');
+      });
     });
 
     describe('stopTor', () => {
@@ -606,6 +730,61 @@ describe('Docker Container Management', () => {
 
         expect(result.success).toBe(true);
         expect(result.message).toContain('already stopped');
+      });
+
+      it('should return success if tor container does not exist', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        const result = await stopTor();
+
+        expect(result.success).toBe(true);
+        expect(result.message).toContain('does not exist');
+      });
+
+      it('should handle stop endpoint failure', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor123',
+              Names: ['/sanctuary-tor'],
+              State: 'running',
+            },
+          ],
+        });
+
+        mockFetch.mockResolvedValueOnce({
+          status: 500,
+          text: async () => 'cannot stop',
+        });
+
+        const result = await stopTor();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Failed to stop Tor');
+      });
+
+      it('should handle stop network errors', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'tor123',
+              Names: ['/sanctuary-tor'],
+              State: 'running',
+            },
+          ],
+        });
+
+        mockFetch.mockRejectedValueOnce(new Error('stop timeout'));
+
+        const result = await stopTor();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('stop timeout');
       });
     });
 
@@ -663,6 +842,140 @@ describe('Docker Container Management', () => {
         expect(result.success).toBe(true);
         expect(result.message).toContain('created and started');
       });
+
+      it('should handle tor image pull failure', async () => {
+        // Status check
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Pull image fails
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          text: async () => 'cannot pull tor image',
+        });
+
+        const result = await createTorContainer();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Failed to pull Tor image');
+      });
+
+      it('should use project name from existing frontend container', async () => {
+        // Status check
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Pull image
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          text: async () => 'Done',
+        });
+
+        // Existing frontend container
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'frontend1',
+              Names: ['/myproj-frontend-1'],
+              State: 'running',
+            },
+          ],
+        });
+
+        // Create
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ Id: 'tor-new' }),
+        });
+
+        // Start
+        mockFetch.mockResolvedValueOnce({
+          status: 204,
+        });
+
+        const result = await createTorContainer();
+
+        expect(result.success).toBe(true);
+        const createCall = mockFetch.mock.calls.find(
+          call => typeof call[0] === 'string' && call[0].includes('containers/create')
+        );
+        expect(createCall[0]).toContain('myproj-tor');
+      });
+
+      it('should handle tor container create failure', async () => {
+        // Status check
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Pull image
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          text: async () => 'Done',
+        });
+
+        // List containers
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Create fails
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          text: async () => 'create tor failed',
+        });
+
+        const result = await createTorContainer();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Failed to create Tor container');
+      });
+
+      it('should handle tor container start failure after creation', async () => {
+        // Status check
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Pull image
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          text: async () => 'Done',
+        });
+
+        // List containers
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
+
+        // Create
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ Id: 'tor-created' }),
+        });
+
+        // Start fails
+        mockFetch.mockResolvedValueOnce({
+          status: 500,
+          text: async () => 'tor start failed',
+        });
+
+        const result = await createTorContainer();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('failed to start');
+      });
     });
   });
 
@@ -718,6 +1031,44 @@ describe('Docker Container Management', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('DNS lookup failed');
+    });
+
+    it('should handle network errors in startOllama start call', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'ollama123',
+            Names: ['/sanctuary-ollama-1'],
+            State: 'exited',
+          },
+        ],
+      });
+      mockFetch.mockRejectedValueOnce(new Error('start refused'));
+
+      const result = await startOllama();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('start refused');
+    });
+
+    it('should handle network errors in stopOllama stop call', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            Id: 'ollama123',
+            Names: ['/sanctuary-ollama-1'],
+            State: 'running',
+          },
+        ],
+      });
+      mockFetch.mockRejectedValueOnce(new Error('stop refused'));
+
+      const result = await stopOllama();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('stop refused');
     });
   });
 });

@@ -19,21 +19,35 @@ vi.mock('react-router-dom', () => ({
 
 // Mock UserContext
 const mockUpdatePreferences = vi.fn();
-vi.mock('../../contexts/UserContext', () => ({
-  useUser: () => ({
-    user: {
-      id: 'user-123',
-      preferences: {
-        viewSettings: {
-          devices: {
-            layout: 'list',
-            sortBy: 'label',
-            sortOrder: 'asc',
-            ownershipFilter: 'all',
-          },
-        },
+const mockUser = {
+  id: 'user-123',
+  preferences: {
+    viewSettings: {
+      devices: {
+        layout: 'list',
+        sortBy: 'label',
+        sortOrder: 'asc',
+        ownershipFilter: 'all',
       },
     },
+  },
+};
+
+const resetUserPreferences = () => {
+  mockUser.preferences = {
+    viewSettings: {
+      devices: {
+        layout: 'list',
+        sortBy: 'label',
+        sortOrder: 'asc',
+        ownershipFilter: 'all',
+      },
+    },
+  };
+};
+vi.mock('../../contexts/UserContext', () => ({
+  useUser: () => ({
+    user: mockUser,
     updatePreferences: mockUpdatePreferences,
   }),
 }));
@@ -90,22 +104,49 @@ vi.mock('../../components/ui/Button', () => ({
 
 // Mock ConfigurableTable
 vi.mock('../../components/ui/ConfigurableTable', () => ({
-  ConfigurableTable: ({ data, onRowClick }: { data: unknown[]; onRowClick?: (item: unknown) => void }) => (
-    <table data-testid="configurable-table">
-      <tbody>
-        {data.map((item: unknown, index) => (
-          <tr key={index} onClick={() => onRowClick?.(item)} data-testid="device-row">
-            <td>{(item as Device).label}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+  ConfigurableTable: ({
+    data,
+    onRowClick,
+    onSort,
+  }: {
+    data: unknown[];
+    onRowClick?: (item: unknown) => void;
+    onSort?: (field: string) => void;
+  }) => (
+    <div>
+      <button onClick={() => onSort?.('label')}>Sort Label</button>
+      <button onClick={() => onSort?.('type')}>Sort Type</button>
+      <table data-testid="configurable-table">
+        <tbody>
+          {data.map((item: unknown, index) => (
+            <tr key={index} onClick={() => onRowClick?.(item)} data-testid="device-row">
+              <td>{(item as Device).label}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   ),
 }));
 
 // Mock ColumnConfigButton
 vi.mock('../../components/ui/ColumnConfigButton', () => ({
-  ColumnConfigButton: () => <button data-testid="column-config-button">Columns</button>,
+  ColumnConfigButton: ({
+    onOrderChange,
+    onVisibilityChange,
+    onReset,
+  }: {
+    onOrderChange: (order: string[]) => void;
+    onVisibilityChange: (columnId: string, visible: boolean) => void;
+    onReset: () => void;
+  }) => (
+    <div>
+      <button data-testid="column-config-button">Columns</button>
+      <button onClick={() => onOrderChange(['type', 'label', 'fingerprint'])}>Change Order</button>
+      <button onClick={() => onVisibilityChange('type', false)}>Hide Type</button>
+      <button onClick={onReset}>Reset Columns</button>
+    </div>
+  ),
 }));
 
 // Mock device column utilities
@@ -147,6 +188,7 @@ const mockDeviceModels: HardwareDeviceModel[] = [
 describe('DeviceList Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserPreferences();
     mockGetDevices.mockResolvedValue([]);
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
   });
@@ -196,6 +238,7 @@ describe('DeviceList Component', () => {
 describe('DeviceList - View Modes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserPreferences();
     mockGetDevices.mockResolvedValue([createMockDevice()]);
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
   });
@@ -214,6 +257,7 @@ describe('DeviceList - View Modes', () => {
 describe('DeviceList - Ownership Filter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserPreferences();
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
   });
 
@@ -238,6 +282,7 @@ describe('DeviceList - Ownership Filter', () => {
 describe('DeviceList - Device Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserPreferences();
     mockGetDevices.mockResolvedValue([createMockDevice()]);
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
   });
@@ -265,6 +310,7 @@ describe('DeviceList - Device Actions', () => {
 describe('DeviceList - Column Configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserPreferences();
     mockGetDevices.mockResolvedValue([createMockDevice()]);
     mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
   });
@@ -277,5 +323,208 @@ describe('DeviceList - Column Configuration', () => {
     await waitFor(() => {
       expect(screen.getByTestId('column-config-button')).toBeInTheDocument();
     });
+  });
+
+  it('updates preferences for column order, visibility, reset, and sort changes', async () => {
+    const { DeviceList } = await import('../../components/DeviceList');
+    const user = userEvent.setup();
+
+    render(<DeviceList />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('configurable-table')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Change Order'));
+    await user.click(screen.getByText('Hide Type'));
+    await user.click(screen.getByText('Reset Columns'));
+    await user.click(screen.getByText('Sort Label'));
+    await user.click(screen.getByText('Sort Type'));
+
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            columnOrder: ['type', 'label', 'fingerprint'],
+          }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            visibleColumns: ['label', 'fingerprint'],
+          }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            columnOrder: ['label', 'type', 'fingerprint'],
+            visibleColumns: ['label', 'type', 'fingerprint'],
+          }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            sortBy: 'label',
+            sortOrder: 'desc',
+          }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            sortBy: 'type',
+            sortOrder: 'asc',
+          }),
+        }),
+      })
+    );
+  });
+});
+
+describe('DeviceList - Grouped Mode Actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetUserPreferences();
+    mockUser.preferences.viewSettings.devices.layout = 'grouped';
+    mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
+  });
+
+  it('renders grouped view and supports editing/saving a device', async () => {
+    const user = userEvent.setup();
+    mockUpdateDevice.mockResolvedValue({ label: 'Renamed Device' });
+    mockGetDevices.mockResolvedValue([
+      createMockDevice({
+        id: 'device-edit',
+        label: 'Edit Me',
+        model: { slug: 'ledger-nano-s' } as any,
+      }),
+    ]);
+
+    const { DeviceList } = await import('../../components/DeviceList');
+    render(<DeviceList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Me')).toBeInTheDocument();
+    });
+
+    const editButton = screen.getByTestId('edit-icon').closest('button') as HTMLButtonElement;
+    await user.click(editButton);
+    const labelInput = screen.getByDisplayValue('Edit Me');
+    await user.clear(labelInput);
+    await user.type(labelInput, 'Renamed Device');
+    await user.selectOptions(screen.getByRole('combobox'), 'trezor-model-t');
+
+    await user.click(screen.getByLabelText('Save device'));
+
+    await waitFor(() => {
+      expect(mockUpdateDevice).toHaveBeenCalledWith('device-edit', {
+        label: 'Renamed Device',
+        modelSlug: 'trezor-model-t',
+      });
+    });
+    expect(screen.getByText('Renamed Device')).toBeInTheDocument();
+  });
+
+  it('shows delete confirmation and removes device after delete', async () => {
+    const user = userEvent.setup();
+    mockDeleteDevice.mockResolvedValue(undefined);
+    mockGetDevices.mockResolvedValue([
+      createMockDevice({
+        id: 'device-delete',
+        label: 'Delete Me',
+        wallets: [],
+        walletCount: 0,
+      }),
+    ]);
+
+    const { DeviceList } = await import('../../components/DeviceList');
+    render(<DeviceList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete Me')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTitle('Delete device'));
+    expect(screen.getByText('Delete?')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => {
+      expect(mockDeleteDevice).toHaveBeenCalledWith('device-delete');
+    });
+
+    expect(screen.queryByText('Delete Me')).not.toBeInTheDocument();
+  });
+});
+
+describe('DeviceList - Preference Controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetUserPreferences();
+    mockGetDeviceModels.mockResolvedValue(mockDeviceModels);
+    mockGetDevices.mockResolvedValue([
+      createMockDevice({ id: 'owned-1', label: 'Owned Device', isOwner: true }),
+      createMockDevice({ id: 'shared-1', label: 'Shared Device', isOwner: false, isShared: true }),
+    ]);
+  });
+
+  it('updates preferences from ownership and view mode controls', async () => {
+    const user = userEvent.setup();
+    const { DeviceList } = await import('../../components/DeviceList');
+    render(<DeviceList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Owned (1)')).toBeInTheDocument();
+      expect(screen.getByText('Shared (1)')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Owned (1)'));
+    await user.click(screen.getByText('Shared (1)'));
+    await user.click(screen.getByTitle('Grouped View'));
+
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({ ownershipFilter: 'owned' }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({ ownershipFilter: 'shared' }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({ layout: 'grouped' }),
+        }),
+      })
+    );
+  });
+
+  it('navigates to connect page from connect new device button', async () => {
+    const user = userEvent.setup();
+    const { DeviceList } = await import('../../components/DeviceList');
+    render(<DeviceList />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /connect new device/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /connect new device/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/devices/connect');
   });
 });

@@ -10,6 +10,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import type { Transaction, Wallet } from '../../types';
+import * as bitcoinApi from '../../src/api/bitcoin';
+import * as labelsApi from '../../src/api/labels';
+import * as transactionsApi from '../../src/api/transactions';
 
 // Mock the CurrencyContext
 vi.mock('../../contexts/CurrencyContext', () => ({
@@ -35,7 +38,8 @@ vi.mock('../../src/api/bitcoin', () => ({
 
 vi.mock('../../src/api/labels', () => ({
   getLabels: vi.fn().mockResolvedValue([]),
-  updateTransactionLabels: vi.fn().mockResolvedValue({}),
+  setTransactionLabels: vi.fn().mockResolvedValue({}),
+  createLabel: vi.fn(),
 }));
 
 vi.mock('../../src/api/transactions', () => ({
@@ -54,7 +58,7 @@ vi.mock('../../utils/logger', () => ({
 
 // Mock explorer utility
 vi.mock('../../utils/explorer', () => ({
-  getTxExplorerUrl: vi.fn((txid: string, explorerUrl: string) => `${explorerUrl}/tx/${txid}`),
+  getTxExplorerUrl: vi.fn((txid: string, _network: string, explorerUrl: string) => `${explorerUrl}/tx/${txid}`),
 }));
 
 // Mock Amount component
@@ -153,6 +157,10 @@ const mockWallet: Wallet = {
 describe('TransactionList Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(bitcoinApi.getStatus).mockResolvedValue({ explorerUrl: 'https://mempool.space' });
+    vi.mocked(transactionsApi.getTransaction).mockResolvedValue({});
+    vi.mocked(labelsApi.getLabels).mockResolvedValue([]);
+    vi.mocked(labelsApi.setTransactionLabels).mockResolvedValue({});
   });
 
   it('should render empty state when no transactions', async () => {
@@ -443,5 +451,173 @@ describe('TransactionList - Additional behaviors', () => {
     await user.click(screen.getByText('Main Wallet'));
     expect(onWalletClick).toHaveBeenCalledWith('wallet-1');
     expect(onTransactionClick).not.toHaveBeenCalled();
+  });
+
+  it('opens transaction details modal and shows pending actions for unconfirmed tx', async () => {
+    const user = userEvent.setup();
+    const { TransactionList } = await import('../../components/TransactionList');
+    vi.mocked(transactionsApi.getTransaction).mockResolvedValueOnce({
+      inputs: [{ txid: 'prev', vout: 0, address: 'bc1qin', amount: 10000 }],
+      outputs: [{ address: 'bc1qout', amount: 9000, outputType: 'external' }],
+    } as Transaction);
+
+    render(
+      <TransactionList
+        transactions={[{ ...baseTx, confirmations: 0, amount: -5000, walletId: 'wallet-1' }]}
+        wallets={[{ id: 'wallet-1', name: 'Main Wallet', network: 'mainnet' } as Wallet]}
+      />
+    );
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+
+    expect(await screen.findByText('Transaction Details')).toBeInTheDocument();
+    expect(await screen.findByTestId('transaction-actions')).toBeInTheDocument();
+    expect(await screen.findByTestId('transaction-flow-preview')).toBeInTheDocument();
+  });
+
+  it('does not show pending actions for confirmed tx', async () => {
+    const user = userEvent.setup();
+    const { TransactionList } = await import('../../components/TransactionList');
+
+    render(<TransactionList transactions={[{ ...baseTx, confirmations: 6 }]} />);
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+
+    expect(await screen.findByText('Transaction Details')).toBeInTheDocument();
+    expect(screen.queryByTestId('transaction-actions')).not.toBeInTheDocument();
+  });
+
+  it('copies txid to clipboard from details modal', async () => {
+    const user = userEvent.setup();
+    const { TransactionList } = await import('../../components/TransactionList');
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+    });
+
+    render(<TransactionList transactions={[baseTx]} />);
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+
+    const copyButton = await screen.findByTitle('Copy to clipboard');
+    await user.click(copyButton);
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('txid-1');
+    });
+  });
+
+  it('falls back to document.execCommand when clipboard API fails', async () => {
+    const user = userEvent.setup();
+    const { TransactionList } = await import('../../components/TransactionList');
+    const execSpy = vi.fn().mockReturnValue(true);
+    Object.defineProperty(document, 'execCommand', {
+      value: execSpy,
+      configurable: true,
+    });
+    const writeTextMock = vi.fn().mockRejectedValue(new Error('no clipboard'));
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+    });
+
+    render(<TransactionList transactions={[baseTx]} />);
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+    await user.click(await screen.findByTitle('Copy to clipboard'));
+
+    await waitFor(() => {
+      expect(execSpy).toHaveBeenCalledWith('copy');
+    });
+  });
+
+  it('loads labels, toggles selection, and saves label updates', async () => {
+    const user = userEvent.setup();
+    const onLabelsChange = vi.fn();
+    const { TransactionList } = await import('../../components/TransactionList');
+    vi.mocked(labelsApi.getLabels).mockResolvedValueOnce([
+      { id: 'label-1', name: 'Bills', color: '#ff0000' } as any,
+      { id: 'label-2', name: 'Travel', color: '#00ff00' } as any,
+    ]);
+
+    render(
+      <TransactionList
+        transactions={[{ ...baseTx, labels: [] }]}
+        onLabelsChange={onLabelsChange}
+      />
+    );
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+
+    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    expect(labelsApi.getLabels).toHaveBeenCalledWith('wallet-1');
+
+    await user.click(await screen.findByRole('button', { name: /travel/i }));
+    await user.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(labelsApi.setTransactionLabels).toHaveBeenCalledWith('tx-1', ['label-2']);
+    });
+    expect(onLabelsChange).toHaveBeenCalled();
+  });
+
+  it('hides label edit controls in modal when canEdit is false', async () => {
+    const user = userEvent.setup();
+    const { TransactionList } = await import('../../components/TransactionList');
+
+    render(<TransactionList transactions={[baseTx]} canEdit={false} />);
+
+    const row = screen.getByTestId('transaction-row');
+    await user.click(row.querySelectorAll('td')[0]);
+
+    expect(await screen.findByText('Transaction Details')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+  });
+
+  it('uses provided transactionStats values instead of calculating from rows', async () => {
+    const { TransactionList } = await import('../../components/TransactionList');
+
+    render(
+      <TransactionList
+        transactions={[baseTx]}
+        transactionStats={{
+          totalCount: 99,
+          receivedCount: 40,
+          sentCount: 45,
+          consolidationCount: 14,
+          totalReceived: 1_000_000,
+          totalSent: 2_000_000,
+          totalFees: 10_000,
+        }}
+      />
+    );
+
+    expect(screen.getByText('99')).toBeInTheDocument();
+    expect(screen.getByText('40')).toBeInTheDocument();
+    expect(screen.getByText('45')).toBeInTheDocument();
+    expect(screen.getByText('14')).toBeInTheDocument();
+  });
+
+  it('shows balance column and balanceAfter values when walletBalance is provided', async () => {
+    const { TransactionList } = await import('../../components/TransactionList');
+
+    render(
+      <TransactionList
+        transactions={[
+          { ...baseTx, id: 'tx-b1', balanceAfter: 1234 },
+          { ...baseTx, id: 'tx-b2', txid: 'txid-2', balanceAfter: 5678 },
+        ]}
+        walletBalance={10_000}
+      />
+    );
+
+    expect(screen.getByRole('columnheader', { name: /balance/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/1,234 sats|5,678 sats/).length).toBeGreaterThan(0);
   });
 });

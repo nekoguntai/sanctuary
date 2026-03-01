@@ -5,9 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { ApiError } from '../../src/api/client';
 
 // Mock the UserContext
 const mockUpdateUser = vi.fn();
@@ -34,11 +35,13 @@ vi.mock('../../src/api/auth', () => ({
 // Mock 2FA API
 const mockSetup2FA = vi.fn();
 const mockEnable2FA = vi.fn();
+const mockDisable2FA = vi.fn();
+const mockRegenerateBackupCodes = vi.fn();
 vi.mock('../../src/api/twoFactor', () => ({
   setup2FA: (...args: unknown[]) => mockSetup2FA(...args),
   enable2FA: (...args: unknown[]) => mockEnable2FA(...args),
-  disable2FA: vi.fn(),
-  regenerateBackupCodes: vi.fn(),
+  disable2FA: (...args: unknown[]) => mockDisable2FA(...args),
+  regenerateBackupCodes: (...args: unknown[]) => mockRegenerateBackupCodes(...args),
 }));
 
 // Mock logger
@@ -51,9 +54,11 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
+const mockCopyToClipboard = vi.fn();
+
 // Mock clipboard utility
 vi.mock('../../utils/clipboard', () => ({
-  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  copyToClipboard: (...args: unknown[]) => mockCopyToClipboard(...args),
 }));
 
 // Mock lucide-react icons
@@ -82,9 +87,20 @@ vi.mock('../../components/ui/Button', () => ({
   ),
 }));
 
+async function renderAccount() {
+  const { Account } = await import('../../components/Account');
+  render(<Account />);
+}
+
+function getPasswordInputs() {
+  return Array.from(document.querySelectorAll('form input')) as HTMLInputElement[];
+}
+
 describe('Account Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser.twoFactorEnabled = false;
+    mockCopyToClipboard.mockResolvedValue(true);
   });
 
   it('should render user information', async () => {
@@ -130,6 +146,8 @@ describe('Account Component', () => {
 describe('Account Component - Password Input Visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser.twoFactorEnabled = false;
+    mockCopyToClipboard.mockResolvedValue(true);
   });
 
   it('should have eye icons for password visibility toggle', async () => {
@@ -146,6 +164,8 @@ describe('Account Component - Password Input Visibility', () => {
 describe('Account Component - 2FA Setup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser.twoFactorEnabled = false;
+    mockCopyToClipboard.mockResolvedValue(true);
   });
 
   it('should show setup button when 2FA is disabled', async () => {
@@ -186,5 +206,261 @@ describe('Account Component - 2FA Enabled State', () => {
 
     // The 2FA section should always be present (use heading role to be specific)
     expect(screen.getByRole('heading', { name: /two-factor authentication/i })).toBeInTheDocument();
+  });
+});
+
+describe('Account Component - Password Actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUser.twoFactorEnabled = false;
+    mockCopyToClipboard.mockResolvedValue(true);
+  });
+
+  it('shows mismatch validation and skips API call', async () => {
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const [currentPassword, newPassword, confirmPassword] = getPasswordInputs();
+    await user.type(currentPassword, 'current-pass');
+    await user.type(newPassword, 'new-pass-123');
+    await user.type(confirmPassword, 'different-pass-123');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    expect(screen.getByText('New passwords do not match')).toBeInTheDocument();
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('shows minimum-length validation and skips API call', async () => {
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const [currentPassword, newPassword, confirmPassword] = getPasswordInputs();
+    await user.type(currentPassword, 'current-pass');
+    await user.type(newPassword, '12345');
+    await user.type(confirmPassword, '12345');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    expect(screen.getByText('Password must be at least 6 characters')).toBeInTheDocument();
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('submits password change and resets fields on success', async () => {
+    mockChangePassword.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const [currentPassword, newPassword, confirmPassword] = getPasswordInputs();
+    await user.type(currentPassword, 'current-pass');
+    await user.type(newPassword, 'new-pass-123');
+    await user.type(confirmPassword, 'new-pass-123');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    await waitFor(() => {
+      expect(mockChangePassword).toHaveBeenCalledWith({
+        currentPassword: 'current-pass',
+        newPassword: 'new-pass-123',
+      });
+    });
+
+    expect(await screen.findByText('Password changed successfully')).toBeInTheDocument();
+    expect(currentPassword.value).toBe('');
+    expect(newPassword.value).toBe('');
+    expect(confirmPassword.value).toBe('');
+  });
+
+  it('shows API error message when password change fails with ApiError', async () => {
+    mockChangePassword.mockRejectedValueOnce(new ApiError('Current password is invalid', 400));
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const [currentPassword, newPassword, confirmPassword] = getPasswordInputs();
+    await user.type(currentPassword, 'bad-pass');
+    await user.type(newPassword, 'new-pass-123');
+    await user.type(confirmPassword, 'new-pass-123');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    expect(await screen.findByText('Current password is invalid')).toBeInTheDocument();
+  });
+
+  it('shows fallback error message when password change fails with unknown error', async () => {
+    mockChangePassword.mockRejectedValueOnce(new Error('network down'));
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const [currentPassword, newPassword, confirmPassword] = getPasswordInputs();
+    await user.type(currentPassword, 'bad-pass');
+    await user.type(newPassword, 'new-pass-123');
+    await user.type(confirmPassword, 'new-pass-123');
+    await user.click(screen.getByRole('button', { name: /change password/i }));
+
+    expect(await screen.findByText('Failed to change password')).toBeInTheDocument();
+  });
+
+  it('toggles password visibility for current password field', async () => {
+    const user = userEvent.setup();
+    await renderAccount();
+
+    const currentPasswordSection = screen.getByText('Current Password').parentElement as HTMLElement;
+    const input = currentPasswordSection.querySelector('input') as HTMLInputElement;
+    const toggle = currentPasswordSection.querySelector('button') as HTMLButtonElement;
+
+    expect(input.type).toBe('password');
+    await user.click(toggle);
+    expect(input.type).toBe('text');
+    await user.click(toggle);
+    expect(input.type).toBe('password');
+  });
+});
+
+describe('Account Component - 2FA Flows', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUser.twoFactorEnabled = false;
+    mockCopyToClipboard.mockResolvedValue(true);
+  });
+
+  it('opens setup modal and sanitizes verification code input', async () => {
+    mockSetup2FA.mockResolvedValueOnce({
+      secret: 'JBSWY3DPEHPK3PXP',
+      qrCodeDataUrl: 'data:image/png;base64,mockQRCode',
+    });
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /enable 2fa/i }));
+
+    expect(await screen.findByRole('heading', { name: /set up two-factor authentication/i })).toBeInTheDocument();
+    expect(screen.getByAltText('2FA QR Code')).toBeInTheDocument();
+
+    const verifyInput = screen.getByPlaceholderText('000000') as HTMLInputElement;
+    await user.type(verifyInput, '12ab34x');
+    expect(verifyInput.value).toBe('1234');
+    expect(screen.getByRole('button', { name: /verify and enable 2fa/i })).toBeDisabled();
+  });
+
+  it('verifies 2FA, shows backup codes, and supports copy actions', async () => {
+    mockSetup2FA.mockResolvedValueOnce({
+      secret: 'JBSWY3DPEHPK3PXP',
+      qrCodeDataUrl: 'data:image/png;base64,mockQRCode',
+    });
+    mockEnable2FA.mockResolvedValueOnce({
+      backupCodes: ['CODE1111', 'CODE2222'],
+    });
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /enable 2fa/i }));
+    await screen.findByRole('heading', { name: /set up two-factor authentication/i });
+
+    const verifyInput = screen.getByPlaceholderText('000000');
+    await user.type(verifyInput, '123456');
+    await user.click(screen.getByRole('button', { name: /verify and enable 2fa/i }));
+
+    await waitFor(() => {
+      expect(mockEnable2FA).toHaveBeenCalledWith('123456');
+    });
+
+    expect(await screen.findByRole('heading', { name: /save backup codes/i })).toBeInTheDocument();
+    await user.click(screen.getByText('CODE1111'));
+    expect(mockCopyToClipboard).toHaveBeenCalledWith('CODE1111');
+
+    await user.click(screen.getByRole('button', { name: /copy all codes/i }));
+    expect(mockCopyToClipboard).toHaveBeenCalledWith('CODE1111\nCODE2222');
+
+    await user.click(screen.getByRole('button', { name: /i've saved my codes/i }));
+    expect(screen.queryByRole('heading', { name: /save backup codes/i })).not.toBeInTheDocument();
+    expect(screen.getByText('2FA Enabled')).toBeInTheDocument();
+  });
+
+  it('shows setup error when setup2FA fails with ApiError', async () => {
+    mockSetup2FA.mockRejectedValueOnce(new ApiError('Unable to start setup', 500));
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /enable 2fa/i }));
+
+    expect(await screen.findByText('Unable to start setup')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /set up two-factor authentication/i })).not.toBeInTheDocument();
+  });
+
+  it('shows verification fallback error when enable2FA fails with unknown error', async () => {
+    mockSetup2FA.mockResolvedValueOnce({
+      secret: 'JBSWY3DPEHPK3PXP',
+      qrCodeDataUrl: 'data:image/png;base64,mockQRCode',
+    });
+    mockEnable2FA.mockRejectedValueOnce(new Error('bad token'));
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /enable 2fa/i }));
+    await screen.findByRole('heading', { name: /set up two-factor authentication/i });
+    await user.type(screen.getByPlaceholderText('000000'), '123456');
+    await user.click(screen.getByRole('button', { name: /verify and enable 2fa/i }));
+
+    const errorMessages = await screen.findAllByText('Invalid verification code');
+    expect(errorMessages.length).toBeGreaterThan(0);
+  });
+
+  it('disables 2FA from the disable modal', async () => {
+    mockUser.twoFactorEnabled = true;
+    mockDisable2FA.mockResolvedValueOnce(undefined);
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /^disable$/i }));
+    const modalTitle = await screen.findByRole('heading', { name: /disable two-factor authentication/i });
+    const modal = modalTitle.closest('div')?.parentElement?.parentElement as HTMLElement;
+
+    const passwordInput = within(modal).getByPlaceholderText('Enter your password');
+    const tokenInput = within(modal).getByPlaceholderText('000000') as HTMLInputElement;
+    await user.type(passwordInput, 'account-pass');
+    await user.type(tokenInput, 'ab12cd$');
+    expect(tokenInput.value).toBe('AB12CD');
+
+    await user.click(within(modal).getByRole('button', { name: /disable 2fa/i }));
+
+    await waitFor(() => {
+      expect(mockDisable2FA).toHaveBeenCalledWith({
+        password: 'account-pass',
+        token: 'AB12CD',
+      });
+    });
+
+    expect(screen.queryByRole('heading', { name: /disable two-factor authentication/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /enable 2fa/i })).toBeInTheDocument();
+  });
+
+  it('regenerates backup codes and shows new codes modal state', async () => {
+    mockUser.twoFactorEnabled = true;
+    mockRegenerateBackupCodes.mockResolvedValueOnce({
+      backupCodes: ['NEWCODE1', 'NEWCODE2'],
+    });
+
+    const user = userEvent.setup();
+    await renderAccount();
+
+    await user.click(screen.getByRole('button', { name: /regenerate/i }));
+    const modalTitle = await screen.findByRole('heading', { name: /regenerate backup codes/i });
+    const modal = modalTitle.closest('div')?.parentElement?.parentElement as HTMLElement;
+
+    await user.type(within(modal).getByPlaceholderText('Enter your password'), 'account-pass');
+    await user.type(within(modal).getByPlaceholderText('000000'), '123456');
+    await user.click(within(modal).getByRole('button', { name: /generate new codes/i }));
+
+    await waitFor(() => {
+      expect(mockRegenerateBackupCodes).toHaveBeenCalledWith({
+        password: 'account-pass',
+        token: '123456',
+      });
+    });
+
+    expect(await screen.findByRole('heading', { name: /new backup codes/i })).toBeInTheDocument();
+    expect(screen.getByText('NEWCODE1')).toBeInTheDocument();
+    expect(screen.getByText('NEWCODE2')).toBeInTheDocument();
   });
 });

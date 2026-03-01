@@ -1,0 +1,139 @@
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { DeviceDetailsForm } from '../../../components/ConnectDevice/DeviceDetailsForm';
+
+const selectedModel = {
+  id: 'model-1',
+  slug: 'ledger-nano-s',
+  name: 'Ledger Nano S',
+  manufacturer: 'Ledger',
+  connectivity: ['usb'],
+  airGapped: false,
+  secureElement: true,
+  openSource: false,
+  supportsBitcoinOnly: false,
+  integrationTested: true,
+} as any;
+
+function createProps(overrides: Record<string, unknown> = {}) {
+  return {
+    selectedModel,
+    method: 'manual',
+    scanned: false,
+    formData: {
+      label: 'My Device',
+      xpub: '',
+      fingerprint: '',
+      derivationPath: "m/84'/0'/0'",
+      parsedAccounts: [],
+      selectedAccounts: new Set<number>(),
+    },
+    saving: false,
+    error: null,
+    warning: null,
+    qrExtractedFields: null,
+    showQrDetails: false,
+    onFormDataChange: vi.fn(),
+    onToggleAccount: vi.fn(),
+    onToggleQrDetails: vi.fn(),
+    onSave: vi.fn(),
+    ...overrides,
+  } as any;
+}
+
+describe('DeviceDetailsForm', () => {
+  it('renders placeholder state when no model selected', () => {
+    render(<DeviceDetailsForm {...createProps({ selectedModel: null })} />);
+    expect(screen.getByText(/Select a device to continue/i)).toBeInTheDocument();
+  });
+
+  it('handles manual entry form changes', () => {
+    const props = createProps();
+    render(<DeviceDetailsForm {...props} />);
+
+    fireEvent.change(screen.getByDisplayValue('My Device'), { target: { value: 'Renamed Device' } });
+    fireEvent.change(screen.getByPlaceholderText('00000000'), { target: { value: 'a1b2c3d4' } });
+    fireEvent.change(screen.getByDisplayValue("m/84'/0'/0'"), { target: { value: "m/86'/0'/0'" } });
+    fireEvent.change(screen.getByPlaceholderText('xpub... / ypub... / zpub...'), { target: { value: 'xpub123' } });
+
+    expect(props.onFormDataChange).toHaveBeenCalledWith({ label: 'Renamed Device' });
+    expect(props.onFormDataChange).toHaveBeenCalledWith({ fingerprint: 'a1b2c3d4' });
+    expect(props.onFormDataChange).toHaveBeenCalledWith({ derivationPath: "m/86'/0'/0'" });
+    expect(props.onFormDataChange).toHaveBeenCalledWith({ xpub: 'xpub123' });
+  });
+
+  it('renders parsed account list, toggles accounts, and saves', async () => {
+    const user = userEvent.setup();
+    const props = createProps({
+      method: 'usb',
+      scanned: true,
+      formData: {
+        label: 'Ledger Nano S',
+        xpub: '',
+        fingerprint: 'f00dbeef',
+        derivationPath: "m/84'/0'/0'",
+        parsedAccounts: [
+          {
+            derivationPath: "m/84'/0'/0'",
+            xpub: 'xpub661MyMwAqRbcFAKEACCOUNTAAAA00000011111111',
+            purpose: 'single_sig',
+            scriptType: 'native_segwit',
+          },
+          {
+            derivationPath: "m/86'/0'/0'",
+            xpub: 'xpub661MyMwAqRbcFAKEACCOUNTBBBB22222233333333',
+            purpose: 'multisig',
+            scriptType: 'taproot',
+          },
+        ],
+        selectedAccounts: new Set<number>([0]),
+      },
+    });
+
+    render(<DeviceDetailsForm {...props} />);
+
+    expect(screen.getByText(/Accounts to Import/i)).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 selected')).toBeInTheDocument();
+    expect(screen.getByText('Single-sig')).toBeInTheDocument();
+    expect(screen.getByText('Multisig')).toBeInTheDocument();
+    expect(screen.getByText('Native SegWit')).toBeInTheDocument();
+    expect(screen.getByText('Taproot')).toBeInTheDocument();
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[1]!);
+    expect(props.onToggleAccount).toHaveBeenCalledWith(1);
+
+    await user.click(screen.getByRole('button', { name: /Save Device/i }));
+    expect(props.onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows helper message when parsed accounts exist but none are selected', () => {
+    render(
+      <DeviceDetailsForm
+        {...createProps({
+          method: 'usb',
+          scanned: true,
+          formData: {
+            label: 'Ledger Nano S',
+            xpub: '',
+            fingerprint: 'f00dbeef',
+            derivationPath: "m/84'/0'/0'",
+            parsedAccounts: [
+              {
+                derivationPath: "m/84'/0'/0'",
+                xpub: 'xpub661MyMwAqRbcFAKEACCOUNTAAAA00000011111111',
+                purpose: 'single_sig',
+                scriptType: 'native_segwit',
+              },
+            ],
+            selectedAccounts: new Set<number>(),
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText(/Select at least one account to import/i)).toBeInTheDocument();
+  });
+});

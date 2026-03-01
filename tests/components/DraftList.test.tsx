@@ -3,13 +3,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { DraftList } from '../../components/DraftList';
 import { WalletType } from '../../types';
 import * as CurrencyContext from '../../contexts/CurrencyContext';
 import * as draftsApi from '../../src/api/drafts';
+import * as downloadUtils from '../../utils/download';
 
 // Mock navigate
 const mockNavigate = vi.fn();
@@ -31,6 +32,10 @@ vi.mock('../../src/api/drafts', () => ({
   getDrafts: vi.fn(),
   deleteDraft: vi.fn(),
   updateDraft: vi.fn(),
+}));
+
+vi.mock('../../utils/download', () => ({
+  downloadBlob: vi.fn(),
 }));
 
 // Mock child components
@@ -61,7 +66,7 @@ describe('DraftList', () => {
       totalOutput: 59000,
       changeAmount: 8000,
       changeAddress: 'bc1qchange...',
-      psbtBase64: 'cHNidP8...',
+      psbtBase64: 'cHNidP8=',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       outputs: [{ address: 'bc1qrecipient...', amount: 50000 }],
@@ -79,8 +84,8 @@ describe('DraftList', () => {
       totalOutput: 118000,
       changeAmount: 16000,
       changeAddress: 'bc1qchange2...',
-      psbtBase64: 'cHNidP8...',
-      signedPsbtBase64: 'cHNidP8signed...',
+      psbtBase64: 'cHNidP8=',
+      signedPsbtBase64: 'cHNidP8=',
       signedDeviceIds: ['device-1'],
       createdAt: new Date(Date.now() - 86400000).toISOString(),
       updatedAt: new Date().toISOString(),
@@ -257,9 +262,7 @@ describe('DraftList', () => {
       renderDraftList();
 
       await waitFor(() => {
-        // May show warning about high fee
-        const warningText = screen.queryByText(/fee.*more than/i);
-        // This depends on whether the warning is visible in collapsed state
+        expect(screen.getByText(/Fee is more than half of the amount!/i)).toBeInTheDocument();
       });
     });
   });
@@ -314,6 +317,178 @@ describe('DraftList', () => {
       // Delete buttons should not be present
       const deleteButtons = screen.queryAllByTitle(/Delete/i);
       expect(deleteButtons.length).toBe(0);
+    });
+  });
+
+  describe('interactive actions', () => {
+    it('navigates to send page when resuming without onResume callback', async () => {
+      const user = userEvent.setup();
+      renderDraftList();
+
+      const resumeButtons = await screen.findAllByRole('button', { name: /resume/i });
+      await user.click(resumeButtons[0]);
+
+      expect(mockNavigate).toHaveBeenCalledWith('/wallets/wallet-1/send', {
+        state: { draft: expect.objectContaining({ id: 'draft-2' }) },
+      });
+    });
+
+    it('calls onResume callback when provided', async () => {
+      const user = userEvent.setup();
+      const onResume = vi.fn();
+      renderDraftList({ onResume });
+
+      const resumeButtons = await screen.findAllByRole('button', { name: /resume/i });
+      await user.click(resumeButtons[0]);
+
+      expect(onResume).toHaveBeenCalledWith(expect.objectContaining({ id: 'draft-2' }));
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('downloads PSBT for single-sig drafts', async () => {
+      const user = userEvent.setup();
+      renderDraftList();
+
+      await screen.findByText('Unsigned');
+      await user.click(screen.getAllByTitle('Download PSBT')[0]);
+
+      expect(downloadUtils.downloadBlob).toHaveBeenCalled();
+      expect(vi.mocked(downloadUtils.downloadBlob).mock.calls[0]?.[1]).toMatch(/sanctuary-draft-.*\.psbt/);
+    });
+
+    it('shows and confirms delete flow', async () => {
+      const user = userEvent.setup();
+      const onDraftsChange = vi.fn();
+      renderDraftList({ onDraftsChange });
+
+      await screen.findByText('Unsigned');
+      await user.click(screen.getAllByTitle('Delete draft')[0]);
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Delete' }));
+      await waitFor(() => {
+        expect(draftsApi.deleteDraft).toHaveBeenCalledWith('wallet-1', 'draft-2');
+      });
+      expect(onDraftsChange).toHaveBeenCalledWith(1);
+    });
+
+    it('cancels delete flow without deleting', async () => {
+      const user = userEvent.setup();
+      renderDraftList();
+
+      await screen.findByText('Unsigned');
+      await user.click(screen.getAllByTitle('Delete draft')[0]);
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(draftsApi.deleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('expands and collapses transaction flow preview', async () => {
+      const user = userEvent.setup();
+      renderDraftList();
+
+      const showButtons = await screen.findAllByRole('button', { name: /show transaction flow/i });
+      await user.click(showButtons[0]);
+      expect(screen.getByTestId('flow-preview')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /hide transaction flow/i }));
+      expect(screen.queryByTestId('flow-preview')).not.toBeInTheDocument();
+    });
+
+    it('uploads binary PSBT and marks single-sig draft as signed', async () => {
+      renderDraftList();
+      await screen.findByText('Unsigned');
+
+      const binaryPsbt = new Uint8Array([0x70, 0x73, 0x62, 0x74, 0xff, 0x01, 0x02]).buffer;
+      const file = {
+        name: 'signed.psbt',
+        arrayBuffer: () => Promise.resolve(binaryPsbt),
+        text: () => Promise.resolve(''),
+      } as unknown as File;
+      const fileInputs = document.querySelectorAll('input[type="file"]');
+      fireEvent.change(fileInputs[0] as HTMLInputElement, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(draftsApi.updateDraft).toHaveBeenCalledWith(
+          'wallet-1',
+          'draft-2',
+          expect.objectContaining({ status: 'signed', signedPsbtBase64: expect.any(String) })
+        );
+      });
+      expect(draftsApi.getDrafts).toHaveBeenCalledTimes(2);
+    });
+
+    it('uploads base64 PSBT and marks single-sig draft as signed', async () => {
+      renderDraftList();
+      await screen.findByText('Unsigned');
+
+      const file = {
+        name: 'signed.txt',
+        arrayBuffer: () => Promise.resolve(new Uint8Array([0x00]).buffer),
+        text: () => Promise.resolve('cHNidP8='),
+      } as unknown as File;
+      const fileInputs = document.querySelectorAll('input[type="file"]');
+      fireEvent.change(fileInputs[0] as HTMLInputElement, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(draftsApi.updateDraft).toHaveBeenCalledWith(
+          'wallet-1',
+          'draft-2',
+          expect.objectContaining({ status: 'signed', signedPsbtBase64: expect.any(String) })
+        );
+      });
+    });
+
+    it('shows operation error when uploaded PSBT format is invalid', async () => {
+      renderDraftList();
+      await screen.findByText('Unsigned');
+
+      const file = {
+        name: 'invalid.txt',
+        arrayBuffer: () => Promise.resolve(new Uint8Array([0x00]).buffer),
+        text: () => Promise.resolve('not-a-psbt'),
+      } as unknown as File;
+      const fileInputs = document.querySelectorAll('input[type="file"]');
+      fireEvent.change(fileInputs[0] as HTMLInputElement, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(screen.getByText(/Expected binary, base64, or hex/i)).toBeInTheDocument();
+      });
+    });
+
+    it('hides edit controls when canEdit is false', async () => {
+      renderDraftList({ canEdit: false });
+      await screen.findByText('Unsigned');
+
+      expect(screen.queryByTitle('Delete draft')).not.toBeInTheDocument();
+      expect(document.querySelectorAll('input[type="file"]').length).toBe(0);
+    });
+
+    it('hides download/upload controls for multisig mode', async () => {
+      renderDraftList({ walletType: WalletType.MULTI_SIG, quorum: { m: 2, n: 3 } });
+      await screen.findByText(/1 of 2 signed/i);
+
+      expect(screen.queryByTitle('Download PSBT')).not.toBeInTheDocument();
+      expect(document.querySelectorAll('input[type="file"]').length).toBe(0);
+    });
+  });
+
+  describe('error retry', () => {
+    it('retries loading drafts from error state', async () => {
+      const user = userEvent.setup();
+      vi.mocked(draftsApi.getDrafts)
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce([]);
+
+      renderDraftList();
+
+      const retryButton = await screen.findByRole('button', { name: /try again/i });
+      await user.click(retryButton);
+
+      await waitFor(() => {
+        expect(draftsApi.getDrafts).toHaveBeenCalledTimes(2);
+      });
+      expect(screen.getByText(/No draft transactions/i)).toBeInTheDocument();
     });
   });
 });

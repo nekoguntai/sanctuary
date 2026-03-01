@@ -1,0 +1,307 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../utils/logger', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+const { parseDeviceJsonMock } = vi.hoisted(() => ({
+  parseDeviceJsonMock: vi.fn(),
+}));
+vi.mock('../../services/deviceParsers', () => ({
+  parseDeviceJson: parseDeviceJsonMock,
+}));
+
+const registry = vi.hoisted(() => {
+  class MockPathComponent {
+    constructor(
+      private readonly index: number,
+      private readonly hardened: boolean
+    ) {}
+
+    getIndex(): number {
+      return this.index;
+    }
+
+    isHardened(): boolean {
+      return this.hardened;
+    }
+  }
+
+  class MockOrigin {
+    constructor(
+      private readonly sourceFingerprint?: Uint8Array,
+      private readonly components: InstanceType<typeof MockPathComponent>[] = []
+    ) {}
+
+    getSourceFingerprint(): Uint8Array | undefined {
+      return this.sourceFingerprint;
+    }
+
+    getComponents(): InstanceType<typeof MockPathComponent>[] {
+      return this.components;
+    }
+  }
+
+  class MockCryptoHDKey {
+    constructor(
+      private readonly xpub = 'xpub-default',
+      private readonly origin: InstanceType<typeof MockOrigin> | null = null,
+      private readonly parentFingerprint?: Uint8Array,
+      private readonly throwOnParentFingerprint = false
+    ) {}
+
+    getBip32Key(): string {
+      return this.xpub;
+    }
+
+    getOrigin(): InstanceType<typeof MockOrigin> | null {
+      return this.origin;
+    }
+
+    getParentFingerprint(): Uint8Array | undefined {
+      if (this.throwOnParentFingerprint) {
+        throw new Error('no parent fingerprint');
+      }
+      return this.parentFingerprint;
+    }
+  }
+
+  class MockCryptoOutput {
+    constructor(private readonly hdKey: InstanceType<typeof MockCryptoHDKey> | null) {}
+
+    getHDKey(): InstanceType<typeof MockCryptoHDKey> | null {
+      return this.hdKey;
+    }
+  }
+
+  class MockCryptoAccount {
+    constructor(
+      private readonly masterFingerprint?: Uint8Array,
+      private readonly outputs: InstanceType<typeof MockCryptoOutput>[] = []
+    ) {}
+
+    getMasterFingerprint(): Uint8Array | undefined {
+      return this.masterFingerprint;
+    }
+
+    getOutputDescriptors(): InstanceType<typeof MockCryptoOutput>[] {
+      return this.outputs;
+    }
+  }
+
+  return {
+    MockPathComponent,
+    MockOrigin,
+    MockCryptoHDKey,
+    MockCryptoOutput,
+    MockCryptoAccount,
+  };
+});
+
+vi.mock('@keystonehq/bc-ur-registry', () => ({
+  CryptoHDKey: registry.MockCryptoHDKey,
+  CryptoOutput: registry.MockCryptoOutput,
+  CryptoAccount: registry.MockCryptoAccount,
+}));
+
+const {
+  MockPathComponent,
+  MockOrigin,
+  MockCryptoHDKey,
+} = registry;
+
+import {
+  extractFingerprintFromHdKey,
+  extractFromUrBytesContent,
+  extractFromUrResult,
+  getUrType,
+  isUrFormat,
+} from '../../utils/urDeviceDecoder';
+import { CryptoAccount, CryptoHDKey, CryptoOutput } from '@keystonehq/bc-ur-registry';
+
+describe('urDeviceDecoder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('extracts source fingerprint before parent fingerprint', () => {
+    const origin = new MockOrigin(Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]));
+    const hdKey = new CryptoHDKey('xpub-1', origin, Buffer.from([1, 2, 3, 4]));
+
+    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('aabbccdd');
+  });
+
+  it('falls back to parent fingerprint when source fingerprint is unavailable', () => {
+    const hdKey = new CryptoHDKey(
+      'xpub-2',
+      new MockOrigin(undefined),
+      Buffer.from([0xde, 0xad, 0xbe, 0xef])
+    );
+
+    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('deadbeef');
+  });
+
+  it('returns empty fingerprint when no fingerprint data is available', () => {
+    const hdKey = new CryptoHDKey('xpub-3', null, undefined, true);
+    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('');
+  });
+
+  it('extracts xpub/fingerprint/path from CryptoHDKey UR result', () => {
+    const origin = new MockOrigin(Buffer.from([0x12, 0x34, 0x56, 0x78]), [
+      new MockPathComponent(84, true),
+      new MockPathComponent(0, true),
+      new MockPathComponent(0, true),
+    ]);
+    const hdKey = new CryptoHDKey('xpub-hd-key', origin);
+
+    expect(extractFromUrResult(hdKey)).toEqual({
+      xpub: 'xpub-hd-key',
+      fingerprint: '12345678',
+      path: "m/84'/0'/0'",
+    });
+  });
+
+  it('extracts data from CryptoOutput UR result', () => {
+    const origin = new MockOrigin(Buffer.from([0x11, 0x22, 0x33, 0x44]), [
+      new MockPathComponent(49, true),
+      new MockPathComponent(0, true),
+      new MockPathComponent(0, true),
+    ]);
+    const output = new CryptoOutput(new CryptoHDKey('xpub-output', origin));
+
+    expect(extractFromUrResult(output)).toEqual({
+      xpub: 'xpub-output',
+      fingerprint: '11223344',
+      path: "m/49'/0'/0'",
+    });
+  });
+
+  it('prefers BIP84 output when extracting from CryptoAccount UR result', () => {
+    const account = new CryptoAccount(
+      Buffer.from([0xab, 0xcd, 0xef, 0x01]),
+      [
+        new CryptoOutput(
+          new CryptoHDKey(
+            'xpub-nested',
+            new MockOrigin(undefined, [
+              new MockPathComponent(49, true),
+              new MockPathComponent(0, true),
+              new MockPathComponent(0, true),
+            ])
+          )
+        ),
+        new CryptoOutput(
+          new CryptoHDKey(
+            'xpub-native',
+            new MockOrigin(undefined, [
+              new MockPathComponent(84, true),
+              new MockPathComponent(0, true),
+              new MockPathComponent(0, true),
+            ])
+          )
+        ),
+      ]
+    );
+
+    expect(extractFromUrResult(account)).toEqual({
+      xpub: 'xpub-native',
+      fingerprint: 'abcdef01',
+      path: "m/84'/0'/0'",
+    });
+  });
+
+  it('falls back to first account output when no BIP84 path exists', () => {
+    const account = new CryptoAccount(
+      Buffer.from([0x10, 0x20, 0x30, 0x40]),
+      [
+        new CryptoOutput(
+          new CryptoHDKey(
+            'xpub-first',
+            new MockOrigin(undefined, [
+              new MockPathComponent(48, true),
+              new MockPathComponent(0, true),
+              new MockPathComponent(0, true),
+            ])
+          )
+        ),
+      ]
+    );
+
+    expect(extractFromUrResult(account)).toEqual({
+      xpub: 'xpub-first',
+      fingerprint: '10203040',
+      path: "m/48'/0'/0'",
+    });
+  });
+
+  it('handles ur:bytes payloads without throwing', () => {
+    parseDeviceJsonMock.mockReturnValue({
+      format: 'passport',
+      xpub: 'xpub-bytes',
+      fingerprint: 'f1f2f3f4',
+      derivationPath: "m/84'/0'/0'",
+    });
+
+    const bytesResult = extractFromUrResult({
+      bytes: Buffer.from('{"descriptor":"ok"}'),
+    });
+
+    expect(bytesResult).toBeNull();
+  });
+
+  it('returns null when ur:bytes content cannot be parsed', () => {
+    parseDeviceJsonMock.mockReturnValue(null);
+
+    expect(
+      extractFromUrResult({
+        bytes: Buffer.from('invalid'),
+      })
+    ).toBeNull();
+  });
+
+  it('returns null when extraction throws unexpectedly', () => {
+    const badHdKey = {
+      getBip32Key: () => {
+        throw new Error('boom');
+      },
+    };
+
+    const result = extractFromUrResult(Object.setPrototypeOf(badHdKey, MockCryptoHDKey.prototype));
+    expect(result).toBeNull();
+  });
+
+  it('extracts from decoded ur:bytes text helper', () => {
+    parseDeviceJsonMock.mockReturnValue({
+      format: 'json',
+      xpub: 'xpub-text',
+      fingerprint: 'a1b2c3d4',
+      derivationPath: "m/48'/0'/0'",
+    });
+
+    expect(extractFromUrBytesContent('{"wallet":"data"}')).toEqual({
+      xpub: 'xpub-text',
+      fingerprint: 'a1b2c3d4',
+      path: "m/48'/0'/0'",
+    });
+  });
+
+  it('returns null from ur:bytes helper when parser finds no xpub', () => {
+    parseDeviceJsonMock.mockReturnValue({ format: 'unknown' });
+    expect(extractFromUrBytesContent('not wallet data')).toBeNull();
+  });
+
+  it('detects UR format and extracts UR type', () => {
+    expect(isUrFormat('ur:crypto-hdkey/abc')).toBe(true);
+    expect(isUrFormat('UR:BYTES/abc')).toBe(true);
+    expect(isUrFormat('xpub123')).toBe(false);
+
+    expect(getUrType('ur:crypto-account/foo')).toBe('crypto-account');
+    expect(getUrType('UR:BYTES/bar')).toBe('bytes');
+    expect(getUrType('not-ur')).toBeNull();
+  });
+});

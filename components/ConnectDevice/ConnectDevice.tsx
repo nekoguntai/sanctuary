@@ -12,24 +12,21 @@
  * and UI to subcomponents for better maintainability.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
-import { HardwareDeviceModel, DeviceAccountInput } from '../../src/api/devices';
-import { DeviceAccount, parseDeviceJson } from '../../services/deviceParsers';
+import { HardwareDeviceModel } from '../../src/api/devices';
 import { isSecureContext } from '../../services/hardwareWallet';
 
 // Hooks
 import { useDeviceModels } from '../../hooks/useDeviceModels';
 import { useDeviceSave } from '../../hooks/useDeviceSave';
-import { useQrScanner, QrScanResult } from '../../hooks/useQrScanner';
+import { useQrScanner } from '../../hooks/useQrScanner';
 import { useDeviceConnection } from '../../hooks/useDeviceConnection';
+import { useDeviceForm } from './hooks/useDeviceForm';
 
 // Utilities
-import {
-  getAvailableMethods,
-  normalizeDerivationPath,
-} from '../../utils/deviceConnection';
+import { getAvailableMethods } from '../../utils/deviceConnection';
 
 // Subcomponents
 import { DeviceModelSelector } from './DeviceModelSelector';
@@ -39,12 +36,12 @@ import { QrScannerPanel } from './QrScannerPanel';
 import { FileUploadPanel } from './FileUploadPanel';
 import { DeviceDetailsForm } from './DeviceDetailsForm';
 import { ConflictDialog } from './ConflictDialog';
-import { ConnectionMethod, DeviceFormData } from './types';
 
 export const ConnectDevice: React.FC = () => {
   const navigate = useNavigate();
 
   // Device model selection
+  const [selectedModel, setSelectedModel] = useState<HardwareDeviceModel | null>(null);
   const {
     filteredModels,
     manufacturers,
@@ -82,7 +79,6 @@ export const ConnectDevice: React.FC = () => {
     error: qrError,
     handleQrScan,
     handleCameraError,
-    handleFileContent,
     reset: resetQr,
     stopCamera,
   } = useQrScanner();
@@ -97,250 +93,32 @@ export const ConnectDevice: React.FC = () => {
     reset: resetUsb,
   } = useDeviceConnection();
 
-  // Local UI state
-  const [selectedModel, setSelectedModel] = useState<HardwareDeviceModel | null>(null);
-  const [method, setMethod] = useState<ConnectionMethod | null>(null);
-  const [scanned, setScanned] = useState(false);
-  const [fileScanning, setFileScanning] = useState(false);
-
-  // Device form data
-  const [formData, setFormData] = useState<DeviceFormData>({
-    label: '',
-    xpub: '',
-    fingerprint: '',
-    derivationPath: "m/84'/0'/0'",
-    parsedAccounts: [],
-    selectedAccounts: new Set(),
+  // Form state and handlers
+  const {
+    formData,
+    scanned,
+    fileScanning,
+    warning,
+    qrExtractedFields,
+    showQrDetails,
+    method,
+    handleFormDataChange,
+    handleToggleAccount,
+    handleFileUpload,
+    handleSelectMethod,
+    handleSave,
+    handleMerge,
+    setShowQrDetails,
+  } = useDeviceForm({
+    selectedModel,
+    scanResult,
+    connectionResult,
+    saveDevice,
+    mergeDevice,
+    resetQr,
+    resetUsb,
+    resetSave,
   });
-
-  // QR extraction tracking
-  const [qrExtractedFields, setQrExtractedFields] = useState<{
-    xpub: boolean;
-    fingerprint: boolean;
-    derivationPath: boolean;
-    label: boolean;
-  } | null>(null);
-  const [showQrDetails, setShowQrDetails] = useState(false);
-  const [warning, setWarning] = useState<string | null>(null);
-
-  // Reset state when model changes
-  useEffect(() => {
-    setMethod(null);
-    setScanned(false);
-    resetQr();
-    resetUsb();
-    resetSave();
-    setQrExtractedFields(null);
-    setWarning(null);
-    setFormData({
-      label: selectedModel ? `My ${selectedModel.name}` : '',
-      xpub: '',
-      fingerprint: '',
-      derivationPath: "m/84'/0'/0'",
-      parsedAccounts: [],
-      selectedAccounts: new Set(),
-    });
-  }, [selectedModel, resetQr, resetUsb, resetSave]);
-
-  // Apply QR scan result to form
-  useEffect(() => {
-    if (scanResult) {
-      applyParseResult(scanResult);
-      setScanned(true);
-    }
-  }, [scanResult]);
-
-  // Apply USB connection result to form
-  useEffect(() => {
-    if (connectionResult) {
-      setFormData(prev => ({
-        ...prev,
-        fingerprint: connectionResult.fingerprint,
-        parsedAccounts: connectionResult.accounts,
-        selectedAccounts: new Set(connectionResult.accounts.map((_, i) => i)),
-      }));
-      setScanned(true);
-    }
-  }, [connectionResult]);
-
-  /**
-   * Apply parsed device data to form
-   */
-  const applyParseResult = useCallback((result: QrScanResult | {
-    xpub?: string;
-    fingerprint?: string;
-    derivationPath?: string;
-    label?: string;
-    accounts?: DeviceAccount[];
-  }) => {
-    setFormData(prev => {
-      const updates: Partial<DeviceFormData> = {};
-
-      if ('extractedFields' in result) {
-        // QR scan result
-        updates.xpub = result.xpub;
-        updates.fingerprint = result.fingerprint;
-        if (result.derivationPath) {
-          updates.derivationPath = result.derivationPath;
-        }
-        if (result.label && !prev.label.startsWith('My ')) {
-          updates.label = result.label;
-        }
-        if (result.accounts && result.accounts.length > 0) {
-          updates.parsedAccounts = result.accounts;
-          updates.selectedAccounts = new Set(result.accounts.map((_, i) => i));
-        }
-
-        setQrExtractedFields(result.extractedFields);
-        setWarning(result.warning);
-      } else {
-        // File parse result
-        if (result.xpub) updates.xpub = result.xpub;
-        if (result.fingerprint) updates.fingerprint = result.fingerprint;
-        if (result.derivationPath) {
-          updates.derivationPath = normalizeDerivationPath(result.derivationPath);
-        }
-        if (result.label && !prev.label.startsWith('My ')) {
-          updates.label = result.label;
-        }
-        if (result.accounts && result.accounts.length > 0) {
-          updates.parsedAccounts = result.accounts;
-          updates.selectedAccounts = new Set(result.accounts.map((_, i) => i));
-        }
-      }
-
-      return { ...prev, ...updates };
-    });
-  }, []);
-
-  /**
-   * Handle file upload for SD card / QR file mode
-   */
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setFileScanning(true);
-    setWarning(null);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      const result = parseDeviceJson(content);
-
-      if (result && (result.xpub || result.fingerprint || result.accounts?.length)) {
-        applyParseResult(result);
-        setScanned(true);
-      } else {
-        setWarning('Could not parse file. Please check the format.');
-      }
-      setFileScanning(false);
-    };
-    reader.onerror = () => {
-      setWarning('Failed to read file.');
-      setFileScanning(false);
-    };
-    reader.readAsText(file);
-  }, [applyParseResult]);
-
-  /**
-   * Update form data
-   */
-  const handleFormDataChange = useCallback((updates: Partial<DeviceFormData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
-  }, []);
-
-  /**
-   * Toggle account selection
-   */
-  const handleToggleAccount = useCallback((index: number) => {
-    setFormData(prev => {
-      const newSelected = new Set(prev.selectedAccounts);
-      if (newSelected.has(index)) {
-        newSelected.delete(index);
-      } else {
-        newSelected.add(index);
-      }
-      return { ...prev, selectedAccounts: newSelected };
-    });
-  }, []);
-
-  /**
-   * Handle method selection
-   */
-  const handleSelectMethod = useCallback((newMethod: ConnectionMethod) => {
-    setMethod(newMethod);
-    setScanned(false);
-    setWarning(null);
-    setQrExtractedFields(null);
-    resetQr();
-    resetUsb();
-  }, [resetQr, resetUsb]);
-
-  /**
-   * Handle save
-   */
-  const handleSave = useCallback(async () => {
-    if (!selectedModel) return;
-
-    // Build accounts array from selected parsed accounts
-    const accounts: DeviceAccountInput[] = [];
-    if (formData.parsedAccounts.length > 0 && formData.selectedAccounts.size > 0) {
-      formData.parsedAccounts.forEach((account, index) => {
-        if (formData.selectedAccounts.has(index)) {
-          accounts.push({
-            purpose: account.purpose,
-            scriptType: account.scriptType,
-            derivationPath: account.derivationPath,
-            xpub: account.xpub,
-          });
-        }
-      });
-    }
-
-    await saveDevice({
-      type: selectedModel.name,
-      label: formData.label || `${selectedModel.name} ${formData.fingerprint}`,
-      fingerprint: formData.fingerprint || '00000000',
-      ...(accounts.length > 0
-        ? { accounts }
-        : { xpub: formData.xpub, derivationPath: formData.derivationPath }
-      ),
-      modelSlug: selectedModel.slug,
-    });
-  }, [selectedModel, formData, saveDevice]);
-
-  /**
-   * Handle merge
-   */
-  const handleMerge = useCallback(async () => {
-    if (!selectedModel) return;
-
-    const accounts: DeviceAccountInput[] = [];
-    if (formData.parsedAccounts.length > 0 && formData.selectedAccounts.size > 0) {
-      formData.parsedAccounts.forEach((account, index) => {
-        if (formData.selectedAccounts.has(index)) {
-          accounts.push({
-            purpose: account.purpose,
-            scriptType: account.scriptType,
-            derivationPath: account.derivationPath,
-            xpub: account.xpub,
-          });
-        }
-      });
-    }
-
-    await mergeDevice({
-      type: selectedModel.name,
-      label: formData.label || `${selectedModel.name} ${formData.fingerprint}`,
-      fingerprint: formData.fingerprint || '00000000',
-      ...(accounts.length > 0
-        ? { accounts }
-        : { xpub: formData.xpub, derivationPath: formData.derivationPath }
-      ),
-      modelSlug: selectedModel.slug,
-    });
-  }, [selectedModel, formData, mergeDevice]);
 
   // Get available methods for selected model
   const availableMethods = selectedModel

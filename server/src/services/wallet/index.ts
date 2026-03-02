@@ -21,14 +21,14 @@ export {
 // Address generation
 export { generateInitialAddresses, generateAddress } from './addressGeneration';
 
-// Wallet CRUD and orchestration
-export {
-  createWallet,
-  getUserWallets,
-  getWalletById,
-  updateWallet,
-  deleteWallet,
-  addDeviceToWallet,
-  repairWalletDescriptor,
-  getWalletStats,
-} from './walletService';
+// Wallet creation
+export { createWallet } from './walletCreate';
+
+// Wallet queries
+export { getUserWallets, getWalletById, getWalletStats } from './walletQueries';
+
+// Wallet mutations
+export { updateWallet, deleteWallet } from './walletMutations';
+
+// Wallet device operations
+export { addDeviceToWallet, repairWalletDescriptor } from './walletDevices';

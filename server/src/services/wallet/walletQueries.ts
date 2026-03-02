@@ -1,0 +1,275 @@
+/**
+ * Wallet Queries
+ *
+ * Read-only operations for retrieving wallet data with optimized
+ * aggregate queries for balance computation.
+ */
+
+import { db as prisma } from '../../repositories/db';
+import { WalletNotFoundError } from '../../errors';
+import { EDIT_ROLES } from './types';
+import type { WalletRole, WalletWithBalance } from './types';
+
+/**
+ * Get all wallets for a user
+ * OPTIMIZED: Uses aggregate queries for balance instead of loading all UTXOs
+ */
+export async function getUserWallets(userId: string): Promise<WalletWithBalance[]> {
+  // First, get wallet IDs and basic info
+  const wallets = await prisma.wallet.findMany({
+    where: {
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include: {
+      devices: { select: { id: true } },
+      addresses: { select: { id: true } },
+      // Include sharing info
+      group: {
+        select: { name: true },
+      },
+      users: {
+        select: { userId: true, role: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (wallets.length === 0) {
+    return [];
+  }
+
+  // Fetch balances using aggregate query (single query for all wallets)
+  const walletIds = wallets.map(w => w.id);
+  const balances = await prisma.uTXO.groupBy({
+    by: ['walletId'],
+    where: {
+      walletId: { in: walletIds },
+      spent: false,
+    },
+    _sum: { amount: true },
+  });
+
+  // Create balance lookup map
+  const balanceMap = new Map(
+    balances.map(b => [b.walletId, Number(b._sum.amount || 0)])
+  );
+
+  return wallets.map((wallet) => {
+    // Get balance from aggregate query
+    const balance = balanceMap.get(wallet.id) || 0;
+
+    // Determine if wallet is shared (has group or multiple users)
+    const userCount = wallet.users.length;
+    const hasGroup = !!wallet.group;
+    const isShared = hasGroup || userCount > 1;
+
+    // Determine user's role for this wallet
+    // Check direct user access first, then group access
+    const directAccess = wallet.users.find(u => u.userId === userId);
+    let userRole: WalletRole = null;
+    if (directAccess) {
+      userRole = directAccess.role as WalletRole;
+    } else if (hasGroup) {
+      // User has access via group, use the wallet's groupRole
+      userRole = (wallet as unknown as { groupRole: string }).groupRole as WalletRole || 'viewer';
+    }
+
+    const canEdit = userRole === 'owner' || userRole === 'signer';
+
+    return {
+      id: wallet.id,
+      name: wallet.name,
+      type: wallet.type,
+      scriptType: wallet.scriptType,
+      network: wallet.network,
+      quorum: wallet.quorum,
+      totalSigners: wallet.totalSigners,
+      descriptor: wallet.descriptor,
+      fingerprint: wallet.fingerprint,
+      createdAt: wallet.createdAt,
+      balance,
+      deviceCount: wallet.devices.length,
+      addressCount: wallet.addresses.length,
+      // Sync metadata
+      lastSyncedAt: wallet.lastSyncedAt,
+      lastSyncStatus: wallet.lastSyncStatus,
+      syncInProgress: wallet.syncInProgress,
+      // Sharing info
+      isShared,
+      sharedWith: isShared ? {
+        groupName: wallet.group?.name || null,
+        userCount,
+      } : undefined,
+      // User permissions
+      userRole,
+      canEdit,
+    };
+  });
+}
+
+/**
+ * Get a single wallet by ID
+ */
+export async function getWalletById(
+  walletId: string,
+  userId: string
+): Promise<WalletWithBalance | null> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    include: {
+      users: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      },
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+      addresses: {
+        orderBy: { index: 'asc' },
+      },
+      // Don't load UTXOs - use aggregate query instead
+      group: {
+        include: {
+          members: {
+            where: { userId },
+            select: { role: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!wallet) return null;
+
+  // Use aggregate query for balance (efficient for wallets with many UTXOs)
+  const balanceResult = await prisma.uTXO.aggregate({
+    where: {
+      walletId,
+      spent: false,
+    },
+    _sum: { amount: true },
+  });
+  const balance = Number(balanceResult._sum.amount || 0);
+
+  // Determine if wallet is shared
+  const userCount = wallet.users.length;
+  const hasGroup = !!wallet.group;
+  const isShared = hasGroup || userCount > 1;
+
+  // Determine user's role for this wallet
+  const directAccess = wallet.users.find(wu => wu.userId === userId);
+  let userRole: WalletRole = null;
+
+  if (directAccess) {
+    // Direct wallet access takes precedence
+    userRole = directAccess.role as WalletRole;
+  } else if (wallet.group) {
+    // Group-based access uses the wallet's groupRole
+    userRole = wallet.groupRole as WalletRole;
+  }
+
+  const canEdit = userRole !== null && EDIT_ROLES.includes(userRole);
+
+  return {
+    id: wallet.id,
+    name: wallet.name,
+    type: wallet.type,
+    scriptType: wallet.scriptType,
+    network: wallet.network,
+    quorum: wallet.quorum,
+    totalSigners: wallet.totalSigners,
+    descriptor: wallet.descriptor,
+    fingerprint: wallet.fingerprint,
+    createdAt: wallet.createdAt,
+    balance,
+    deviceCount: wallet.devices.length,
+    addressCount: wallet.addresses.length,
+    // Sync metadata
+    lastSyncedAt: wallet.lastSyncedAt,
+    lastSyncStatus: wallet.lastSyncStatus,
+    syncInProgress: wallet.syncInProgress,
+    // Sharing info
+    isShared,
+    sharedWith: isShared ? {
+      groupName: wallet.group?.name || null,
+      userCount,
+    } : undefined,
+    // User permissions
+    userRole,
+    canEdit,
+  };
+}
+
+/**
+ * Get wallet statistics
+ * OPTIMIZED: Uses aggregate queries instead of loading all data
+ */
+export async function getWalletStats(walletId: string, userId: string) {
+  // First verify access
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      OR: [
+        { users: { some: { userId } } },
+        { group: { members: { some: { userId } } } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!wallet) {
+    throw new WalletNotFoundError(walletId);
+  }
+
+  // Use aggregate queries for all statistics (efficient for wallets with many records)
+  const [balanceResult, receivedResult, sentResult, transactionCount, utxoCount, addressCount] =
+    await Promise.all([
+      // Balance from unspent UTXOs
+      prisma.uTXO.aggregate({
+        where: { walletId, spent: false },
+        _sum: { amount: true },
+      }),
+      // Total received
+      prisma.transaction.aggregate({
+        where: { walletId, type: 'received' },
+        _sum: { amount: true },
+      }),
+      // Total sent
+      prisma.transaction.aggregate({
+        where: { walletId, type: 'sent' },
+        _sum: { amount: true },
+      }),
+      // Transaction count
+      prisma.transaction.count({ where: { walletId } }),
+      // UTXO count (unspent only)
+      prisma.uTXO.count({ where: { walletId, spent: false } }),
+      // Address count
+      prisma.address.count({ where: { walletId } }),
+    ]);
+
+  return {
+    balance: Number(balanceResult._sum.amount || 0),
+    received: Number(receivedResult._sum.amount || 0),
+    sent: Number(sentResult._sum.amount || 0),
+    transactionCount,
+    utxoCount,
+    addressCount,
+  };
+}

@@ -1,0 +1,238 @@
+/**
+ * Wallet Device Operations
+ *
+ * Device-to-wallet linking and descriptor generation/repair.
+ */
+
+import { db as prisma } from '../../repositories/db';
+import * as descriptorBuilder from '../bitcoin/descriptorBuilder';
+import { createLogger } from '../../utils/logger';
+import { ConflictError, WalletNotFoundError, DeviceNotFoundError } from '../../errors';
+import { getErrorMessage } from '../../utils/errors';
+import { generateInitialAddresses } from './addressGeneration';
+
+const log = createLogger('WALLET');
+
+/**
+ * Add device to wallet
+ */
+export async function addDeviceToWallet(
+  walletId: string,
+  deviceId: string,
+  userId: string,
+  signerIndex?: number
+): Promise<void> {
+  // Check user has access to wallet
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId } },
+    },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
+  });
+
+  if (!wallet) {
+    throw new WalletNotFoundError(walletId);
+  }
+
+  // Check device belongs to user
+  const device = await prisma.device.findFirst({
+    where: {
+      id: deviceId,
+      userId,
+    },
+  });
+
+  if (!device) {
+    throw new DeviceNotFoundError(deviceId);
+  }
+
+  // Check if device is already attached to this wallet
+  const existingLink = wallet.devices.find(wd => wd.deviceId === deviceId);
+  if (existingLink) {
+    throw new ConflictError('Device is already linked to this wallet');
+  }
+
+  // Add device to wallet
+  await prisma.walletDevice.create({
+    data: {
+      walletId,
+      deviceId,
+      signerIndex,
+    },
+  });
+
+  // Regenerate descriptor if wallet now has enough devices
+  const allDevices = [...wallet.devices.map(wd => wd.device), device];
+  const shouldGenerateDescriptor =
+    (wallet.type === 'single_sig' && allDevices.length === 1) ||
+    (wallet.type === 'multi_sig' && allDevices.length >= (wallet.totalSigners || 2));
+
+  if (shouldGenerateDescriptor && !wallet.descriptor) {
+    // Build descriptor from all linked devices
+    const deviceInfos = allDevices.map(d => ({
+      fingerprint: d.fingerprint,
+      xpub: d.xpub,
+      derivationPath: d.derivationPath || undefined,
+    }));
+
+    try {
+      const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+        deviceInfos,
+        {
+          type: wallet.type as 'single_sig' | 'multi_sig',
+          scriptType: wallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
+          network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+          quorum: wallet.quorum || undefined,
+        }
+      );
+
+      // Update wallet with new descriptor
+      await prisma.wallet.update({
+        where: { id: walletId },
+        data: {
+          descriptor: descriptorResult.descriptor,
+          fingerprint: descriptorResult.fingerprint,
+        },
+      });
+
+      log.info('Generated descriptor for wallet after device link', {
+        walletId,
+        deviceCount: allDevices.length,
+      });
+    } catch (err) {
+      // Log but don't fail - device was still added
+      log.warn('Failed to generate descriptor after device link', {
+        walletId,
+        error: getErrorMessage(err),
+      });
+    }
+  }
+}
+
+/**
+ * Repair wallet descriptor
+ *
+ * Regenerates the Bitcoin descriptor from attached hardware devices for wallets
+ * that have devices linked but are missing a descriptor. This can happen when
+ * a multisig wallet is created before all devices are added.
+ *
+ * Security: Only wallet owners can repair descriptors. This prevents unauthorized
+ * users from regenerating descriptors which could theoretically be used to derive
+ * addresses. The operation is safe because descriptors are deterministically
+ * derived from the immutable device xpubs - the same devices will always
+ * produce the same descriptor.
+ *
+ * @param walletId - The wallet to repair
+ * @param userId - The user requesting the repair (must be owner)
+ * @returns Success status and message
+ * @throws Error if wallet not found or user is not owner
+ */
+export async function repairWalletDescriptor(
+  walletId: string,
+  userId: string
+): Promise<{ success: boolean; message: string }> {
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      id: walletId,
+      users: { some: { userId, role: 'owner' } },
+    },
+    include: {
+      devices: {
+        include: {
+          device: true,
+        },
+      },
+    },
+  });
+
+  if (!wallet) {
+    throw new WalletNotFoundError(walletId);
+  }
+
+  if (wallet.descriptor) {
+    return { success: true, message: 'Wallet already has a descriptor' };
+  }
+
+  const devices = wallet.devices.map(wd => wd.device);
+
+  // Check device count requirements
+  if (wallet.type === 'single_sig' && devices.length !== 1) {
+    return {
+      success: false,
+      message: `Single-sig wallet needs exactly 1 device, but has ${devices.length}`
+    };
+  }
+
+  if (wallet.type === 'multi_sig') {
+    const requiredDevices = wallet.totalSigners || 2;
+    if (devices.length < requiredDevices) {
+      return {
+        success: false,
+        message: `Multi-sig wallet needs ${requiredDevices} devices, but only has ${devices.length}`
+      };
+    }
+  }
+
+  // Build descriptor from devices
+  const deviceInfos = devices.map(d => ({
+    fingerprint: d.fingerprint,
+    xpub: d.xpub,
+    derivationPath: d.derivationPath || undefined,
+  }));
+
+  try {
+    const descriptorResult = descriptorBuilder.buildDescriptorFromDevices(
+      deviceInfos,
+      {
+        type: wallet.type as 'single_sig' | 'multi_sig',
+        scriptType: wallet.scriptType as 'native_segwit' | 'nested_segwit' | 'taproot' | 'legacy',
+        network: wallet.network as 'mainnet' | 'testnet' | 'regtest',
+        quorum: wallet.quorum || undefined,
+      }
+    );
+
+    // Update wallet with descriptor
+    await prisma.wallet.update({
+      where: { id: walletId },
+      data: {
+        descriptor: descriptorResult.descriptor,
+        fingerprint: descriptorResult.fingerprint,
+      },
+    });
+
+    // Generate initial addresses
+    const network = wallet.network as 'mainnet' | 'testnet' | 'regtest';
+    const addressesToCreate = generateInitialAddresses(wallet.id, descriptorResult.descriptor, network);
+
+    // skipDuplicates ensures idempotency - if repair is called multiple times
+    // or addresses already exist from a partial repair, they won't cause errors
+    await prisma.address.createMany({
+      data: addressesToCreate,
+      skipDuplicates: true,
+    });
+
+    log.info('Repaired wallet descriptor', {
+      walletId,
+      deviceCount: devices.length,
+      addressesGenerated: addressesToCreate.length,
+    });
+
+    return {
+      success: true,
+      message: `Generated descriptor and ${addressesToCreate.length} addresses`
+    };
+  } catch (err) {
+    log.error('Failed to repair wallet descriptor', {
+      walletId,
+      error: getErrorMessage(err),
+    });
+    throw new Error(`Failed to generate descriptor: ${getErrorMessage(err)}`);
+  }
+}

@@ -1,0 +1,73 @@
+/**
+ * Lock Coordination
+ *
+ * Distributed lock acquisition, refresh, and release for ensuring
+ * only one process owns Electrum subscriptions at a time.
+ */
+
+import { createLogger } from '../../utils/logger';
+import { acquireLock, extendLock, releaseLock, type DistributedLock } from '../../infrastructure';
+import {
+  ELECTRUM_SUBSCRIPTION_LOCK_KEY,
+  ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS,
+  ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS,
+} from './types';
+
+const log = createLogger('ElectrumMgr');
+
+/**
+ * Attempt to acquire the Electrum subscription lock.
+ * Returns the lock if acquired, null otherwise.
+ */
+export async function acquireSubscriptionLock(): Promise<DistributedLock | null> {
+  const lock = await acquireLock(ELECTRUM_SUBSCRIPTION_LOCK_KEY, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+  if (lock) {
+    log.info('Acquired Electrum subscription ownership');
+  } else {
+    log.warn('Electrum subscriptions already owned by another process, skipping startup');
+  }
+  return lock;
+}
+
+/**
+ * Start periodic lock refresh. Calls onLockLost if the lock cannot be extended.
+ */
+export function startLockRefresh(
+  getLock: () => DistributedLock | null,
+  setLock: (lock: DistributedLock | null) => void,
+  onLockLost: () => Promise<void>
+): NodeJS.Timeout {
+  const timer = setInterval(async () => {
+    const lock = getLock();
+    if (!lock) return;
+
+    const refreshed = await extendLock(lock, ELECTRUM_SUBSCRIPTION_LOCK_TTL_MS);
+    if (!refreshed) {
+      log.warn('Lost Electrum subscription lock, stopping manager');
+      setLock(null);
+      clearInterval(timer);
+      await onLockLost();
+      return;
+    }
+
+    setLock(refreshed);
+  }, ELECTRUM_SUBSCRIPTION_LOCK_REFRESH_MS);
+
+  timer.unref?.();
+  return timer;
+}
+
+/**
+ * Release the subscription lock and stop refresh timer.
+ */
+export async function releaseSubscriptionLock(
+  lock: DistributedLock | null,
+  refreshTimer: NodeJS.Timeout | null
+): Promise<void> {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+  }
+  if (lock) {
+    await releaseLock(lock);
+  }
+}

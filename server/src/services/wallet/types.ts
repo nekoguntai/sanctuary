@@ -31,6 +31,9 @@ export interface CreateWalletInput {
   deviceIds?: string[]; // New: array of device IDs to include
 }
 
+/** Roles that can edit wallet data (labels, etc.) */
+export const EDIT_ROLES: string[] = ['owner', 'signer'];
+
 export interface WalletWithBalance {
   id: string;
   name: string;

@@ -43,7 +43,9 @@ describe('keystoneStandardParser branch coverage', () => {
             { hdPath: "M/84'/0'/0'", xPub: 'xpub-native' },
             { hdPath: "M/86h/0h/0h", xpub: 'xpub-taproot' },
             { hdPath: "M/48h/0h/0h/1h", xPub: 'xpub-multi-nested' },
+            { hdPath: "M/48'/0'/0'/1'", xPub: 'xpub-multi-nested-quote' },
             { hdPath: "M/48'/0'/0'/2'", xPub: 'xpub-multi-native' },
+            { hdPath: "M/49'/0'/0'", xPub: 'xpub-nested-quote' },
             { hdPath: 'M/84/0/0', xPub: '' },
           ],
         },
@@ -56,9 +58,11 @@ describe('keystoneStandardParser branch coverage', () => {
       expect.arrayContaining([
         expect.objectContaining({ xpub: 'xpub-legacy', scriptType: 'legacy', purpose: 'single_sig' }),
         expect.objectContaining({ xpub: 'xpub-nested', scriptType: 'nested_segwit', purpose: 'single_sig' }),
+        expect.objectContaining({ xpub: 'xpub-nested-quote', scriptType: 'nested_segwit', purpose: 'single_sig' }),
         expect.objectContaining({ xpub: 'xpub-native', scriptType: 'native_segwit', purpose: 'single_sig' }),
         expect.objectContaining({ xpub: 'xpub-taproot', scriptType: 'taproot', purpose: 'single_sig' }),
         expect.objectContaining({ xpub: 'xpub-multi-nested', scriptType: 'nested_segwit', purpose: 'multisig' }),
+        expect.objectContaining({ xpub: 'xpub-multi-nested-quote', scriptType: 'nested_segwit', purpose: 'multisig' }),
         expect.objectContaining({ xpub: 'xpub-multi-native', scriptType: 'native_segwit', purpose: 'multisig' }),
       ])
     );
@@ -85,6 +89,64 @@ describe('keystoneStandardParser branch coverage', () => {
 
     expect(parsed.xpub).toBe('xpub-single-nested');
     expect(parsed.derivationPath).toBe("m/49'/0'/0'");
+  });
+
+  it('covers nested parse source, only-multisig fallback, and empty-account output branches', () => {
+    const nested = keystoneStandardParser.parse({
+      data: {
+        sync: {
+          coins: [
+            {
+              coin: 'BTC',
+              accounts: [{ xPub: 'xpub-no-path' }],
+            },
+          ],
+        },
+      },
+    });
+    expect(nested).toEqual({
+      xpub: 'xpub-no-path',
+      derivationPath: '',
+      accounts: [
+        {
+          xpub: 'xpub-no-path',
+          derivationPath: '',
+          purpose: 'single_sig',
+          scriptType: 'native_segwit',
+        },
+      ],
+    });
+
+    const onlyMultisig = keystoneStandardParser.parse({
+      coins: [
+        {
+          coinCode: 'BTC',
+          accounts: [{ hdPath: "M/48'/0'/0'/3'", xPub: 'xpub-multi-only' }],
+        },
+      ],
+    });
+    expect(onlyMultisig.xpub).toBe('xpub-multi-only');
+    expect(onlyMultisig.derivationPath).toBe("m/48'/0'/0'/3'");
+    expect(onlyMultisig.accounts?.[0]).toMatchObject({
+      purpose: 'multisig',
+      scriptType: 'native_segwit',
+    });
+
+    const allEmpty = keystoneStandardParser.parse({
+      coins: [
+        {
+          coinCode: 'BTC',
+          accounts: [{ hdPath: "M/84'/0'/0'", xPub: '' }],
+        },
+      ],
+    });
+    expect(allEmpty).toEqual({
+      xpub: '',
+      derivationPath: '',
+      accounts: undefined,
+    });
+
+    expect(keystoneStandardParser.parse({})).toEqual({});
   });
 });
 
@@ -142,6 +204,23 @@ describe('keystoneMultisigParser branch coverage', () => {
       fingerprint: '',
       derivationPath: "m/48'/0'/0'/2'",
       accounts: undefined,
+    });
+
+    const pathless = keystoneMultisigParser.parse({
+      ExtendedPublicKey: 'Zpub-pathless',
+    });
+    expect(pathless).toEqual({
+      xpub: 'Zpub-pathless',
+      fingerprint: '',
+      derivationPath: '',
+      accounts: [
+        {
+          xpub: 'Zpub-pathless',
+          derivationPath: '',
+          purpose: 'multisig',
+          scriptType: 'native_segwit',
+        },
+      ],
     });
   });
 });

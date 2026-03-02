@@ -10,6 +10,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:full": "npm run test:coverage && npm run test:backend:coverage && cd gateway && npm run test:coverage",
     "test:all": "npm run test:run && npm run test:backend",
     "test:backend": "cd server && npm test",
     "test:backend:watch": "cd server && npm run test:watch",
@@ -22,6 +23,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "test:hygiene": "node scripts/test-hygiene.mjs",
     "test:mutation": "stryker run",
     "test:mutation:backend": "cd server && npx stryker run"
   },

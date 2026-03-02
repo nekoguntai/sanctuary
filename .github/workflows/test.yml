@@ -1,6 +1,9 @@
 name: Test Suite
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -8,14 +11,17 @@ on:
       - 'src/**'
       - 'components/**'
       - 'hooks/**'
+      - 'contexts/**'
+      - 'providers/**'
+      - 'services/**'
+      - 'themes/**'
       - 'utils/**'
       - 'shared/**'
       - 'tests/**'
-      - 'server/src/**'
-      - 'server/tests/**'
-      - 'gateway/src/**'
-      - 'gateway/tests/**'
+      - 'server/**'
+      - 'gateway/**'
       - 'e2e/**'
+      - 'scripts/**'
       - 'package*.json'
       - 'server/package*.json'
       - 'gateway/package*.json'
@@ -24,9 +30,8 @@ on:
       - 'gateway/vitest.config.ts'
       - 'playwright.config.ts'
       - '.github/workflows/test.yml'
-  pull_request:
-    branches:
-      - main
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 env:
@@ -34,10 +39,235 @@ env:
 
 jobs:
   # ============================================
-  # Backend Tests (Vitest + PostgreSQL)
+  # PR Quick Lane (changed-files based)
   # ============================================
-  backend-tests:
-    name: Backend Tests
+  detect-changes:
+    name: Detect Changed Files
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+      frontend_files: ${{ steps.filter.outputs.frontend_files }}
+      backend_changed: ${{ steps.filter.outputs.backend }}
+      backend_files: ${{ steps.filter.outputs.backend_files }}
+      gateway_changed: ${{ steps.filter.outputs.gateway }}
+      gateway_files: ${{ steps.filter.outputs.gateway_files }}
+      e2e_changed: ${{ steps.filter.outputs.e2e }}
+      test_files: ${{ steps.filter.outputs.test_files_files }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          list-files: shell
+          filters: |
+            frontend:
+              - 'App.tsx'
+              - 'index.tsx'
+              - 'src/**'
+              - 'components/**'
+              - 'hooks/**'
+              - 'contexts/**'
+              - 'providers/**'
+              - 'services/**'
+              - 'themes/**'
+              - 'shared/**'
+              - 'tests/**'
+              - 'vitest.config.ts'
+              - 'package*.json'
+            backend:
+              - 'server/**'
+            gateway:
+              - 'gateway/**'
+            e2e:
+              - 'e2e/**'
+              - 'playwright.config.ts'
+            test_files:
+              - 'tests/**/*.test.ts'
+              - 'tests/**/*.test.tsx'
+              - 'tests/**/*.spec.ts'
+              - 'tests/**/*.spec.tsx'
+              - 'server/tests/**/*.test.ts'
+              - 'server/tests/**/*.spec.ts'
+              - 'gateway/tests/**/*.test.ts'
+              - 'gateway/tests/**/*.spec.ts'
+              - 'e2e/**/*.spec.ts'
+
+  quick-test-hygiene:
+    name: Quick Test Hygiene
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test hygiene checks on changed tests
+        run: |
+          if [ -z "${{ needs.detect-changes.outputs.test_files }}" ]; then
+            echo "No changed test files."
+            exit 0
+          fi
+          npm run test:hygiene -- ${{ needs.detect-changes.outputs.test_files }}
+
+  quick-frontend-tests:
+    name: Quick Frontend Tests
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend_changed == 'true'
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run related frontend tests
+        run: npx vitest related --run --passWithNoTests ${{ needs.detect-changes.outputs.frontend_files }}
+
+  quick-backend-tests:
+    name: Quick Backend Tests
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.backend_changed == 'true'
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    defaults:
+      run:
+        working-directory: server
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: sanctuary_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
+        run: npx prisma migrate deploy
+
+      - name: Run related backend tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
+          JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
+          ENCRYPTION_KEY: test-encryption-key-32-chars-long!
+          NODE_ENV: test
+        run: npx vitest related --run --passWithNoTests ${{ needs.detect-changes.outputs.backend_files }}
+
+  quick-gateway-tests:
+    name: Quick Gateway Tests
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.gateway_changed == 'true'
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    defaults:
+      run:
+        working-directory: gateway
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: gateway/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run related gateway tests
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
+        run: npx vitest related --run --passWithNoTests ${{ needs.detect-changes.outputs.gateway_files }}
+
+  quick-e2e-smoke:
+    name: Quick E2E Smoke
+    if: github.event_name == 'pull_request' && (needs.detect-changes.outputs.e2e_changed == 'true' || needs.detect-changes.outputs.frontend_changed == 'true')
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:3001
+
+      - name: Run smoke E2E tests
+        run: npm run test:e2e -- --project=chromium e2e/admin-drafts-smoke.spec.ts
+        env:
+          CI: 'true'
+
+  # ============================================
+  # Full Lane (main/nightly/manual)
+  # ============================================
+  full-backend-tests:
+    name: Full Backend Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,7 +310,7 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
         run: npx prisma migrate deploy
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/sanctuary_test?schema=public
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
@@ -107,11 +337,9 @@ jobs:
             server/junit.xml
           retention-days: 14
 
-  # ============================================
-  # Frontend Tests (Vitest + jsdom)
-  # ============================================
-  frontend-tests:
-    name: Frontend Tests
+  full-frontend-tests:
+    name: Full Frontend Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
@@ -128,8 +356,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests with coverage
-        run: npm run test:run -- --coverage
+      - name: Run frontend coverage (threshold-enforced)
+        run: npm run test:coverage
 
       - name: Upload frontend coverage
         if: always()
@@ -139,11 +367,9 @@ jobs:
           path: coverage/
           retention-days: 14
 
-  # ============================================
-  # Gateway Tests (Vitest)
-  # ============================================
-  gateway-tests:
-    name: Gateway Tests
+  full-gateway-tests:
+    name: Full Gateway Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -163,7 +389,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests with coverage
+      - name: Run gateway coverage
         env:
           NODE_ENV: test
           JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
@@ -177,15 +403,11 @@ jobs:
           path: gateway/coverage/
           retention-days: 14
 
-  # ============================================
-  # E2E Tests (Playwright)
-  # ============================================
-  e2e-tests:
-    name: E2E Tests
+  full-e2e-tests:
+    name: Full E2E Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, gateway-tests]
-    # Only run E2E on main branch or when explicitly requested
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [full-backend-tests, full-frontend-tests, full-gateway-tests]
 
     services:
       postgres:
@@ -222,7 +444,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci
 
       - name: Install Playwright browsers
@@ -280,7 +502,7 @@ jobs:
           ENCRYPTION_KEY: test-encryption-key-32-chars-long!
           NODE_ENV: test
           VITE_API_URL: http://localhost:3001
-          # Skip auth-dependent tests until test user seeding is implemented
+          # Keep auth-dependent legacy specs skipped until seeded test auth users exist.
           SKIP_AUTH_TESTS: 'true'
 
       - name: Upload Playwright report
@@ -299,13 +521,11 @@ jobs:
           path: test-results/
           retention-days: 14
 
-  # ============================================
-  # Build Verification
-  # ============================================
-  build-check:
-    name: Build Check
+  full-build-check:
+    name: Full Build Check
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests]
+    needs: [full-backend-tests, full-frontend-tests]
 
     steps:
       - name: Checkout repository
@@ -328,14 +548,11 @@ jobs:
           npx prisma generate
           npm run build
 
-  # ============================================
-  # Test Summary
-  # ============================================
-  test-summary:
-    name: Test Summary
+  full-test-summary:
+    name: Full Test Summary
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, build-check]
-    if: always()
+    needs: [full-backend-tests, full-frontend-tests, full-gateway-tests, full-build-check]
 
     steps:
       - name: Download backend coverage
@@ -350,39 +567,63 @@ jobs:
           name: frontend-coverage
           path: frontend-results/
 
+      - name: Download gateway coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: gateway-coverage
+          path: gateway-results/
+
       - name: Generate summary
         run: |
-          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Full Test Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Backend status
-          if [ "${{ needs.backend-tests.result }}" == "success" ]; then
-            echo "### Backend Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.full-backend-tests.result }}" = "success" ]; then
+            echo "### Backend: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### Backend Tests: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "### Backend: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Backend coverage summary
           if [ -f backend-results/coverage/coverage-summary.json ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Backend Coverage" >> $GITHUB_STEP_SUMMARY
             echo "| Metric | Coverage |" >> $GITHUB_STEP_SUMMARY
             echo "|--------|----------|" >> $GITHUB_STEP_SUMMARY
-            cat backend-results/coverage/coverage-summary.json | jq -r '.total | to_entries[] | "| \(.key) | \(.value.pct)% |"' >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Coverage data unavailable" >> $GITHUB_STEP_SUMMARY
+            jq -r '.total | to_entries[] | "| \(.key) | \(.value.pct)% |"' backend-results/coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Frontend status
-          if [ "${{ needs.frontend-tests.result }}" == "success" ]; then
-            echo "### Frontend Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.full-frontend-tests.result }}" = "success" ]; then
+            echo "### Frontend: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### Frontend Tests: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "### Frontend: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f frontend-results/coverage-summary.json ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Coverage |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|----------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.total | to_entries[] | "| \(.key) | \(.value.pct)% |"' frontend-results/coverage-summary.json >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.full-gateway-tests.result }}" = "success" ]; then
+            echo "### Gateway: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Gateway: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
 
-          # Build status
-          if [ "${{ needs.build-check.result }}" == "success" ]; then
+          if [ -f gateway-results/coverage/coverage-summary.json ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Gateway Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Coverage |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|----------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.total | to_entries[] | "| \(.key) | \(.value.pct)% |"' gateway-results/coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.full-build-check.result }}" = "success" ]; then
             echo "### Build Check: Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Build Check: Failed" >> $GITHUB_STEP_SUMMARY

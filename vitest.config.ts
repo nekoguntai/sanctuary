@@ -55,12 +55,12 @@ export default defineConfig({
       ],
       reportsDirectory: './coverage',
       thresholds: {
-        // Coverage baseline raised after second-pass + low-coverage batch hardening (2026-03-02)
-        // Keep this aligned with CI to prevent silent branch regressions.
-        branches: 90,
-        functions: 90,
-        lines: 90,
-        statements: 90,
+        // Coverage baseline locked to current observed total coverage (2026-03-02).
+        // Keep this aligned with CI to prevent silent regressions.
+        branches: 100,
+        functions: 100,
+        lines: 100,
+        statements: 100,
       },
     },
     reporters: ['default', 'junit'],

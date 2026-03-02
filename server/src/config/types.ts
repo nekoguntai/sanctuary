@@ -140,6 +140,7 @@ export interface SyncConfig {
   maxSyncDurationMs: number;             // Max time for a single wallet sync (default: 30 minutes)
   transactionBatchSize: number;          // Batch size for transaction updates (default: 100)
   electrumSubscriptionsEnabled: boolean; // Enable server-side Electrum subscriptions
+  workerHealthPollIntervalMs: number;   // How often to check worker health for polling mode (default: 30s)
 }
 
 /**

@@ -185,6 +185,7 @@ function loadConfig(): CombinedConfig {
       maxSyncDurationMs: parseInt(process.env.SYNC_MAX_DURATION_MS || String(30 * 60 * 1000), 10), // 30 minutes default
       transactionBatchSize: parseInt(process.env.SYNC_TRANSACTION_BATCH_SIZE || '100', 10),
       electrumSubscriptionsEnabled: process.env.SYNC_ELECTRUM_SUBSCRIPTIONS_ENABLED !== 'false',
+      workerHealthPollIntervalMs: parseInt(process.env.SYNC_WORKER_HEALTH_POLL_MS || '30000', 10),
     },
 
     electrumClient: {

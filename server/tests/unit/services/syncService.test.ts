@@ -107,6 +107,7 @@ vi.mock('../../../src/config', () => ({
       maxSyncDurationMs: 120000,
       transactionBatchSize: 100,
       electrumSubscriptionsEnabled: true,
+      workerHealthPollIntervalMs: 30000,
     },
     bitcoin: {
       network: 'testnet',
@@ -158,6 +159,7 @@ vi.mock('../../../src/services/deadLetterQueue', () => ({
 vi.mock('../../../src/observability/metrics', () => ({
   walletSyncsTotal: { inc: vi.fn() },
   walletSyncDuration: { observe: vi.fn() },
+  syncPollingModeTransitions: { inc: vi.fn() },
 }));
 
 // Mock async utilities
@@ -911,6 +913,60 @@ describe('SyncService', () => {
       await vi.advanceTimersByTimeAsync(30_000);
 
       expect(syncService.getHealthMetrics().pollingMode).toBe('in-process');
+    });
+
+    it('should handle full round-trip: healthy → unhealthy → healthy via timer', async () => {
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: true });
+      await syncService.start();
+
+      // Phase 1: worker-delegated, no polling intervals
+      expect(syncService.getHealthMetrics().pollingMode).toBe('worker-delegated');
+      expect(syncService['syncInterval']).toBeNull();
+      expect(syncService['confirmationInterval']).toBeNull();
+
+      // Phase 2: worker goes down — timer fires, transitions to in-process
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: false });
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(syncService.getHealthMetrics().pollingMode).toBe('in-process');
+      expect(syncService['syncInterval']).not.toBeNull();
+      expect(syncService['confirmationInterval']).not.toBeNull();
+      const syncIntervalRef = syncService['syncInterval'];
+
+      // Phase 3: worker recovers — timer fires, transitions back to worker-delegated
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: true });
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(syncService.getHealthMetrics().pollingMode).toBe('worker-delegated');
+      expect(syncService['syncInterval']).toBeNull();
+      expect(syncService['confirmationInterval']).toBeNull();
+
+      // Verify the old interval reference was cleared (not leaked)
+      expect(syncService['syncInterval']).not.toBe(syncIntervalRef);
+    });
+
+    it('should increment transition metric on mode change', async () => {
+      const { syncPollingModeTransitions } = await import('../../../src/observability/metrics');
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: true });
+      await syncService.start();
+
+      // Transition: worker-delegated → in-process
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: false });
+      syncService['evaluatePollingMode']();
+
+      expect(syncPollingModeTransitions.inc).toHaveBeenCalledWith({
+        from: 'worker-delegated',
+        to: 'in-process',
+      });
+
+      // Transition: in-process → worker-delegated
+      mockGetWorkerHealthStatus.mockReturnValue({ healthy: true });
+      syncService['evaluatePollingMode']();
+
+      expect(syncPollingModeTransitions.inc).toHaveBeenCalledWith({
+        from: 'in-process',
+        to: 'worker-delegated',
+      });
     });
   });
 

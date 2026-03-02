@@ -52,6 +52,7 @@ export {
   transactionBroadcastsTotal,
   activeWallets,
   activeUsers,
+  syncPollingModeTransitions,
 } from './businessMetrics';
 
 // Infrastructure metrics

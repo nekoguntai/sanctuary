@@ -55,3 +55,13 @@ export const activeUsers = new Gauge({
   help: 'Number of active user sessions',
   registers: [registry],
 });
+
+/**
+ * Sync polling mode transition counter
+ */
+export const syncPollingModeTransitions = new Counter({
+  name: 'sanctuary_sync_polling_mode_transitions_total',
+  help: 'Polling mode transitions between in-process and worker-delegated',
+  labelNames: ['from', 'to'],
+  registers: [registry],
+});

@@ -22,6 +22,7 @@ import { getConfig } from '../../config';
 import { eventService } from '../eventService';
 import { releaseLock } from '../../infrastructure';
 import { getWorkerHealthStatus } from '../workerHealth';
+import { syncPollingModeTransitions } from '../../observability/metrics';
 import type { SyncState, SyncResult, SyncHealthMetrics, PollingMode } from './types';
 import { queueSync as doQueueSync, processQueue as doProcessQueue } from './syncQueue';
 import { executeSyncJob as doExecuteSyncJob, acquireSyncLock as doAcquireSyncLock } from './walletSync';
@@ -165,10 +166,10 @@ class SyncService {
     }, 60 * 60 * 1000); // 1 hour
     this.reconciliationInterval.unref?.();
 
-    // Poll worker health every 30s and start/stop intervals dynamically
+    // Poll worker health and start/stop intervals dynamically
     this.workerHealthPollTimer = setInterval(() => {
       this.evaluatePollingMode();
-    }, 30_000);
+    }, syncConfig.workerHealthPollIntervalMs);
     this.workerHealthPollTimer.unref?.();
 
     log.info('[SYNC] Background sync service started', {
@@ -456,8 +457,12 @@ class SyncService {
       this.updateAllConfirmations();
     }, syncConfig.confirmationUpdateIntervalMs);
 
+    const previousMode = this.state.pollingMode;
     this.state.pollingMode = 'in-process';
-    log.info('[SYNC] In-process polling intervals started');
+    if (previousMode !== 'in-process') {
+      syncPollingModeTransitions.inc({ from: previousMode, to: 'in-process' });
+    }
+    log.warn('[SYNC] Worker unhealthy — in-process polling intervals started');
   }
 
   /**
@@ -473,8 +478,12 @@ class SyncService {
       this.confirmationInterval = null;
     }
 
+    const previousMode = this.state.pollingMode;
     this.state.pollingMode = 'worker-delegated';
-    log.info('[SYNC] In-process polling intervals stopped — delegated to worker');
+    if (previousMode !== 'worker-delegated') {
+      syncPollingModeTransitions.inc({ from: previousMode, to: 'worker-delegated' });
+    }
+    log.info('[SYNC] Worker recovered — polling delegated to worker');
   }
 
   /**

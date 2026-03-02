@@ -1203,7 +1203,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     // Note: Address generation tests require full Bitcoin service mocks (descriptor derivation, etc.)
     // These are better suited for unit tests with proper mock injection
-    it.skip('should allow signer to generate addresses', async () => {
+    it('should allow signer to generate addresses', async () => {
       const owner = await createTestUser(prisma, {
         username: uniqueUsername('owner'),
         password: 'OwnerPass123!',
@@ -1239,7 +1239,7 @@ describeWithDb('Wallet Lifecycle Integration', () => {
 
     // Note: Address generation tests require full Bitcoin service mocks (descriptor derivation, etc.)
     // These are better suited for unit tests with proper mock injection
-    it.skip('should allow owner to generate addresses', async () => {
+    it('should allow owner to generate addresses', async () => {
       const { userId, token } = await createAndLoginUser(app, prisma);
 
       const wallet = await prisma.wallet.create({

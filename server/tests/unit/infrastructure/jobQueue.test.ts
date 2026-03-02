@@ -5,8 +5,12 @@
  * and is covered by `tests/unit/jobs/jobQueue.test.ts`.
  */
 
-import { describe, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
 
-describe.skip('Legacy infrastructure jobQueue tests', () => {
-  it('covered by tests/unit/jobs/jobQueue.test.ts', () => {});
+describe('Legacy infrastructure jobQueue coverage mapping', () => {
+  it('is covered by jobs/jobQueue tests', () => {
+    const replacement = new URL('../jobs/jobQueue.test.ts', import.meta.url);
+    expect(existsSync(replacement)).toBe(true);
+  });
 });

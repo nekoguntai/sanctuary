@@ -6,8 +6,12 @@
  * `tests/unit/services/circuitBreaker.test.ts`.
  */
 
-import { describe, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
 
-describe.skip('Legacy infrastructure redisCircuitBreaker tests', () => {
-  it('covered by tests/unit/services/circuitBreaker.test.ts', () => {});
+describe('Legacy infrastructure redisCircuitBreaker coverage mapping', () => {
+  it('is covered by services/circuitBreaker tests', () => {
+    const replacement = new URL('../services/circuitBreaker.test.ts', import.meta.url);
+    expect(existsSync(replacement)).toBe(true);
+  });
 });

@@ -6,8 +6,12 @@
  * `tests/unit/services/accessControl.test.ts`.
  */
 
-import { describe, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
 
-describe.skip('Legacy authorization service tests', () => {
-  it('covered by tests/unit/services/accessControl.test.ts', () => {});
+describe('Legacy authorization service coverage mapping', () => {
+  it('is covered by accessControl service tests', () => {
+    const replacement = new URL('./accessControl.test.ts', import.meta.url);
+    expect(existsSync(replacement)).toBe(true);
+  });
 });

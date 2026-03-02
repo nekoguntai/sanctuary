@@ -199,12 +199,36 @@ export interface ExtendedPsbtTestVector {
 
 /**
  * P2WPKH (Native SegWit) Test Vectors
- * These vectors are intentionally empty - will be populated by generate-vectors script
+ * Deterministic local vectors used by verification tests.
  */
-export const P2WPKH_VECTORS: ExtendedPsbtTestVector[] = [];
+export const P2WPKH_VECTORS: ExtendedPsbtTestVector[] = [
+  {
+    description: 'Deterministic testnet P2WPKH (1 input, 1 output)',
+    scriptType: 'p2wpkh',
+    network: 'testnet',
+    psbtBase64:
+      'cHNidP8BAFICAAAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAAD9////AWi/AAAAAAAAFgAUXrm15EXbZz8O2JNdGM0gWyFOUYcAAAAAAAEBH1DDAAAAAAAAFgAUrfzlT1KbIVTjw2G74/fUHbBjVxciBgIRERERERERERERERERERERERERERERERERERERERERERjZDGpPVAAAgAEAAIAAAACAAAAAAAAAAAAAAA==',
+    expectedFee: 1000,
+    expectedVsize: 111,
+    isComplete: false,
+    verifiedBy: ['bitcoinjs-lib'],
+  },
+];
 
 /**
  * P2WSH Multisig Test Vectors
- * These vectors are intentionally empty - will be populated by generate-vectors script
+ * Deterministic local vectors used by verification tests.
  */
-export const P2WSH_MULTISIG_VECTORS: ExtendedPsbtTestVector[] = [];
+export const P2WSH_MULTISIG_VECTORS: ExtendedPsbtTestVector[] = [
+  {
+    description: 'Deterministic testnet P2WSH 2-of-2 multisig (1 input, 1 output)',
+    scriptType: 'p2wsh',
+    network: 'testnet',
+    psbtBase64:
+      'cHNidP8BAFICAAAAAQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAQAAAAD9////AdB+AQAAAAAAFgAUXrm15EXbZz8O2JNdGM0gWyFOUYcAAAAAAAEBK6CGAQAAAAAAIgAgarbQLZ5DzTOMzH4tWG9M0FcuTFC56+IL25JSYB2xbcEBBUdSIQIRERERERERERERERERERERERERERERERERERERERERESEDIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiJSriIGAhERERERERERERERERERERERERERERERERERERERERERHNkMak8wAACAAQAAgAAAAIACAACAAAAAAAAAAAAiBgMiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIhyhssPUMAAAgAEAAIAAAACAAgAAgAAAAAABAAAAAAA=',
+    expectedFee: 2000,
+    expectedVsize: 140,
+    isComplete: false,
+    verifiedBy: ['bitcoinjs-lib'],
+  },
+];

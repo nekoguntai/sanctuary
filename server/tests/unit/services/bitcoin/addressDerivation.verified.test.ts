@@ -28,11 +28,9 @@ import {
 
 describe('Address Derivation - Cross-Implementation Verification', () => {
   describe('Single-sig address verification', () => {
-    // Skip if no vectors (generation script hasn't been run)
-    if (VERIFIED_SINGLESIG_VECTORS.length === 0) {
-      it.skip('No verified vectors available - run scripts/verify-addresses/npm run generate', () => {});
-      return;
-    }
+    it('has verified single-sig vectors', () => {
+      expect(VERIFIED_SINGLESIG_VECTORS.length).toBeGreaterThan(0);
+    });
 
     describe('Native SegWit (P2WPKH)', () => {
       const nativeSegwitVectors = VERIFIED_SINGLESIG_VECTORS.filter(
@@ -58,10 +56,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
         v => v.scriptType === 'nested_segwit'
       );
 
-      if (nestedSegwitVectors.length === 0) {
-        it.skip('No nested segwit vectors available', () => {});
-        return;
-      }
+      it('has nested segwit vectors', () => {
+        expect(nestedSegwitVectors.length).toBeGreaterThan(0);
+      });
 
       it.each(nestedSegwitVectors.map(v => [v.description, v]))(
         '%s',
@@ -82,10 +79,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
         v => v.scriptType === 'legacy'
       );
 
-      if (legacyVectors.length === 0) {
-        it.skip('No legacy vectors available', () => {});
-        return;
-      }
+      it('has legacy vectors', () => {
+        expect(legacyVectors.length).toBeGreaterThan(0);
+      });
 
       it.each(legacyVectors.map(v => [v.description, v]))(
         '%s',
@@ -106,10 +102,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
         v => v.scriptType === 'taproot'
       );
 
-      if (taprootVectors.length === 0) {
-        it.skip('No taproot vectors available', () => {});
-        return;
-      }
+      it('has taproot vectors', () => {
+        expect(taprootVectors.length).toBeGreaterThan(0);
+      });
 
       it.each(taprootVectors.map(v => [v.description, v]))(
         '%s',
@@ -127,21 +122,18 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
   });
 
   describe('Multisig address verification', () => {
-    // Skip if no vectors
-    if (VERIFIED_MULTISIG_VECTORS.length === 0) {
-      it.skip('No verified multisig vectors available - run scripts/verify-addresses/npm run generate', () => {});
-      return;
-    }
+    it('has verified multisig vectors', () => {
+      expect(VERIFIED_MULTISIG_VECTORS.length).toBeGreaterThan(0);
+    });
 
     describe('P2WSH (Native SegWit Multisig)', () => {
       const p2wshVectors = VERIFIED_MULTISIG_VECTORS.filter(
         v => v.scriptType === 'p2wsh'
       );
 
-      if (p2wshVectors.length === 0) {
-        it.skip('No P2WSH vectors available', () => {});
-        return;
-      }
+      it('has P2WSH vectors', () => {
+        expect(p2wshVectors.length).toBeGreaterThan(0);
+      });
 
       it.each(p2wshVectors.map(v => [v.description, v]))(
         '%s',
@@ -166,10 +158,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
         v => v.scriptType === 'p2sh_p2wsh'
       );
 
-      if (p2shP2wshVectors.length === 0) {
-        it.skip('No P2SH-P2WSH vectors available', () => {});
-        return;
-      }
+      it('has P2SH-P2WSH vectors', () => {
+        expect(p2shP2wshVectors.length).toBeGreaterThan(0);
+      });
 
       it.each(p2shP2wshVectors.map(v => [v.description, v]))(
         '%s',
@@ -194,10 +185,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
         v => v.description.includes('key ordering')
       );
 
-      if (keyOrderingVectors.length < 2) {
-        it.skip('Not enough key ordering vectors for comparison', () => {});
-        return;
-      }
+      it('has key ordering vectors for comparison', () => {
+        expect(keyOrderingVectors.length).toBeGreaterThanOrEqual(2);
+      });
 
       it('should produce identical addresses regardless of input key order', () => {
         // All key ordering tests should produce the same address
@@ -214,10 +204,11 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
     // Use vectors to verify determinism
     const sampleVector = VERIFIED_SINGLESIG_VECTORS[0];
 
-    if (!sampleVector) {
-      it.skip('No vectors available for property tests', () => {});
-      return;
-    }
+    it('has vectors available for property tests', () => {
+      expect(sampleVector).toBeDefined();
+    });
+
+    if (!sampleVector) return;
 
     it('should be deterministic - same inputs always produce same output', () => {
       const result1 = deriveAddress(sampleVector.xpub, sampleVector.index, {
@@ -283,10 +274,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
       v => v.index >= 999
     );
 
-    if (highIndexVectors.length === 0) {
-      it.skip('No high index vectors available', () => {});
-      return;
-    }
+    it('has high-index vectors', () => {
+      expect(highIndexVectors.length).toBeGreaterThan(0);
+    });
 
     it.each(highIndexVectors.map(v => [v.description, v]))(
       '%s',
@@ -305,10 +295,9 @@ describe('Address Derivation - Cross-Implementation Verification', () => {
   describe('xpub validation', () => {
     const vectors = VERIFIED_SINGLESIG_VECTORS;
 
-    if (vectors.length === 0) {
-      it.skip('No vectors available', () => {});
-      return;
-    }
+    it('has vectors for xpub validation', () => {
+      expect(vectors.length).toBeGreaterThan(0);
+    });
 
     it('should validate xpubs from verified vectors', () => {
       for (const vector of vectors.slice(0, 5)) { // Test first 5

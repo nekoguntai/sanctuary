@@ -161,6 +161,28 @@ describe('WebSocketClient', () => {
 
       expect(listener).toHaveBeenCalledWith(true);
     });
+
+    it('should handle WebSocket constructor failures gracefully', () => {
+      vi.stubGlobal(
+        'WebSocket',
+        class {
+          static OPEN = 1;
+          constructor() {
+            throw new Error('constructor failed');
+          }
+        }
+      );
+
+      expect(() => client.connect()).not.toThrow();
+      expect(client.getState()).toBe('disconnected');
+    });
+
+    it('should reset connecting state on socket error callback', () => {
+      client.connect();
+      const ws = getLastWs();
+      ws.simulateError(new Error('socket error'));
+      expect(client.getState()).toBe('disconnected');
+    });
   });
 
   describe('disconnect', () => {
@@ -309,6 +331,22 @@ describe('WebSocketClient', () => {
       const countBefore = getLastWs().sentMessages.length;
       client.unsubscribe('not-subscribed');
       expect(getLastWs().sentMessages.length).toBe(countBefore);
+    });
+
+    it('should update queued subscriptions while disconnected without sending messages', () => {
+      client.subscribe('queued-a');
+      client.subscribeBatch(['queued-b']);
+      client.unsubscribe('queued-a');
+      client.unsubscribeBatch(['queued-b']);
+
+      client.connect();
+      getLastWs().simulateOpen();
+
+      const sent = getLastWs().sentMessages.map(s => JSON.parse(s).type);
+      expect(sent).not.toContain('subscribe_batch');
+      expect(sent).not.toContain('subscribe');
+      expect(sent).not.toContain('unsubscribe');
+      expect(sent).not.toContain('unsubscribe_batch');
     });
   });
 
@@ -459,6 +497,34 @@ describe('WebSocketClient', () => {
 
       expect(handler).not.toHaveBeenCalled();
     });
+
+    it('should handle channel and wildcard listener errors and eventless channel messages', () => {
+      const channelHandler = vi.fn().mockImplementation(() => {
+        throw new Error('channel listener fail');
+      });
+      const wildcardHandler = vi.fn().mockImplementation(() => {
+        throw new Error('wildcard listener fail');
+      });
+      client.on('channel:wallet:error' as any, channelHandler);
+      client.on('*', wildcardHandler);
+
+      client.connect();
+      getLastWs().simulateOpen();
+
+      getLastWs().simulateMessage({
+        type: 'event',
+        channel: 'wallet:error',
+        data: { onlyChannel: true },
+      } as any);
+      getLastWs().simulateMessage({
+        type: 'event',
+        channel: 'wallet:no-listener',
+        data: { noListener: true },
+      } as any);
+
+      expect(channelHandler).toHaveBeenCalledTimes(1);
+      expect(wildcardHandler).toHaveBeenCalledTimes(2);
+    });
   });
 
   // ========================================
@@ -513,6 +579,41 @@ describe('WebSocketClient', () => {
       if (ws.onmessage) {
         expect(() => ws.onmessage!({ data: 'not json' })).not.toThrow();
       }
+    });
+
+    it('should cover remaining control message branches', () => {
+      client.connect();
+      const ws = getLastWs();
+      ws.simulateOpen();
+
+      ws.simulateMessage({ type: 'connected', data: {} });
+      ws.simulateMessage({ type: 'subscribed', data: { channel: 'blocks' } });
+      ws.simulateMessage({ type: 'subscribed_batch', data: { subscribed: ['a', 'b'] } });
+      ws.simulateMessage({ type: 'subscribed_batch', data: { subscribed: 'not-an-array' as any } });
+      ws.simulateMessage({ type: 'unsubscribed', data: { channel: 'blocks' } });
+      ws.simulateMessage({ type: 'unsubscribed_batch', data: { unsubscribed: ['a'] } });
+      ws.simulateMessage({ type: 'unsubscribed_batch', data: { unsubscribed: null } });
+      ws.simulateMessage({ type: 'error', data: { message: 'server-side' } });
+      ws.simulateMessage({ type: 'pong', data: {} });
+      ws.simulateMessage({ type: 'unknown-control-type', data: {} } as any);
+
+      // Ensure message handling remains functional after mixed control messages
+      ws.simulateMessage({ type: 'event', event: 'block', data: { height: 1 } });
+      expect(client.getState()).toBe('connected');
+    });
+
+    it('should avoid sending when auth success arrives before socket opens', () => {
+      client.subscribe('blocks');
+      client.connect('token');
+
+      // Still CONNECTING; if authenticated arrives early, resubscribe attempts
+      // and send() should take the "not connected" branch.
+      getLastWs().simulateMessage({
+        type: 'authenticated',
+        data: { success: true },
+      });
+
+      expect(getLastWs().sentMessages).toEqual([]);
     });
   });
 
@@ -625,6 +726,38 @@ describe('WebSocketClient', () => {
       // Both called, error doesn't prevent others
       expect(badListener).toHaveBeenCalled();
       expect(goodListener).toHaveBeenCalledWith(true);
+    });
+
+    it('off() should no-op when listener set does not exist', () => {
+      expect(() => client.off('transaction', vi.fn() as EventCallback)).not.toThrow();
+    });
+  });
+
+  describe('singleton URL resolution', () => {
+    it('prefers VITE_WS_URL when creating websocketClient', async () => {
+      vi.resetModules();
+      vi.stubEnv('VITE_WS_URL', 'ws://configured.example/ws');
+
+      const mod = await import('../../services/websocket');
+      expect((mod.websocketClient as any).url).toBe('ws://configured.example/ws');
+
+      vi.unstubAllEnvs();
+    });
+
+    it('uses wss protocol when window location is https', async () => {
+      vi.resetModules();
+      vi.unstubAllEnvs();
+      vi.stubGlobal('window', {
+        location: {
+          protocol: 'https:',
+          host: 'secure.example',
+        },
+      } as any);
+
+      const mod = await import('../../services/websocket');
+      expect((mod.websocketClient as any).url).toBe('wss://secure.example/ws');
+
+      vi.unstubAllGlobals();
     });
   });
 });

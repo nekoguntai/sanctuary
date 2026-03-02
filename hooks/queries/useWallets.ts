@@ -134,7 +134,12 @@ export function useInvalidateAllWallets() {
   const queryClient = useQueryClient();
 
   return useCallback(() => {
+    // Wallet-level data
     queryClient.invalidateQueries({ queryKey: walletKeys.all });
+    // Dashboard aggregate data that depends on wallet/transaction changes
+    queryClient.invalidateQueries({ queryKey: ['recentTransactions'] });
+    queryClient.invalidateQueries({ queryKey: ['pendingTransactions'] });
+    queryClient.invalidateQueries({ queryKey: ['balanceHistory'] });
   }, [queryClient]);
 }
 

@@ -205,6 +205,8 @@ const resetState = () => {
       blockTime: undefined,
       label: '',
       type: 'sent',
+      isLocked: true,
+      lockedByDraftLabel: 'Draft Payment',
     },
   ];
   txLoading = false;
@@ -299,6 +301,8 @@ describe('useDashboardData', () => {
     expect(result.current.recentTx[0].confirmations).toBeGreaterThan(0);
     expect(result.current.recentTx[1].amount).toBe(-500);
     expect(result.current.recentTx[1].confirmations).toBe(0);
+    expect(result.current.recentTx[1].isLocked).toBe(true);
+    expect(result.current.recentTx[1].lockedByDraftLabel).toBe('Draft Payment');
     expect(result.current.pendingTxs).toEqual(pendingTxData);
 
     expect(result.current.fees).toEqual({ fast: 18.6, medium: 9, slow: 3.4 });

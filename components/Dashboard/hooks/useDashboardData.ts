@@ -156,6 +156,9 @@ export function useDashboardData() {
       timestamp: tx.blockTime ? new Date(tx.blockTime).getTime() : Date.now(),
       label: tx.label || '',
       type: tx.type,
+      isFrozen: !!tx.isFrozen,
+      isLocked: !!tx.isLocked,
+      lockedByDraftLabel: tx.lockedByDraftLabel || undefined,
     };
   }), [recentTxRaw]);
 

@@ -162,6 +162,42 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
       take: limit,
     });
 
+    // Build frozen/locked state from unspent outputs created by each transaction.
+    // This lets the UI show lock indicators in Recent Activity.
+    const txids = [...new Set(transactions.map(tx => tx.txid))];
+    const utxos = txids.length > 0
+      ? await prisma.uTXO.findMany({
+          where: {
+            walletId: { in: walletIds },
+            txid: { in: txids },
+            spent: false,
+          },
+          select: {
+            walletId: true,
+            txid: true,
+            frozen: true,
+            draftLock: {
+              include: {
+                draft: {
+                  select: { label: true },
+                },
+              },
+            },
+          },
+        })
+      : [];
+
+    const txStateMap = new Map<string, { isFrozen: boolean; isLocked: boolean; lockedByDraftLabel?: string }>();
+    for (const utxo of utxos) {
+      const key = `${utxo.walletId}:${utxo.txid}`;
+      const previous = txStateMap.get(key) ?? { isFrozen: false, isLocked: false, lockedByDraftLabel: undefined };
+      txStateMap.set(key, {
+        isFrozen: previous.isFrozen || utxo.frozen,
+        isLocked: previous.isLocked || !!utxo.draftLock,
+        lockedByDraftLabel: previous.lockedByDraftLabel || utxo.draftLock?.draft?.label || undefined,
+      });
+    }
+
     // Serialize transactions with wallet name included
     const serializedTransactions = transactions.map(tx => {
       const blockHeight = bigIntToNumber(tx.blockHeight);
@@ -169,6 +205,7 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
       // Get cached block height for this wallet's network (no network call)
       const network = walletNetworkMap.get(tx.walletId) || 'mainnet';
       const currentHeight = getCachedBlockHeight(network);
+      const state = txStateMap.get(`${tx.walletId}:${tx.txid}`);
 
       return {
         ...tx,
@@ -181,6 +218,9 @@ router.get('/transactions/recent', async (req: Request, res: Response) => {
         labels: tx.transactionLabels.map(tl => tl.label),
         transactionLabels: undefined,
         walletName: walletNameMap.get(tx.walletId),
+        isFrozen: state?.isFrozen ?? false,
+        isLocked: state?.isLocked ?? false,
+        lockedByDraftLabel: state?.lockedByDraftLabel,
       };
     });
 

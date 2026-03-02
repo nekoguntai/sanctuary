@@ -99,6 +99,7 @@ vi.mock('lucide-react', () => ({
   Tag: () => <span data-testid="tag-icon" />,
   CheckCircle2: () => <span data-testid="check-circle-icon" />,
   ShieldCheck: () => <span data-testid="shield-check-icon" />,
+  Lock: () => <span data-testid="lock-icon" />,
   ExternalLink: () => <span data-testid="external-link-icon" />,
   Copy: () => <span data-testid="copy-icon" />,
   X: () => <span data-testid="x-icon" />,

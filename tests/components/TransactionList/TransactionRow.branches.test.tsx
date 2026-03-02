@@ -28,6 +28,7 @@ vi.mock('lucide-react', () => ({
   Tag: () => <span data-testid="tag" />,
   CheckCircle2: () => <span data-testid="check-circle" />,
   ShieldCheck: () => <span data-testid="shield-check" />,
+  Lock: () => <span data-testid="lock" />,
 }));
 
 const baseTx: Transaction = {
@@ -219,5 +220,25 @@ describe('TransactionRow branch coverage', () => {
 
     expect(onWalletClick).toHaveBeenCalledWith('wallet-1');
     expect(onTxClick).not.toHaveBeenCalled();
+  });
+
+  it('renders frozen/locked badge with lock icon', () => {
+    const { rerender, props } = renderRow({ isFrozen: true });
+    expect(screen.getByText('Frozen')).toBeInTheDocument();
+    expect(screen.getByTestId('lock')).toBeInTheDocument();
+
+    rerender(
+      <table>
+        <tbody>
+          <tr>
+            <TransactionRow
+              {...props}
+              tx={{ ...props.tx, isFrozen: false, isLocked: true, lockedByDraftLabel: 'Payroll Draft' }}
+            />
+          </tr>
+        </tbody>
+      </table>
+    );
+    expect(screen.getByText('Locked')).toBeInTheDocument();
   });
 });

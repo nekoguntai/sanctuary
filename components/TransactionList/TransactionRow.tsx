@@ -2,7 +2,7 @@ import React from 'react';
 import { Transaction, Wallet, isMultisigType } from '../../types';
 import { Amount } from '../Amount';
 import { LabelBadges } from '../LabelSelector';
-import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, RefreshCw, Clock, Tag, CheckCircle2, ShieldCheck, Lock } from 'lucide-react';
 
 interface TransactionRowProps {
   tx: Transaction;
@@ -40,6 +40,13 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   const highlightClass = isHighlighted
     ? 'bg-warning-50 dark:bg-warning-950/20'
     : 'hover:bg-sanctuary-50 dark:hover:bg-sanctuary-800/50';
+  const hasLockBadge = !!tx.isFrozen || !!tx.isLocked;
+  const lockLabel = tx.isFrozen ? 'Frozen' : 'Locked';
+  const lockTitle = tx.isFrozen
+    ? 'Transaction has frozen UTXOs'
+    : tx.lockedByDraftLabel
+      ? `Locked by draft: ${tx.lockedByDraftLabel}`
+      : 'Transaction has draft-locked UTXOs';
 
   return (
     <>
@@ -69,6 +76,15 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
           <span className="text-sm font-medium text-sanctuary-900 dark:text-sanctuary-100">
             {isConsolidation ? 'Consolidation' : isReceive ? 'Received' : 'Sent'}
           </span>
+          {hasLockBadge && (
+            <span
+              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zen-vermilion/10 text-zen-vermilion border border-zen-vermilion/20"
+              title={lockTitle}
+            >
+              <Lock className="w-3 h-3 mr-1" />
+              {lockLabel}
+            </span>
+          )}
         </div>
       </td>
 

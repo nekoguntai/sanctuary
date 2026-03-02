@@ -211,6 +211,9 @@ describe('wallet cache helper hooks', () => {
 
     act(() => result.current());
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: walletKeys.all });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['recentTransactions'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['pendingTransactions'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['balanceHistory'] });
   });
 
   it('updates sync status in wallet list and detail cache entries', () => {

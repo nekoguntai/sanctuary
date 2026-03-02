@@ -660,6 +660,10 @@ export interface Transaction {
   replacedByTxid?: string; // If this tx was replaced, points to replacement
   replacementForTxid?: string; // If this is a replacement, points to original
   rbfStatus?: 'active' | 'replaced' | 'confirmed'; // Transaction RBF status
+  // UTXO state hints for transaction outputs (used by Recent Activity)
+  isFrozen?: boolean;
+  isLocked?: boolean;
+  lockedByDraftLabel?: string;
 }
 
 /**

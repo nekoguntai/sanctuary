@@ -149,6 +149,9 @@ vi.mock('../../../src/constants', () => ({
   DEFAULT_AI_ENABLED: false,
   DEFAULT_AI_ENDPOINT: 'http://localhost:11434',
   DEFAULT_AI_MODEL: 'llama2',
+  WALLET_LOG_MAX_ENTRIES: 200,
+  WALLET_LOG_INACTIVE_CLEANUP_MS: 30 * 60 * 1000,
+  WALLET_LOG_CLEANUP_INTERVAL_MS: 5 * 60 * 1000,
 }));
 
 // Mock websocket server to prevent import chain to tiny-secp256k1

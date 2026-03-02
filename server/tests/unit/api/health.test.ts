@@ -111,6 +111,7 @@ describe('Health API', () => {
         subscribedAddresses: 100,
         subscriptionsEnabled: true,
         subscriptionOwnership: 'self',
+        pollingMode: 'in-process',
       }),
     });
     (getWebSocketServer as Mock).mockReturnValue({
@@ -167,6 +168,7 @@ describe('Health API', () => {
       expect(response.body.components).toBeDefined();
       expect(response.body.components.database.status).toBe('healthy');
       expect(response.body.components.memory.status).toBe('healthy');
+      expect(response.body.components.sync.details.pollingMode).toBe('in-process');
     });
 
     it('should return degraded status when database is unhealthy', async () => {
@@ -189,6 +191,7 @@ describe('Health API', () => {
           subscribedAddresses: 0,
           subscriptionsEnabled: true,
           subscriptionOwnership: 'external',
+          pollingMode: 'in-process',
         }),
       });
 
@@ -209,6 +212,7 @@ describe('Health API', () => {
           subscribedAddresses: 100,
           subscriptionsEnabled: true,
           subscriptionOwnership: 'self',
+          pollingMode: 'in-process',
         }),
       });
 
@@ -722,6 +726,7 @@ describe('Health API', () => {
           subscribedAddresses: 0,
           subscriptionsEnabled: true,
           subscriptionOwnership: 'external',
+          pollingMode: 'in-process',
         }),
       });
 

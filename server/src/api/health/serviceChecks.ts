@@ -123,6 +123,7 @@ export function checkSync(): ComponentHealth {
         subscribedAddresses: metrics.subscribedAddresses,
         subscriptionsEnabled: metrics.subscriptionsEnabled,
         subscriptionOwnership: metrics.subscriptionOwnership,
+        pollingMode: metrics.pollingMode,
       },
     };
   } catch {

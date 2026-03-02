@@ -222,8 +222,8 @@ describe('AnimatedBackground', () => {
       ANIMATED_PATTERNS.forEach((patternId) => {
         const pattern = globalPatterns.find((p) => p.id === patternId);
         expect(pattern).toBeDefined();
-        expect(pattern?.name).toBeTruthy();
-        expect(pattern?.description).toBeTruthy();
+        expect((pattern?.name ?? '').length).toBeGreaterThan(0);
+        expect((pattern?.description ?? '').length).toBeGreaterThan(0);
       });
     });
   });
@@ -235,7 +235,7 @@ describe('AnimatedBackground', () => {
       it(`${patternId} should not be marked as animated`, () => {
         const pattern = globalPatterns.find((p) => p.id === patternId);
         expect(pattern).toBeDefined();
-        expect(pattern?.animated).toBeFalsy();
+        expect(pattern?.animated).not.toBe(true);
       });
 
       it(`${patternId} should not be in ANIMATED_PATTERNS`, () => {

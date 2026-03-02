@@ -66,7 +66,7 @@ describe('README.md Links', () => {
   }
 
   it('should have a README.md file', () => {
-    expect(readmeContent).toBeTruthy();
+    expect(typeof readmeContent).toBe('string');
     expect(readmeContent.length).toBeGreaterThan(0);
   });
 

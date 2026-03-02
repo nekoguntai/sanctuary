@@ -171,12 +171,12 @@ describe('HardwareWalletService', () => {
         throw new Error('disconnect failed');
       }),
     });
-    const { adapter: trezor } = createMockAdapter('trezor');
+    const { adapter: trezor, device: trezorDevice } = createMockAdapter('trezor');
     service.registerAdapter(ledger);
     service.registerAdapter(trezor);
 
     await service.connect('ledger');
-    await expect(service.connect('trezor')).resolves.toBeTruthy();
+    await expect(service.connect('trezor')).resolves.toEqual(trezorDevice);
     expect(trezor.connect).toHaveBeenCalled();
   });
 

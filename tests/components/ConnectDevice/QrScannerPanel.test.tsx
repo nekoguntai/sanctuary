@@ -75,7 +75,7 @@ describe('QrScannerPanel', () => {
     expect(scannerPropsSpy).toHaveBeenCalled();
 
     const stopButton = container.querySelector('button.absolute') as HTMLButtonElement;
-    expect(stopButton).toBeTruthy();
+    expect(stopButton).not.toBeNull();
     await user.click(stopButton);
     expect(props.onStopCamera).toHaveBeenCalledTimes(1);
   });

@@ -164,7 +164,7 @@ describeIfDb('Admin API Integration', () => {
         const user = await prisma.user.findUnique({
           where: { username: newUsername },
         });
-        expect(user).toBeTruthy();
+        expect(user).not.toBeNull();
       });
 
       it('should create admin user when isAdmin is true', async () => {
@@ -436,7 +436,7 @@ describeIfDb('Admin API Integration', () => {
         const associationBefore = await prisma.walletUser.findUnique({
           where: { walletId_userId: { userId, walletId: wallet.id } },
         });
-        expect(associationBefore).toBeTruthy();
+        expect(associationBefore).not.toBeNull();
 
         await request(app)
           .delete(`/api/v1/admin/users/${userId}`)
@@ -558,7 +558,7 @@ describeIfDb('Admin API Integration', () => {
         const group = await prisma.group.findUnique({
           where: { id: response.body.id },
         });
-        expect(group).toBeTruthy();
+        expect(group).not.toBeNull();
       });
 
       it('should create group with initial members', async () => {
@@ -762,7 +762,7 @@ describeIfDb('Admin API Integration', () => {
         const membership = await prisma.groupMember.findUnique({
           where: { userId_groupId: { userId, groupId: group.id } },
         });
-        expect(membership).toBeTruthy();
+        expect(membership).not.toBeNull();
       });
 
       it('should add member as admin role', async () => {
@@ -898,7 +898,7 @@ describeIfDb('Admin API Integration', () => {
         orderBy: { createdAt: 'desc' },
       });
 
-      expect(auditLog).toBeTruthy();
+      expect(auditLog).not.toBeNull();
       expect(auditLog?.category).toBe('user');
     });
 
@@ -920,7 +920,7 @@ describeIfDb('Admin API Integration', () => {
         orderBy: { createdAt: 'desc' },
       });
 
-      expect(auditLog).toBeTruthy();
+      expect(auditLog).not.toBeNull();
     });
 
     it('should create audit log for admin role grant', async () => {
@@ -942,7 +942,7 @@ describeIfDb('Admin API Integration', () => {
         orderBy: { createdAt: 'desc' },
       });
 
-      expect(auditLog).toBeTruthy();
+      expect(auditLog).not.toBeNull();
     });
 
     it('should create audit log for admin role revoke', async () => {
@@ -964,7 +964,7 @@ describeIfDb('Admin API Integration', () => {
         orderBy: { createdAt: 'desc' },
       });
 
-      expect(auditLog).toBeTruthy();
+      expect(auditLog).not.toBeNull();
     });
 
     it('should create audit log for group creation', async () => {
@@ -985,7 +985,7 @@ describeIfDb('Admin API Integration', () => {
         orderBy: { createdAt: 'desc' },
       });
 
-      expect(auditLog).toBeTruthy();
+      expect(auditLog).not.toBeNull();
       expect(auditLog?.category).toBe('admin');
     });
   });

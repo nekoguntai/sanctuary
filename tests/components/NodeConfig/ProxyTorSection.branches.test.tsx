@@ -61,7 +61,7 @@ describe('ProxyTorSection branch coverage', () => {
     render(<ProxyTorSection {...baseProps} />);
 
     const header = screen.getByText('Proxy / Tor').closest('[role="button"]');
-    expect(header).toBeTruthy();
+    expect(header).not.toBeNull();
     if (!header) throw new Error('Proxy / Tor header not found');
     fireEvent.keyDown(header, { key: 'Enter' });
     fireEvent.keyDown(header, { key: ' ' });

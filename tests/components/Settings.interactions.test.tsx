@@ -224,7 +224,7 @@ describe('Settings interactions', () => {
 
     const enableSoundsLabel = screen.getByText('Enable Sounds');
     const masterToggle = enableSoundsLabel.parentElement?.parentElement?.querySelector('button');
-    expect(masterToggle).toBeTruthy();
+    expect(masterToggle).not.toBeNull();
     await user.click(masterToggle as HTMLButtonElement);
 
     await waitFor(() => {
@@ -264,7 +264,7 @@ describe('Settings interactions', () => {
 
     const showFiatLabel = screen.getByText('Show Fiat Equivalent');
     const showFiatToggle = showFiatLabel.parentElement?.parentElement?.querySelector('button');
-    expect(showFiatToggle).toBeTruthy();
+    expect(showFiatToggle).not.toBeNull();
     await user.click(showFiatToggle as HTMLButtonElement);
     expect(mockState.toggleShowFiat).toHaveBeenCalled();
 
@@ -324,7 +324,7 @@ describe('Settings interactions', () => {
 
     const disabledLabel = screen.getByText('Disabled');
     const toggleButton = disabledLabel.parentElement?.querySelector('button');
-    expect(toggleButton).toBeTruthy();
+    expect(toggleButton).not.toBeNull();
     await user.click(toggleButton as HTMLButtonElement);
 
     await waitFor(() => {
@@ -368,7 +368,7 @@ describe('Settings interactions', () => {
     mockState.logError.mockReturnValue('Failed to update settings');
     const enabledLabel = screen.getByText('Enabled');
     const toggleButton = enabledLabel.parentElement?.querySelector('button');
-    expect(toggleButton).toBeTruthy();
+    expect(toggleButton).not.toBeNull();
     await user.click(toggleButton as HTMLButtonElement);
 
     expect(await screen.findByText('Failed to update settings')).toBeInTheDocument();

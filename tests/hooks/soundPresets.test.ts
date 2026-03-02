@@ -68,9 +68,9 @@ describe('SOUND_PRESETS', () => {
     expect(entries.length).toBeGreaterThan(10);
 
     for (const [id, preset] of entries) {
-      expect(id).toBeTruthy();
-      expect(preset.name).toBeTruthy();
-      expect(preset.description).toBeTruthy();
+      expect(id.length).toBeGreaterThan(0);
+      expect(preset.name.length).toBeGreaterThan(0);
+      expect(preset.description.length).toBeGreaterThan(0);
       expect(typeof preset.play).toBe('function');
     }
   });

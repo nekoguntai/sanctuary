@@ -303,7 +303,7 @@ describe('AILabelSuggestion', () => {
       // The error container has the class 'bg-rose-50'
       const errorContainer = document.querySelector('.bg-rose-50');
       const dismissButton = errorContainer?.querySelector('button');
-      expect(dismissButton).toBeTruthy();
+      expect(dismissButton).not.toBeNull();
 
       if (dismissButton) {
         fireEvent.click(dismissButton);

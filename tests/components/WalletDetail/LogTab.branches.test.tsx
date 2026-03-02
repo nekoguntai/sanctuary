@@ -64,7 +64,7 @@ describe('LogTab branch coverage', () => {
     );
 
     const scrollArea = container.querySelector('div.h-\\[500px\\]') as HTMLDivElement;
-    expect(scrollArea).toBeTruthy();
+    expect(scrollArea).not.toBeNull();
 
     Object.defineProperty(scrollArea, 'scrollHeight', { value: 500, configurable: true });
     Object.defineProperty(scrollArea, 'clientHeight', { value: 100, configurable: true });

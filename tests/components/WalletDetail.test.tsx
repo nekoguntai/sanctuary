@@ -172,9 +172,14 @@ describe('WalletDetail', () => {
   const mockWallet = {
     id: 'wallet-1',
     name: 'Test Wallet',
-    type: 'native_segwit' as const,
+    type: 'single_sig' as const,
+    scriptType: 'native_segwit' as const,
     balance: 1000000,
     network: 'mainnet',
+    userRole: 'owner' as const,
+    canEdit: true,
+    quorum: 1,
+    totalSigners: 1,
     ownerId: 'user-1',
     createdAt: '2024-01-01',
   };
@@ -251,13 +256,22 @@ describe('WalletDetail', () => {
     vi.mocked(walletsApi.getWalletShareInfo).mockResolvedValue({ sharedWith: [] } as any);
 
     vi.mocked(transactionsApi.getTransactions).mockResolvedValue(mockTransactions as any);
-    vi.mocked(transactionsApi.getUTXOs).mockResolvedValue({ utxos: mockUtxos } as any);
-    vi.mocked(transactionsApi.getAddresses).mockResolvedValue({ addresses: mockAddresses } as any);
+    vi.mocked(transactionsApi.getUTXOs).mockResolvedValue({
+      utxos: mockUtxos,
+      count: mockUtxos.length,
+      totalBalance: 50000,
+    } as any);
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValue(mockAddresses as any);
     vi.mocked(transactionsApi.generateAddresses).mockResolvedValue({ addresses: mockAddresses } as any);
     vi.mocked(transactionsApi.getTransactionStats).mockResolvedValue({
+      totalCount: 2,
+      receivedCount: 1,
+      sentCount: 1,
+      consolidationCount: 0,
       totalReceived: 100000,
       totalSent: 50000,
-      count: 2,
+      totalFees: 1000,
+      walletBalance: 1000000,
     } as any);
     vi.mocked(transactionsApi.getWalletPrivacy).mockResolvedValue({
       utxos: [],
@@ -291,19 +305,16 @@ describe('WalletDetail', () => {
   };
 
   describe('Loading state', () => {
-    // Skip: Complex loading state test requires extensive API mocking
-    it.skip('shows loading spinner while fetching wallet', async () => {
+    it('shows loading placeholder while fetching wallet', async () => {
       // Mock a delayed response
       vi.mocked(walletsApi.getWallet).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve(mockWallet as any), 100))
+        () => new Promise(resolve => setTimeout(() => resolve(mockWallet as any), 150))
       );
 
       renderWalletDetail();
 
-      // Should show loading state
-      await waitFor(() => {
-        expect(document.querySelector('.animate-spin')).toBeInTheDocument();
-      });
+      expect(await screen.findByText('Loading wallet...')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('Test Wallet')).toBeInTheDocument());
     });
   });
 
@@ -335,18 +346,17 @@ describe('WalletDetail', () => {
   });
 
   describe('Tab navigation', () => {
-    // Skip: Test times out waiting for all tabs to render (requires full API mocking)
-    it.skip('renders all tab buttons', async () => {
+    it('renders all tab buttons', async () => {
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText('Transactions')).toBeInTheDocument();
-        expect(screen.getByText('UTXOs')).toBeInTheDocument();
-        expect(screen.getByText('Addresses')).toBeInTheDocument();
-        expect(screen.getByText('Drafts')).toBeInTheDocument();
-        expect(screen.getByText('Stats')).toBeInTheDocument();
-        expect(screen.getByText('Access')).toBeInTheDocument();
-        expect(screen.getByText('Settings')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^transactions$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^utxos$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^addresses$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^drafts$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^stats$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^access$/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^settings$/i })).toBeInTheDocument();
       });
     });
 
@@ -373,32 +383,30 @@ describe('WalletDetail', () => {
       });
     });
 
-    // Skip: Test times out (requires full API mocking for tab content)
-    it.skip('switches to Stats tab when clicked', async () => {
+    it('switches to Stats tab when clicked', async () => {
       const user = userEvent.setup();
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText('Stats')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /stats/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText('Stats'));
+      await user.click(screen.getByRole('button', { name: /stats/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('wallet-stats')).toBeInTheDocument();
       });
     });
 
-    // Skip: Test times out (requires full API mocking for tab content)
-    it.skip('switches to Drafts tab when clicked', async () => {
+    it('switches to Drafts tab when clicked', async () => {
       const user = userEvent.setup();
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText('Drafts')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /drafts/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText('Drafts'));
+      await user.click(screen.getByRole('button', { name: /drafts/i }));
 
       await waitFor(() => {
         expect(screen.getByTestId('draft-list')).toBeInTheDocument();
@@ -424,51 +432,49 @@ describe('WalletDetail', () => {
   });
 
   describe('Error handling', () => {
-    // Skip: Error handling test times out due to API retry logic
-    it.skip('shows error message when wallet fetch fails', async () => {
+    it('shows error message when wallet fetch fails', async () => {
       vi.mocked(walletsApi.getWallet).mockRejectedValue(new Error('Wallet not found'));
 
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/not found|error/i)).toBeInTheDocument();
+        expect(screen.getByText('Failed to Load Wallet')).toBeInTheDocument();
       });
     });
   });
 
   describe('Wallet actions', () => {
-    // Skip: Test times out waiting for action buttons to render
-    it.skip('renders sync button', async () => {
+    it('renders sync button', async () => {
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByLabelText(/sync|refresh/i)).toBeInTheDocument();
+        expect(screen.getByTitle('Sync wallet')).toBeInTheDocument();
       });
     });
 
-    // Skip: Test times out waiting for action buttons to render
-    it.skip('renders export button', async () => {
+    it('renders export button', async () => {
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByLabelText(/export|share/i)).toBeInTheDocument();
+        expect(screen.getByTitle('Export wallet')).toBeInTheDocument();
       });
     });
   });
 
   describe('Multi-sig wallet', () => {
-    // Skip: Multisig test times out due to complex component state
-    it.skip('displays quorum info for multisig wallets', async () => {
+    it('displays quorum info for multisig wallets', async () => {
       vi.mocked(walletsApi.getWallet).mockResolvedValue({
         ...mockWallet,
-        type: 'multisig:2/3',
-        quorum: { m: 2, n: 3 },
+        type: 'multi_sig',
+        quorum: 2,
+        totalSigners: 3,
+        userRole: 'owner',
       } as any);
 
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText(/2.*of.*3/i)).toBeInTheDocument();
+        expect(screen.getByText('2/3 Multisig')).toBeInTheDocument();
       });
     });
   });
@@ -499,14 +505,16 @@ describe('WalletDetail', () => {
     });
   });
 
-  describe('Drafts count badge', () => {
-    // Skip: Test times out waiting for drafts badge to render
-    it.skip('shows drafts count badge when drafts exist', async () => {
-      // The drafts count would be fetched and displayed
+  describe('Drafts state', () => {
+    it('loads drafts data and keeps drafts tab available', async () => {
+      vi.mocked(draftsApi.getDrafts).mockResolvedValue([
+        { id: 'draft-1', walletId: 'wallet-1' },
+      ] as any);
       renderWalletDetail();
 
       await waitFor(() => {
-        expect(screen.getByText('Drafts')).toBeInTheDocument();
+        expect(draftsApi.getDrafts).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /^drafts$/i })).toBeInTheDocument();
       });
     });
   });

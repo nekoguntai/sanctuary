@@ -257,7 +257,7 @@ describe('Trezor helper functions', () => {
     };
 
     const multisig = buildTrezorMultisig(script, derivations as any, xpubMap);
-    expect(multisig).toBeTruthy();
+    expect(multisig).not.toBeNull();
     expect(multisig?.m).toBe(2);
     expect(multisig?.signatures).toEqual(['', '']);
     expect(multisig?.pubkeys).toHaveLength(2);

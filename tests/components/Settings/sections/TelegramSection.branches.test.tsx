@@ -93,7 +93,7 @@ describe('TelegramSettings branch coverage', () => {
     expect(tokenInput.type).toBe('password');
 
     const eyeButton = tokenInput.parentElement?.querySelector('button');
-    expect(eyeButton).toBeTruthy();
+    expect(eyeButton).not.toBeNull();
     await user.click(eyeButton as HTMLButtonElement);
     expect(tokenInput.type).toBe('text');
     await user.click(eyeButton as HTMLButtonElement);
@@ -196,7 +196,7 @@ describe('TelegramSettings branch coverage', () => {
     mockState.updatePreferences.mockRejectedValueOnce(new Error('toggle failed'));
     const disabledLabel = screen.getByText('Disabled');
     const toggleButton = disabledLabel.parentElement?.querySelector('button');
-    expect(toggleButton).toBeTruthy();
+    expect(toggleButton).not.toBeNull();
     await user.click(toggleButton as HTMLButtonElement);
     expect(await screen.findByText('Failed to update settings')).toBeInTheDocument();
     expect(screen.getByText('Disabled')).toBeInTheDocument();
@@ -238,7 +238,7 @@ describe('TelegramSettings branch coverage', () => {
 
     const disabledLabel = screen.getByText('Disabled');
     const toggleButton = disabledLabel.parentElement?.querySelector('button');
-    expect(toggleButton).toBeTruthy();
+    expect(toggleButton).not.toBeNull();
     await user.click(toggleButton as HTMLButtonElement);
 
     expect(mockState.updatePreferences).toHaveBeenLastCalledWith(expect.objectContaining({

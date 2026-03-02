@@ -324,10 +324,25 @@ describe('ImportWallet', () => {
       });
     });
 
-    it.skip('renders script type options', async () => {
-      // Skipped: Script type options are only shown after device connection
-      // This would require mocking the full hardware device connection flow
-      // Better tested via E2E tests with actual device simulation
+    it('renders script type options after device connection', async () => {
+      const user = userEvent.setup();
+      vi.mocked(hardwareWallet.hardwareWalletService.connect).mockResolvedValue({
+        name: 'Test Ledger',
+      } as any);
+
+      renderImportWallet();
+      await goToStep2Hardware(user);
+
+      await user.click(screen.getByRole('button', { name: 'Connect Device' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Connected')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Native SegWit')).toBeInTheDocument();
+      expect(screen.getByText('Nested SegWit')).toBeInTheDocument();
+      expect(screen.getByText('Taproot')).toBeInTheDocument();
+      expect(screen.getByText('Legacy')).toBeInTheDocument();
     });
   });
 
@@ -349,30 +364,132 @@ describe('ImportWallet', () => {
   });
 
   describe('Step 3: Review', () => {
-    // These integration tests verify multi-step flow behavior
-    // Complex async state transitions are better tested via E2E tests
-    it.skip('shows validation results', async () => {
-      // Skipped: Multi-step form transitions have timing issues in unit tests
-      // The validation API call is tested in "validates data when clicking Next Step"
+    const validateSuccess = {
+      valid: true,
+      format: 'descriptor',
+      walletType: 'single_sig',
+      scriptType: 'native_segwit',
+      network: 'mainnet',
+      devices: [
+        {
+          fingerprint: 'ABC123',
+          xpub: 'xpub-test',
+          derivationPath: "m/84'/0'/0'",
+          existingDeviceId: 'device-1',
+          existingDeviceLabel: 'Ledger One',
+          willCreate: false,
+          originalType: 'ledger',
+        },
+      ],
+      suggestedName: 'Imported Wallet',
+    };
+
+    it('shows validation results', async () => {
+      const user = userEvent.setup();
+      vi.mocked(walletsApi.validateImport).mockResolvedValue(validateSuccess as any);
+
+      renderImportWallet();
+      await user.click(screen.getByText('Output Descriptor').closest('button')!);
+      await user.click(screen.getByText('Next Step'));
+      await user.type(screen.getByPlaceholderText(/wpkh\(/), 'wpkh([abc123]xpub.../0/*)');
+      await user.click(screen.getByText('Next Step'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Configure Import')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Single Signature')).toBeInTheDocument();
+      expect(screen.getByText(/Will reuse existing devices:/)).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Imported Wallet')).toBeInTheDocument();
     });
 
-    it.skip('auto-fills wallet name from suggestion', async () => {
-      // Skipped: Multi-step form transitions have timing issues in unit tests
-      // The component logic is verified through individual step tests
+    it('auto-fills wallet name from suggestion', async () => {
+      const user = userEvent.setup();
+      vi.mocked(walletsApi.validateImport).mockResolvedValue({
+        ...validateSuccess,
+        suggestedName: 'Suggested Coldcard Wallet',
+      } as any);
+
+      renderImportWallet();
+      await user.click(screen.getByText('Output Descriptor').closest('button')!);
+      await user.click(screen.getByText('Next Step'));
+      await user.type(screen.getByPlaceholderText(/wpkh\(/), 'wpkh([abc123]xpub.../0/*)');
+      await user.click(screen.getByText('Next Step'));
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Suggested Coldcard Wallet')).toBeInTheDocument();
+      });
     });
   });
 
   describe('Step 4: Import', () => {
-    // Full import flow integration tests - skipped due to multi-step timing issues
-    // These scenarios are better covered by E2E tests
-    it.skip('imports wallet and navigates to detail page', async () => {
-      // Skipped: Full multi-step form flow has timing issues in unit tests
-      // The import mutation is verified through useWallets hook tests
+    const validateSuccess = {
+      valid: true,
+      format: 'descriptor',
+      walletType: 'single_sig',
+      scriptType: 'native_segwit',
+      network: 'mainnet',
+      devices: [
+        {
+          fingerprint: 'ABC123',
+          xpub: 'xpub-test',
+          derivationPath: "m/84'/0'/0'",
+          existingDeviceId: 'device-1',
+          existingDeviceLabel: 'Ledger One',
+          willCreate: false,
+          originalType: 'ledger',
+        },
+      ],
+      suggestedName: 'Imported Wallet',
+    };
+
+    const goToStep4 = async (user: ReturnType<typeof userEvent.setup>) => {
+      renderImportWallet();
+      await user.click(screen.getByText('Output Descriptor').closest('button')!);
+      await user.click(screen.getByText('Next Step'));
+      await user.type(screen.getByPlaceholderText(/wpkh\(/), 'wpkh([abc123]xpub.../0/*)');
+      await user.click(screen.getByText('Next Step'));
+      await waitFor(() => {
+        expect(screen.getByText('Configure Import')).toBeInTheDocument();
+      });
+      await user.click(screen.getByText('Next Step'));
+      await waitFor(() => {
+        expect(screen.getByText('Confirm Import')).toBeInTheDocument();
+      });
+    };
+
+    it('imports wallet and navigates to detail page', async () => {
+      const user = userEvent.setup();
+      vi.mocked(walletsApi.validateImport).mockResolvedValue(validateSuccess as any);
+      mockImportMutation.mutateAsync.mockResolvedValue({
+        wallet: { id: 'wallet-99' },
+      });
+
+      await goToStep4(user);
+      await user.click(screen.getByRole('button', { name: /import wallet/i }));
+
+      await waitFor(() => {
+        expect(mockImportMutation.mutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.stringContaining('wpkh('),
+            name: 'Imported Wallet',
+            network: 'mainnet',
+          })
+        );
+        expect(mockNavigate).toHaveBeenCalledWith('/wallets/wallet-99');
+      });
     });
 
-    it.skip('shows error on import failure', async () => {
-      // Skipped: Full multi-step form flow has timing issues in unit tests
-      // Error handling is verified through individual component behavior tests
+    it('shows error on import failure', async () => {
+      const user = userEvent.setup();
+      vi.mocked(walletsApi.validateImport).mockResolvedValue(validateSuccess as any);
+      mockImportMutation.mutateAsync.mockRejectedValue(new Error('backend exploded'));
+
+      await goToStep4(user);
+      await user.click(screen.getByRole('button', { name: /import wallet/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to import wallet. Please try again.')).toBeInTheDocument();
+      });
     });
   });
 

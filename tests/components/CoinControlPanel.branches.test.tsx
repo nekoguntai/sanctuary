@@ -104,7 +104,7 @@ describe('CoinControlPanel branch coverage', () => {
     expect(mockSelectUtxos).not.toHaveBeenCalled();
 
     const latestCall = (props.onSetSelectedUtxos as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-    expect(latestCall).toBeTruthy();
+    expect(latestCall).toBeDefined();
     expect((latestCall?.[0] as Set<string>).size).toBe(0);
   });
 

@@ -227,7 +227,8 @@ describe('WebSocket Server', () => {
       };
 
       expect(message.type).toBe('auth');
-      expect(message.data.token).toBeTruthy();
+      expect(typeof message.data.token).toBe('string');
+      expect(message.data.token.length).toBeGreaterThan(0);
     });
 
     it('should format subscribe message correctly', () => {
@@ -247,7 +248,8 @@ describe('WebSocket Server', () => {
       };
 
       expect(message.type).toBe('unsubscribe');
-      expect(message.data.channel).toBeTruthy();
+      expect(typeof message.data.channel).toBe('string');
+      expect(message.data.channel.length).toBeGreaterThan(0);
     });
 
     it('should format ping message correctly', () => {
@@ -271,7 +273,8 @@ describe('WebSocket Server', () => {
 
       expect(message.type).toBe('event');
       expect(message.event).toBe('transaction');
-      expect(message.channel).toBeTruthy();
+      expect(typeof message.channel).toBe('string');
+      expect(message.channel.length).toBeGreaterThan(0);
       expect(message.timestamp).toBeGreaterThan(0);
     });
 
@@ -282,7 +285,8 @@ describe('WebSocket Server', () => {
       };
 
       expect(message.type).toBe('error');
-      expect(message.data.message).toBeTruthy();
+      expect(typeof message.data.message).toBe('string');
+      expect(message.data.message.length).toBeGreaterThan(0);
     });
   });
 
@@ -365,7 +369,7 @@ describe('Gateway WebSocket Server', () => {
         .update(challenge)
         .digest('hex');
 
-      expect(hmacResponse).toBeTruthy();
+      expect(typeof hmacResponse).toBe('string');
       expect(hmacResponse.length).toBe(64); // SHA-256 produces 64 hex chars
     });
 
@@ -431,7 +435,8 @@ describe('Gateway WebSocket Server', () => {
       };
 
       expect(message.type).toBe('auth_challenge');
-      expect(message.challenge).toBeTruthy();
+      expect(typeof message.challenge).toBe('string');
+      expect(message.challenge.length).toBeGreaterThan(0);
     });
 
     it('should format auth response message correctly', () => {
@@ -441,7 +446,8 @@ describe('Gateway WebSocket Server', () => {
       };
 
       expect(message.type).toBe('auth_response');
-      expect(message.response).toBeTruthy();
+      expect(typeof message.response).toBe('string');
+      expect(message.response.length).toBeGreaterThan(0);
     });
 
     it('should format auth success message correctly', () => {
@@ -461,19 +467,20 @@ describe('Gateway WebSocket Server', () => {
 
       expect(message.type).toBe('event');
       expect(message.event.type).toBe('transaction');
-      expect(message.event.walletId).toBeTruthy();
+      expect(typeof message.event.walletId).toBe('string');
+      expect(message.event.walletId.length).toBeGreaterThan(0);
     });
   });
 
   describe('Gateway Security', () => {
     it('should require gateway secret to be configured', () => {
-      expect(mockConfig.gatewaySecret).toBeTruthy();
+      expect(typeof mockConfig.gatewaySecret).toBe('string');
       expect(mockConfig.gatewaySecret.length).toBeGreaterThan(0);
     });
 
     it('should reject connections without gateway secret', () => {
       const emptySecret = '';
-      expect(emptySecret).toBeFalsy();
+      expect(emptySecret).toBe('');
       // Should reject if !config.gatewaySecret
     });
 

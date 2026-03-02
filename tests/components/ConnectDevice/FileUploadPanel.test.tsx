@@ -32,7 +32,7 @@ describe('FileUploadPanel', () => {
     expect(screen.getByText('Select File')).toBeInTheDocument();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).toBeTruthy();
+    expect(fileInput).not.toBeNull();
     fireEvent.change(fileInput, { target: { files: [new File(['{}'], 'wallet.json', { type: 'application/json' })] } });
 
     expect(onFileUpload).toHaveBeenCalledTimes(1);
@@ -65,4 +65,3 @@ describe('FileUploadPanel', () => {
     expect(screen.getByText(/File Imported Successfully/i)).toBeInTheDocument();
   });
 });
-

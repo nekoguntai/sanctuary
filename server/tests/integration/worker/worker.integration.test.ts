@@ -50,7 +50,7 @@ describe('worker integration', () => {
     const syncCall = harness.jobQueue.addJob.mock.calls.find(
       ([queue, name]) => queue === 'sync' && name === 'sync-wallet'
     );
-    expect(syncCall).toBeTruthy();
+    expect(syncCall).toBeDefined();
     expect(syncCall![2]).toEqual({
       walletId: 'wallet-1',
       priority: 'high',

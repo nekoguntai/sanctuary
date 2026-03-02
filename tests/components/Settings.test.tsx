@@ -218,7 +218,7 @@ describe('Settings Component', () => {
     render(<Settings />);
 
     // Settings should render with tabs visible
-    expect(document.body.textContent).toBeTruthy();
+    expect((document.body.textContent ?? '').length).toBeGreaterThan(0);
   });
 
   it('should display theme options', async () => {

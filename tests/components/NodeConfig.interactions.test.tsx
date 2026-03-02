@@ -274,7 +274,7 @@ describe('NodeConfig interaction branches', () => {
 
     const toggles = document.querySelectorAll('button.rounded-full');
     const torToggle = toggles[toggles.length - 1] as HTMLButtonElement;
-    expect(torToggle).toBeTruthy();
+    expect(torToggle).toBeDefined();
     await user.click(torToggle);
 
     await waitFor(() => {

@@ -319,11 +319,11 @@ describe('NetworkConnectionCard', () => {
 
       const formTitle = screen.getByText('Add New Server');
       const formContainer = formTitle.closest('div')?.parentElement;
-      expect(formContainer).toBeTruthy();
+      expect(formContainer).not.toBeNull();
       const submitButton = within(formContainer as HTMLElement)
         .getAllByRole('button')
         .find(button => /Add Server|Adding/i.test(button.textContent || ''));
-      expect(submitButton).toBeTruthy();
+      expect(submitButton).toBeDefined();
       if (submitButton && !submitButton.hasAttribute('disabled')) {
         await user.click(submitButton);
       }

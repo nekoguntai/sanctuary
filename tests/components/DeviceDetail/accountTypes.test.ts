@@ -18,11 +18,11 @@ describe('ACCOUNT_TYPE_CONFIG', () => {
   describe('Configuration Validity', () => {
     it('should have all required fields for each account type', () => {
       Object.entries(ACCOUNT_TYPE_CONFIG).forEach(([key, config]) => {
-        expect(config.title).toBeTruthy();
+        expect(config.title.length).toBeGreaterThan(0);
         expect(typeof config.title).toBe('string');
-        expect(config.description).toBeTruthy();
+        expect(config.description.length).toBeGreaterThan(0);
         expect(typeof config.description).toBe('string');
-        expect(config.addressPrefix).toBeTruthy();
+        expect(config.addressPrefix.length).toBeGreaterThan(0);
         expect(typeof config.addressPrefix).toBe('string');
       });
     });
@@ -276,7 +276,7 @@ describe('getAccountTypeInfo', () => {
         const info = getAccountTypeInfo(account);
 
         expect(info).toBeDefined();
-        expect(info.title).toBeTruthy();
+        expect(info.title.length).toBeGreaterThan(0);
       });
     });
   });

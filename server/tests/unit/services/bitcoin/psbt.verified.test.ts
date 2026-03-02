@@ -232,7 +232,7 @@ describe('PSBT Invariants (Property-Based)', () => {
 
           psbt.data.inputs.forEach((input) => {
             const hasUtxoData = input.witnessUtxo || input.nonWitnessUtxo;
-            expect(hasUtxoData).toBeTruthy();
+            expect(hasUtxoData).toBeDefined();
           });
         });
       });

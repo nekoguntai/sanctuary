@@ -106,7 +106,7 @@ describe('WebSocketStatsCard branch coverage', () => {
 
     expect(adminApi.getWebSocketStats).toHaveBeenCalledTimes(2);
     await waitFor(() => {
-      expect(refreshButton.querySelector('.animate-spin')).toBeTruthy();
+      expect(refreshButton.querySelector('.animate-spin')).not.toBeNull();
     });
 
     next.resolve(createStats());

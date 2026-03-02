@@ -56,7 +56,7 @@ describe('Formatters', () => {
       // TypeScript would catch this, but runtime safety matters
       const result = truncateAddress(null as unknown as string);
 
-      expect(result).toBeFalsy();
+      expect(result).toBeNull();
     });
 
     it('should work with legacy P2PKH addresses', () => {

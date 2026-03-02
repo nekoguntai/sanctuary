@@ -68,7 +68,7 @@ describe('BackupCodesModal', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
 
     const closeButton = screen.getAllByRole('button').find(btn => btn.querySelector('svg'));
-    expect(closeButton).toBeTruthy();
+    expect(closeButton).toBeDefined();
     if (closeButton) {
       await user.click(closeButton);
     }

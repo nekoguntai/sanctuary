@@ -301,7 +301,7 @@ describe('DeviceDetail page', () => {
 
     const bob = await screen.findByText('bob');
     const bobRow = bob.parentElement?.parentElement;
-    expect(bobRow).toBeTruthy();
+    expect(bobRow).not.toBeNull();
     await user.click(within(bobRow as HTMLElement).getByRole('button', { name: 'Add as Viewer' }));
 
     await waitFor(() => {

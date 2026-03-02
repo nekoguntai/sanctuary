@@ -65,7 +65,7 @@ describe('LabelManager', () => {
 
       // Check for the spinner element
       const spinner = container.querySelector('.animate-spin');
-      expect(spinner).toBeTruthy();
+      expect(spinner).not.toBeNull();
     });
   });
 

@@ -189,7 +189,7 @@ describe('useLoadingState', () => {
       });
 
       // Should have some error message (from extractErrorMessage utility)
-      expect(result.current.error).toBeTruthy();
+      expect((result.current.error ?? '').length).toBeGreaterThan(0);
     });
   });
 

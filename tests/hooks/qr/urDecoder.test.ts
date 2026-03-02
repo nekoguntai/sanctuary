@@ -117,7 +117,7 @@ describe('urDecoder helpers', () => {
 
     expect(done).toBe(false);
     expect(callbacks.setUrProgress).toHaveBeenCalledWith(42);
-    expect(ref.current).toBeTruthy();
+    expect(ref.current).toBeDefined();
   });
 
   it('processUrBytes completes successfully and resets decoder ref', () => {
@@ -178,7 +178,7 @@ describe('urDecoder helpers', () => {
 
     expect(done).toBe(false);
     expect(callbacks.setUrProgress).toHaveBeenCalledWith(60);
-    expect(ref.current).toBeTruthy();
+    expect(ref.current).toBeDefined();
   });
 
   it('processUrRegistry reuses existing decoder instance when provided', () => {

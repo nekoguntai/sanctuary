@@ -44,8 +44,8 @@ describe('Background Categories', () => {
 
     it('should have label and icon for each category', () => {
       CATEGORIES.forEach(category => {
-        expect(category.label).toBeTruthy();
-        expect(category.icon).toBeTruthy();
+        expect(category.label.length).toBeGreaterThan(0);
+        expect(category.icon.length).toBeGreaterThan(0);
       });
     });
   });

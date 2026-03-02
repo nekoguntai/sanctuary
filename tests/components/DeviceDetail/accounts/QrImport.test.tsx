@@ -68,7 +68,7 @@ describe('QrImport', () => {
 
     expect(screen.getByText('Upload QR data file')).toBeInTheDocument();
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).toBeTruthy();
+    expect(fileInput).not.toBeNull();
     fireEvent.change(fileInput, { target: { files: [new File(['{}'], 'qr.json', { type: 'application/json' })] } });
     expect(onFileUpload).toHaveBeenCalledTimes(1);
   });

@@ -153,7 +153,7 @@ describe('AISettings', () => {
 
       // Look for the spinner via class since there's no role="status"
       const spinner = container.querySelector('.animate-spin');
-      expect(spinner).toBeTruthy();
+      expect(spinner).not.toBeNull();
     });
 
     it('should load and display settings after mount', async () => {
@@ -316,7 +316,7 @@ describe('AISettings', () => {
 
       // Click on Settings tab
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
 
       await waitFor(() => {
@@ -350,7 +350,7 @@ describe('AISettings', () => {
 
       // Click on Settings tab
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
 
       await waitFor(() => {
@@ -381,7 +381,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
       await waitFor(() => {
         expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
@@ -480,7 +480,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
       await waitFor(() => {
         expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
@@ -589,7 +589,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
       await waitFor(() => {
         expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
@@ -675,7 +675,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const settingsTab = getTabButton('Settings');
-      expect(settingsTab).toBeTruthy();
+      expect(settingsTab).not.toBeNull();
       await user.click(settingsTab!);
       await waitFor(() => {
         expect(screen.getByText('AI Endpoint URL')).toBeInTheDocument();
@@ -762,7 +762,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const modelsTab = getTabButton('Models');
-      expect(modelsTab).toBeTruthy();
+      expect(modelsTab).not.toBeNull();
       await user.click(modelsTab!);
       await waitFor(() => {
         expect(screen.getByText('Popular Models')).toBeInTheDocument();
@@ -907,7 +907,7 @@ describe('AISettings', () => {
         expect(screen.getByText('AI Assistant')).toBeInTheDocument();
       });
       const modelsTab = getTabButton('Models');
-      expect(modelsTab).toBeTruthy();
+      expect(modelsTab).not.toBeNull();
       await user.click(modelsTab!);
       await waitFor(() => {
         expect(screen.getByText('Popular Models')).toBeInTheDocument();

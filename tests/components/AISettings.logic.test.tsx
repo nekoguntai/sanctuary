@@ -145,7 +145,7 @@ async function renderAndWaitForReady() {
 
 function clickTopTab(label: 'Status' | 'Settings' | 'Models') {
   const tabButton = screen.getAllByRole('button').find((button) => button.textContent?.includes(label));
-  expect(tabButton).toBeTruthy();
+  expect(tabButton).toBeDefined();
   fireEvent.click(tabButton as HTMLButtonElement);
 }
 
@@ -209,7 +209,7 @@ describe('AISettings logic branches', () => {
     await waitFor(() => {
       expect(mockPullModel).toHaveBeenCalledWith('llama3.2:3b');
     });
-    expect(downloadProgressListener).toBeTruthy();
+    expect(downloadProgressListener).toBeTypeOf('function');
 
     await act(async () => {
       downloadProgressListener?.({ model: 'llama3.2:3b', status: 'complete' });

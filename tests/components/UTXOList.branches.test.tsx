@@ -96,7 +96,7 @@ describe('UTXOList branch coverage', () => {
     expect(addressLink.getAttribute('href')).toContain('https://mempool.space/address/');
 
     const clickableDot = document.querySelector('div[title*="No Label"]');
-    expect(clickableDot).toBeTruthy();
+    expect(clickableDot).not.toBeNull();
     fireEvent.click(clickableDot!);
     expect(onToggleSelect).toHaveBeenCalledWith('dust:0');
 
@@ -238,8 +238,8 @@ describe('UTXOList branch coverage', () => {
 
     const frozenDot = container.querySelector('div[title*="(Frozen)"]');
     const lockedDot = container.querySelector('div[title*="(Locked: Draft One)"]');
-    expect(frozenDot).toBeTruthy();
-    expect(lockedDot).toBeTruthy();
+    expect(frozenDot).not.toBeNull();
+    expect(lockedDot).not.toBeNull();
     fireEvent.click(frozenDot!);
     fireEvent.click(lockedDot!);
     expect(onToggleSelect).not.toHaveBeenCalledWith('frozen:0');

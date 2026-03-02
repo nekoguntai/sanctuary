@@ -29,7 +29,7 @@ describe('EncryptionKeyDisplay branch coverage', () => {
     expect(screen.getByTitle('Hide')).toBeInTheDocument();
 
     const copyButtons = screen.getAllByTitle('Copy to clipboard');
-    expect(copyButtons[1].querySelector('.text-success-500')).toBeTruthy();
+    expect(copyButtons[1].querySelector('.text-success-500')).not.toBeNull();
   });
 
   it('handles salt show toggle and salt copy actions', async () => {

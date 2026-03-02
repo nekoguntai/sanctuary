@@ -133,7 +133,7 @@ describe('SigningFlow', () => {
     expect(onDownloadPsbt).toHaveBeenCalledTimes(1);
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(fileInput).toBeTruthy();
+    expect(fileInput).not.toBeNull();
     expect(deviceFileInputRefs.current['coldcard-1']).toBe(fileInput);
 
     const file = new File(['signed psbt'], 'signed.psbt', { type: 'text/plain' });

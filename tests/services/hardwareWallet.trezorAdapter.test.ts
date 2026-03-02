@@ -343,6 +343,30 @@ describe('TrezorAdapter class', () => {
     expect(adapter.getDevice()?.id).toContain('trezor-');
   });
 
+  it('short-circuits repeated initialize calls and uses manifest fallback origin', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        ...originalWindow,
+        isSecureContext: true,
+        location: { origin: '' },
+      },
+      configurable: true,
+    });
+
+    const adapter = new TrezorAdapter();
+    await (adapter as any).initialize();
+    await (adapter as any).initialize();
+
+    expect(mockInit).toHaveBeenCalledTimes(1);
+    expect(mockInit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        manifest: expect.objectContaining({
+          appUrl: 'https://sanctuary.bitcoin',
+        }),
+      })
+    );
+  });
+
   it('initializes only once when connect is called repeatedly', async () => {
     const adapter = new TrezorAdapter();
     await adapter.connect();
@@ -360,6 +384,10 @@ describe('TrezorAdapter class', () => {
       throw new Error('Popup closed');
     });
     await expect(adapterB.connect()).rejects.toThrow('Connection cancelled by user');
+
+    const adapterC = new TrezorAdapter();
+    mockGetFeatures.mockResolvedValueOnce({ success: false, payload: {} });
+    await expect(adapterC.connect()).rejects.toThrow('Failed to connect Trezor: Failed to connect to Trezor');
   });
 
   it('maps initialization, bridge, and generic connect failures', async () => {
@@ -378,6 +406,47 @@ describe('TrezorAdapter class', () => {
     const genericFailure = new TrezorAdapter();
     mockGetFeatures.mockRejectedValueOnce(new Error('exploded'));
     await expect(genericFailure.connect()).rejects.toThrow('Failed to connect Trezor: exploded');
+
+    const unknownFailure = new TrezorAdapter();
+    mockGetFeatures.mockRejectedValueOnce('exploded');
+    await expect(unknownFailure.connect()).rejects.toThrow('Failed to connect Trezor: Unknown error');
+  });
+
+  it('uses model fallback values when feature id/label are missing and fp request is unsuccessful', async () => {
+    mockGetFeatures.mockResolvedValueOnce({
+      success: true,
+      payload: {
+        internal_model: 'T3T1',
+        pin_protection: false,
+        unlocked: true,
+        passphrase_protection: false,
+      },
+    });
+    mockGetPublicKey.mockResolvedValueOnce({
+      success: false,
+      payload: {},
+    });
+
+    const adapter = new TrezorAdapter();
+    const device = await adapter.connect();
+
+    expect(device.id).toBe('trezor-unknown');
+    expect(device.model).toBe('Trezor Safe 5');
+    expect(device.name).toBe('Trezor Safe 5');
+    expect(device.fingerprint).toBeUndefined();
+  });
+
+  it('continues connecting when fingerprint request throws an exception', async () => {
+    mockGetPublicKey.mockImplementationOnce(async () => {
+      throw new Error('fingerprint unavailable');
+    });
+
+    const adapter = new TrezorAdapter();
+    const device = await adapter.connect();
+
+    expect(device.connected).toBe(true);
+    expect(device.fingerprint).toBeUndefined();
+    expect(adapter.isConnected()).toBe(true);
   });
 
   it.each([
@@ -463,6 +532,22 @@ describe('TrezorAdapter class', () => {
     );
   });
 
+  it('falls back to empty fingerprint when master and parent fingerprints are unavailable', async () => {
+    const adapter = new TrezorAdapter();
+    mockGetPublicKey.mockResolvedValueOnce({
+      success: true,
+      payload: { xpub: 'xpub-master-no-fp' },
+    });
+    await adapter.connect();
+
+    mockGetPublicKey.mockResolvedValueOnce({
+      success: true,
+      payload: { xpub: 'xpub-child-no-fp' },
+    });
+    const result = await adapter.getXpub("m/84'/0'/0'");
+    expect(result.fingerprint).toBe('');
+  });
+
   it('maps getXpub cancellation errors', async () => {
     const adapter = new TrezorAdapter();
     await adapter.connect();
@@ -493,6 +578,13 @@ describe('TrezorAdapter class', () => {
     });
     await expect(adapterB.getXpub("m/84'/0'/0'")).rejects.toThrow(
       'Failed to get xpub from Trezor: Failed to get public key'
+    );
+
+    const adapterC = new TrezorAdapter();
+    await adapterC.connect();
+    mockGetPublicKey.mockRejectedValueOnce('bridge-failed');
+    await expect(adapterC.getXpub("m/84'/0'/0'")).rejects.toThrow(
+      'Failed to get xpub from Trezor: Unknown error'
     );
   });
 

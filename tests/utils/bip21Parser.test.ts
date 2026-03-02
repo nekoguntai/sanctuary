@@ -210,6 +210,14 @@ describe('BIP21 Parser', () => {
 
         expect(result?.amount).toBe(50000000);
       });
+
+      it('should return null when parameter decoding throws', () => {
+        const result = parseBip21Uri(
+          'bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa?label=%E0%A4%A'
+        );
+
+        expect(result).toBeNull();
+      });
     });
   });
 

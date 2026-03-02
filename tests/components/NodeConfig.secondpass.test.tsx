@@ -217,6 +217,100 @@ describe('NodeConfig second-pass branches', () => {
     });
   });
 
+  it('covers pool-stats fetch rejection path during initial load', async () => {
+    vi.mocked(bitcoinApi.getStatus).mockRejectedValueOnce(new Error('pool stats failed'));
+
+    render(<NodeConfig />);
+    await waitFor(() => {
+      expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(bitcoinApi.getStatus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('covers proxy-test exception catch path', async () => {
+    vi.mocked(adminApi.testProxy).mockRejectedValueOnce(new Error('proxy throw'));
+
+    render(<NodeConfig />);
+    await waitFor(() => {
+      expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('proxy-test'));
+    await waitFor(() => {
+      expect(screen.getByText('proxy throw')).toBeInTheDocument();
+    });
+  });
+
+  it('executes save-success timeout callback and clears success banner', async () => {
+    const timeoutCallbacks: Array<() => void | Promise<void>> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((cb: TimerHandler, ms?: number) => {
+        if (typeof cb === 'function' && ms === 3000) {
+          timeoutCallbacks.push(cb as () => void);
+          return realSetTimeout(() => {}, ms);
+        }
+        return realSetTimeout(cb, ms);
+      }) as typeof setTimeout);
+
+    try {
+      render(<NodeConfig />);
+      await waitFor(() => {
+        expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Save All Settings'));
+      await waitFor(() => {
+        expect(screen.getByText('Node configuration saved successfully')).toBeInTheDocument();
+      });
+
+      expect(timeoutCallbacks.length).toBeGreaterThan(0);
+      await act(async () => {
+        timeoutCallbacks.forEach((cb) => cb());
+      });
+      expect(screen.queryByText('Node configuration saved successfully')).not.toBeInTheDocument();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('executes proxy test reset timeout callback after result is shown', async () => {
+    const timeoutCallbacks: Array<() => void | Promise<void>> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((cb: TimerHandler, ms?: number) => {
+        if (typeof cb === 'function' && ms === 10000) {
+          timeoutCallbacks.push(cb as () => void);
+          return realSetTimeout(() => {}, ms);
+        }
+        return realSetTimeout(cb, ms);
+      }) as typeof setTimeout);
+
+    try {
+      render(<NodeConfig />);
+      await waitFor(() => {
+        expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('proxy-test'));
+      await waitFor(() => {
+        expect(screen.getByText('ok')).toBeInTheDocument();
+      });
+
+      expect(timeoutCallbacks.length).toBeGreaterThan(0);
+      await act(async () => {
+        timeoutCallbacks.forEach((cb) => cb());
+      });
+      expect(screen.queryByText('ok')).not.toBeInTheDocument();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it('returns early on save when nodeConfig is missing', async () => {
     vi.mocked(adminApi.getNodeConfig).mockResolvedValueOnce(null as any);
     vi.mocked(adminApi.getTorContainerStatus).mockResolvedValueOnce(null as any);
@@ -267,6 +361,57 @@ describe('NodeConfig second-pass branches', () => {
     expect(adminApi.getTorContainerStatus).toHaveBeenCalledTimes(3);
   });
 
+  it('runs post-toggle refresh timeout callback and handles explicit refresh success/failure', async () => {
+    const timeoutCallbacks: Array<() => void | Promise<void>> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((cb: TimerHandler, ms?: number) => {
+        if (typeof cb === 'function' && ms === 2000) {
+          timeoutCallbacks.push(cb as () => Promise<void>);
+          return realSetTimeout(() => {}, ms);
+        }
+        return realSetTimeout(cb, ms);
+      }) as typeof setTimeout);
+
+    vi.mocked(adminApi.getTorContainerStatus)
+      .mockResolvedValueOnce({ available: true, exists: true, running: true, status: 'running' } as any)
+      .mockRejectedValueOnce(new Error('deferred refresh failed'))
+      .mockResolvedValueOnce({ available: true, exists: true, running: false, status: 'exited' } as any)
+      .mockRejectedValueOnce(new Error('refresh failed'));
+    vi.mocked(adminApi.stopTorContainer).mockRejectedValueOnce(new Error('toggle failed'));
+
+    try {
+      render(<NodeConfig />);
+      await waitFor(() => {
+        expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('tor-toggle'));
+      await waitFor(() => {
+        expect(adminApi.stopTorContainer).toHaveBeenCalledTimes(1);
+      });
+
+      expect(timeoutCallbacks.length).toBeGreaterThan(0);
+      await act(async () => {
+        await Promise.all(timeoutCallbacks.map((cb) => cb()));
+      });
+      expect(adminApi.getTorContainerStatus).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByText('tor-refresh'));
+      await waitFor(() => {
+        expect(adminApi.getTorContainerStatus).toHaveBeenCalledTimes(3);
+      });
+
+      fireEvent.click(screen.getByText('tor-refresh'));
+      await waitFor(() => {
+        expect(adminApi.getTorContainerStatus).toHaveBeenCalledTimes(4);
+      });
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
   it('disables proxy when stopping bundled tor and skips null post-toggle refresh', async () => {
     vi.mocked(adminApi.getNodeConfig).mockResolvedValueOnce({
       ...baseConfig,
@@ -298,5 +443,74 @@ describe('NodeConfig second-pass branches', () => {
       await Promise.resolve();
     });
     expect(adminApi.getTorContainerStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps manual proxy settings when stopping tor without bundled proxy host', async () => {
+    vi.mocked(adminApi.getNodeConfig).mockResolvedValueOnce({
+      ...baseConfig,
+      proxyEnabled: true,
+      proxyHost: '127.0.0.1',
+      proxyPort: 9050,
+    } as any);
+    vi.mocked(adminApi.getTorContainerStatus).mockResolvedValueOnce({
+      available: true,
+      exists: true,
+      running: true,
+      status: 'running',
+    } as any);
+    vi.mocked(adminApi.stopTorContainer).mockResolvedValueOnce({ success: true, message: 'stopped' } as any);
+
+    render(<NodeConfig />);
+    await waitFor(() => {
+      expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('127.0.0.1:9050')).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByText('tor-toggle'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adminApi.stopTorContainer).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('127.0.0.1:9050')).toBeInTheDocument();
+  });
+
+  it('applies truthy post-toggle tor status refresh when initial start fails', async () => {
+    vi.mocked(adminApi.getTorContainerStatus)
+      .mockResolvedValueOnce({ available: true, exists: true, running: false, status: 'exited' } as any)
+      .mockResolvedValueOnce({ available: true, exists: true, running: true, status: 'running' } as any)
+      .mockResolvedValueOnce({ available: true, exists: true, running: true, status: 'running' } as any);
+    vi.mocked(adminApi.startTorContainer).mockResolvedValueOnce({ success: false, message: 'start failed' } as any);
+    vi.mocked(adminApi.stopTorContainer).mockResolvedValueOnce({ success: true, message: 'stopped' } as any);
+
+    render(<NodeConfig />);
+    await waitFor(() => {
+      expect(screen.getByText('Node Configuration')).toBeInTheDocument();
+    });
+
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByText('tor-toggle'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(adminApi.startTorContainer).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('tor-toggle'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(adminApi.startTorContainer).toHaveBeenCalledTimes(1);
+    expect(adminApi.stopTorContainer).toHaveBeenCalledTimes(1);
   });
 });

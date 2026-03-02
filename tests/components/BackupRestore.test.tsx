@@ -146,6 +146,13 @@ describe('BackupRestore Component', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /restore from backup/i })).toBeInTheDocument();
     });
+
+    const backupTab = screen.getByRole('button', { name: /^backup$/i });
+    await user.click(backupTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /create backup/i })).toBeInTheDocument();
+    });
   });
 
   it('should show encryption keys section', async () => {
@@ -430,6 +437,87 @@ describe('BackupRestore Component - Advanced Flows', () => {
     expect(screen.getByRole('button', { name: /restore from backup/i })).toBeDisabled();
   });
 
+  it('shows uploaded backup description when metadata includes one', async () => {
+    mockValidateBackup.mockResolvedValueOnce({
+      valid: true,
+      issues: [],
+      warnings: [],
+      info: { totalRecords: 10, tables: ['users', 'wallets'] },
+    });
+
+    const backup = {
+      meta: {
+        createdAt: '2026-01-01T00:00:00Z',
+        createdBy: 'admin',
+        appVersion: '1.0.0',
+        description: 'Nightly snapshot before migration',
+      },
+      data: {},
+    };
+
+    const { BackupRestore } = await import('../../components/BackupRestore');
+    const user = userEvent.setup();
+    const toLocaleStringSpy = vi
+      .spyOn(Date.prototype, 'toLocaleString')
+      .mockImplementationOnce(() => {
+        throw new Error('date format failed');
+      });
+
+    try {
+      await renderBackupRestore(BackupRestore);
+
+      await user.click(screen.getByRole('button', { name: /restore/i }));
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = new File([''], 'backup.json', { type: 'application/json' });
+      Object.defineProperty(file, 'text', { value: () => Promise.resolve(JSON.stringify(backup)) });
+      await user.upload(fileInput, file);
+
+      expect(await screen.findByText('"Nightly snapshot before migration"')).toBeInTheDocument();
+      expect(screen.getByText('2026-01-01T00:00:00Z')).toBeInTheDocument();
+    } finally {
+      toLocaleStringSpy.mockRestore();
+    }
+  });
+
+  it('shows validating state while uploaded backup is being validated', async () => {
+    mockValidateBackup.mockImplementationOnce(
+      () =>
+        new Promise(resolve =>
+          setTimeout(
+            () =>
+              resolve({
+                valid: true,
+                issues: [],
+                warnings: [],
+                info: { totalRecords: 10, tables: ['users', 'wallets'] },
+              }),
+            100
+          )
+        ) as any
+    );
+
+    const backup = {
+      meta: {
+        createdAt: '2026-01-01T00:00:00Z',
+        createdBy: 'admin',
+        appVersion: '1.0.0',
+      },
+      data: {},
+    };
+
+    const { BackupRestore } = await import('../../components/BackupRestore');
+    const user = userEvent.setup();
+    await renderBackupRestore(BackupRestore);
+
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([''], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(JSON.stringify(backup)) });
+    await user.upload(fileInput, file);
+
+    expect(await screen.findByText(/validating backup/i)).toBeInTheDocument();
+  });
+
   it('runs restore flow after confirmation and emits warning notifications', async () => {
     mockValidateBackup.mockResolvedValueOnce({
       valid: true,
@@ -476,5 +564,44 @@ describe('BackupRestore Component - Advanced Flows', () => {
       })
     );
     expect(screen.getByText(/database restored successfully/i)).toBeInTheDocument();
+  });
+
+  it('closes restore confirmation modal on cancel and resets confirm text', async () => {
+    mockValidateBackup.mockResolvedValueOnce({
+      valid: true,
+      issues: [],
+      warnings: [],
+      info: { totalRecords: 5, tables: ['users'] },
+    });
+
+    const backup = {
+      meta: {
+        createdAt: '2026-01-01T00:00:00Z',
+        createdBy: 'admin',
+        appVersion: '1.0.0',
+      },
+      data: {},
+    };
+
+    const { BackupRestore } = await import('../../components/BackupRestore');
+    const user = userEvent.setup();
+    await renderBackupRestore(BackupRestore);
+
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([''], 'backup.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(JSON.stringify(backup)) });
+    await user.upload(fileInput, file);
+    await screen.findByText(/backup is valid and ready to restore/i);
+
+    await user.click(screen.getByRole('button', { name: /^restore from backup$/i }));
+    const confirmInput = screen.getByPlaceholderText(/type restore/i);
+    await user.type(confirmInput, 'RESTORE');
+
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByRole('heading', { name: /confirm database restore/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^restore from backup$/i }));
+    expect(screen.getByPlaceholderText(/type restore/i)).toHaveValue('');
   });
 });

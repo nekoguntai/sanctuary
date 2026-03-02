@@ -55,9 +55,10 @@ vi.mock('../../components/UsersGroups/GroupPanel', () => ({
 }));
 
 vi.mock('../../components/UsersGroups/CreateUserModal', () => ({
-  CreateUserModal: ({ isOpen, onCreate }: any) =>
+  CreateUserModal: ({ isOpen, onCreate, onClose }: any) =>
     isOpen ? (
       <div data-testid="mock-create-user-modal">
+        <button onClick={onClose}>close-create-user</button>
         <button
           onClick={() =>
             onCreate({
@@ -87,9 +88,10 @@ vi.mock('../../components/UsersGroups/CreateUserModal', () => ({
 }));
 
 vi.mock('../../components/UsersGroups/EditUserModal', () => ({
-  EditUserModal: ({ user, onUpdate }: any) => (
+  EditUserModal: ({ user, onUpdate, onClose }: any) => (
     <div data-testid="mock-edit-user-modal">
       <span data-testid="editing-user-state">{user ? 'set' : 'empty'}</span>
+      <button onClick={onClose}>close-edit-user</button>
       <button
         onClick={() =>
           onUpdate({
@@ -147,9 +149,10 @@ vi.mock('../../components/UsersGroups/EditUserModal', () => ({
 }));
 
 vi.mock('../../components/UsersGroups/EditGroupModal', () => ({
-  EditGroupModal: ({ group, onUpdate }: any) => (
+  EditGroupModal: ({ group, onUpdate, onClose }: any) => (
     <div data-testid="mock-edit-group-modal">
       <span data-testid="editing-group-state">{group ? 'set' : 'empty'}</span>
+      <button onClick={onClose}>close-edit-group</button>
       <button
         onClick={() =>
           onUpdate({
@@ -259,6 +262,25 @@ describe('UsersGroups branch coverage', () => {
     });
   });
 
+  it('covers edit-user email fallback compare branch when existing email is missing', async () => {
+    const user = userEvent.setup();
+    vi.mocked(adminApi.getUsers).mockResolvedValue([
+      {
+        ...users[0],
+        email: undefined,
+      },
+    ] as any);
+
+    render(<UsersGroups />);
+    await waitFor(() => expect(screen.getByTestId('mock-user-panel')).toBeInTheDocument());
+
+    await user.click(screen.getByText('open-edit-user'));
+    await user.click(screen.getByText('update-user-nochange'));
+    await waitFor(() => {
+      expect(adminApi.updateUser).toHaveBeenCalledWith('user-1', {});
+    });
+  });
+
   it('keeps edit-user modal open when update fails (result null branch)', async () => {
     const user = userEvent.setup();
     vi.mocked(adminApi.updateUser).mockRejectedValueOnce(new Error('update failed'));
@@ -321,5 +343,47 @@ describe('UsersGroups branch coverage', () => {
     });
 
     expect(screen.getByTestId('editing-group-state')).toHaveTextContent('set');
+  });
+
+  it('covers delete-user and delete-group API failure handlers', async () => {
+    const user = userEvent.setup();
+    vi.mocked(adminApi.deleteUser).mockRejectedValueOnce(new Error('delete user failed'));
+    vi.mocked(adminApi.deleteGroup).mockRejectedValueOnce(new Error('delete group failed'));
+
+    render(<UsersGroups />);
+    await waitFor(() => expect(screen.getByTestId('mock-user-panel')).toBeInTheDocument());
+
+    await user.click(screen.getByText('delete-first-user'));
+    await waitFor(() => expect(adminApi.deleteUser).toHaveBeenCalledWith('user-1'));
+
+    await user.click(screen.getByText('delete-first-group'));
+    await waitFor(() => expect(adminApi.deleteGroup).toHaveBeenCalledWith('group-1'));
+  });
+
+  it('covers modal close handlers for create-user, edit-user, and edit-group', async () => {
+    const user = userEvent.setup();
+    render(<UsersGroups />);
+    await waitFor(() => expect(screen.getByTestId('mock-user-panel')).toBeInTheDocument());
+
+    await user.click(screen.getByText('open-create-user'));
+    expect(screen.getByTestId('mock-create-user-modal')).toBeInTheDocument();
+    await user.click(screen.getByText('close-create-user'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('mock-create-user-modal')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('open-edit-user'));
+    expect(screen.getByTestId('editing-user-state')).toHaveTextContent('set');
+    await user.click(screen.getByText('close-edit-user'));
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-user-state')).toHaveTextContent('empty');
+    });
+
+    await user.click(screen.getByText('open-edit-group'));
+    expect(screen.getByTestId('editing-group-state')).toHaveTextContent('set');
+    await user.click(screen.getByText('close-edit-group'));
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-group-state')).toHaveTextContent('empty');
+    });
   });
 });

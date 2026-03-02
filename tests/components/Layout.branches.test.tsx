@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Layout } from '../../components/Layout/Layout';
@@ -198,6 +198,19 @@ describe('Layout branch coverage', () => {
     });
   });
 
+  it('continues processing remaining wallets when draft fetch fails for one wallet', async () => {
+    vi.mocked(draftsApi.getDrafts)
+      .mockRejectedValueOnce(new Error('draft fetch failed'))
+      .mockResolvedValueOnce([]);
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(draftsApi.getDrafts).toHaveBeenCalledTimes(2);
+      expect(removeNotificationsByType).toHaveBeenCalledWith('pending_drafts', 'wallet-2');
+    });
+  });
+
   it('uses fallback message and no admin action for disconnected non-admin status', async () => {
     vi.mocked(bitcoinApi.getStatus).mockResolvedValue({
       connected: false,
@@ -324,6 +337,18 @@ describe('Layout branch coverage', () => {
   it('handles clipboard success path', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
+    const timeoutCallbacks: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((cb: TimerHandler, ms?: number) => {
+        if (typeof cb === 'function' && ms === 2000) {
+          timeoutCallbacks.push(cb as () => void);
+          return 0 as unknown as ReturnType<typeof setTimeout>;
+        }
+        return realSetTimeout(cb, ms);
+      }) as typeof setTimeout);
+
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
@@ -338,6 +363,14 @@ describe('Layout branch coverage', () => {
       expect(writeText).toHaveBeenCalledWith('bc1q-test-address');
       expect(screen.getByTestId('copied-address')).toHaveTextContent('btc');
     });
+
+    expect(timeoutCallbacks.length).toBeGreaterThan(0);
+    act(() => {
+      timeoutCallbacks.forEach((callback) => callback());
+    });
+    expect(screen.getByTestId('copied-address')).toHaveTextContent('none');
+
+    setTimeoutSpy.mockRestore();
   });
 
   it('handles clipboard failure path', async () => {

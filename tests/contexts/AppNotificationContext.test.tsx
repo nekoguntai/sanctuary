@@ -432,6 +432,33 @@ describe('AppNotificationContext', () => {
 
       expect(result.current.notifications).toHaveLength(1);
     });
+
+    it('should keep non-target notifications when dismissing one item', () => {
+      const { result } = renderHook(() => useAppNotifications(), { wrapper });
+
+      let dismissId: string;
+      act(() => {
+        dismissId = result.current.addNotification({
+          type: 'update_available',
+          scope: 'global',
+          title: 'Dismiss Me',
+          dismissible: true,
+        });
+        result.current.addNotification({
+          type: 'sync_error',
+          scope: 'global',
+          title: 'Keep Me',
+          dismissible: true,
+        });
+      });
+
+      act(() => {
+        result.current.dismissNotification(dismissId);
+      });
+
+      expect(result.current.notifications).toHaveLength(1);
+      expect(result.current.notifications[0].title).toBe('Keep Me');
+    });
   });
 
   describe('filtered getters', () => {
@@ -619,6 +646,20 @@ describe('AppNotificationContext', () => {
 
       expect(result.current.getTotalCount()).toBe(1);
     });
+
+    it('should default global count to 1 when global notification count is missing', () => {
+      const { result } = renderHook(() => useAppNotifications(), { wrapper });
+
+      act(() => {
+        result.current.addNotification({
+          type: 'update_available',
+          scope: 'global',
+          title: 'Global Update',
+        });
+      });
+
+      expect(result.current.getGlobalCount()).toBe(1);
+    });
   });
 
   describe('hasNotificationType', () => {
@@ -754,9 +795,114 @@ describe('AppNotificationContext', () => {
 
       expect(result.current.notifications[0].persistent).toBe(false);
     });
+
+    it('handles JSON parse errors when loading notifications', async () => {
+      const getItemSpy = vi
+        .spyOn(localStorage, 'getItem')
+        .mockImplementation((key: string) =>
+          key === 'sanctuary_app_notifications' ? '{bad-json' : null
+        );
+
+      try {
+        const { result } = renderHook(() => useAppNotifications(), { wrapper });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(getItemSpy).toHaveBeenCalledWith('sanctuary_app_notifications');
+        expect(result.current.notifications).toHaveLength(0);
+      } finally {
+        getItemSpy.mockRestore();
+      }
+    });
+
+    it('handles serialization errors when saving notifications', async () => {
+      const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(() => {
+        throw new Error('serialization failed');
+      });
+
+      try {
+        const { result } = renderHook(() => useAppNotifications(), { wrapper });
+        act(() => {
+          result.current.addNotification({
+            type: 'backup_reminder',
+            scope: 'global',
+            title: 'Save Fallback',
+            persistent: true,
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(result.current.notifications).toHaveLength(1);
+      } finally {
+        stringifySpy.mockRestore();
+      }
+    });
   });
 
   describe('expiration', () => {
+    it('should load persisted notifications and keep only non-expired entries', async () => {
+      const now = Date.now();
+      const persisted = [
+        {
+          id: 'persist-no-expiry',
+          type: 'update_available',
+          scope: 'global',
+          severity: 'info',
+          title: 'No Expiry',
+          dismissible: true,
+          persistent: true,
+          createdAt: new Date(now - 1000).toISOString(),
+        },
+        {
+          id: 'persist-future-expiry',
+          type: 'sync_error',
+          scope: 'global',
+          severity: 'warning',
+          title: 'Future Expiry',
+          dismissible: true,
+          persistent: true,
+          createdAt: new Date(now - 1000).toISOString(),
+          expiresAt: new Date(now + 3600000).toISOString(),
+        },
+        {
+          id: 'persist-expired',
+          type: 'backup_reminder',
+          scope: 'global',
+          severity: 'info',
+          title: 'Expired',
+          dismissible: true,
+          persistent: true,
+          createdAt: new Date(now - 7200000).toISOString(),
+          expiresAt: new Date(now - 3600000).toISOString(),
+        },
+      ];
+
+      const getItemSpy = vi
+        .spyOn(localStorage, 'getItem')
+        .mockImplementation((key: string) =>
+          key === 'sanctuary_app_notifications' ? JSON.stringify(persisted) : null
+        );
+
+      try {
+        const { result } = renderHook(() => useAppNotifications(), { wrapper });
+
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(getItemSpy).toHaveBeenCalledWith('sanctuary_app_notifications');
+        expect(result.current.notifications).toHaveLength(2);
+        expect(result.current.notifications.map(n => n.id).sort()).toEqual([
+          'persist-future-expiry',
+          'persist-no-expiry',
+        ]);
+      } finally {
+        getItemSpy.mockRestore();
+      }
+    });
+
     it('should filter out expired notifications on load', () => {
       const expiredNotif = {
         id: 'expired-id',
@@ -799,6 +945,26 @@ describe('AppNotificationContext', () => {
       });
 
       expect(result.current.notifications).toHaveLength(0);
+    });
+
+    it('should keep non-expired notifications during periodic cleanup', () => {
+      const { result } = renderHook(() => useAppNotifications(), { wrapper });
+
+      act(() => {
+        result.current.addNotification({
+          type: 'update_available',
+          scope: 'global',
+          title: 'Still Valid',
+          expiresAt: new Date(Date.now() + 300000),
+        });
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(60000);
+      });
+
+      expect(result.current.notifications).toHaveLength(1);
+      expect(result.current.notifications[0].title).toBe('Still Valid');
     });
   });
 });
@@ -963,5 +1129,26 @@ describe('useDeviceNotifications', () => {
     });
 
     expect(result.current.notifications).toHaveLength(0);
+  });
+
+  it('should remove only notifications of a given type for the device scope', () => {
+    const { result } = renderHook(
+      () => useDeviceNotifications('device-remove'),
+      { wrapper }
+    );
+
+    act(() => {
+      result.current.add({ type: 'connection_error', title: 'Error 1' });
+      result.current.add({ type: 'backup_reminder', title: 'Reminder' });
+    });
+
+    expect(result.current.notifications).toHaveLength(2);
+
+    act(() => {
+      result.current.remove('connection_error');
+    });
+
+    expect(result.current.notifications).toHaveLength(1);
+    expect(result.current.notifications[0].type).toBe('backup_reminder');
   });
 });

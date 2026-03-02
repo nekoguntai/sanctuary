@@ -40,6 +40,7 @@ vi.mock('../../utils/logger', () => ({
 vi.mock('../../components/StrategySelector', () => ({
   StrategySelector: ({ onStrategyChange }: { onStrategyChange: (strategy: string) => void }) => (
     <div>
+      <button onClick={() => onStrategyChange('auto')}>mock-strategy-auto</button>
       <button onClick={() => onStrategyChange('privacy')}>mock-strategy-privacy</button>
       <button onClick={() => onStrategyChange('manual')}>mock-strategy-manual</button>
       <button onClick={() => onStrategyChange('unknown')}>mock-strategy-unknown</button>
@@ -153,6 +154,21 @@ describe('CoinControlPanel second-pass branches', () => {
     expect(mockGetWalletPrivacy).toHaveBeenCalledWith('wallet-1');
   });
 
+  it('applies privacy map when wallet-privacy fetch resolves while mounted', async () => {
+    mockGetWalletPrivacy.mockResolvedValueOnce({
+      utxos: [{ txid: 'a', vout: 0, score: { score: 90, grade: 'excellent' } }],
+      summary: { averageScore: 90, grade: 'excellent' },
+    });
+
+    render(<CoinControlPanel {...makeProps()} />);
+    fireEvent.click(screen.getByText(/Coin Control/));
+
+    await waitFor(() => {
+      expect(screen.getByText('privacy-a:0')).toBeInTheDocument();
+      expect(screen.getByText('no-privacy-b:1')).toBeInTheDocument();
+    });
+  });
+
   it('ignores stale analysis rejection and clears debounce timeout on cleanup', async () => {
     vi.useFakeTimers();
 
@@ -227,6 +243,48 @@ describe('CoinControlPanel second-pass branches', () => {
     );
   });
 
+  it('logs wallet-privacy fetch failures when panel expands', async () => {
+    mockGetWalletPrivacy.mockRejectedValueOnce(new Error('privacy failed'));
+
+    render(<CoinControlPanel {...makeProps()} />);
+    fireEvent.click(screen.getByText(/Coin Control/));
+
+    await waitFor(() => {
+      expect(mockGetWalletPrivacy).toHaveBeenCalledWith('wallet-1');
+      expect(mockLogError).toHaveBeenCalledWith(
+        'Failed to fetch wallet privacy',
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('handles cleanup when debounce timer id is falsy', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      () => 0 as unknown as ReturnType<typeof setTimeout>
+    );
+
+    const { rerender } = render(
+      <CoinControlPanel
+        {...makeProps({
+          strategy: 'manual',
+          selectedUtxos: new Set(['a:0']),
+        })}
+      />
+    );
+    fireEvent.click(screen.getByText(/Coin Control/));
+
+    rerender(
+      <CoinControlPanel
+        {...makeProps({
+          strategy: 'manual',
+          selectedUtxos: new Set(['a:0', 'b:1']),
+        })}
+      />
+    );
+
+    setTimeoutSpy.mockRestore();
+  });
+
   it('covers disabled/unknown/manual strategy exits and non-Error selection failure fallback', async () => {
     const onStrategyChange = vi.fn();
     const onSetSelectedUtxos = vi.fn();
@@ -275,6 +333,31 @@ describe('CoinControlPanel second-pass branches', () => {
     fireEvent.click(screen.getByText('mock-strategy-privacy'));
     await waitFor(() => {
       expect(screen.getByText('Selection failed')).toBeInTheDocument();
+    });
+  });
+
+  it('handles auto strategy selection path', async () => {
+    const onStrategyChange = vi.fn();
+    render(
+      <CoinControlPanel
+        {...makeProps({
+          onStrategyChange,
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByText(/Coin Control/));
+    fireEvent.click(screen.getByText('mock-strategy-auto'));
+
+    expect(onStrategyChange).toHaveBeenCalledWith('auto');
+    await waitFor(() => {
+      expect(mockSelectUtxos).toHaveBeenCalledWith(
+        'wallet-1',
+        expect.objectContaining({
+          amount: 20_000,
+          feeRate: 10,
+        })
+      );
     });
   });
 });

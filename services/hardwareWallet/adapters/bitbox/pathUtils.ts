@@ -6,10 +6,7 @@
 
 import { constants } from 'bitbox02-api';
 import * as bitcoin from 'bitcoinjs-lib';
-import { createLogger } from '../../../../utils/logger';
 import { normalizeDerivationPath } from '../../../../shared/utils/bitcoin';
-
-const log = createLogger('BitBoxAdapter');
 
 /**
  * Get script type constant from path or script type string
@@ -88,35 +85,31 @@ export const getCoin = (path: string): number => {
  * Get output type constant from address
  */
 export const getOutputType = (address: string, network: bitcoin.Network): number => {
+  // Try to decode as different address types
   try {
-    // Try to decode as different address types
-    try {
-      const decoded = bitcoin.address.fromBech32(address);
-      if (decoded.version === 0) {
-        return decoded.data.length === 20
-          ? constants.messages.BTCOutputType.P2WPKH
-          : constants.messages.BTCOutputType.P2WSH;
-      }
-      if (decoded.version === 1) {
-        return constants.messages.BTCOutputType.P2TR;
-      }
-    } catch {
-      // Not bech32
+    const decoded = bitcoin.address.fromBech32(address);
+    if (decoded.version === 0) {
+      return decoded.data.length === 20
+        ? constants.messages.BTCOutputType.P2WPKH
+        : constants.messages.BTCOutputType.P2WSH;
     }
+    if (decoded.version === 1) {
+      return constants.messages.BTCOutputType.P2TR;
+    }
+  } catch {
+    // Not bech32
+  }
 
-    try {
-      const decoded = bitcoin.address.fromBase58Check(address);
-      if (decoded.version === network.pubKeyHash) {
-        return constants.messages.BTCOutputType.P2PKH;
-      }
-      if (decoded.version === network.scriptHash) {
-        return constants.messages.BTCOutputType.P2SH;
-      }
-    } catch {
-      // Not base58
+  try {
+    const decoded = bitcoin.address.fromBase58Check(address);
+    if (decoded.version === network.pubKeyHash) {
+      return constants.messages.BTCOutputType.P2PKH;
     }
-  } catch (e) {
-    log.warn('Could not determine output type', { address, error: e });
+    if (decoded.version === network.scriptHash) {
+      return constants.messages.BTCOutputType.P2SH;
+    }
+  } catch {
+    // Not base58
   }
 
   // Default to P2WPKH

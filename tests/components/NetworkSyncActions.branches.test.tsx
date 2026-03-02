@@ -104,6 +104,18 @@ describe('NetworkSyncActions branch coverage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders fallback resync error message for unknown error types', async () => {
+    renderActions();
+    vi.mocked(syncApi.resyncNetworkWallets).mockRejectedValueOnce({});
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full Resync All Mainnet' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Resync All Wallets' }));
+    });
+
+    expect(screen.getByText('Failed to resync wallets')).toBeInTheDocument();
+  });
+
   it('handles compact dialog close via Cancel and X controls', () => {
     renderActions({ compact: true, walletCount: 3 });
 
@@ -118,6 +130,25 @@ describe('NetworkSyncActions branch coverage', () => {
     expect(xButton).not.toBeNull();
     fireEvent.click(xButton as HTMLButtonElement);
     expect(screen.queryByText('Full Resync All Mainnet Wallets')).not.toBeInTheDocument();
+  });
+
+  it('applies compact disabled styling when no wallets are available', () => {
+    renderActions({ compact: true, walletCount: 0 });
+
+    const syncButton = screen.getByTitle('Sync all Mainnet wallets');
+    const resyncButton = screen.getByTitle('Full resync all Mainnet wallets');
+
+    expect(syncButton).toBeDisabled();
+    expect(resyncButton).toBeDisabled();
+    expect(syncButton).toHaveClass('cursor-not-allowed');
+    expect(resyncButton).toHaveClass('cursor-not-allowed');
+  });
+
+  it('shows singular wallet wording in compact resync confirmation', () => {
+    renderActions({ compact: true, walletCount: 1 });
+
+    fireEvent.click(screen.getByTitle('Full resync all Mainnet wallets'));
+    expect(screen.getByText('Clear all transaction history for 1 wallet')).toBeInTheDocument();
   });
 
   it('applies compact syncing state with spinner and disabled controls', async () => {

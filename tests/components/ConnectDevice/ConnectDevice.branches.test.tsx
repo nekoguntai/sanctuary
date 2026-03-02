@@ -212,6 +212,25 @@ vi.mock('../../../components/ConnectDevice/DeviceDetailsForm', () => ({
       >
         set-one-account
       </button>
+      <button
+        onClick={() =>
+          onFormDataChange({
+            label: '',
+            fingerprint: '',
+            xpub: 'fallback-xpub',
+            derivationPath: "m/84'/0'/7'",
+            parsedAccounts: [{
+              purpose: 'single_sig',
+              scriptType: 'native_segwit',
+              derivationPath: "m/84'/0'/7'",
+              xpub: 'xpub-unselected',
+            }],
+            selectedAccounts: new Set([99]),
+          })
+        }
+      >
+        set-unselected-account
+      </button>
       <button onClick={onToggleQrDetails}>toggle-qr-details</button>
     </div>
   ),
@@ -378,6 +397,81 @@ describe('ConnectDevice branch coverage', () => {
     parseDeviceJsonMock.mockReturnValueOnce(null);
     await user.click(screen.getByRole('button', { name: 'upload-valid' }));
     expect(screen.getByText('Could not parse file. Please check the format.')).toBeInTheDocument();
+  });
+
+  it('covers QR parse branches when optional fields are missing and label replacement is allowed', async () => {
+    const user = userEvent.setup();
+    render(<ConnectDevice />);
+
+    await user.click(screen.getByRole('button', { name: 'select-model' }));
+    await user.click(screen.getByRole('button', { name: 'set-custom-label' }));
+
+    hookState.qr.scanResult = {
+      xpub: 'xpub-qr-minimal',
+      fingerprint: 'abcd1234',
+      label: 'QR Imported Label',
+      extractedFields: {
+        xpub: true,
+        fingerprint: true,
+        derivationPath: false,
+        label: true,
+      },
+      warning: null,
+    } as any;
+
+    await user.click(screen.getByRole('button', { name: 'method-qr' }));
+
+    expect(screen.getByTestId('form-label')).toHaveTextContent('QR Imported Label');
+    expect(screen.getByTestId('form-fingerprint')).toHaveTextContent('abcd1234');
+    expect(screen.getByTestId('form-derivation')).toHaveTextContent("m/84'/0'/0'");
+    expect(screen.getByTestId('form-accounts')).toHaveTextContent('0');
+  });
+
+  it('covers file parse branches for missing fingerprint/accounts and truthy-but-empty parse results', async () => {
+    const user = userEvent.setup();
+    render(<ConnectDevice />);
+
+    await user.click(screen.getByRole('button', { name: 'select-model' }));
+    await user.click(screen.getByRole('button', { name: 'method-sd' }));
+
+    parseDeviceJsonMock.mockReturnValueOnce({
+      xpub: 'xpub-only',
+      derivationPath: "m/84h/0h/7h",
+    });
+    await user.click(screen.getByRole('button', { name: 'upload-valid' }));
+
+    expect(screen.getByTestId('form-xpub')).toHaveTextContent('xpub-only');
+    expect(screen.getByTestId('form-fingerprint')).toHaveTextContent('');
+    expect(screen.getByTestId('form-derivation')).toHaveTextContent("norm:m/84h/0h/7h");
+    expect(screen.getByTestId('form-accounts')).toHaveTextContent('0');
+
+    parseDeviceJsonMock.mockReturnValueOnce({});
+    await user.click(screen.getByRole('button', { name: 'upload-valid' }));
+    expect(screen.getByText('Could not parse file. Please check the format.')).toBeInTheDocument();
+  });
+
+  it('covers save and merge account filtering when selected set does not include parsed account index', async () => {
+    const user = userEvent.setup();
+    render(<ConnectDevice />);
+
+    await user.click(screen.getByRole('button', { name: 'select-model' }));
+    await user.click(screen.getByRole('button', { name: 'set-unselected-account' }));
+
+    await user.click(screen.getByRole('button', { name: 'save-device' }));
+    expect(saveDeviceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        xpub: 'fallback-xpub',
+        derivationPath: "m/84'/0'/7'",
+      })
+    );
+
+    await user.click(screen.getByRole('button', { name: 'merge-device' }));
+    expect(mergeDeviceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        xpub: 'fallback-xpub',
+        derivationPath: "m/84'/0'/7'",
+      })
+    );
   });
 });
 

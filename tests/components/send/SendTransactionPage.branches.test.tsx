@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SendTransactionPage } from '../../../components/send/SendTransactionPage';
 import * as UserContext from '../../../contexts/UserContext';
@@ -71,6 +71,7 @@ vi.mock('../../../components/send/SendTransactionWizard', () => ({
       <span data-testid="signed-devices">{(props.initialState?.signedDevices ?? []).length}</span>
       <span data-testid="mempool-count">{props.mempoolBlocks?.length ?? 0}</span>
       <span data-testid="draft-fee">{props.draftTxData?.fee ?? ''}</span>
+      <span data-testid="outputs-valid-count">{(props.initialState?.outputsValid ?? []).length}</span>
       <button onClick={props.onCancel}>cancel</button>
     </div>
   ),
@@ -128,6 +129,14 @@ describe('SendTransactionPage branch coverage', () => {
         </Routes>
       </MemoryRouter>
     );
+
+  const createDeferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -342,5 +351,91 @@ describe('SendTransactionPage branch coverage', () => {
     expect(screen.getByTestId('selected-utxos')).toHaveTextContent('');
     expect(screen.getByTestId('show-coin-control')).toHaveTextContent('false');
     expect(showInfoMock).toHaveBeenCalledWith('2 frozen UTXOs removed from selection');
+  });
+
+  it('covers mountedRef guard after unmount before parallel requests resolve', async () => {
+    const deferredUtxos = createDeferred<any>();
+    vi.mocked(transactionsApi.getUTXOs).mockReturnValue(deferredUtxos.promise);
+
+    const view = renderPage();
+    await waitFor(() => {
+      expect(walletsApi.getWallet).toHaveBeenCalledWith('wallet-1');
+    });
+
+    view.unmount();
+
+    await act(async () => {
+      deferredUtxos.resolve(baseUtxos as any);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('wizard')).not.toBeInTheDocument();
+  });
+
+  it('covers multisig descriptor branch where no fingerprint regex match is found', async () => {
+    vi.mocked(walletsApi.getWallet).mockResolvedValue({
+      ...baseWallet,
+      type: 'multi_sig',
+      descriptor: 'wsh(sortedmulti(2,xpubA,xpubB))',
+    } as any);
+    vi.mocked(devicesApi.getDevices).mockResolvedValue([
+      { id: 'd1', type: 'ledger', label: 'Ledger', wallets: [] },
+    ] as any);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('device-count')).toHaveTextContent('0');
+  });
+
+  it('covers draft branch with no valid selected UTXOs and address fallback defaults', async () => {
+    vi.mocked(transactionsApi.getAddresses).mockResolvedValue(undefined as any);
+
+    const outputsWithoutArray = {
+      length: 1,
+      map: () => undefined,
+    };
+
+    const draft = {
+      id: 'draft-no-valid',
+      walletId: 'wallet-1',
+      userId: 'user-1',
+      recipient: 'bc1q-fallback',
+      amount: 10000,
+      feeRate: 4,
+      selectedUtxoIds: ['missing:9'],
+      enableRBF: true,
+      subtractFees: false,
+      sendMax: false,
+      isRBF: false,
+      outputs: outputsWithoutArray,
+      psbtBase64: 'unsigned',
+      fee: 350,
+      totalInput: 12000,
+      totalOutput: 11650,
+      changeAmount: 1650,
+      effectiveAmount: 10000,
+      inputPaths: [],
+      status: 'unsigned',
+      signedDeviceIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    renderPage({ draft });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('selected-utxos')).toHaveTextContent('');
+    expect(screen.getByTestId('show-coin-control')).toHaveTextContent('false');
+    expect(screen.getByTestId('tx-type')).toHaveTextContent('standard');
+    expect(screen.getByTestId('outputs-valid-count')).toHaveTextContent('0');
+    expect(showInfoMock).toHaveBeenCalledWith('1 UTXOs are no longer available');
   });
 });

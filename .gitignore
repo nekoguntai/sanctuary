@@ -38,6 +38,7 @@ sanctuary-backup-*.json
 
 # Test outputs
 coverage/
+coverage-*/
 junit.xml
 *.lcov
 

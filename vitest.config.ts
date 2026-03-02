@@ -28,8 +28,31 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary', 'lcov'],
-      include: ['hooks/**/*.ts', 'components/**/*.tsx', 'utils/**/*.ts', 'contexts/**/*.tsx'],
-      exclude: ['**/*.test.{ts,tsx}', '**/tests/**', '**/__tests__/**'],
+      include: [
+        'App.tsx',
+        'index.tsx',
+        'hooks/**/*.{ts,tsx}',
+        'components/**/*.{ts,tsx}',
+        'utils/**/*.ts',
+        'contexts/**/*.{ts,tsx}',
+        'src/**/*.ts',
+        'services/**/*.ts',
+        'shared/**/*.ts',
+        'providers/**/*.{ts,tsx}',
+        'themes/**/*.ts',
+      ],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        '**/tests/**',
+        '**/__tests__/**',
+        '**/*.d.ts',
+        '**/coverage/**',
+        '**/dist/**',
+        '**/node_modules/**',
+        'components/animations/**',
+        'src/types/**/*.ts',
+        'shared/types/**/*.ts',
+      ],
       reportsDirectory: './coverage',
       thresholds: {
         // Thresholds updated after Batch 1-3 test coverage implementation (2026-01-11)

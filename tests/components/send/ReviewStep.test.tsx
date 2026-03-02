@@ -163,11 +163,10 @@ describe('ReviewStep', () => {
       expect(screen.getByText('bc1qtest...')).toBeInTheDocument();
     });
 
-    // Skip: Requires txData to be set in context for accurate rendering
-    it.skip('renders recipient amount', () => {
+    it('renders recipient amount', () => {
       render(<ReviewStep />);
 
-      expect(screen.getByText('50000 sats')).toBeInTheDocument();
+      expect(screen.getAllByText('50000 sats').length).toBeGreaterThan(0);
     });
 
     it('renders MAX for sendMax outputs', () => {
@@ -230,11 +229,10 @@ describe('ReviewStep', () => {
       expect(screen.getByText('25 sat/vB')).toBeInTheDocument();
     });
 
-    // Skip: Requires txData with changeAmount to render change section
-    it.skip('renders change amount when applicable', () => {
+    it('renders change amount when applicable', () => {
       render(<ReviewStep />);
 
-      expect(screen.getByText('Change')).toBeInTheDocument();
+      expect(screen.getByText('49000 sats')).toBeInTheDocument();
     });
 
     it('renders total including fee', () => {
@@ -284,21 +282,21 @@ describe('ReviewStep', () => {
   });
 
   describe('Edit functionality', () => {
-    // Skip: "Change" text appears in multiple contexts (amount section, edit buttons)
-    it.skip('calls goToStep when clicking Change on type', async () => {
+    it('calls goToStep when clicking Change on type', async () => {
       const user = userEvent.setup();
       render(<ReviewStep />);
 
-      await user.click(screen.getByText('Change'));
+      const changeButtons = screen.getAllByRole('button', { name: 'Change' });
+      await user.click(changeButtons[0]);
 
       expect(mockGoToStep).toHaveBeenCalledWith('type');
     });
 
-    // Skip: Component rendering depends on txData which isn't mocked
-    it.skip('hides edit buttons in draft mode', () => {
+    it('hides edit buttons in draft mode', () => {
       render(<ReviewStep isDraftMode={true} />);
 
-      expect(screen.queryByText('Change')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     });
   });
 
@@ -388,12 +386,10 @@ describe('ReviewStep', () => {
     });
   });
 
-  // Skip: Multi-sig signing tests require complex txData setup and device integration
-  // Better tested via E2E tests
-  describe.skip('Multi-sig signing', () => {
+  describe('Multi-sig signing', () => {
     const multisigContext = {
       ...defaultContext,
-      wallet: { id: 'wallet-1', name: 'Test Wallet', type: 'multisig:2/3', quorum: { m: 2, n: 3 } },
+      wallet: { id: 'wallet-1', name: 'Test Wallet', type: 'multi_sig', quorum: { m: 2, n: 3 } },
       devices: [
         { id: 'device-1', type: 'coldcard', label: 'ColdCard 1', fingerprint: 'ABC123' },
         { id: 'device-2', type: 'ledger', label: 'Ledger 1', fingerprint: 'DEF456' },
@@ -440,7 +436,7 @@ describe('ReviewStep', () => {
 
       render(<ReviewStep txData={{} as any} unsignedPsbt="base64psbt" />);
 
-      expect(screen.getByText('USB')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'USB' }).length).toBeGreaterThan(0);
     });
 
     it('renders QR Code button for QR-capable devices', () => {
@@ -448,7 +444,7 @@ describe('ReviewStep', () => {
 
       render(<ReviewStep txData={{} as any} unsignedPsbt="base64psbt" />);
 
-      expect(screen.getByText('QR Code')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'QR Code' }).length).toBeGreaterThan(0);
     });
 
     it('renders Download/Upload buttons for airgap devices', () => {
@@ -476,7 +472,7 @@ describe('ReviewStep', () => {
 
     it('calls onBroadcastSigned when clicking Broadcast', async () => {
       const user = userEvent.setup();
-      const onBroadcastSigned = vi.fn();
+      const onBroadcastSigned = vi.fn().mockResolvedValue(true);
       vi.mocked(SendContext.useSendTransaction).mockReturnValue(multisigContext as any);
 
       render(
@@ -496,7 +492,7 @@ describe('ReviewStep', () => {
 
   // Skip: QR Signing Modal tests require complex txData setup and modal integration
   // Better tested via E2E tests
-  describe.skip('QR Signing Modal', () => {
+  describe('QR Signing Modal', () => {
     it('opens QR modal when clicking QR Code button', async () => {
       const user = userEvent.setup();
       vi.mocked(SendContext.useSendTransaction).mockReturnValue({

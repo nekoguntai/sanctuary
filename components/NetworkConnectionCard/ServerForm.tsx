@@ -25,8 +25,11 @@ export const ServerForm: React.FC<ServerFormProps> = ({
   onAddPreset,
   onCancel,
   onSubmit,
-}) => (
-  <div className="mt-3 p-4 surface-muted rounded-xl space-y-3">
+}) => {
+  const isSubmitting = serverActionLoading === 'add' || (!!editingServerId && serverActionLoading === editingServerId);
+
+  return (
+    <div className="mt-3 p-4 surface-muted rounded-xl space-y-3">
     <div className="text-sm font-medium text-sanctuary-700 dark:text-sanctuary-300">
       {editingServerId ? 'Edit Server' : 'Add New Server'}
     </div>
@@ -94,9 +97,9 @@ export const ServerForm: React.FC<ServerFormProps> = ({
           variant="primary"
           size="sm"
           onClick={onSubmit}
-          disabled={!newServer.label || !newServer.host || serverActionLoading === 'add' || serverActionLoading === editingServerId}
+          disabled={!newServer.label || !newServer.host || isSubmitting}
         >
-          {(serverActionLoading === 'add' || serverActionLoading === editingServerId) ? (
+          {isSubmitting ? (
             <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> {editingServerId ? 'Updating' : 'Adding'}</>
           ) : (
             editingServerId ? 'Update Server' : 'Add Server'
@@ -105,4 +108,5 @@ export const ServerForm: React.FC<ServerFormProps> = ({
       </div>
     </div>
   </div>
-);
+  );
+};

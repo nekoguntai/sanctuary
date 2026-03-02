@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NetworkConnectionCard } from '../../components/NetworkConnectionCard';
 import * as adminApi from '../../src/api/admin';
@@ -308,18 +308,25 @@ describe('NetworkConnectionCard', () => {
       });
     });
 
-    // Skip: Complex form interaction with dialog state management
-    // Better tested via E2E tests
-    it.skip('adds new server', async () => {
+    it('adds new server', async () => {
       const user = userEvent.setup();
       render(<NetworkConnectionCard {...defaultProps} />);
 
       await user.click(screen.getByText('Add Server'));
 
-      await user.type(screen.getByPlaceholderText('My Server'), 'Test Server');
-      await user.type(screen.getByPlaceholderText('electrum.example.com'), 'test.example.com');
+      fireEvent.change(screen.getByPlaceholderText('My Server'), { target: { value: 'Test Server' } });
+      fireEvent.change(screen.getByPlaceholderText('electrum.example.com'), { target: { value: 'test.example.com' } });
 
-      await user.click(screen.getByRole('button', { name: 'Add Server' }));
+      const formTitle = screen.getByText('Add New Server');
+      const formContainer = formTitle.closest('div')?.parentElement;
+      expect(formContainer).toBeTruthy();
+      const submitButton = within(formContainer as HTMLElement)
+        .getAllByRole('button')
+        .find(button => /Add Server|Adding/i.test(button.textContent || ''));
+      expect(submitButton).toBeTruthy();
+      if (submitButton && !submitButton.hasAttribute('disabled')) {
+        await user.click(submitButton);
+      }
 
       await waitFor(() => {
         expect(adminApi.addElectrumServer).toHaveBeenCalledWith(

@@ -417,5 +417,205 @@ describe('ManualAccountForm', () => {
         })
       );
     });
+
+    it('should set BIP-48 nested suffix when changing purpose to multisig', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'single_sig',
+        scriptType: 'nested_segwit',
+        derivationPath: "m/49'/0'/0'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const purposeSelect = screen.getAllByRole('combobox')[0];
+      await user.selectOptions(purposeSelect, 'multisig');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'multisig',
+          derivationPath: "m/48'/0'/0'/1'",
+        })
+      );
+    });
+
+    it('should set BIP-48 fallback suffix when changing purpose to multisig with taproot', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'single_sig',
+        scriptType: 'taproot',
+        derivationPath: "m/86'/0'/0'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const purposeSelect = screen.getAllByRole('combobox')[0];
+      await user.selectOptions(purposeSelect, 'multisig');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'multisig',
+          derivationPath: "m/48'/0'/0'/2'",
+        })
+      );
+    });
+
+    it('should set BIP-86 path when changing purpose to single_sig with taproot', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'multisig',
+        scriptType: 'taproot',
+        derivationPath: "m/48'/0'/0'/2'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const purposeSelect = screen.getAllByRole('combobox')[0];
+      await user.selectOptions(purposeSelect, 'single_sig');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'single_sig',
+          derivationPath: "m/86'/0'/0'",
+        })
+      );
+    });
+
+    it('should set BIP-49 path when changing purpose to single_sig with nested_segwit', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'multisig',
+        scriptType: 'nested_segwit',
+        derivationPath: "m/48'/0'/0'/1'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const purposeSelect = screen.getAllByRole('combobox')[0];
+      await user.selectOptions(purposeSelect, 'single_sig');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'single_sig',
+          derivationPath: "m/49'/0'/0'",
+        })
+      );
+    });
+
+    it('should set BIP-44 path when changing purpose to single_sig with legacy', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'multisig',
+        scriptType: 'legacy',
+        derivationPath: "m/48'/0'/0'/2'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const purposeSelect = screen.getAllByRole('combobox')[0];
+      await user.selectOptions(purposeSelect, 'single_sig');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'single_sig',
+          derivationPath: "m/44'/0'/0'",
+        })
+      );
+    });
+
+    it('should set multisig native suffix when script type changes to native_segwit', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'multisig',
+        scriptType: 'taproot',
+        derivationPath: "m/48'/0'/0'/2'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const scriptTypeSelect = screen.getAllByRole('combobox')[1];
+      await user.selectOptions(scriptTypeSelect, 'native_segwit');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scriptType: 'native_segwit',
+          derivationPath: "m/48'/0'/0'/2'",
+        })
+      );
+    });
+
+    it('should set multisig fallback suffix when script type changes to taproot', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'multisig',
+        scriptType: 'nested_segwit',
+        derivationPath: "m/48'/0'/0'/1'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const scriptTypeSelect = screen.getAllByRole('combobox')[1];
+      await user.selectOptions(scriptTypeSelect, 'taproot');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scriptType: 'taproot',
+          derivationPath: "m/48'/0'/0'/2'",
+        })
+      );
+    });
+
+    it('should set BIP-84 path when script type changes to native_segwit for single_sig', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const account: ManualAccountData = {
+        purpose: 'single_sig',
+        scriptType: 'taproot',
+        derivationPath: "m/86'/0'/0'",
+        xpub: '',
+      };
+
+      render(
+        <ManualAccountForm {...defaultProps} account={account} onChange={onChange} />
+      );
+
+      const scriptTypeSelect = screen.getAllByRole('combobox')[1];
+      await user.selectOptions(scriptTypeSelect, 'native_segwit');
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scriptType: 'native_segwit',
+          derivationPath: "m/84'/0'/0'",
+        })
+      );
+    });
   });
 });

@@ -1,0 +1,386 @@
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { Device } from '../../../types';
+
+const mockNavigate = vi.fn();
+const mockGetDevices = vi.fn();
+const mockGetDeviceModels = vi.fn();
+const mockUpdateDevice = vi.fn();
+const mockDeleteDevice = vi.fn();
+const mockUpdatePreferences = vi.fn();
+const extractErrorMessageMock = vi.fn((error: unknown, fallback: string) => {
+  const message = error instanceof Error ? error.message : '';
+  return message || fallback;
+});
+const loggerErrorMock = vi.fn();
+
+let currentUser: any = null;
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
+
+vi.mock('../../../src/api/devices', () => ({
+  getDevices: () => mockGetDevices(),
+  getDeviceModels: () => mockGetDeviceModels(),
+  updateDevice: (...args: unknown[]) => mockUpdateDevice(...args),
+  deleteDevice: (...args: unknown[]) => mockDeleteDevice(...args),
+}));
+
+vi.mock('../../../contexts/UserContext', () => ({
+  useUser: () => ({
+    user: currentUser,
+    updatePreferences: mockUpdatePreferences,
+  }),
+}));
+
+vi.mock('../../../hooks/useLoadingState', () => ({
+  useLoadingState: () => ({
+    loading: false,
+    execute: async (fn: () => Promise<void>) => {
+      await fn();
+    },
+  }),
+}));
+
+vi.mock('../../../utils/errorHandler', () => ({
+  extractErrorMessage: (...args: unknown[]) => extractErrorMessageMock(...args),
+}));
+
+vi.mock('../../../utils/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: (...args: unknown[]) => loggerErrorMock(...args),
+  }),
+}));
+
+vi.mock('../../../components/DeviceList/EmptyState', () => ({
+  EmptyState: () => <div data-testid="empty-state">EMPTY</div>,
+}));
+
+vi.mock('../../../components/columns/deviceColumns', () => ({
+  DEVICE_COLUMNS: [],
+  DEFAULT_DEVICE_COLUMN_ORDER: ['label', 'type', 'fingerprint'],
+  DEFAULT_DEVICE_VISIBLE_COLUMNS: ['label', 'type', 'fingerprint'],
+  mergeDeviceColumnOrder: (order?: string[]) => order || ['label', 'type', 'fingerprint'],
+}));
+
+vi.mock('../../../components/cells/DeviceCells', () => ({
+  createDeviceCellRenderers: vi.fn(() => ({})),
+}));
+
+vi.mock('../../../components/DeviceList/DeviceListHeader', () => ({
+  DeviceListHeader: ({
+    setViewMode,
+    setOwnershipFilter,
+    onColumnVisibilityChange,
+  }: {
+    setViewMode: (mode: 'list' | 'grouped') => void;
+    setOwnershipFilter: (mode: 'all' | 'owned' | 'shared') => void;
+    onColumnVisibilityChange: (columnId: string, visible: boolean) => void;
+  }) => (
+    <div>
+      <button onClick={() => setViewMode('list')}>Set List</button>
+      <button onClick={() => setViewMode('grouped')}>Set Grouped</button>
+      <button onClick={() => setOwnershipFilter('owned')}>Filter Owned</button>
+      <button onClick={() => setOwnershipFilter('shared')}>Filter Shared</button>
+      <button onClick={() => onColumnVisibilityChange('type', true)}>Show Type Column</button>
+    </div>
+  ),
+}));
+
+vi.mock('../../../components/ui/ConfigurableTable', () => ({
+  ConfigurableTable: ({
+    data,
+    keyExtractor,
+    onSort,
+    onRowClick,
+  }: {
+    data: Device[];
+    keyExtractor: (device: Device) => string;
+    onSort?: (field: string) => void;
+    onRowClick?: (device: Device) => void;
+  }) => (
+    <div>
+      <button onClick={() => onSort?.('label')}>Sort Label</button>
+      <button onClick={() => onSort?.('type')}>Sort Type</button>
+      <button onClick={() => onSort?.('fingerprint')}>Sort Fingerprint</button>
+      <button onClick={() => onSort?.('wallets')}>Sort Wallets</button>
+      {data.map((device) => (
+        <div
+          key={keyExtractor(device)}
+          data-testid="table-row"
+          onClick={() => onRowClick?.(device)}
+        >
+          {device.label}
+        </div>
+      ))}
+    </div>
+  ),
+}));
+
+vi.mock('../../../components/DeviceList/DeviceGroupedView', () => ({
+  DeviceGroupedView: ({
+    groupedDevices,
+    getDeviceDisplayName,
+    getWalletCount,
+    handleEdit,
+    handleSave,
+    handleDelete,
+  }: {
+    groupedDevices: Record<string, Device[]>;
+    getDeviceDisplayName: (type: string) => string;
+    getWalletCount: (device: Device) => number;
+    handleEdit: (device: Device) => void;
+    handleSave: (device: Device) => void;
+    handleDelete: (device: Device) => void;
+  }) => {
+    const allDevices = Object.values(groupedDevices).flat();
+    const first = allDevices[0];
+    return (
+      <div data-testid="grouped-view">
+        <div data-testid="name-ledger">{getDeviceDisplayName('ledger')}</div>
+        <div data-testid="name-mystery">{getDeviceDisplayName('mystery')}</div>
+        <div data-testid="name-empty">{getDeviceDisplayName('')}</div>
+        {allDevices.map((device, i) => (
+          <div key={device.id} data-testid={`wallet-count-${i}`}>
+            {getWalletCount(device)}
+          </div>
+        ))}
+        {first && (
+          <>
+            <button onClick={() => handleEdit(first)}>Edit First</button>
+            <button onClick={() => handleSave(first)}>Save First</button>
+            <button onClick={() => handleDelete(first)}>Delete First</button>
+          </>
+        )}
+      </div>
+    );
+  },
+}));
+
+import { DeviceList } from '../../../components/DeviceList/DeviceList';
+
+const makeUser = (devicesPrefs: Record<string, unknown>) => ({
+  id: 'user-1',
+  preferences: {
+    viewSettings: {
+      devices: devicesPrefs,
+    },
+  },
+});
+
+const makeDevice = (overrides: Partial<Device> = {}): Device => ({
+  id: 'device-1',
+  userId: 'user-1',
+  label: 'Device 1',
+  type: 'ledger',
+  fingerprint: 'ffff1111',
+  xpub: 'xpub-1',
+  derivationPath: "m/84'/0'/0'",
+  createdAt: '2025-01-01T00:00:00.000Z',
+  updatedAt: '2025-01-01T00:00:00.000Z',
+  wallets: [],
+  isOwner: true,
+  isShared: false,
+  ...overrides,
+});
+
+describe('DeviceList branch coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentUser = null;
+    mockGetDevices.mockResolvedValue([]);
+    mockGetDeviceModels.mockResolvedValue([]);
+    mockUpdateDevice.mockResolvedValue({});
+    mockDeleteDevice.mockResolvedValue(undefined);
+  });
+
+  it('covers no-user branch and preference fallbacks', async () => {
+    render(<DeviceList />);
+
+    expect(await screen.findByTestId('empty-state')).toBeInTheDocument();
+    expect(mockGetDevices).not.toHaveBeenCalled();
+    expect(mockGetDeviceModels).not.toHaveBeenCalled();
+  });
+
+  it('covers sort toggle branch and visible-column add branch', async () => {
+    const user = userEvent.setup();
+    currentUser = makeUser({
+      layout: 'list',
+      sortBy: 'label',
+      sortOrder: 'desc',
+      ownershipFilter: 'all',
+      visibleColumns: ['label'],
+      columnOrder: ['label'],
+    });
+    mockGetDevices.mockResolvedValue([makeDevice()]);
+
+    render(<DeviceList />);
+
+    await screen.findByTestId('table-row');
+
+    await user.click(screen.getByRole('button', { name: 'Show Type Column' }));
+    await user.click(screen.getByRole('button', { name: 'Sort Label' }));
+    await user.click(screen.getByRole('button', { name: 'Sort Type' }));
+
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            visibleColumns: ['label', 'type'],
+          }),
+        }),
+      })
+    );
+    expect(mockUpdatePreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        viewSettings: expect.objectContaining({
+          devices: expect.objectContaining({
+            sortBy: 'label',
+            sortOrder: 'asc',
+          }),
+        }),
+      })
+    );
+  });
+
+  it('covers grouped edit/save unchanged, update error, delete error, and display/wallet fallbacks', async () => {
+    const user = userEvent.setup();
+    currentUser = makeUser({
+      layout: 'grouped',
+      sortBy: 'label',
+      sortOrder: 'asc',
+      ownershipFilter: 'all',
+      visibleColumns: ['label', 'type'],
+      columnOrder: ['label', 'type'],
+    });
+
+    const devices = [
+      makeDevice({
+        id: 'd1',
+        label: 'Alpha',
+        type: 'ledger',
+        model: undefined,
+        walletCount: 7,
+      }),
+      makeDevice({
+        id: 'd2',
+        label: 'Beta',
+        type: 'trezor',
+        walletCount: undefined,
+        wallets: [{ wallet: { id: 'w-1', name: 'Wallet 1', type: 'single_sig' } }] as any,
+      }),
+      makeDevice({
+        id: 'd3',
+        label: 'Gamma',
+        type: 'keystone',
+        walletCount: undefined,
+        wallets: undefined,
+      }),
+    ];
+    mockGetDevices.mockResolvedValue(devices);
+    mockGetDeviceModels.mockResolvedValue([{ slug: 'ledger', name: 'Ledger X' }]);
+
+    render(<DeviceList />);
+    await screen.findByTestId('grouped-view');
+
+    expect(screen.getByTestId('name-ledger')).toHaveTextContent('Ledger X');
+    expect(screen.getByTestId('name-mystery')).toHaveTextContent('mystery');
+    expect(screen.getByTestId('name-empty')).toHaveTextContent('Unknown Device');
+    expect(screen.getByTestId('wallet-count-0')).toHaveTextContent('7');
+    expect(screen.getByTestId('wallet-count-1')).toHaveTextContent('1');
+    expect(screen.getByTestId('wallet-count-2')).toHaveTextContent('0');
+
+    await user.click(screen.getByRole('button', { name: 'Edit First' }));
+    await user.click(screen.getByRole('button', { name: 'Save First' }));
+    await waitFor(() => {
+      expect(mockUpdateDevice).toHaveBeenCalledWith('d1', {});
+    });
+
+    mockUpdateDevice.mockRejectedValueOnce(new Error('update failed'));
+    await user.click(screen.getByRole('button', { name: 'Save First' }));
+    await waitFor(() => {
+      expect(loggerErrorMock).toHaveBeenCalledWith('Failed to update device', expect.any(Object));
+    });
+
+    mockDeleteDevice.mockRejectedValueOnce(new Error('delete failed'));
+    await user.click(screen.getByRole('button', { name: 'Delete First' }));
+    await waitFor(() => {
+      expect(loggerErrorMock).toHaveBeenCalledWith('Failed to delete device', expect.any(Object));
+      expect(extractErrorMessageMock).toHaveBeenCalledWith(expect.any(Error), 'Failed to delete device');
+    });
+  });
+
+  it('covers ownership filters and sort switch branches', async () => {
+    const devices = [
+      makeDevice({ id: 'o1', label: 'Owned Trezor', isOwner: true, type: 'trezor', fingerprint: 'ccc', walletCount: 1 }),
+      makeDevice({ id: 'o2', label: 'Owned Ledger', isOwner: true, type: 'ledger', fingerprint: 'aaa', wallets: [{ wallet: { id: 'w1', name: 'W1', type: 'single_sig' } }] as any, walletCount: undefined }),
+      makeDevice({ id: 's1', label: 'Shared Coldcard', isOwner: false, isShared: true, type: 'coldcard', fingerprint: 'bbb', walletCount: 3 }),
+      makeDevice({ id: 's2', label: 'Shared Bitbox', isOwner: false, isShared: true, type: 'bitbox', fingerprint: 'ddd', walletCount: 0 }),
+    ];
+    mockGetDevices.mockResolvedValue(devices);
+
+    currentUser = makeUser({
+      layout: 'list',
+      sortBy: 'type',
+      sortOrder: 'asc',
+      ownershipFilter: 'owned',
+      visibleColumns: ['label'],
+      columnOrder: ['label'],
+    });
+    const ownedView = render(<DeviceList />);
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('table-row').map(row => row.textContent);
+      expect(rows).toEqual(['Owned Ledger', 'Owned Trezor']);
+    });
+    ownedView.unmount();
+
+    currentUser = makeUser({
+      layout: 'list',
+      sortBy: 'fingerprint',
+      sortOrder: 'asc',
+      ownershipFilter: 'shared',
+      visibleColumns: ['label'],
+      columnOrder: ['label'],
+    });
+    const sharedView = render(<DeviceList />);
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('table-row').map(row => row.textContent);
+      expect(rows).toEqual(['Shared Coldcard', 'Shared Bitbox']);
+    });
+    sharedView.unmount();
+
+    currentUser = makeUser({
+      layout: 'list',
+      sortBy: 'wallets',
+      sortOrder: 'desc',
+      ownershipFilter: 'all',
+      visibleColumns: ['label'],
+      columnOrder: ['label'],
+    });
+    const walletsView = render(<DeviceList />);
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('table-row').map(row => row.textContent);
+      expect(rows[0]).toBe('Shared Coldcard');
+    });
+    walletsView.unmount();
+
+    currentUser = makeUser({
+      layout: 'list',
+      sortBy: 'unknown',
+      sortOrder: 'asc',
+      ownershipFilter: 'all',
+      visibleColumns: ['label'],
+      columnOrder: ['label'],
+    });
+    render(<DeviceList />);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('table-row').length).toBe(4);
+    });
+  });
+});

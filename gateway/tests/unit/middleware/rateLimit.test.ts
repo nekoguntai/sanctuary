@@ -6,6 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import request from 'supertest';
 import {
   defaultRateLimiter,
   strictRateLimiter,
@@ -20,6 +22,7 @@ import {
   backoffTracker,
 } from '../../../src/middleware/rateLimit';
 import { AuthenticatedRequest } from '../../../src/middleware/auth';
+import { logSecurityEvent } from '../../../src/middleware/requestLogger';
 
 // Mock the config
 vi.mock('../../../src/config', () => ({
@@ -42,10 +45,42 @@ vi.mock('../../../src/middleware/requestLogger', () => ({
 }));
 
 describe('Rate Limiting Middleware', () => {
+  const invokeLimiterUntilBlocked = async (
+    middleware: (req: Request, res: Response, next: NextFunction) => void,
+    max: number,
+    options?: { userId?: string; path?: string; ip?: string }
+  ) => {
+    const path = options?.path || '/api/v1/test';
+    const ip = options?.ip || '198.51.100.100';
+    const userId = options?.userId;
+    const app = express();
+    app.set('trust proxy', true);
+    app.use((req, _res, next) => {
+      if (userId) {
+        (req as AuthenticatedRequest).user = {
+          userId,
+          username: 'test-user',
+        } as any;
+      }
+      next();
+    });
+    app.use(middleware);
+    app.get(path, (_req, res) => {
+      res.status(200).json({ ok: true });
+    });
+
+    let response = await request(app).get(path).set('x-forwarded-for', ip).set('user-agent', 'vitest-agent');
+    for (let i = 0; i < max; i++) {
+      response = await request(app).get(path).set('x-forwarded-for', ip).set('user-agent', 'vitest-agent');
+    }
+    return response;
+  };
+
   beforeEach(() => {
     // Clear backoff tracker between tests
     backoffTracker.clear();
     vi.useFakeTimers();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -227,6 +262,108 @@ describe('Rate Limiting Middleware', () => {
 
         expect(typeof addressGenerationRateLimiter).toBe('function');
       });
+    });
+  });
+
+  describe('Rate limiter handlers (429 paths)', () => {
+    it('defaultRateLimiter emits 429 payload and security log', async () => {
+      const response = await invokeLimiterUntilBlocked(defaultRateLimiter, 60, {
+        userId: 'default-user',
+        path: '/api/v1/wallets',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.error).toBe('Too Many Requests');
+      expect(response.body.retryAfter).toBeTypeOf('number');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'default', userId: 'default-user' })
+      );
+    });
+
+    it('strictRateLimiter emits strict 429 response', async () => {
+      const response = await invokeLimiterUntilBlocked(strictRateLimiter, 10, {
+        userId: 'strict-user',
+        path: '/api/v1/devices/register',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.retryAfter).toBe(3600);
+      expect(response.body.message).toContain('Please try again later');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'strict', userId: 'strict-user' })
+      );
+    });
+
+    it('authRateLimiter emits auth 429 response with high severity log', async () => {
+      const response = await invokeLimiterUntilBlocked(authRateLimiter, 15, {
+        path: '/api/v1/auth/login',
+        ip: '203.0.113.10',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.message).toContain('Too many login attempts');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'AUTH_RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'auth', severity: 'high' })
+      );
+    });
+
+    it('transactionCreateRateLimiter emits tier-specific 429 response', async () => {
+      const response = await invokeLimiterUntilBlocked(transactionCreateRateLimiter, 10, {
+        userId: 'tx-user',
+        path: '/api/v1/wallets/123/transactions/create',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.message).toContain('10/min');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'transaction_create', severity: 'medium' })
+      );
+    });
+
+    it('broadcastRateLimiter emits tier-specific 429 response', async () => {
+      const response = await invokeLimiterUntilBlocked(broadcastRateLimiter, 5, {
+        userId: 'broadcast-user',
+        path: '/api/v1/wallets/123/transactions/broadcast',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.message).toContain('5/min');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'broadcast', severity: 'high' })
+      );
+    });
+
+    it('deviceRegistrationRateLimiter emits tier-specific 429 response', async () => {
+      const response = await invokeLimiterUntilBlocked(deviceRegistrationRateLimiter, 3, {
+        userId: 'device-user',
+        path: '/api/v1/push/register',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.message).toContain('3/hr');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'device_registration', severity: 'medium' })
+      );
+    });
+
+    it('addressGenerationRateLimiter emits tier-specific 429 response', async () => {
+      const response = await invokeLimiterUntilBlocked(addressGenerationRateLimiter, 20, {
+        userId: 'address-user',
+        path: '/api/v1/wallets/123/addresses/generate',
+      });
+
+      expect(response.status).toBe(429);
+      expect(response.body.message).toContain('20/min');
+      expect(vi.mocked(logSecurityEvent)).toHaveBeenCalledWith(
+        'RATE_LIMIT_EXCEEDED',
+        expect.objectContaining({ tier: 'address_generation', severity: 'low' })
+      );
     });
   });
 

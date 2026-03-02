@@ -403,6 +403,128 @@ describe('SendTransactionWizard', () => {
         expect(signPSBT).toHaveBeenCalled();
       });
     });
+
+    it('broadcasts signed raw transaction directly when available', async () => {
+      const user = userEvent.setup();
+      const broadcastTransaction = vi.fn();
+      const createTransaction = vi.fn();
+
+      vi.mocked(useSendTransactionActionsHook.useSendTransactionActions).mockReturnValue({
+        ...defaultActionsValue,
+        txData: { psbtBase64: 'already-created' },
+        signedRawTx: '0200000001deadbeef',
+        createTransaction,
+        broadcastTransaction,
+      } as any);
+
+      vi.mocked(SendContext.useSendTransaction).mockReturnValue({
+        ...defaultContextValue,
+        currentStep: 'review',
+        isReadyToSign: true,
+      } as any);
+
+      renderWizard();
+      await user.click(screen.getByTestId('broadcast-btn'));
+
+      expect(broadcastTransaction).toHaveBeenCalledWith(undefined, '0200000001deadbeef');
+      expect(createTransaction).not.toHaveBeenCalled();
+    });
+
+    it('creates transaction when txData is missing and broadcasts uploaded signed PSBT', async () => {
+      const user = userEvent.setup();
+      const createTransaction = vi.fn().mockResolvedValue({ psbtBase64: 'unsigned-from-create' });
+      const broadcastTransaction = vi.fn();
+
+      vi.mocked(useSendTransactionActionsHook.useSendTransactionActions).mockReturnValue({
+        ...defaultActionsValue,
+        txData: null,
+        signedDevices: new Set(['device-1']),
+        unsignedPsbt: 'signed-psbt',
+        createTransaction,
+        broadcastTransaction,
+      } as any);
+
+      vi.mocked(SendContext.useSendTransaction).mockReturnValue({
+        ...defaultContextValue,
+        currentStep: 'review',
+        isReadyToSign: true,
+      } as any);
+
+      renderWizard();
+      await user.click(screen.getByTestId('broadcast-btn'));
+
+      await waitFor(() => {
+        expect(createTransaction).toHaveBeenCalled();
+      });
+      expect(broadcastTransaction).toHaveBeenCalledWith('signed-psbt');
+    });
+
+    it('creates PSBT for external signing when no signing method is available', async () => {
+      const user = userEvent.setup();
+      const createTransaction = vi.fn().mockResolvedValue({ psbtBase64: 'unsigned-created' });
+      const broadcastTransaction = vi.fn();
+
+      vi.mocked(useSendTransactionActionsHook.useSendTransactionActions).mockReturnValue({
+        ...defaultActionsValue,
+        txData: { psbtBase64: 'already-created' },
+        signedDevices: new Set<string>(),
+        unsignedPsbt: null,
+        createTransaction,
+        broadcastTransaction,
+      } as any);
+
+      vi.mocked(SendContext.useSendTransaction).mockReturnValue({
+        ...defaultContextValue,
+        currentStep: 'review',
+        isReadyToSign: true,
+      } as any);
+
+      renderWizard();
+      await user.click(screen.getByTestId('broadcast-btn'));
+
+      await waitFor(() => {
+        expect(createTransaction).toHaveBeenCalledTimes(1);
+      });
+      expect(broadcastTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('step transitions', () => {
+    it('resets actions when leaving review step in non-draft mode', async () => {
+      const reset = vi.fn();
+      const contextReview = {
+        ...defaultContextValue,
+        currentStep: 'review' as const,
+        isReadyToSign: true,
+        state: {
+          ...defaultContextValue.state,
+          isDraftMode: false,
+        },
+      };
+      const contextOutputs = {
+        ...contextReview,
+        currentStep: 'outputs' as const,
+      };
+
+      vi.mocked(SendContext.useSendTransaction)
+        .mockReturnValueOnce(contextReview as any)
+        .mockReturnValueOnce(contextOutputs as any);
+      vi.mocked(useSendTransactionActionsHook.useSendTransactionActions).mockReturnValue({
+        ...defaultActionsValue,
+        reset,
+      } as any);
+
+      const view = renderWizard();
+      view.rerender(
+        <MemoryRouter>
+          <SendTransactionWizard {...defaultProps} />
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(reset).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe('loading states', () => {

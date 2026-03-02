@@ -68,6 +68,9 @@ vi.mock('../../../components/send/SendTransactionWizard', () => ({
     <div data-testid="send-wizard">
       <span data-testid="wizard-wallet-name">{props.wallet?.name}</span>
       <span data-testid="wizard-utxo-count">{props.utxos?.length}</span>
+      <span data-testid="wizard-initial-step">{props.initialState?.currentStep ?? ''}</span>
+      <span data-testid="wizard-draft-id">{props.initialState?.draftId ?? ''}</span>
+      <span data-testid="wizard-draft-fee">{props.draftTxData?.fee ?? ''}</span>
       <button data-testid="wizard-cancel" onClick={props.onCancel}>Cancel</button>
     </div>
   ),
@@ -295,16 +298,30 @@ describe('SendTransactionPage', () => {
   });
 
   describe('draft loading', () => {
-    // Skip: This test requires complex setup with location state and API mocking
-    // that is difficult to coordinate in unit tests. Better tested via E2E.
-    it.skip('loads draft from location state', async () => {
+    it('loads draft from location state', async () => {
       const draftData = {
         id: 'draft-1',
+        walletId: 'wallet-1',
+        userId: 'user-1',
         psbtBase64: 'cHNidP8...',
+        feeRate: 25,
+        selectedUtxoIds: ['abc123:0'],
+        enableRBF: true,
+        subtractFees: false,
+        sendMax: false,
+        isRBF: false,
         status: 'unsigned',
+        signedDeviceIds: [],
         recipient: 'bc1qrecipient...',
-        effectiveAmount: 50000,
+        amount: 50000,
         fee: 1000,
+        totalInput: 100000,
+        totalOutput: 99000,
+        changeAmount: 49000,
+        effectiveAmount: 50000,
+        inputPaths: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       render(
@@ -318,6 +335,10 @@ describe('SendTransactionPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('send-wizard')).toBeInTheDocument();
       });
+
+      expect(screen.getByTestId('wizard-initial-step')).toHaveTextContent('review');
+      expect(screen.getByTestId('wizard-draft-id')).toHaveTextContent('draft-1');
+      expect(screen.getByTestId('wizard-draft-fee')).toHaveTextContent('1000');
     });
   });
 

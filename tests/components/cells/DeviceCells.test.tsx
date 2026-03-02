@@ -290,4 +290,255 @@ describe('DeviceCells', () => {
     expect(setDeleteConfirmId).toHaveBeenCalledWith(null);
     expect(setDeleteError).toHaveBeenCalledWith(null);
   });
+
+  it('renders account badges for multisig and singlesig paths, including undefined accounts fallback', () => {
+    const renderers = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: null,
+        deleteError: null,
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    const { rerender } = render(
+      <renderers.accounts
+        item={{ ...baseDevice, accounts: undefined, derivationPath: "m/84'/0'/0'/0/0" } as any}
+        column={baseColumn}
+      />
+    );
+    expect(screen.getByText("m/84'/0'/0'/0/0")).toBeInTheDocument();
+
+    rerender(
+      <renderers.accounts
+        item={{
+          ...baseDevice,
+          accounts: [
+            {
+              id: 'acct-multi',
+              deviceId: 'device-1',
+              derivationPath: "m/48'/0'/0'/2'",
+              purpose: 'multisig',
+              scriptType: 'native_segwit',
+              accountIndex: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            {
+              id: 'acct-single',
+              deviceId: 'device-1',
+              derivationPath: "m/84'/0'/0'",
+              purpose: 'single_sig',
+              scriptType: 'native_segwit',
+              accountIndex: 1,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        } as any}
+        column={baseColumn}
+      />
+    );
+
+    expect(screen.getByTitle('Multisig (native_segwit)')).toBeInTheDocument();
+    expect(screen.getByTitle('Single-sig (native_segwit)')).toBeInTheDocument();
+  });
+
+  it('renders wallet badges for multisig, singlesig, and default wallet type fallback', () => {
+    const renderers = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: null,
+        deleteError: null,
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    render(
+      <renderers.wallets
+        item={{
+          ...baseDevice,
+          walletCount: 3,
+          wallets: [
+            { wallet: { id: 'w1', name: 'Multi Wallet', type: 'multi_sig' } },
+            { wallet: { id: 'w2', name: 'Single Wallet', type: 'single_sig' } },
+            { wallet: { id: 'w3', name: 'Legacy Wallet', type: '' } },
+          ],
+        } as any}
+        column={baseColumn}
+      />
+    );
+
+    expect(screen.getByText('Multi Wallet')).toBeInTheDocument();
+    expect(screen.getByText('Single Wallet')).toBeInTheDocument();
+    expect(screen.getByText('Legacy Wallet')).toBeInTheDocument();
+    expect(screen.getAllByTestId('wallet-icon')).toHaveLength(3);
+  });
+
+  it('renders singular wallet fallback badge when count is one and wallets list is missing', () => {
+    const renderers = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: null,
+        deleteError: null,
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    render(
+      <renderers.wallets
+        item={{ ...baseDevice, wallets: undefined, walletCount: 1 } as any}
+        column={baseColumn}
+      />
+    );
+
+    expect(screen.getByText('1 wallet')).toBeInTheDocument();
+  });
+
+  it('hides action cell for non-owners or devices with attached wallets', () => {
+    const renderers = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: null,
+        deleteError: null,
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    const { container, rerender } = render(
+      <renderers.actions item={{ ...baseDevice, isOwner: false, walletCount: 0 }} column={baseColumn} />
+    );
+    expect(container.firstChild).toBeNull();
+
+    rerender(<renderers.actions item={{ ...baseDevice, isOwner: true, walletCount: 1 }} column={baseColumn} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('shows delete error only for the currently confirmed device id', () => {
+    const renderers = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: 'device-1',
+        deleteError: 'Cannot delete device',
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    const { rerender } = render(<renderers.actions item={baseDevice} column={baseColumn} />);
+    expect(screen.getByText('Cannot delete device')).toBeInTheDocument();
+
+    const renderersMismatch = createDeviceCellRenderers(
+      {
+        editingId: null,
+        editValue: '',
+        editType: '',
+        setEditingId: vi.fn(),
+        setEditValue: vi.fn(),
+        setEditType: vi.fn(),
+      },
+      {
+        deleteConfirmId: 'other-device',
+        deleteError: 'Cannot delete device',
+        setDeleteConfirmId: vi.fn(),
+        setDeleteError: vi.fn(),
+      },
+      {
+        handleEdit: vi.fn(),
+        handleSave: vi.fn(),
+        handleDelete: vi.fn(),
+      },
+      {
+        getDeviceDisplayName: (type: string) => `Display ${type}`,
+        deviceModels: [],
+      }
+    );
+
+    rerender(<renderersMismatch.actions item={baseDevice} column={baseColumn} />);
+    expect(screen.queryByText('Cannot delete device')).not.toBeInTheDocument();
+  });
 });

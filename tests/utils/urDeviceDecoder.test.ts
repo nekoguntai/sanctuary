@@ -113,6 +113,8 @@ const {
   MockPathComponent,
   MockOrigin,
   MockCryptoHDKey,
+  MockCryptoOutput,
+  MockCryptoAccount,
 } = registry;
 
 import {
@@ -122,7 +124,7 @@ import {
   getUrType,
   isUrFormat,
 } from '../../utils/urDeviceDecoder';
-import { CryptoAccount, CryptoHDKey, CryptoOutput } from '@keystonehq/bc-ur-registry';
+import type { CryptoHDKey } from '@keystonehq/bc-ur-registry';
 
 describe('urDeviceDecoder', () => {
   beforeEach(() => {
@@ -131,24 +133,24 @@ describe('urDeviceDecoder', () => {
 
   it('extracts source fingerprint before parent fingerprint', () => {
     const origin = new MockOrigin(Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]));
-    const hdKey = new CryptoHDKey('xpub-1', origin, Buffer.from([1, 2, 3, 4]));
+    const hdKey = new MockCryptoHDKey('xpub-1', origin, Buffer.from([1, 2, 3, 4]));
 
-    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('aabbccdd');
+    expect(extractFingerprintFromHdKey(hdKey as unknown as CryptoHDKey)).toBe('aabbccdd');
   });
 
   it('falls back to parent fingerprint when source fingerprint is unavailable', () => {
-    const hdKey = new CryptoHDKey(
+    const hdKey = new MockCryptoHDKey(
       'xpub-2',
       new MockOrigin(undefined),
       Buffer.from([0xde, 0xad, 0xbe, 0xef])
     );
 
-    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('deadbeef');
+    expect(extractFingerprintFromHdKey(hdKey as unknown as CryptoHDKey)).toBe('deadbeef');
   });
 
   it('returns empty fingerprint when no fingerprint data is available', () => {
-    const hdKey = new CryptoHDKey('xpub-3', null, undefined, true);
-    expect(extractFingerprintFromHdKey(hdKey as unknown as MockCryptoHDKey)).toBe('');
+    const hdKey = new MockCryptoHDKey('xpub-3', null, undefined, true);
+    expect(extractFingerprintFromHdKey(hdKey as unknown as CryptoHDKey)).toBe('');
   });
 
   it('extracts xpub/fingerprint/path from CryptoHDKey UR result', () => {
@@ -157,7 +159,7 @@ describe('urDeviceDecoder', () => {
       new MockPathComponent(0, true),
       new MockPathComponent(0, true),
     ]);
-    const hdKey = new CryptoHDKey('xpub-hd-key', origin);
+    const hdKey = new MockCryptoHDKey('xpub-hd-key', origin);
 
     expect(extractFromUrResult(hdKey)).toEqual({
       xpub: 'xpub-hd-key',
@@ -167,7 +169,7 @@ describe('urDeviceDecoder', () => {
   });
 
   it('returns empty path/fingerprint when CryptoHDKey has no origin data', () => {
-    const hdKey = new CryptoHDKey('xpub-no-origin', null, undefined);
+    const hdKey = new MockCryptoHDKey('xpub-no-origin', null, undefined);
 
     expect(extractFromUrResult(hdKey)).toEqual({
       xpub: 'xpub-no-origin',
@@ -182,7 +184,7 @@ describe('urDeviceDecoder', () => {
       new MockPathComponent(0, false),
       new MockPathComponent(5, false),
     ]);
-    const hdKey = new CryptoHDKey('xpub-non-hardened', origin);
+    const hdKey = new MockCryptoHDKey('xpub-non-hardened', origin);
 
     expect(extractFromUrResult(hdKey)).toEqual({
       xpub: 'xpub-non-hardened',
@@ -196,7 +198,7 @@ describe('urDeviceDecoder', () => {
       getSourceFingerprint: () => Buffer.from([0x01, 0x02, 0x03, 0x04]),
       getComponents: () => undefined,
     };
-    const hdKey = new CryptoHDKey('xpub-weird-origin', weirdOrigin as unknown as MockOrigin);
+    const hdKey = new MockCryptoHDKey('xpub-weird-origin', weirdOrigin as unknown as InstanceType<typeof MockOrigin>);
 
     expect(extractFromUrResult(hdKey)).toEqual({
       xpub: 'xpub-weird-origin',
@@ -211,7 +213,7 @@ describe('urDeviceDecoder', () => {
       new MockPathComponent(0, true),
       new MockPathComponent(0, true),
     ]);
-    const output = new CryptoOutput(new CryptoHDKey('xpub-output', origin));
+    const output = new MockCryptoOutput(new MockCryptoHDKey('xpub-output', origin));
 
     expect(extractFromUrResult(output)).toEqual({
       xpub: 'xpub-output',
@@ -221,16 +223,16 @@ describe('urDeviceDecoder', () => {
   });
 
   it('returns null for CryptoOutput without an HDKey', () => {
-    const output = new CryptoOutput(null);
+    const output = new MockCryptoOutput(null);
     expect(extractFromUrResult(output)).toBeNull();
   });
 
   it('prefers BIP84 output when extracting from CryptoAccount UR result', () => {
-    const account = new CryptoAccount(
+    const account = new MockCryptoAccount(
       Buffer.from([0xab, 0xcd, 0xef, 0x01]),
       [
-        new CryptoOutput(
-          new CryptoHDKey(
+        new MockCryptoOutput(
+          new MockCryptoHDKey(
             'xpub-nested',
             new MockOrigin(undefined, [
               new MockPathComponent(49, true),
@@ -239,8 +241,8 @@ describe('urDeviceDecoder', () => {
             ])
           )
         ),
-        new CryptoOutput(
-          new CryptoHDKey(
+        new MockCryptoOutput(
+          new MockCryptoHDKey(
             'xpub-native',
             new MockOrigin(undefined, [
               new MockPathComponent(84, true),
@@ -260,11 +262,11 @@ describe('urDeviceDecoder', () => {
   });
 
   it('falls back to first account output when no BIP84 path exists', () => {
-    const account = new CryptoAccount(
+    const account = new MockCryptoAccount(
       Buffer.from([0x10, 0x20, 0x30, 0x40]),
       [
-        new CryptoOutput(
-          new CryptoHDKey(
+        new MockCryptoOutput(
+          new MockCryptoHDKey(
             'xpub-first',
             new MockOrigin(undefined, [
               new MockPathComponent(48, true),
@@ -284,12 +286,12 @@ describe('urDeviceDecoder', () => {
   });
 
   it('returns null when CryptoAccount outputs have no HDKeys', () => {
-    const account = new CryptoAccount(undefined, [new CryptoOutput(null)]);
+    const account = new MockCryptoAccount(undefined, [new MockCryptoOutput(null)]);
     expect(extractFromUrResult(account)).toBeNull();
   });
 
   it('returns null when CryptoAccount has no outputs', () => {
-    const account = new CryptoAccount(undefined, []);
+    const account = new MockCryptoAccount(undefined, []);
     expect(extractFromUrResult(account)).toBeNull();
   });
 

@@ -54,7 +54,7 @@ function loadConfig(): CombinedConfig {
   const databaseUrl = process.env.DATABASE_URL || '';
   const workerHealthPort = parseInt(process.env.WORKER_HEALTH_PORT || '3002', 10);
   const defaultWorkerHost = nodeEnv === 'production' ? 'worker' : 'localhost';
-  const workerHealthUrl = process.env.WORKER_HEALTH_URL || `http://${defaultWorkerHost}:${workerHealthPort}/health`;
+  const workerHealthUrl = process.env.WORKER_HEALTH_URL || `http://${defaultWorkerHost}:${workerHealthPort}/ready`;
   const workerHealthTimeoutMs = parseInt(process.env.WORKER_HEALTH_TIMEOUT_MS || '3000', 10);
   const workerHealthCheckIntervalMs = parseInt(process.env.WORKER_HEALTH_CHECK_INTERVAL_MS || '10000', 10);
 

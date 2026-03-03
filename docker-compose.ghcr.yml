@@ -62,7 +62,7 @@ services:
       redis:
         condition: service_healthy
       worker:
-        condition: service_healthy
+        condition: service_started
     environment:
       # Server
       NODE_ENV: ${NODE_ENV:-production}
@@ -86,7 +86,7 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET:?GATEWAY_SECRET is required}
 
       # Worker heartbeat (required)
-      WORKER_HEALTH_URL: ${WORKER_HEALTH_URL:-http://worker:3002/health}
+      WORKER_HEALTH_URL: ${WORKER_HEALTH_URL:-http://worker:3002/ready}
 
       # Bitcoin Network
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-mainnet}

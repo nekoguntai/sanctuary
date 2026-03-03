@@ -247,16 +247,16 @@ jobs:
           POSTGRES_PASSWORD=$(openssl rand -base64 16 | tr -d '=/+' | head -c 24)
           cd docker/nginx/ssl && ./generate-certs.sh localhost && cd ../../..
           # Build first, then start (migrate container needs backend image)
-          # Set LOGIN_RATE_LIMIT=100 for testing to avoid rate limit issues
+          # Raise auth rate limits for stressy auth-flow test sequences
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
-            LOGIN_RATE_LIMIT=100 \
+            RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
             docker compose build
           JWT_SECRET="$JWT_SECRET" ENCRYPTION_KEY="$ENCRYPTION_KEY" \
             GATEWAY_SECRET="$GATEWAY_SECRET" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
             HTTPS_PORT=$HTTPS_PORT HTTP_PORT=$HTTP_PORT \
-            LOGIN_RATE_LIMIT=100 \
+            RATE_LIMIT_LOGIN=100 RATE_LIMIT_PASSWORD_CHANGE=100 \
             docker compose up -d
 
       - name: Wait for migration to complete

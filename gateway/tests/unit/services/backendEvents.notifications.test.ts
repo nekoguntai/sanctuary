@@ -111,6 +111,22 @@ describe('backendEvents notifications formatter', () => {
     expect(second).toBeNull();
   });
 
+  it('uses zero-amount fallback for first confirmation when amount is missing', () => {
+    const notification = formatNotificationForEvent({
+      type: 'confirmation',
+      walletId: 'wallet-1',
+      data: { confirmations: 1, txid: 'tx-fallback' },
+    });
+
+    expect(mockFormatTransactionNotification).toHaveBeenCalledWith(
+      'confirmed',
+      'Wallet',
+      0,
+      'tx-fallback'
+    );
+    expect(notification).not.toBeNull();
+  });
+
   it('formats broadcast success/failure with defaults', () => {
     const success = formatNotificationForEvent({
       type: 'broadcast_success',
@@ -132,6 +148,22 @@ describe('backendEvents notifications formatter', () => {
       'rejected by mempool'
     );
     expect(failed).not.toBeNull();
+  });
+
+  it('returns null for broadcast success events missing txid', () => {
+    const notification = formatNotificationForEvent({
+      type: 'broadcast_success',
+      walletId: 'wallet-1',
+      walletName: 'Main Wallet',
+      data: {},
+    });
+
+    expect(notification).toBeNull();
+    expect(mockFormatBroadcastNotification).not.toHaveBeenCalledWith(
+      true,
+      expect.any(String),
+      expect.any(String)
+    );
   });
 
   it('formats PSBT signing requests with default signer counts and creator', () => {

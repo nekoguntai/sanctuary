@@ -81,10 +81,17 @@ echo "Running Prisma generate + migrate deploy..."
 echo "Running server integration tests..."
 (
   cd "$PROJECT_ROOT/server"
-  TEST_DATABASE_URL="$TEST_DATABASE_URL" \
-  DATABASE_URL="$TEST_DATABASE_URL" \
-  NODE_ENV=test \
-  npm run test:integration
+  if [[ "$#" -gt 0 ]]; then
+    TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+    DATABASE_URL="$TEST_DATABASE_URL" \
+    NODE_ENV=test \
+    npx vitest run --no-file-parallelism --maxWorkers 1 "$@"
+  else
+    TEST_DATABASE_URL="$TEST_DATABASE_URL" \
+    DATABASE_URL="$TEST_DATABASE_URL" \
+    NODE_ENV=test \
+    npm run test:integration
+  fi
 )
 
 echo "Integration tests completed."

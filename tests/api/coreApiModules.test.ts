@@ -343,6 +343,23 @@ describe('Core API Modules', () => {
       );
     });
 
+    it('calls autopilot settings and status endpoints', async () => {
+      mockGet.mockResolvedValue({ settings: { enabled: true, targetUtxoCount: 5 } });
+      mockPatch.mockResolvedValue({});
+
+      const settings = await walletsApi.getWalletAutopilotSettings('w1');
+      await walletsApi.updateWalletAutopilotSettings('w1', { enabled: false });
+
+      expect(settings).toEqual({ enabled: true, targetUtxoCount: 5 });
+      expect(mockGet).toHaveBeenCalledWith('/wallets/w1/autopilot');
+      expect(mockPatch).toHaveBeenCalledWith('/wallets/w1/autopilot', { enabled: false });
+
+      mockGet.mockResolvedValue({ healthy: true, utxoCount: 10 });
+      const status = await walletsApi.getWalletAutopilotStatus('w1');
+      expect(status).toEqual({ healthy: true, utxoCount: 10 });
+      expect(mockGet).toHaveBeenCalledWith('/wallets/w1/autopilot/status');
+    });
+
     it('handles telegram settings endpoints and token extraction', async () => {
       const settings = {
         enabled: true,

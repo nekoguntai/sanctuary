@@ -25,12 +25,12 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['**/*.d.ts', '**/index.ts'],
       thresholds: {
-        // Thresholds updated after adding labels.ts and price.ts tests (2026-01-11)
-        // Current coverage: branches=47.23%, functions=51.83%, lines=52.81%, statements=52.71%
-        branches: 47,
-        functions: 51,
-        lines: 52,
-        statements: 52,
+        // Coverage baseline locked to current observed total coverage (2026-03-04).
+        // Remaining gaps are v8 arrow-function artifacts in delegate methods.
+        branches: 99,
+        functions: 99,
+        lines: 99,
+        statements: 99,
       },
     },
   },

@@ -1000,6 +1000,24 @@ describe('SyncService', () => {
       expect(syncService['addressToWalletMap'].size).toBe(1);
       expect(mockElectrumClient.unsubscribeAddress).toHaveBeenCalledTimes(2);
     });
+
+    it('should gracefully handle unsubscribe errors for individual addresses', async () => {
+      syncService['subscriptionOwnership'] = 'self';
+      syncService['addressToWalletMap'].set('addr1', 'wallet-1');
+      syncService['addressToWalletMap'].set('addr2', 'wallet-1');
+      syncService['addressToWalletMap'].set('addr3', 'wallet-2');
+
+      mockElectrumClient.unsubscribeAddress
+        .mockRejectedValueOnce(new Error('electrum disconnect'))
+        .mockResolvedValueOnce(undefined);
+
+      await syncService.unsubscribeWalletAddresses('wallet-1');
+
+      // Both addresses removed from map despite one unsubscribe failing
+      expect(syncService['addressToWalletMap'].size).toBe(1);
+      expect(syncService['addressToWalletMap'].has('addr3')).toBe(true);
+      expect(mockElectrumClient.unsubscribeAddress).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('queue overflow behavior', () => {

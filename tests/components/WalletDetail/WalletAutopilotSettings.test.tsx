@@ -212,6 +212,98 @@ describe('WalletAutopilotSettings', () => {
     });
   });
 
+  it('saves minUtxoCount and dustThreshold fields on blur', async () => {
+    mockTelegramUser();
+    vi.mocked(walletsApi.getWalletAutopilotSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+
+    render(<WalletAutopilotSettings walletId={walletId} />);
+
+    await screen.findByText('Max fee rate (sat/vB)');
+    const inputs = screen.getAllByRole('spinbutton');
+    // inputs: [maxFeeRate, minUtxoCount, dustThreshold]
+    const minUtxoInput = inputs[1];
+    const dustInput = inputs[2];
+
+    fireEvent.change(minUtxoInput, { target: { value: '20' } });
+    fireEvent.blur(minUtxoInput);
+
+    await waitFor(() => {
+      expect(walletsApi.updateWalletAutopilotSettings).toHaveBeenCalledWith(
+        walletId,
+        expect.objectContaining({ minUtxoCount: 20 })
+      );
+    });
+
+    vi.mocked(walletsApi.updateWalletAutopilotSettings).mockClear();
+
+    fireEvent.change(dustInput, { target: { value: '5000' } });
+    fireEvent.blur(dustInput);
+
+    await waitFor(() => {
+      expect(walletsApi.updateWalletAutopilotSettings).toHaveBeenCalledWith(
+        walletId,
+        expect.objectContaining({ dustThreshold: 5000 })
+      );
+    });
+  });
+
+  it('saves advanced filter fields on blur', async () => {
+    const user = userEvent.setup();
+    mockTelegramUser();
+    vi.mocked(walletsApi.getWalletAutopilotSettings).mockResolvedValue({
+      ...defaultSettings,
+      enabled: true,
+    });
+
+    render(<WalletAutopilotSettings walletId={walletId} />);
+
+    await screen.findByText('Advanced Filters');
+    await user.click(screen.getByText('Advanced Filters'));
+
+    const inputs = screen.getAllByRole('spinbutton');
+    // After expanding advanced: [maxFeeRate, minUtxoCount, dustThreshold, minDustCount, maxUtxoSize, cooldownHours]
+    const minDustInput = inputs[3];
+    const maxUtxoSizeInput = inputs[4];
+    const cooldownInput = inputs[5];
+
+    fireEvent.change(minDustInput, { target: { value: '3' } });
+    fireEvent.blur(minDustInput);
+
+    await waitFor(() => {
+      expect(walletsApi.updateWalletAutopilotSettings).toHaveBeenCalledWith(
+        walletId,
+        expect.objectContaining({ minDustCount: 3 })
+      );
+    });
+
+    vi.mocked(walletsApi.updateWalletAutopilotSettings).mockClear();
+
+    fireEvent.change(maxUtxoSizeInput, { target: { value: '50000' } });
+    fireEvent.blur(maxUtxoSizeInput);
+
+    await waitFor(() => {
+      expect(walletsApi.updateWalletAutopilotSettings).toHaveBeenCalledWith(
+        walletId,
+        expect.objectContaining({ maxUtxoSize: 50000 })
+      );
+    });
+
+    vi.mocked(walletsApi.updateWalletAutopilotSettings).mockClear();
+
+    fireEvent.change(cooldownInput, { target: { value: '48' } });
+    fireEvent.blur(cooldownInput);
+
+    await waitFor(() => {
+      expect(walletsApi.updateWalletAutopilotSettings).toHaveBeenCalledWith(
+        walletId,
+        expect.objectContaining({ cooldownHours: 48 })
+      );
+    });
+  });
+
   it('does not save on blur when value has not changed', async () => {
     mockTelegramUser();
     vi.mocked(walletsApi.getWalletAutopilotSettings).mockResolvedValue({
@@ -398,6 +490,17 @@ describe('WalletAutopilotSettings', () => {
 
     expect(await screen.findByText('Notifications required')).toBeInTheDocument();
     expect(screen.queryByText('Enable Autopilot')).not.toBeInTheDocument();
+  });
+
+  it('uses defaults when initial settings fetch throws a non-ApiError', async () => {
+    mockTelegramUser();
+    vi.mocked(walletsApi.getWalletAutopilotSettings).mockRejectedValue(new Error('network down'));
+
+    render(<WalletAutopilotSettings walletId={walletId} />);
+
+    // Should render normally with defaults (not show "Feature not available")
+    expect(await screen.findByText('Enable Autopilot')).toBeInTheDocument();
+    expect(screen.queryByText('Feature not available')).not.toBeInTheDocument();
   });
 
   it('hides settings fields when not enabled', async () => {

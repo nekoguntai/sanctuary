@@ -214,6 +214,22 @@ describe('deadLetterQueue', () => {
     expect(stats.newest).toEqual(new Date('2025-01-03T00:00:00.000Z'));
   });
 
+  it('dequeues entry for retry and removes it from store', async () => {
+    const id = await deadLetterQueue.add('sync', 'wallet_sync', { walletId: 'w1' }, 'conn failed', 2);
+    expect(deadLetterQueue.get(id)).toBeDefined();
+
+    const entry = await deadLetterQueue.dequeueForRetry(id);
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('sync');
+    expect(entry!.operation).toBe('wallet_sync');
+    expect(deadLetterQueue.get(id)).toBeUndefined();
+    expect(mockCache.delete).toHaveBeenCalledWith(expect.stringContaining(id));
+
+    // Dequeue missing entry returns null
+    const missing = await deadLetterQueue.dequeueForRetry('nonexistent-id');
+    expect(missing).toBeNull();
+  });
+
   it('removes entries and clears categories', async () => {
     const id1 = await deadLetterQueue.add('electrum', 'connect', { host: 'h' }, 'err', 1);
     const id2 = await deadLetterQueue.add('electrum', 'connect2', { host: 'h2' }, 'err', 2);

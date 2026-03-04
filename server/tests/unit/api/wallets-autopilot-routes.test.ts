@@ -203,6 +203,20 @@ describe('Wallets Autopilot Routes', () => {
     expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 10000, 0);
   });
 
+  it('falls back to default enabled when enabled is omitted from PATCH body', async () => {
+    const response = await request(app)
+      .patch('/api/v1/wallets/wallet-1/autopilot')
+      .send({ maxFeeRate: 8 });
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateWalletAutopilotSettings).toHaveBeenCalledWith('user-1', 'wallet-1',
+      expect.objectContaining({
+        enabled: false, // DEFAULT_AUTOPILOT_SETTINGS.enabled
+        maxFeeRate: 8,
+      })
+    );
+  });
+
   it('accepts minDustCount and maxUtxoSize in PATCH', async () => {
     const response = await request(app)
       .patch('/api/v1/wallets/wallet-1/autopilot')

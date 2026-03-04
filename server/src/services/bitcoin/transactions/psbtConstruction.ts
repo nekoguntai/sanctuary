@@ -359,6 +359,7 @@ function addMultisigBip32Info(
 ): void {
   const { multisigKeys, multisigQuorum, multisigScriptType } = signingInfo;
 
+  /* v8 ignore next -- defensive guard: caller already checks multisigKeys before invoking */
   if (!multisigKeys) return;
 
   // Add bip32Derivation for each cosigner

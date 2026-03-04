@@ -970,6 +970,30 @@ describe('ElectrumClient connection and transport internals', () => {
     expect(handleDataSpy).toHaveBeenCalledWith(payload);
   });
 
+  it('ignores late socket errors after connection already timed out', async () => {
+    const socket = new FakeSocket();
+    netConnectMock.mockImplementationOnce(() => socket);
+
+    const client = new ElectrumClient({
+      host: 'tcp-double-error-host',
+      port: 50001,
+      protocol: 'tcp',
+      connectionTimeoutMs: 10,
+    });
+
+    const rejected = client.connect().catch((err: Error) => err);
+
+    // Let the connection timeout fire first (handleError #1)
+    await vi.advanceTimersByTimeAsync(15);
+
+    const error = await rejected;
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('Connection timeout after 10ms');
+
+    // Now emit a socket error after the connection is already settled (handleError #2 → early return)
+    expect(() => socket.emit('error', new Error('late socket error'))).not.toThrow();
+  });
+
   it('routes JSON-RPC notifications from handleData', () => {
     const client = new ElectrumClient({
       host: 'localhost',

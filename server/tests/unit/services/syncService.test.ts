@@ -249,6 +249,24 @@ describe('SyncService', () => {
     });
   });
 
+  describe('state getters', () => {
+    it('should expose subscriptionLockRefresh via getter', () => {
+      expect(syncService.subscriptionLockRefresh).toBeNull();
+      const fakeTimer = setInterval(() => {}, 99999);
+      syncService.subscriptionLockRefresh = fakeTimer;
+      expect(syncService.subscriptionLockRefresh).toBe(fakeTimer);
+      clearInterval(fakeTimer);
+      syncService.subscriptionLockRefresh = null;
+    });
+
+    it('should expose subscriptionsEnabled via getter', () => {
+      expect(syncService.subscriptionsEnabled).toBe(false);
+      syncService.subscriptionsEnabled = true;
+      expect(syncService.subscriptionsEnabled).toBe(true);
+      syncService.subscriptionsEnabled = false;
+    });
+  });
+
   describe('start/stop', () => {
     it('should start the service', async () => {
       await syncService.start();
@@ -307,6 +325,23 @@ describe('SyncService', () => {
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
 
       expect(reconcileSpy).toHaveBeenCalled();
+    });
+
+    it('skips reconciliation when another instance holds the lock', async () => {
+      vi.spyOn(syncService as any, 'setupRealTimeSubscriptions').mockResolvedValue(undefined);
+      const reconcileSpy = vi
+        .spyOn(syncService as any, 'reconcileAddressToWalletMap')
+        .mockResolvedValue(undefined);
+
+      await syncService.start();
+
+      // Make the next withLock call return { success: false } to simulate lock contention
+      mockWithLock.mockImplementationOnce(async () => ({ success: false }));
+
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
+      // reconcileAddressToWalletMap should NOT have been called because the lock was not acquired
+      expect(reconcileSpy).not.toHaveBeenCalled();
     });
 
     it('handles async setupRealTimeSubscriptions rejection during start', async () => {

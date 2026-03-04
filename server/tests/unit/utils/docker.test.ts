@@ -30,6 +30,7 @@ import {
   createTorContainer,
   startTor,
   stopTor,
+  discoverProjectName,
 } from '../../../src/utils/docker';
 
 describe('Docker Container Management', () => {
@@ -706,6 +707,25 @@ describe('Docker Container Management', () => {
         expect(status.status).toBe('not_created');
       });
 
+      it('should return not_created when containers exist but none match tor pattern', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              Id: 'backend123',
+              Names: ['/sanctuary-backend-1'],
+              State: 'running',
+            },
+          ],
+        });
+
+        const status = await getTorStatus();
+
+        expect(status.exists).toBe(false);
+        expect(status.running).toBe(false);
+        expect(status.status).toBe('not_created');
+      });
+
       it('should return not_created when list API fails', async () => {
         mockFetch.mockResolvedValueOnce({
           ok: false,
@@ -1280,6 +1300,16 @@ describe('Docker Container Management', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('stop refused');
+    });
+  });
+
+  describe('discoverProjectName', () => {
+    it('should return default project name when Docker API fails', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('connection refused'));
+
+      const result = await discoverProjectName();
+
+      expect(result).toBe('sanctuary');
     });
   });
 });

@@ -78,6 +78,20 @@ describe('autopilot utxoHealth', () => {
     expect(profile.consolidationCandidates).toBe(0);
   });
 
+  it('finds the smallest UTXO when it appears after the first entry', async () => {
+    (mockFindUnspent as Mock).mockResolvedValueOnce([
+      { amount: 10_000n },
+      { amount: 500n },
+    ]);
+
+    const profile = await getUtxoHealthProfile('wallet-1', 10_000);
+
+    expect(profile.smallestUtxo).toBe(500n);
+    expect(profile.largestUtxo).toBe(10_000n);
+    expect(profile.dustCount).toBe(1); // 500 < 10_000
+    expect(profile.dustValue).toBe(500n);
+  });
+
   it('does not classify amount equal to threshold as dust', async () => {
     (mockFindUnspent as Mock).mockResolvedValueOnce([
       { amount: 10_000n },

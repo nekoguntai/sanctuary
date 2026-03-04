@@ -310,6 +310,21 @@ describe('Mobile Permission Middleware', () => {
         expect(mockNext).not.toHaveBeenCalled();
       });
 
+      it('should handle non-Error thrown values via String() fallback', async () => {
+        mockFetch.mockRejectedValueOnce('string error');
+
+        const middleware = requireMobilePermission('broadcast');
+
+        await middleware(mockReq as Request, mockRes as Response, mockNext as NextFunction);
+
+        expect(statusMock).toHaveBeenCalledWith(403);
+        expect(jsonMock).toHaveBeenCalledWith({
+          error: 'Forbidden',
+          message: 'Permission check unavailable',
+        });
+        expect(mockNext).not.toHaveBeenCalled();
+      });
+
       it('should deny access when backend is unreachable', async () => {
         mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 

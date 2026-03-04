@@ -381,6 +381,7 @@ export async function updateDraft(
   }
 
   // Defensive fallback for type narrowing; normal flow returns or throws inside the loop.
+  /* v8 ignore next -- unreachable: the for-loop always returns or throws on every path */
   throw new ConflictError('Draft update failed after retry attempts.');
 }
 

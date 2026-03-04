@@ -182,6 +182,17 @@ describe('UTXO Repository', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('should exclude frozen UTXOs when excludeFrozen is true', async () => {
+      (prisma.uTXO.findMany as Mock).mockResolvedValue([mockUtxo]);
+
+      await utxoRepository.findUnspent('wallet-456', { excludeFrozen: true });
+
+      expect(prisma.uTXO.findMany).toHaveBeenCalledWith({
+        where: { walletId: 'wallet-456', spent: false, frozen: false },
+        orderBy: { amount: 'desc' },
+      });
+    });
   });
 
   describe('markAsSpent', () => {

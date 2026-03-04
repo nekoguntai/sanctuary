@@ -103,6 +103,24 @@ describe('autopilot feeMonitor', () => {
     expect(mockLogger.error).toHaveBeenCalled();
   });
 
+  it('returns empty array from getRecentFees when redis is not connected', async () => {
+    (mockIsRedisConnected as Mock).mockReturnValueOnce(false);
+
+    const snapshots = await getRecentFees(60);
+
+    expect(snapshots).toEqual([]);
+    expect(redis.zrangebyscore).not.toHaveBeenCalled();
+  });
+
+  it('returns null from getLatestFeeSnapshot when redis is not connected', async () => {
+    (mockIsRedisConnected as Mock).mockReturnValueOnce(false);
+
+    const snapshot = await getLatestFeeSnapshot();
+
+    expect(snapshot).toBeNull();
+    expect(redis.zrevrange).not.toHaveBeenCalled();
+  });
+
   it('returns recent fee snapshots from redis window query', async () => {
     redis.zrangebyscore.mockResolvedValueOnce([
       JSON.stringify({

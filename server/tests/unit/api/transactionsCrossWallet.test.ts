@@ -421,6 +421,81 @@ describe('transactions cross-wallet routes', () => {
     });
   });
 
+  it('GET /transactions/recent populates isFrozen and isLocked from UTXO state', async () => {
+    const txid1 = 'a'.repeat(64);
+    const txid2 = 'b'.repeat(64);
+
+    mockPrismaClient.wallet.findMany.mockResolvedValue([
+      { id: 'wallet-1', name: 'Main Wallet', network: 'mainnet' },
+    ]);
+    mockPrismaClient.transaction.findMany.mockResolvedValue([
+      {
+        id: 'tx-frozen',
+        txid: txid1,
+        walletId: 'wallet-1',
+        type: 'received',
+        amount: BigInt(50000),
+        fee: BigInt(0),
+        balanceAfter: BigInt(50000),
+        blockHeight: BigInt(849990),
+        confirmations: 0,
+        blockTime: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        address: null,
+        transactionLabels: [],
+        rbfStatus: null,
+      },
+      {
+        id: 'tx-locked',
+        txid: txid2,
+        walletId: 'wallet-1',
+        type: 'received',
+        amount: BigInt(30000),
+        fee: BigInt(0),
+        balanceAfter: BigInt(80000),
+        blockHeight: BigInt(849991),
+        confirmations: 0,
+        blockTime: new Date('2026-01-02T00:00:00.000Z'),
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        address: null,
+        transactionLabels: [],
+        rbfStatus: null,
+      },
+    ]);
+    mockPrismaClient.uTXO.findMany.mockResolvedValue([
+      {
+        walletId: 'wallet-1',
+        txid: txid1,
+        frozen: true,
+        draftLock: null,
+      },
+      {
+        walletId: 'wallet-1',
+        txid: txid2,
+        frozen: false,
+        draftLock: {
+          draft: { label: 'Pending Send' },
+        },
+      },
+    ]);
+    mocks.getCachedBlockHeight.mockReturnValue(850000);
+
+    const response = await request(app).get('/api/v1/transactions/recent');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveLength(2);
+
+    const frozenTx = response.body.find((tx: any) => tx.txid === txid1);
+    const lockedTx = response.body.find((tx: any) => tx.txid === txid2);
+
+    expect(frozenTx.isFrozen).toBe(true);
+    expect(frozenTx.isLocked).toBe(false);
+
+    expect(lockedTx.isFrozen).toBe(false);
+    expect(lockedTx.isLocked).toBe(true);
+    expect(lockedTx.lockedByDraftLabel).toBe('Pending Send');
+  });
+
   it('returns 500 when wallet lookup fails for recent transactions', async () => {
     mockPrismaClient.wallet.findMany.mockRejectedValue(new Error('database down'));
 

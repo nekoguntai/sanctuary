@@ -43,6 +43,14 @@ describe('autopilot settings service', () => {
       await expect(getWalletAutopilotSettings('u1', 'w1')).resolves.toBeNull();
     });
 
+    it('returns null when preferences is null', async () => {
+      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+        preferences: null,
+      });
+
+      await expect(getWalletAutopilotSettings('u1', 'w1')).resolves.toBeNull();
+    });
+
     it('returns wallet-specific settings when present', async () => {
       (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
         preferences: {
@@ -91,6 +99,70 @@ describe('autopilot settings service', () => {
           maxUtxoSize: 0,
         })
       ).rejects.toThrow('User not found');
+    });
+
+    it('initialises preferences from null when updating settings', async () => {
+      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+        preferences: null,
+      });
+      (mockPrisma.user.update as Mock).mockResolvedValueOnce({});
+
+      await updateWalletAutopilotSettings('u1', 'wallet-new', {
+        enabled: true,
+        maxFeeRate: 5,
+        minUtxoCount: 10,
+        dustThreshold: 10_000,
+        cooldownHours: 24,
+        notifyTelegram: true,
+        notifyPush: true,
+        minDustCount: 0,
+        maxUtxoSize: 0,
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: {
+          preferences: {
+            autopilot: {
+              wallets: {
+                'wallet-new': expect.objectContaining({ enabled: true }),
+              },
+            },
+          },
+        },
+      });
+    });
+
+    it('initialises wallets map when autopilot exists without wallets key', async () => {
+      (mockPrisma.user.findUnique as Mock).mockResolvedValueOnce({
+        preferences: { autopilot: {} },
+      });
+      (mockPrisma.user.update as Mock).mockResolvedValueOnce({});
+
+      await updateWalletAutopilotSettings('u1', 'wallet-new', {
+        enabled: false,
+        maxFeeRate: 3,
+        minUtxoCount: 5,
+        dustThreshold: 7000,
+        cooldownHours: 48,
+        notifyTelegram: false,
+        notifyPush: true,
+        minDustCount: 0,
+        maxUtxoSize: 0,
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: {
+          preferences: {
+            autopilot: {
+              wallets: {
+                'wallet-new': expect.objectContaining({ enabled: false }),
+              },
+            },
+          },
+        },
+      });
     });
 
     it('merges autopilot settings into existing user preferences', async () => {
@@ -154,6 +226,30 @@ describe('autopilot settings service', () => {
   });
 
   describe('getEnabledAutopilotWallets', () => {
+    it('falls back to "Unknown" when wallet name is empty', async () => {
+      (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
+        {
+          id: 'u1',
+          preferences: {
+            autopilot: {
+              wallets: {
+                'wallet-empty-name': { enabled: true, maxFeeRate: 5 },
+              },
+            },
+          },
+          wallets: [
+            { wallet: { id: 'wallet-empty-name', name: '' } },
+          ],
+          groupMemberships: [],
+        },
+      ]);
+
+      const result = await getEnabledAutopilotWallets();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].walletName).toBe('Unknown');
+    });
+
     it('returns only enabled wallets accessible by each user and applies defaults', async () => {
       (mockPrisma.user.findMany as Mock).mockResolvedValueOnce([
         {

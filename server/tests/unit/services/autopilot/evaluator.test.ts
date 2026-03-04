@@ -400,6 +400,127 @@ describe('autopilot evaluator', () => {
       expect(pushNotify).not.toHaveBeenCalled();
     });
 
+    it('catches per-wallet errors and continues to next wallet', async () => {
+      (mockGetEnabledAutopilotWallets as Mock).mockResolvedValueOnce([
+        { walletId: 'wallet-bad', walletName: 'Bad', userId: 'u1', settings: baseSettings },
+        { walletId: 'wallet-ok', walletName: 'Ok', userId: 'u2', settings: baseSettings },
+      ]);
+      // First wallet's health profile rejects, second succeeds
+      (mockGetUtxoHealthProfile as Mock)
+        .mockRejectedValueOnce(new Error('UTXO query failed'))
+        .mockResolvedValueOnce({
+          totalUtxos: 20,
+          dustCount: 2,
+          dustValue: 5000n,
+          totalValue: 200_000n,
+          avgUtxoSize: 10_000n,
+          smallestUtxo: 500n,
+          largestUtxo: 50_000n,
+          consolidationCandidates: 20,
+        });
+
+      await expect(evaluateAllWallets()).resolves.toBeUndefined();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error evaluating wallet',
+        expect.objectContaining({ walletId: 'wallet-bad', error: 'UTXO query failed' })
+      );
+      // Second wallet should still be evaluated (stability reset called)
+      expect(redis.del).toHaveBeenCalled();
+    });
+
+    it('formats large savings in BTC when >= 100,000 sats', async () => {
+      // totalUtxos=100, currentFeeRate=5 → savings = 100*68*(20-5) = 102,000 sats >= 100,000
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 100,
+        dustCount: 10,
+        dustValue: 50_000n,
+        totalValue: 5_000_000n,
+        avgUtxoSize: 50_000n,
+        smallestUtxo: 500n,
+        largestUtxo: 100_000n,
+        consolidationCandidates: 100,
+      });
+
+      const suggestion = await evaluateWallet('w1', 'Treasury', baseSettings);
+
+      expect(suggestion).not.toBeNull();
+      expect(suggestion!.estimatedSavings).toMatch(/~[\d.]+ BTC in potential fee savings/);
+    });
+
+    it('skips push channel when notifyPush is false', async () => {
+      const pushNotify = vi.fn().mockResolvedValue(undefined);
+      const telegramNotify = vi.fn().mockResolvedValue(undefined);
+
+      (mockGetAllChannels as Mock).mockReturnValue([
+        { id: 'push', notifyConsolidationSuggestion: pushNotify },
+        { id: 'telegram', notifyConsolidationSuggestion: telegramNotify },
+      ]);
+      (mockGetEnabledAutopilotWallets as Mock).mockResolvedValueOnce([
+        {
+          walletId: 'wallet-1',
+          walletName: 'Treasury',
+          userId: 'u1',
+          settings: {
+            ...baseSettings,
+            notifyPush: false,
+            notifyTelegram: true,
+          },
+        },
+      ]);
+      redis.exists.mockResolvedValueOnce(0);
+      redis.incr.mockResolvedValueOnce(2);
+
+      await evaluateAllWallets();
+
+      expect(pushNotify).not.toHaveBeenCalled();
+      expect(telegramNotify).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips channels without notifyConsolidationSuggestion method', async () => {
+      const telegramNotify = vi.fn().mockResolvedValue(undefined);
+
+      (mockGetAllChannels as Mock).mockReturnValue([
+        { id: 'telegram', notifyConsolidationSuggestion: telegramNotify },
+        { id: 'webhook' }, // Channel without notifyConsolidationSuggestion
+      ]);
+      (mockGetEnabledAutopilotWallets as Mock).mockResolvedValueOnce([
+        {
+          walletId: 'wallet-1',
+          walletName: 'Treasury',
+          userId: 'u1',
+          settings: baseSettings,
+        },
+      ]);
+      redis.exists.mockResolvedValueOnce(0);
+      redis.incr.mockResolvedValueOnce(2);
+
+      await evaluateAllWallets();
+
+      expect(telegramNotify).toHaveBeenCalledTimes(1);
+      // webhook channel has no notifyConsolidationSuggestion so it's simply skipped
+    });
+
+    it('omits dust mention in reason when dustCount is zero', async () => {
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 20,
+        dustCount: 0,
+        dustValue: 0n,
+        totalValue: 200_000n,
+        avgUtxoSize: 10_000n,
+        smallestUtxo: 2_000n,
+        largestUtxo: 50_000n,
+        consolidationCandidates: 20,
+      });
+
+      const suggestion = await evaluateWallet('w1', 'Treasury', baseSettings);
+
+      expect(suggestion).not.toBeNull();
+      expect(suggestion!.reason).toContain('Fees are low');
+      expect(suggestion!.reason).toContain('20 total UTXOs could be consolidated');
+      expect(suggestion!.reason).not.toContain('dust UTXOs found');
+    });
+
     it('swallows top-level evaluator errors', async () => {
       (mockGetEnabledAutopilotWallets as Mock).mockRejectedValueOnce(new Error('db unavailable'));
 

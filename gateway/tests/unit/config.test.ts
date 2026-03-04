@@ -425,5 +425,50 @@ describe('Gateway Config', () => {
       expect(errorCall).toContain('TLS_CERT_PATH');
       expect(errorCall).toContain('TLS_KEY_PATH');
     });
+
+    it('should exit when TLS is enabled but only certPath is missing', async () => {
+      process.env.JWT_SECRET = 'my-secret';
+      process.env.GATEWAY_SECRET = 'this-is-a-32-character-secret!!!';
+      process.env.TLS_ENABLED = 'true';
+      const { config, validateConfig } = await import('../../src/config');
+
+      config.tls.certPath = '';
+      config.tls.keyPath = '/valid/key.pem';
+
+      validateConfig();
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      const errorCall = consoleErrorSpy.mock.calls.flat().join(' ');
+      expect(errorCall).toContain('TLS_CERT_PATH');
+      expect(errorCall).not.toContain('TLS_KEY_PATH');
+    });
+
+    it('should exit when TLS is enabled but only keyPath is missing', async () => {
+      process.env.JWT_SECRET = 'my-secret';
+      process.env.GATEWAY_SECRET = 'this-is-a-32-character-secret!!!';
+      process.env.TLS_ENABLED = 'true';
+      const { config, validateConfig } = await import('../../src/config');
+
+      config.tls.certPath = '/valid/cert.pem';
+      config.tls.keyPath = '';
+
+      validateConfig();
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      const errorCall = consoleErrorSpy.mock.calls.flat().join(' ');
+      expect(errorCall).not.toContain('TLS_CERT_PATH');
+      expect(errorCall).toContain('TLS_KEY_PATH');
+    });
+
+    it('should pass validation when TLS is enabled with valid paths', async () => {
+      process.env.JWT_SECRET = 'my-secret';
+      process.env.GATEWAY_SECRET = 'this-is-a-32-character-secret!!!';
+      process.env.TLS_ENABLED = 'true';
+      const { validateConfig } = await import('../../src/config');
+
+      validateConfig();
+
+      expect(processExitSpy).not.toHaveBeenCalled();
+    });
   });
 });

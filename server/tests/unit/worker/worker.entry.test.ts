@@ -244,6 +244,47 @@ describe('worker entrypoint', () => {
     expect(mocks.queueInstance.scheduleRecurring).not.toHaveBeenCalled();
   });
 
+  it('schedules autopilot recurring jobs when treasuryAutopilot feature flag is enabled', async () => {
+    vi.spyOn(process, 'on').mockImplementation(((event: string, handler: (...args: any[]) => any) => {
+      void event;
+      void handler;
+      return process;
+    }) as any);
+    vi.spyOn(process, 'exit').mockImplementation((() => undefined) as any);
+
+    mocks.getConfig.mockReturnValue({
+      bitcoin: { network: 'testnet' },
+      sync: {
+        intervalMs: 5 * 60 * 1000,
+        confirmationUpdateIntervalMs: 2 * 60 * 1000,
+      },
+      maintenance: {
+        auditLogRetentionDays: 30,
+        priceDataRetentionDays: 30,
+        feeEstimateRetentionDays: 7,
+      },
+      features: {
+        treasuryAutopilot: true,
+      },
+    });
+
+    await import('../../../src/worker.ts');
+    await vi.dynamicImportSettled();
+
+    expect(mocks.queueInstance.scheduleRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:record-fees',
+      {},
+      '*/10 * * * *'
+    );
+    expect(mocks.queueInstance.scheduleRecurring).toHaveBeenCalledWith(
+      'maintenance',
+      'autopilot:evaluate',
+      {},
+      '5/10 * * * *'
+    );
+  });
+
   it('covers timer, queue-error handlers, process handlers, and graceful shutdown branches', async () => {
     const handlers: Record<string, Array<(...args: any[]) => any>> = {};
     let intervalCallback: (() => Promise<void> | void) | undefined;

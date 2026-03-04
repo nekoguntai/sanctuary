@@ -196,6 +196,20 @@ describe('repository factory', () => {
     });
   });
 
+  it('passes excludeFrozen filter to findUnspent when requested', async () => {
+    const client = buildClient();
+    client.uTXO.findMany.mockResolvedValue([{ id: 'u-unfrozen' }]);
+
+    const repos = createRepositories(client);
+
+    await expect(repos.utxo.findUnspent('wallet-1', { excludeFrozen: true })).resolves.toEqual([{ id: 'u-unfrozen' }]);
+
+    expect(client.uTXO.findMany).toHaveBeenCalledWith({
+      where: { walletId: 'wallet-1', spent: false, frozen: false },
+      orderBy: { amount: 'desc' },
+    });
+  });
+
   it('falls back to zero unspent balance when aggregate sum is missing', async () => {
     const client = buildClient();
     client.uTXO.aggregate.mockResolvedValue({ _sum: { amount: null } });

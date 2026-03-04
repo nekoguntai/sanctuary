@@ -61,6 +61,23 @@ describe('electrum methods getTransactionsBatch', () => {
     expect(result.has('c'.repeat(64))).toBe(true);
   });
 
+  it('skips missing entries when batch returns fewer results than requested txids', async () => {
+    // Batch returns only 1 result for 2 requested txids
+    const batchRequest = vi.fn().mockResolvedValue([RAW_TX_HEX]);
+
+    const result = await getTransactionsBatch(
+      batchRequest,
+      ['a'.repeat(64), 'b'.repeat(64)],
+      'testnet',
+      1000
+    );
+
+    // Only the first txid should be in the result map; the missing second slot is skipped
+    expect(result.size).toBe(1);
+    expect(result.has('a'.repeat(64))).toBe(true);
+    expect(result.has('b'.repeat(64))).toBe(false);
+  });
+
   it('rethrows non-timeout failures without retrying', async () => {
     const batchRequest = vi.fn().mockRejectedValueOnce(new Error('permission denied'));
 

@@ -295,6 +295,21 @@ describe('requestLogger middleware', () => {
         })
       );
     });
+
+    it('should fall back to req.socket.remoteAddress when req.ip is undefined', () => {
+      req.headers = {};
+      req.ip = undefined;
+      (req as any).socket = { remoteAddress: '10.0.0.5' };
+
+      requestLogger(req as Request, res as Response, next);
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Incoming request',
+        expect.objectContaining({
+          ip: '10.0.0.5',
+        })
+      );
+    });
   });
 
   describe('sensitive endpoint detection', () => {

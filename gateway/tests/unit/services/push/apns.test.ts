@@ -7,13 +7,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Hoist mutable state
-const { mockSend, mockShutdown, MockProvider, MockNotification, mockLogger, mockConfigRef } = vi.hoisted(() => {
+const { mockSend, mockShutdown, MockProvider, MockNotification, mockLogger, mockConfigRef, shouldThrowOnConstruct } = vi.hoisted(() => {
   const mockSend = vi.fn();
   const mockShutdown = vi.fn();
+  const shouldThrowOnConstruct = { value: false };
 
   class MockProvider {
     send = mockSend;
     shutdown = mockShutdown;
+    constructor() {
+      if (shouldThrowOnConstruct.value) {
+        throw new Error('Invalid key format');
+      }
+    }
   }
 
   class MockNotification {
@@ -44,7 +50,7 @@ const { mockSend, mockShutdown, MockProvider, MockNotification, mockLogger, mock
     },
   };
 
-  return { mockSend, mockShutdown, MockProvider, MockNotification, mockLogger, mockConfigRef };
+  return { mockSend, mockShutdown, MockProvider, MockNotification, mockLogger, mockConfigRef, shouldThrowOnConstruct };
 });
 
 vi.mock('@parse/node-apn', () => ({
@@ -163,6 +169,22 @@ describe('APNs Service', () => {
       const result = apnsMissingTeam.initializeAPNs();
 
       expect(result).toBe(false);
+    });
+
+    it('should return false and log error when Provider constructor throws', async () => {
+      vi.resetModules();
+      shouldThrowOnConstruct.value = true;
+
+      const apnsThrowing = await import('../../../../src/services/push/apns');
+      const result = apnsThrowing.initializeAPNs();
+
+      shouldThrowOnConstruct.value = false;
+
+      expect(result).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to initialize APNs',
+        { error: 'Invalid key format' }
+      );
     });
   });
 

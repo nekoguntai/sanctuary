@@ -6,7 +6,7 @@
  */
 
 // Common utilities
-export { isDockerProxyAvailable } from './common';
+export { isDockerProxyAvailable, discoverProjectName } from './common';
 
 // Ollama container management
 export {

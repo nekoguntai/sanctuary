@@ -425,6 +425,15 @@ describe('Admin Infrastructure Routes', () => {
     );
   });
 
+  it('returns 500 when dequeueForRetry throws unexpectedly', async () => {
+    mockDlqDequeueForRetry.mockRejectedValue(new Error('database connection lost'));
+
+    const response = await request(app).post('/api/v1/admin/dlq/some-id/retry');
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toBe('Failed to retry dead letter entry');
+  });
+
   it('clears dead letter categories with validation and error handling', async () => {
     const invalid = await request(app).delete('/api/v1/admin/dlq/category/not-a-category');
     expect(invalid.status).toBe(400);

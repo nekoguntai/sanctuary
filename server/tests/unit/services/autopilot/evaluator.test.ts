@@ -82,6 +82,8 @@ const baseSettings: WalletAutopilotSettings = {
   cooldownHours: 24,
   notifyTelegram: true,
   notifyPush: true,
+  minDustCount: 0,
+  maxUtxoSize: 0,
 };
 
 describe('autopilot evaluator', () => {
@@ -112,6 +114,7 @@ describe('autopilot evaluator', () => {
       avgUtxoSize: 10_000n,
       smallestUtxo: 500n,
       largestUtxo: 50_000n,
+      consolidationCandidates: 20,
     });
     (mockGetEnabledAutopilotWallets as Mock).mockResolvedValue([]);
     (mockGetAllChannels as Mock).mockReturnValue([]);
@@ -146,6 +149,7 @@ describe('autopilot evaluator', () => {
         avgUtxoSize: 10_000n,
         smallestUtxo: 10_000n,
         largestUtxo: 10_000n,
+        consolidationCandidates: 3,
       });
 
       await expect(evaluateWallet('w1', 'Treasury', baseSettings)).resolves.toBeNull();
@@ -165,6 +169,93 @@ describe('autopilot evaluator', () => {
       expect(suggestion?.reason).toContain('Fees are low (5 sat/vB, threshold: 10).');
       expect(suggestion?.reason).toContain('2 dust UTXOs found');
       expect(suggestion?.reason).toContain('20 total UTXOs could be consolidated');
+    });
+
+    it('returns null when dust count is below minDustCount', async () => {
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 20,
+        dustCount: 2,
+        dustValue: 5000n,
+        totalValue: 200_000n,
+        avgUtxoSize: 10_000n,
+        smallestUtxo: 500n,
+        largestUtxo: 50_000n,
+        consolidationCandidates: 20,
+      });
+
+      const result = await evaluateWallet('w1', 'Treasury', {
+        ...baseSettings,
+        minDustCount: 5,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('passes when dust count meets minDustCount', async () => {
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 20,
+        dustCount: 5,
+        dustValue: 15000n,
+        totalValue: 200_000n,
+        avgUtxoSize: 10_000n,
+        smallestUtxo: 500n,
+        largestUtxo: 50_000n,
+        consolidationCandidates: 20,
+      });
+
+      const result = await evaluateWallet('w1', 'Treasury', {
+        ...baseSettings,
+        minDustCount: 5,
+      });
+
+      expect(result).not.toBeNull();
+    });
+
+    it('uses consolidationCandidates not totalUtxos for threshold check', async () => {
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 20,
+        dustCount: 2,
+        dustValue: 5000n,
+        totalValue: 200_000n,
+        avgUtxoSize: 10_000n,
+        smallestUtxo: 500n,
+        largestUtxo: 50_000n,
+        consolidationCandidates: 5, // below minUtxoCount of 10
+      });
+
+      const result = await evaluateWallet('w1', 'Treasury', baseSettings);
+
+      expect(result).toBeNull();
+    });
+
+    it('passes maxUtxoSize to health profile', async () => {
+      await evaluateWallet('w1', 'Treasury', {
+        ...baseSettings,
+        maxUtxoSize: 50_000,
+      });
+
+      expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('w1', 10_000, 50_000);
+    });
+
+    it('mentions size filter in reason when maxUtxoSize is set', async () => {
+      (mockGetUtxoHealthProfile as Mock).mockResolvedValueOnce({
+        totalUtxos: 20,
+        dustCount: 2,
+        dustValue: 5000n,
+        totalValue: 200_000n,
+        avgUtxoSize: 10_000n,
+        smallestUtxo: 500n,
+        largestUtxo: 50_000n,
+        consolidationCandidates: 15,
+      });
+
+      const suggestion = await evaluateWallet('w1', 'Treasury', {
+        ...baseSettings,
+        maxUtxoSize: 25_000,
+      });
+
+      expect(suggestion?.reason).toContain('15 UTXOs under 25,000 sats could be consolidated');
+      expect(suggestion?.reason).not.toContain('total UTXOs');
     });
 
     it('uses minimal savings label when current fee is not favorable', async () => {

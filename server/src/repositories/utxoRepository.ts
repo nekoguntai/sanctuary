@@ -63,9 +63,16 @@ export async function findByWalletId(
 /**
  * Find unspent UTXOs for a wallet
  */
-export async function findUnspent(walletId: string): Promise<UTXO[]> {
+export async function findUnspent(
+  walletId: string,
+  options?: { excludeFrozen?: boolean }
+): Promise<UTXO[]> {
+  const where: Prisma.UTXOWhereInput = { walletId, spent: false };
+  if (options?.excludeFrozen) {
+    where.frozen = false;
+  }
   return prisma.uTXO.findMany({
-    where: { walletId, spent: false },
+    where,
     orderBy: { amount: 'desc' },
   });
 }

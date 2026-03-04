@@ -26,7 +26,9 @@ describe('autopilot utxoHealth', () => {
       avgUtxoSize: 0n,
       smallestUtxo: 0n,
       largestUtxo: 0n,
+      consolidationCandidates: 0,
     });
+    expect(mockFindUnspent).toHaveBeenCalledWith('wallet-1', { excludeFrozen: true });
   });
 
   it('computes dust metrics and size stats from UTXO amounts', async () => {
@@ -47,7 +49,33 @@ describe('autopilot utxoHealth', () => {
       avgUtxoSize: 16_000n,
       smallestUtxo: 1000n,
       largestUtxo: 50_000n,
+      consolidationCandidates: 4, // all UTXOs when maxUtxoSize is 0
     });
+  });
+
+  it('only counts UTXOs below maxUtxoSize as consolidation candidates', async () => {
+    (mockFindUnspent as Mock).mockResolvedValueOnce([
+      { amount: 1000n },
+      { amount: 10_000n },
+      { amount: 50_000n },
+      { amount: 3000n },
+    ]);
+
+    const profile = await getUtxoHealthProfile('wallet-1', 10_000, 10_000);
+
+    expect(profile.consolidationCandidates).toBe(2); // only 1000 and 3000
+    expect(profile.totalUtxos).toBe(4); // all UTXOs still counted
+  });
+
+  it('treats UTXO equal to maxUtxoSize as non-candidate', async () => {
+    (mockFindUnspent as Mock).mockResolvedValueOnce([
+      { amount: 50_000n },
+      { amount: 50_001n },
+    ]);
+
+    const profile = await getUtxoHealthProfile('wallet-1', 10_000, 50_000);
+
+    expect(profile.consolidationCandidates).toBe(0);
   });
 
   it('does not classify amount equal to threshold as dust', async () => {

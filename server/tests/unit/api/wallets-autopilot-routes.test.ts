@@ -72,6 +72,8 @@ describe('Wallets Autopilot Routes', () => {
       cooldownHours: 12,
       notifyTelegram: false,
       notifyPush: true,
+      minDustCount: 0,
+      maxUtxoSize: 0,
     });
     mockUpdateWalletAutopilotSettings.mockResolvedValue(undefined);
     mockGetUtxoHealthProfile.mockResolvedValue({
@@ -82,6 +84,7 @@ describe('Wallets Autopilot Routes', () => {
       avgUtxoSize: 10_000n,
       smallestUtxo: 1000n,
       largestUtxo: 25_000n,
+      consolidationCandidates: 12,
     });
     mockGetLatestFeeSnapshot.mockResolvedValue({
       timestamp: 1,
@@ -106,6 +109,8 @@ describe('Wallets Autopilot Routes', () => {
       cooldownHours: 12,
       notifyTelegram: false,
       notifyPush: true,
+      minDustCount: 0,
+      maxUtxoSize: 0,
     });
   });
 
@@ -123,6 +128,8 @@ describe('Wallets Autopilot Routes', () => {
       cooldownHours: 24,
       notifyTelegram: true,
       notifyPush: true,
+      minDustCount: 0,
+      maxUtxoSize: 0,
     });
   });
 
@@ -140,6 +147,8 @@ describe('Wallets Autopilot Routes', () => {
       cooldownHours: 24,
       notifyTelegram: false,
       notifyPush: true,
+      minDustCount: 0,
+      maxUtxoSize: 0,
     });
     expect(response.body).toEqual({
       success: true,
@@ -151,7 +160,7 @@ describe('Wallets Autopilot Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/autopilot/status');
 
     expect(response.status).toBe(200);
-    expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 8000);
+    expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 8000, 0);
     expect(response.body).toEqual({
       utxoHealth: {
         totalUtxos: 12,
@@ -161,6 +170,7 @@ describe('Wallets Autopilot Routes', () => {
         avgUtxoSize: '10000',
         smallestUtxo: '1000',
         largestUtxo: '25000',
+        consolidationCandidates: 12,
       },
       feeSnapshot: {
         timestamp: 1,
@@ -178,6 +188,8 @@ describe('Wallets Autopilot Routes', () => {
         cooldownHours: 12,
         notifyTelegram: false,
         notifyPush: true,
+        minDustCount: 0,
+        maxUtxoSize: 0,
       },
     });
   });
@@ -188,7 +200,41 @@ describe('Wallets Autopilot Routes', () => {
     const response = await request(app).get('/api/v1/wallets/wallet-1/autopilot/status');
 
     expect(response.status).toBe(200);
-    expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 10000);
+    expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 10000, 0);
+  });
+
+  it('accepts minDustCount and maxUtxoSize in PATCH', async () => {
+    const response = await request(app)
+      .patch('/api/v1/wallets/wallet-1/autopilot')
+      .send({ enabled: true, minDustCount: 5, maxUtxoSize: 50000 });
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateWalletAutopilotSettings).toHaveBeenCalledWith('user-1', 'wallet-1',
+      expect.objectContaining({
+        minDustCount: 5,
+        maxUtxoSize: 50000,
+      })
+    );
+  });
+
+  it('passes maxUtxoSize from settings to health profile in status endpoint', async () => {
+    mockGetWalletAutopilotSettings.mockResolvedValueOnce({
+      enabled: true,
+      maxFeeRate: 7,
+      minUtxoCount: 15,
+      dustThreshold: 8000,
+      cooldownHours: 12,
+      notifyTelegram: false,
+      notifyPush: true,
+      minDustCount: 3,
+      maxUtxoSize: 50000,
+    });
+
+    const response = await request(app).get('/api/v1/wallets/wallet-1/autopilot/status');
+
+    expect(response.status).toBe(200);
+    expect(mockGetUtxoHealthProfile).toHaveBeenCalledWith('wallet-1', 8000, 50000);
+    expect(response.body.utxoHealth).toHaveProperty('consolidationCandidates');
   });
 
   it('returns 500 on settings read failures', async () => {

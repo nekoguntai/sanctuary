@@ -64,6 +64,8 @@ router.patch(
         cooldownHours,
         notifyTelegram,
         notifyPush,
+        minDustCount,
+        maxUtxoSize,
       } = req.body;
 
       const { updateWalletAutopilotSettings } = await import('../../services/autopilot/settings');
@@ -75,6 +77,8 @@ router.patch(
         cooldownHours: cooldownHours ?? DEFAULT_AUTOPILOT_SETTINGS.cooldownHours,
         notifyTelegram: notifyTelegram ?? DEFAULT_AUTOPILOT_SETTINGS.notifyTelegram,
         notifyPush: notifyPush ?? DEFAULT_AUTOPILOT_SETTINGS.notifyPush,
+        minDustCount: minDustCount ?? DEFAULT_AUTOPILOT_SETTINGS.minDustCount,
+        maxUtxoSize: maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize,
       });
 
       res.json({
@@ -110,9 +114,10 @@ router.get(
 
       const settings = await getWalletAutopilotSettings(userId, walletId);
       const dustThreshold = settings?.dustThreshold ?? DEFAULT_AUTOPILOT_SETTINGS.dustThreshold;
+      const maxUtxoSize = settings?.maxUtxoSize ?? DEFAULT_AUTOPILOT_SETTINGS.maxUtxoSize;
 
       const [health, feeSnapshot] = await Promise.all([
-        getUtxoHealthProfile(walletId, dustThreshold),
+        getUtxoHealthProfile(walletId, dustThreshold, maxUtxoSize),
         getLatestFeeSnapshot(),
       ]);
 
@@ -126,6 +131,7 @@ router.get(
           avgUtxoSize: health.avgUtxoSize.toString(),
           smallestUtxo: health.smallestUtxo.toString(),
           largestUtxo: health.largestUtxo.toString(),
+          consolidationCandidates: health.consolidationCandidates,
         },
         feeSnapshot,
         settings: settings || DEFAULT_AUTOPILOT_SETTINGS,

@@ -174,9 +174,13 @@ function createUtxoRepository(client: PrismaClientLike): UtxoRepositoryInterface
       });
     },
 
-    async findUnspent(walletId: string) {
+    async findUnspent(walletId: string, options?: { excludeFrozen?: boolean }) {
+      const where: { walletId: string; spent: boolean; frozen?: boolean } = { walletId, spent: false };
+      if (options?.excludeFrozen) {
+        where.frozen = false;
+      }
       return client.uTXO.findMany({
-        where: { walletId, spent: false },
+        where,
         orderBy: { amount: 'desc' },
       });
     },

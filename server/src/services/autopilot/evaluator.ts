@@ -52,19 +52,29 @@ export async function evaluateWallet(
   }
 
   // 2. Check UTXO health
-  const health = await getUtxoHealthProfile(walletId, settings.dustThreshold);
+  const health = await getUtxoHealthProfile(walletId, settings.dustThreshold, settings.maxUtxoSize);
 
-  if (health.totalUtxos < settings.minUtxoCount) {
-    log.debug('Not enough UTXOs to suggest consolidation', {
+  if (health.consolidationCandidates < settings.minUtxoCount) {
+    log.debug('Not enough candidate UTXOs to suggest consolidation', {
       walletId,
-      totalUtxos: health.totalUtxos,
+      consolidationCandidates: health.consolidationCandidates,
       minUtxoCount: settings.minUtxoCount,
     });
     return null;
   }
 
+  // 2b. Check minimum dust count if configured
+  if (settings.minDustCount > 0 && health.dustCount < settings.minDustCount) {
+    log.debug('Not enough dust UTXOs to suggest consolidation', {
+      walletId,
+      dustCount: health.dustCount,
+      minDustCount: settings.minDustCount,
+    });
+    return null;
+  }
+
   // 3. Build suggestion
-  const reason = buildReason(feeSnapshot.economy, settings.maxFeeRate, health);
+  const reason = buildReason(feeSnapshot.economy, settings.maxFeeRate, health, settings.maxUtxoSize);
   const estimatedSavings = estimateSavings(health, feeSnapshot.economy);
 
   return {
@@ -228,14 +238,19 @@ async function sendConsolidationNotification(
 /**
  * Build a human-readable reason string.
  */
-function buildReason(feeRate: number, maxFeeRate: number, health: UtxoHealthProfile): string {
+function buildReason(feeRate: number, maxFeeRate: number, health: UtxoHealthProfile, maxUtxoSize: number = 0): string {
   const parts: string[] = [];
   parts.push(`Fees are low (${feeRate} sat/vB, threshold: ${maxFeeRate})`);
 
   if (health.dustCount > 0) {
     parts.push(`${health.dustCount} dust UTXOs found`);
   }
-  parts.push(`${health.totalUtxos} total UTXOs could be consolidated`);
+
+  if (maxUtxoSize > 0) {
+    parts.push(`${health.consolidationCandidates} UTXOs under ${maxUtxoSize.toLocaleString()} sats could be consolidated`);
+  } else {
+    parts.push(`${health.totalUtxos} total UTXOs could be consolidated`);
+  }
 
   return parts.join('. ') + '.';
 }

@@ -87,6 +87,8 @@ describe('autopilot settings service', () => {
           cooldownHours: 24,
           notifyTelegram: true,
           notifyPush: true,
+          minDustCount: 0,
+          maxUtxoSize: 0,
         })
       ).rejects.toThrow('User not found');
     });
@@ -120,6 +122,8 @@ describe('autopilot settings service', () => {
         cooldownHours: 48,
         notifyTelegram: false,
         notifyPush: true,
+        minDustCount: 0,
+        maxUtxoSize: 0,
       });
 
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
@@ -138,6 +142,8 @@ describe('autopilot settings service', () => {
                   cooldownHours: 48,
                   notifyTelegram: false,
                   notifyPush: true,
+                  minDustCount: 0,
+                  maxUtxoSize: 0,
                 },
               },
             },

@@ -18,6 +18,10 @@ export interface WalletAutopilotSettings {
   notifyTelegram: boolean;
   /** Send via push channel */
   notifyPush: boolean;
+  /** Minimum dust UTXOs required to trigger notification (0 = disabled) */
+  minDustCount: number;
+  /** Only count UTXOs below this size (sats) toward minUtxoCount (0 = all) */
+  maxUtxoSize: number;
 }
 
 export interface AutopilotConfig {
@@ -43,6 +47,8 @@ export interface UtxoHealthProfile {
   avgUtxoSize: bigint;
   smallestUtxo: bigint;
   largestUtxo: bigint;
+  /** UTXOs that qualify for consolidation (filtered by maxUtxoSize if set) */
+  consolidationCandidates: number;
 }
 
 export interface ConsolidationSuggestion {
@@ -65,4 +71,6 @@ export const DEFAULT_AUTOPILOT_SETTINGS: WalletAutopilotSettings = {
   cooldownHours: 24,
   notifyTelegram: true,
   notifyPush: true,
+  minDustCount: 0,
+  maxUtxoSize: 0,
 };

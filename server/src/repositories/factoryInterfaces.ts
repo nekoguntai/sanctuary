@@ -50,7 +50,7 @@ export interface AddressRepositoryInterface {
  */
 export interface UtxoRepositoryInterface {
   findByWalletId(walletId: string, options?: { spent?: boolean }): Promise<UTXO[]>;
-  findUnspent(walletId: string): Promise<UTXO[]>;
+  findUnspent(walletId: string, options?: { excludeFrozen?: boolean }): Promise<UTXO[]>;
   getUnspentBalance(walletId: string): Promise<bigint>;
   deleteByWalletId(walletId: string): Promise<number>;
 }

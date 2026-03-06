@@ -73,7 +73,7 @@ async function sendToBackendAudit(
         userId: details.userId,
         username: details.username,
       }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(config.backendRequestTimeoutMs),
     });
 
     if (!response.ok) {

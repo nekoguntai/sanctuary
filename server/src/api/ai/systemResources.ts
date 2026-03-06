@@ -25,37 +25,36 @@ interface DiskInfo {
 }
 
 /**
+ * Parse `df -m` output into DiskInfo
+ */
+function parseDfOutput(stdout: string): DiskInfo | null {
+  const lines = stdout.trim().split('\n');
+  if (lines.length >= 2) {
+    const parts = lines[1].split(/\s+/);
+    if (parts.length >= 4) {
+      return {
+        total: parseInt(parts[1], 10) || 0,
+        available: parseInt(parts[3], 10) || 0,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Get disk space info for the root filesystem (or relevant mount)
  */
 async function getDiskInfo(): Promise<DiskInfo> {
   try {
     const { stdout } = await execFile('df', ['-m', '/'], { timeout: 5000 });
-
-    const lines = stdout.trim().split('\n');
-    if (lines.length >= 2) {
-      // Parse df output: Filesystem, 1M-blocks, Used, Available, Use%, Mounted on
-      const parts = lines[1].split(/\s+/);
-      if (parts.length >= 4) {
-        return {
-          total: parseInt(parts[1], 10) || 0,
-          available: parseInt(parts[3], 10) || 0,
-        };
-      }
-    }
+    const result = parseDfOutput(stdout);
+    if (result) return result;
   } catch {
     // Fallback: try current directory
     try {
       const { stdout } = await execFile('df', ['-m', '.'], { timeout: 5000 });
-      const lines = stdout.trim().split('\n');
-      if (lines.length >= 2) {
-        const parts = lines[1].split(/\s+/);
-        if (parts.length >= 4) {
-          return {
-            total: parseInt(parts[1], 10) || 0,
-            available: parseInt(parts[3], 10) || 0,
-          };
-        }
-      }
+      const result = parseDfOutput(stdout);
+      if (result) return result;
     } catch (error) {
       log.warn('Failed to get disk info', { error: String(error) });
     }

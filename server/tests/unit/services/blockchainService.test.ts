@@ -126,6 +126,13 @@ vi.mock('../../../src/services/notifications/notificationService', () => ({
   notifyNewTransactions: vi.fn(() => Promise.resolve()),
 }));
 
+// Mock config
+vi.mock('../../../src/config', () => ({
+  config: {
+    sync: { transactionBatchSize: 100 },
+  },
+}));
+
 // Mock logger
 vi.mock('../../../src/utils/logger', () => ({
   createLogger: vi.fn(() => ({

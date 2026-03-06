@@ -4,6 +4,7 @@ const { mockConfig, mockGenerateRequestSignature, mockLogger } = vi.hoisted(() =
   mockConfig: {
     backendUrl: 'http://backend:3000',
     gatewaySecret: 'gateway-secret-with-32-characters!!',
+    backendRequestTimeoutMs: 5000,
   },
   mockGenerateRequestSignature: vi.fn(() => ({
     signature: 'sig-123',

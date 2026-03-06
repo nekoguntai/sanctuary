@@ -37,7 +37,7 @@ export async function getDevicesForUser(userId: string): Promise<DeviceInfo[]> {
 
     const response = await fetch(`${config.backendUrl}${path}`, {
       headers,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(config.backendRequestTimeoutMs),
     });
 
     if (!response.ok) {
@@ -79,7 +79,7 @@ export async function removeInvalidDevice(deviceId: string, token: string): Prom
     const response = await fetch(`${config.backendUrl}${path}`, {
       method: 'DELETE',
       headers,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(config.backendRequestTimeoutMs),
     });
 
     if (response.ok) {

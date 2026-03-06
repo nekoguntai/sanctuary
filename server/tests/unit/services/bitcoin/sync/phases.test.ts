@@ -37,6 +37,13 @@ vi.mock('../../../../../src/services/notifications/notificationService', () => (
   notifyNewTransactions: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock config
+vi.mock('../../../../../src/config', () => ({
+  config: {
+    sync: { transactionBatchSize: 100 },
+  },
+}));
+
 // Mock balance calculation
 vi.mock('../../../../../src/services/bitcoin/utils/balanceCalculation', () => ({
   recalculateWalletBalances: vi.fn().mockResolvedValue(undefined),

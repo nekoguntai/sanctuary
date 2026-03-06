@@ -24,6 +24,7 @@ vi.mock('../../../src/utils/logger', () => ({
 vi.mock('../../../src/config', () => ({
   config: {
     backendUrl: 'http://localhost:3000',
+    backendRequestTimeoutMs: 5000,
   },
 }));
 

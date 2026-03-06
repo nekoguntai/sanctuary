@@ -66,6 +66,7 @@ export const config = {
   // Backend connection (internal network)
   backendUrl: process.env.BACKEND_URL || 'http://backend:3000',
   backendWsUrl: process.env.BACKEND_WS_URL || 'ws://backend:3000',
+  backendRequestTimeoutMs: 5000,
 
   // JWT (must match backend)
   jwtSecret: process.env.JWT_SECRET || '',

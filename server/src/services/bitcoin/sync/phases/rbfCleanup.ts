@@ -13,6 +13,34 @@ import type { SyncContext } from '../types';
 
 const log = createLogger('SYNC-RBF');
 
+interface TxWithInputs {
+  id: string;
+  txid: string;
+  inputs: Array<{ txid: string; vout: number }>;
+}
+
+/**
+ * Build a map from "inputTxid:vout" → confirmed replacement txid,
+ * then find the replacement for each pending/unlinked transaction.
+ */
+function buildInputToConfirmedMap(
+  confirmedTxs: Array<{ txid: string; inputs: Array<{ txid: string; vout: number }> }>,
+  excludeTxids: Set<string>,
+): Map<string, string> {
+  const inputToConfirmedTxid = new Map<string, string>();
+  for (const confirmed of confirmedTxs) {
+    if (excludeTxids.has(confirmed.txid)) continue;
+    for (const input of confirmed.inputs) {
+      inputToConfirmedTxid.set(`${input.txid}:${input.vout}`, confirmed.txid);
+    }
+  }
+  return inputToConfirmedTxid;
+}
+
+function findReplacement(tx: TxWithInputs, inputMap: Map<string, string>): string | undefined {
+  return tx.inputs.map(i => inputMap.get(`${i.txid}:${i.vout}`)).find(Boolean);
+}
+
 /**
  * Execute RBF cleanup phase
  *
@@ -62,20 +90,11 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
       },
     });
 
-    // Build a map: "inputTxid:vout" → confirmed txid
-    const inputToConfirmedTxid = new Map<string, string>();
-    for (const confirmed of confirmedWithSharedInputs) {
-      if (pendingTxids.has(confirmed.txid)) continue; // Skip self-matches
-      for (const input of confirmed.inputs) {
-        inputToConfirmedTxid.set(`${input.txid}:${input.vout}`, confirmed.txid);
-      }
-    }
+    // Build input→confirmed map and match pending txs in memory
+    const inputToConfirmedTxid = buildInputToConfirmedMap(confirmedWithSharedInputs, pendingTxids);
 
-    // Match pending txs to their replacements in memory
     for (const pendingTx of pendingTxsWithInputs) {
-      const replacementTxid = pendingTx.inputs
-        .map(i => inputToConfirmedTxid.get(`${i.txid}:${i.vout}`))
-        .find(Boolean);
+      const replacementTxid = findReplacement(pendingTx, inputToConfirmedTxid);
 
       if (replacementTxid) {
         await prisma.transaction.update({
@@ -134,20 +153,11 @@ export async function rbfCleanupPhase(ctx: SyncContext): Promise<SyncContext> {
         },
       });
 
-      // Build input → confirmed txid map
-      const inputToConfirmed = new Map<string, string>();
-      for (const confirmed of confirmedMatches) {
-        if (unlinkedTxids.has(confirmed.txid)) continue;
-        for (const input of confirmed.inputs) {
-          inputToConfirmed.set(`${input.txid}:${input.vout}`, confirmed.txid);
-        }
-      }
+      // Build input→confirmed map and match in memory
+      const inputToConfirmed = buildInputToConfirmedMap(confirmedMatches, unlinkedTxids);
 
-      // Match in memory
       for (const replacedTx of txsWithInputs) {
-        const replacementTxid = replacedTx.inputs
-          .map(i => inputToConfirmed.get(`${i.txid}:${i.vout}`))
-          .find(Boolean);
+        const replacementTxid = findReplacement(replacedTx, inputToConfirmed);
 
         if (replacementTxid) {
           await prisma.transaction.update({

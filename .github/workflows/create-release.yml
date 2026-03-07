@@ -100,8 +100,7 @@ jobs:
           Your data and configuration will be preserved automatically.
 
           ```bash
-          cd sanctuary
-          git pull
+          cd ~/sanctuary
           ./install.sh
           ```
 

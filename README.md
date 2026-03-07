@@ -1012,6 +1012,8 @@ docker compose build
 docker compose up -d
 ```
 
+> **Note:** Both `./install.sh` and the manual upgrade check out a release **tag**, which puts Git in "detached HEAD" state. This is normal — it pins you to a specific release. However, it means `git pull` will not work afterward. Always use `./install.sh` or the manual steps above to upgrade, not `git pull`.
+
 ### Checking Your Current Version
 
 ```bash
@@ -1143,6 +1145,21 @@ services:
 - Consider VPN access for remote administration
 
 ## Troubleshooting
+
+### "You are not currently on a branch" when upgrading
+
+This happens because the installer checks out a release tag, which puts Git in detached HEAD state. **Do not use `git pull` to upgrade.** Instead:
+
+```bash
+cd ~/sanctuary
+./install.sh
+```
+
+If you need to get back on the `main` branch (e.g., for development):
+```bash
+git checkout main
+git pull
+```
 
 ### Container won't start
 ```bash

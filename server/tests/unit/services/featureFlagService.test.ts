@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Hoist all mocks
-const { mockPrisma, mockCache, mockConfig } = vi.hoisted(() => {
+const { mockPrisma, mockCache, mockConfig, mockEventBus } = vi.hoisted(() => {
   const mockPrisma = {
     featureFlag: {
       findUnique: vi.fn(),
@@ -33,6 +33,11 @@ const { mockPrisma, mockCache, mockConfig } = vi.hoisted(() => {
     delete: vi.fn(),
   };
 
+  const mockEventBus = {
+    on: vi.fn(),
+    emit: vi.fn(),
+  };
+
   const mockConfig = {
     features: {
       hardwareWalletSigning: true,
@@ -46,6 +51,7 @@ const { mockPrisma, mockCache, mockConfig } = vi.hoisted(() => {
       aiAssistant: false,
       telegramNotifications: false,
       websocketV2Events: true,
+      treasuryAutopilot: false,
       experimental: {
         taprootAddresses: false,
         silentPayments: false,
@@ -54,7 +60,7 @@ const { mockPrisma, mockCache, mockConfig } = vi.hoisted(() => {
     },
   };
 
-  return { mockPrisma, mockCache, mockConfig };
+  return { mockPrisma, mockCache, mockConfig, mockEventBus };
 });
 
 // Mock dependencies
@@ -64,6 +70,7 @@ vi.mock('../../../src/models/prisma', () => ({
 
 vi.mock('../../../src/infrastructure', () => ({
   getDistributedCache: () => mockCache,
+  getDistributedEventBus: () => mockEventBus,
 }));
 
 vi.mock('../../../src/config', () => ({
@@ -85,9 +92,10 @@ import { featureFlagService } from '../../../src/services/featureFlagService';
 describe('Feature Flag Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset service state by clearing local cache
+    // Reset service state by clearing local cache and event listener flag
     (featureFlagService as any).localCache = new Map();
     (featureFlagService as any).initialized = false;
+    (featureFlagService as any).eventListenerRegistered = false;
   });
 
   describe('initialize', () => {
@@ -168,6 +176,66 @@ describe('Feature Flag Service', () => {
       mockCache.set.mockRejectedValue(new Error('cache unavailable'));
 
       await expect((featureFlagService as any).refreshCache()).resolves.toBeUndefined();
+      expect((featureFlagService as any).localCache.get('aiAssistant')).toBe(true);
+    });
+
+    it('should include treasuryAutopilot in env sync', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockPrisma.featureFlag.create.mockResolvedValue({ id: '1', key: 'test', enabled: false });
+      mockPrisma.featureFlag.findMany.mockResolvedValue([]);
+
+      await featureFlagService.initialize();
+
+      const createCalls = mockPrisma.featureFlag.create.mock.calls;
+      const treasuryCall = createCalls.find(
+        (call: any) => call[0]?.data?.key === 'treasuryAutopilot'
+      );
+      expect(treasuryCall).toBeDefined();
+      expect(treasuryCall![0].data.description).toBe('Enable Treasury Autopilot consolidation jobs');
+    });
+
+    it('should subscribe to featureFlag.changed event during initialization', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockPrisma.featureFlag.findMany.mockResolvedValue([]);
+
+      await featureFlagService.initialize();
+
+      expect(mockEventBus.on).toHaveBeenCalledWith(
+        'system:featureFlag.changed',
+        expect.any(Function)
+      );
+    });
+
+    it('should register event listener only once (idempotent)', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockPrisma.featureFlag.findMany.mockResolvedValue([]);
+
+      await featureFlagService.initialize();
+      (featureFlagService as any).initialized = false; // Allow re-init
+      await featureFlagService.initialize();
+
+      // on() should only have been called once for featureFlag.changed
+      const featureFlagCalls = mockEventBus.on.mock.calls.filter(
+        (call: any) => call[0] === 'system:featureFlag.changed'
+      );
+      expect(featureFlagCalls).toHaveLength(1);
+    });
+
+    it('should update local cache when receiving featureFlag.changed event', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(null);
+      mockPrisma.featureFlag.findMany.mockResolvedValue([]);
+
+      await featureFlagService.initialize();
+
+      // Get the event handler that was registered
+      const handler = mockEventBus.on.mock.calls.find(
+        (call: any) => call[0] === 'system:featureFlag.changed'
+      )?.[1];
+      expect(handler).toBeDefined();
+
+      // Simulate receiving an event
+      handler({ key: 'aiAssistant', enabled: true });
+
       expect((featureFlagService as any).localCache.get('aiAssistant')).toBe(true);
     });
 
@@ -340,6 +408,36 @@ describe('Feature Flag Service', () => {
       expect(mockCache.delete).toHaveBeenCalled();
       expect((featureFlagService as any).localCache.get('aiAssistant')).toBe(true);
     });
+
+    it('should emit system:featureFlag.changed event on update', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue(mockExistingFlag);
+      mockPrisma.featureFlag.update.mockResolvedValue({ ...mockExistingFlag, enabled: true });
+      mockPrisma.featureFlagAudit.create.mockResolvedValue({});
+
+      await featureFlagService.setFlag('aiAssistant', true, {
+        userId: 'admin-123',
+      });
+
+      expect(mockEventBus.emit).toHaveBeenCalledWith('system:featureFlag.changed', {
+        key: 'aiAssistant',
+        enabled: true,
+        previousValue: false,
+        changedBy: 'admin-123',
+      });
+    });
+
+    it('should not emit event when value is unchanged', async () => {
+      mockPrisma.featureFlag.findUnique.mockResolvedValue({
+        ...mockExistingFlag,
+        enabled: true,
+      });
+
+      await featureFlagService.setFlag('aiAssistant', true, {
+        userId: 'admin-123',
+      });
+
+      expect(mockEventBus.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe('getAllFlags', () => {
@@ -409,6 +507,7 @@ describe('Feature Flag Service', () => {
         where: { key: 'aiAssistant' },
         orderBy: { createdAt: 'desc' },
         take: 50,
+        skip: 0,
       });
       expect(result).toHaveLength(1);
       expect(result[0].key).toBe('aiAssistant');
@@ -423,6 +522,7 @@ describe('Feature Flag Service', () => {
         where: undefined,
         orderBy: { createdAt: 'desc' },
         take: 50,
+        skip: 0,
       });
     });
 
@@ -435,6 +535,7 @@ describe('Feature Flag Service', () => {
         where: { key: 'aiAssistant' },
         orderBy: { createdAt: 'desc' },
         take: 10,
+        skip: 0,
       });
     });
   });

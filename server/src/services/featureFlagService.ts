@@ -44,7 +44,7 @@
 
 import { getConfig, type FeatureFlags, type FeatureFlagKey, type ExperimentalFeatures } from '../config';
 import { db as prisma } from '../repositories/db';
-import { getDistributedCache } from '../infrastructure';
+import { getDistributedCache, getDistributedEventBus } from '../infrastructure';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('FeatureFlags');
@@ -95,6 +95,7 @@ const FEATURE_DESCRIPTIONS: Record<string, { description: string; category: stri
   priceAlerts: { description: 'Enable price alert notifications', category: 'general' },
   aiAssistant: { description: 'Enable AI-powered transaction analysis', category: 'general' },
   telegramNotifications: { description: 'Enable Telegram bot notifications', category: 'general' },
+  treasuryAutopilot: { description: 'Enable Treasury Autopilot consolidation jobs', category: 'general' },
   websocketV2Events: { description: 'Enable WebSocket v2 event format', category: 'general' },
   'experimental.taprootAddresses': { description: 'Enable Taproot (P2TR) address support', category: 'experimental' },
   'experimental.silentPayments': { description: 'Enable Silent Payments (BIP352)', category: 'experimental' },
@@ -115,6 +116,7 @@ const CACHE_TTL = 60; // 1 minute cache
 class FeatureFlagService {
   private initialized = false;
   private localCache: Map<string, boolean> = new Map();
+  private eventListenerRegistered = false;
 
   /**
    * Initialize the service - sync environment defaults to database
@@ -149,6 +151,16 @@ class FeatureFlagService {
         }
       }
 
+      // Subscribe to cross-process flag change events (idempotent)
+      if (!this.eventListenerRegistered) {
+        const bus = getDistributedEventBus();
+        bus.on('system:featureFlag.changed', ({ key, enabled }) => {
+          log.debug('Received feature flag change event', { key, enabled });
+          this.localCache.set(key, enabled);
+        });
+        this.eventListenerRegistered = true;
+      }
+
       // Load all flags into local cache
       await this.refreshCache();
 
@@ -172,7 +184,8 @@ class FeatureFlagService {
     // Top-level flags
     const topLevel = ['hardwareWalletSigning', 'qrCodeSigning', 'multisigWallets',
       'batchSync', 'payjoinSupport', 'batchTransactions', 'rbfTransactions',
-      'priceAlerts', 'aiAssistant', 'telegramNotifications', 'websocketV2Events'] as const;
+      'priceAlerts', 'aiAssistant', 'telegramNotifications', 'websocketV2Events',
+      'treasuryAutopilot'] as const;
 
     for (const key of topLevel) {
       flags[key] = features[key];
@@ -291,6 +304,15 @@ class FeatureFlagService {
     const cache = getDistributedCache();
     await cache.delete(CACHE_KEY);
 
+    // Emit cross-process event for cache coherence and worker reactions
+    const bus = getDistributedEventBus();
+    bus.emit('system:featureFlag.changed', {
+      key,
+      enabled,
+      previousValue,
+      changedBy: options.userId,
+    });
+
     log.info('Feature flag updated', {
       key,
       previousValue,
@@ -322,12 +344,13 @@ class FeatureFlagService {
   /**
    * Get audit log for a specific flag or all flags
    */
-  async getAuditLog(key?: string, limit = 50): Promise<AuditEntry[]> {
+  async getAuditLog(key?: string, limit = 50, offset = 0): Promise<AuditEntry[]> {
     const where = key ? { key } : undefined;
     const entries = await prisma.featureFlagAudit.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
+      skip: offset,
     });
 
     return entries.map((entry) => ({

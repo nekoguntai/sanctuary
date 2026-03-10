@@ -261,3 +261,35 @@ export interface GrafanaConfig {
   anonymousAccess: boolean;
   anonymousAccessNote: string;
 }
+
+// ========================================
+// FEATURE FLAG TYPES
+// ========================================
+
+export interface FeatureFlagInfo {
+  key: string;
+  enabled: boolean;
+  description: string | null;
+  category: string;
+  source: 'environment' | 'database';
+  modifiedBy: string | null;
+  updatedAt: string | null;
+}
+
+export interface FeatureFlagAuditEntry {
+  id: string;
+  key: string;
+  previousValue: boolean;
+  newValue: boolean;
+  changedBy: string;
+  reason: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface FeatureFlagAuditResult {
+  entries: FeatureFlagAuditEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}

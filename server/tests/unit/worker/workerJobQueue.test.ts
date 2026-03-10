@@ -53,6 +53,7 @@ vi.mock('bullmq', () => {
     addBulk = vi.fn().mockResolvedValue([{ id: 'job-1' }, { id: 'job-2' }]);
     getRepeatableJobs = vi.fn().mockResolvedValue([]);
     removeRepeatableByKey = vi.fn().mockResolvedValue(undefined);
+    getJobs = vi.fn().mockResolvedValue([]);
     getWaitingCount = vi.fn().mockResolvedValue(0);
     getActiveCount = vi.fn().mockResolvedValue(0);
     getCompletedCount = vi.fn().mockResolvedValue(0);
@@ -340,6 +341,78 @@ describe('WorkerJobQueue', () => {
       expect(syncQueue.removeRepeatableByKey).toHaveBeenCalledWith('stale-1');
       expect(syncQueue.removeRepeatableByKey).toHaveBeenCalledWith('stale-2');
       expect(job).toBeDefined();
+    });
+  });
+
+  describe('removeRecurring', () => {
+    it('should remove repeatable jobs by name', async () => {
+      await queue.initialize();
+      // Use a queue that exists in this test instance
+      const q = new WorkerJobQueue({
+        concurrency: 1,
+        queues: ['maintenance'],
+      });
+      await q.initialize();
+      const maintenanceQueue = (q as any).queues.get('maintenance').queue;
+
+      maintenanceQueue.getRepeatableJobs.mockResolvedValue([
+        { name: 'autopilot:record-fees', key: 'key-1' },
+        { name: 'autopilot:evaluate', key: 'key-2' },
+        { name: 'other-job', key: 'key-3' },
+      ]);
+
+      await q.removeRecurring('maintenance', 'autopilot:record-fees');
+
+      expect(maintenanceQueue.removeRepeatableByKey).toHaveBeenCalledWith('key-1');
+      expect(maintenanceQueue.removeRepeatableByKey).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return early for non-existent queue', async () => {
+      await queue.initialize();
+
+      // Should not throw
+      await queue.removeRecurring('nonexistent', 'some-job');
+    });
+
+    it('should purge waiting and delayed jobs when purgeQueued is true', async () => {
+      await queue.initialize();
+      const syncQueue = (queue as any).queues.get('sync').queue;
+
+      syncQueue.getRepeatableJobs.mockResolvedValue([]);
+
+      const mockWaitingJob = { name: 'check-stale', remove: vi.fn() };
+      const mockDelayedJob = { name: 'check-stale', remove: vi.fn() };
+      const mockOtherJob = { name: 'other-job', remove: vi.fn() };
+
+      syncQueue.getJobs = vi.fn().mockResolvedValue([mockWaitingJob, mockOtherJob, mockDelayedJob]);
+
+      await queue.removeRecurring('sync', 'check-stale', { purgeQueued: true });
+
+      expect(mockWaitingJob.remove).toHaveBeenCalled();
+      expect(mockDelayedJob.remove).toHaveBeenCalled();
+      expect(mockOtherJob.remove).not.toHaveBeenCalled();
+    });
+
+    it('should not purge queued jobs when purgeQueued is not set', async () => {
+      await queue.initialize();
+      const syncQueue = (queue as any).queues.get('sync').queue;
+
+      syncQueue.getRepeatableJobs.mockResolvedValue([]);
+
+      await queue.removeRecurring('sync', 'check-stale');
+
+      // getJobs should not be called since purgeQueued is not set
+      expect(syncQueue.getJobs).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      await queue.initialize();
+      const syncQueue = (queue as any).queues.get('sync').queue;
+
+      syncQueue.getRepeatableJobs.mockRejectedValue(new Error('Redis error'));
+
+      // Should not throw
+      await queue.removeRecurring('sync', 'check-stale');
     });
   });
 

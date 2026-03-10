@@ -32,6 +32,9 @@ export type {
   MonitoringService,
   MonitoringServicesResponse,
   GrafanaConfig,
+  FeatureFlagInfo,
+  FeatureFlagAuditEntry,
+  FeatureFlagAuditResult,
 } from './types';
 
 // User management
@@ -87,3 +90,11 @@ export {
   startTorContainer,
   stopTorContainer,
 } from './monitoring';
+
+// Feature flags
+export {
+  getFeatureFlags,
+  updateFeatureFlag,
+  resetFeatureFlag,
+  getFeatureFlagAuditLog,
+} from './features';

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     getHealth: vi.fn(),
     addJob: vi.fn(),
     scheduleRecurring: vi.fn(),
+    removeRecurring: vi.fn(),
     shutdown: vi.fn(),
   };
 
@@ -82,9 +83,18 @@ const mocks = vi.hoisted(() => {
     shutdownRedis: vi.fn(),
     isRedisConnected: vi.fn(),
     shutdownDistributedLock: vi.fn(),
+    getDistributedEventBus: vi.fn(),
     getErrorMessage: vi.fn((error: unknown) =>
       error instanceof Error ? error.message : String(error)
     ),
+    mockEventBus: {
+      on: vi.fn(),
+      emit: vi.fn(),
+    },
+    mockFeatureFlagService: {
+      initialize: vi.fn(),
+      isEnabled: vi.fn(),
+    },
     getElectrumCallbacks: () => electrumCallbacks,
     getHealthProvider: () => healthProvider,
   };
@@ -116,6 +126,11 @@ vi.mock('../../../src/infrastructure', () => ({
   shutdownRedis: mocks.shutdownRedis,
   isRedisConnected: mocks.isRedisConnected,
   shutdownDistributedLock: mocks.shutdownDistributedLock,
+  getDistributedEventBus: () => mocks.mockEventBus,
+}));
+
+vi.mock('../../../src/services/featureFlagService', () => ({
+  featureFlagService: mocks.mockFeatureFlagService,
 }));
 
 vi.mock('../../../src/worker/workerJobQueue', () => ({
@@ -153,6 +168,7 @@ describe('worker entrypoint', () => {
     mocks.queueInstance.getHealth.mockResolvedValue({ queues: { sync: { size: 0 } } });
     mocks.queueInstance.addJob.mockResolvedValue(undefined);
     mocks.queueInstance.scheduleRecurring.mockResolvedValue(undefined);
+    mocks.queueInstance.removeRecurring.mockResolvedValue(undefined);
     mocks.queueInstance.shutdown.mockResolvedValue(undefined);
 
     mocks.electrumInstance.start.mockResolvedValue(undefined);
@@ -165,6 +181,9 @@ describe('worker entrypoint', () => {
     mocks.electrumInstance.reconcileSubscriptions.mockResolvedValue(undefined);
 
     mocks.healthServerHandle.close.mockResolvedValue(undefined);
+
+    mocks.mockFeatureFlagService.initialize.mockResolvedValue(undefined);
+    mocks.mockFeatureFlagService.isEnabled.mockResolvedValue(false);
   });
 
   it('handles startup failure by logging and exiting with code 1', async () => {
@@ -252,21 +271,7 @@ describe('worker entrypoint', () => {
     }) as any);
     vi.spyOn(process, 'exit').mockImplementation((() => undefined) as any);
 
-    mocks.getConfig.mockReturnValue({
-      bitcoin: { network: 'testnet' },
-      sync: {
-        intervalMs: 5 * 60 * 1000,
-        confirmationUpdateIntervalMs: 2 * 60 * 1000,
-      },
-      maintenance: {
-        auditLogRetentionDays: 30,
-        priceDataRetentionDays: 30,
-        feeEstimateRetentionDays: 7,
-      },
-      features: {
-        treasuryAutopilot: true,
-      },
-    });
+    mocks.mockFeatureFlagService.isEnabled.mockResolvedValue(true);
 
     await import('../../../src/worker.ts');
     await vi.dynamicImportSettled();

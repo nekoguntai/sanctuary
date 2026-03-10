@@ -16,6 +16,7 @@ import {
   FileText,
   Brain,
   Activity,
+  ToggleLeft,
 } from 'lucide-react';
 import { SanctuaryLogo, getWalletIcon, getDeviceIcon } from '../ui/CustomIcons';
 import { WalletType, isMultisigType } from '../../types';
@@ -190,6 +191,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = ({
                   to="/admin/monitoring"
                   label="Monitoring"
                   icon={<Activity className="w-3 h-3" />}
+                />
+                <SubNavItem
+                  to="/admin/feature-flags"
+                  label="Feature Flags"
+                  icon={<ToggleLeft className="w-3 h-3" />}
                 />
               </div>
             )}

@@ -41,6 +41,7 @@ export const createWorkerTestHarness = async (
     addJob: vi.fn(async () => undefined),
     addBulkJobs: vi.fn(async () => []),
     scheduleRecurring: vi.fn(async () => undefined),
+    removeRecurring: vi.fn(async () => undefined),
     getRegisteredJobs: vi.fn(() => ['test-job']),
     getHealth: vi.fn(async () => ({ queues: {} })),
     isHealthy: vi.fn(() => true),
@@ -121,6 +122,14 @@ export const createWorkerTestHarness = async (
     shutdownRedis: vi.fn(async () => undefined),
     isRedisConnected: vi.fn(() => redisConnected),
     shutdownDistributedLock: vi.fn(() => undefined),
+    getDistributedEventBus: () => ({ on: vi.fn(), emit: vi.fn() }),
+  }));
+
+  vi.doMock('../../../src/services/featureFlagService', () => ({
+    featureFlagService: {
+      initialize: vi.fn(async () => undefined),
+      isEnabled: vi.fn(async () => false),
+    },
   }));
 
   vi.doMock('../../../src/worker/workerJobQueue', () => ({

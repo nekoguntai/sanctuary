@@ -24,11 +24,12 @@ import { getConfig } from './config';
 import { createLogger } from './utils/logger';
 import { getErrorMessage } from './utils/errors';
 import { connectWithRetry, disconnect } from './models/prisma';
-import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock } from './infrastructure';
+import { initializeRedis, shutdownRedis, isRedisConnected, shutdownDistributedLock, getDistributedEventBus } from './infrastructure';
 import { WorkerJobQueue } from './worker/workerJobQueue';
 import { ElectrumSubscriptionManager, type BitcoinNetwork } from './worker/electrumManager';
 import { startHealthServer, type HealthServerHandle } from './worker/healthServer';
 import { registerWorkerJobs } from './worker/jobs';
+import { featureFlagService } from './services/featureFlagService';
 import type { CheckStaleWalletsResult } from './worker/jobs/types';
 
 const log = createLogger('WORKER');
@@ -103,6 +104,21 @@ async function startWorker(): Promise<void> {
   registerWorkerJobs(jobQueue);
   log.info('Job handlers registered', {
     jobs: jobQueue.getRegisteredJobs(),
+  });
+
+  // Initialize feature flag service (requires Redis + Prisma, both ready at this point)
+  await featureFlagService.initialize();
+
+  // Subscribe to feature flag changes for dynamic job scheduling
+  const bus = getDistributedEventBus();
+  bus.on('system:featureFlag.changed', async ({ key, enabled }) => {
+    if (key !== 'treasuryAutopilot' || !jobQueue) return;
+
+    if (enabled) {
+      await scheduleAutopilotJobs();
+    } else {
+      await removeAutopilotJobs();
+    }
   });
 
   // Initialize Electrum subscription manager
@@ -319,23 +335,13 @@ async function scheduleRecurringJobs(): Promise<void> {
     '0 4 1 * *' // 1st of month 4 AM
   );
 
-  // Treasury Autopilot jobs (behind feature flag)
-  if (config.features.treasuryAutopilot) {
-    await jobQueue.scheduleRecurring(
-      'maintenance',
-      'autopilot:record-fees',
-      {},
-      '*/10 * * * *' // Every 10 minutes
-    );
-
-    await jobQueue.scheduleRecurring(
-      'maintenance',
-      'autopilot:evaluate',
-      {},
-      '5/10 * * * *' // Every 10 minutes, offset by 5
-    );
-
-    log.info('Treasury Autopilot jobs scheduled');
+  // Treasury Autopilot jobs (behind feature flag — uses DB-backed service for runtime toggling)
+  const autopilotEnabled = await featureFlagService.isEnabled('treasuryAutopilot');
+  if (autopilotEnabled) {
+    await scheduleAutopilotJobs();
+  } else {
+    // Ensure no stale autopilot jobs remain from a previous run where the flag was enabled
+    await removeAutopilotJobs();
   }
 
   // Set up job result handler for stale wallet check
@@ -346,6 +352,41 @@ async function scheduleRecurringJobs(): Promise<void> {
 // Test-only hook to exercise recurring job scheduling guard branches.
 export async function __testOnlyScheduleRecurringJobs(): Promise<void> {
   await scheduleRecurringJobs();
+}
+
+/**
+ * Schedule Treasury Autopilot recurring jobs
+ */
+async function scheduleAutopilotJobs(): Promise<void> {
+  if (!jobQueue) return;
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'autopilot:record-fees',
+    {},
+    '*/10 * * * *' // Every 10 minutes
+  );
+
+  await jobQueue.scheduleRecurring(
+    'maintenance',
+    'autopilot:evaluate',
+    {},
+    '5/10 * * * *' // Every 10 minutes, offset by 5
+  );
+
+  log.info('Treasury Autopilot jobs scheduled');
+}
+
+/**
+ * Remove Treasury Autopilot recurring jobs and purge queued instances
+ */
+async function removeAutopilotJobs(): Promise<void> {
+  if (!jobQueue) return;
+
+  await jobQueue.removeRecurring('maintenance', 'autopilot:record-fees', { purgeQueued: true });
+  await jobQueue.removeRecurring('maintenance', 'autopilot:evaluate', { purgeQueued: true });
+
+  log.info('Treasury Autopilot jobs removed');
 }
 
 /**

@@ -152,6 +152,25 @@ export const AuditLogFilterSchema = PaginationSchema.extend({
 });
 
 // =============================================================================
+// Feature Flags
+// =============================================================================
+
+export const UpdateFeatureFlagSchema = z.object({
+  enabled: z.boolean(),
+  reason: z.string().max(500).optional(),
+});
+
+export const FeatureFlagKeyParamSchema = z.object({
+  key: z.string().min(1),
+});
+
+export const FeatureFlagAuditQuerySchema = z.object({
+  key: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+// =============================================================================
 // Type Exports
 // =============================================================================
 
@@ -163,3 +182,5 @@ export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
 export type CreateGroupInput = z.infer<typeof CreateGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof UpdateGroupSchema>;
 export type AuditLogFilter = z.infer<typeof AuditLogFilterSchema>;
+export type UpdateFeatureFlagInput = z.infer<typeof UpdateFeatureFlagSchema>;
+export type FeatureFlagAuditQuery = z.infer<typeof FeatureFlagAuditQuerySchema>;

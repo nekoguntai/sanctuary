@@ -157,6 +157,12 @@ export interface SystemEvents {
     newValue: string;
     changedBy: string;
   };
+  'system:featureFlag.changed': {
+    key: string;
+    enabled: boolean;
+    previousValue: boolean;
+    changedBy: string;
+  };
 }
 
 /**

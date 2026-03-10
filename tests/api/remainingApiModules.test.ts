@@ -43,6 +43,7 @@ import * as adminSettingsApi from '../../src/api/admin/settings';
 import * as adminMonitoringApi from '../../src/api/admin/monitoring';
 import * as adminGroupsApi from '../../src/api/admin/groups';
 import * as adminUsersApi from '../../src/api/admin/users';
+import * as adminFeaturesApi from '../../src/api/admin/features';
 
 describe('Remaining API Modules', () => {
   beforeEach(() => {
@@ -540,6 +541,54 @@ describe('Remaining API Modules', () => {
       expect(mockPost).toHaveBeenCalledWith('/admin/users', { username: 'alice', password: 'secret' });
       expect(mockPut).toHaveBeenCalledWith('/admin/users/u1', { isAdmin: true });
       expect(mockDelete).toHaveBeenCalledWith('/admin/users/u1');
+    });
+  });
+
+  describe('Admin Feature Flags API', () => {
+    it('calls feature flag CRUD endpoints', async () => {
+      mockGet.mockResolvedValue([]);
+      mockPatch.mockResolvedValue({});
+      mockPost.mockResolvedValue({});
+
+      await adminFeaturesApi.getFeatureFlags();
+      await adminFeaturesApi.updateFeatureFlag('aiAssistant', true, 'Testing');
+      await adminFeaturesApi.resetFeatureFlag('aiAssistant');
+      await adminFeaturesApi.getFeatureFlagAuditLog();
+
+      expect(mockGet).toHaveBeenCalledWith('/admin/features');
+      expect(mockPatch).toHaveBeenCalledWith('/admin/features/aiAssistant', {
+        enabled: true,
+        reason: 'Testing',
+      });
+      expect(mockPost).toHaveBeenCalledWith('/admin/features/aiAssistant/reset');
+      expect(mockGet).toHaveBeenCalledWith('/admin/features/audit-log');
+    });
+
+    it('passes optional key and limit to audit log', async () => {
+      mockGet.mockResolvedValue({ entries: [], total: 0, limit: 10, offset: 0 });
+
+      await adminFeaturesApi.getFeatureFlagAuditLog('treasuryAutopilot', 10);
+
+      expect(mockGet).toHaveBeenCalledWith('/admin/features/audit-log?key=treasuryAutopilot&limit=10');
+    });
+
+    it('omits query params when not provided', async () => {
+      mockGet.mockResolvedValue({ entries: [], total: 0, limit: 50, offset: 0 });
+
+      await adminFeaturesApi.getFeatureFlagAuditLog();
+
+      expect(mockGet).toHaveBeenCalledWith('/admin/features/audit-log');
+    });
+
+    it('calls updateFeatureFlag without reason', async () => {
+      mockPatch.mockResolvedValue({});
+
+      await adminFeaturesApi.updateFeatureFlag('priceAlerts', false);
+
+      expect(mockPatch).toHaveBeenCalledWith('/admin/features/priceAlerts', {
+        enabled: false,
+        reason: undefined,
+      });
     });
   });
 });

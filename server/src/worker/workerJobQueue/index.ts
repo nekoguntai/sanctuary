@@ -248,6 +248,45 @@ export class WorkerJobQueue {
   }
 
   /**
+   * Remove a recurring job by name
+   */
+  async removeRecurring(
+    queueName: string,
+    jobName: string,
+    options?: { purgeQueued?: boolean }
+  ): Promise<void> {
+    const queueInstance = this.queues.get(queueName);
+    if (!queueInstance) {
+      log.warn(`Queue not found: ${queueName}`);
+      return;
+    }
+
+    try {
+      // Remove repeatable job definitions
+      const repeatableJobs = await queueInstance.queue.getRepeatableJobs();
+      for (const existing of repeatableJobs) {
+        if (existing.name === jobName) {
+          await queueInstance.queue.removeRepeatableByKey(existing.key);
+          log.info(`Removed repeatable job: ${queueName}:${jobName}`, { key: existing.key });
+        }
+      }
+
+      // Optionally purge waiting/delayed jobs
+      if (options?.purgeQueued) {
+        const jobs = await queueInstance.queue.getJobs(['waiting', 'delayed']);
+        const toRemove = jobs.filter(job => job.name === jobName);
+        await Promise.all(toRemove.map(job => job.remove()));
+
+        if (toRemove.length > 0) {
+          log.info(`Purged ${toRemove.length} queued jobs: ${queueName}:${jobName}`);
+        }
+      }
+    } catch (error) {
+      log.error(`Failed to remove recurring job: ${queueName}:${jobName}`, { error });
+    }
+  }
+
+  /**
    * Get health status for all queues
    */
   async getHealth(): Promise<{

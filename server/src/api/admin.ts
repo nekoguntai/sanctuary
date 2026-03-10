@@ -29,6 +29,7 @@ import electrumServersRouter from './admin/electrumServers';
 import nodeConfigRouter from './admin/nodeConfig';
 import infrastructureRouter from './admin/infrastructure';
 import monitoringRouter from './admin/monitoring';
+import featuresRouter from './admin/features';
 
 const router = Router();
 
@@ -36,6 +37,7 @@ const router = Router();
 router.use('/users', usersRouter);
 router.use('/groups', groupsRouter);
 router.use('/settings', settingsRouter);
+router.use('/features', featuresRouter);
 router.use('/audit-logs', auditLogsRouter);
 router.use('/version', versionRouter);
 router.use('/', backupRouter);

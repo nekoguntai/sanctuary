@@ -7,7 +7,7 @@
  * - Invalidates draft transactions using spent UTXOs
  */
 
-import { config } from '../../../../config';
+import config from '../../../../config';
 import { db as prisma } from '../../../../repositories/db';
 import { createLogger } from '../../../../utils/logger';
 import { walletLog } from '../../../../websocket/notifications';

@@ -345,6 +345,14 @@ const AI_CONTAINER_STATUS = {
   status: 'exited',
 };
 
+type MockApiFailure = {
+  status?: number;
+  body?: unknown;
+  timeout?: boolean;
+};
+
+type MockApiFailureMap = Record<string, MockApiFailure>;
+
 function json(route: Route, data: unknown, status = 200) {
   return route.fulfill({
     status,
@@ -353,7 +361,7 @@ function json(route: Route, data: unknown, status = 200) {
   });
 }
 
-async function mockAuthenticatedApi(page: Page) {
+async function mockAuthenticatedApi(page: Page, options?: { failures?: MockApiFailureMap }) {
   await page.addInitScript(() => {
     localStorage.setItem('sanctuary_token', 'playwright-render-token');
   });
@@ -365,6 +373,15 @@ async function mockAuthenticatedApi(page: Page) {
     const method = request.method();
     const url = new URL(request.url());
     const path = url.pathname.replace(/^\/api\/v1/, '');
+    const requestKey = `${method} ${path}`;
+
+    const failure = options?.failures?.[requestKey];
+    if (failure) {
+      if (failure.timeout) {
+        return route.abort('timedout');
+      }
+      return json(route, failure.body ?? { message: `Injected failure for ${requestKey}` }, failure.status ?? 500);
+    }
 
     // Auth/bootstrap
     if (method === 'GET' && path === '/auth/me') {
@@ -715,6 +732,21 @@ async function mockPublicApi(page: Page) {
 }
 
 test.describe('Route-level rendering regressions', () => {
+  const runtimeErrors = new WeakMap<Page, string[]>();
+
+  test.beforeEach(async ({ page }) => {
+    const errors: string[] = [];
+    runtimeErrors.set(page, errors);
+    page.on('pageerror', err => {
+      errors.push(err.message);
+    });
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    const errors = runtimeErrors.get(page) ?? [];
+    expect(errors, `Unexpected page runtime errors in "${testInfo.title}"`).toEqual([]);
+  });
+
   test('dashboard renders core cards and network-specific placeholders', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
 
@@ -796,6 +828,27 @@ test.describe('Route-level rendering regressions', () => {
     await page.getByRole('button', { name: /Testnet/i }).click();
     await expect(page.getByRole('heading', { name: 'Testnet Wallets' })).toBeVisible();
     await expect(page.getByText('Render Testnet Wallet')).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('wallet list route renders first-wallet empty state when no wallets exist', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'GET /wallets': {
+          status: 200,
+          body: [],
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets');
+
+    await expect(main.getByRole('heading', { name: 'Wallet Overview' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'No Wallets Yet' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Create Wallet' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Import Wallet' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -912,6 +965,26 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('admin monitoring route renders error panel when services API fails', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'GET /admin/monitoring/services': {
+          status: 500,
+          body: { message: 'Monitoring services failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/admin/monitoring');
+
+    await expect(main.getByText('Monitoring services failed in test')).toBeVisible({ timeout: 20000 });
+    await expect(main.getByRole('heading', { name: 'Monitoring', exact: true })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'About Monitoring' })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('admin variables route renders system variable controls', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
 
@@ -995,6 +1068,26 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('admin audit logs route renders error panel when logs API fails', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'GET /admin/audit-logs': {
+          status: 500,
+          body: { message: 'Audit logs failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/admin/audit-logs');
+
+    await expect(main.getByRole('heading', { name: 'Audit Logs' })).toBeVisible();
+    await expect(main.getByText('Audit logs failed in test')).toBeVisible({ timeout: 20000 });
+    await expect(main.getByRole('button', { name: 'Refresh' })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('admin ai route renders status workflow shell', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
     const main = page.getByRole('main');
@@ -1047,6 +1140,42 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('create wallet route shows no-compatible-device message for multisig selection', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/create');
+
+    await main.getByRole('button', { name: 'Multi Signature' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await expect(main.getByRole('heading', { name: 'Select Signers' })).toBeVisible();
+    await expect(main.getByText('No devices with multisig accounts found.')).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Connect New Device' })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('create wallet route configuration shows network warning for testnet', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/create');
+
+    await main.getByRole('button', { name: 'Single Signature' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await main.getByText('Render Ledger', { exact: true }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await expect(main.getByRole('heading', { name: 'Configuration' })).toBeVisible();
+    await expect(main.getByText('Script Type')).toBeVisible();
+    await main.getByRole('button', { name: 'Testnet' }).click();
+    await expect(main.getByText('Testnet coins have no real-world value.')).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('send transaction route renders transaction type selection shell', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
     const main = page.getByRole('main');
@@ -1059,6 +1188,67 @@ test.describe('Route-level rendering regressions', () => {
     await expect(main.getByRole('button', { name: 'Consolidation' })).toBeVisible();
     await expect(main.getByRole('button', { name: 'Sweep' })).toBeVisible();
     await expect(main.getByRole('button', { name: 'Cancel' })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('send transaction route redirects viewers back to wallet detail', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        [`GET /wallets/${MAINNET_WALLET_ID}`]: {
+          status: 200,
+          body: {
+            ...MAINNET_WALLET,
+            userRole: 'viewer',
+          },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto(`/#/wallets/${MAINNET_WALLET_ID}/send`);
+
+    await expect(page).toHaveURL(new RegExp(`#\\/wallets\\/${MAINNET_WALLET_ID}$`));
+    await expect(main.getByRole('heading', { name: MAINNET_WALLET.name })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Transactions', exact: true })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('send transaction route renders failure state when wallet fetch returns 500', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        [`GET /wallets/${MAINNET_WALLET_ID}`]: {
+          status: 500,
+          body: { message: 'Wallet fetch failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto(`/#/wallets/${MAINNET_WALLET_ID}/send`);
+
+    await expect(main.getByRole('heading', { name: 'Failed to Load' })).toBeVisible({ timeout: 20000 });
+    await expect(main.getByText('Wallet fetch failed in test')).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Go Back' })).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('send transaction route renders failure state when wallet fetch times out', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        [`GET /wallets/${MAINNET_WALLET_ID}`]: {
+          timeout: true,
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto(`/#/wallets/${MAINNET_WALLET_ID}/send`);
+
+    await expect(main.getByRole('heading', { name: 'Failed to Load' })).toBeVisible({ timeout: 20000 });
+    await expect(main.getByRole('button', { name: 'Go Back' })).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -1086,6 +1276,67 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('connect device route search handles empty results and clear-filters recovery', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/devices/connect');
+
+    await main.getByPlaceholder('Search devices...').fill('zzzz-unmatched-model');
+    await expect(main.getByText('No devices match your search')).toBeVisible();
+    await main.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(main.getByRole('button', { name: /Nano X/i }).first()).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('connect device route hides usb and qr options when context is not secure', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        value: false,
+      });
+    });
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/devices/connect');
+
+    await main.getByRole('button', { name: /Nano X/i }).first().click();
+
+    await expect(main.getByRole('heading', { name: '2. Connection Method' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'SD Card' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Manual Entry' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'USB' })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: 'QR Code' })).toHaveCount(0);
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('connect device route renders save failure feedback when API returns 500', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'POST /devices': {
+          status: 500,
+          body: { message: 'Device save failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/devices/connect');
+
+    await main.getByRole('button', { name: /Nano X/i }).first().click();
+    await main.getByRole('button', { name: 'Manual Entry' }).click();
+    await main.getByPlaceholder('00000000').fill('deadbeef');
+    await main.getByPlaceholder('xpub... / ypub... / zpub...').fill('xpub-render-test');
+    await main.getByRole('button', { name: 'Save Device' }).click();
+
+    await expect(main.getByText('Device save failed in test')).toBeVisible({ timeout: 20000 });
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('import wallet route renders format selection options', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
     const main = page.getByRole('main');
@@ -1102,6 +1353,67 @@ test.describe('Route-level rendering regressions', () => {
 
     await main.getByRole('button', { name: 'Output Descriptor' }).click();
     await expect(main.getByRole('button', { name: 'Next Step' })).toBeEnabled();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('import wallet route renders validation failure feedback when API returns 500', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'POST /wallets/import/validate': {
+          status: 500,
+          body: { message: 'Import validation failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/import');
+
+    await main.getByRole('button', { name: 'Output Descriptor' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+    await main.locator('textarea').first().fill("wpkh([deadbeef/84h/0h/0h]xpub-render-test/0/*)");
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await expect(main.getByText('Import validation failed in test')).toBeVisible({ timeout: 20000 });
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('import wallet descriptor step rejects oversized upload file', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/import');
+
+    await main.getByRole('button', { name: 'Output Descriptor' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+    await page.locator('#file-upload').setInputFiles({
+      name: 'wallet-descriptor.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('a'.repeat(1_200_000)),
+    });
+
+    await expect(main.getByText(/File too large/)).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('import wallet descriptor step rejects invalid upload extension', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/import');
+
+    await main.getByRole('button', { name: 'Output Descriptor' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+    await page.locator('#file-upload').setInputFiles({
+      name: 'wallet.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('{"wallet":"test"}'),
+    });
+
+    await expect(main.getByText('Invalid file type. Expected: .txt')).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });
@@ -1141,6 +1453,49 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('import wallet hardware step shows HTTPS requirement in insecure context', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        value: false,
+      });
+    });
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/import');
+
+    await main.getByRole('button', { name: 'Hardware Device' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await expect(main.getByRole('heading', { name: 'Connect Hardware Device' })).toBeVisible();
+    await expect(main.getByText('Requires HTTPS connection')).toBeVisible();
+    await expect(main.getByRole('button', { name: /Ledger/ })).toBeDisabled();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('import wallet qr step shows HTTPS camera warning in insecure context', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'isSecureContext', {
+        configurable: true,
+        value: false,
+      });
+    });
+    const unhandledRequests = await mockAuthenticatedApi(page);
+    const main = page.getByRole('main');
+
+    await page.goto('/#/wallets/import');
+
+    await main.getByRole('button', { name: 'QR Code' }).click();
+    await main.getByRole('button', { name: 'Next Step' }).click();
+
+    await expect(main.getByRole('heading', { name: 'Scan Wallet QR Code' })).toBeVisible();
+    await expect(main.getByText('Camera access requires HTTPS. Please use https://localhost:8443')).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('account route renders profile, password, and 2fa sections', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
     const main = page.getByRole('main');
@@ -1160,6 +1515,25 @@ test.describe('Route-level rendering regressions', () => {
     expect(unhandledRequests).toEqual([]);
   });
 
+  test('admin settings route renders websocket error panel when stats API fails', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'GET /admin/websocket/stats': {
+          status: 500,
+          body: { message: 'WebSocket stats failed in test' },
+        },
+      },
+    });
+    const main = page.getByRole('main');
+
+    await page.goto('/#/admin/settings');
+
+    await main.getByRole('button', { name: 'WebSocket', exact: true }).click();
+    await expect(main.getByText('WebSocket stats failed in test')).toBeVisible({ timeout: 20000 });
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
   test('unknown authenticated route redirects to dashboard', async ({ page }) => {
     const unhandledRequests = await mockAuthenticatedApi(page);
 
@@ -1168,6 +1542,25 @@ test.describe('Route-level rendering regressions', () => {
     await expect(page).toHaveURL(/#\/$/);
     await expect(page.getByText('Bitcoin Price')).toBeVisible();
     await expect(page.getByText('Fee Estimation')).toBeVisible();
+
+    expect(unhandledRequests).toEqual([]);
+  });
+
+  test('expired authenticated session redirects to login when /auth/me returns 401', async ({ page }) => {
+    const unhandledRequests = await mockAuthenticatedApi(page, {
+      failures: {
+        'GET /auth/me': {
+          status: 401,
+          body: { message: 'Unauthorized' },
+        },
+      },
+    });
+
+    await page.goto('/#/wallets');
+
+    await expect(page.getByRole('heading', { name: 'Sanctuary' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+    await expect(page.getByText('Backend API:')).toBeVisible();
 
     expect(unhandledRequests).toEqual([]);
   });

@@ -289,18 +289,18 @@ export function useAddAccountFlow({ deviceId, device, onClose, onDeviceUpdated }
     setAddAccountLoading(true);
     setAddAccountError(null);
     setUsbProgress(null);
-    let walletService: HardwareWalletService | null = null;
+    let disconnectFromDevice: () => Promise<void> = Promise.resolve.bind(Promise) as () => Promise<void>;
 
     try {
       // Defer hardware runtime import until USB flow is actually used.
       const { hardwareWalletService } = await import('../../../../services/hardwareWallet');
-      walletService = hardwareWalletService;
+      disconnectFromDevice = hardwareWalletService.disconnect.bind(hardwareWalletService);
 
       // Connect to the device
-      await walletService.connect(deviceType);
+      await hardwareWalletService.connect(deviceType);
 
       // Fetch all xpubs
-      const allXpubs = await walletService.getAllXpubs((current, total, name) => {
+      const allXpubs = await hardwareWalletService.getAllXpubs((current, total, name) => {
         setUsbProgress({ current, total, name });
       });
 
@@ -341,12 +341,10 @@ export function useAddAccountFlow({ deviceId, device, onClose, onDeviceUpdated }
     } finally {
       setAddAccountLoading(false);
       setUsbProgress(null);
-      if (walletService) {
-        try {
-          await walletService.disconnect();
-        } catch {
-          // Ignore disconnect errors
-        }
+      try {
+        await disconnectFromDevice();
+      } catch {
+        // Ignore disconnect errors
       }
     }
   }, [device, deviceId, onClose, onDeviceUpdated]);

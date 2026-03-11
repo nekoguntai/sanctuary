@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FeatureFlags } from '../../components/FeatureFlags';
 import * as adminApi from '../../src/api/admin';
@@ -97,6 +97,31 @@ describe('FeatureFlags', () => {
       expect(screen.getByText('experimental.taprootAddresses')).toBeInTheDocument();
     });
 
+    it('falls back to default and custom category labels', async () => {
+      vi.mocked(adminApi.getFeatureFlags).mockResolvedValue([
+        {
+          ...mockFlags[0],
+          key: 'fallback.general',
+          category: undefined as unknown as string,
+        },
+        {
+          ...mockFlags[1],
+          key: 'ops.customFlag',
+          category: 'ops',
+        },
+      ]);
+
+      render(<FeatureFlags />);
+
+      await waitFor(() => {
+        expect(screen.getByText('General')).toBeInTheDocument();
+        expect(screen.getByText('ops')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('fallback.general')).toBeInTheDocument();
+      expect(screen.getByText('ops.customFlag')).toBeInTheDocument();
+    });
+
     it('renders flag descriptions', async () => {
       render(<FeatureFlags />);
 
@@ -149,6 +174,46 @@ describe('FeatureFlags', () => {
         expect(adminApi.updateFeatureFlag).toHaveBeenCalledWith('aiAssistant', false);
       });
     });
+
+    it('replaces prior success timeout and clears Saved after delay', async () => {
+      const user = userEvent.setup();
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+      try {
+        render(<FeatureFlags />);
+
+        await waitFor(() => {
+          expect(screen.getByText('aiAssistant')).toBeInTheDocument();
+        });
+
+        const toggleButtons = screen.getAllByRole('button').filter(
+          btn => btn.className.includes('rounded-full') && btn.className.includes('inline-flex')
+        );
+        const resetButtons = screen.getAllByTitle('Reset to environment default');
+
+        await user.click(toggleButtons[0]);
+        await waitFor(() => {
+          expect(screen.getByText('Saved')).toBeInTheDocument();
+        });
+
+        await user.click(resetButtons[0]);
+        await waitFor(() => {
+          expect(adminApi.resetFeatureFlag).toHaveBeenCalledWith('aiAssistant');
+        });
+
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 3100));
+        });
+
+        await waitFor(() => {
+          expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+        });
+      } finally {
+        clearTimeoutSpy.mockRestore();
+      }
+    }, 10000);
   });
 
   describe('reset behavior', () => {
@@ -190,6 +255,36 @@ describe('FeatureFlags', () => {
       });
     });
 
+    it('shows loading state while audit log is fetching', async () => {
+      let resolveAuditLog: ((value: typeof mockAuditLog) => void) | null = null;
+      const pendingAuditLog = new Promise<typeof mockAuditLog>((resolve) => {
+        resolveAuditLog = resolve;
+      });
+      vi.mocked(adminApi.getFeatureFlagAuditLog).mockImplementationOnce(() => pendingAuditLog);
+
+      const user = userEvent.setup();
+      render(<FeatureFlags />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Change History')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Change History'));
+
+      expect(screen.getByText('Loading audit log...')).toBeInTheDocument();
+
+      resolveAuditLog?.({
+        entries: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('No changes recorded yet.')).toBeInTheDocument();
+      });
+    });
+
     it('shows empty state when no audit entries', async () => {
       vi.mocked(adminApi.getFeatureFlagAuditLog).mockResolvedValue({
         entries: [],
@@ -210,6 +305,41 @@ describe('FeatureFlags', () => {
       await waitFor(() => {
         expect(screen.getByText('No changes recorded yet.')).toBeInTheDocument();
       });
+    });
+
+    it('shows disabled entries and does not refetch when collapsing', async () => {
+      vi.mocked(adminApi.getFeatureFlagAuditLog).mockResolvedValueOnce({
+        entries: [
+          {
+            id: 'audit-disabled',
+            key: 'treasuryAutopilot',
+            previousValue: true,
+            newValue: false,
+            changedBy: 'admin-2',
+            reason: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      });
+
+      const user = userEvent.setup();
+      render(<FeatureFlags />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Change History')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Change History'));
+
+      await waitFor(() => {
+        expect(screen.getByText('disabled')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Change History'));
+      expect(adminApi.getFeatureFlagAuditLog).toHaveBeenCalledTimes(1);
     });
   });
 

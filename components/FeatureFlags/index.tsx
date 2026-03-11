@@ -77,13 +77,55 @@ export function FeatureFlags() {
     handleFlagAction(flag, () => adminApi.resetFeatureFlag(flag.key), setResettingKey);
 
   const handleToggleAuditLog = async () => {
-    if (!showAuditLog) {
-      await runLoadAudit(async () => {
-        const result = await adminApi.getFeatureFlagAuditLog(undefined, 50);
-        setAuditLog(result.entries);
-      });
+    if (showAuditLog) {
+      setShowAuditLog(false);
+      return;
     }
-    setShowAuditLog(!showAuditLog);
+
+    setShowAuditLog(true);
+    await runLoadAudit(async () => {
+      const result = await adminApi.getFeatureFlagAuditLog(undefined, 50);
+      setAuditLog(result.entries);
+    });
+  };
+
+  const renderAuditContent = () => {
+    if (isLoadingAudit) {
+      return <div className="p-4 text-center text-sanctuary-400 text-sm">Loading audit log...</div>;
+    }
+
+    if (auditLog.length === 0) {
+      return <div className="p-4 text-center text-sanctuary-400 text-sm">No changes recorded yet.</div>;
+    }
+
+    return (
+      <div className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
+        {auditLog.map(entry => (
+          <div key={entry.id} className="p-3 flex items-start space-x-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-mono text-sanctuary-900 dark:text-sanctuary-100">{entry.key}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  entry.newValue
+                    ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
+                    : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
+                }`}>
+                  {entry.newValue ? 'enabled' : 'disabled'}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 mt-0.5">
+                <span className="text-[11px] text-sanctuary-400">
+                  by {entry.changedBy} &middot; {new Date(entry.createdAt).toLocaleString()}
+                </span>
+              </div>
+              {entry.reason && (
+                <p className="text-[11px] text-sanctuary-500 mt-0.5">{entry.reason}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   // Group flags by category (must be before early returns to satisfy rules of hooks)
@@ -215,38 +257,7 @@ export function FeatureFlags() {
 
         {showAuditLog && (
           <div className="border-t border-sanctuary-100 dark:border-sanctuary-800">
-            {isLoadingAudit ? (
-              <div className="p-4 text-center text-sanctuary-400 text-sm">Loading audit log...</div>
-            ) : auditLog.length === 0 ? (
-              <div className="p-4 text-center text-sanctuary-400 text-sm">No changes recorded yet.</div>
-            ) : (
-              <div className="divide-y divide-sanctuary-100 dark:divide-sanctuary-800">
-                {auditLog.map(entry => (
-                  <div key={entry.id} className="p-3 flex items-start space-x-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-mono text-sanctuary-900 dark:text-sanctuary-100">{entry.key}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          entry.newValue
-                            ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
-                            : 'bg-sanctuary-100 dark:bg-sanctuary-800 text-sanctuary-600 dark:text-sanctuary-400'
-                        }`}>
-                          {entry.newValue ? 'enabled' : 'disabled'}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2 mt-0.5">
-                        <span className="text-[11px] text-sanctuary-400">
-                          by {entry.changedBy} &middot; {new Date(entry.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      {entry.reason && (
-                        <p className="text-[11px] text-sanctuary-500 mt-0.5">{entry.reason}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            {renderAuditContent()}
           </div>
         )}
       </div>
